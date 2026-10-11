@@ -237,3 +237,15 @@ These schemas validate all responses from `/v1/x402/*`, `/v1/approvals/*`,
 `/v1/entitlements/*`, and `/v1/diagnostics/commerce/*` at the network boundary.
 Wire format mirrors backend Pydantic models in `services/api/value/x402/commerce_models.py`.
 Breaking changes to backend models require coordinated updates to both files.
+
+## External agent telemetry
+
+The server SDK exposes typed task, tool, policy-evaluation, delegation, and
+outcome observations for external agent deployments. These events are
+source-asserted. Ingestion attributes them using the backend-validated,
+tenant-owned deployment registry record; a payload's `agentId` or delegated-to
+reference does not resolve canonical identity or authority. The telemetry is
+accepted only when the external-agent feature is enabled and the deployment is
+active for the authenticated tenant. See
+[Agent Marketplace Lineage](source-of-truth/AGENT_MARKETPLACE_LINEAGE.md) for
+the graph and run-explanation evidence boundaries.

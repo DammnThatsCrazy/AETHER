@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
 from config.settings import settings
@@ -23,6 +23,7 @@ from actions.agent.deployments import (
     get_deployment_repository,
 )
 from actions.agentic_observability.foundation import require_permission as _require_perm
+from actions.agent_marketplace.models import AgentMarketplaceOrigin
 from shared.common.common import APIResponse, BadRequestError
 from shared.logger.logger import get_logger, metrics
 
@@ -90,6 +91,7 @@ class DeploymentCreate(BaseModel):
     allowed_event_families: list[str] = Field(default_factory=list)
     required_consent_purposes: list[str] = Field(default_factory=list)
     capability_scopes: list[str] = Field(default_factory=list)
+    marketplace_origin: Optional[AgentMarketplaceOrigin] = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -120,6 +122,32 @@ async def create_deployment(body: DeploymentCreate, request: Request):
         actor=_actor_id(request),
         request_id=_request_id(request),
     )
+    if record.get("marketplace_origin"):
+        if not settings.external_agent_telemetry.graph_enabled:
+            record["marketplace_origin_graph_projection_status"] = "disabled"
+        else:
+            try:
+                from actions.agent_marketplace.lineage import build_marketplace_origin_mutations
+                from actions.agent_marketplace.projection import AgentMarketplaceGraphProjectionOutbox
+
+                queued = await AgentMarketplaceGraphProjectionOutbox().enqueue_mutations(
+                    tenant.tenant_id,
+                    str(record.get("id") or ""),
+                    build_marketplace_origin_mutations(record),
+                )
+                record["marketplace_origin_graph_projection_status"] = (
+                    queued.get("graph_projection_status") or "failed"
+                )
+            except Exception as exc:
+                # Registry persistence is authoritative; source-to-outbox
+                # reconciliation can recover this projection after a transient
+                # store outage without losing the tenant's declaration.
+                logger.warning(
+                    "marketplace origin graph enqueue failed",
+                    extra={"tenant_id": tenant.tenant_id, "deployment_id": record.get("id"),
+                           "error": type(exc).__name__},
+                )
+                record["marketplace_origin_graph_projection_status"] = "failed"
     metrics.increment("agent_deployment_api_created_total")
     return APIResponse(data=record).to_dict()
 
@@ -242,6 +270,175 @@ async def deployment_activity(
             "consent_blocked_count_24h": record.get("consent_blocked_count_24h", 0),
         },
     }).to_dict()
+
+
+@deployments_router.get("/{deployment_id}/runs/{run_id}/explanation")
+async def explain_agent_run(
+    deployment_id: str,
+    run_id: str,
+    request: Request,
+    limit: int = 200,
+):
+    """Return an evidence timeline for one observed external-agent run.
+
+    The response reports source assertions and their gaps. It never generates
+    hidden reasoning or promotes telemetry claims into verified identity or
+    policy authority.
+    """
+    _require_registry_enabled()
+    tenant = _tenant(request)
+    await _repo().get(tenant.tenant_id, deployment_id)
+    if not run_id or len(run_id) > 256 or any(ord(char) < 32 or ord(char) == 127 for char in run_id):
+        raise BadRequestError("run_id must be a printable source reference of at most 256 characters")
+    limit = min(max(limit, 1), 500)
+
+    try:
+        from dependencies.providers import get_cache
+        from repositories.repos import AnalyticsRepository
+
+        rows = await AnalyticsRepository(get_cache()).query_silver(
+            "silver_agent_execution_facts",
+            {
+                "tenant_id": tenant.tenant_id,
+                "deployment_id": deployment_id,
+                "run_id": run_id,
+            },
+            limit=limit,
+        )
+    except Exception as exc:
+        logger.warning(
+            "agent run explanation evidence unavailable",
+            extra={"tenant_id": tenant.tenant_id, "deployment_id": deployment_id,
+                   "run_id": run_id, "error": type(exc).__name__},
+        )
+        return APIResponse(data={
+            "tenant_id": tenant.tenant_id,
+            "deployment_id": deployment_id,
+            "run_id": run_id,
+            "source_status": "unavailable",
+            "evidence": [],
+            "explanation_boundary": "source evidence unavailable; no causal explanation asserted",
+        }).to_dict()
+
+    rows.sort(key=lambda row: str(row.get("occurred_at") or ""))
+    evidence = []
+    for row in rows:
+        evidence.append({
+            "source_event_id": row.get("source_event_id"),
+            "event_type": row.get("event_name"),
+            "occurred_at": row.get("occurred_at"),
+            "evidence_authority": "tenant_source_asserted",
+            "task_ref": row.get("task_ref"),
+            "action_ref": row.get("action_ref"),
+            "action_type": row.get("action_type"),
+            "trigger_ref": row.get("trigger_ref"),
+            "trigger_type": row.get("trigger_type"),
+            "decision_ref": row.get("decision_ref"),
+            "policy": {
+                "id": row.get("policy_id"),
+                "version": row.get("policy_version"),
+                "decision": row.get("policy_decision"),
+                "reason_codes": row.get("policy_reason_codes") or [],
+            } if row.get("policy_id") or row.get("policy_decision") else None,
+            "delegation_ref": row.get("delegation_id"),
+            "delegated_to_ref": row.get("delegated_to_ref"),
+            "tool_name": row.get("tool_name"),
+            "status": row.get("status"),
+            "outcome_ref": row.get("outcome_ref"),
+            "outcome": row.get("outcome"),
+            "trace_id": row.get("trace_id"),
+            "causation_id": row.get("causation_id"),
+        })
+
+    kinds = {item.get("event_type") for item in evidence}
+    has_trigger = any(item.get("trigger_ref") or item.get("trigger_type") for item in evidence)
+    has_policy = "agent_policy_evaluated" in kinds
+    has_delegation = "agent_delegated_task" in kinds
+    has_outcome = bool(kinds.intersection({"agent_task_completed", "agent_task_failed", "agent_outcome_recorded"}))
+    return APIResponse(data={
+        "tenant_id": tenant.tenant_id,
+        "deployment_id": deployment_id,
+        "run_id": run_id,
+        "source_status": "available" if rows else "empty",
+        "evidence_count": len(evidence),
+        "evidence_truncated": len(evidence) >= limit,
+        "evidence": evidence,
+        "coverage": {
+            "trigger_evidence": "observed" if has_trigger else "not_observed",
+            "policy_evaluation": "observed" if has_policy else "not_observed",
+            "delegation": "observed" if has_delegation else "not_observed",
+            "outcome": "observed" if has_outcome else "not_observed",
+        },
+        "explanation_boundary": (
+            "Observed event references establish sequence and attribution only. "
+            "They do not establish hidden model reasoning or independently verify "
+            "source-reported policy, delegation, or outcome claims."
+        ),
+    }).to_dict()
+
+
+@kyber_router.post("/graph-projection/drain")
+async def drain_agent_graph_projection(
+    request: Request,
+    tenant_id: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=1000),
+):
+    """Drain one bounded batch of tenant agent-graph projections."""
+    _require_kyber_enabled()
+    _require_perm(request, "admin")
+    if not settings.external_agent_telemetry.graph_enabled:
+        raise BadRequestError("Agent graph projection is disabled")
+    from actions.agent_marketplace.projection import AgentMarketplaceGraphOutboxWorker
+
+    summary = await AgentMarketplaceGraphOutboxWorker().drain_once(
+        tenant_id=tenant_id, limit=limit
+    )
+    metrics.increment(
+        "agent_marketplace_graph_projection_drain_triggered_total",
+        value=summary.get("processed", 0),
+    )
+    return APIResponse(data=summary).to_dict()
+
+
+@kyber_router.get("/graph-projection/reconcile")
+async def reconcile_agent_graph_projection(
+    request: Request,
+    tenant_id: str = Query(..., min_length=1, max_length=256),
+    limit: int = Query(default=500, ge=1, le=1000),
+):
+    """Report queue coverage, pending retries, and dead letters for one tenant."""
+    _require_kyber_enabled()
+    _require_perm(request, "admin")
+    from actions.agent_marketplace.projection import AgentMarketplaceGraphProjectionOutbox
+
+    report = await AgentMarketplaceGraphProjectionOutbox().reconcile(
+        tenant_id, limit=limit
+    )
+    return APIResponse(data=report).to_dict()
+
+
+@kyber_router.post("/graph-projection/repair")
+async def repair_agent_graph_projection(
+    request: Request,
+    tenant_id: str = Query(..., min_length=1, max_length=256),
+    enqueue_missing: bool = Query(default=True),
+    replay_dead_letters: bool = Query(default=True),
+    replay_persisted: bool = Query(default=False),
+    limit: int = Query(default=500, ge=1, le=1000),
+):
+    """Re-enqueue missing source projections or replay terminal outbox rows."""
+    _require_kyber_enabled()
+    _require_perm(request, "admin")
+    from actions.agent_marketplace.projection import AgentMarketplaceGraphProjectionOutbox
+
+    result = await AgentMarketplaceGraphProjectionOutbox().repair(
+        tenant_id,
+        enqueue_missing=enqueue_missing,
+        replay_dead_letters=replay_dead_letters,
+        replay_persisted=replay_persisted,
+        limit=limit,
+    )
+    return APIResponse(data=result).to_dict()
 
 
 # ── Kyber operator routes ─────────────────────────────────────────────────────

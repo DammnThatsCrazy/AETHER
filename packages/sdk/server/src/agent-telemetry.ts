@@ -167,9 +167,15 @@ export class AgentTelemetryClient extends AetherServerSDK {
   /** Observe an agent task lifecycle transition. */
   task(params: {
     taskId: string;
+    /** Stable caller-owned run reference; scoped to this deployment by Aether. */
+    runId?: string;
     status: 'started' | 'completed' | 'failed';
     durationMs?: number;
     errorCode?: string;
+    triggerId?: string;
+    triggerType?: string;
+    actionId?: string;
+    actionType?: string;
     properties?: Record<string, unknown>;
   }): void {
     const type: EventType = params.status === 'started'
@@ -179,8 +185,13 @@ export class AgentTelemetryClient extends AetherServerSDK {
       type,
       properties: {
         taskId: params.taskId,
+        runId: params.runId,
         durationMs: params.durationMs,
         errorCode: params.errorCode,
+        triggerId: params.triggerId,
+        triggerType: params.triggerType,
+        actionId: params.actionId,
+        actionType: params.actionType,
         ...params.properties,
       },
     });
@@ -189,6 +200,9 @@ export class AgentTelemetryClient extends AetherServerSDK {
   /** Observe an agent tool invocation on the external surface. */
   toolInvocation(params: {
     toolName: string;
+    taskId?: string;
+    /** Stable caller-owned run reference; scoped to this deployment by Aether. */
+    runId?: string;
     status?: 'observed' | 'succeeded_observed' | 'failed_observed' | 'denied_observed';
     durationMs?: number;
     mcpServerName?: string;
@@ -199,10 +213,72 @@ export class AgentTelemetryClient extends AetherServerSDK {
       type,
       properties: {
         toolName: params.toolName,
+        taskId: params.taskId,
+        runId: params.runId,
         status: params.status ?? 'observed',
         durationMs: params.durationMs,
         mcpServerName: params.mcpServerName,
         ...params.properties,
+      },
+    });
+  }
+
+  /** Record a source-reported policy decision that preceded an agent action. */
+  policyEvaluated(params: {
+    runId: string;
+    taskId?: string;
+    decisionId?: string;
+    actionId?: string;
+    actionType?: string;
+    triggerId?: string;
+    triggerType?: string;
+    policyId: string;
+    policyVersion?: string;
+    decision: 'allow' | 'deny' | 'require_approval' | 'unknown';
+    reasonCodes?: string[];
+  }): void {
+    const type: EventType = 'agent_policy_evaluated';
+    this.track({
+      type,
+      properties: {
+        runId: params.runId,
+        taskId: params.taskId,
+        decisionId: params.decisionId,
+        actionId: params.actionId,
+        actionType: params.actionType,
+        triggerId: params.triggerId,
+        triggerType: params.triggerType,
+        policyId: params.policyId,
+        policyVersion: params.policyVersion,
+        decision: params.decision,
+        reasonCodes: params.reasonCodes ?? [],
+      },
+    });
+  }
+
+  /** Record a source-reported delegation without asserting canonical agent identity. */
+  delegatedTask(params: {
+    runId: string;
+    taskId?: string;
+    delegationId: string;
+    delegatedToAgentId: string;
+    actionId?: string;
+    actionType?: string;
+    triggerId?: string;
+    triggerType?: string;
+  }): void {
+    const type: EventType = 'agent_delegated_task';
+    this.track({
+      type,
+      properties: {
+        runId: params.runId,
+        taskId: params.taskId,
+        delegationId: params.delegationId,
+        delegatedToAgentId: params.delegatedToAgentId,
+        actionId: params.actionId,
+        actionType: params.actionType,
+        triggerId: params.triggerId,
+        triggerType: params.triggerType,
       },
     });
   }
@@ -265,8 +341,11 @@ export class AgentTelemetryClient extends AetherServerSDK {
 
   /** Record an observed agent outcome. */
   outcomeRecorded(params: {
+    outcomeId?: string;
     outcome: string;
     taskId?: string;
+    /** Stable caller-owned run reference; scoped to this deployment by Aether. */
+    runId?: string;
     success?: boolean;
     score?: number;
     properties?: Record<string, unknown>;
@@ -275,8 +354,10 @@ export class AgentTelemetryClient extends AetherServerSDK {
     this.track({
       type,
       properties: {
+        outcomeId: params.outcomeId,
         outcome: params.outcome,
         taskId: params.taskId,
+        runId: params.runId,
         success: params.success,
         score: params.score,
         ...params.properties,

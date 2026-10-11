@@ -20,9 +20,9 @@ source_hashes:
   "services/api/config/settings.py": "sha256:0c59864b351aaa3558edf56cc3e550803ed212c05c716f8ec24311ccfcf9779b"
   "services/api/main.py": "sha256:d3c8f2c63bfedaa93e0d0cafd11c0fe1a25983dd48e64ac3a3de7d9a364d63d4"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
-  "services/api/workers/runtime/roles.py": "sha256:8cbb7a52751817b57795668262bcde8a4e40c487c2d814c245b5994a0e1e90ca"
+  "services/api/workers/runtime/roles.py": "sha256:eea55ed965e4a24945b60da138085129eebc19d5174130b0a18b1778322ab67d"
   "services/api/workers/runtime/run_role.py": "sha256:787c2388526da3d9bf77aa4d138e35fddf15afeb4aafef0d06f2501834785354"
-  "services/api/workers/runtime/specs.py": "sha256:634133812d296333ce190e3df430fc23f6dcdacc3acf0cc3f5d0900089ea6025"
+  "services/api/workers/runtime/specs.py": "sha256:24d26c3031cb512edb415033cea2c668d982df4db7bc659c2d41c40d51896aa0"
 ---
 
 # Backend Execution Model
@@ -41,7 +41,7 @@ API process no longer starts every worker, consumer, and cron in-request.
 | `outbox-relay` | Outbox relay workers: the notification outbox, the ingestion `event_outbox` relay (FT-6), and the reward delivery outbox (drains `reward_delivery_jobs` through the rail-sender registry — the at-least-once delivery path for the reward plane). |
 | `stream-worker` | Stream loops plus Bronze/Silver projection, the analytics event-store projection (`analytics_event_recorder` → the `events`/`sessions` tables the analytics API reads), notification consumers, and safe SDK x402 request/intent observations. |
 | `identity-worker` | Source-identity registration and canonical resolution for validated SDK observations; emits `IDENTITY_RESOLVED` only after a real decision. |
-| `graph-writer` | Profile/graph projection and delegation mutation consumers. |
+| `graph-writer` | Profile/graph projection and delegation mutation consumers, including retryable card-linked and external-agent graph projection outboxes. |
 | `measurement-worker` | Identity merge/split journey rebuild and attribution restatement consumers. |
 | `semantic-worker` | Semantic classification + identity-restatement consumers plus the `semantic_reconciler` (Gold recompute sweep, gated by `settings.semantic.reconciler_enabled`), `semantic_retention` (Silver tombstone / Gold delete sweep, gated by `settings.semantic.retention_enabled`), and `semantic_graph_projector` (per-tenant Gold relationship-state projection into the intelligence graph via the canonical mutation gateway, gated by `settings.semantic.graph_projector_enabled`) loop workers. |
 | `materializer` | Artifact materialization sweeps (export expiry, payment-rail sync, object-backed Bronze compaction + scheduled storage reconciler — FT-8, gated by the `settings.storage_plane` flags — and x402 settlement reconciliation, which advances verified PENDING settlements to on-chain finality, gated by the commerce control plane). |

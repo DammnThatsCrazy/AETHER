@@ -6,12 +6,14 @@ visibility: P
 audience: [dev-senior, architect, ops]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/shared/events/events.py, services/api/ingestion/ingestion/validation.py]
+source_files: [services/api/shared/events/events.py, services/api/ingestion/ingestion/validation.py, packages/shared/contracts/event-registry.json, packages/sdk/server/src/agent-telemetry.ts]
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
-  "services/api/ingestion/ingestion/validation.py": "sha256:3fcbc5123e0c7da5ebad64b7968a6a61095b541644d7c4c2d9eac9c230c210ab"
+  "packages/sdk/server/src/agent-telemetry.ts": "sha256:c76f0910237bee7e7867f77ac38ede82bb33a6230f08094903c04561d77c9632"
+  "packages/shared/contracts/event-registry.json": "sha256:9a7bd7fa8b2fb9ae18b178a6076c71d573d262f7eb4dd403a48f8042a638eb15"
+  "services/api/ingestion/ingestion/validation.py": "sha256:03544e3ad77f59db7eb04bb57d32ae0ce77a23a423cd0136529a09aab8615641"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
 ---
 
@@ -110,3 +112,14 @@ Ingestion validation (`services/api/ingestion/ingestion/validation.py`) stages e
 - Client torn down while messages are unacknowledged → `ConsumerClientTornDown` (drains wait on both in-flight handlers and unacknowledged messages to avoid duplicate application)
 - Kafka batch overflow (`batch.append()` returns `None`) → overflow events fall back to individual `publish()` calls, ensuring no silent drops when a batch payload exceeds broker limits
 - DLQ events include `original_payload` so failed events are replayable without data loss
+
+## External agent action evidence
+
+The server SDK emits source-asserted events for agent task starts/completions/
+failures, tool invocations, policy evaluations, and delegated tasks. Ingestion
+accepts these events only with an active deployment identity validated against
+the authenticated tenant. The backend registry identity is authoritative;
+SDK-supplied agent identity and delegation targets remain source references.
+Silver preserves the event timeline and run explanation reports which evidence
+was not observed. Graph projection links bounded action and policy-decision
+records to a tenant-scoped run through the retryable graph-writer outbox.

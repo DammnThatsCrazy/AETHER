@@ -14,6 +14,9 @@ source_files:
   - services/api/ingestion/ingestion/replay_routes.py
   - services/api/shared/events/events.py
   - packages/shared/
+  - services/api/actions/agent/deployment_routes.py
+  - services/api/actions/agent_marketplace/projection.py
+  - services/api/workers/runtime/specs.py
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
@@ -21,13 +24,16 @@ reviewed_source_commits:
   - commit: "5bfb9394"
     reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
 source_hashes:
-  "packages/shared/": "sha256:625e112252988ff4307e93a82786685fb734459369728b8263978800e959c4c3"
+  "packages/shared/": "sha256:85d85e07e1dc1d9cba7967d00c00e22e3e9e95200dafe0216f270f9b987c5834"
+  "services/api/actions/agent/deployment_routes.py": "sha256:a782f5db92c58ec7ae9ca5160f03a5d7a8e5c4b1c711818fd1c692982bd255ab"
+  "services/api/actions/agent_marketplace/projection.py": "sha256:174c8ab0c749ef7aa1611008aa9b3c1a456f13cb828d52c9937d49061e877e2d"
   "services/api/config/settings.py": "sha256:0c59864b351aaa3558edf56cc3e550803ed212c05c716f8ec24311ccfcf9779b"
   "services/api/ingestion/ingestion/replay.py": "sha256:ca77373185e811a47e354b28052901bc48ef309e62ea0133f1f55fdc37f5f687"
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/main.py": "sha256:d3c8f2c63bfedaa93e0d0cafd11c0fe1a25983dd48e64ac3a3de7d9a364d63d4"
   "services/api/middleware/middleware.py": "sha256:4f984e6a2d3622df9652045c85dd323db990e11bfb4d8cf4af6f08aadfb935d6"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
+  "services/api/workers/runtime/specs.py": "sha256:24d26c3031cb512edb415033cea2c668d982df4db7bc659c2d41c40d51896aa0"
 ---
 # Aether vNext — Architecture Guide
 
@@ -990,3 +996,21 @@ Three additive service modules mount conditionally via `main.py` behind feature 
 These services are fully additive — they add no startup overhead when their flags are disabled. They share the graph client, event producer, and investigation repository with existing services. The `FraudIntelligenceConfig` dataclass in `config/settings.py` owns the fraud-intelligence flags and tuning parameters (`max_network_depth`, `max_flow_trace_hops`).
 
 See `docs/architecture/AGENT-CONTROLLER.md` for the full specification and `services/agents/README.md` for implementation details.
+
+## External agent observation and recovery
+
+The tenant-facing `/v1/agent/deployments` registry stores an external agent's
+tenant-declared marketplace origin and validated source telemetry. The
+run-explanation route returns a chronological evidence timeline for task,
+action, trigger, policy, delegation, tool, and outcome events. Silver facts are
+the detailed record; the graph carries bounded run/action/decision relationships
+for cross-entity exploration. Neither surface claims access to hidden model
+reasoning or independently verifies source-reported policy and delegation.
+
+When `AETHER_AGENT_DEPLOYMENT_GRAPH_ENABLED` is enabled, marketplace and run
+projection mutations are queued in the supervised `graph-writer` outbox and
+applied through `GraphMutationGateway`. Kyber's
+`/v1/admin/kyber/agent-telemetry/graph-projection/{drain,reconcile,repair}`
+routes support bounded draining and source-to-outbox recovery. Reconciliation
+does not inspect or certify graph contents; replay is idempotent and can
+recreate missing queue work from the deployment registry and Silver facts.

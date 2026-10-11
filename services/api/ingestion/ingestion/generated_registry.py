@@ -1469,6 +1469,30 @@ EVENT_FIELD_TRUST: dict[str, dict[str, dict[str, object]]] = {
         "properties.contract": { "trustClass": "SOURCE_REFERENCE" },
         "userId": { "trustClass": "CLIENT_HINT" },
     },
+    "agent_task_started": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "context.agentDeployment": { "trustClass": "SOURCE_REFERENCE" },
+    },
+    "agent_task_completed": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "context.agentDeployment": { "trustClass": "SOURCE_REFERENCE" },
+    },
+    "agent_task_failed": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "context.agentDeployment": { "trustClass": "SOURCE_REFERENCE" },
+    },
+    "agent_delegated_task": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "context.agentDeployment": { "trustClass": "SOURCE_REFERENCE" },
+    },
+    "agent_policy_evaluated": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "context.agentDeployment": { "trustClass": "SOURCE_REFERENCE" },
+    },
+    "agent_outcome_recorded": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "context.agentDeployment": { "trustClass": "SOURCE_REFERENCE" },
+    },
     "x402_payment": {
         "userId": { "trustClass": "CLIENT_HINT" },
         "properties.txHash": { "trustClass": "SOURCE_REFERENCE" },
@@ -1521,6 +1545,10 @@ EVENT_FIELD_TRUST: dict[str, dict[str, dict[str, object]]] = {
     },
     "x402_refund_or_reversal": {
         "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "agent_tool_invocation_observed": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "context.agentDeployment": { "trustClass": "SOURCE_REFERENCE" },
     },
     "workspace_created": {
         "properties": { "trustClass": "SOURCE_ASSERTED" },
@@ -2264,6 +2292,12 @@ SDK_EMITTABLE_EVENT_TYPES: frozenset[str] = frozenset({
     "wallet",
     "transaction",
     "contract_action",
+    "agent_task_started",
+    "agent_task_completed",
+    "agent_task_failed",
+    "agent_delegated_task",
+    "agent_policy_evaluated",
+    "agent_outcome_recorded",
     "reward_proof_generated",
     "reward_delivered",
     "reward_claim_submitted",
@@ -2282,6 +2316,7 @@ SDK_EMITTABLE_EVENT_TYPES: frozenset[str] = frozenset({
     "x402_access_granted",
     "x402_access_denied",
     "x402_refund_or_reversal",
+    "agent_tool_invocation_observed",
     "x402_resource_request_observed",
     "x402_challenge_observed",
     "x402_payment_requirement_observed",

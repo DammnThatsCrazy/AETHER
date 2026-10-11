@@ -6,12 +6,16 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/shared/graph/graph.py, services/api/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts]
+source_files: [services/api/shared/graph/graph.py, services/api/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/actions/agent_marketplace/lineage.py, services/api/actions/agent_marketplace/projection.py]
 canonical_owner: platform@aether
 source_hashes:
-  "packages/shared/graph-contract.ts": "sha256:22f04a5932fd36c169c27cab2cf3107df3a8ea6150b02796ce30bc77affd6a94"
-  "services/api/shared/graph/graph.py": "sha256:58b03f8407597f9b6b72910a3c30a51b71f44b1ad07942c0ca5f9a79a3d6a2e7"
-  "services/api/shared/graph/relationship_layers.py": "sha256:c12c383bdda3487a894632fb5ad0a1d927a2bf9e27fea9f043a13797322b413c"
+  "packages/shared/graph-contract.ts": "sha256:1d8abee6ae4996435a52ec89e4631fb24a1db9a73009387f5c7c45ce9060a2ab"
+  "services/api/actions/agent_marketplace/lineage.py": "sha256:df30e2c21f5a763e3a778d32824d3d29e864ea62f04903174d65b96fe9471ba0"
+  "services/api/actions/agent_marketplace/projection.py": "sha256:174c8ab0c749ef7aa1611008aa9b3c1a456f13cb828d52c9937d49061e877e2d"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:63f702d411c6e2f11349abb68f70f67bfc0cd22e5aff7d150614a43f3821486c"
+  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:5e1772ea0b72e26131503b6b98716a852d608a6704bf64579d24acb0ff510488"
+  "services/api/shared/graph/graph.py": "sha256:5ebd5c00091501ed11bac0bd49baf741261177a93ae1e99e5e9d6b0ec5054a06"
+  "services/api/shared/graph/relationship_layers.py": "sha256:0d53e3c12efef77b060beb2b53b7e02f5086d4ee93ecea098b1d8318a4eb8af6"
 ---
 
 # Graph Projection Model
@@ -99,3 +103,25 @@ projected by the semantic graph projector
 — governed (edge intent, ledger-aware in shadow/enforce mode), idempotent, and
 tenant-scoped, gated on `SEMANTIC_GRAPH_PROJECTOR_ENABLED` (default OFF). See
 [`docs/architecture/INTELLIGENCE-GRAPH.md`](../../../architecture/INTELLIGENCE-GRAPH.md#semantic-relationship-overlay).
+
+## External agent execution lineage
+
+Marketplace listings, tenant-declared deployments, and observed execution are
+separate graph evidence. A deployment's marketplace origin remains a
+tenant-declared reference; its agent ID is not linked to a canonical Agent
+until identity authority resolves it. Runs are grouped using the validated
+deployment plus source run ID, or trace ID when no run ID is supplied.
+
+The graph links each run to the deployment and source-scoped task/outcome
+records. Source-reported actions, tool calls, triggers, policy decisions, and
+delegation references are retained as timestamped `ActionRecord` and
+`DecisionRecord` nodes. The complete source event stays in Silver. A run
+explanation is an ordered view of those observations and their coverage gaps,
+not an inference about hidden reasoning or a verification of reported policy.
+
+Graph writes use a store-backed outbox and the canonical `GraphMutationGateway`.
+Kyber can reconcile expected mutations from deployment/Silver sources, enqueue
+missing work, and replay dead-lettered or stale processing rows. This proves
+source-to-outbox coverage only; it does not detect graph-side drift. The
+projection is feature-flagged and local in-memory store mode is not durable
+across processes.

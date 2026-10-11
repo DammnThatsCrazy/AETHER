@@ -11,6 +11,8 @@ Each emission is:
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import os
 from typing import Any
 
@@ -34,6 +36,13 @@ _TOOL_EVENTS = frozenset({
     "agent_tool_observed",
     "agent_tool_called",
 })
+
+
+def _tenant_scoped_graph_id(kind: str, tenant_id: str, *refs: str) -> str:
+    """Opaque deterministic graph IDs for source-scoped observed entities."""
+    material = json.dumps([tenant_id, *refs], ensure_ascii=False, separators=(",", ":"))
+    digest = hashlib.sha256(material.encode("utf-8")).hexdigest()[:40]
+    return f"{kind}_{digest}"
 
 
 async def _emit(edge: Edge, *, subject_id: str = "") -> None:
@@ -135,6 +144,180 @@ def _edge(
         to_vertex_id=to_id,
         properties=props,
     )
+
+
+def build_external_agent_run_mutations(row: dict[str, Any]) -> list[Any]:
+    """Build a bounded, tenant-scoped run path from one Silver fact.
+
+    Source agent, task, outcome, and policy references remain tenant/deployment
+    scoped. The builder deliberately does not join ``agent_id`` to a canonical
+    Agent vertex; identity authority owns that decision.
+    """
+    tenant_id = str(row.get("tenant_id") or "")
+    deployment_id = str(row.get("deployment_id") or "")
+    run_id = str(row.get("run_id") or "")
+    source_event_id = str(row.get("source_event_id") or "")
+    if not (tenant_id and deployment_id and run_id and source_event_id):
+        return []
+
+    occurred_at = _as_iso(row.get("occurred_at"))
+    run_vertex_id = _tenant_scoped_graph_id(
+        "agent_run", tenant_id, deployment_id, run_id
+    )
+    mutations: list[Any] = [
+        Vertex(
+            vertex_type=VertexType.EXTERNAL_AGENTIC_ACCOUNT,
+            vertex_id=deployment_id,
+            properties={
+                "tenant_id": tenant_id,
+                "tenantId": tenant_id,
+                "kind": "agent_deployment",
+                "agent_reference_authority": "tenant_deployment_registry",
+            },
+        ),
+        Vertex(
+            vertex_type=VertexType.AGENT_EXECUTION_RUN,
+            vertex_id=run_vertex_id,
+            properties={
+                "tenant_id": tenant_id,
+                "tenantId": tenant_id,
+                "kind": "observed_external_agent_run",
+                "agent_reference_authority": "tenant_deployment_registry",
+                "deployment_id": deployment_id,
+                "correlation_basis": row.get("run_correlation_source") or "source_reported",
+                "evidence_status": "source_reported",
+            },
+        ),
+        _bounded_edge(
+            EdgeType.EXECUTED_ON, run_vertex_id, deployment_id,
+            tenant_id, source_event_id, occurred_at,
+        ),
+    ]
+
+    task_ref = str(row.get("task_ref") or "")
+    if task_ref:
+        task_vertex_id = _tenant_scoped_graph_id(
+            "agent_task", tenant_id, deployment_id, task_ref
+        )
+        mutations.extend([
+            Vertex(
+                vertex_type=VertexType.TASK,
+                vertex_id=task_vertex_id,
+                properties={
+                    "tenant_id": tenant_id,
+                    "tenantId": tenant_id,
+                    "kind": "observed_external_agent_task",
+                    "deployment_id": deployment_id,
+                    "evidence_status": "source_reported",
+                },
+            ),
+            _bounded_edge(
+                EdgeType.RUN_CONTAINS_TASK, run_vertex_id, task_vertex_id,
+                tenant_id, source_event_id, occurred_at,
+            ),
+        ])
+
+    # Keep action/decision evidence as a small, typed graph record linked to
+    # the run. The full event payload stays in Silver; this record carries only
+    # the source references and bounded labels needed to follow what happened.
+    action_evidence_fields = (
+        "action_ref", "action_type", "trigger_ref", "trigger_type", "tool_name",
+        "policy_id", "policy_decision", "delegation_id", "delegated_to_ref",
+        "outcome_ref",
+    )
+    action_fields = (*action_evidence_fields, "status", "principal_id")
+    event_name = str(row.get("event_name") or "")
+    has_action_evidence = any(row.get(field) for field in action_evidence_fields) or event_name in {
+        "agent_task_started", "agent_task_completed", "agent_task_failed",
+        "agent_tool_invocation_observed", "agent_tool_called", "agent_tool_observed",
+        "agent_policy_evaluated", "agent_delegated_task", "agent_outcome_recorded",
+    }
+    if has_action_evidence:
+        action_vertex_id = _tenant_scoped_graph_id(
+            "agent_action", tenant_id, deployment_id, source_event_id
+        )
+        action_properties = {
+            "tenant_id": tenant_id,
+            "tenantId": tenant_id,
+            "kind": "source_reported_agent_action",
+            "deployment_id": deployment_id,
+            "source_event_id": source_event_id,
+            "event_name": event_name[:128],
+            "occurred_at": occurred_at,
+            "evidence_status": "source_reported",
+        }
+        for field in action_fields:
+            value = row.get(field)
+            if isinstance(value, str) and value:
+                action_properties[field] = value[:256]
+        action_properties["policy_version"] = str(row.get("policy_version") or "")[:128] or None
+        reasons = row.get("policy_reason_codes") or []
+        action_properties["policy_reason_codes"] = [
+            str(value)[:128] for value in reasons[:16] if isinstance(value, str)
+        ] if isinstance(reasons, list) else []
+        mutations.extend([
+            Vertex(
+                vertex_type=VertexType.ACTION_RECORD,
+                vertex_id=action_vertex_id,
+                properties=action_properties,
+            ),
+            _bounded_edge(
+                EdgeType.PERFORMED_ACTION, run_vertex_id, action_vertex_id,
+                tenant_id, source_event_id, occurred_at,
+            ),
+        ])
+        if row.get("policy_id") or row.get("policy_decision") or event_name == "agent_policy_evaluated":
+            decision_vertex_id = _tenant_scoped_graph_id(
+                "agent_policy_decision", tenant_id, deployment_id, source_event_id
+            )
+            mutations.extend([
+                Vertex(
+                    vertex_type=VertexType.DECISION_RECORD,
+                    vertex_id=decision_vertex_id,
+                    properties={
+                        "tenant_id": tenant_id,
+                        "tenantId": tenant_id,
+                        "kind": "source_reported_agent_policy_evaluation",
+                        "deployment_id": deployment_id,
+                        "source_event_id": source_event_id,
+                        "policy_id": str(row.get("policy_id") or "")[:256] or None,
+                        "policy_version": str(row.get("policy_version") or "")[:128] or None,
+                        "decision": str(row.get("policy_decision") or "")[:128] or None,
+                        "reason_codes": action_properties["policy_reason_codes"],
+                        "evidence_status": "source_reported",
+                    },
+                ),
+                _bounded_edge(
+                    EdgeType.EVALUATED_BY_POLICY, action_vertex_id, decision_vertex_id,
+                    tenant_id, source_event_id, occurred_at,
+                ),
+            ])
+
+    outcome_ref = str(row.get("outcome_ref") or "")
+    if outcome_ref:
+        outcome_vertex_id = _tenant_scoped_graph_id(
+            "agent_outcome", tenant_id, deployment_id, outcome_ref
+        )
+        mutations.extend([
+            Vertex(
+                vertex_type=VertexType.OUTCOME_OBSERVATION,
+                vertex_id=outcome_vertex_id,
+                properties={
+                    "tenant_id": tenant_id,
+                    "tenantId": tenant_id,
+                    "kind": "observed_external_agent_outcome",
+                    "deployment_id": deployment_id,
+                    "outcome_ref": outcome_ref[:256],
+                    "outcome": str(row.get("outcome") or row.get("status") or "")[:128] or None,
+                    "evidence_status": "source_reported",
+                },
+            ),
+            _bounded_edge(
+                EdgeType.RESULTED_IN_OUTCOME, run_vertex_id, outcome_vertex_id,
+                tenant_id, source_event_id, occurred_at,
+            ),
+        ])
+    return mutations
 
 
 class SilverGraphProjector:
@@ -256,6 +439,9 @@ class SilverGraphProjector:
         - Tool invocation events → one ``AgentToolObserved`` vertex per (tenant,
           tool) carrying the REAL tool name, and one ``AGENT_USED_TOOL_OBS`` edge
           per (agent, tool).
+        - Internal agent MCP/tool observations retain their existing bounded
+          projections. External deployments use the separate run projection
+          and never join a registry ``agent_id`` to a canonical Agent vertex.
         - Everything else (generic activity, risk signals, trades, …) stays a
           Silver fact only — no per-event vertex enters the graph (high-cardinality
           stays in Silver, not the graph).
@@ -266,14 +452,21 @@ class SilverGraphProjector:
         for row in result.rows:
             agent_id = row.get("agent_id")
             source_event_id = str(row.get("source_event_id") or "")
-            if not agent_id or not source_event_id:
+            if not source_event_id:
                 continue
             tenant_id = str(row.get("tenant_id") or "default")
-            agent_id = str(agent_id)
             occurred_at = _as_iso(row.get("occurred_at"))
             event_name = row.get("event_name") or event.get("type") or ""
 
-            if event_name in _MCP_EVENTS:
+            # A validated deployment reference is not canonical Agent identity.
+            # Keep the legacy per-agent MCP/tool edges for internal agents only;
+            # external telemetry enters the tenant-scoped run outbox below.
+            if not row.get("deployment_id") and agent_id:
+                agent_id = str(agent_id)
+            else:
+                agent_id = None
+
+            if agent_id and event_name in _MCP_EVENTS:
                 server_name = row.get("server_name")
                 if not server_name:
                     continue
@@ -299,7 +492,7 @@ class SilverGraphProjector:
                     subject_id=agent_id,
                 )
 
-            elif event_name in _TOOL_EVENTS:
+            elif agent_id and event_name in _TOOL_EVENTS:
                 tool_name = row.get("tool_name")
                 if not tool_name:
                     continue
@@ -323,7 +516,34 @@ class SilverGraphProjector:
                     ),
                     subject_id=agent_id,
                 )
-            # else: generic activity / risk-signal → Silver fact only.
+            # Generic activity remains Silver-only. Events with a validated
+            # external deployment and explicit run correlation also add one
+            # bounded AgentExecutionRun node and source-scoped task/outcome
+            # nodes below.
+
+            await self._emit_external_agent_run(row, tenant_id, source_event_id)
+
+    async def _emit_external_agent_run(
+        self,
+        row: dict[str, Any],
+        tenant_id: str,
+        source_event_id: str,
+    ) -> None:
+        """Queue a replayable deployment → run → task/outcome projection."""
+        from config.settings import settings
+
+        if not settings.external_agent_telemetry.graph_enabled:
+            return
+        mutations = build_external_agent_run_mutations(row)
+        if not mutations:
+            return
+        from actions.agent_marketplace.projection import (
+            AgentMarketplaceGraphProjectionOutbox,
+        )
+
+        await AgentMarketplaceGraphProjectionOutbox().enqueue_mutations(
+            tenant_id, source_event_id, mutations
+        )
 
     async def _emit_touchpoint_source(self, result: ProjectionResult, event: dict[str, Any]) -> None:
         """Project canonical source/attribution relationships (spec §13.6).

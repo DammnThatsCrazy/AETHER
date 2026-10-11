@@ -58,6 +58,27 @@ export const agentDeploymentStatuses = [
 export type AgentDeploymentStatus = typeof agentDeploymentStatuses[number];
 
 /**
+ * Tenant-declared origin for an external agent deployment. This records where
+ * the tenant says a template came from; it is not proof that the marketplace
+ * published the listing or that the listed capabilities are granted at run
+ * time. `sourceNamespace` scopes all source references and is never a
+ * canonical agent identity.
+ */
+export interface AgentMarketplaceOrigin {
+  schemaVersion?: 'agent.marketplace-origin.v1';
+  sourceNamespace: string;
+  listingRef: string;
+  templateRef: string;
+  templateVersion: string;
+  listingUrl?: string;
+  category?: string;
+  /** Catalog labels only; these are not runtime authority grants. */
+  catalogCapabilities?: string[];
+  /** Set by the registry. Callers cannot claim provider verification. */
+  assertion?: 'tenant_declared';
+}
+
+/**
  * Deployment-aware context attached to telemetry emitted by external agent
  * runtimes. `deploymentId` identifies the deployment and `agentId` the agent;
  * neither identifies a human by itself and neither is a merge-eligible
@@ -113,6 +134,15 @@ export interface AgentDeployment extends AgentDeploymentHealth {
   requiredConsentPurposes: string[];
   /** Declared capability scopes (observation-only; never execution grants). */
   capabilityScopes: string[];
+  /** Optional source lineage, immutable after deployment creation. */
+  marketplaceOrigin?: AgentMarketplaceOrigin;
+  /** Present on deployment-create responses when an origin was supplied. */
+  marketplaceOriginGraphProjectionStatus?:
+    | 'queued'
+    | 'persisted'
+    | 'partial'
+    | 'failed'
+    | 'disabled';
   metadata?: Record<string, unknown>;
   firstSeenAt?: string;
   lastSeenAt?: string;

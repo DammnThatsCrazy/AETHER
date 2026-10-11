@@ -48,6 +48,11 @@ export const LAYER_DESCRIPTIONS: Record<RelationshipLayer, { label: string; desc
 /** Canonical edge types with their layer classification. */
 export const EDGE_LAYER_MAP: Record<string, RelationshipLayer> = {
   // H2H edges
+  // Metadata/topology relationships already classified H2H by the backend;
+  // they are not agent activity events or evidence of delegated authority.
+  INSTANCE_OF: 'H2H',
+  LISTED_ON: 'H2H',
+  LISTS_AGENT_TEMPLATE: 'H2H',
   HAS_SESSION: 'H2H',
   VIEWED_PAGE: 'H2H',
   TRIGGERED_EVENT: 'H2H',
@@ -94,6 +99,11 @@ export const EDGE_LAYER_MAP: Record<string, RelationshipLayer> = {
   REFERRED_ENTITY: 'A2H',
 
   // A2A edges
+  AGENT_LINKED_TO_EXTERNAL_ACCOUNT: 'A2A',
+  EXECUTED: 'A2A',
+  EXECUTED_ON: 'A2A',
+  RESULTED_IN_OUTCOME: 'A2A',
+  RUN_CONTAINS_TASK: 'A2A',
   PAYS: 'A2A',
   CONSUMES: 'A2A',
   HIRED: 'A2A',

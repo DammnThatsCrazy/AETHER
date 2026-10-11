@@ -358,6 +358,11 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return CardLinkedGraphOutboxWorker().build_coro()
 
+    def _agent_marketplace_graph_outbox() -> Coroutine[Any, Any, None]:
+        from actions.agent_marketplace.projection import AgentMarketplaceGraphOutboxWorker
+
+        return AgentMarketplaceGraphOutboxWorker().build_coro()
+
     def _stablecoin_provider_polling() -> Coroutine[Any, Any, None]:
         from value.stablecoins.polling import build_stablecoin_polling_loop
 
@@ -761,6 +766,11 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
             name="card_linked_graph_outbox",
             factory=_card_linked_graph_outbox,
             enabled=lambda: bool(settings.card_linked_payment_rails.enabled),
+        ),
+        WorkerSpec(
+            name="agent_marketplace_graph_outbox",
+            factory=_agent_marketplace_graph_outbox,
+            enabled=lambda: bool(settings.external_agent_telemetry.graph_enabled),
         ),
         # Stablecoin provider/finality polling: polls stablecoin providers and
         # confirms finality on a cooldown cadence. Gated on the stablecoin

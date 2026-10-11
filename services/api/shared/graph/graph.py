@@ -111,6 +111,8 @@ class VertexType:
 
     # Intelligence Graph — Actor nodes
     AGENT = "Agent"
+    AGENT_TEMPLATE = "AgentTemplate"       # Source-scoped marketplace template, not an Agent identity
+    AGENT_MARKETPLACE_LISTING = "AgentMarketplaceListing"  # Tenant-declared listing evidence
     SERVICE = "Service"
     CONTRACT = "Contract"
     PROTOCOL = "Protocol"
@@ -131,6 +133,7 @@ class VertexType:
     RECOMMENDATION = "Recommendation"
     DECISION_RECORD = "DecisionRecord"
     OUTCOME_OBSERVATION = "OutcomeObservation"
+    AGENT_EXECUTION_RUN = "AgentExecutionRun"  # Bounded run correlation for observed external deployments
     PLAYBOOK_RUN = "PlaybookRun"
 
     # Web3 Coverage — Registry-native graph objects
@@ -546,6 +549,7 @@ class EdgeType:
     ACTED_FOR = "ACTED_FOR"                          # Agent → User/Entity (acting on behalf of)
 
     # ── Agent Lifecycle — Task control-flow edges (additive) ──────────────
+    RUN_CONTAINS_TASK = "RUN_CONTAINS_TASK"        # Observed AgentExecutionRun → source-scoped Task
     CREATED_TASK = "CREATED_TASK"                    # Agent/User → Task
     DECOMPOSED_INTO = "DECOMPOSED_INTO"              # Task → Task (subtask decomposition)
     STARTED_TASK = "STARTED_TASK"                    # Agent → Task
@@ -611,6 +615,7 @@ class EdgeType:
     # ── Entity → Entity (universal relationship graph) ────────────────
     CO_INVESTS_WITH = "CO_INVESTS_WITH"             # Entity → Entity (shared investment position)
     LISTED_ON = "LISTED_ON"                         # Brand/Product → Marketplace or Exchange
+    LISTS_AGENT_TEMPLATE = "LISTS_AGENT_TEMPLATE"   # Marketplace listing → source-scoped template version
     DISTRIBUTES_VIA = "DISTRIBUTES_VIA"             # Entity → Channel/Platform (distribution)
     CONTENT_ON = "CONTENT_ON"                       # Entity → MediaEntity/Platform (presence)
     COMPETES_WITH = "COMPETES_WITH"                 # Entity → Entity (competitive relationship)

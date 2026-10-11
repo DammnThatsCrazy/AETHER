@@ -64,17 +64,17 @@
 | `agent_capability_revoked` | `agent` | agent | behavioral | standard_90d | Agent capability revocation |
 | `agent_task_created` | `agent` | agent | behavioral | standard_90d | Agent task created |
 | `agent_task_decomposed` | `agent` | agent | behavioral | standard_90d | Agent task decomposed into subtasks |
-| `agent_task_started` | `agent` | agent | behavioral | standard_90d | Agent task execution started |
-| `agent_task_completed` | `agent` | agent | behavioral | standard_90d | Agent task completed successfully |
-| `agent_task_failed` | `agent` | agent | behavioral | standard_90d | Agent task failed |
+| `agent_task_started` | `agent` | agent | behavioral | standard_90d | External agent task execution start reported by its source |
+| `agent_task_completed` | `agent` | agent | behavioral | standard_90d | External agent task completion reported by its source |
+| `agent_task_failed` | `agent` | agent | behavioral | standard_90d | External agent task failure reported by its source |
 | `agent_tool_called` | `agent` | agent | behavioral | standard_90d | Agent called an external tool |
 | `agent_resource_requested` | `agent` | agent | behavioral | standard_90d | Agent requested a resource |
-| `agent_delegated_task` | `agent` | agent | behavioral | standard_90d | Agent delegated task to another agent |
+| `agent_delegated_task` | `agent` | agent | behavioral | standard_90d | External agent delegation reported by its source |
 | `agent_subagent_spawned` | `agent` | agent | behavioral | standard_90d | Agent spawned a subagent |
-| `agent_policy_evaluated` | `agent` | agent | behavioral | standard_90d | Policy evaluated for agent action |
+| `agent_policy_evaluated` | `agent` | agent | behavioral | standard_90d | External agent policy evaluation reported by its source |
 | `agent_handoff` | `agent` | agent | behavioral | standard_90d | Agent handed off to another system |
 | `agent_escalated_to_human` | `agent` | agent | behavioral | standard_90d | Agent escalated task to human |
-| `agent_outcome_recorded` | `agent` | agent | behavioral | standard_90d | Agent outcome recorded |
+| `agent_outcome_recorded` | `agent` | agent | behavioral | standard_90d | External agent outcome reported by its source |
 | `reward_action_queued` | `reward` | commerce | financial | financial_7y | Reward eligibility action queued — emitted by Aether, not the tenant |
 | `reward_proof_generated` | `reward` | commerce | financial | financial_7y | Reward cryptographic proof generated |
 | `reward_delivered` | `reward` | commerce | financial | financial_7y | Reward delivered to recipient |
@@ -102,7 +102,7 @@
 | `agent_permission_observed` | `agent` | agent | behavioral | standard_90d | Agent permission state observed |
 | `agent_mcp_connection_observed` | `agent` | agent | behavioral | standard_90d | Agent MCP connection observed |
 | `agent_tool_observed` | `agent` | agent | behavioral | standard_90d | Agent tool availability observed |
-| `agent_tool_invocation_observed` | `agent` | agent | behavioral | standard_90d | Agent tool invocation observed |
+| `agent_tool_invocation_observed` | `agent` | agent | behavioral | standard_90d | External agent tool invocation observed by its source |
 | `agent_activity_observed` | `agent` | agent | behavioral | standard_90d | General agent activity observed |
 | `agent_risk_signal_observed` | `agent` | agent | behavioral | standard_90d | Agent risk signal observed |
 | `agent_notification_observed` | `agent` | agent | behavioral | standard_90d | Agent notification observed |

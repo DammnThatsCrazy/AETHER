@@ -5,6 +5,23 @@ from __future__ import annotations
 from typing import Any
 from .base import BaseProjector, ProjectionResult
 
+_SOURCE_REF_MAX_LENGTH = 256
+
+
+def _source_reference(value: Any) -> str | None:
+    """Keep external correlation references bounded and printable."""
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if (
+        not normalized
+        or len(normalized) > _SOURCE_REF_MAX_LENGTH
+        or any(ord(char) < 32 or ord(char) == 127 for char in normalized)
+    ):
+        return None
+    return normalized
+
+
 _AGENT_TYPES = frozenset({
     "agent_task_started",
     "agent_task_completed",
@@ -80,22 +97,107 @@ class AgentExecutionProjector(BaseProjector):
         if event.get("type") not in self.handles:
             return None
         p = self._props(event)
+        context = event.get("context") or {}
+        # This marker is added after deployment registry validation in the
+        # ingestion decision. SDK-supplied agentDeployment data is not trusted
+        # as a canonical agent/deployment join.
+        deployment = event.get("validated_agent_deployment") or {}
+        correlation = context.get("correlation") or {}
+        event_name = str(event.get("type") or "")
         row = self._base_row(event)
+        run_ref = _source_reference(p.get("runId") or p.get("run_id"))
+        trace_ref = _source_reference(
+            correlation.get("traceId") or correlation.get("trace_id")
+        )
+        task_ref = _source_reference(p.get("taskId") or p.get("task_id"))
+        outcome_ref = _source_reference(p.get("outcomeId") or p.get("outcome_id"))
+        if not outcome_ref and event_name in {
+            "agent_task_completed", "agent_task_failed", "agent_outcome_recorded",
+        }:
+            # Every accepted event already has a stable source_event_id. Use it
+            # as the source outcome reference when a producer omits outcomeId.
+            outcome_ref = _source_reference(row.get("source_event_id"))
+        event_status = {
+            "agent_task_started": "started",
+            "agent_task_completed": "completed",
+            "agent_task_failed": "failed",
+        }.get(event_name)
         row.update({
-            "event_name": event.get("type"),
-            "agent_id": p.get("agentId") or p.get("workerId"),
-            "task_id": p.get("taskId") or p.get("sessionId"),
+            "event_name": event_name,
+            # Registry-backed identity takes precedence over event properties
+            # when an accepted event has validated deployment context.
+            "agent_id": deployment.get("agentId") or deployment.get("agent_id") or p.get("agentId") or p.get("workerId"),
+            "deployment_id": deployment.get("deploymentId") or deployment.get("deployment_id"),
+            "run_id": run_ref or trace_ref,
+            "run_correlation_source": "run_id" if run_ref else (
+                "trace_id" if trace_ref else None
+            ),
+            "trace_id": trace_ref,
+            "span_id": _source_reference(
+                correlation.get("spanId") or correlation.get("span_id")
+            ),
+            "correlation_id": _source_reference(
+                correlation.get("correlationId") or correlation.get("correlation_id")
+            ),
+            "causation_id": _source_reference(
+                correlation.get("causationId") or correlation.get("causation_id")
+            ),
+            "delegation_id": _source_reference(
+                p.get("delegationId") or p.get("delegation_id")
+                or context.get("delegationId") or context.get("delegation_id")
+            ),
+            "delegated_to_ref": _source_reference(
+                p.get("delegatedToAgentId") or p.get("delegated_to_agent_id")
+                or p.get("targetAgentId") or p.get("target_agent_id")
+            ),
+            "action_ref": _source_reference(
+                p.get("actionId") or p.get("action_id")
+            ),
+            "action_type": _source_reference(
+                p.get("actionType") or p.get("action_type") or p.get("action")
+            ),
+            "trigger_ref": _source_reference(
+                p.get("triggerId") or p.get("trigger_id")
+            ),
+            "trigger_type": _source_reference(
+                p.get("triggerType") or p.get("trigger_type")
+            ),
+            "decision_ref": _source_reference(
+                p.get("decisionId") or p.get("decision_id")
+            ),
+            "policy_id": _source_reference(p.get("policyId") or p.get("policy_id")),
+            "policy_version": _source_reference(
+                p.get("policyVersion") or p.get("policy_version")
+            ),
+            "policy_decision": _source_reference(
+                p.get("decision") or p.get("policyDecision") or p.get("policy_decision")
+            ),
+            "policy_reason_codes": [
+                item[:128] for item in (p.get("reasonCodes") or p.get("policyReasonCodes") or [])
+                if isinstance(item, str) and item.strip() and len(item) <= 256
+                and not any(ord(char) < 32 or ord(char) == 127 for char in item)
+            ][:32],
+            "principal_id": _source_reference(
+                context.get("beneficiaryActorId") or context.get("beneficiary_actor_id")
+            ),
+            "task_id": task_ref or _source_reference(
+                p.get("sessionId") or p.get("session_id")
+            ),
+            "task_ref": task_ref,
+            "outcome_ref": outcome_ref,
             "model_id": p.get("modelId") or p.get("model"),
             "prompt_tokens": p.get("promptTokens"),
             "completion_tokens": p.get("completionTokens"),
             "cost_usd": p.get("costUsd") or p.get("cost"),
-            "status": p.get("status"),
-            "outcome": p.get("outcome") or p.get("status"),
+            "status": _source_reference(p.get("status")) or event_status,
+            "outcome": _source_reference(p.get("outcome") or p.get("status")) or (
+                event_status if event_status in {"completed", "failed"} else None
+            ),
             "grounding_sources": p.get("groundingSources"),
             "human_override": bool(p.get("humanOverride")),
             # Observed MCP / tool / risk / object context (drives bounded graph
             # emission in SilverGraphProjector._emit_agent_execution).
-            "tool_name": p.get("toolName"),
+            "tool_name": _source_reference(p.get("toolName") or p.get("tool_name")),
             "server_name": p.get("serverName"),
             "server_url": p.get("serverUrl"),
             "protocol_version": p.get("protocolVersion"),

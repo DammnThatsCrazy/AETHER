@@ -30,6 +30,7 @@ from enum import Enum
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
+from actions.agent_marketplace.models import AgentMarketplaceOrigin
 
 from ingestion.ingestion.generated_registry import EVENT_CONSENT_PURPOSE, EVENT_FAMILY
 from shared.common.common import BadRequestError, ConflictError, NotFoundError
@@ -205,6 +206,9 @@ class AgentDeployment(BaseModel):
     required_consent_purposes: list[str] = Field(default_factory=list)
     # Declared capability scopes (observation-only; never execution grants).
     capability_scopes: list[str] = Field(default_factory=list)
+    # Source lineage is supplied by the tenant at registration. It is a claim
+    # about provenance, not a provider-verified catalog fact or a grant.
+    marketplace_origin: Optional[AgentMarketplaceOrigin] = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     first_seen_at: Optional[str] = None
     last_seen_at: Optional[str] = None
@@ -328,10 +332,22 @@ class AgentDeploymentRepository:
 
         record = deployment.model_dump(mode="json")
         await self._store.set(self._key(tenant_id, deployment.id), record)
+        audit_detail: dict[str, Any] = {
+            "external_platform": record["external_platform"],
+            "environment": record["environment"],
+        }
+        if record.get("marketplace_origin"):
+            origin = record["marketplace_origin"]
+            audit_detail["marketplace_origin"] = {
+                "source_namespace": origin["source_namespace"],
+                "listing_ref": origin["listing_ref"],
+                "template_ref": origin["template_ref"],
+                "template_version": origin["template_version"],
+                "assertion": origin["assertion"],
+            }
         await self._write_audit(
             tenant_id, deployment.id, "created", actor, request_id,
-            detail={"external_platform": record["external_platform"],
-                    "environment": record["environment"]},
+            detail=audit_detail,
         )
         metrics.increment("agent_deployments_created_total")
         logger.info("Agent deployment created: %s (tenant=%s)", deployment.id, tenant_id)

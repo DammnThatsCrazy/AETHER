@@ -8,6 +8,11 @@ status: stable
 since_version: 0.1.0
 source_files:
   - services/api/shared/graph/
+  - services/api/ingestion/silver/projectors/agent_execution_projector.py
+  - services/api/ingestion/silver/projectors/silver_graph_projector.py
+  - services/api/actions/agent_marketplace/lineage.py
+  - services/api/actions/agent_marketplace/projection.py
+  - services/api/actions/agent/deployment_routes.py
   - services/api/graph/web3/classifier.py
   - services/api/graph/web3/routes.py
   - scripts/allowlists/graph_write_paths.json
@@ -22,9 +27,14 @@ source_hashes:
   "docs/reference/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:77e53b782c1633240ba44d8151a7b0f3712f44a497cf9691b7c0421a466c56f8"
   "scripts/allowlists/graph_write_paths.json": "sha256:37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
   "scripts/validate_graph_write_paths.py": "sha256:b8e155e472289a5a0024e91e1af025f0c300b927f91cb9b6f3d34e02dfaf00c6"
+  "services/api/actions/agent/deployment_routes.py": "sha256:a782f5db92c58ec7ae9ca5160f03a5d7a8e5c4b1c711818fd1c692982bd255ab"
+  "services/api/actions/agent_marketplace/lineage.py": "sha256:df30e2c21f5a763e3a778d32824d3d29e864ea62f04903174d65b96fe9471ba0"
+  "services/api/actions/agent_marketplace/projection.py": "sha256:174c8ab0c749ef7aa1611008aa9b3c1a456f13cb828d52c9937d49061e877e2d"
   "services/api/graph/web3/classifier.py": "sha256:4ced74981c964a8e2442071071289d7d28dbd6bf4042200ce05934cdbd781a0e"
   "services/api/graph/web3/routes.py": "sha256:99f06d0b04993a9e61061bfb036da76e571d3084106db18f4c3e7696c1421d37"
-  "services/api/shared/graph/": "sha256:0074169c53298b1e710bc6dfca292afb8eb512ce9e8095a5fb03c51d1c1d41b0"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:63f702d411c6e2f11349abb68f70f67bfc0cd22e5aff7d150614a43f3821486c"
+  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:5e1772ea0b72e26131503b6b98716a852d608a6704bf64579d24acb0ff510488"
+  "services/api/shared/graph/": "sha256:bb8717642057ad588d97ecbc23ee41bc160b3cebc145bb267aeeeae8e436317c"
 ---
 # Unified On-Chain Intelligence Graph v0.1.0-alpha.0
 
@@ -822,3 +832,20 @@ Aether graph nodes are styled based on `observation_class`:
 | `manually_asserted` | Solid + annotation icon | Human-annotated |
 
 Predicted nodes must never render with the same visual weight as observed nodes.
+
+## External agent execution evidence
+
+The external-agent observation path adds tenant-scoped `AgentExecutionRun`
+vertices linked to registered deployments, task references, and outcome
+references. Source-reported task actions, tool calls, triggers, policy decisions,
+and delegation references are represented as bounded `ActionRecord` and
+`DecisionRecord` evidence connected to the run. These records preserve event
+IDs and observed times so graph traversal can show the reported sequence.
+
+The source event and run explanation remain evidence, not a claim about hidden
+model reasoning. The tenant's delegated-to reference is not resolved to a
+canonical Agent, and a policy label is not proof that the runtime enforced that
+policy. Marketplace origin is tenant-declared lineage. All these graph writes
+are queued and replayed through the supervised projection outbox and
+`GraphMutationGateway`; Kyber recovery reports source-to-outbox coverage and
+does not assert that it independently compared the persisted graph state.
