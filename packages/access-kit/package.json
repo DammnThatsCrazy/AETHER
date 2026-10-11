@@ -1,0 +1,26 @@
+{
+  "name": "@aether/access-kit",
+  "version": "0.1.0-alpha.0",
+  "private": true,
+  "description": "Aether agent-access inventory and site-bound canonical intake CLI/MCP bridge.",
+  "type": "module",
+  "bin": {
+    "aether": "./bin/aether.js",
+    "aether-mcp": "./bin/aether-mcp.js"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start:mcp": "node ./bin/aether-mcp.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.3.1",
+    "zod": "4.2.0"
+  },
+  "license": "UNLICENSED"
+}
