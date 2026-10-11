@@ -15,6 +15,7 @@ AETHER_ENV=local (in-memory backend, no asyncpg/Redis):
   * outbox rows written only for accepted events
   * V2 route path (flag ON) returns the exact BatchResponse schema
   * V1 and V2 return the same response keys/statuses for the same input
+  * V1 and V2 attach equivalent gateway-stamped SDK envelopes when enabled
   * flag OFF uses V1 (does not call ingest_many)
 
 Robust to suite ordering: every test evicts and re-imports the backend modules
@@ -302,6 +303,64 @@ def _patch_v1_deps(batch_mod):
     batch_mod.get_identity_resolver = lambda: None
 
 
+def _enable_observation_envelope(backend):
+    """Turn on the existing additive Envelope-B flags for one route run."""
+    object.__setattr__(
+        backend.settings,
+        "observation_envelope",
+        dataclasses.replace(backend.settings.observation_envelope, enabled=True),
+    )
+    object.__setattr__(
+        backend.settings,
+        "ingress_gateway",
+        dataclasses.replace(backend.settings.ingress_gateway, enabled=True),
+    )
+
+
+def test_observation_envelope_is_omitted_when_adoption_flag_is_off():
+    with fresh() as b:
+        object.__setattr__(
+            b.settings,
+            "observation_envelope",
+            dataclasses.replace(b.settings.observation_envelope, enabled=False),
+        )
+        object.__setattr__(
+            b.settings,
+            "ingress_gateway",
+            dataclasses.replace(b.settings.ingress_gateway, enabled=True),
+        )
+        normalized = {"event_id": "legacy", "event_type": "track"}
+        original = dict(normalized)
+
+        b.batch._attach_observation_envelope(
+            normalized, batch_id="batch-1", tenant_id="tenant-x"
+        )
+
+        assert normalized == original
+
+
+def _stable_envelope_fields(payload):
+    """Drop request-time stamps while retaining the shared envelope contract."""
+    envelope = payload["observation_envelope"]
+    observation = envelope["observation"]
+    return {
+        "observation": {
+            "observation_id": observation["observation_id"],
+            "observation_type": observation["observation_type"],
+            "family": observation["family"],
+            "schema_version": observation["schema_version"],
+            "occurred_at": observation["occurred_at"],
+        },
+        "tenancy": envelope["tenancy"],
+        "source": envelope["source"],
+        "subjects": envelope["subjects"],
+        "correlation": envelope.get("correlation"),
+        "temporal": envelope.get("temporal"),
+        "provenance": envelope.get("provenance"),
+        "quality": envelope.get("quality"),
+    }
+
+
 def test_v2_route_accepts_and_returns_batchresponse_schema():
     with fresh(enabled=True) as b:
         tenant = _FakeTenant("tenant-x")
@@ -398,3 +457,51 @@ def test_v1_and_v2_same_response_schema_and_statuses():
     # Per-event result objects share the same shape.
     for e1, e2 in zip(v1_resp["events"], v2_resp["events"]):
         assert set(e1.keys()) == set(e2.keys())
+
+
+def test_v1_and_v2_attach_equivalent_gateway_stamped_sdk_envelopes():
+    # V1 writes its published payload; V2 writes the same normalized payload to
+    # its transactional outbox. Compare stable Envelope-B fields because each
+    # request intentionally receives distinct server timestamps and batch ids.
+    with fresh(enabled=False) as b:
+        _enable_observation_envelope(b)
+        _patch_v1_deps(b.batch)
+        producer = _FakeProducer()
+        body = _mk_body(b.batch, ["envelope-parity"], event_type="track")
+        body.consents = ["analytics"]
+        response = _run(
+            b.batch.ingest_batch(
+                _FakeRequest(_FakeTenant("tenant-x")), body, producer=producer
+            )
+        )
+        assert response["accepted"] == 1
+        assert len(producer.published) == 1
+        v1_envelope = _stable_envelope_fields(producer.published[0].payload)
+
+    with fresh(enabled=True) as b:
+        _enable_observation_envelope(b)
+        persisted = {}
+        real_ingest_many = b.batch.ingest_many
+
+        async def _capture_outbox(records, outbox_events):
+            assert len(records) == len(outbox_events) == 1
+            persisted["envelope"] = _stable_envelope_fields(records[0].payload)
+            persisted["outbox_envelope"] = _stable_envelope_fields(
+                outbox_events[0].payload
+            )
+            return await real_ingest_many(records, outbox_events)
+
+        b.batch.ingest_many = _capture_outbox
+        body = _mk_body(b.batch, ["envelope-parity"], event_type="track")
+        body.consents = ["analytics"]
+        response = _run(
+            b.batch.ingest_batch(
+                _FakeRequest(_FakeTenant("tenant-x")), body, producer=_FakeProducer()
+            )
+        )
+        assert response["accepted"] == 1
+
+    assert persisted["envelope"] == v1_envelope
+    assert persisted["outbox_envelope"] == v1_envelope
+    assert persisted["envelope"]["provenance"]["credential_class"] == "PUBLIC_CLIENT"
+    assert persisted["envelope"]["quality"]["validation_state"] == "gateway:accepted"

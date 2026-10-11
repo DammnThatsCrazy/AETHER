@@ -87,11 +87,14 @@ and `packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt` and
    and parsing of accepted, duplicate, rejected, and transport-failure outcomes.
    Keep platform-specific APIs where appropriate; prove their wire behavior
    against the same contract rather than requiring identical surface methods.
-2. **V1/V2 intake proof.** Exercise both route branches with the envelope and
-   gateway flags off and on. Retain evidence for additive payload compatibility,
-   gateway acceptance/stamping, gateway rejection degradation, transactional
-   Bronze/outbox idempotency, and retry after publish or relay failure. The code
-   change that aligned Envelope-B emission is not itself execution evidence.
+2. **V1/V2 intake proof.** Focused local route coverage now sends the same SDK
+   event through V1 and V2 with Envelope-B and gateway flags on, then compares
+   stable envelope fields in the V1 published payload and V2 Bronze/outbox
+   payload. A separate local check proves the default-off helper leaves the
+   legacy payload unchanged. Still retain route-level evidence for gateway
+   rejection degradation, transactional Bronze/outbox retry after publish or
+   relay failure, and provider-backed durable replay; these local in-memory
+   checks do not prove those cases.
 3. **Tenant graph hydration.** For each SDK family, use a real customer-style
    credential and tenant to send a consented source event, follow it through
    durable evidence, normalization and identity authority, then prove it is
