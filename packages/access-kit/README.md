@@ -38,13 +38,13 @@ Supply only the credential required by the command being used:
 
 | Command | Environment |
 |---|---|
-| `aether agents capabilities ...` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN` with `read` permission |
-| `aether entities ...` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN` with `read` permission |
-| `aether account context`, `aether auth context` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN` with `read` permission |
+| `aether agents capabilities ...` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, or a saved OS credential-store session, with `read` permission |
+| `aether entities ...` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, or a saved OS credential-store session, with `read` permission |
+| `aether account context`, `aether auth context` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, or a saved OS credential-store session, with `read` permission |
 | `aether auth login` | `AETHER_AUTH0_DOMAIN`, `AETHER_AUTH0_CLIENT_ID`, `AETHER_AUTH0_AUDIENCE` |
 | `aether auth logout` | Session stored by `aether auth login` |
-| `aether auth sessions list` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, through the existing tenant session route |
-| `aether auth sessions revoke SESSION_ID` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, through the existing tenant session route |
+| `aether auth sessions list` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, or saved OS credential-store session, through the existing tenant session route |
+| `aether auth sessions revoke SESSION_ID` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, or saved OS credential-store session, through the existing tenant session route |
 | `aether ingest ...` | `AETHER_PUBLISHABLE_KEY` and its bound `AETHER_SITE_ID` |
 | MCP inventory, entity, and account read tools | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN` with `read` permission; otherwise a saved session from the OS credential store |
 | MCP `observe` tool | `AETHER_PUBLISHABLE_KEY` and its bound `AETHER_SITE_ID` |
@@ -196,11 +196,13 @@ Start `aether-mcp` using the MCP host's environment or secure secret-injection
 mechanism. The bridge supports `agent_access_capabilities_list`,
 `agent_access_capabilities_overview`, `entities_list`, `entities_get`,
 `account_context`, and `observe`. Inventory, entity, and account-context read
-tools require exactly one read credential (`AETHER_API_KEY` or
-`AETHER_SESSION_TOKEN`);
+tools use exactly one read credential (`AETHER_API_KEY` or
+`AETHER_SESSION_TOKEN`), either explicitly supplied or loaded from the saved
+OS credential-store session;
 `observe` requires the publishable key and its bound site ID.
-Each call makes a fresh REST request. There is no remote HTTP MCP server,
-OAuth flow, stored session, or MCP host configuration file in this package.
+Each call makes a fresh REST request. The local stdio bridge can reuse the
+saved CLI human session; there is no remote HTTP MCP server, remote MCP OAuth
+flow, or MCP host configuration file in this package.
 
 `observe` accepts `event_name`, `event_id`, `session_id`, `anonymous_id`,
 non-negative `sequence`, and optional `properties`. It sends the same one-event

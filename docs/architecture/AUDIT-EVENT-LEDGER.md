@@ -32,6 +32,17 @@ sensitive governance actions, persisted via `SecurityAuditEventRepository`.
   `system`/`agent`), `event_type`, `resource_type`/`resource_id`, `action`,
   `outcome` (`allowed`/`blocked`/`failed`), optional `policy_decision_id`,
   `ip_address`, `user_agent`, and `created_at`.
+- When a ledger write runs inside an authenticated tenant request, it may also
+  capture that request's `correlation_id`. The ledger accepts it only when the
+  request's resolved tenant and context tenant both match the audit row's
+  `tenant_id`, and the value is a printable, bounded string. A present
+  correlation ID is part of the v2 integrity hash; absent values are omitted
+  from both the stored legacy-compatible row shape and its canonical hash.
+- The `/v1/batch` intake route records an `ingestion.batch` event with the
+  durable batch ID, outcome counts, and available usage references, then
+  returns the actual `auditEventId` when persistence succeeds. The audit write
+  is best-effort after intake durability; an absent response ID is not
+  synthesized into a receipt or authorization decision.
 
 ## What gets audited
 

@@ -75,22 +75,35 @@ PR #734 and PR #733 are merged into `Development`. They provide substantial arch
 
 ### Delivery disposition for this PR
 
-The initial implementation slice is complete for the supported routes and
-contracts that have an existing owner. The following matrix distinguishes work
-delivered here from continuation gates that require an authority, policy, or
-live environment outside this branch.
+The implementation has closed the locally actionable remainder for six
+carry-forward items. Code and repository-local proof are complete where an
+existing authority supports them. The remaining entries are specific live
+environment or owner-contract gates, not work represented as complete by
+package presence or mocked tests.
+
+| Carry-forward item | Delivered on this stack | Remaining proof or owner gate |
+|---|---|---|
+| CSV import rights admission | Commit requires allowed, durable Rights Authority decisions for `tenant_lake`, `write_tenant_graph`, and `tenant_insights`; source grant is checked and held through writes; decision refs are retained on attempts, Bronze, Silver, and governed graph mutations. Missing, denied, mismatched, revoked, or unavailable authority fails before data writes. | Run the migration and accepted/denied import against a live tenant with configured grants; local tests do not prove deployed policy or production data behavior. |
+| SDK/mobile evidence | Web, Server, and React Native suites pass and exercise the shared wire fixture; iOS and Android fixture tests exist but are not runnable here. A macOS Swift package build passes. | Xcode is not installed (`xcode-select` points to Command Line Tools and `simctl` is absent), so `swift test` cannot load `XCTest`; Android has no Java runtime, Gradle, Android SDK, or ADB. Device install, store beta, and tenant graph hydration need those toolchains, credentials, and a live tenant. |
+| Customer CLI onboarding | Auth0 Device Authorization login, `session_required` Aether session exchange, OS keyring storage, session context/list/revoke/logout, and local MCP reuse of that session are implemented. Reusable API-key fallback is refused. | Configure the Auth0 Native client and API audience, enable human sessions, and prove a real invited user login/session revoke and OS keyring on supported platforms. Tenant switching remains owner-gated because no membership chooser contract exists. |
+| Remote MCP | Local stdio protocol uses the pinned official SDK, exposes bounded supported tools, and reuses the existing API/session authorities. | Remote HTTP transport, delegated client registration/auth, and host conformance need an owning product runtime/auth contract and an actual supported remote host. IAM/Auth must define OAuth resource discovery plus caller-bound token issuance or introspection returning principal, tenant membership, audience, scopes, expiry, and revocation. Opaque `sess_...` credentials are not treated as if they had OAuth claims. `tfmcp` remains operator infrastructure and is not repurposed. |
+| Request-to-usage correlation | Batch responses join the middleware request ID to the actual usage event/evidence IDs and, when the existing audit write succeeds, to an `auditEventId` whose audit row also carries the authenticated request correlation. Allowed authoritative consent is stored as the actual receipt reference in each accepted observation's gateway-stamped Envelope-B privacy block. Access Kit preserves API-returned audit, usage, and evidence references. | The ordinary `WRITE` permission check still has no durable authorization-decision ID; it is not represented as a Rights Authority decision. General billing/payment receipts remain owned by their billing/payment flows. Audit persistence is best-effort after ingestion, and no missing IDs are synthesized. |
+| Live tenant/provider proof | Local SDK, import, provider-admission, batch, CLI, MCP, and auth route contracts are covered by focused tests below. | Real provider credentials, customer tenant/API credentials, and a separately authenticated graph read are required to prove provider-to-graph hydration, tenant isolation, and time-to-value. No such credentials are configured in this environment. |
+
+The work-order matrix below records the broader disposition for the
+implemented surface and its still-open external proof.
 
 | Work order | Disposition | Evidence or specific continuation gate |
 |---|---|---|
 | WO-0 | Complete | Current #734/#733 ownership and surface map reviewed against this tree; stale standalone source-governance runtime removed from scope. |
-| WO-1 | Partial; provider and SDK handoffs aligned | V1/V2 SDK envelope parity and shared five-platform wire vector are implemented. CSV import rights admission remains gated on the product decision described under WO-1; no import rights behavior is changed in this PR. |
-| WO-2 | Contract slice complete; device proof deferred | Five SDKs consume the shared minimum wire vector or native serialization helper. Device installation, store beta, and tenant graph hydration need device-lab/store credentials and a live tenant. |
+| WO-1 | Local implementation complete; live policy proof deferred | V1/V2 SDK envelope parity, existing provider admission, and CSV import Rights Authority admission are implemented. Two focused import suites pass (25 tests); deployed migration and active-grant behavior still need a live tenant. |
+| WO-2 | Cross-platform contract evidence complete where tools are available; device proof deferred | Web 382, Server 97, and React Native 127 tests pass and exercise the shared wire fixture; the iOS XCTest target cannot resolve `XCTest`; Android Gradle/ADB are unavailable. The Swift package builds for the available macOS target. Device/store beta and tenant graph hydration remain separate gates. |
 | WO-3 | Supported interaction normalization complete; invocation deferred | Query and observe outcomes share one response envelope. A generic invoker waits for an owning capability execution API, grant model, and server authorization contract. |
 | WO-4 | Supported API surface complete | Existing entity list/detail, account context, capability inventory, and canonical batch intake are composed with fixed projections and bounds. Broad graph search, export, and unsupported queries are not claimed. |
-| WO-5 | Local MCP slice complete; remote MCP deferred | Local stdio initialize/tool listing and handler contracts are tested. Remote transport needs an owning delegated-auth/client identity flow and host conformance evidence. |
-| WO-6 | Env-configured CLI slice complete; customer onboarding deferred | Safe reads and site-bound intake are implemented. Login, tenant switching, secure credential storage, and revocation need a supported delegated-auth owner and live user credentials. |
-| WO-7 | Response correlation complete; cross-authority receipts deferred | Server-returned references are preserved. Billing, usage, audit, and receipt joins require their owners' stable correlation contracts. |
-| WO-8 | Local contract proof complete; live/release proof deferred | Focused test results are listed under WO-8. Customer tenant, device, provider, hosted PR, and release evidence remain independent gates. |
+| WO-5 | Local MCP slice complete; remote MCP deferred | Local stdio initialize/tool listing, read and observe handlers, session reuse, and error contracts are tested. Remote transport needs an owning delegated-auth/client identity contract and host conformance evidence. |
+| WO-6 | CLI login and local onboarding implemented; live configuration and tenant selection deferred | Auth0 Device Authorization, revocable Aether session storage, context/list/revoke/logout, and safe reads/intake are implemented. Live Auth0/API setup and OS keyring proof remain; tenant switching needs a supported membership-selection API. |
+| WO-7 | Supported request, consent, usage, and audit references joined | Batch request IDs correlate to returned usage/evidence IDs and tenant audit rows; accepted observations preserve the real allowed consent receipt in gateway-stamped Envelope-B. Durable per-request authorization decisions and general billing/payment receipt joins remain owner-gated. |
+| WO-8 | Local proof complete for supported paths; live/release proof deferred | Exact focused results and toolchain limitations are listed under WO-8. Customer tenant, device, provider, hosted PR, and release evidence remain independent gates. |
 
 This work starts from `Development` after #734/#733. PR #771 is an unrelated open draft and is not the base of this program.
 
@@ -182,7 +195,7 @@ Each work order produces a commit on the same PR branch. An acceptance condition
 
 **Acceptance:** every changed adapter has an explicit end-to-end handoff to the canonical authority, and no client or adapter makes identity, rights, or graph decisions. Legacy route removal or storage consolidation requires the #734 migration proof, not a parallel destructive cutover.
 
-**Current stack status:** partial. The SDK observation handoff and V1/V2 envelope parity are implemented, and provider admission remains behind the existing Rights Authority checks. The separate CSV import path was audited and found to admit tenant-owned imports without a durable Rights Authority decision reference. This branch does not change that path because the governing product rule is unresolved: require an explicit Rights Authority grant before import, or accept tenant-admin-approved data for tenant use while Rights Authority gates later reuse. Resume this sub-slice only after that policy decision, then prove that denied imports produce no Bronze, identity, or graph writes and that accepted records carry the durable decision reference through replay and governed mutation.
+**Current stack status:** the SDK and provider handoffs use their existing canonical authorities, and this stack now closes the CSV import admission gap with an explicit-grant rule. Every import commit resolves allowed durable decisions for tenant lake storage, graph write, and tenant insights against the submitted source and retains the active source grant through writes. Denial, missing or wrong-source grant, revocation, and resolver/store failure stop before import data writes. Import attempt, Bronze, Silver, and graph-mutation evidence retain their durable decision references. Focused commit/projector suites pass (25 tests total); live tenant grants and deployed migration execution remain unproven.
 
 ### WO-2 — SDK productization and mobile evidence
 
@@ -211,7 +224,7 @@ Each work order produces a commit on the same PR branch. An acceptance condition
 
 **Current stack status:** partial. A shared REST-client result now carries the
 same protocol-neutral `interaction` envelope through CLI and MCP for supported
-query and observe calls: operation, `successful | denied | blocked | degraded |
+query, observe, and auth calls: operation, `successful | denied | blocked | degraded |
 failed` status class, correlation/request IDs, HTTP status, and recognized
 references returned by the API. Existing observation decisions and response
 references remain intact in the original result data. Tenant and actor remain
@@ -259,16 +272,16 @@ and limits overview maps to 50 entries with `sampled` set on truncation.
 
 **Acceptance:** protocol conformance, authentication, tenant isolation, scope denial, deterministic listing, error mapping, and request correlation are documented and reviewable. MCP-specific tests and remote-client evidence are required before claiming MCP beta; they are not implied by API evidence.
 
-**Current stack status:** partial. The pinned official TypeScript SDK local
-stdio bridge exposes read-only `entities_list` and `entities_get` tools using
-the same entity REST wrapper, alongside the previously implemented capability
-inventory reads, `account_context`, and `observe` ingestion tool. Query and
-observe calls share a normalized interaction envelope. Focused local
-registration and handler contract tests cover schemas, output projection,
-bounds, and mapped errors; a pinned-SDK stdio subprocess smoke test covers a
-legacy `initialize` plus `tools/list` exchange without an API call. Remote MCP
-HTTP, delegated OAuth, full host conformance, live tenant isolation, and
-customer beta evidence remain deferred.
+**Current stack status:** local stdio is complete for the supported read and
+observe surface. The pinned official TypeScript SDK bridge exposes
+`entities_list`, `entities_get`, capability inventory reads, `account_context`,
+and `observe` through the existing REST authorities. It best-effort reuses a
+stored human session for reads while preserving site-bound publishable-key-only
+observe. Focused handler tests and a pinned-SDK stdio subprocess smoke test
+cover schemas, projections, bounds, errors, initialization, and tool listing.
+Remote MCP HTTP, delegated client registration, host conformance, live tenant
+isolation, and customer beta evidence remain deferred to an owning runtime/auth
+contract and supported remote host.
 
 ### WO-6 — Customer CLI adapter
 
@@ -282,18 +295,17 @@ customer beta evidence remain deferred.
 
 **Acceptance:** CLI commands do not call graph stores directly or embed privileged service credentials; install/auth/tenant/read/denied paths are documented; revocation and credential storage have an explicit supported behavior.
 
-**Current stack status:** partial. The customer CLI now supports
-`aether entities list` and `aether entities show`, `aether account context`,
-the observed capability inventory commands, and site-bound one-event
-`aether ingest`. All reads use externally supplied `AETHER_API_KEY` and the
-existing API; no graph store access or tenant override exists. Login, tenant
-selection, secure credential storage, revocation flow, and live
-denied/cross-tenant evidence remain target-only. A combined `doctor` command is
-excluded: `/v1/health` and `/v1/ready` describe infrastructure,
-`/v1/tenant/readiness` is a distinct launch-readiness evidence view, and
-`/v1/me/usage` has its own availability semantics. Aggregating these locally
-would invent a diagnostic or readiness authority; expose separate named reads
-or wait for an owner API.
+**Current stack status:** CLI login and local customer operations are
+implemented. Commands include bounded entity/account/capability reads,
+site-bound one-event intake, Auth0 Device Authorization login, revocable
+human-session context/list/revoke/logout, and native OS credential storage.
+The SSO exchange explicitly requires a human session and refuses the reusable
+API-key fallback. Local MCP can reuse the same stored session. Live Auth0
+configuration, enabled API human sessions, invited-user login, and native
+keyring proof remain deployment gates. Tenant switching remains target-only
+until the account/session authority exposes membership selection. A combined
+`doctor` command remains excluded because health, launch readiness, and usage
+have separate owners and semantics.
 
 ### WO-7 — Receipts, telemetry, and developer handoff
 
@@ -307,13 +319,25 @@ or wait for an owner API.
 
 **Acceptance:** a call can be correlated across request, authorization, usage/audit, receipt, and result where those authorities support it; missing billing or observability integration is called out, not claimed complete.
 
-**Current stack status:** partial. CLI and MCP now carry the shared normalized
-interaction envelope and preserve any server decision, batch, receipt, rights,
-or other recognized reference returned in the original response. This does not
-create audit, usage, billing, or durable-receipt integration: none is inferred
-or synthesized when the API response omits it. A full cross-authority trace
-remains target-only pending correlation/receipt contracts from the owning
-authorities.
+**Current stack status:** the supported request-to-usage join is implemented.
+Both batch handlers pass the middleware request ID into canonical metering
+correlation metadata and return the real meter event and evidence IDs when the
+metering owner supplies them. After the batch is accepted, the route writes an
+`ingestion.batch` row to the existing tenant Audit Ledger with the actual batch
+ID, accepted/duplicate/rejected counts, available usage references, and the
+authenticated request correlation. It returns the persisted `auditEventId`
+only when that write succeeds; audit failure does not cause an already-durable
+batch to be retried. Access Kit preserves the returned audit, usage, and
+evidence references.
+
+The ingestion consent evaluator now exposes an additive receipt-bearing result
+while preserving its existing tuple API. For an allowed authoritative consent
+decision, validation places the actual tenant-scoped receipt ID and purpose in
+the gateway-stamped Envelope-B privacy block. Denied or unreceipted consent
+does not receive a fabricated reference. This is consent evidence, not a
+durable per-request authorization decision. The general `WRITE` permission
+check still lacks a durable decision ID, and billing/payment receipts remain
+with their owning flows; neither is synthesized by the adapter.
 
 ### WO-8 — Cross-surface proof and readiness record
 
@@ -327,30 +351,21 @@ authorities.
 
 **Acceptance:** all claims map to retained evidence; no production, certification, customer-beta, or broad merge-readiness claim is made without its canonical release/PR evidence.
 
-**Current stack status:** local contract proof is complete for the supported
-slice. At the integrated head, the Access Kit suite passes 23 tests, including
-mocked REST/CLI/tool-handler contracts, terminal-control escaping, and a
-pinned-SDK stdio subprocess smoke test for `initialize` plus `tools/list`. Full
-Web (382), Server (97), and React Native (127) package suites passed after
-building the shared SDK package. Backend V1/V2 observation tests (37),
-import/provider admission suites (25 and 17), and a Swift package-build check
-also passed. The security diff review found and this stack remediates terminal
-control injection from observed capability labels in human CLI output.
-
-The repository-wide `verification-disposition` was attempted but did not
-complete successfully. Its final reported status was `FAILED`: the docs check
-created a temporary checkout on a case-insensitive macOS volume and dropped
-tracked documentation paths that differ only by case; frontend and Server SDK
-tests ran before the shared SDK build artifacts existed; and unrelated Python
-tests lacked the `python` command alias and the optional `.[agent]` dependency.
-A corrective run was prepared with those dependencies and a case-sensitive
-temporary volume, but the execution environment reset before it returned a
-final result. No full local authority pass or hosted PR checks are claimed.
-Android Gradle and Apple XCTest/device tooling are unavailable. No live tenant,
-provider credentials, modern remote MCP host, or device/store environment was
-available, so cross-tenant live calls, timeout behavior against a service,
-ingestion-to-graph hydration, customer beta, and release readiness remain
-unproven.
+**Current stack status:** focused local evidence is complete for the supported
+surface. Current integrated results: Access Kit 43 tests; Web SDK 382; Server
+SDK 97; React Native SDK 127; 90 combined tests across CSV import commit and
+Silver projection, V1/V2 batch route, consent authority, observation envelope,
+and golden-fixture suites; 59 tests across provider-rights admission, batch
+identity/idempotency, and security governance; and 28 auth route/session tests
+from the delegated CLI slice. The batch identity/idempotency suite contains 7
+tests. The Access Kit security fix for terminal-control injection is also
+covered. `swift build` passes for the available macOS target, but `swift test`
+fails because this Command Line Tools installation cannot resolve `XCTest`;
+Android Gradle/ADB are absent. No live Auth0 setup, customer tenant/provider credentials, remote
+MCP host, or mobile device/store environment is available. Therefore live
+cross-tenant denial, tenant/provider-to-graph hydration, device lifecycle,
+remote host conformance, customer beta, hosted PR authority, and release
+readiness remain unproven until their specific environments are supplied.
 
 ## 6. Single-PR commit sequence
 
@@ -367,7 +382,13 @@ implementation slices and may satisfy more than one work order:
 7. `test(sdk): add shared batch wire conformance vector` — Web, Server, React Native, iOS, and Android fixture.
 8. `feat(access-kit): normalize interaction outcomes` — consistent outcomes and server-returned references.
 9. `fix(access-kit): escape terminal controls in human output` — terminal-safe external labels and values.
-10. Final documentation/evidence commit — actual verification disposition, generated/source-linked pages, and deferred gates.
+10. `feat(ingestion): correlate batch usage evidence` — join middleware request IDs to existing usage and evidence records when returned.
+11. `gate CSV imports through Rights Authority` — require durable purpose decisions and an active source grant before import writes.
+12. `refactor(ingestion): use canonical correlation metadata` — use the metering contract's canonical metadata key.
+13. `feat(access-kit): add delegated CLI auth and MCP session reuse` — Auth0 Device Authorization, revocable Aether sessions, OS credential storage, session management, and local MCP reuse.
+14. `feat(governance): retain consent receipt references` — preserve actual allowed consent receipt evidence in the governed observation envelope.
+15. `feat(ingestion): audit batch request correlation` — link completed batch responses to durable tenant audit entries when persisted.
+16. Final documentation/evidence commit — reviewed source-linked pages, generated artifacts, focused proof, and exact external gates.
 
 All changes remain commits on this feature branch and one PR targeting `Development`.
 

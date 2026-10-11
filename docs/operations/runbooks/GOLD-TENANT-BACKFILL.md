@@ -10,9 +10,12 @@ canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 2
 source_files: [services/api/repositories/lake.py, scripts/gold_tenant_backfill.py]
+reviewed_source_commits:
+  - commit: "30d10ccb6"
+    reason: "Reviewed the import rights-lineage additions to Bronze records. Gold materialization and tenant backfill selection are unchanged; the PostgreSQL subsystem and import failure runbook document the new import-only metadata."
 source_hashes:
   "scripts/gold_tenant_backfill.py": "sha256:fa51831b84447a67f850b42a025c42cf3e1a9b9656683d713524da1ec3ee3cf7"
-  "services/api/repositories/lake.py": "sha256:2f5b0c5b9cd1a1299615e97728385c58deeff307073b98d8e8c22e9b69b03df6"
+  "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
 ---
 
 # Runbook — Gold Tenant Backfill

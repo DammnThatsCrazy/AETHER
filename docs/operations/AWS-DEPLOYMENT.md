@@ -47,6 +47,9 @@ source_files:
   - scripts/release/check_terraform_state_access_policy.py
   - scripts/release/check_staging_lifecycle_policy.py
   - services/api/Dockerfile
+reviewed_source_commits:
+  - commit: "609a3ad37"
+    reason: "Reviewed the new Auth0 Native Aether CLI client and connection grants. The Auth0 deployment inventory now records the public Device Authorization client and its human-session deployment gate; the independent operator tfmcp service is unchanged."
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
@@ -73,7 +76,7 @@ source_hashes:
   "infra/aws/config/": "sha256:cfe8d46db890f7855fbc7f28ece5c3a9ce4a891e065478060a254c1f36bf0bf0"
   "infra/aws/lead-intake/template.yaml": "sha256:f076101dd476c103f32b717444598ea2cbea181b292c61230ca9b02de4feb9a1"
   "infra/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "infra/aws/terraform/": "sha256:eace0b2cae355aa48d20b755a7e574613f7c9bb70882e70958e0c95b1eeffe21"
+  "infra/aws/terraform/": "sha256:445f57a48b2d8621e68996c154d5d6cfe7b8ecf16b60e479f478a9605693090d"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:124f62c1f1469281a3e19de2ec58d36b50f6f210410f1e79de8f79b2ef222e36"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
@@ -836,7 +839,7 @@ Seventeen module directories exist under `terraform/modules/`. Modules marked
 | `ecs` | Fargate cluster, backend service, per-service task definitions, IAM roles, autoscaling | always; **gated** dedicated ML service |
 | `monitoring` | SNS alerts, CloudWatch alarms, dashboard, S3 log archive | always; per-backend alarms **gated** |
 | `ml_drift_lambda` | Nightly PSI drift check → `Aether/MLDrift` namespace | always |
-| `auth0` | SPA clients + API resource server | always |
+| `auth0` | Aether and Kyber SPA clients, public Aether CLI Native client with Device Authorization, and the API resource server | always |
 | `elasticache` | Redis 7.x, TLS in transit, AUTH token, KMS at rest | **gated** — scale / enterprise |
 | `msk` | 3-broker MSK Kafka, TLS, KMS, CloudWatch metrics | **gated** — scale / enterprise |
 | `neptune` | Neptune cluster + instances, IAM auth, KMS | **gated** — scale / enterprise |
@@ -844,6 +847,16 @@ Seventeen module directories exist under `terraform/modules/`. Modules marked
 | `s3` | — | **not instantiated by this root** |
 | `tfmcp` | tfmcp MCP server (ECS Fargate, IAM, Secrets, ALB rule) | **gated** — production-scale / enterprise (default); production-lean opt-in via `enable_tfmcp_in_lean` |
 | `vpc_endpoints` | — | **not instantiated by this root** |
+
+The Auth0 module's CLI client is a public Native application with no client
+secret. Terraform enables the Device Authorization grant, grants the API
+audience, associates the configured database/social connections, and exposes
+the non-secret `aether_cli_auth0_client_id` root output. A CLI installation
+also needs the Auth0 domain and API audience. Auth0 provisioning alone does not
+enable customer login: the API must advertise and issue revocable human
+sessions, and the user must have an existing tenant membership or invitation.
+This CLI client is customer identity configuration; it is not the operator
+`tfmcp` service or its privileged runtime role.
 
 ### tfmcp — Terraform MCP server
 

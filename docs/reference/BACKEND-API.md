@@ -29,11 +29,11 @@ source_hashes:
   "services/api/governance/": "sha256:4979f1d68790c9673561b70d97ad0710960603cc7228fd429539160d64db4f1d"
   "services/api/graph/": "sha256:7372bf88ff18200edd21b53649b25098a9b1e1ec474a79ee36cd28a480093706"
   "services/api/identity/": "sha256:e983d0dc2e0dae26c6254cdc8bcff4fff0cb2a8d4e418eefdbbb37bd8103e253"
-  "services/api/ingestion/": "sha256:fcf702fa50857a59064078c1dd83a68a9fe8ab571c730a78b98e702573e3d9de"
+  "services/api/ingestion/": "sha256:9e7f50002bf72a22b7b82bdd30fd242821ebb9686030fc10ab56e79c6cd09637"
   "services/api/intelligence/": "sha256:6f97e244ba5d4ab36c14ce27c6a207ba4e428b61173821f33d0e387411a7c737"
   "services/api/journeys/": "sha256:5d7336fa8f43bb5107a9314f09a08c16132ba1c1cf1f57762344f55a1192608a"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
-  "services/api/tenancy/": "sha256:b3e28efab538d22bad132a158a150d7ac9872d05a14ce3bf858637dc58e18289"
+  "services/api/tenancy/": "sha256:b8b5c4e0956e300494f051e9b82958da6caf3ca375b8c79f00d5b76dd061fc63"
   "services/api/value/": "sha256:f152a470584719e80d5d398c8e166cf34754b85c4aaae12803a1e3630bfffbc8"
   "services/api/workers/": "sha256:483bc638eae1311f235c3eae1407f868ab392de4d3788799cbda70c1e477a321"
 ---
@@ -637,6 +637,26 @@ default-off; envelope construction or gateway rejection degrades to the
 accepted flat event and records the corresponding metric. Downstream consumers
 must continue treating the flat event as the compatibility surface during this
 adoption phase.
+
+Each batch response echoes the middleware `requestId`. When the advisory
+metering hook succeeds, it also returns the actual `usageEventId` and
+`usageEvidenceId`; these fields may be absent when metering is unavailable or
+no accepted event was billable. The request ID is passed to the existing
+metering authority as correlation metadata. After intake completes, the route
+records an `ingestion.batch` event in the existing tenant Audit Ledger and
+returns its actual `auditEventId` when persisted. The audit row links the batch
+ID, outcome counts, available usage references, and authenticated request
+correlation. Because the observation may already be durable, audit persistence
+is best-effort and a missing `auditEventId` means no durable audit ID was
+returned; the server does not fabricate one.
+
+When authoritative consent allows an observation and provides a durable
+tenant-scoped consent receipt, the validation path preserves that actual
+receipt ID and purpose in the gateway-stamped Envelope-B privacy block.
+Denied or unreceipted consent receives no invented reference. These fields
+provide consent evidence, not a general authorization-decision or billing
+receipt. The ordinary `WRITE` permission check still has no durable decision
+ID, and billing/payment receipts remain owned by their existing flows.
 
 ---
 
@@ -4158,6 +4178,17 @@ canonical `/v1/imports` and `/v1/exports` seams.
 | POST | `/v1/data-exchange/imports/{import_id}/preview/graph` | Graph-mutation preview | `write`; delegates to the canonical commit preview. |
 | POST | `/v1/data-exchange/imports/{import_id}/commit` | Commit the import | `admin`; enqueues the canonical `import.commit` durable job. |
 | POST | `/v1/data-exchange/imports/{import_id}/rollback` | Roll back a committed import | `admin`; uses canonical source-tag rollback. |
+
+For CSV commits, the worker resolves Rights Authority decisions for
+`tenant_lake`, `write_tenant_graph`, and `tenant_insights` against the import's
+source before identity, Bronze, Silver, or graph writes. A durable active grant
+for the exact tenant and source must remain valid through the writes. Missing,
+denied, wrong-source, revoked, or unavailable rights fail closed as
+`import_rights_denied`; the import session keeps the attempt history and any
+durable decision references. Successful commit records and Bronze/Silver
+evidence retain those references, and governed graph mutations carry the graph
+decision reference. Silver remains a best-effort projection under its existing
+contract.
 
 ### Saved import mappings
 

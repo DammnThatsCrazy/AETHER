@@ -20,6 +20,8 @@ source_files:
 reviewed_source_commits:
   - commit: "f63d631"
     reason: "Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required."
+  - commit: "609a3ad37"
+    reason: "Reviewed the optional session_required guard on the SSO callback. This page now explains its CLI-only fail-closed behavior while preserving browser sign-in and first-admin bootstrap behavior."
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:5c1138601e7f849d2a1b6649957c32607fc1aacd25667bf910de280a4db4db0c"
   ".github/workflows/staging-lifecycle.yml": "sha256:ab0d86125cd2be277ba7e0a40a4dbc9fdd5db1480ff1c7cb816adf4874a55ae9"
@@ -28,7 +30,7 @@ source_hashes:
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "services/api/repositories/repos.py": "sha256:c03e0537e86217db3dc67aabc2ce179a589ece64870dcdcc1f76d7f79ae95dae"
-  "services/api/tenancy/auth/routes.py": "sha256:35dd9ffc6fe501bed1346c37fc1f455e65b9494f0d041b2ec9e70fcb930fe3d1"
+  "services/api/tenancy/auth/routes.py": "sha256:33de1a272f8eaf4ee635f01044703bf25888d45d27c5623ee5ca3bbbe003c9a5"
 ---
 
 # AETHER first-admin bootstrap
@@ -80,6 +82,14 @@ Terraform `platform_operator_emails` (`PLATFORM_OPERATOR_EMAILS`, pilot lane
 only), and their first verified Auth0 sign-in (for example **Continue with
 Google** with a Workspace account) joins this tenant as `owner`. The list lives
 in reviewed configuration, so that access returns after a database reset.
+
+The customer CLI uses a separate Auth0 Device Authorization client and
+exchanges its access token through the same SSO callback with
+`session_required: true`. This option refuses the exchange before token
+validation or membership side effects when revocable human sessions are
+disabled; it does not change browser sign-in or the first-admin bootstrap
+contract. CLI sign-in still requires an existing tenant membership or
+invitation and never accepts a client-selected tenant.
 
 ## Automated lifecycle
 

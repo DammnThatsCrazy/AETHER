@@ -6,16 +6,19 @@ visibility: I
 audience: [ops, architect]
 status: stable
 since_version: 0.1.0
-source_files: [config/deployment_profiles.yaml, config/runtime_deployment.yaml, config/terraform_resource_contracts.yaml, infra/aws/terraform/profiles.tf, infra/aws/terraform/main.tf, infra/aws/terraform/modules/alb/main.tf, infra/aws/terraform/modules/aurora/main.tf, infra/aws/terraform/modules/ecr/main.tf, infra/aws/terraform/modules/secrets/main.tf, infra/aws/terraform/modules/secrets/rotation.tf, infra/aws/terraform/modules/kms_credentials/main.tf, infra/aws/terraform/variables.tf, scripts/release/check_profile_config.py, scripts/release/check_profile_parity.py, scripts/release/check_staging_lane_contract.py, config/capability_overlays.yaml, scripts/validate_capability_overlays.py]
+source_files: [config/deployment_profiles.yaml, config/runtime_deployment.yaml, config/terraform_resource_contracts.yaml, config/aws_price_book.yaml, infra/aws/terraform/profiles.tf, infra/aws/terraform/main.tf, infra/aws/terraform/modules/alb/main.tf, infra/aws/terraform/modules/aurora/main.tf, infra/aws/terraform/modules/ecr/main.tf, infra/aws/terraform/modules/secrets/main.tf, infra/aws/terraform/modules/secrets/rotation.tf, infra/aws/terraform/modules/kms_credentials/main.tf, infra/aws/terraform/variables.tf, scripts/release/check_profile_config.py, scripts/release/check_profile_parity.py, scripts/release/check_staging_lane_contract.py, scripts/release/check_cost_model.py, config/capability_overlays.yaml, scripts/validate_capability_overlays.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
+reviewed_source_commits:
+  - commit: "609a3ad37"
+    reason: "Reviewed the Access Kit Auth0 client work. The linked root main.tf change is comment-only; the Native CLI application is an Auth0 module resource and does not alter deployment profile topology or runtime resource selection, so this profile guide needed no body change."
 source_hashes:
   "config/capability_overlays.yaml": "sha256:aab4be2180c27275e54164100963b8c3fda947fbcceecb99114bc6412f923407"
   "config/deployment_profiles.yaml": "sha256:77d37f2c71472b5d644da32636bb68948263250739b62b621502cdfb09797475"
   "config/runtime_deployment.yaml": "sha256:ba7bd71d79e605a88076b6ea745582dce9c4bff38442ebd5d327cfee9bbf7284"
   "config/terraform_resource_contracts.yaml": "sha256:1f08c04dae8931f845c7918328504f748a9f643bc806670a32b644eb8231baca"
-  "infra/aws/terraform/main.tf": "sha256:a04ba5462686d78c59d9f03feb2a9261a39adc26814997133ee22a08503e293f"
+  "infra/aws/terraform/main.tf": "sha256:f170279d27753b2567c5229720e12dd054ecbc345ad7afa42fda62319cba7798"
   "infra/aws/terraform/modules/alb/main.tf": "sha256:d019a2c18cda9a4e96d89165a4977e627dccacef34293c69e86c61ed43522097"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
   "infra/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
@@ -353,7 +356,7 @@ delete/recreate plan.
 | **Runtime topology** | `execution_mode: consolidated`. Two always-on tasks: `api` (1 vCPU / 2 GiB, max 4) and `lean-worker` (2 vCPU / 8 GiB, max 4) hosting all eight worker roles. No Spot at any capacity, because the task hosts `outbox-relay`. |
 | **Data behaviour** | Aurora Postgres is the database, graph and analytics of record. DynamoDB is the cache. SNS/SQS is the event substrate. ML runs in-process (`remote_ml: false`), so the semantic classifier is a resident model in the `lean-worker` task. |
 | **Network behaviour** | `network_egress_mode = "public_ip"` → `nat_mode = "none"`. NAT is *forbidden unless explicit*: setting this variable to a NAT mode is the explicit opt-in and must be reviewed as a cost-policy exception. |
-| **Cost posture** | Fixed baseline measures **USD 187.13/month** — USD 37.13 over the USD 150 target and USD 12.87 under the USD 200 hard ceiling. The gate warns and passes. The deviation is reviewed and **accepted**, with both closing levers examined and declined; the full analysis and approval record is in [Cost Optimization](../operations/COST-OPTIMIZATION.md). Expected usage-variable cost is a further USD 107.22/month and is not bounded by the ceiling. |
+| **Cost posture** | Fixed baseline measures **USD 188.93/month** — USD 38.93 over the USD 150 target and USD 11.07 under the USD 200 hard ceiling. The gate warns and passes. The deviation is reviewed and **accepted**, with both closing levers examined and declined; the full analysis and approval record is in [Cost Optimization](../operations/COST-OPTIMIZATION.md). Expected usage-variable cost is a further USD 107.22/month and is not bounded by the ceiling. |
 | **TTL / lifecycle** | None. This profile runs continuously; 730 h/month is the pricing basis. |
 | **Security posture** | Data stores in isolated subnets with no default route. Secrets fetched at container start from Secrets Manager; no secret values in task definitions or state. ALB enforces TLS 1.3 minimum. VPC flow logs on. Tasks carry a public IP for egress; inbound is ALB-only via the security group. |
 | **Validation** | `make deployment-profile-gate` runs the whole no-credentials chain. `make test-terraform-profiles` proves the planned module cardinality; `make validate-terraform-profile-policy` and `make validate-cost-model` score a plan inventory. |
