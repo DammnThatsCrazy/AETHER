@@ -173,6 +173,12 @@ class AgentExecutionProjector(BaseProjector):
             "action_type": _source_reference(
                 p.get("actionType") or p.get("action_type") or p.get("action")
             ),
+            # An explicit source resource reference may be compared with
+            # canonical delegation scope. Do not synthesize it from object
+            # type/id: those source fields can have different semantics.
+            "resource_ref": _source_reference(
+                p.get("resourceRef") or p.get("resource_ref")
+            ),
             "trigger_ref": _source_reference(
                 p.get("triggerId") or p.get("trigger_id")
             ),

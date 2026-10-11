@@ -117,6 +117,8 @@ export interface AgentDeployment extends AgentDeploymentHealth {
   id: string;
   tenantId: string;
   agentId: string;
+  /** Runtime source namespace used with an explicit backend canonical-agent binding. */
+  agentSourceNamespace?: string;
   displayName: string;
   description?: string;
   externalPlatform: ExternalPlatform;

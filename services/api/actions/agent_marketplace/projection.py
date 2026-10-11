@@ -222,12 +222,16 @@ class AgentMarketplaceGraphProjectionOutbox:
         from actions.agent_marketplace.authority import AgentRunAuthorityResolver
         from actions.agent_marketplace.catalog import MarketplaceCatalogRepository
         from actions.agent_marketplace.lineage import build_marketplace_origin_mutations
+        from actions.agent_marketplace.identity_binding import (
+            AgentDeploymentIdentityBindingRepository,
+            build_agent_deployment_identity_mutations,
+        )
         from config.settings import settings
         from dependencies.providers import get_cache
         from ingestion.silver.projectors.silver_graph_projector import (
             build_external_agent_run_mutations,
         )
-        from repositories.repos import AnalyticsRepository
+        from repositories.repos import AnalyticsRepository, EntityRepository
 
         expected: list[tuple[str, Any]] = []
         if tenant_id == "platform":
@@ -264,6 +268,26 @@ class AgentMarketplaceGraphProjectionOutbox:
             if deployment.get("marketplace_origin"):
                 for mutation in build_marketplace_origin_mutations(deployment):
                     expected.append((str(deployment.get("id") or ""), mutation))
+            namespace = str(deployment.get("agent_source_namespace") or "")
+            source_ref = str(deployment.get("agent_id") or "")
+            if namespace and source_ref:
+                bindings = await AgentDeploymentIdentityBindingRepository().find_for_source(
+                    tenant_id, namespace, source_ref,
+                )
+                if len(bindings) == 1:
+                    binding = bindings[0]
+                    canonical_id = str(binding.get("canonical_agent_entity_id") or "")
+                    entity = await EntityRepository().find_by_id(canonical_id) if canonical_id else None
+                    if (
+                        entity
+                        and entity.get("tenant_id") == tenant_id
+                        and entity.get("entity_type") == "agent"
+                        and entity.get("entity_id") == canonical_id
+                    ):
+                        for mutation in build_agent_deployment_identity_mutations(
+                            deployment, binding,
+                        ):
+                            expected.append((str(deployment.get("id") or ""), mutation))
 
         if settings.external_agent_telemetry.graph_enabled and not silver_done:
             rows, silver_cursor, silver_truncated = await AnalyticsRepository(

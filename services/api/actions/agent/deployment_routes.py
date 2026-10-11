@@ -25,6 +25,7 @@ from actions.agent.deployments import (
 )
 from actions.agentic_observability.foundation import require_permission as _require_perm
 from actions.agent_marketplace.models import AgentMarketplaceOrigin
+from repositories.repos import EntityRepository
 from shared.common.common import APIResponse, BadRequestError
 from shared.logger.logger import get_logger, metrics
 
@@ -85,6 +86,7 @@ def _repo() -> AgentDeploymentRepository:
 
 class DeploymentCreate(BaseModel):
     agent_id: str = Field(..., min_length=1, max_length=256)
+    agent_source_namespace: Optional[str] = Field(default=None, max_length=64)
     display_name: str = Field(..., min_length=1, max_length=256)
     description: Optional[str] = Field(default=None, max_length=2000)
     external_platform: str
@@ -114,6 +116,10 @@ class DeploymentPatch(BaseModel):
 
 class LifecycleAction(BaseModel):
     reason: str = Field(default="", max_length=2000)
+
+
+class AgentIdentityBindingRequest(BaseModel):
+    canonical_agent_entity_id: str = Field(..., min_length=1, max_length=256)
 
 
 # ── Tenant routes ─────────────────────────────────────────────────────────────
@@ -156,6 +162,78 @@ async def create_deployment(body: DeploymentCreate, request: Request):
                 )
                 record["marketplace_origin_graph_projection_status"] = "failed"
     metrics.increment("agent_deployment_api_created_total")
+    return APIResponse(data=record).to_dict()
+
+
+@deployments_router.put("/{deployment_id}/identity-binding")
+async def bind_deployment_agent_identity(
+    deployment_id: str,
+    body: AgentIdentityBindingRequest,
+    request: Request,
+):
+    """Bind a namespaced deployment source ref to a canonical tenant Agent.
+
+    This is a tenant-admin assertion persisted by Aether. SDK events cannot
+    create or change the binding; the target Agent must already exist in this
+    tenant. A source ref without this binding remains unresolved.
+    """
+    _require_registry_enabled()
+    tenant = _tenant(request)
+    deployment = await _repo().get(tenant.tenant_id, deployment_id)
+    source_namespace = str(deployment.get("agent_source_namespace") or "")
+    source_agent_ref = str(deployment.get("agent_id") or "")
+    if not source_namespace or not source_agent_ref:
+        raise BadRequestError(
+            "Deployment requires agent_source_namespace and agent_id before identity binding"
+        )
+
+    entity = await EntityRepository().find_by_id(body.canonical_agent_entity_id)
+    if (
+        not entity
+        or entity.get("tenant_id") != tenant.tenant_id
+        or entity.get("entity_type") != "agent"
+        or entity.get("entity_id") != body.canonical_agent_entity_id
+    ):
+        raise BadRequestError(
+            "canonical_agent_entity_id must identify an Agent entity in this tenant"
+        )
+
+    from actions.agent_marketplace.identity_binding import (
+        AgentDeploymentIdentityBindingRepository,
+    )
+
+    record = await AgentDeploymentIdentityBindingRepository().bind(
+        tenant_id=tenant.tenant_id,
+        source_namespace=source_namespace,
+        source_agent_ref=source_agent_ref,
+        canonical_agent_entity_id=body.canonical_agent_entity_id,
+        bound_by=_actor_id(request),
+        source_deployment_id=deployment_id,
+    )
+    if not settings.external_agent_telemetry.graph_enabled:
+        record["graph_projection_status"] = "disabled"
+    else:
+        try:
+            from actions.agent_marketplace.identity_binding import (
+                build_agent_deployment_identity_mutations,
+            )
+            from actions.agent_marketplace.projection import AgentMarketplaceGraphProjectionOutbox
+
+            queued = await AgentMarketplaceGraphProjectionOutbox().enqueue_mutations(
+                tenant.tenant_id,
+                deployment_id,
+                build_agent_deployment_identity_mutations(deployment, record),
+            )
+            record["graph_projection_status"] = (
+                queued.get("graph_projection_status") or "failed"
+            )
+        except Exception as exc:
+            logger.warning(
+                "agent identity graph enqueue failed",
+                extra={"tenant_id": tenant.tenant_id, "deployment_id": deployment_id,
+                       "error": type(exc).__name__},
+            )
+            record["graph_projection_status"] = "failed"
     return APIResponse(data=record).to_dict()
 
 
@@ -452,6 +530,7 @@ async def explain_agent_run(
             "task_ref": row.get("task_ref"),
             "action_ref": row.get("action_ref"),
             "action_type": row.get("action_type"),
+            "resource_ref": row.get("resource_ref"),
             "trigger_ref": row.get("trigger_ref"),
             "trigger_type": row.get("trigger_type"),
             "decision_ref": row.get("decision_ref"),
@@ -466,6 +545,8 @@ async def explain_agent_run(
             "payment_intent_ref": row.get("payment_intent_ref"),
             "settlement_event_ref": row.get("settlement_event_ref"),
             "delegation_resolution": resolved["delegation_resolution"],
+            "delegation_authorization": resolved["delegation_authorization"],
+            "execution_occurrence": resolved["execution_occurrence"],
             "economic_outcome": resolved["economic_outcome"],
             "tool_name": row.get("tool_name"),
             "status": row.get("status"),

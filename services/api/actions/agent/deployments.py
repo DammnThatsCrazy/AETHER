@@ -116,6 +116,7 @@ _SECRET_KEY_PATTERNS: list[re.Pattern] = [
 
 _MAX_CAPABILITY_SCOPES = 64
 _MAX_CAPABILITY_SCOPE_LENGTH = 200
+_AGENT_SOURCE_NAMESPACE_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 
 # Valid lifecycle transitions: current status → allowed target statuses.
 _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
@@ -188,6 +189,9 @@ class AgentDeployment(BaseModel):
     id: str = Field(default_factory=_new_id)
     tenant_id: str = Field(..., min_length=1, max_length=256)
     agent_id: str = Field(..., min_length=1, max_length=256)
+    # Runtime identity namespace is distinct from marketplace_origin.source_namespace.
+    # Legacy deployments without it remain unbound for canonical authorization.
+    agent_source_namespace: Optional[str] = Field(default=None, max_length=64)
     display_name: str = Field(..., min_length=1, max_length=256)
     description: Optional[str] = Field(default=None, max_length=2000)
     external_platform: ExternalPlatform
@@ -254,6 +258,18 @@ class AgentDeployment(BaseModel):
                     f"Capability scopes must be 1-{_MAX_CAPABILITY_SCOPE_LENGTH} characters"
                 )
         return v
+
+    @field_validator("agent_source_namespace")
+    @classmethod
+    def _validate_agent_source_namespace(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        if not _AGENT_SOURCE_NAMESPACE_RE.fullmatch(normalized):
+            raise ValueError(
+                "agent_source_namespace must be a lowercase provider namespace"
+            )
+        return normalized
 
     @model_validator(mode="after")
     def _sanitize_metadata(self) -> "AgentDeployment":

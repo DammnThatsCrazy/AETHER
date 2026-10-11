@@ -146,6 +146,7 @@ def test_agent_execution_projector_projects_validated_causality_and_bounds_refer
             "taskId": "task-1",
             "actionId": "action-1",
             "actionType": "issue.update",
+            "resourceRef": "repo:acme/project",
             "triggerId": "trigger-1",
             "policyId": "policy-1",
             "policyVersion": "4",
@@ -176,6 +177,7 @@ def test_agent_execution_projector_projects_validated_causality_and_bounds_refer
     assert row["run_correlation_source"] == "run_id"
     assert row["delegation_id"] == "delegation-1"
     assert row["delegated_to_ref"] == "external-agent-2"
+    assert row["resource_ref"] == "repo:acme/project"
     assert row["policy_reason_codes"] == ["within_scope"]
 
 
@@ -723,3 +725,446 @@ async def test_reconcile_marks_scans_as_non_snapshot_consistent():
 
     assert report["scan_consistency"] == "best_effort_non_snapshot"
     assert report["scan_pages_exhausted"] is True
+
+
+@pytest.mark.asyncio
+async def test_deployment_identity_binding_is_namespace_scoped_immutable_and_graph_explicit():
+    from actions.agent.deployments import AgentDeployment, ExternalPlatform
+    from actions.agent_marketplace.identity_binding import (
+        AgentDeploymentIdentityBindingRepository,
+        build_agent_deployment_identity_mutations,
+    )
+    from shared.common.common import ConflictError
+
+    tenant_id = _tenant()
+    validated_deployment = AgentDeployment(
+        tenant_id=tenant_id,
+        agent_id="runtime-agent-7",
+        agent_source_namespace=" Vendor.Runtime ",
+        display_name="Runtime agent",
+        external_platform=ExternalPlatform.API_AGENT,
+    )
+    assert validated_deployment.agent_source_namespace == "vendor.runtime"
+    with pytest.raises(ValidationError):
+        AgentDeployment(
+            tenant_id=tenant_id,
+            agent_id="runtime-agent-7",
+            agent_source_namespace="bad namespace",
+            display_name="Runtime agent",
+            external_platform=ExternalPlatform.API_AGENT,
+        )
+    repository = AgentDeploymentIdentityBindingRepository()
+    binding = await repository.bind(
+        tenant_id=tenant_id,
+        source_namespace=" Vendor.Runtime ".strip().lower(),
+        source_agent_ref="runtime-agent-7",
+        canonical_agent_entity_id="canonical-agent-7",
+        bound_by="tenant-admin-1",
+        source_deployment_id="deployment-7",
+    )
+    replayed = await repository.bind(
+        tenant_id=tenant_id,
+        source_namespace="vendor.runtime",
+        source_agent_ref="runtime-agent-7",
+        canonical_agent_entity_id="canonical-agent-7",
+        bound_by="tenant-admin-2",
+        source_deployment_id="deployment-8",
+    )
+    assert replayed["id"] == binding["id"]
+    assert binding["binding_authority"] == "tenant_admin_explicit"
+    with pytest.raises(ConflictError):
+        await repository.bind(
+            tenant_id=tenant_id,
+            source_namespace="vendor.runtime",
+            source_agent_ref="runtime-agent-7",
+            canonical_agent_entity_id="canonical-agent-other",
+            bound_by="tenant-admin-1",
+            source_deployment_id="deployment-7",
+        )
+    assert await repository.find_for_source(
+        _tenant(), "vendor.runtime", "runtime-agent-7",
+    ) == []
+
+    deployment = {
+        "id": "deployment-7",
+        "tenant_id": tenant_id,
+        "agent_id": "runtime-agent-7",
+        "agent_source_namespace": "vendor.runtime",
+    }
+    mutations = build_agent_deployment_identity_mutations(deployment, binding)
+    link = next(edge for edge in _edges(mutations) if edge.edge_type == EdgeType.AGENT_LINKED_TO_EXTERNAL_ACCOUNT)
+    assert link.from_vertex_id == "canonical-agent-7"
+    assert link.to_vertex_id == "deployment-7"
+    assert link.properties["provenance"] == "agent_deployment_identity_binding"
+    assert link.properties["binding_authority"] == "tenant_admin_explicit"
+    assert build_agent_deployment_identity_mutations(
+        {**deployment, "agent_source_namespace": "other.runtime"}, binding,
+    ) == []
+
+
+@pytest.mark.asyncio
+async def test_run_authority_evaluates_canonical_delegation_separately_from_occurrence(monkeypatch):
+    import actions.agent_marketplace.authority as authority_module
+
+    tenant_id = _tenant()
+    entities = {
+        "canonical-grantor": {
+            "entity_id": "canonical-grantor", "tenant_id": tenant_id, "entity_type": "agent",
+        },
+        "canonical-grantee": {
+            "entity_id": "canonical-grantee", "tenant_id": tenant_id, "entity_type": "agent",
+        },
+    }
+    identity_rows = {
+        "runtime-grantor": [{
+            "tenant_id": tenant_id, "source_namespace": "vendor.runtime",
+            "source_agent_ref": "runtime-grantor",
+            "canonical_agent_entity_id": "canonical-grantor",
+            "binding_authority": "tenant_admin_explicit", "status": "active",
+        }],
+        "runtime-grantee": [{
+            "tenant_id": tenant_id, "source_namespace": "vendor.runtime",
+            "source_agent_ref": "runtime-grantee",
+            "canonical_agent_entity_id": "canonical-grantee",
+            "binding_authority": "tenant_admin_explicit", "status": "active",
+        }],
+    }
+    delegation = {
+        "delegation_id": "delegation-canonical-1",
+        "tenant_id": tenant_id,
+        "grantor_entity_id": "canonical-grantor",
+        "grantee_entity_id": "canonical-grantee",
+        "starts_at": "2026-10-01T00:00:00+00:00",
+        "ends_at": "2026-11-01T00:00:00+00:00",
+        "revoked_at": None,
+        "scope": {
+            "actions": ["issue.update"],
+            "resources": ["repo:acme:*"],
+        },
+    }
+
+    class DeploymentRepository:
+        async def get_record(self, requested_tenant, deployment_id):
+            assert requested_tenant == tenant_id
+            return {
+                "id": deployment_id,
+                "tenant_id": tenant_id,
+                "agent_id": "runtime-grantor",
+                "agent_source_namespace": "vendor.runtime",
+            }
+
+    class DelegationRepositoryFake:
+        async def find_by_id(self, delegation_id):
+            assert delegation_id == "delegation-canonical-1"
+            return delegation
+
+    class BindingRepositoryFake:
+        async def find_for_source(self, requested_tenant, namespace, source_ref):
+            assert requested_tenant == tenant_id
+            assert namespace == "vendor.runtime"
+            return identity_rows.get(source_ref, [])
+
+    class EntityRepositoryFake:
+        async def find_by_id(self, entity_id):
+            return entities.get(entity_id)
+
+    monkeypatch.setattr(authority_module, "get_deployment_repository", lambda: DeploymentRepository())
+    resolver = authority_module.AgentRunAuthorityResolver(
+        delegation_repo=DelegationRepositoryFake(),
+        identity_binding_repo=BindingRepositoryFake(),
+        entity_repo=EntityRepositoryFake(),
+    )
+    row = _run_row(
+        tenant_id=tenant_id,
+        deployment_id="deployment-grantor",
+        delegation_id="delegation-canonical-1",
+        delegated_to_ref="runtime-grantee",
+        action_type="issue.update",
+        resource_ref="repo:acme:project",
+        occurred_at="2026-10-10T10:00:00+00:00",
+    )
+    resolved = await resolver.resolve(row)
+    assert resolved["delegation_resolution"]["party_identity_status"] == "matched"
+    assert resolved["delegation_authorization"]["status"] == "within_scope"
+    assert resolved["delegation_authorization"]["actor_entity_id"] == "canonical-grantor"
+    assert resolved["delegation_authorization"]["target_entity_id"] == "canonical-grantee"
+    assert resolved["execution_occurrence"] == {
+        "status": "source_reported",
+        "verified": False,
+        "source_event_id": row["source_event_id"],
+        "reason": "no_server_authoritative_external_execution_receipt",
+    }
+
+    graph_mutations = authority_module.build_agent_run_authority_mutations(row, resolved)
+    link = next(edge for edge in _edges(graph_mutations) if edge.edge_type == EdgeType.REFERENCES_DELEGATION_RECORD)
+    assert link.properties["authorization_claim"] == "none"
+    assert link.properties["delegation_authorization_status"] == "within_scope"
+    assert link.properties["execution_occurrence"] == "source_reported"
+    assert link.properties["execution_verified"] is False
+
+
+@pytest.mark.asyncio
+async def test_run_authorization_is_indeterminate_for_ambiguous_bindings_and_missing_amount(monkeypatch):
+    import actions.agent_marketplace.authority as authority_module
+
+    tenant_id = _tenant()
+    delegation = {
+        "delegation_id": "delegation-ambiguous",
+        "tenant_id": tenant_id,
+        "grantor_entity_id": "canonical-a",
+        "grantee_entity_id": "canonical-b",
+        "starts_at": "2026-10-01T00:00:00+00:00",
+        "ends_at": "2026-11-01T00:00:00+00:00",
+        "revoked_at": None,
+        "scope": {"actions": ["issue.update"], "max_amount": "10"},
+    }
+
+    class DeploymentRepository:
+        async def get_record(self, requested_tenant, deployment_id):
+            return {
+                "id": deployment_id, "tenant_id": tenant_id,
+                "agent_id": "runtime-a", "agent_source_namespace": "vendor.runtime",
+            }
+
+    class DelegationRepositoryFake:
+        async def find_by_id(self, delegation_id):
+            return delegation
+
+    class BindingRepositoryFake:
+        async def find_for_source(self, requested_tenant, namespace, source_ref):
+            if source_ref == "runtime-a":
+                return [{
+                    "tenant_id": tenant_id, "source_namespace": namespace,
+                    "source_agent_ref": source_ref, "canonical_agent_entity_id": "canonical-a",
+                    "binding_authority": "tenant_admin_explicit", "status": "active",
+                }]
+            return [
+                {"tenant_id": tenant_id, "source_namespace": namespace, "source_agent_ref": source_ref},
+                {"tenant_id": tenant_id, "source_namespace": namespace, "source_agent_ref": source_ref},
+            ]
+
+    class EntityRepositoryFake:
+        async def find_by_id(self, entity_id):
+            return {"entity_id": entity_id, "tenant_id": tenant_id, "entity_type": "agent"}
+
+    monkeypatch.setattr(authority_module, "get_deployment_repository", lambda: DeploymentRepository())
+    resolver = authority_module.AgentRunAuthorityResolver(
+        delegation_repo=DelegationRepositoryFake(),
+        identity_binding_repo=BindingRepositoryFake(),
+        entity_repo=EntityRepositoryFake(),
+    )
+    row = _run_row(
+        tenant_id=tenant_id, deployment_id="deployment-a",
+        delegation_id="delegation-ambiguous", delegated_to_ref="runtime-b",
+        action_type="issue.update", resource_ref="repo:acme:project",
+        occurred_at="2026-10-10T10:00:00+00:00",
+    )
+    ambiguous = await resolver.resolve(row)
+    assert ambiguous["delegation_resolution"]["target_identity_status"] == "ambiguous"
+    assert ambiguous["delegation_authorization"]["status"] == "indeterminate"
+    assert ambiguous["delegation_authorization"]["reason"] == "canonical_party_binding_unresolved"
+
+    class BoundRepositoryFake(BindingRepositoryFake):
+        async def find_for_source(self, requested_tenant, namespace, source_ref):
+            canonical = "canonical-a" if source_ref == "runtime-a" else "canonical-b"
+            return [{
+                "tenant_id": tenant_id, "source_namespace": namespace,
+                "source_agent_ref": source_ref, "canonical_agent_entity_id": canonical,
+                "binding_authority": "tenant_admin_explicit", "status": "active",
+            }]
+
+    resolver = authority_module.AgentRunAuthorityResolver(
+        delegation_repo=DelegationRepositoryFake(),
+        identity_binding_repo=BoundRepositoryFake(),
+        entity_repo=EntityRepositoryFake(),
+    )
+    no_amount = await resolver.resolve(row)
+    assert no_amount["delegation_authorization"]["status"] == "indeterminate"
+    assert no_amount["delegation_authorization"]["reason"] == (
+        "authoritative_amount_missing_for_delegation_limit"
+    )
+
+
+def test_delegation_authorization_reports_scope_and_time_mismatches_separately():
+    from actions.agent_marketplace.authority import _evaluate_delegation_authorization
+
+    actor = {"status": "matched", "canonical_agent_entity_id": "grantor"}
+    target = {"status": "matched", "canonical_agent_entity_id": "grantee"}
+    record = {
+        "tenant_id": "tenant-a",
+        "delegation_id": "delegation-a",
+        "grantor_entity_id": "grantor",
+        "grantee_entity_id": "grantee",
+        "starts_at": "2026-10-01T00:00:00+00:00",
+        "ends_at": "2026-11-01T00:00:00+00:00",
+        "revoked_at": None,
+        "scope": {"actions": ["issue.update"], "resources": ["repo:acme:*"]},
+    }
+    common = {
+        "tenant_id": "tenant-a", "actor": actor, "target": target,
+        "action_type": "issue.update", "resource_ref": "repo:acme:project",
+        "occurred_at": "2026-10-10T10:00:00+00:00", "authoritative_amount": None,
+    }
+    assert _evaluate_delegation_authorization(record=record, **common)["status"] == "within_scope"
+    out_of_scope = _evaluate_delegation_authorization(
+        record=record, **{**common, "action_type": "issue.delete"},
+    )
+    assert out_of_scope["status"] == "out_of_scope"
+    assert out_of_scope["reason"] == "action_not_in_delegation_scope"
+
+    revoked = _evaluate_delegation_authorization(
+        record={**record, "revoked_at": "2026-10-09T00:00:00+00:00"}, **common,
+    )
+    assert revoked["status"] == "out_of_scope"
+    assert revoked["reason"] == "delegation_revoked"
+    assert revoked["execution_verified"] is False
+
+
+@pytest.mark.asyncio
+async def test_binding_endpoint_validates_tenant_agent_and_preserves_graph_disabled_state(monkeypatch):
+    import actions.agent.deployment_routes as routes_module
+    import actions.agent_marketplace.identity_binding as binding_module
+    from config.settings import settings
+    from shared.common.common import BadRequestError
+
+    tenant_id = _tenant()
+    deployment = {
+        "id": "deployment-binding-route",
+        "tenant_id": tenant_id,
+        "agent_id": "runtime-ref",
+        "agent_source_namespace": "vendor.runtime",
+    }
+
+    class Tenant:
+        user_id = "tenant-admin"
+
+        def require_permission(self, permission):
+            assert permission == "agent:manage"
+
+    tenant = Tenant()
+    tenant.tenant_id = tenant_id
+
+    class DeploymentRepository:
+        async def get(self, requested_tenant, deployment_id):
+            assert requested_tenant == tenant_id
+            assert deployment_id == deployment["id"]
+            return deployment
+
+    class EntityRepositoryFake:
+        entity = {
+            "entity_id": "canonical-agent",
+            "tenant_id": tenant_id,
+            "entity_type": "agent",
+        }
+
+        async def find_by_id(self, entity_id):
+            assert entity_id == "canonical-agent"
+            return self.entity
+
+    saved = {}
+
+    class BindingRepositoryFake:
+        async def bind(self, **kwargs):
+            saved.update(kwargs)
+            return {
+                "id": "binding-1", "tenant_id": tenant_id,
+                "binding_authority": "tenant_admin_explicit", "status": "active",
+            }
+
+    monkeypatch.setattr(routes_module, "_repo", lambda: DeploymentRepository())
+    monkeypatch.setattr(routes_module, "EntityRepository", EntityRepositoryFake)
+    monkeypatch.setattr(binding_module, "AgentDeploymentIdentityBindingRepository", BindingRepositoryFake)
+    monkeypatch.setattr(
+        settings,
+        "external_agent_telemetry",
+        dataclasses.replace(
+            settings.external_agent_telemetry, enabled=True, registry_enabled=True,
+            graph_enabled=False,
+        ),
+    )
+    request = SimpleNamespace(
+        state=SimpleNamespace(tenant=tenant, request_id="request-1"), headers={},
+    )
+    response = await routes_module.bind_deployment_agent_identity(
+        deployment["id"], routes_module.AgentIdentityBindingRequest(
+            canonical_agent_entity_id="canonical-agent",
+        ), request,
+    )
+    assert response["data"]["graph_projection_status"] == "disabled"
+    assert saved == {
+        "tenant_id": tenant_id,
+        "source_namespace": "vendor.runtime",
+        "source_agent_ref": "runtime-ref",
+        "canonical_agent_entity_id": "canonical-agent",
+        "bound_by": "tenant-admin",
+        "source_deployment_id": deployment["id"],
+    }
+
+    EntityRepositoryFake.entity = {
+        "entity_id": "canonical-agent", "tenant_id": "another-tenant", "entity_type": "agent",
+    }
+    with pytest.raises(BadRequestError):
+        await routes_module.bind_deployment_agent_identity(
+            deployment["id"], routes_module.AgentIdentityBindingRequest(
+                canonical_agent_entity_id="canonical-agent",
+            ), request,
+        )
+
+
+@pytest.mark.asyncio
+async def test_graph_recovery_rebuilds_only_validated_deployment_identity_edges(monkeypatch):
+    import actions.agent.deployments as deployments_module
+    import actions.agent_marketplace.identity_binding as binding_module
+    import dependencies.providers as providers_module
+    import repositories.repos as repos_module
+    from config.settings import settings
+
+    tenant_id = _tenant()
+    deployment = {
+        "id": "deployment-recover",
+        "tenant_id": tenant_id,
+        "agent_id": "runtime-ref",
+        "agent_source_namespace": "vendor.runtime",
+    }
+    binding = {
+        "id": "binding-recover", "tenant_id": tenant_id,
+        "source_namespace": "vendor.runtime", "source_agent_ref": "runtime-ref",
+        "canonical_agent_entity_id": "canonical-agent", "binding_authority": "tenant_admin_explicit",
+        "status": "active", "bound_at": "2026-10-10T10:00:00+00:00",
+    }
+
+    class DeploymentPages:
+        async def list_page(self, requested_tenant, *, limit, cursor=None):
+            return [deployment], None, False
+
+    async def find_for_source(self, requested_tenant, namespace, source_ref):
+        assert (requested_tenant, namespace, source_ref) == (
+            tenant_id, "vendor.runtime", "runtime-ref",
+        )
+        return [binding]
+
+    async def find_by_id(self, entity_id):
+        return {
+            "entity_id": entity_id, "tenant_id": tenant_id, "entity_type": "agent",
+        }
+
+    monkeypatch.setattr(deployments_module, "get_deployment_repository", lambda: DeploymentPages())
+    monkeypatch.setattr(binding_module.AgentDeploymentIdentityBindingRepository, "find_for_source", find_for_source)
+    monkeypatch.setattr(repos_module.EntityRepository, "find_by_id", find_by_id)
+    monkeypatch.setattr(providers_module, "get_cache", lambda: object())
+    monkeypatch.setattr(
+        settings,
+        "external_agent_telemetry",
+        dataclasses.replace(settings.external_agent_telemetry, graph_enabled=False),
+    )
+    expected, truncated, cursor = await AgentMarketplaceGraphProjectionOutbox()._expected_mutations(
+        tenant_id, 10,
+    )
+    assert not truncated and cursor is None
+    identity_edges = [
+        mutation for _source_event_id, mutation in expected
+        if isinstance(mutation, Edge) and mutation.edge_type == EdgeType.AGENT_LINKED_TO_EXTERNAL_ACCOUNT
+    ]
+    assert len(identity_edges) == 1
+    assert identity_edges[0].from_vertex_id == "canonical-agent"
+    assert identity_edges[0].to_vertex_id == deployment["id"]
