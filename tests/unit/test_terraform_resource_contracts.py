@@ -309,7 +309,7 @@ def test_terraform_root_declared_by_the_contracts_file_exists():
     assert (declared / "profiles.tf").exists()
 
 
-def test_auth0_pilot_database_connection_association_is_aether_only():
+def test_auth0_database_connection_associations_are_limited_to_aether_clients():
     auth0 = (TERRAFORM_ROOT / "modules/auth0/main.tf").read_text()
     root = (TERRAFORM_ROOT / "main.tf").read_text()
 
@@ -322,11 +322,19 @@ def test_auth0_pilot_database_connection_association_is_aether_only():
         (name, body) for name, body in singular
         if "auth0_connection.database.id" in body
     ]
-    assert len(database_associations) == 1
-    name, body = database_associations[0]
-    assert name == "aether_db"
-    assert "auth0_client.aether.id" in body
-    assert "enabled_clients" not in body
+    assert {name for name, _body in database_associations} == {
+        "aether_db",
+        "aether_cli_db",
+    }
+    associated_clients = {
+        re.search(r'client_id\s*=\s*([^\s]+)', body).group(1)
+        for _name, body in database_associations
+    }
+    assert associated_clients == {
+        "auth0_client.aether.id",
+        "auth0_client.aether_cli.id",
+    }
+    assert all("enabled_clients" not in body for _name, body in database_associations)
     assert not re.search(
         r'resource\s+"auth0_connection_clients"\s+"[^"]+"\s*\{[^}]*'
         r'auth0_connection\.database\.id',
