@@ -327,19 +327,30 @@ authorities.
 
 **Acceptance:** all claims map to retained evidence; no production, certification, customer-beta, or broad merge-readiness claim is made without its canonical release/PR evidence.
 
-**Current stack status:** local contract proof is complete for this slice. The
-Access Kit suite passes 23 tests, including mocked REST/CLI/tool-handler
-contracts, terminal-control escaping, and a pinned-SDK stdio subprocess smoke
-test for `initialize` plus `tools/list`. Focused Web (1), Server (3), React
-Native (11), backend V1/V2 observation (37), import/provider admission (25 and
-17 in their respective focused runs), and Swift package-build checks have
-passed. The security diff review found and this stack remediates terminal
-control injection from observed capability labels in human CLI output. Android
-Gradle and Apple XCTest/device tooling are not available in this environment.
-No live tenant, provider credentials, modern remote MCP host, or device/store
-environment was available, so cross-tenant live calls, timeout behavior
-against a service, ingestion-to-graph hydration, customer beta, and release
-readiness remain unproven.
+**Current stack status:** local contract proof is complete for the supported
+slice. At the integrated head, the Access Kit suite passes 23 tests, including
+mocked REST/CLI/tool-handler contracts, terminal-control escaping, and a
+pinned-SDK stdio subprocess smoke test for `initialize` plus `tools/list`. Full
+Web (382), Server (97), and React Native (127) package suites passed after
+building the shared SDK package. Backend V1/V2 observation tests (37),
+import/provider admission suites (25 and 17), and a Swift package-build check
+also passed. The security diff review found and this stack remediates terminal
+control injection from observed capability labels in human CLI output.
+
+The repository-wide `verification-disposition` was attempted but did not
+complete successfully. Its final reported status was `FAILED`: the docs check
+created a temporary checkout on a case-insensitive macOS volume and dropped
+tracked documentation paths that differ only by case; frontend and Server SDK
+tests ran before the shared SDK build artifacts existed; and unrelated Python
+tests lacked the `python` command alias and the optional `.[agent]` dependency.
+A corrective run was prepared with those dependencies and a case-sensitive
+temporary volume, but the execution environment reset before it returned a
+final result. No full local authority pass or hosted PR checks are claimed.
+Android Gradle and Apple XCTest/device tooling are unavailable. No live tenant,
+provider credentials, modern remote MCP host, or device/store environment was
+available, so cross-tenant live calls, timeout behavior against a service,
+ingestion-to-graph hydration, customer beta, and release readiness remain
+unproven.
 
 ## 6. Single-PR commit sequence
 
