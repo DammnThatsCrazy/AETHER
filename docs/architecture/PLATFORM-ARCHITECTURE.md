@@ -22,8 +22,10 @@ reviewed_source_commits:
     reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
   - commit: "181af52f4"
     reason: "Reviewed the shared SDK batch wire vector and cross-platform conformance seam. It documents the existing canonical intake path and adds no client-owned tenant, identity, rights, or graph authority."
+  - commit: "b9dc38da7"
+    reason: "Reviewed the generated shared feature-surface manifest update: Agent 360 remains tenant-scoped and explicitly exempt from exact Kyber mirror parity until an owner defines that contract."
 source_hashes:
-  "packages/shared/": "sha256:a041823ff48096bd09c31e6e15972ae2bec97b28685cb5e0a93e48f2ce6a3aad"
+  "packages/shared/": "sha256:15c68be54f0db370a3d992b9dc7d9d6151728e242bedbb9eabf2bfacf668ee95"
   "services/api/config/settings.py": "sha256:0c59864b351aaa3558edf56cc3e550803ed212c05c716f8ec24311ccfcf9779b"
   "services/api/ingestion/ingestion/replay.py": "sha256:ca77373185e811a47e354b28052901bc48ef309e62ea0133f1f55fdc37f5f687"
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
@@ -561,6 +563,11 @@ runtime. The Aether `/explore` surface is nevertheless classified as
 parity-required in the generated Kyber feature-surface manifest, so authorized
 internal tenant-mirror inspection uses the existing generic mirror capability
 and disclosure policy rather than exposing Kyber in the customer product.
+The generated feature-surface manifest classifies all 67 Aether routes: 40
+require tenant-visible parity and 27 have explicit exceptions. The
+tenant-scoped `/agents/:agentId` Agent 360 detail has no exact Kyber Tenant
+Mirror route today, so it remains an explicit exception until an owner defines
+the parity contract; operator access stays on separately governed APIs.
 
 Lens identity remains registry-governed: `packages/shared/contracts/lens-registry.json`
 generates `packages/shared/lenses_generated.ts`, and projection availability
