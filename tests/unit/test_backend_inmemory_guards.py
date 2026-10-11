@@ -466,7 +466,9 @@ def test_staging_api_imports_with_the_configured_durable_backends():
         env=env,
         capture_output=True,
         text=True,
-        timeout=45,
+        # Importing the full staging API graph is intentionally exercised here;
+        # leave room for the parallel root-platform lane on slower CI workers.
+        timeout=90,
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
