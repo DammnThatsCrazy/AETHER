@@ -28,7 +28,7 @@ source_hashes:
   "services/api/identity/identity/": "sha256:4a4a8257dd3969d9591988d2b94ebaba91f1486ab7bf60b8f01ea512c8da5889"
   "services/api/identity/profile/aggregator.py": "sha256:a901c1088e387bb967d425b1aed3673fc3942b7b6bf017648c78aad860bfe04b"
   "services/api/identity/profile/composer.py": "sha256:aae09f67a164f0e2b940676e52841ff325f36650ac4b1c022cc2a60a31505c20"
-  "services/api/ingestion/ingestion/batch.py": "sha256:1291896e1d4319ed491ec7793660a9c5d6e60a97a32480558f847517916c606d"
+  "services/api/ingestion/ingestion/batch.py": "sha256:1be13c12153f070ceaf29a0761d49fd4ab11f4c4de66ce94efb7fe44607cd40b"
   "services/api/intelligence/analytics/routes.py": "sha256:b51cb890d703eb9c495b723fd79b6e03bf292300db82441024b5b645e6b341b7"
   "services/api/repositories/repos.py": "sha256:c03e0537e86217db3dc67aabc2ce179a589ece64870dcdcc1f76d7f79ae95dae"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"

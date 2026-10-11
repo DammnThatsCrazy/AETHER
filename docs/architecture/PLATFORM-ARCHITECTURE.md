@@ -23,7 +23,7 @@ reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the shared SDK batch wire vector and cross-platform conformance seam. It documents the existing canonical intake path and adds no client-owned tenant, identity, rights, or graph authority."
 source_hashes:
-  "packages/shared/": "sha256:01c5aa6b65ff9bc3054afd263d7d61ed9013b4091876fefeb27e7713821b4a03"
+  "packages/shared/": "sha256:a041823ff48096bd09c31e6e15972ae2bec97b28685cb5e0a93e48f2ce6a3aad"
   "services/api/config/settings.py": "sha256:0c59864b351aaa3558edf56cc3e550803ed212c05c716f8ec24311ccfcf9779b"
   "services/api/ingestion/ingestion/replay.py": "sha256:ca77373185e811a47e354b28052901bc48ef309e62ea0133f1f55fdc37f5f687"
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"

@@ -14,6 +14,7 @@ reviewed_source_commits:
   - commit: "609a3ad37"
     reason: "Reviewed the Access Kit Auth0 client work. The linked root main.tf change is comment-only; the Native CLI application is an Auth0 module resource and does not alter deployment profile topology or runtime resource selection, so this profile guide needed no body change."
 source_hashes:
+  "config/aws_price_book.yaml": "sha256:b449237c5d4b11622f0f35278b3f5a22a17b39b1cea74a53596b6af94ba2d3dc"
   "config/capability_overlays.yaml": "sha256:aab4be2180c27275e54164100963b8c3fda947fbcceecb99114bc6412f923407"
   "config/deployment_profiles.yaml": "sha256:77d37f2c71472b5d644da32636bb68948263250739b62b621502cdfb09797475"
   "config/runtime_deployment.yaml": "sha256:ba7bd71d79e605a88076b6ea745582dce9c4bff38442ebd5d327cfee9bbf7284"
@@ -27,6 +28,7 @@ source_hashes:
   "infra/aws/terraform/modules/secrets/rotation.tf": "sha256:2e3b0bc6336ee324e3a3829f4f08c94b901501902981f87034933c875549fb00"
   "infra/aws/terraform/profiles.tf": "sha256:c197af7ebf1556be22a70dbf05c4ba85f5f93a2dd322dc39a42442f27226a89d"
   "infra/aws/terraform/variables.tf": "sha256:a2903e0b695041ac8c457ed97683a904829c134dcfe888fdedf255a745b7dda8"
+  "scripts/release/check_cost_model.py": "sha256:b80c15e6d0ceee9a161ad4259c82284469da10a395ac08c3b0e26f0c44e95aa7"
   "scripts/release/check_profile_config.py": "sha256:c1a16a2c7342d7be2d16306f1a15915cf4d37ffc4f1c6ea0466e3fe2df71782b"
   "scripts/release/check_profile_parity.py": "sha256:34c8ae168107d6c5e69c26dd2081c9774b42dd158b9663189ff5e70b6415adf2"
   "scripts/release/check_staging_lane_contract.py": "sha256:385a5e2316e8c38d33e10119f996854af3a7f3bc9034ca3b3545829638c8122d"
