@@ -35,6 +35,11 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from repositories.imports_repo import get_imports_repository
+from ingestion.imports.rights_admission import (
+    ImportRightsDenied,
+    ImportRightsEvidence,
+    get_import_rights_admission,
+)
 from value.card_linked_payments.import_session import (
     MAX_SESSION_RETRIES,
     ImportSessionState,
@@ -288,6 +293,7 @@ async def _stage_and_mutate(
     from ingestion.imports.analyzer import detect_format, read_rows
 
     bronze_rows = 0
+    bronze_record_ids: dict[tuple[str, int], str] = {}
     all_records: list[dict] = []
     row_errors: list[dict] = []
     # WS-B3: rows are staged in full (per file) before any Bronze write so the
@@ -311,47 +317,85 @@ async def _stage_and_mutate(
     # T-class data-policy gate before any durable write (no partial Bronze).
     await _enforce_imports_consent_policy(tenant_id, fields, staged_rows)
 
-    # The identity evidence write is part of commit success. If its persistence
-    # fails, fail the commit before reporting success; retry keys are stable.
-    for staged in staged_rows:
-        file_records = [
-            record for record in all_records if record.get("file_id") == staged["file_id"]
-        ]
-        await _register_csv_identity_evidence(
-            tenant_id, import_id, commit_id, staged["file_id"], file_records
+    # Rights Authority is mandatory for CSV commit regardless of its general
+    # propagation rollout mode. Persist this attempt before any identity,
+    # Bronze, Silver, or graph write so denials and allowed lineage are durable.
+    admission = get_import_rights_admission()
+    try:
+        rights_evidence = await admission.admit(
+            tenant_id=tenant_id,
+            import_id=import_id,
+            commit_id=commit_id,
+            source_id=session.get("source_id"),
+            actor=session.get("approved_by"),
         )
-
-    # Scrub is the MANDATORY T-class minimization layer and runs UNCONDITIONALLY
-    # (redaction never rejects). It is applied to the Bronze payload copy ONLY:
-    # secret-key columns are redacted in what is persisted under tenant_import,
-    # while the graph-building records keep the governor-approved mapped values.
-    from ingestion.ingestion.validation import scrub_sensitive_fields
-
-    for staged in staged_rows:
-        file_id = staged["file_id"]
-        for idx, row in enumerate(staged["rows"]):
-            payload, _ = scrub_sensitive_fields(row)
-            _rec, is_new = await bronze.ingest(
-                source=BRONZE_DOMAIN,
-                source_tag=commit_id,
-                provider_record_id=f"{file_id}:{idx}",
-                payload=payload,
-                tenant_id=tenant_id,
-                license_status="tenant_owned",
-                terms_status="approved",
-            )
-            if is_new:
-                bronze_rows += 1
-
-    vertices, edges = plan_graph(tenant_id, all_records)
-    created_edges = await _apply_graph(tenant_id, commit_id, vertices, edges)
-
-    # Project the committed records into Silver (silver_import_facts) for the
-    # analytical layer. Best-effort — Bronze is the durable source of truth and a
-    # replay re-derives the facts, so a Silver hiccup must never fail the commit.
-    silver_rows = await _project_silver(
-        tenant_id, import_id, commit_id, int(mapping.get("version", 1)), all_records
+    except ImportRightsDenied as exc:
+        await _record_import_rights_attempt(repo, tenant_id, import_id, exc.evidence)
+        raise
+    rights_attempts = await _record_import_rights_attempt(
+        repo, tenant_id, import_id, rights_evidence
     )
+
+    try:
+        async with admission.hold_grant(rights_evidence):
+            # The identity evidence write is part of commit success. If its
+            # persistence fails, fail before reporting success; retry keys are
+            # stable and every attempt gets a fresh rights decision.
+            for staged in staged_rows:
+                file_records = [
+                    record for record in all_records
+                    if record.get("file_id") == staged["file_id"]
+                ]
+                await _register_csv_identity_evidence(
+                    tenant_id, import_id, commit_id, staged["file_id"], file_records
+                )
+
+            # Scrub is the MANDATORY T-class minimization layer and runs
+            # UNCONDITIONALLY. It applies to the Bronze payload copy only.
+            from ingestion.ingestion.validation import scrub_sensitive_fields
+
+            for staged in staged_rows:
+                file_id = staged["file_id"]
+                for idx, row in enumerate(staged["rows"]):
+                    payload, _ = scrub_sensitive_fields(row)
+                    bronze_record, is_new = await bronze.ingest(
+                        source=BRONZE_DOMAIN,
+                        source_tag=commit_id,
+                        # Bronze import evidence is per commit/replay. A fresh
+                        # provider record identity keeps each run's rdec refs
+                        # immutable and queryable by its own source_tag.
+                        provider_record_id=f"{import_id}:{file_id}:{idx}:{commit_id}",
+                        payload=payload,
+                        tenant_id=tenant_id,
+                        license_status="tenant_owned",
+                        terms_status="approved",
+                        rights_decision_refs=rights_evidence.decision_refs,
+                    )
+                    bronze_record_ids[(file_id, idx)] = str(bronze_record["id"])
+                    if is_new:
+                        bronze_rows += 1
+
+            for record in all_records:
+                record["bronze_record_id"] = bronze_record_ids[
+                    (record["file_id"], record["row"])
+                ]
+
+            vertices, edges = plan_graph(tenant_id, all_records)
+            created_edges = await _apply_graph(
+                tenant_id, commit_id, vertices, edges,
+                rights_evidence.graph_propagation,
+            )
+
+            # Silver is an analytical projection and receives its own required
+            # tenant_insights admission before this best-effort write.
+            silver_rows = await _project_silver(
+                tenant_id, import_id, commit_id,
+                int(mapping.get("version", 1)), all_records,
+                rights_evidence.decision_refs,
+            )
+    except ImportRightsDenied as exc:
+        await _record_import_rights_attempt(repo, tenant_id, import_id, exc.evidence)
+        raise
 
     status = "partially_committed" if row_errors else "committed"
     return {
@@ -370,17 +414,45 @@ async def _stage_and_mutate(
         "upserted_vertices": [vertex["vertex_id"] for vertex in vertices],
         "bronze_source_tag": commit_id,
         "row_errors": row_errors[:500],
+        "rights_admission_attempts": rights_attempts,
+        "rights_decision_refs": rights_evidence.decision_refs,
+        "rights_source_grant_ref": rights_evidence.source_grant_ref,
     }
 
 
+async def _record_import_rights_attempt(
+    repo: Any,
+    tenant_id: str,
+    import_id: str,
+    evidence: ImportRightsEvidence,
+) -> list[dict]:
+    """Append one admission attempt under its commit or replay identity."""
+    session = await repo.get_session(tenant_id, import_id)
+    histories = dict(session.get("rights_admissions") or {})
+    attempts = list(histories.get(evidence.commit_id) or [])
+    record = evidence.to_record()
+    if not attempts or attempts[-1] != record:
+        attempts.append(record)
+    histories[evidence.commit_id] = attempts
+    await repo.update_session(
+        tenant_id, import_id, rights_admissions=histories
+    )
+    return attempts
+
+
 async def _apply_graph(
-    tenant_id: str, commit_id: str, vertices: list[dict], edges: list[dict]
+    tenant_id: str,
+    commit_id: str,
+    vertices: list[dict],
+    edges: list[dict],
+    rights_propagation: Any,
 ) -> list[dict]:
     """Upsert vertices and add edges idempotently; return the edges actually
     created (so a rollback can revoke exactly them)."""
     from shared.graph.graph import Edge, Vertex, get_graph_client
     from shared.graph.mutation_gateway import GraphMutationGateway
     from shared.graph.mutation_intents import edge_intent, vertex_intent
+    from tenancy.rights_authority.propagation import stamp_intent
 
     graph = get_graph_client()
     gateway = GraphMutationGateway(graph_client=graph)
@@ -403,18 +475,21 @@ async def _apply_graph(
         }
         if existing is None:
             props["import_commit_id"] = commit_id
-        await gateway.apply(vertex_intent(
+        intent = vertex_intent(
             Vertex(vertex_type=v["vertex_type"], vertex_id=v["vertex_id"], properties=props),
             operation="node_versioned", tenant_id=tenant_id,
             actor_kind="import", actor_id=commit_id, correlation_id=commit_id,
-        ))
+        )
+        await gateway.apply(
+            stamp_intent(intent, rights_propagation), mode_override="shadow"
+        )
 
     created: list[dict] = []
     for e in edges:
         existing = await graph.get_edges(e["from"], edge_type=e["type"], direction="out")
         if any(x.to_vertex_id == e["to"] for x in existing):
             continue  # idempotent: this edge already connects these vertices
-        await gateway.apply(edge_intent(
+        intent = edge_intent(
             Edge(
                 edge_type=e["type"],
                 from_vertex_id=e["from"],
@@ -430,7 +505,10 @@ async def _apply_graph(
             # that was never re-projected).
             source_event_id=commit_id,
             correlation_id=commit_id, causality_class="declared_reason",
-        ))
+        )
+        await gateway.apply(
+            stamp_intent(intent, rights_propagation), mode_override="shadow"
+        )
         created.append(e)
     return created
 
@@ -441,6 +519,7 @@ async def _project_silver(
     commit_id: str,
     mapping_version: int,
     records: list[dict],
+    rights_decision_refs: dict[str, str],
 ) -> int:
     """Best-effort Silver projection of the committed records into
     ``silver_import_facts``. Returns the number of rows written (0 on any
@@ -460,6 +539,7 @@ async def _project_silver(
             mapping_version=mapping_version,
             occurred_at=datetime.now(timezone.utc).isoformat(),
             records=records,
+            rights_decision_refs=rights_decision_refs,
         )
         return await SilverFactWriter().persist([result])
     except Exception as exc:  # pragma: no cover — Silver hiccup must not fail a commit
