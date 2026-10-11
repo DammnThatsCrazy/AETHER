@@ -691,7 +691,7 @@ async def ingest_events(
         metering_outcome = await meter_family_usage(
             "ingestion", tenant_id, event_id=batch_id,
             quantity=n_accepted, enforce=False, raise_on_metering_error=False,
-            metadata={"request_id": request_id} if request_id else None,
+            metadata={"correlation_id": request_id} if request_id else None,
         )
 
     return BatchResponse(
@@ -917,7 +917,7 @@ async def _ingest_batch_v2(
         metering_outcome = await meter_family_usage(
             "ingestion", tenant.tenant_id, event_id=batch_id,
             quantity=n_accepted, enforce=False, raise_on_metering_error=False,
-            metadata={"request_id": request_id} if request_id else None,
+            metadata={"correlation_id": request_id} if request_id else None,
         )
 
     return BatchResponse(

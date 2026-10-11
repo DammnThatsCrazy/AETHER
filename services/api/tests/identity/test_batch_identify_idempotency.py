@@ -129,7 +129,7 @@ async def test_retry_of_identify_event_is_published_once_and_never_resolved_inli
     assert first.requestId == "req-batch-first"
     assert first.usageEventId == "usage-event-1"
     assert first.usageEvidenceId == "usage-evidence-1"
-    assert metering_calls[0]["metadata"] == {"request_id": "req-batch-first"}
+    assert metering_calls[0]["metadata"] == {"correlation_id": "req-batch-first"}
     assert second.duplicates == 1
     assert len(producer.batches) == 1
     # Resolution is the identity-worker's job (it consumes SDK_EVENTS_VALIDATED),
@@ -227,7 +227,7 @@ async def test_v2_batch_response_correlates_request_and_usage_evidence(monkeypat
     assert response["requestId"] == "req-v2-correlation"
     assert response["usageEventId"] == "usage-event-v2"
     assert response["usageEvidenceId"] == "usage-evidence-v2"
-    assert metering_calls[0]["metadata"] == {"request_id": "req-v2-correlation"}
+    assert metering_calls[0]["metadata"] == {"correlation_id": "req-v2-correlation"}
 
 
 @pytest.mark.asyncio
