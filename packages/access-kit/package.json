@@ -6,7 +6,8 @@
   "type": "module",
   "bin": {
     "aether": "./bin/aether.js",
-    "aether-mcp": "./bin/aether-mcp.js"
+    "aether-mcp": "./bin/aether-mcp.js",
+    "aether-mcp-http": "./bin/aether-mcp-http.js"
   },
   "files": [
     "bin",
@@ -17,6 +18,7 @@
   },
   "scripts": {
     "start:mcp": "node ./bin/aether-mcp.js",
+    "start:mcp:http": "node ./bin/aether-mcp-http.js",
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {

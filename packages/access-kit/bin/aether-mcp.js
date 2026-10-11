@@ -7,9 +7,12 @@ import * as z from 'zod/v4';
 
 import {
   AccessApiError,
+  getAccountContext,
   getCapabilityOverview,
   ingestTrackObservation,
   listCapabilities,
+  listEntities,
+  getEntity,
   projectObservedCapability,
 } from '../src/api.mjs';
 import { registerEntityTools } from '../src/entity-tools.mjs';
@@ -88,10 +91,13 @@ function toolError(error) {
   return { content: [{ type: 'text', text: JSON.stringify({ error: details }) }], isError: true };
 }
 
-function createServer() {
+export function createAccessMcpServer(env = process.env, { includeObserve = true } = {}) {
   const server = new McpServer({ name: 'aether-access-kit', version: '0.1.0-alpha.0' });
-  registerEntityTools(server);
-  registerAccountContextTool(server);
+  registerEntityTools(server, {
+    list: (args) => listEntities(args, env),
+    get: (entityId) => getEntity(entityId, env),
+  });
+  registerAccountContextTool(server, { get: () => getAccountContext(env) });
 
   server.registerTool(
     'agent_access_capabilities_list',
@@ -122,7 +128,7 @@ function createServer() {
           toolName: tool_name,
           limit: limit ?? 100,
           offset: offset ?? 0,
-        });
+        }, env);
         const items = (Array.isArray(result.data?.items) ? result.data.items : [])
           .map(projectObservedCapability)
           .filter(Boolean)
@@ -159,7 +165,7 @@ function createServer() {
     },
     async () => {
       try {
-        const result = await getCapabilityOverview();
+        const result = await getCapabilityOverview(env);
         const output = {
           summary: result.data ?? {},
           request_id: result.requestId,
@@ -176,11 +182,11 @@ function createServer() {
     },
   );
 
-  server.registerTool(
+  if (includeObserve) server.registerTool(
     'observe',
     {
       title: 'Send a canonical observation',
-      description: 'Send one custom application track event through Aether POST /v1/batch. Configure AETHER_PUBLISHABLE_KEY and its bound AETHER_SITE_ID. Aether validates the event and returns accepted, duplicate, or rejected decisions; no tenant override is accepted.',
+      description: 'Send one custom application track event through Aether POST /v1/batch. For local stdio, configure AETHER_PUBLISHABLE_KEY and its bound AETHER_SITE_ID. For hosted MCP, provide request-scoped X-Aether-Observe-Key and X-Aether-Site-ID headers on each MCP request. Aether validates the key/site binding and returns accepted, duplicate, or rejected decisions; no tenant override is accepted.',
       inputSchema: z.object({
         event_name: z.string().trim().min(1).max(128),
         event_id: z.string().trim().min(1).max(128),
@@ -202,7 +208,7 @@ function createServer() {
           eventSequence: sequence,
           properties,
           surface: 'mcp',
-        });
+        }, env);
         const output = buildObserveOutput(result);
         return {
           content: [{ type: 'text', text: JSON.stringify(output) }],
@@ -220,7 +226,7 @@ function createServer() {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     await loadMcpStoredSession(process.env);
-    await serveStdio(createServer);
+    await serveStdio(() => createAccessMcpServer(process.env));
   } catch (error) {
     process.stderr.write(`Aether MCP bridge could not start: ${error.message}\n`);
     process.exitCode = 1;

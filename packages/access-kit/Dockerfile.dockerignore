@@ -1,0 +1,12 @@
+**
+!**/
+!**/package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!.npmrc
+!packages/access-kit/**
+**/node_modules
+**/node_modules/**
+.git
+.env
+.env.*

@@ -1,7 +1,7 @@
 # Aether Access Kit
 
-The Access Kit package provides a Node CLI and local MCP stdio bridge for bounded
-customer operations:
+The Access Kit package provides a Node CLI, local MCP stdio bridge, and hosted
+stateless MCP HTTP service for bounded customer operations:
 
 - Read the observed third-party agent access inventory owned by Agent Access
   Intelligence.
@@ -12,6 +12,7 @@ customer operations:
 - Sign in through Auth0 Device Authorization and keep the resulting revocable
   Aether session in the native OS credential store.
 - Send one custom application observation through canonical `POST /v1/batch`.
+- Serve the supported tenant reads over stateless remote Streamable HTTP MCP.
 
 The observed inventory is not an Aether callable-capability registry. Listing a
 record neither grants nor invokes a capability. The Access Kit does not own
@@ -48,6 +49,8 @@ Supply only the credential required by the command being used:
 | `aether ingest ...` | `AETHER_PUBLISHABLE_KEY` and its bound `AETHER_SITE_ID` |
 | MCP inventory, entity, and account read tools | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN` with `read` permission; otherwise a saved session from the OS credential store |
 | MCP `observe` tool | `AETHER_PUBLISHABLE_KEY` and its bound `AETHER_SITE_ID` |
+| Hosted MCP tenant read tools | Per-request `Authorization: Bearer ak_...` or `Bearer sess_...` |
+| Hosted MCP `observe` tool | Per-request `X-Aether-Observe-Key: pk_...` plus `X-Aether-Site-ID`, alongside the read bearer |
 
 Set at most one explicit tenant read credential: `AETHER_API_KEY` or
 `AETHER_SESSION_TOKEN`; an explicit credential takes precedence over a saved
@@ -58,7 +61,10 @@ Explicit environment credentials are never written there. MCP still starts if
 the keyring is absent so a host configured only for publishable-key `observe`
 can use it; tenant read tools then require an explicit credential or successful
 keyring session load. `observe` uses only its site-bound publishable key and
-never uses the stored human session.
+never uses the stored human session. Non-interactive CLI commands with an
+explicit API key or human session skip OS credential-store lookup, which
+supports headless CloudShell, CI, and ECS jobs; interactive `auth login` still
+requires the native credential service.
 The publishable key must be a `pk_` credential. The caller supplies the
 site-bound ID separately. Aether resolves tenant scope from the key and checks
 the required `X-Aether-Site` header against the key's binding. Do not set or
@@ -201,8 +207,7 @@ tools use exactly one read credential (`AETHER_API_KEY` or
 OS credential-store session;
 `observe` requires the publishable key and its bound site ID.
 Each call makes a fresh REST request. The local stdio bridge can reuse the
-saved CLI human session; there is no remote HTTP MCP server, remote MCP OAuth
-flow, or MCP host configuration file in this package.
+saved CLI human session.
 
 `observe` accepts `event_name`, `event_id`, `session_id`, `anonymous_id`,
 non-negative `sequence`, and optional `properties`. It sends the same one-event
@@ -234,8 +239,91 @@ diagnostic/readiness authority. Account context must not be presented as a
 readiness signal.
 
 The package uses the official `@modelcontextprotocol/server` SDK pinned to
-`2.3.1`. The SDK `serveStdio` transport owns protocol framing and compatibility.
-This package does not implement Streamable HTTP or an OAuth server.
+`2.3.1`. The SDK owns stdio framing and remote protocol dispatch.
+
+## Hosted Streamable HTTP MCP
+
+Build the standalone Access Kit image from the repository root:
+
+```sh
+docker build -f packages/access-kit/Dockerfile -t aether-access-kit .
+docker run --rm -p 8080:8080 \
+  -e AETHER_API_URL=https://api.aether.io \
+  -e AETHER_MCP_ALLOWED_HOSTS=mcp.example.com \
+  -e AETHER_MCP_ALLOWED_ORIGINS=https://console.example.com \
+  aether-access-kit
+```
+
+The container listens on port `8080` and serves MCP at
+`/v1/access/mcp` by default. Set `AETHER_MCP_PATH` to change the exact path;
+the default avoids the `/mcp*` route reserved for the internal Terraform MCP
+operator. Put the container behind TLS termination at the AWS edge. The service
+does not need or accept a shared tenant API key in its environment. Configure
+`AETHER_MCP_ALLOWED_HOSTS` as a comma-separated list of exact hostnames without
+ports or wildcards. `AETHER_MCP_ALLOWED_ORIGINS` is an optional comma-separated
+list of exact HTTPS origins (HTTP is accepted for loopback development only).
+Server-to-server MCP clients may omit `Origin`; browser requests must match the
+origin allowlist. No wildcard CORS is enabled.
+
+Every POST to the MCP path, including protocol discovery and `tools/list`,
+requires an `Authorization: Bearer` containing an existing Aether secret API
+key (`ak_` plus 24 alphanumeric characters) or revocable human session
+(`sess_` plus 48 lowercase hexadecimal characters). The handler validates the
+credential against the existing tenant-scoped `GET /v1/me` API for each HTTP
+request, then passes the same request-scoped credential to each tool's existing
+API route. Aether revalidates authorization and tenant scope on every API call.
+The tools are bounded to the existing entity reads, account context, and
+observed third-party agent inventory. No caller-supplied tenant ID is accepted.
+
+`observe` appears in the remote tool list only when that MCP request also
+provides both `X-Aether-Observe-Key` and `X-Aether-Site-ID`. The first must be
+the `pk_` publishable key for that site; the pair is request-scoped and is
+forwarded only to the existing `POST /v1/batch` route. Aether checks the key's
+site binding and resolves the tenant. If both headers are absent, `observe` is
+omitted; a partial or malformed pair is rejected. The MCP service stores and
+logs neither credential. The caller's secret API key or session remains
+required for every MCP protocol request, including an `observe` call.
+
+The transport is modern-only for MCP protocol revision `2026-07-28` and uses
+the SDK's required `MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name`
+validation. It is stateless and does not create an MCP session. It supports the
+JSON request/response tools in this package, not long-lived SSE streams. This
+endpoint uses caller-supplied Aether bearer credentials directly. It does not
+implement OAuth authorization-server metadata, dynamic client registration,
+OAuth login, or token exchange; remote MCP hosts must securely provision an
+Aether API key or human session and attach it to each request. Do not present
+this endpoint as MCP OAuth authorization until the Aether identity owner adds
+and operates that flow.
+
+Container health probes are independent of customer credentials:
+
+| Route | Contract |
+|---|---|
+| `GET /healthz` | Liveness: `200 {"status":"ok"}` while the process responds |
+| `GET /readyz` | `200 {"status":"ready","path":"/v1/access/mcp"}` when API origin, MCP path, and allowed-host configuration are valid; otherwise `503` |
+
+Readiness checks configuration, not live Aether API connectivity or a
+customer tenant. The remote handler verifies Aether reachability and the
+caller's current access on each MCP request.
+
+The same image includes the standalone CLI. In CloudShell or an ECS task, inject
+the credential through a secret-backed environment variable and run a CLI
+command directly; no interactive login or OS keyring service is required for
+explicit environment credentials:
+
+```sh
+docker run --rm \
+  -e AETHER_API_URL=https://api.aether.io \
+  -e AETHER_API_KEY \
+  aether-access-kit node ./bin/aether.js entities list --json
+```
+
+Use `AETHER_SESSION_TOKEN` instead of `AETHER_API_KEY` when using a revocable
+human session. With a workspace checkout, install the locked package
+dependencies and run `node packages/access-kit/bin/aether.js ...`. Let the
+cloud secret manager inject the value; do not paste it into shell history,
+print it, write it to a file, or pass it as a literal command argument. The
+CLI does not log the credential.
 
 ## Implementation status
 
@@ -245,4 +333,6 @@ switching, token refresh, general query language, callable-capability registry,
 arbitrary external tool execution, graph traversal, graph mutation, and action
 dispatch remain outside scope. Entity reads are limited to the two existing
 tenant-scoped REST operations described above. The owning REST authorities
-remain the source of permission and policy decisions.
+remain the source of permission and policy decisions. Hosted MCP now provides
+a deployable stateless HTTP transport, but OAuth/DCR and a remotely registered
+per-user delegated authorization flow remain external identity-owner work.
