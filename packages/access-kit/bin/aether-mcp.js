@@ -14,6 +14,7 @@ import {
 import { registerEntityTools } from '../src/entity-tools.mjs';
 import { registerAccountContextTool } from '../src/account-context-tools.mjs';
 import { interactionSchema } from '../src/interaction-schema.mjs';
+import { loadMcpStoredSession } from '../src/mcp-auth.mjs';
 
 const capabilitySchema = z.object({
   capability_id: z.string().regex(/^cap_[a-f0-9]{24}$/),
@@ -67,7 +68,7 @@ function createServer() {
     'agent_access_capabilities_list',
     {
       title: 'List observed agent access capabilities',
-      description: 'Read this tenant’s observed third-party agent access inventory. These records are evidence, not grants or executable Aether tools. Tenant scope comes from AETHER_API_KEY.',
+      description: 'Read this tenant’s observed third-party agent access inventory. These records are evidence, not grants or executable Aether tools. Tenant scope comes from one explicit AETHER_API_KEY or AETHER_SESSION_TOKEN, or from the local OS credential store after aether auth login.',
       inputSchema: z.object({
         provider: z.string().optional(),
         server_name: z.string().optional(),
@@ -207,6 +208,7 @@ function createServer() {
 }
 
 try {
+  await loadMcpStoredSession(process.env);
   await serveStdio(createServer);
 } catch (error) {
   process.stderr.write(`Aether MCP bridge could not start: ${error.message}\n`);

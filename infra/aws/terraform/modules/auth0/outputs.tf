@@ -3,6 +3,11 @@ output "aether_client_id" {
   value       = auth0_client.aether.client_id
 }
 
+output "aether_cli_client_id" {
+  description = "Public Auth0 Native client ID for the Aether CLI device-authorization flow"
+  value       = auth0_client.aether_cli.client_id
+}
+
 output "kyber_client_id" {
   description = "Auth0 client ID for the Kyber SPA — use as VITE_AUTH0_CLIENT_ID build arg"
   value       = auth0_client.kyber.client_id

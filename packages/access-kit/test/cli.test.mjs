@@ -110,6 +110,58 @@ test('CLI account context returns a minimal account projection with normalized r
   assert.match(result.stderr, /MOCK_FETCH GET \/v1\/me redirect=error/);
 });
 
+test('CLI auth context works with an externally supplied human session token', () => {
+  const result = runCli(['auth', 'context', '--json'], {
+    AETHER_API_KEY: '',
+    AETHER_SESSION_TOKEN: 'sess_cli_test_secret',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.account.name, 'CLI account');
+  assert.equal(output.interaction.status_class, 'successful');
+  assert.doesNotMatch(`${result.stdout}${result.stderr}`, /sess_cli_test_secret|tenant-private|private-graph/);
+  assert.match(result.stderr, /MOCK_FETCH GET \/v1\/me redirect=error/);
+});
+
+test('CLI auth sessions list and revoke use the existing session APIs with bounded output', () => {
+  const env = { AETHER_API_KEY: '', AETHER_SESSION_TOKEN: 'sess_cli_test_secret' };
+  const listed = runCli(['auth', 'sessions', 'list', '--limit', '10', '--json'], env);
+  assert.equal(listed.status, 0, listed.stderr);
+  const listOutput = JSON.parse(listed.stdout);
+  assert.deepEqual(listOutput.sessions, [{
+    session_id: 'session-cli',
+    status: 'active',
+    credential_class: 'human_session',
+    idle_expires_at: '2026-10-11T18:00:00Z',
+    absolute_expires_at: '2026-10-12T00:00:00Z',
+  }]);
+  assert.equal(listOutput.interaction.operation, 'auth');
+  assert.equal(listOutput.request_id, 'cli-request-id');
+  assert.doesNotMatch(`${listed.stdout}${listed.stderr}`, /sess_cli_test_secret|tenant-private|private-user|private-hash|private-metadata/);
+  assert.match(listed.stderr, /MOCK_FETCH GET \/v1\/me\/sessions\?limit=10&offset=0 redirect=error/);
+
+  const revoked = runCli(['auth', 'sessions', 'revoke', 'session-cli', '--json'], env);
+  assert.equal(revoked.status, 0, revoked.stderr);
+  const revokeOutput = JSON.parse(revoked.stdout);
+  assert.deepEqual(revokeOutput, {
+    revoked: true,
+    session_id: 'session-cli',
+    request_id: 'cli-request-id',
+    api_request_id: 'api-envelope-id',
+    interaction: {
+      version: '1',
+      operation: 'auth',
+      status_class: 'successful',
+      request_id: 'cli-request-id',
+      api_request_id: 'api-envelope-id',
+      http_status: 200,
+      references: {},
+    },
+  });
+  assert.match(revoked.stderr, /MOCK_FETCH DELETE \/v1\/me\/sessions\/session-cli redirect=error/);
+  assert.doesNotMatch(`${revoked.stdout}${revoked.stderr}`, /sess_cli_test_secret/);
+});
+
 test('CLI observe returns server decisions, reference fields, and the shared interaction envelope', () => {
   const result = runCli([
     'ingest', 'onboarding_step_completed', '--event-id', 'evt-cli', '--session-id', 'sess-cli',

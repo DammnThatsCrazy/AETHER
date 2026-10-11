@@ -2,9 +2,11 @@ const STATUS_CLASSES = new Set(['successful', 'denied', 'blocked', 'degraded', '
 
 const REFERENCE_FIELDS = [
   'batch_id', 'batchId', 'receipt_id', 'receiptId', 'receipt_ref', 'receiptRef',
+  'session_id', 'sessionId',
   'decision_id', 'decisionId', 'decision_ref', 'decisionRef', 'rights_decision_ref',
   'task_id', 'taskId', 'result_id', 'resultId', 'export_id', 'exportId',
-  'approval_id', 'approvalId', 'usage_event_id', 'usageEventId', 'audit_id', 'auditId',
+  'approval_id', 'approvalId', 'usage_event_id', 'usageEventId',
+  'usage_evidence_id', 'usageEvidenceId', 'audit_id', 'auditId',
 ];
 
 function classifyStatus({ operation, httpStatus, responseOk, contractError, data }) {
@@ -41,8 +43,8 @@ export function normalizeInteractionOutcome({
   code,
   data,
 }) {
-  if (!['query', 'observe'].includes(operation)) {
-    throw new Error('Interaction operation must be query or observe.');
+  if (!['query', 'observe', 'auth'].includes(operation)) {
+    throw new Error('Interaction operation must be query, observe, or auth.');
   }
   if (typeof requestId !== 'string' || !requestId) {
     throw new Error('Interaction request ID is required.');

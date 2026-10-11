@@ -8,7 +8,7 @@ export function registerAccountContextTool(server, { get = getAccountContext } =
     'account_context',
     {
       title: 'Read account context',
-      description: 'Read the authenticated account name, plan limits, billing status, API key count, and caller admin flag. Uses the existing read-protected /v1/me route; tenant identity comes only from AETHER_API_KEY. Omits tenant and graph IDs, contact email, and payment-provider IDs. This is account context, not a readiness or diagnostic assessment.',
+      description: 'Read the authenticated account name, plan limits, billing status, API key count, and caller admin flag. Uses the existing read-protected /v1/me route; tenant identity comes only from one explicit AETHER_API_KEY or AETHER_SESSION_TOKEN, or the local OS credential store after aether auth login. Omits tenant and graph IDs, contact email, and payment-provider IDs. This is account context, not a readiness or diagnostic assessment.',
       inputSchema: z.object({}).strict(),
       outputSchema: z.object({
         account: accountContextSchema,

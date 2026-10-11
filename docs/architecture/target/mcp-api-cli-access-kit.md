@@ -46,9 +46,14 @@ They have distinct owners and meanings:
 | `POST /v1/capability-policy/evaluate`, `GET /v1/capability-policy/decisions` | `PolicyEngine` and Agent Access Intelligence | Evaluation records a sensitive policy decision and audit event; it does not invoke the external capability or mutate a tenant resource. Decisions are tenant-scoped reads. |
 | `GET /v1/entities` and `GET /v1/entities/{entity_id}` | `services/api/identity/entities/routes.py` | Existing tenant-scoped entity reads (`read`). Entity and graph mutations remain in their owner API and mutation gateway. There is no catch-all `/v1/graph` query route added by this work. |
 | `GET /v1/me` | `services/api/tenancy/me/routes.py:get_my_profile` | Existing tenant-scoped caller account profile, plan, billing summary, API key count, and admin flag. Middleware requires `read`; client projection omits tenant/graph IDs, contact email, and Stripe customer ID. |
+| `POST /v1/auth/login` | `services/api/tenancy/auth/routes.py:login` | Existing email/password authentication. When human sessions are enabled it creates a durable session; otherwise it follows the legacy reusable API-key response. It is not a delegated CLI grant. |
+| `POST /v1/auth/sso/callback` | `services/api/tenancy/auth/routes.py:sso_callback` | Exchanges an already-issued Auth0 access token for a server session or legacy key. `session_required: true` refuses before token validation or membership effects unless human sessions are enabled, so the CLI cannot receive a reusable API key. The CLI obtains the Auth0 token using Device Authorization. Membership resolution selects one existing tenant association/invitation and exposes no chooser. |
+| `GET /v1/auth/sso/providers` | `services/api/tenancy/auth/routes.py` | Lists configured SSO providers (no auth), including `session_auth_enabled` for client preflight. |
+| `GET /v1/me/sessions`, `DELETE /v1/me/sessions/{session_id}` | `services/api/tenancy/me/routes.py`, `SessionService` | Existing authenticated tenant session inventory and tenant-scoped revocation; the client projects safe session metadata and leaves the decision to the route. |
 
 Every listed customer route reads `request.state.tenant`, which middleware
-resolves from the API key or session JWT before the handler. The handlers enforce
+resolves from an API key, the existing `X-Session-Token`/session-cookie
+contract, or a supported JWT before the handler. The handlers enforce
 their permission and scope repository reads with that resolved tenant. Operator
 views under `/v1/kyber/*` use a separate Kyber gate and are not customer Access
 Kit targets.
@@ -71,6 +76,11 @@ data authority is added.
 | CLI | `aether entities list [--entity-type TYPE] [--limit N] [--json]` | Entity list, max 50 | Query, `read` |
 | CLI | `aether entities show ENTITY_ID [--json]` | Entity detail | Query, `read` |
 | CLI | `aether account context [--json]` | `/v1/me` safe projection | Query, `read` |
+| CLI | `aether auth context [--json]` | `/v1/me` safe projection | Query, `read` |
+| CLI | `aether auth login [--no-browser] [--json]` | Auth0 Device Authorization then `POST /v1/auth/sso/callback` with `session_required: true` | Human-session login; native OS credential store |
+| CLI | `aether auth logout [--json]` | `DELETE /v1/me/sessions/{session_id}` for stored session | Tenant-scoped revocation, then credential-store removal |
+| CLI | `aether auth sessions list [--limit N] [--offset N] [--json]` | `GET /v1/me/sessions`, max 100 | Auth session inventory, tenant-scoped |
+| CLI | `aether auth sessions revoke SESSION_ID [--json]` | `DELETE /v1/me/sessions/{session_id}` | Auth session revocation, tenant-scoped |
 | MCP | `agent_access_capabilities_overview` | Catalog overview | Read-only tool, `read` |
 | MCP | `agent_access_capabilities_list` | Catalog list | Read-only tool, `read` |
 | MCP | `entities_list` | Entity list, max 50 | Read-only tool, `read` |
@@ -85,13 +95,18 @@ separate Access Kit invocation registry remains target-only until an owning
 runtime exists.
 
 The CLI and MCP clients do not accept or send a tenant ID. Read calls resolve
-tenant scope from `AETHER_API_KEY`; intake calls resolve tenant scope from the
-site-bound publishable key. For intake, the clients send `X-Aether-Site` with
+tenant scope from at most one explicit `AETHER_API_KEY` or
+`AETHER_SESSION_TOKEN`; otherwise CLI and local MCP best-effort read a human
+session from the OS credential store. Explicit environment credentials take
+precedence. The stored session is sent using the existing `X-Session-Token`
+contract. Intake calls
+resolve tenant scope from the site-bound publishable key. For intake, the clients send `X-Aether-Site` with
 `AETHER_SITE_ID`; middleware verifies the key is bound to that site. The API
 retains final control of authorization, validation, privacy, consent, persistence,
 deduplication, and per-event status. The intake clients return the server's
-`accepted`, `duplicates`, `rejected`, event reasons, batch ID, and received time
-with the API request ID. They do not retry automatically. Repeating an event
+`accepted`, `duplicates`, `rejected`, event reasons, batch ID, usage evidence
+ID when present, and received time with the API request ID. They do not retry
+automatically. Repeating an event
 with the same caller-supplied event ID is the server-supported deduplication
 path.
 
@@ -180,10 +195,28 @@ owning diagnostic/readiness contract exists.
   paths, query strings, or fragments.
 - Key issuance, tenant membership, role/scopes, revocation, request correlation,
   rate limits, and API error authority stay in Aether's existing middleware and
-  account services. This package does not cache credentials or maintain a
-  profile/tenant registry.
+  account services. `aether auth login` uses the Terraform-provisioned public
+  Auth0 Native client and Device Authorization, then sends the Auth0 access
+  token to the existing SSO callback with `session_required: true`. The API
+  mints the revocable human session. The CLI stores only that Aether session
+  token and session ID in native OS credential storage; it does not persist
+  Auth0 access/refresh tokens, passwords, or profiles. Existing tenant
+  membership resolution remains server-owned; there is no tenant chooser.
+- CLI login requires `AETHER_AUTH0_DOMAIN`, `AETHER_AUTH0_CLIENT_ID`, and
+  `AETHER_AUTH0_AUDIENCE`. It checks keyring availability and the public
+  `session_auth_enabled` preflight before starting Auth0. macOS uses Keychain,
+  Windows uses Credential Manager, and Linux explicitly requires Secret
+  Service. Login fails closed if secure storage is unavailable. If the new
+  session cannot be saved, the CLI attempts tenant-scoped server revocation
+  using the in-memory session token.
 - The package currently declares Node `>=20` because the pinned MCP SDK release
   requires it. CLI and MCP calls use Node's built-in `fetch`.
+- Local MCP uses explicit `AETHER_API_KEY` or `AETHER_SESSION_TOKEN` when set;
+  otherwise it best-effort loads the CLI human session from the same OS
+  credential store. Missing or unavailable keyring access does not stop stdio
+  startup, so publishable-key-only `observe` still works. Observe sends only
+  its bound publishable key and never the saved human session. Remote MCP still
+  requires a separately owned host authorization and client-registration path.
 
 ### MCP
 
@@ -213,7 +246,9 @@ server-side REST permission check remains authoritative.
 
 | Concern | Authority / owner | Access Kit rule |
 |---|---|---|
-| API key, session, actor, tenant resolution | `services/api/middleware/middleware.py`, account/auth services | Accept existing credentials; never trust caller tenant context. |
+| API key, session, actor, tenant resolution | `services/api/middleware/middleware.py`, account/auth services | Accept existing API keys or human session tokens; never trust caller tenant context. |
+| Human login, membership, and session lifecycle | `services/api/tenancy/auth/routes.py`, `services/api/tenancy/auth/sessions/service.py`, `services/api/tenancy/me/routes.py` | CLI uses Auth0 Device Authorization, the `session_required` SSO guard, and existing tenant session list/revoke routes. API remains the session and membership authority. |
+| Auth0 CLI application | `infra/aws/terraform/modules/auth0/` | Terraform owns the Native public CLI client, Device Authorization grant, API audience/client grant, database connection association, and public client ID output. |
 | Observed agent access inventory | `CapabilityCatalogService` | Read through its customer API; observations do not imply permission to invoke. These are not Aether's callable-capability registry. |
 | CLI/MCP observation intake | `POST /v1/batch`, canonical ingestion route and authorities | Forward one site-bound `track` event and preserve every server decision. Do not ingest directly into storage or claim acceptance locally. |
 | Capability grant and revoke | `CapabilityAuthorizationService` and Delegation Authority | Keep mutation commands out of the initial CLI/MCP slice; later calls use these routes and permission gates. |
@@ -229,10 +264,17 @@ server-side REST permission check remains authoritative.
 - A generic protocol-neutral invocation router does not exist. Add one only
   when multiple surfaces need it and when it can dispatch through explicitly
   registered owning authorities without bypassing their checks.
-- The CLI/MCP slice has no login/device authorization flow, saved profile,
-  tenant switching, token refresh, or revocation command. Initial auth is an
-  externally supplied server-side API key. A future delegated login must reuse
-  the approved identity/session owner and define secure OS credential storage.
+- CLI login/logout is implemented through Auth0 Device Authorization,
+  `session_required` SSO exchange, native OS credential storage, and the
+  existing tenant-scoped session DELETE route. Live Auth0 configuration,
+  human-session enablement, and device sign-in remain deployment proof gates.
+  `POST /v1/auth/login` is a separate password flow and may return a reusable
+  API key when human sessions are disabled; the CLI does not call it.
+- There is no customer endpoint to list the current user's tenant memberships
+  or exchange a session for a selected authorized tenant. Password login
+  resolves one tenant from the user record; SSO membership resolution links or
+  accepts an invitation but does not expose a tenant chooser. Tenant selection
+  remains target-only until the auth/session owner provides that contract.
 - No graph search/traversal or broad `campaigns` or `agents` command/tool is
   registered in the Access Kit. Entity reads are limited to the named list and
   detail routes above; additional identity, graph, and domain queries need
@@ -244,6 +286,10 @@ server-side REST permission check remains authoritative.
   intake is limited to the generic, site-bound `track` path described above;
   batch collections, identity writes, and arbitrary direct route payloads are
   not exposed.
+- Remote MCP delegated authorization remains target-only. The local stdio
+  bridge can receive an existing session token through its environment, but the
+  REST session header is not a remote MCP client-registration/delegated identity
+  contract.
 - This package has no usage-consumption or pricing interpretation, combined
   customer-facing doctor report, hosted protocol probe, or provider-backed
   graph hydration proof.
@@ -258,19 +304,25 @@ The following evidence is required before the associated claim:
 | Tenant-safe read | Two tenant keys and records; a key cannot list or resolve another tenant's catalog row. A missing/insufficient read scope is denied by API middleware/route authority. |
 | Tenant-safe entity query | Exercise entity list/detail with two tenants and confirm cross-tenant detail is denied; verify CLI/MCP omit tenant IDs and metadata and list results never exceed 50. Local mocked contract tests do not replace this live API proof. |
 | Site-bound intake | A matching key/site accepts or returns canonical validation outcomes; missing and mismatched site headers are denied; retrying the same event ID returns the server's idempotent result. |
+| CLI human-session login | Apply the Auth0 module in a non-production tenant; verify the public Native client, Device Authorization grant, API audience/client grant, and enabled login connection; set the three `AETHER_AUTH0_*` values; complete device sign-in with API human sessions enabled; verify session list/revoke, then repeat with sessions disabled and confirm refusal without storing a reusable API key. Exercise keyring-unavailable and post-issuance storage-failure cleanup. |
 | MCP protocol compatible | Run the official SDK/host conformance path for the pinned release on modern `2026-07-28` and supported 2025-era stdio clients; verify deterministic tool names/schemas and that a failed API authorization is returned as an error. |
 | MCP customer beta | Above plus actual host connection evidence, secure host secret injection, request correlation, error visibility, privacy/security review, and rollout support. A local bridge build alone is not beta evidence. |
 | Graph data available | A real tenant's observation-to-normalization-to-identity-to-projection proof and a separately authenticated read of that tenant's governed graph result. Catalog rows or a successful API response do not prove graph hydration. |
 | PR readiness / production readiness | The single normal PR authority and applicable release scorecard; focused package evidence is not a substitute. |
 
 Focused local Node tests cover REST wrapper behavior, projection and response
-normalization, CLI output/error contracts, MCP tool schemas/handlers, and an
+normalization, CLI output/error contracts, Auth0 device polling/expiry,
+human-session storage/revocation, human-session header use and session
+list/revoke mapping, MCP tool schemas/handlers, and an
 actual pinned-SDK stdio subprocess `initialize` plus `tools/list` exchange with
 no live API call. These tests do not prove official host conformance on modern
 or legacy clients, tenant isolation against a live API, publishable-key site
 binding, provider execution, graph hydration, or customer beta readiness. The
 current deliverable remains an experimental inventory, account/entity reads,
-and one-event intake adapter slice.
+one-event intake adapter, and CLI human-session sign-in slice. Local mocked
+tests do not prove live Auth0 tenant configuration, provider login, deployed
+human-session flags, supported OS keyring availability, or customer onboarding
+readiness.
 
 ## Protocol reference
 

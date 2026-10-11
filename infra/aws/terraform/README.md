@@ -408,3 +408,11 @@ directory, and the live variable surface is `variables.tf` plus
   credential in every plan artifact. The `auth0` provider reads `AUTH0_DOMAIN`,
   `AUTH0_CLIENT_ID` and `AUTH0_CLIENT_SECRET` from the runner's environment
   instead; `TF_VAR_auth0_*` names are no longer read by anything.
+- The Auth0 module also provisions the Aether CLI as a public Native client for
+  Device Authorization. It has no client secret, receives an API audience grant
+  and the existing database connection association, and exposes
+  `aether_cli_auth0_client_id` as a non-secret root output. The CLI uses that
+  output with the Auth0 domain and API audience, then stores only the resulting
+  revocable Aether session in the user's OS credential store. Apply this Auth0
+  change through the normal reviewed Terraform plan/apply workflow before
+  enabling customer CLI login.

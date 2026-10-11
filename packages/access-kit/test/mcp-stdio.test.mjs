@@ -29,6 +29,9 @@ test('pinned MCP stdio SDK initializes and lists tools without making API calls'
     env: {
       ...process.env,
       AETHER_API_KEY: '',
+      AETHER_SESSION_TOKEN: '',
+      AETHER_PUBLISHABLE_KEY: 'pk_test-observe-only',
+      AETHER_SITE_ID: 'site-test',
       AETHER_API_URL: 'https://api.example.test',
     },
     stdio: ['pipe', 'pipe', 'pipe'],

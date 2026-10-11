@@ -8,8 +8,12 @@ import {
   listCapabilities,
   getEntity,
   listEntities,
+  listSessions,
   MAX_ENTITY_PAGE_SIZE,
+  revokeSession,
 } from '../src/api.mjs';
+import { credentialStore } from '../src/credential-store.mjs';
+import { loginWithAuth0Device, logoutStoredSession, readStoredSession } from '../src/auth.mjs';
 
 const HELP = `Aether Access Kit — agent access inventory and canonical intake
 
@@ -21,19 +25,32 @@ Usage:
   aether entities list [--entity-type TYPE] [--limit N] [--json]
   aether entities show ENTITY_ID [--json]
   aether account context [--json]
+  aether auth context [--json]
+  aether auth login [--no-browser] [--json]
+  aether auth logout [--json]
+  aether auth sessions list [--limit N] [--offset N] [--json]
+  aether auth sessions revoke SESSION_ID [--json]
   aether ingest EVENT_NAME --event-id ID --session-id ID --anonymous-id ID --sequence N
                            [--properties-json JSON] [--json]
 
 Authentication:
   AETHER_API_KEY           Tenant-scoped API key with read permission, for agents,
-                           entity, and account-context queries
+                           entity, account-context, and session-management calls
+  AETHER_SESSION_TOKEN     Existing revocable human session for the same calls;
+                           sent through the server's X-Session-Token contract
+  AETHER_AUTH0_DOMAIN      Auth0 HTTPS tenant domain for the auth login command
+  AETHER_AUTH0_CLIENT_ID   Public Native CLI client ID from Aether Terraform output
+  AETHER_AUTH0_AUDIENCE    Aether API resource-server audience
   AETHER_PUBLISHABLE_KEY   Site-bound pk_ key, for ingest only
   AETHER_SITE_ID           Site ID bound to AETHER_PUBLISHABLE_KEY, for ingest only
   AETHER_API_URL           API origin (default: https://api.aether.io)
 
-Read and ingestion credentials are separate. Ingestion sends one generic track event to
-POST /v1/batch with X-Aether-Site. Aether resolves tenant and site binding; no tenant ID
-override is accepted. The API's per-event accepted/duplicate/rejected decisions are returned.
+Set exactly one read credential: AETHER_API_KEY or AETHER_SESSION_TOKEN. The CLI
+uses a saved human session from the OS credential store when neither is supplied.
+The auth login command saves only an Aether revocable session; auth logout revokes it.
+Read and ingestion credentials are separate. Ingestion sends one generic track event to POST /v1/batch with X-Aether-Site. Aether
+resolves tenant and site binding; no tenant ID override is accepted. The API's per-event
+accepted/duplicate/rejected decisions are returned.
 `;
 
 function parseArgs(args) {
@@ -42,6 +59,10 @@ function parseArgs(args) {
     const arg = args[index];
     if (arg === '--json') {
       parsed.json = true;
+      continue;
+    }
+    if (arg === '--no-browser') {
+      parsed.options['no-browser'] = true;
       continue;
     }
     if (arg === '--help' || arg === '-h') continue;
@@ -132,6 +153,18 @@ function formatEntities(entities, requestId, apiRequestId, interaction) {
   if (interaction) process.stdout.write(`Outcome: ${interaction.status_class}\n`);
 }
 
+function formatSessions(sessions, requestId, apiRequestId, interaction) {
+  process.stdout.write(`Human sessions (${sessions.length} returned)\n`);
+  for (const session of sessions) {
+    process.stdout.write(`- ${session.session_id}  [${session.status ?? 'unknown'}]`);
+    if (session.absolute_expires_at) process.stdout.write(`  expires ${session.absolute_expires_at}`);
+    process.stdout.write('\n');
+  }
+  process.stdout.write(`Request: ${requestId}\n`);
+  if (apiRequestId) process.stdout.write(`API request: ${apiRequestId}\n`);
+  if (interaction) process.stdout.write(`Outcome: ${interaction.status_class}\n`);
+}
+
 async function main() {
   const { positionals, options, json } = parseArgs(process.argv.slice(2));
   const [area, command, subcommand, arg] = positionals;
@@ -139,6 +172,70 @@ async function main() {
   if (!area || area === 'help' || area === '--help' || area === '-h'
       || process.argv.includes('--help') || process.argv.includes('-h')) {
     process.stdout.write(HELP);
+    return;
+  }
+  const isLogin = area === 'auth' && command === 'login';
+  const isLogout = area === 'auth' && command === 'logout';
+  const needsTenantRead = area === 'account'
+    || area === 'entities'
+    || area === 'agents'
+    || (area === 'auth' && command !== 'login' && command !== 'logout');
+  let storedSession = null;
+  if (needsTenantRead && !process.env.AETHER_API_KEY?.trim()
+      && !process.env.AETHER_SESSION_TOKEN?.trim()) {
+    storedSession = await readStoredSession(process.env);
+    if (storedSession) process.env.AETHER_SESSION_TOKEN = storedSession.token;
+  }
+
+  if (isLogin) {
+    if (positionals.length !== 2 || Object.keys(options).some(key => key !== 'no-browser')) {
+      throw new Error(`Unexpected arguments for auth login.\n\n${HELP}`);
+    }
+    const result = await loginWithAuth0Device({
+      env: process.env,
+      store: credentialStore,
+      ...(options['no-browser'] ? { openBrowser: async () => {} } : {}),
+      onInstructions: ({ verificationUri, activationUri, userCode }) => {
+        process.stderr.write('Authorize this Aether CLI session in Auth0:\n');
+        process.stderr.write(`  Open: ${activationUri || verificationUri}\n`);
+        process.stderr.write(`  Code: ${userCode}\n`);
+        if (activationUri && activationUri !== verificationUri) {
+          process.stderr.write(`  Manual entry: ${verificationUri}\n`);
+        }
+      },
+    });
+    const output = {
+      session_id: result.session_id,
+      credential_class: result.credential_class,
+      idle_expires_at: result.idle_expires_at,
+      absolute_expires_at: result.absolute_expires_at,
+      request_id: result.requestId,
+      ...(result.apiRequestId ? { api_request_id: result.apiRequestId } : {}),
+      preflight_request_id: result.preflightRequestId,
+      interaction: result.interaction,
+    };
+    if (json) writeJson(output);
+    else {
+      process.stdout.write(`Signed in with revocable session ${result.session_id}.\n`);
+      process.stdout.write('Session saved in the OS credential store.\n');
+      if (result.absolute_expires_at) process.stdout.write(`Expires: ${result.absolute_expires_at}\n`);
+      process.stdout.write(`Request: ${result.requestId}\n`);
+    }
+    return;
+  }
+
+  if (isLogout) {
+    if (positionals.length !== 2 || Object.keys(options).length > 0) {
+      throw new Error(`Unexpected arguments for auth logout.\n\n${HELP}`);
+    }
+    const result = await logoutStoredSession({ env: process.env, store: credentialStore });
+    const output = { ...result.data, ...writeRequestIds(result), ...writeInteraction(result) };
+    if (json) writeJson(output);
+    else {
+      process.stdout.write(`Session ${result.data.session_id}: ${result.data.revoked ? 'revoked' : 'not revoked'}\n`);
+      process.stdout.write('Removed the local session from the OS credential store.\n');
+      process.stdout.write(`Request: ${result.requestId}\n`);
+    }
     return;
   }
   if (area === 'ingest') {
@@ -199,6 +296,60 @@ async function main() {
       process.stdout.write(`Request: ${terminalText(result.requestId)}\n`);
       process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
       if (result.responseRequestId) process.stdout.write(`API request: ${terminalText(result.responseRequestId)}\n`);
+    }
+    return;
+  }
+
+  if (area === 'auth' && command === 'context') {
+    if (positionals.length !== 2 || Object.keys(options).length > 0) {
+      throw new Error(`Unexpected arguments for auth context.\n\n${HELP}`);
+    }
+    const result = await getAccountContext();
+    const output = { account: result.data, ...writeRequestIds(result), ...writeInteraction(result) };
+    if (json) writeJson(output);
+    else {
+      process.stdout.write(`${JSON.stringify(result.data, null, 2)}\n`);
+      process.stdout.write(`Request: ${result.requestId}\n`);
+      process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
+      if (result.responseRequestId) process.stdout.write(`API request: ${result.responseRequestId}\n`);
+    }
+    return;
+  }
+
+  if (area === 'auth' && command === 'sessions' && subcommand === 'list') {
+    if (positionals.length !== 3) throw new Error(`Unexpected argument for auth sessions list.\n\n${HELP}`);
+    const supportedOptions = new Set(['limit', 'offset']);
+    for (const key of Object.keys(options)) {
+      if (!supportedOptions.has(key)) throw new Error(`Unknown option: --${key}`);
+    }
+    const result = await listSessions({
+      limit: options.limit ? positiveInteger(options.limit, '--limit', { min: 1, max: 100 }) : 20,
+      offset: options.offset ? positiveInteger(options.offset, '--offset', { max: 10_000 }) : 0,
+    });
+    const output = { ...result.data, ...writeRequestIds(result), ...writeInteraction(result) };
+    if (json) writeJson(output);
+    else formatSessions(
+      result.data.sessions, result.requestId, result.responseRequestId, result.interaction,
+    );
+    return;
+  }
+
+  if (area === 'auth' && command === 'sessions' && subcommand === 'revoke' && arg) {
+    if (positionals.length !== 4 || Object.keys(options).length > 0) {
+      throw new Error(`Unexpected arguments for auth sessions revoke.\n\n${HELP}`);
+    }
+    const result = await revokeSession(arg);
+    if (storedSession?.session_id === arg) {
+      const { readApiOrigin } = await import('../src/api.mjs');
+      await credentialStore.remove(readApiOrigin(process.env));
+    }
+    const output = { ...result.data, ...writeRequestIds(result), ...writeInteraction(result) };
+    if (json) writeJson(output);
+    else {
+      process.stdout.write(`Session ${result.data.session_id}: ${result.data.revoked ? 'revoked' : 'not revoked'}\n`);
+      process.stdout.write(`Request: ${result.requestId}\n`);
+      if (result.responseRequestId) process.stdout.write(`API request: ${result.responseRequestId}\n`);
+      process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
     }
     return;
   }

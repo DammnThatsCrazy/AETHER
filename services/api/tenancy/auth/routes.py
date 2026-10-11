@@ -922,6 +922,10 @@ async def login(body: LoginRequest, response: Response = None, request: Request 
 class SSOCallbackRequest(BaseModel):
     token: str = Field(..., description="Auth0 access token (RS256 JWT)")
     plan_tier: str = Field(default="alpha", pattern="^(alpha|beta|gamma|delta)$")
+    session_required: bool = Field(
+        default=False,
+        description="Refuse the exchange unless the server can issue a revocable human session.",
+    )
 
 
 @router.post("/v1/auth/sso/callback")
@@ -936,6 +940,14 @@ async def sso_callback(body: SSOCallbackRequest, response: Response = None):
     Auth0 social connection. The `sub` claim is the stable identifier.
     """
     from shared.auth.auth0_validator import validate_auth0_token
+
+    # Public clients such as the Access Kit CLI must never silently fall back
+    # to a reusable API key. Check this before validating/provisioning an SSO
+    # principal so an unsupported session posture has no account side effects.
+    if body.session_required and not settings.trust_plane.human_sessions_enabled:
+        raise ForbiddenError(
+            "This client requires revocable human sessions, which are disabled in this environment."
+        )
 
     try:
         claims = await validate_auth0_token(body.token)
@@ -1135,6 +1147,7 @@ async def list_sso_providers():
         "providers": providers,
         "auth0_domain": domain,
         "configured": auth0_configured,
+        "session_auth_enabled": settings.trust_plane.human_sessions_enabled,
     }).to_dict()
 
 

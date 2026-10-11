@@ -28,7 +28,7 @@ function isLoopback(hostname) {
     || normalized === '::1';
 }
 
-function readApiOrigin(env = process.env) {
+export function readApiOrigin(env = process.env) {
   const rawUrl = env.AETHER_API_URL || DEFAULT_API_URL;
   let apiUrl;
   try {
@@ -54,13 +54,23 @@ function readApiOrigin(env = process.env) {
 
 export function readConfig(env = process.env) {
   const apiOrigin = readApiOrigin(env);
-
-  const apiKey = env.AETHER_API_KEY;
-  if (!apiKey || !apiKey.trim()) {
-    throw new Error('Set AETHER_API_KEY to a tenant-scoped Aether API key.');
+  const apiKey = typeof env.AETHER_API_KEY === 'string' && env.AETHER_API_KEY.trim()
+    ? env.AETHER_API_KEY
+    : undefined;
+  const sessionToken = typeof env.AETHER_SESSION_TOKEN === 'string' && env.AETHER_SESSION_TOKEN.trim()
+    ? env.AETHER_SESSION_TOKEN
+    : undefined;
+  if (apiKey && sessionToken) {
+    throw new Error('Set only one read credential: AETHER_API_KEY or AETHER_SESSION_TOKEN.');
+  }
+  if (!apiKey && !sessionToken) {
+    throw new Error('Set AETHER_API_KEY or AETHER_SESSION_TOKEN for a tenant-scoped API request.');
   }
 
-  return { apiOrigin, apiKey };
+  const authHeaders = apiKey
+    ? { authorization: `Bearer ${apiKey}` }
+    : { 'x-session-token': sessionToken };
+  return { apiOrigin, authHeaders };
 }
 
 export function readPublishableConfig(env = process.env) {
@@ -79,8 +89,13 @@ export function readPublishableConfig(env = process.env) {
   return { apiOrigin, publishableKey, siteId };
 }
 
-async function readRequest(path, query = undefined, env = process.env) {
-  const { apiOrigin, apiKey } = readConfig(env);
+async function readRequest(
+  path,
+  query = undefined,
+  env = process.env,
+  { method = 'GET', operation = 'query' } = {},
+) {
+  const { apiOrigin, authHeaders } = readConfig(env);
   const url = new URL(path, `${apiOrigin}/`);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
@@ -92,11 +107,11 @@ async function readRequest(path, query = undefined, env = process.env) {
   let response;
   try {
     response = await fetch(url, {
-      method: 'GET',
+      method,
       redirect: 'error',
       headers: {
         accept: 'application/json',
-        authorization: `Bearer ${apiKey}`,
+        ...authHeaders,
         'x-correlation-id': correlationId,
       },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -105,7 +120,7 @@ async function readRequest(path, query = undefined, env = process.env) {
     const reason = error?.name === 'TimeoutError' ? 'request timed out' : 'could not reach the Aether API';
     throw new AccessApiError(reason, {
       requestId: correlationId,
-      interaction: normalizeInteractionOutcome({ operation: 'query', requestId: correlationId }),
+      interaction: normalizeInteractionOutcome({ operation, requestId: correlationId }),
     });
   }
 
@@ -119,7 +134,7 @@ async function readRequest(path, query = undefined, env = process.env) {
       status: response.status,
       requestId: headerRequestId,
       interaction: normalizeInteractionOutcome({
-        operation: 'query', httpStatus: response.status, requestId: headerRequestId,
+        operation, httpStatus: response.status, requestId: headerRequestId,
         responseOk: false, contractError: true,
       }),
     });
@@ -135,7 +150,7 @@ async function readRequest(path, query = undefined, env = process.env) {
       {
         status: response.status, code: errorCode, requestId: headerRequestId, apiRequestId,
         interaction: normalizeInteractionOutcome({
-          operation: 'query', httpStatus: response.status, requestId: headerRequestId,
+          operation, httpStatus: response.status, requestId: headerRequestId,
           apiRequestId, responseOk: false, code: errorCode,
         }),
       },
@@ -150,7 +165,7 @@ async function readRequest(path, query = undefined, env = process.env) {
       requestId: headerRequestId,
       apiRequestId,
       interaction: normalizeInteractionOutcome({
-        operation: 'query', httpStatus: response.status, requestId: headerRequestId,
+        operation, httpStatus: response.status, requestId: headerRequestId,
         apiRequestId, responseOk: true, contractError: true,
       }),
     });
@@ -162,7 +177,7 @@ async function readRequest(path, query = undefined, env = process.env) {
     requestId: headerRequestId,
     responseRequestId,
     interaction: normalizeInteractionOutcome({
-      operation: 'query', httpStatus: response.status, requestId: headerRequestId,
+      operation, httpStatus: response.status, requestId: headerRequestId,
       apiRequestId: responseRequestId, responseOk: true, data: payload.data,
     }),
   };
@@ -201,6 +216,66 @@ function safeAccountContext(profile) {
 export async function getAccountContext(env = process.env) {
   const result = await readRequest('/v1/me', undefined, env);
   return { ...result, data: safeAccountContext(result.data) };
+}
+
+const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const MAX_SESSION_PAGE_SIZE = 100;
+const MAX_SESSION_OFFSET = 10_000;
+
+function safeSession(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+  const sessionId = boundedString(row.session_id ?? row.id, 128);
+  if (!sessionId || !SESSION_ID_PATTERN.test(sessionId)) return null;
+  return {
+    session_id: sessionId,
+    status: boundedString(row.status, 32),
+    credential_class: boundedString(row.credential_class, 64),
+    idle_expires_at: boundedString(row.idle_expires_at, 64),
+    absolute_expires_at: boundedString(row.absolute_expires_at, 64),
+  };
+}
+
+export async function listSessions({ limit = 20, offset = 0 } = {}, env = process.env) {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_SESSION_PAGE_SIZE) {
+    throw new Error(`Session page size must be an integer from 1 through ${MAX_SESSION_PAGE_SIZE}.`);
+  }
+  if (!Number.isSafeInteger(offset) || offset < 0 || offset > MAX_SESSION_OFFSET) {
+    throw new Error(`Session offset must be an integer from 0 through ${MAX_SESSION_OFFSET}.`);
+  }
+  const result = await readRequest('/v1/me/sessions', { limit, offset }, env, { operation: 'auth' });
+  const rows = Array.isArray(result.data?.sessions) ? result.data.sessions.slice(0, limit) : [];
+  const sessions = rows.map(safeSession).filter(Boolean);
+  return {
+    ...result,
+    data: {
+      sessions,
+      count: sessions.length,
+      total: Number.isSafeInteger(result.data?.total) && result.data.total >= 0
+        ? result.data.total
+        : sessions.length,
+      limit,
+      offset,
+    },
+  };
+}
+
+export async function revokeSession(sessionId, env = process.env) {
+  if (typeof sessionId !== 'string' || !SESSION_ID_PATTERN.test(sessionId)) {
+    throw new Error('Session IDs must contain 1 through 128 letters, digits, underscores, or hyphens.');
+  }
+  const result = await readRequest(
+    `/v1/me/sessions/${encodeURIComponent(sessionId)}`,
+    undefined,
+    env,
+    { method: 'DELETE', operation: 'auth' },
+  );
+  return {
+    ...result,
+    data: {
+      revoked: result.data?.revoked === true,
+      session_id: boundedString(result.data?.id, 128) ?? sessionId,
+    },
+  };
 }
 
 function boundedText(value, maxLength) {

@@ -16,6 +16,11 @@ output "backend_url" {
   value       = "https://${var.domain_name}"
 }
 
+output "aether_cli_auth0_client_id" {
+  description = "Public Auth0 client ID for the Aether CLI; not a secret"
+  value       = module.auth0.aether_cli_client_id
+}
+
 # --------------------------------------------------------------------------
 # ECR
 # --------------------------------------------------------------------------

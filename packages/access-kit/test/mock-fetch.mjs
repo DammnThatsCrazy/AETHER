@@ -34,6 +34,40 @@ globalThis.fetch = async (url, init = {}) => {
     });
   }
 
+  if (parsedUrl.pathname === '/v1/me/sessions') {
+    return new Response(JSON.stringify({
+      data: {
+        sessions: [{
+          id: 'session-cli',
+          tenant_id: 'tenant-private',
+          principal_id: 'private-user',
+          token_hash: 'private-hash',
+          status: 'active',
+          credential_class: 'human_session',
+          idle_expires_at: '2026-10-11T18:00:00Z',
+          absolute_expires_at: '2026-10-12T00:00:00Z',
+          metadata: { private: 'private-metadata' },
+        }],
+        count: 1,
+        total: 1,
+      },
+      meta: { request_id: 'api-envelope-id' },
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json', 'x-request-id': 'cli-request-id' },
+    });
+  }
+
+  if (parsedUrl.pathname.startsWith('/v1/me/sessions/')) {
+    return new Response(JSON.stringify({
+      data: { revoked: true, id: decodeURIComponent(parsedUrl.pathname.split('/').at(-1)) },
+      meta: { request_id: 'api-envelope-id' },
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json', 'x-request-id': 'cli-request-id' },
+    });
+  }
+
   if (parsedUrl.pathname === '/v1/batch') {
     return new Response(JSON.stringify({
       accepted: 1,

@@ -9,6 +9,8 @@ import {
   ingestTrackObservation,
   listCapabilities,
   listEntities,
+  listSessions,
+  revokeSession,
 } from '../src/api.mjs';
 import { normalizeInteractionOutcome } from '../src/interaction.mjs';
 
@@ -252,6 +254,8 @@ test('interaction outcome maps server partial observation decisions to degraded 
     batch_id: 'batch-ref',
     receipt_ref: 'receipt-ref',
     rights_decision_ref: 'rdec-ref',
+    usage_evidence_id: 'usage-evidence-ref',
+    usageEvidenceId: 'camel-usage-evidence-ref',
     events: [{ id: 'evt', status: 'rejected', reason: 'consent_required' }],
   }, { status: 207, headers: { 'x-correlation-id': 'observe-correlation' } });
 
@@ -266,6 +270,8 @@ test('interaction outcome maps server partial observation decisions to degraded 
   assert.equal(result.interaction.status_class, 'degraded');
   assert.deepEqual(result.interaction.references, {
     batch_id: 'batch-ref', receipt_ref: 'receipt-ref', rights_decision_ref: 'rdec-ref',
+    usage_evidence_id: 'usage-evidence-ref',
+    usageEvidenceId: 'camel-usage-evidence-ref',
   });
   assert.equal(result.data.events[0].status, 'rejected');
   assert.equal(result.data.events[0].reason, 'consent_required');
@@ -307,6 +313,109 @@ test('account context reads /v1/me and projects only documented safe fields', as
   assert.doesNotMatch(JSON.stringify(result), /private-tenant|private-graph|private@example|cus_private/);
 });
 
+test('account context accepts the existing human session header without sending an API key', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let captured;
+  globalThis.fetch = async (url, init) => {
+    captured = { url: new URL(url), init };
+    return jsonResponse({ data: { name: 'Session account' } });
+  };
+  const env = {
+    AETHER_API_URL: 'https://api.example.test',
+    AETHER_SESSION_TOKEN: 'sess_cli_test_token',
+  };
+  const result = await getAccountContext(env);
+  assert.equal(captured.url.pathname, '/v1/me');
+  assert.equal(captured.init.headers['x-session-token'], env.AETHER_SESSION_TOKEN);
+  assert.equal('authorization' in captured.init.headers, false);
+  assert.equal(captured.init.redirect, 'error');
+  assert.equal(result.data.name, 'Session account');
+});
+
+test('session listing uses the tenant session route and returns a bounded projection', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let captured;
+  globalThis.fetch = async (url, init) => {
+    captured = { url: new URL(url), init };
+    return jsonResponse({
+      data: {
+        sessions: [{
+          id: 'session-a',
+          tenant_id: 'private-tenant',
+          principal_id: 'private-user',
+          token_hash: 'private-hash',
+          token: 'private-token',
+          status: 'active',
+          credential_class: 'human_session',
+          idle_expires_at: '2026-10-11T18:00:00Z',
+          absolute_expires_at: '2026-10-12T00:00:00Z',
+          metadata: { user_agent: 'private-agent' },
+          unknown: 'private-field',
+        }, { id: '../unsafe-session-id', status: 'active' }],
+        total: 25,
+      },
+      meta: { request_id: 'sessions-api-id' },
+    }, { headers: { 'x-request-id': 'sessions-request-id' } });
+  };
+
+  const env = { AETHER_SESSION_TOKEN: 'sess_test_token', AETHER_API_URL: 'https://api.example.test' };
+  const result = await listSessions({ limit: 10, offset: 20 }, env);
+  assert.equal(captured.url.pathname, '/v1/me/sessions');
+  assert.equal(captured.url.searchParams.get('limit'), '10');
+  assert.equal(captured.url.searchParams.get('offset'), '20');
+  assert.equal(captured.init.method, 'GET');
+  assert.equal(captured.init.redirect, 'error');
+  assert.equal(captured.init.headers['x-session-token'], env.AETHER_SESSION_TOKEN);
+  assert.deepEqual(result.data, {
+    sessions: [{
+      session_id: 'session-a', status: 'active', credential_class: 'human_session',
+      idle_expires_at: '2026-10-11T18:00:00Z', absolute_expires_at: '2026-10-12T00:00:00Z',
+    }],
+    count: 1,
+    total: 25,
+    limit: 10,
+    offset: 20,
+  });
+  assert.equal(result.requestId, 'sessions-request-id');
+  assert.equal(result.responseRequestId, 'sessions-api-id');
+  assert.equal(result.interaction.operation, 'auth');
+  assert.equal(result.interaction.status_class, 'successful');
+  assert.doesNotMatch(JSON.stringify(result), /private-tenant|private-user|private-hash|private-token|private-agent|private-field/);
+});
+
+test('session revocation calls only the existing tenant route and preserves server decision IDs', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let captured;
+  globalThis.fetch = async (url, init) => {
+    captured = { url: new URL(url), init };
+    return jsonResponse({ data: { revoked: true, id: 'session-a' }, meta: { request_id: 'revoke-api-id' } }, {
+      headers: { 'x-correlation-id': 'revoke-request-id' },
+    });
+  };
+  const result = await revokeSession('session-a', readEnv);
+  assert.equal(captured.url.pathname, '/v1/me/sessions/session-a');
+  assert.equal(captured.init.method, 'DELETE');
+  assert.equal(captured.init.redirect, 'error');
+  assert.equal(captured.init.headers.authorization, `Bearer ${readEnv.AETHER_API_KEY}`);
+  assert.deepEqual(result.data, { revoked: true, session_id: 'session-a' });
+  assert.equal(result.requestId, 'revoke-request-id');
+  assert.equal(result.responseRequestId, 'revoke-api-id');
+  assert.equal(result.interaction.operation, 'auth');
+  assert.equal(result.interaction.status_class, 'successful');
+});
+
+test('session list bounds page inputs and session revoke rejects unsafe path IDs before fetch', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = () => assert.fail('fetch should not run for invalid session input');
+  await assert.rejects(() => listSessions({ limit: 101 }, readEnv), /1 through 100/);
+  await assert.rejects(() => listSessions({ offset: 10_001 }, readEnv), /0 through 10000/);
+  await assert.rejects(() => revokeSession('session/a', readEnv), /letters, digits/);
+});
+
 test('interaction classifies rate limiting as blocked and preserves the server code', async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
@@ -334,4 +443,15 @@ test('interaction normalizer represents an unavailable API response as failed', 
     http_status: null,
     references: {},
   });
+});
+
+test('interaction normalizer classifies session-management operations as auth', () => {
+  const result = normalizeInteractionOutcome({
+    operation: 'auth',
+    httpStatus: 401,
+    requestId: 'session-auth-request',
+    responseOk: false,
+  });
+  assert.equal(result.operation, 'auth');
+  assert.equal(result.status_class, 'denied');
 });

@@ -679,7 +679,7 @@ module "ml_drift_lambda" {
 }
 
 # ---------------------------------------------------------------------------
-# 9. Auth0 (SPA clients + API resource server)
+# 9. Auth0 (SPA + native CLI clients and API resource server)
 # ---------------------------------------------------------------------------
 
 # The Auth0 MANAGEMENT credentials are deliberately absent from this call, and

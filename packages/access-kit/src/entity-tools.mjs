@@ -92,7 +92,7 @@ export function registerEntityTools(server, { list = listEntities, get = getEnti
     'entities_get',
     {
       title: 'Get a tenant entity',
-      description: 'Read one entity through the existing tenant-scoped /v1/entities/{entity_id} API. Tenant scope comes from AETHER_API_KEY; tenant IDs and arbitrary metadata are omitted.',
+      description: 'Read one entity through the existing tenant-scoped /v1/entities/{entity_id} API. Tenant scope comes from one explicit AETHER_API_KEY or AETHER_SESSION_TOKEN, or from the local OS credential store after aether auth login; tenant IDs and arbitrary metadata are omitted.',
       inputSchema: z.object({ entity_id: z.string().trim().min(1).max(256) }).strict(),
       outputSchema: z.object({
         entity: entitySchema,
