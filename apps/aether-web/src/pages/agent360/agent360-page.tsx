@@ -3,7 +3,11 @@ import {
   Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, ErrorState,
   LoadingState,
 } from '@aether/ui';
-import { useAgent360 } from '@aether-app/features/agent360';
+import {
+  AgentMarketplaceCatalogPanel,
+  AgentRunEvidencePanel,
+  useAgent360,
+} from '@aether-app/features/agent360';
 
 type RecordValue = Record<string, unknown>;
 
@@ -167,6 +171,9 @@ export function Agent360Page() {
           </ul> : <p className="text-sm text-text-secondary">No active delegation records are available.</p>}
         </CardContent>
       </Card>
+
+      <AgentMarketplaceCatalogPanel />
+      <AgentRunEvidencePanel agentId={agentId} />
     </main>
   );
 }

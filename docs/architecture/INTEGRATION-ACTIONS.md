@@ -56,7 +56,7 @@ Integration deliveries and premium connector usage should emit usage metering ev
 
 Reliability, SRE, incident response, SLOs, runbooks, and tenant-safe system
 status are documented in [Reliability Operations](../operations/RELIABILITY-OPERATIONS.md) and
-related docs ([Incident Response](../operations/INCIDENT-RESPONSE.md),
+related docs ([Incident Response](../operations/incident-response.md),
 [SLO Tracking](../operations/SLO-TRACKING.md), [SRE Runbooks](../operations/SRE-RUNBOOKS.md),
 [Tenant System Status](../operations/TENANT-STATUS.md), [Pipeline Health](../operations/PIPELINE-HEALTH.md),
 [Queue & Worker Health](../operations/QUEUE-WORKER-HEALTH.md), [Postmortems](../operations/POSTMORTEMS.md)).

@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from config.settings import settings
+from shared.temporal.instant import coerce_utc_lenient
 from identity.identity.decision_evidence import IdentityDecisionEvidenceRepository
 from identity.identity.explainability import AdminIdentityService
 from identity.identity.hashing import hash_value
@@ -39,7 +40,9 @@ def _stable_ref(kind: str, tenant_id: str, value: Any) -> str | None:
 
 def _safe_datetime(value: Any) -> str:
     if isinstance(value, datetime):
-        normalized = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        normalized = coerce_utc_lenient(value)
+        if normalized is None:
+            return ""
         return normalized.astimezone(timezone.utc).isoformat()
     if isinstance(value, str) and value:
         return value

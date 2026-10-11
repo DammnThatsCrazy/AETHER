@@ -30,6 +30,7 @@ from shared.common.common import (
 )
 from shared.events.events import Event, Topic
 from shared.logger.logger import get_logger, metrics
+from shared.temporal.instant import coerce_utc_lenient
 
 from ingestion.ingestion.adapters.replay import (
     REPLAY_CONTEXT_KEY,
@@ -133,8 +134,9 @@ def _norm_iso(value: Any) -> Optional[str]:
         return None
     # Older Bronze rows can contain naive timestamps. Treat them as UTC for
     # replay filtering while preserving the original bytes in the payload.
-    if instant.tzinfo is None:
-        instant = instant.replace(tzinfo=timezone.utc)
+    instant = coerce_utc_lenient(instant)
+    if instant is None:
+        return None
     return instant.astimezone(timezone.utc).isoformat(timespec="microseconds")
 
 

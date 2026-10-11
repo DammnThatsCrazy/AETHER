@@ -19,10 +19,12 @@ from actions.agent.deployment_routes import (  # noqa: E402
     DeploymentPatch,
     LifecycleAction,
     archive_deployment,
+    check_agent_graph_projection_state,
     create_deployment,
     deployment_activity,
     deployment_health,
     get_deployment,
+    get_deployment_agent_identity_binding,
     kyber_deployment_detail,
     kyber_fleet_overview,
     list_deployments,
@@ -179,6 +181,209 @@ async def test_cross_tenant_access_is_not_found():
     assert dep_id not in {d["id"] for d in listed_b["data"]["deployments"]}
 
 
+@pytest.mark.asyncio
+async def test_identity_binding_status_is_tenant_scoped_and_validates_canonical_agent(monkeypatch):
+    import actions.agent.deployment_routes as routes_module
+    import actions.agent_marketplace.identity_binding as identity_module
+
+    tenant_id = _tenant_id()
+    deployment = {
+        "id": "deployment-status-test",
+        "tenant_id": tenant_id,
+        "agent_id": "source-agent",
+        "agent_source_namespace": "xai.marketplace",
+    }
+
+    class FakeDeploymentRepository:
+        async def get(self, requested_tenant, requested_deployment):
+            if requested_tenant != tenant_id or requested_deployment != deployment["id"]:
+                raise NotFoundError("Agent deployment")
+            return deployment
+
+    class FakeBindingRepository:
+        rows: list[dict] = []
+        failure: Exception | None = None
+
+        async def find_for_source(self, requested_tenant, namespace, source_ref):
+            assert requested_tenant == tenant_id
+            assert namespace == "xai.marketplace"
+            assert source_ref == "source-agent"
+            if self.failure:
+                raise self.failure
+            return self.rows
+
+    class FakeEntityRepository:
+        entity: dict | None = None
+        failure: Exception | None = None
+
+        async def find_by_id(self, entity_id):
+            if self.failure:
+                raise self.failure
+            assert entity_id == "canonical-agent"
+            return self.entity
+
+    monkeypatch.setattr(routes_module, "_repo", lambda: FakeDeploymentRepository())
+    monkeypatch.setattr(
+        identity_module, "AgentDeploymentIdentityBindingRepository", FakeBindingRepository,
+    )
+    monkeypatch.setattr(routes_module, "EntityRepository", FakeEntityRepository)
+    request = FakeRequest(tenant_id)
+    binding = {
+        "id": "binding-1",
+        "tenant_id": tenant_id,
+        "source_namespace": "xai.marketplace",
+        "source_agent_ref": "source-agent",
+        "canonical_agent_entity_id": "canonical-agent",
+        "binding_authority": "tenant_admin_explicit",
+        "status": "active",
+        "bound_at": "2026-10-10T12:00:00+00:00",
+    }
+
+    FakeBindingRepository.rows = [binding]
+    FakeEntityRepository.entity = {
+        "entity_id": "canonical-agent", "tenant_id": tenant_id, "entity_type": "agent",
+    }
+    matched = (await get_deployment_agent_identity_binding(
+        deployment["id"], request,
+    ))["data"]
+    assert matched["status"] == "matched"
+    assert matched["canonical_agent_entity_id"] == "canonical-agent"
+
+    FakeBindingRepository.rows = []
+    unbound = (await get_deployment_agent_identity_binding(
+        deployment["id"], request,
+    ))["data"]
+    assert unbound["status"] == "unresolved"
+    assert "canonical_agent_entity_id" not in unbound
+
+    FakeBindingRepository.rows = [binding, {**binding, "id": "binding-2"}]
+    ambiguous = (await get_deployment_agent_identity_binding(
+        deployment["id"], request,
+    ))["data"]
+    assert ambiguous["status"] == "ambiguous"
+    assert "canonical_agent_entity_id" not in ambiguous
+
+    FakeBindingRepository.rows = [binding]
+    FakeEntityRepository.entity = {
+        "entity_id": "canonical-agent", "tenant_id": _tenant_id(), "entity_type": "agent",
+    }
+    foreign_entity = (await get_deployment_agent_identity_binding(
+        deployment["id"], request,
+    ))["data"]
+    assert foreign_entity["status"] == "unresolved"
+    assert "canonical_agent_entity_id" not in foreign_entity
+
+    FakeBindingRepository.failure = RuntimeError("repository unavailable")
+    unavailable = (await get_deployment_agent_identity_binding(
+        deployment["id"], request,
+    ))["data"]
+    assert unavailable["status"] == "unavailable"
+    assert "canonical_agent_entity_id" not in unavailable
+
+
+@pytest.mark.asyncio
+async def test_identity_binding_status_enforces_tenant_permission_and_hides_foreign_deployment():
+    tenant_a, tenant_b = _tenant_id(), _tenant_id()
+    deployment = (await create_deployment(
+        _create_body(agent_source_namespace="xai.marketplace"), FakeRequest(tenant_a),
+    ))["data"]
+    with pytest.raises(NotFoundError):
+        await get_deployment_agent_identity_binding(deployment["id"], FakeRequest(tenant_b))
+
+    class DeniedTenant:
+        tenant_id = tenant_a
+
+        @staticmethod
+        def require_permission(permission):
+            assert permission == "agent:manage"
+            raise HTTPException(status_code=403, detail="permission denied")
+
+    denied_request = SimpleNamespace(state=SimpleNamespace(tenant=DeniedTenant()))
+    with pytest.raises(HTTPException) as exc:
+        await get_deployment_agent_identity_binding(deployment["id"], denied_request)
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_agent360_deployment_filter_includes_bounded_canonical_identity_bindings(monkeypatch):
+    import actions.agent.deployment_routes as routes_module
+    import actions.agent_marketplace.identity_binding as identity_module
+
+    tenant_id = _tenant_id()
+    canonical_id = "canonical-agent-360"
+    deployment = {
+        "id": "bound-deployment-360",
+        "tenant_id": tenant_id,
+        "agent_id": "xai-source-agent",
+        "agent_source_namespace": "xai.marketplace",
+        "external_platform": "discord_bot",
+        "status": "active",
+        "updated_at": "2026-10-10T12:00:00+00:00",
+    }
+    binding = {
+        "id": "binding-360",
+        "tenant_id": tenant_id,
+        "canonical_agent_entity_id": canonical_id,
+        "source_namespace": "xai.marketplace",
+        "source_agent_ref": "xai-source-agent",
+        "source_deployment_id": deployment["id"],
+        "binding_authority": "tenant_admin_explicit",
+        "status": "active",
+    }
+    captured: dict[str, object] = {}
+
+    class FakeDeploymentRepository:
+        async def list(self, requested_tenant, *, status=None, platform=None, agent_id=None):
+            if requested_tenant != tenant_id or agent_id != deployment["agent_id"]:
+                return []
+            return [deployment]
+
+        async def get_record(self, requested_tenant, deployment_id):
+            if requested_tenant == tenant_id and deployment_id == deployment["id"]:
+                return deployment
+            return None
+
+    class FakeEntityRepository:
+        async def find_by_id(self, entity_id):
+            if entity_id != canonical_id:
+                return None
+            return {
+                "entity_id": canonical_id,
+                "tenant_id": tenant_id,
+                "entity_type": "agent",
+            }
+
+    class FakeBindingRepository:
+        async def find_many(self, *, filters, limit):
+            captured["filters"] = filters
+            captured["limit"] = limit
+            return [binding]
+
+    monkeypatch.setattr(routes_module, "_repo", lambda: FakeDeploymentRepository())
+    monkeypatch.setattr(routes_module, "EntityRepository", FakeEntityRepository)
+    monkeypatch.setattr(
+        identity_module, "AgentDeploymentIdentityBindingRepository", FakeBindingRepository,
+    )
+
+    by_canonical = (await list_deployments(
+        FakeRequest(tenant_id), agent_id=canonical_id,
+    ))["data"]
+    assert [row["id"] for row in by_canonical["deployments"]] == [deployment["id"]]
+    assert by_canonical["identity_binding_lookup"]["status"] == "matched"
+    assert captured["limit"] == 101
+    assert captured["filters"] == {
+        "tenant_id": tenant_id,
+        "canonical_agent_entity_id": canonical_id,
+        "binding_authority": "tenant_admin_explicit",
+        "status": "active",
+    }
+
+    by_source_reference = (await list_deployments(
+        FakeRequest(tenant_id), agent_id=deployment["agent_id"],
+    ))["data"]
+    assert [row["id"] for row in by_source_reference["deployments"]] == [deployment["id"]]
+
+
 # ── Flag gating ───────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -220,6 +425,59 @@ async def test_kyber_fleet_overview_aggregates_without_tenant_metadata():
         assert "display_name" not in row
         assert "description" not in row
         assert {"id", "tenant_id", "status", "external_platform"} <= set(row)
+
+
+@pytest.mark.asyncio
+async def test_kyber_graph_state_check_is_bounded_read_only_and_uses_authority_extension(monkeypatch):
+    import actions.agent_marketplace.authority as authority_module
+    import actions.agent_marketplace.graph_state_check as checker_module
+
+    captured: dict[str, object] = {}
+
+    class FakeAuthorityResolver:
+        pass
+
+    class FakeChecker:
+        def __init__(self, *, authority_extensions):
+            captured["extensions"] = authority_extensions
+
+        async def reconcile(self, tenant_id, **kwargs):
+            captured["tenant_id"] = tenant_id
+            captured["kwargs"] = kwargs
+            return {"tenant_id": tenant_id, "status": "consistent"}
+
+    monkeypatch.setattr(authority_module, "AgentRunAuthorityResolver", FakeAuthorityResolver)
+    monkeypatch.setattr(checker_module, "AgentEconomyGraphStateChecker", FakeChecker)
+
+    result = await check_agent_graph_projection_state(
+        FakeRequest("olympus_internal", permissions={"admin"}),
+        tenant_id="tenant-target",
+        limit=37,
+    )
+
+    data = result["data"]
+    assert data["tenant_id"] == "tenant-target"
+    assert data["read_only"] is True
+    assert data["graph_mutations_applied"] is False
+    assert data["outbox_consulted"] is False
+    assert captured["tenant_id"] == "tenant-target"
+    assert captured["kwargs"] == {
+        "source_page_size": 37,
+        "max_source_rows": 37,
+        "graph_edge_limit": 37,
+        "issue_limit": 37,
+    }
+    assert len(captured["extensions"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_kyber_graph_state_check_requires_operator_admin():
+    request = FakeRequest("operator", permissions={"read"})
+
+    with pytest.raises(HTTPException) as exc:
+        await check_agent_graph_projection_state(request, tenant_id="tenant-target")
+
+    assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio

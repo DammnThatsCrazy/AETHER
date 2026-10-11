@@ -2579,6 +2579,26 @@ policies:
     requires_consent_invalidation: false
     requires_permission_hash: false
 
+  # Explicit tenant-admin source-identity mappings are tenant-scoped,
+  # row-based authority records, not consent-derived observations or
+  # object-store payloads.
+  - resource_type: agent_deployment_identity_bindings
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
   - resource_type: agent_economic_identities
     authoritative_store: postgres
     metadata_store: postgres

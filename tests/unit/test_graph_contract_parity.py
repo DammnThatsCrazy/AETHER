@@ -21,7 +21,7 @@ def _parse_ts_edge_layer_map() -> dict[str, str]:
 
     # Extract the EDGE_LAYER_MAP object body
     match = re.search(
-        r"export const EDGE_LAYER_MAP:\s*Record<string,\s*RelationshipLayer>\s*=\s*\{([^}]+)\}",
+        r"export const EDGE_LAYER_MAP:\s*Record<string,\s*(?:RelationshipLayer|GraphEdgeLayer)>\s*=\s*\{([^}]+)\}",
         content,
         re.DOTALL,
     )

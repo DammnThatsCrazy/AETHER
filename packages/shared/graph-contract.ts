@@ -13,6 +13,8 @@
 
 /** All four canonical relationship layers. Must never be reduced to three. */
 export type RelationshipLayer = 'H2H' | 'H2A' | 'A2H' | 'A2A';
+/** Non-canonical graph references are retained but excluded from four-layer counts. */
+export type GraphEdgeLayer = RelationshipLayer | 'EXCLUDED';
 
 export const RELATIONSHIP_LAYERS: readonly RelationshipLayer[] = [
   'H2H', // Human-to-Human
@@ -46,8 +48,13 @@ export const LAYER_DESCRIPTIONS: Record<RelationshipLayer, { label: string; desc
 // ── Edge type classification ──────────────────────────────────────────────────
 
 /** Canonical edge types with their layer classification. */
-export const EDGE_LAYER_MAP: Record<string, RelationshipLayer> = {
+export const EDGE_LAYER_MAP: Record<string, GraphEdgeLayer> = {
   // H2H edges
+  // Metadata/topology relationships already classified H2H by the backend;
+  // they are not agent activity events or evidence of delegated authority.
+  INSTANCE_OF: 'H2H',
+  LISTED_ON: 'H2H',
+  LISTS_AGENT_TEMPLATE: 'H2H',
   HAS_SESSION: 'H2H',
   VIEWED_PAGE: 'H2H',
   TRIGGERED_EVENT: 'H2H',
@@ -94,6 +101,11 @@ export const EDGE_LAYER_MAP: Record<string, RelationshipLayer> = {
   REFERRED_ENTITY: 'A2H',
 
   // A2A edges
+  AGENT_LINKED_TO_EXTERNAL_ACCOUNT: 'A2A',
+  EXECUTED: 'A2A',
+  EXECUTED_ON: 'A2A',
+  RESULTED_IN_OUTCOME: 'A2A',
+  RUN_CONTAINS_TASK: 'A2A',
   PAYS: 'A2A',
   CONSUMES: 'A2A',
   HIRED: 'A2A',
@@ -104,6 +116,8 @@ export const EDGE_LAYER_MAP: Record<string, RelationshipLayer> = {
   GOVERNED_BY: 'A2A',
   DEPENDS_ON: 'A2A',
   PERFORMED_ACTION: 'A2A',
+  REFERENCES_DELEGATION_RECORD: 'EXCLUDED',
+  CORRELATED_WITH_ECONOMIC_RECORD: 'EXCLUDED',
   EXECUTED_AS: 'A2A',
   PRODUCED: 'A2A',
   UPDATES_CONFIDENCE_FOR: 'A2A',
@@ -213,7 +227,8 @@ export const EDGE_LAYER_MAP: Record<string, RelationshipLayer> = {
 
 /** Classify an edge type string into its relationship layer. */
 export function classifyEdgeType(edgeType: string): RelationshipLayer | null {
-  return (EDGE_LAYER_MAP[edgeType] as RelationshipLayer) ?? null;
+  const layer = EDGE_LAYER_MAP[edgeType];
+  return layer && layer !== 'EXCLUDED' ? layer : null;
 }
 
 // ── Layer counts ──────────────────────────────────────────────────────────────

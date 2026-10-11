@@ -190,6 +190,92 @@ describe('typed emit helpers', () => {
     expect(event.properties.api_key).toBe('[REDACTED]');
     await client.shutdown();
   });
+
+  it('emits run, trigger, policy, delegation, and outcome references as source telemetry', async () => {
+    const client = makeClient();
+    client.task({
+      taskId: 'task-1',
+      runId: 'run-1',
+      status: 'started',
+      triggerId: 'trigger-1',
+      triggerType: 'webhook',
+      actionId: 'action-1',
+      actionType: 'issue.update',
+    });
+    client.toolInvocation({
+      toolName: 'browser.search',
+      taskId: 'task-1',
+      runId: 'run-1',
+      status: 'succeeded_observed',
+      mcpServerName: 'browser-mcp',
+    });
+    client.policyEvaluated({
+      runId: 'run-1',
+      taskId: 'task-1',
+      decisionId: 'decision-1',
+      actionId: 'action-1',
+      actionType: 'issue.update',
+      triggerId: 'trigger-1',
+      triggerType: 'webhook',
+      policyId: 'policy-1',
+      policyVersion: '4',
+      decision: 'allow',
+      reasonCodes: ['within_scope'],
+    });
+    client.delegatedTask({
+      runId: 'run-1',
+      taskId: 'task-1',
+      delegationId: 'delegation-1',
+      delegatedToAgentId: 'external-agent-2',
+      delegatedToNamespace: 'vendor.runtime',
+      actionId: 'action-1',
+      triggerId: 'trigger-1',
+    });
+    client.outcomeRecorded({
+      outcomeId: 'outcome-1',
+      outcome: 'completed',
+      taskId: 'task-1',
+      runId: 'run-1',
+      success: true,
+    });
+    await client.flush();
+
+    const events = sentEvents();
+    expect(events.map((event) => event.type)).toEqual([
+      'agent_task_started',
+      'agent_tool_invocation_observed',
+      'agent_policy_evaluated',
+      'agent_delegated_task',
+      'agent_outcome_recorded',
+    ]);
+    const [task, tool, policy, delegation, outcome] = events;
+    expect(task.properties).toMatchObject({
+      taskId: 'task-1', runId: 'run-1', triggerId: 'trigger-1',
+      triggerType: 'webhook', actionId: 'action-1', actionType: 'issue.update',
+    });
+    expect(tool.properties).toMatchObject({
+      toolName: 'browser.search', taskId: 'task-1', runId: 'run-1',
+      status: 'succeeded_observed', mcpServerName: 'browser-mcp',
+    });
+    expect(policy.properties).toMatchObject({
+      runId: 'run-1', decisionId: 'decision-1', policyId: 'policy-1',
+      policyVersion: '4', decision: 'allow', reasonCodes: ['within_scope'],
+    });
+    expect(delegation.properties).toMatchObject({
+      runId: 'run-1', delegationId: 'delegation-1',
+      delegatedToAgentId: 'external-agent-2', delegatedToNamespace: 'vendor.runtime',
+      actionId: 'action-1',
+    });
+    expect(outcome.properties).toMatchObject({
+      outcomeId: 'outcome-1', outcome: 'completed', taskId: 'task-1',
+      runId: 'run-1', success: true,
+    });
+    for (const event of events) {
+      expect(event.context.agentDeployment.deploymentId).toBe('dep-1');
+      expect(EVENT_FAMILY[event.type as keyof typeof EVENT_FAMILY]).toBeDefined();
+    }
+    await client.shutdown();
+  });
 });
 
 describe('batching and consent passthrough', () => {

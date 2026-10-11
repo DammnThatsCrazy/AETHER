@@ -1473,17 +1473,24 @@ def create_app() -> FastAPI:
             "(AETHER_CLUSTER_TARGETING_INTELLIGENCE_ENABLED=false)"
         )
 
-    # ── External Agent Telemetry Plane (observation-only; no marketplace, no execution) ──
+    # ── External Agent observations (no hosting or execution) ──
     telemetry_flags = settings.external_agent_telemetry
-    if telemetry_flags.registry_enabled:
+    if telemetry_flags.registry_enabled or telemetry_flags.marketplace_catalog_enabled:
         from actions.agent.deployment_routes import deployments_router
         app.include_router(deployments_router)
-        logger.info("External Agent Telemetry: deployment registry mounted (/v1/agent/deployments)")
+        logger.info(
+            "External Agent Telemetry: deployment/catalog routes mounted "
+            "(/v1/agent/deployments)"
+        )
     if telemetry_flags.kyber_enabled:
         from actions.agent.deployment_routes import kyber_router as agent_telemetry_kyber_router
         app.include_router(agent_telemetry_kyber_router)
         logger.info("External Agent Telemetry: Kyber diagnostics mounted (/v1/admin/kyber/agent-telemetry)")
-    if not (telemetry_flags.registry_enabled or telemetry_flags.kyber_enabled):
+    if not (
+        telemetry_flags.registry_enabled
+        or telemetry_flags.marketplace_catalog_enabled
+        or telemetry_flags.kyber_enabled
+    ):
         logger.info("External Agent Telemetry: disabled (AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED=false)")
 
     # ── One-Person Ops runtime (worker bridge, briefings, ops alerts; approval gates never removed) ──

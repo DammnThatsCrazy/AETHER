@@ -81,5 +81,5 @@ service/pipeline/queue health remains operator-only under
 - Feature flags default safe. There is no partner ecosystem, marketplace or developer platform in the product and no flag for one.
 - Frontend data-truth source and production-bundle scans are required CI gates.
 
-See [Local Development](LOCAL-DEVELOPMENT.md) and
+See [Local Development](local-development.md) and
 [External Billing Integration](../reference/EXTERNAL-BILLING-INTEGRATION.md).

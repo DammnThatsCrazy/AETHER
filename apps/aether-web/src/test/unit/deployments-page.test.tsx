@@ -39,9 +39,11 @@ function getBadge(text: string): HTMLElement {
 const mocks = vi.hoisted(() => ({
   fetchAgentDeployments: vi.fn(),
   fetchAgentDeployment: vi.fn(),
+  fetchAgentDeploymentIdentityBinding: vi.fn(),
   fetchAgentDeploymentHealth: vi.fn(),
   fetchAgentDeploymentActivity: vi.fn(),
   createAgentDeployment: vi.fn(),
+  bindAgentDeploymentIdentity: vi.fn(),
   updateAgentDeployment: vi.fn(),
   pauseAgentDeployment: vi.fn(),
   reactivateAgentDeployment: vi.fn(),
@@ -131,6 +133,13 @@ beforeEach(() => {
   queryCache.invalidatePrefix('agent-deployments');
   mocks.fetchAgentDeployments.mockResolvedValue({ deployments: DEPLOYMENT_FIXTURES, notConfigured: false });
   mocks.fetchAgentDeployment.mockResolvedValue(DEPLOYMENT_FIXTURES[0]);
+  mocks.fetchAgentDeploymentIdentityBinding.mockResolvedValue({
+    status: 'unresolved',
+    deployment_id: 'dep_001',
+    source_namespace: 'example.runtime',
+    source_agent_ref: 'agent_support_v2',
+    reason: 'identity_binding_not_found',
+  });
   mocks.fetchAgentDeploymentHealth.mockResolvedValue({
     event_count_24h: 4210,
     accepted_count_24h: 4102,
@@ -188,6 +197,26 @@ describe('Aether Deployment detail page', () => {
     expect(screen.getByText('created')).toBeInTheDocument();
     expect(screen.getByText('alex@acme.io')).toBeInTheDocument();
     expect(screen.getByText('agent.message')).toBeInTheDocument();
+    expect(await screen.findByText('example.runtime')).toBeInTheDocument();
+    expect(screen.getByText('Not linked')).toBeInTheDocument();
+  });
+
+  it('creates an immutable canonical identity link through the tenant API', async () => {
+    mocks.bindAgentDeploymentIdentity.mockResolvedValue({
+      status: 'matched',
+      deployment_id: 'dep_001',
+      source_namespace: 'example.runtime',
+      source_agent_ref: 'agent_support_v2',
+      canonical_agent_entity_id: 'entity-agent-001',
+      binding_authority: 'tenant_admin_explicit',
+      bound_at: '2026-10-11T10:00:00Z',
+    });
+    renderDetailPage('dep_001');
+
+    await userEvent.type(await screen.findByLabelText('Canonical Agent entity ID in this tenant'), 'entity-agent-001');
+    await userEvent.click(screen.getByRole('button', { name: 'Create immutable identity link' }));
+
+    await waitFor(() => expect(mocks.bindAgentDeploymentIdentity).toHaveBeenCalledWith('dep_001', 'entity-agent-001'));
   });
 
   it('pauses an active deployment without confirmation', async () => {

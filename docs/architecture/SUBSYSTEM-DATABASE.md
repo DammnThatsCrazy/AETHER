@@ -6,15 +6,18 @@ visibility: P
 audience: [dev-senior, architect, ops]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/repositories/repos.py, services/api/repositories/lake.py]
+source_files: [services/api/repositories/repos.py, services/api/repositories/lake.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py]
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
 reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; repository and database behavior remain unchanged.'}
 source_hashes:
+  "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
+  "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
+  "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/repositories/lake.py": "sha256:2f5b0c5b9cd1a1299615e97728385c58deeff307073b98d8e8c22e9b69b03df6"
-  "services/api/repositories/repos.py": "sha256:c03e0537e86217db3dc67aabc2ce179a589ece64870dcdcc1f76d7f79ae95dae"
+  "services/api/repositories/repos.py": "sha256:18ffc6df66bfc4484aaab821c791fda4579382634a23066ddbe5276d4408ec04"
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -124,6 +127,19 @@ table and caches it. Writes and filters are then bound to the migrated types:
 | `economic_resources` | `EconomicResourceRepository` | Purchasable capabilities: inference, GPU compute, APIs, data, memory |
 | `facilitators` | `FacilitatorRepository` | x402 facilitators, trust brokers, and authorization rails |
 | `agent_economic_identities` | `AgentEconomicIdentityRepository` | Derived long-running economic identity per agent, keyed as `{tenant_id}:{agent_id}:economic_identity` |
+| `agent_deployment_identity_bindings` | `AgentDeploymentIdentityBindingRepository` | Explicit tenant-admin binding from source namespace/reference to a same-tenant canonical Agent; uniquely scoped by tenant + namespace + source reference |
+
+**Agent deployment identity bindings:** The additive
+`20261011_agent_deployment_identity_bindings` migration creates the durable
+binding store and its tenant/namespace/source-reference uniqueness guard. Each
+binding records the canonical Agent ID and explicit `tenant_admin_explicit`
+authority. The identity-binding service revalidates tenant ownership and the
+current deployment source reference before returning a match; missing,
+ambiguous, stale, or cross-tenant rows are unresolved. A follow-on migration adds the nullable
+`delegated_to_namespace` column to `silver_agent_execution_facts`, so target
+source references retain their own declared namespace and cannot inherit the
+actor's namespace. These migration files are authored in the branch; this page
+does not claim that either has been applied.
 
 **Tenant isolation enforcement:** The following repository methods require an explicit `tenant_id` argument (no default) — callers must always pass the tenant from request context:
 - `AgentExecutionRepository.list_for_agent(agent_id, tenant_id)`

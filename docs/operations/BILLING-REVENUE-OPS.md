@@ -64,7 +64,7 @@ records are **not** deleted when retention requires their preservation. See
 
 Reliability, SRE, incident response, SLOs, runbooks, and tenant-safe system
 status are documented in [Reliability Operations](RELIABILITY-OPERATIONS.md) and
-related docs ([Incident Response](INCIDENT-RESPONSE.md),
+related docs ([Incident Response](incident-response.md),
 [SLO Tracking](SLO-TRACKING.md), [SRE Runbooks](SRE-RUNBOOKS.md),
 [Tenant System Status](TENANT-STATUS.md), [Pipeline Health](PIPELINE-HEALTH.md),
 [Queue & Worker Health](QUEUE-WORKER-HEALTH.md), [Postmortems](POSTMORTEMS.md)).

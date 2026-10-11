@@ -45,6 +45,14 @@ def test_the_committed_registry_covers_every_service_directory():
     assert registry.validate() == []
 
 
+def test_agent_marketplace_is_classified_as_observation_intake():
+    raw = yaml.safe_load(registry.REGISTRY.read_text(encoding="utf-8"))
+    entry = raw["services"]["agent_marketplace"]
+    assert entry["class"] == "experimental"
+    assert entry["stage"] == "intake"
+    assert "observation-only" in entry["reason"]
+
+
 def test_a_new_unclassified_directory_fails(tmp_path):
     errors = _tree(tmp_path, ["a", "b"], {"a": _svc()})
     assert errors == ["b: backend service directory has no classification"]

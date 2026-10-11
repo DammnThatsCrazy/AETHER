@@ -35,6 +35,7 @@ from shared.graph.graph import (
     VertexType,
     _InMemoryGraphBackend,
     _PostgresGraphBackend,
+    _is_revoked_marker,
 )
 
 try:  # asyncpg is present in the backend runtime; guard so collection never fails.
@@ -223,6 +224,64 @@ async def test_add_and_get_edges_directional(kind):
         assert len(both) == 1
         # An unrelated edge_type filter excludes it.
         assert await backend.get_edges(ns.vid("s"), edge_type=EdgeType.OWNS) == []
+    finally:
+        await cleanup()
+
+
+@pytest.mark.parametrize("kind", BACKENDS)
+async def test_tenant_scoped_edge_scan_filters_before_cap_and_reports_truncation(kind):
+    backend, cleanup = await _open(kind)
+    ns = _NS()
+    try:
+        await backend.add_vertex(ns.vertex("owned"))
+        await backend.add_vertex(ns.vertex("foreign", tenant=ns.other))
+        await backend.add_edge(ns.edge("a", "b"))
+        await backend.add_edge(ns.edge("false-marker", "edge", revoked="false"))
+        await backend.add_edge(ns.edge("true-marker", "edge", revoked="true"))
+        # Exercise the legacy snake_case tenant property accepted by tenant_of.
+        await backend.add_edge(Edge(
+            edge_type=EdgeType.SEMANTIC_RELATES_TO,
+            from_vertex_id=ns.vid("c"),
+            to_vertex_id=ns.vid("d"),
+            properties={"tenant_id": ns.tenant},
+        ))
+        await backend.add_edge(ns.edge("e", "f"))
+        await backend.add_edge(ns.edge("foreign", "foreign", tenant=ns.other))
+        await backend.add_edge(ns.edge("revoked", "edge"))
+        await backend.revoke_edge(
+            ns.vid("revoked"), ns.vid("edge"), EdgeType.SEMANTIC_RELATES_TO,
+            "not active", tenant_id=ns.tenant,
+        )
+
+        page, truncated = await backend.get_edges_for_tenant(
+            ns.tenant, limit=2,
+            edge_types=[EdgeType.SEMANTIC_RELATES_TO],
+        )
+        assert len(page) == 2
+        assert truncated is True
+        assert all(e.properties.get("tenant_id") == ns.tenant for e in page)
+        assert all(not _is_revoked_marker(e.properties.get("revoked")) for e in page)
+
+        all_active, truncated = await backend.get_edges_for_tenant(
+            ns.tenant, limit=10,
+            edge_types=[EdgeType.SEMANTIC_RELATES_TO],
+        )
+        assert len(all_active) == 4
+        assert any(edge.properties.get("revoked") == "false" for edge in all_active)
+        assert truncated is False
+        all_including_revoked, truncated = await backend.get_edges_for_tenant(
+            ns.tenant, limit=10,
+            edge_types=[EdgeType.SEMANTIC_RELATES_TO],
+            include_revoked=True,
+        )
+        assert len(all_including_revoked) == 6
+        assert truncated is False
+        assert await backend.get_edges_for_tenant(
+            ns.tenant, limit=10, edge_types=[EdgeType.OWNS]
+        ) == ([], False)
+
+        assert await backend.get_vertex_for_tenant(ns.tenant, ns.vid("owned")) is not None
+        assert await backend.get_vertex_for_tenant(ns.tenant, ns.vid("foreign")) is None
     finally:
         await cleanup()
 

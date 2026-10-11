@@ -819,6 +819,14 @@
       ]
     },
     {
+      "feature_id": "agents-agentId",
+      "aether_route": "/agents/:agentId",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "Agent 360 combines a tenant-scoped profile with deployment run evidence and a public marketplace snapshot; that composite view has no tenant graph mirror contract. Kyber agent investigation uses the separately authorized agentic-observability surface until a matching resolver and byte-parity proof exist",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
       "feature_id": "interoperability",
       "aether_route": "/interoperability",
       "tenant_parity_required": true,

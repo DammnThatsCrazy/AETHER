@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from shared.events.events import Event
 from shared.logger.logger import get_logger, metrics
+from value.x402.provenance import AUTHORITATIVE_X402_SOURCES
 
 logger = get_logger("aether.ingestion.lifecycle_worker")
 
@@ -26,15 +27,6 @@ SDK_X402_OBSERVATION_EVENTS = frozenset(
         "x402_payment_submitted",
     }
 )
-
-_AUTHORITATIVE_X402_SOURCES = {
-    "aether.commerce.challenge.issued": ("x402.control_plane", "x402_payment_required"),
-    "aether.commerce.payment.submitted": ("x402.control_plane", "x402_payment_submitted"),
-    "aether.commerce.settlement.completed": ("x402.settlement", "x402_payment_settled"),
-    "aether.commerce.settlement.failed": ("x402.settlement", "x402_payment_failed"),
-    "aether.commerce.access.granted": ("x402.control_plane", "x402_access_granted"),
-}
-
 
 async def project_sdk_lifecycle_observation(event: Event) -> None:
     """Persist an accepted SDK x402 observation through the canonical mapper.
@@ -87,6 +79,7 @@ async def project_sdk_lifecycle_observation(event: Event) -> None:
         **(dict(mapped.get("metadata")) if isinstance(mapped.get("metadata"), dict) else {}),
         "evidence_status": "observed",
         "source_kind": "public_sdk",
+        "source_authority": "public_sdk_observation",
         "source_event_id": event_id,
         "source_event_type": event_type,
     }
@@ -112,7 +105,7 @@ async def project_authoritative_x402_lifecycle(event: Event) -> None:
     the linked intent facts; a client payload never reaches this path.
     """
     topic = str(getattr(event.topic, "value", event.topic))
-    authority = _AUTHORITATIVE_X402_SOURCES.get(topic)
+    authority = AUTHORITATIVE_X402_SOURCES.get(topic)
     if authority is None or event.source_service != authority[0]:
         metrics.increment("lifecycle_observation_deferred_total", labels={"family": "x402", "reason": "source_authority_required"})
         return
@@ -127,7 +120,8 @@ async def project_authoritative_x402_lifecycle(event: Event) -> None:
     stage = authority[1]
     mapped: dict = {
         "event_id": event_id,
-        "metadata": {"evidence_status": "server_observed", "source_event_id": event_id,
+        "metadata": {"evidence_status": "server_observed", "source_authority": "x402_commerce",
+                     "source_event_id": event_id,
                      "source_topic": topic, "source_service": event.source_service},
     }
     if stage == "x402_payment_required":
@@ -152,6 +146,7 @@ async def project_authoritative_x402_lifecycle(event: Event) -> None:
         mapped.update({
             "payment_intent_id": requirement.challenge_id,
             "settlement_event_id": event_id,
+            "authorization_id": auth_id,
             "agent_id": requirement.requester_id if requirement.requester_type == "agent" else "",
             "amount": str(auth.amount_usd), "currency": auth.asset_symbol,
             "provider": "x402", "protocol": "x402-v2", "tx_hash": payload.get("tx_hash"),

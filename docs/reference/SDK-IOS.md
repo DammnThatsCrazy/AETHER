@@ -6,14 +6,15 @@ visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/sdk/ios/Sources/AetherSDK/Aether.swift, packages/shared/events.ts, packages/shared/consent.ts]
+source_files: [packages/sdk/ios/Sources/AetherSDK/Aether.swift, packages/shared/events.ts, packages/shared/consent.ts, packages/shared/contracts/event-registry.json]
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
   "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:8e74e347fd0bd27a34523b84235f5d8e4b1004ed930e0967430e82ef5ff30981"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
-  "packages/shared/events.ts": "sha256:46bc12934b7c41c02f9304a77315bba2d3f71be253e7b30b1186208b40f8a59a"
+  "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
+  "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
 ---
 
 # Aether iOS SDK v0.1.0-alpha.0 — Integration Guide
@@ -449,6 +450,22 @@ Aether.shared.agentOutcomeRecorded(taskId:, outcome:, properties:)
 // ... 13 more — see AetherHealthAgent for full list
 ```
 
+**Public SDK acceptance boundary:** wrappers, `EventType` entries, consent-map
+entries, and native emitter methods describe SDK surface area; they do not by
+themselves authorize an event type for public SDK ingestion. The canonical
+`packages/shared/contracts/event-registry.json` currently marks exactly these
+seven agent events `sdkEmitable`: `agent_task_started`,
+`agent_task_completed`, `agent_task_failed`, `agent_delegated_task`,
+`agent_policy_evaluated`, `agent_outcome_recorded`, and
+`agent_tool_invocation_observed`. Their properties are source-asserted; IDs
+such as `paymentIntentId`, `settlementEventId`, `delegationId`,
+`delegatedToAgentId`, `delegatedToNamespace`, and `context.agentDeployment` are
+source references, not verified facts. A delegated target must carry its
+explicit source namespace; missing or invalid namespace remains unresolved and
+does not inherit the actor's namespace. Consent and
+active tenant deployment validation still apply. Other wrapper/type-exposed
+events are not publicly SDK-emittable under the current registry contract.
+
 ## x402 Lifecycle Emitters
 
 ```swift
@@ -491,7 +508,7 @@ Emit using `Aether.shared.track()` with `campaignId`, `ruleId`, and `rewardIdemp
 
 ## Agentic Observability Event Types
 
-47 new event types support passive observation of external agentic activity. All are registered in the SDK's `eventConsentPurpose` map and flow through `POST /v1/batch` like any other event.
+47 event types are present in SDK-facing type or wrapper surfaces for passive observation of external agentic activity. Consent-map registration controls consent handling, not public ingestion eligibility; only the seven agent events listed under the lifecycle emitters are currently marked `sdkEmitable` in the canonical event registry. The source registry's acceptance boundary and trust classes govern `POST /v1/batch`; wrapper exposure alone does not.
 
 **Consent purpose:** `"agent"` for agentic observation events and `"commerce"` for x402 protocol observation events, with five exceptions: the Robinhood-style trading-state observations `agent_trade_order_observed`, `agent_trade_fill_observed`, `agent_position_observed`, `agent_portfolio_snapshot_observed`, and `agent_performance_snapshot_observed` are consent-gated on the explicit opt-in purpose `financial_activity` (grant it via `grantConsent(categories: ["financial_activity"])`; it is never included in `grantAll()`).
 

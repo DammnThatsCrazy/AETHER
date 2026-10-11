@@ -31,19 +31,44 @@ from repositories.repos import (
 )
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger
+from value.x402.provenance import is_server_authoritative_x402_metadata
 
 logger = get_logger("aether.service.x402.lifecycle_mapper")
+
+_AUTHORITATIVE_INTENT_STATUS_ORDER = {
+    "intent_created": 10,
+    "pending": 10,
+    "quoted": 20,
+    "authorization_requested": 30,
+    "authorization_denied": 35,
+    "authorized": 40,
+    "submitted": 50,
+    "failed": 60,
+    "timeout": 60,
+    "settled": 70,
+    "access_denied": 80,
+    "access_granted": 80,
+    "reversed": 90,
+}
+_SERVER_ONLY_LIFECYCLE_EVENTS = frozenset({
+    "x402_payment_settled",
+    "x402_payment_failed",
+    "x402_payment_timeout",
+    "x402_receipt_verified",
+    "x402_access_granted",
+    "x402_access_denied",
+    "x402_refund_or_reversal",
+})
 
 
 class X402LifecycleMapper:
     """Routes x402 lifecycle events to repository operations.
 
     Designed to be called from an event consumer or route handler. All
-    mutations are tenant-scoped. Idempotency is enforced via ``event_id``
-    or ``payment_intent_id`` — if a record for the given ID already exists
-    the call is a no-op for insert paths (``record_intent`` / ``record_event``
-    are backed by ``insert`` which is idempotent on duplicate IDs in the
-    underlying store).
+    mutations are tenant-scoped. Repository record IDs make repeated writes
+    idempotent. Server-authoritative x402 facts are protected from later
+    public-SDK observations, while exact server events can promote earlier
+    SDK-only rows to server-observed provenance.
     """
 
     def __init__(
@@ -94,6 +119,15 @@ class X402LifecycleMapper:
         if handler is None:
             logger.warning(f"Unknown x402 event type: {event_type!r}")
             return {"status": "ignored", "event_type": event_type}
+        if (
+            event_type in _SERVER_ONLY_LIFECYCLE_EVENTS
+            and not is_server_authoritative_x402_metadata(payload.get("metadata"))
+        ):
+            return {
+                "status": "deferred",
+                "reason": "source_authority_required",
+                "event_type": event_type,
+            }
 
         try:
             result = await handler(payload, tenant_id)
@@ -134,6 +168,22 @@ class X402LifecycleMapper:
         self, payload: dict[str, Any], tenant_id: str
     ) -> dict[str, Any]:
         intent_id = _require_intent_id(payload)
+        existing = await self._payment_intents.find_for_tenant(intent_id, tenant_id)
+        if (
+            existing
+            and is_server_authoritative_x402_metadata(existing.get("metadata"))
+            and not is_server_authoritative_x402_metadata(payload.get("metadata"))
+        ):
+            return {"status": "existing_authoritative", "intent_id": intent_id, "record": existing}
+        if is_server_authoritative_x402_metadata(payload.get("metadata")):
+            record = await self._record_authoritative_intent(
+                payload, tenant_id, intent_id, settlement_status="pending",
+            )
+            return {
+                "status": "updated" if existing else "created",
+                "intent_id": intent_id,
+                "record": record,
+            }
         record = await self._payment_intents.record_intent(
             intent_id=intent_id,
             tenant_id=tenant_id,
@@ -159,6 +209,11 @@ class X402LifecycleMapper:
         # Attempt to update existing intent; if not found, create it
         existing = await self._payment_intents.find_for_tenant(intent_id, tenant_id)
         if existing:
+            if (
+                is_server_authoritative_x402_metadata(existing.get("metadata"))
+                and not is_server_authoritative_x402_metadata(payload.get("metadata"))
+            ):
+                return {"status": "observation_only", "intent_id": intent_id, "record": existing}
             record = await self._payment_intents.update_status(
                 intent_id=intent_id,
                 tenant_id=tenant_id,
@@ -187,6 +242,11 @@ class X402LifecycleMapper:
         intent_id = _require_intent_id(payload)
         existing = await self._payment_intents.find_for_tenant(intent_id, tenant_id)
         if existing:
+            if (
+                is_server_authoritative_x402_metadata(existing.get("metadata"))
+                and not is_server_authoritative_x402_metadata(payload.get("metadata"))
+            ):
+                return {"status": "observation_only", "intent_id": intent_id, "record": existing}
             record = await self._payment_intents.update_status(
                 intent_id=intent_id, tenant_id=tenant_id, status="authorization_requested"
             )
@@ -257,9 +317,15 @@ class X402LifecycleMapper:
     ) -> dict[str, Any]:
         event_id = _require_settlement_event_id(payload)
         intent_id = _require_intent_id(payload)
+        payload_is_authoritative = is_server_authoritative_x402_metadata(payload.get("metadata"))
         intent = await self._payment_intents.find_for_tenant(intent_id, tenant_id)
         authorization_id = str(payload.get("authorization_id") or "")
-        if intent is not None and authorization_id:
+        if (
+            intent is not None
+            and authorization_id
+            and not payload_is_authoritative
+            and not is_server_authoritative_x402_metadata(intent.get("metadata"))
+        ):
             # A public observation may repeat an authorization identifier, but
             # only the tenant-scoped x402 source record whose challenge exactly
             # matches this intent is retained as an authoritative link.
@@ -275,6 +341,22 @@ class X402LifecycleMapper:
                     status="submitted",
                     authorization_id=authorization_id,
                 )
+        if payload_is_authoritative:
+            await self._record_authoritative_intent(
+                payload, tenant_id, intent_id, settlement_status="submitted",
+            )
+        existing_settlement = await self._settlements.find_by_id(event_id)
+        if (
+            existing_settlement
+            and existing_settlement.get("tenant_id") == tenant_id
+            and is_server_authoritative_x402_metadata(existing_settlement.get("metadata"))
+            and not payload_is_authoritative
+        ):
+            return {
+                "status": "observation_only",
+                "settlement_event_id": event_id,
+                "record": existing_settlement,
+            }
         record = await self._settlements.record_event(
             settlement_event_id=event_id,
             tenant_id=tenant_id,
@@ -311,13 +393,13 @@ class X402LifecycleMapper:
             metadata=payload.get("metadata"),
             occurred_at=payload.get("timestamp"),
         )
-        # Update intent status
-        intent_record = None
-        existing_intent = await self._payment_intents.find_for_tenant(intent_id, tenant_id)
-        if existing_intent:
-            intent_record = await self._payment_intents.update_status(
-                intent_id=intent_id, tenant_id=tenant_id, status="settled"
-            )
+        # The server settlement may arrive before an authoritative intent
+        # event, or after an SDK-only observation created the row. Rebuild the
+        # intent from this closed server event so correlation does not inherit
+        # caller-authored agent, amount, currency, or status fields.
+        intent_record = await self._record_authoritative_intent(
+            payload, tenant_id, intent_id, settlement_status="settled",
+        )
         return {
             "status": "settled",
             "settlement_event_id": event_id,
@@ -417,13 +499,18 @@ class X402LifecycleMapper:
             metadata=payload.get("metadata"),
             occurred_at=payload.get("timestamp"),
         )
-        intent_record = None
-        existing_intent = await self._payment_intents.find_for_tenant(intent_id, tenant_id)
-        if existing_intent:
-            intent_record = await self._payment_intents.update_status(
-                intent_id=intent_id, tenant_id=tenant_id, status=status,
-                metadata={"failure_reason": payload.get("failure_reason", "")},
+        if is_server_authoritative_x402_metadata(payload.get("metadata")):
+            intent_record = await self._record_authoritative_intent(
+                payload, tenant_id, intent_id, settlement_status=status,
             )
+        else:
+            intent_record = None
+            existing_intent = await self._payment_intents.find_for_tenant(intent_id, tenant_id)
+            if existing_intent:
+                intent_record = await self._payment_intents.update_status(
+                    intent_id=intent_id, tenant_id=tenant_id, status=status,
+                    metadata={"failure_reason": payload.get("failure_reason", "")},
+                )
         return {
             "status": status,
             "settlement_event_id": event_id,
@@ -431,6 +518,61 @@ class X402LifecycleMapper:
             "settlement_record": settlement_record,
             "intent_record": intent_record,
         }
+
+    async def _record_authoritative_intent(
+        self,
+        payload: dict[str, Any],
+        tenant_id: str,
+        intent_id: str,
+        *,
+        settlement_status: str,
+    ) -> Optional[dict[str, Any]]:
+        """Upsert an intent only from a closed server x402 lifecycle event.
+
+        When an SDK observation created the row first, none of its economic
+        fields are carried forward. Fields absent from a later server event
+        are preserved only from an already server-authoritative row.
+        """
+        if not is_server_authoritative_x402_metadata(payload.get("metadata")):
+            return None
+        existing = await self._payment_intents.find_for_tenant(intent_id, tenant_id)
+        trusted_existing = (
+            existing is not None
+            and is_server_authoritative_x402_metadata(existing.get("metadata"))
+        )
+        prior = existing if trusted_existing else {}
+        if trusted_existing:
+            previous_status = str(prior.get("settlement_status") or "").lower()
+            previous_order = _AUTHORITATIVE_INTENT_STATUS_ORDER.get(previous_status, -1)
+            incoming_order = _AUTHORITATIVE_INTENT_STATUS_ORDER.get(settlement_status, -1)
+            if previous_order > incoming_order:
+                settlement_status = previous_status
+        metadata = dict(prior.get("metadata") or {})
+        if isinstance(payload.get("metadata"), dict):
+            metadata.update(payload["metadata"])
+        return await self._payment_intents.record_intent(
+            intent_id=intent_id,
+            tenant_id=tenant_id,
+            agent_id=str(payload.get("agent_id") or prior.get("agent_id") or ""),
+            amount=str(payload.get("amount", prior.get("amount", "0"))),
+            currency=str(payload.get("currency", prior.get("currency", "USD"))),
+            provider=str(payload.get("provider", prior.get("provider", ""))),
+            protocol=str(payload.get("protocol", prior.get("protocol", ""))),
+            endpoint=str(payload.get("endpoint", prior.get("endpoint", ""))),
+            capability_requested=str(
+                payload.get("capability_requested", prior.get("capability_requested", ""))
+            ),
+            settlement_status=settlement_status,
+            retry_count=int(prior.get("retry_count") or 0),
+            resource_id=payload.get("resource_id", prior.get("resource_id")),
+            facilitator_id=payload.get("facilitator_id", prior.get("facilitator_id")),
+            quote_id=prior.get("quote_id"),
+            authorization_id=payload.get("authorization_id", prior.get("authorization_id")),
+            execution_id=payload.get("execution_id", prior.get("execution_id")),
+            abandoned_reason=prior.get("abandoned_reason"),
+            metadata=metadata,
+            occurred_at=prior.get("occurred_at") or payload.get("timestamp"),
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -1482,16 +1482,23 @@ class StablecoinIntelligenceConfig:
 
 @dataclass(frozen=True)
 class ExternalAgentTelemetryConfig:
-    """External Agent Telemetry Plane V1 rollout flags (default OFF).
+    """External agent observations (default OFF; no hosting or execution).
 
-    Aether observes telemetry from tenant-owned agents deployed on external
-    surfaces. No marketplace, no agent hosting, no execution.
+    Tenant execution telemetry and a separate public marketplace catalog
+    observer are opt-in. Catalog observations store source labels and URLs only;
+    they do not collect bot configuration or grant execution authority.
     """
     enabled: bool = _env_bool("AETHER_EXTERNAL_AGENT_TELEMETRY_ENABLED", False)
     kyber_enabled: bool = _env_bool("KYBER_EXTERNAL_AGENT_TELEMETRY_ENABLED", False)
     registry_enabled: bool = _env_bool("AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED", False)
     graph_enabled: bool = _env_bool("AETHER_AGENT_DEPLOYMENT_GRAPH_ENABLED", False)
     profile360_enabled: bool = _env_bool("AETHER_AGENT_DEPLOYMENT_PROFILE360_ENABLED", False)
+    marketplace_catalog_enabled: bool = _env_bool(
+        "AETHER_AGENT_MARKETPLACE_CATALOG_ENABLED", False
+    )
+    catalog_poll_interval_seconds: int = max(
+        900, _env_int("AETHER_AGENT_MARKETPLACE_CATALOG_POLL_SECONDS", 21_600)
+    )
 
 
 @dataclass(frozen=True)

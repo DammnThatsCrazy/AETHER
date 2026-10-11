@@ -13,7 +13,7 @@ estimated_read_minutes: 4
 # Incident Response Tabletop
 
 A rehearsal framework for security/operational incidents, complementing the SRE
-[Incident Response](INCIDENT-RESPONSE.md) and [SRE Runbooks](SRE-RUNBOOKS.md).
+[Incident Response](incident-response.md) and [SRE Runbooks](SRE-RUNBOOKS.md).
 
 ## Roles
 

@@ -6,7 +6,7 @@ visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/sdk/react-native/src/bridge.ts, packages/sdk/react-native/src/index.tsx, packages/shared/events.ts, packages/shared/consent.ts]
+source_files: [packages/sdk/react-native/src/bridge.ts, packages/sdk/react-native/src/index.tsx, packages/shared/events.ts, packages/shared/contracts/event-registry.json, packages/shared/consent.ts]
 canonical_owner: sdk@aether
 estimated_read_minutes: 9
 toc_depth: 3
@@ -14,7 +14,8 @@ source_hashes:
   "packages/sdk/react-native/src/bridge.ts": "sha256:790445142865418604fbda5b12d7524c3a6df40c8be9065ad3b308b811b1efc9"
   "packages/sdk/react-native/src/index.tsx": "sha256:8861ddc797def68d8580f489007f78a65d6f3dd882b4538fdbeb99ddecb54fbe"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
-  "packages/shared/events.ts": "sha256:46bc12934b7c41c02f9304a77315bba2d3f71be253e7b30b1186208b40f8a59a"
+  "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
+  "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
 ---
 
 # Aether React Native SDK v0.1.0-alpha.0 — Integration Guide
@@ -481,6 +482,31 @@ Aether.agent.handoff(fromId, toId, properties?);
 Aether.agent.escalatedToHuman(taskId, reason?, properties?);
 Aether.agent.outcomeRecorded(taskId, outcome, properties?);
 ```
+
+These methods describe the React Native wrapper surface, not the public
+ingestion allowlist. The canonical event registry currently marks seven agent
+events `sdkEmitable`: `agent_task_started`, `agent_task_completed`,
+`agent_task_failed`, `agent_delegated_task`, `agent_policy_evaluated`,
+`agent_outcome_recorded`, and `agent_tool_invocation_observed`. Wrapper/type or
+consent-map exposure alone does not make another event eligible for public
+`/v1/batch` ingestion.
+
+Agent event properties remain source-asserted. `context.agentDeployment`,
+`paymentIntentId`, `settlementEventId`, `delegationId`, `delegatedToAgentId`,
+and `delegatedToNamespace` are source references that the backend resolves
+against tenant-owned records. Canonical party identity requires an explicit
+tenant-admin binding. Delegation targets use the source-declared
+`delegatedToNamespace`; missing or invalid namespace remains unresolved and
+does not fall back to the actor namespace. A canonical event-time grant-scope
+result is not proof that the external action occurred; without a server-owned
+execution receipt, occurrence remains source-reported and unverified.
+
+Payment, settlement, and delegation IDs are caller-reported source references.
+Backend resolution requires exact tenant-scoped records; economic values come
+from server-authoritative x402 records. A raw delegation reference alone does
+not establish canonical party identity or authorization. The separate backend
+binding and event-time grant evaluation described above make those decisions
+from tenant-owned records.
 
 ## x402 Lifecycle Emitters (15 methods)
 

@@ -58,6 +58,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict
+from shared.temporal.instant import coerce_utc_lenient
 
 from intelligence.model_runtime.config import ModelRuntimeSettings
 from intelligence.model_runtime.providers import build_providers, credential_reason
@@ -551,12 +552,9 @@ async def _build_usage() -> UsageResponseOut:
     for event in events:
         if event.get("event_type") != "model_runtime_token_usage":
             continue
-        try:
-            occurred = datetime.fromisoformat(str(event.get("occurred_at", "")).replace("Z", "+00:00"))
-        except ValueError:
+        occurred = coerce_utc_lenient(event.get("occurred_at"))
+        if occurred is None:
             continue
-        if occurred.tzinfo is None:
-            occurred = occurred.replace(tzinfo=timezone.utc)
         if not start <= occurred <= now:
             continue
         metadata = event.get("metadata") or {}

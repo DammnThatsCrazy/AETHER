@@ -18,6 +18,7 @@ from typing import Any, Optional
 
 from repositories.repos import get_pool
 from shared.common.common import utc_now
+from shared.temporal.instant import coerce_utc_lenient
 
 SDK_IDENTIFY_PENDING_STALE_AFTER = timedelta(minutes=15)
 
@@ -109,9 +110,9 @@ class SDKIdentifyIdempotencyRepository:
             if isinstance(response, str):
                 response = json.loads(response)
             return {"status": "replay", "response": response}
-        updated_at = row["updated_at"]
-        if updated_at.tzinfo is None:
-            updated_at = updated_at.replace(tzinfo=timezone.utc)
+        updated_at = coerce_utc_lenient(row.get("updated_at"))
+        if updated_at is None:
+            return {"status": "stale"}
         if (datetime.now(timezone.utc) - updated_at) >= SDK_IDENTIFY_PENDING_STALE_AFTER:
             return {"status": "stale"}
         return {"status": "in_progress"}

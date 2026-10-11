@@ -7,14 +7,15 @@ audience: [dev-senior, architect, ops]
 status: experimental
 since_version: 0.1.0
 canonical_owner: sdk@aether
-source_files: [packages/shared/events.ts, packages/shared/consent.ts, packages/shared/sdk-version.ts, packages/sdk/web/src/index.ts, packages/sdk/web/src/core/event-queue.ts, packages/sdk/web/src/health/sdk-health-agent.ts, docs/reference/source-of-truth/PLATFORM_PARITY.md]
+source_files: [packages/shared/events.ts, packages/shared/consent.ts, packages/shared/contracts/event-registry.json, packages/shared/sdk-version.ts, packages/sdk/web/src/index.ts, packages/sdk/web/src/core/event-queue.ts, packages/sdk/web/src/health/sdk-health-agent.ts, docs/reference/source-of-truth/PLATFORM_PARITY.md]
 source_hashes:
   "docs/reference/source-of-truth/PLATFORM_PARITY.md": "sha256:abb0660e91963d129b1f5d4a5b472c24bfb55001cd336952b709fdf9dbf13771"
   "packages/sdk/web/src/core/event-queue.ts": "sha256:839b25762ec01f03c4f5faa12c73fbfd31d41551dde584fa32c46b7305c6c8c1"
   "packages/sdk/web/src/health/sdk-health-agent.ts": "sha256:3cca664a5ca1b53a50bed15af670685bdc22840451a95d330dda572345348c20"
   "packages/sdk/web/src/index.ts": "sha256:a538f52844c44b9dc654e97b4ffb54a25a4609d8ae70540c021092ff099d13f0"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
-  "packages/shared/events.ts": "sha256:46bc12934b7c41c02f9304a77315bba2d3f71be253e7b30b1186208b40f8a59a"
+  "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
+  "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "packages/shared/sdk-version.ts": "sha256:3301384a8b98d5ecf06981a00d56439479fc72b218e07b5ebc061cd52d7b98b8"
 ---
 
@@ -326,7 +327,7 @@ All Tier B items are now fully implemented across the applicable platforms.
 - iOS: `AetherQueue.swift` updated to write queue to `Documents/aether_queue.json`
 - Android: `AetherQueue.kt` updated to write queue to internal files directory
 
-### 4.2 Granular Agent Lifecycle Emitters (19 methods)
+### 4.2 Granular Agent Lifecycle Type and Wrapper Surface (19 types)
 
 All 19 granular agent lifecycle event types (see `EventType` union in `packages/shared/events.ts`) are now exposed on iOS, Android, and React Native bridges in addition to the existing Web SDK namespace.
 
@@ -334,6 +335,19 @@ Event types: `agent_registered`, `agent_updated`, `agent_authorized`, `agent_dea
 
 **Evidence test:**
 - `packages/shared/events-registry.test.ts`: verifies all 19 agent types exist and are agent-family
+
+**Acceptance boundary clarification:** this audit's 19-method count describes
+wrapper/type exposure across platforms. It is not the backend's current public
+SDK event allowlist. The canonical event registry marks only
+`agent_task_started`, `agent_task_completed`, `agent_task_failed`,
+`agent_delegated_task`, `agent_policy_evaluated`, `agent_outcome_recorded`, and
+`agent_tool_invocation_observed` as `sdkEmitable`. Their event properties are
+source-asserted, while identifiers such as `context.agentDeployment`, payment,
+settlement, delegation, `delegatedToAgentId`, and `delegatedToNamespace` remain
+source references. Delegated-target resolution requires the explicit source
+namespace; missing or invalid namespace remains unresolved instead of
+inheriting the actor's namespace. Consent-map presence and wrapper tests do not
+imply acceptance or verification of other event types.
 
 ### 4.3 Granular x402 Lifecycle Emitters (14 methods)
 

@@ -7,7 +7,7 @@ audience: [buyer, ops, architect, security, compliance]
 status: stable
 since_version: "0.1.0"
 source_files: [services/api/governance/security/policy_engine.py, services/api/governance/security/access_control.py, services/api/governance/governance/routes.py, services/api/governance/reliability/service.py]
-related: [compliance, reliability/operations, reliability/incident-response]
+related: [compliance, reliability/operations, ops-incident-response]
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 source_hashes:

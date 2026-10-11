@@ -82,6 +82,16 @@ const GRAPH_STYLE: StylesheetJson = [
   { selector: 'node.contract', style: { 'background-color': '#06b6d4', 'shape': 'triangle' } },
   { selector: 'node.protocol', style: { 'background-color': '#8b5cf6', 'shape': 'hexagon' } },
   { selector: 'node.bot', style: { 'background-color': '#ef4444', 'shape': 'cut-rectangle' } },
+  // Agent-economy evidence records remain visually distinct from canonical
+  // Agent identities and from one another when inspected in the graph.
+  { selector: 'node.AgentMarketplaceListing', style: { 'background-color': '#38bdf8', 'shape': 'hexagon' } },
+  { selector: 'node.AgentTemplate', style: { 'background-color': '#a78bfa', 'shape': 'triangle' } },
+  { selector: 'node.ExternalAgenticAccount', style: { 'background-color': '#f59e0b', 'shape': 'round-rectangle' } },
+  { selector: 'node.AgentExecutionRun', style: { 'background-color': '#06b6d4', 'shape': 'round-rectangle' } },
+  { selector: 'node.Task', style: { 'background-color': '#84cc16', 'shape': 'hexagon' } },
+  { selector: 'node.ActionRecord', style: { 'background-color': '#f97316', 'shape': 'diamond' } },
+  { selector: 'node.DecisionRecord', style: { 'background-color': '#eab308', 'shape': 'octagon' } },
+  { selector: 'node.OutcomeObservation', style: { 'background-color': '#22c55e', 'shape': 'star' } },
   { selector: 'node.unknown', style: { 'background-color': '#64748b', 'shape': 'ellipse' } },
   { selector: 'node.highlighted', style: { 'border-width': 3, 'border-color': '#4a6cf7' } },
   { selector: 'node.path', style: { 'border-width': 3, 'border-color': '#a855f7' } },

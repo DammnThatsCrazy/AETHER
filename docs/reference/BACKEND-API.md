@@ -6,7 +6,7 @@ visibility: P
 audience: [dev-junior, dev-senior, architect]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/tenancy/, services/api/ingestion/, services/api/identity/, services/api/graph/, services/api/journeys/, services/api/intelligence/, services/api/value/, services/api/actions/, services/api/governance/, services/api/workers/, services/api/connectors/, services/api/replay/, services/api/billing/]
+source_files: [services/api/tenancy/, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/ingestion/, services/api/identity/, services/api/graph/, services/api/journeys/, services/api/intelligence/, services/api/value/, services/api/actions/, services/api/governance/, services/api/workers/, services/api/connectors/, services/api/replay/, services/api/billing/]
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
@@ -22,19 +22,20 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/api/actions/": "sha256:cc762b94faad369af1d66f4f3e3ca0728a99860f2d5133a2522ecdcff2413a65"
+  "services/api/actions/": "sha256:f5e9afb088d3a8f9e93bdd981db2b6dd1fc522c67d22d37b72d20d1b720791cb"
+  "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:dd694b14e890adec41191a54a035ad863d9c14a2183ba5e9888c64c018658e77"
   "services/api/connectors/": "sha256:01f3d11694ce153f102de85133e514fe4548877376c05668c2ee6fe63e1ad633"
   "services/api/governance/": "sha256:4979f1d68790c9673561b70d97ad0710960603cc7228fd429539160d64db4f1d"
   "services/api/graph/": "sha256:7372bf88ff18200edd21b53649b25098a9b1e1ec474a79ee36cd28a480093706"
-  "services/api/identity/": "sha256:e983d0dc2e0dae26c6254cdc8bcff4fff0cb2a8d4e418eefdbbb37bd8103e253"
-  "services/api/ingestion/": "sha256:cced019a9d58c2b5da76ba38436b3d9b945ba9baefdeaf1676fd521977885d5f"
-  "services/api/intelligence/": "sha256:6f97e244ba5d4ab36c14ce27c6a207ba4e428b61173821f33d0e387411a7c737"
+  "services/api/identity/": "sha256:3899aca8a5fe95b1f975945913ebbd0cef920109649676c9b48b49fd6fcd2a1f"
+  "services/api/ingestion/": "sha256:d0e00051fe3b5cde2ed9a3d4c1bcea3237e5a2628db64194b78e803b1fa227b0"
+  "services/api/intelligence/": "sha256:50d2fba35ca8b62431283aa909ae746d789f59dcf201dfb15ad297fd522f1a13"
   "services/api/journeys/": "sha256:5d7336fa8f43bb5107a9314f09a08c16132ba1c1cf1f57762344f55a1192608a"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b3e28efab538d22bad132a158a150d7ac9872d05a14ce3bf858637dc58e18289"
-  "services/api/value/": "sha256:f152a470584719e80d5d398c8e166cf34754b85c4aaae12803a1e3630bfffbc8"
-  "services/api/workers/": "sha256:483bc638eae1311f235c3eae1407f868ab392de4d3788799cbda70c1e477a321"
+  "services/api/value/": "sha256:b90c235210f77460e626c395c3011149dd7cbd4d5da0f58e797abfe7e9d24328"
+  "services/api/workers/": "sha256:2ba7219cc4a6bb8a77040d5871b16f764631ca87da8f36de0ba2140b59a015e6"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -3027,6 +3028,30 @@ Tenant-managed outbound webhook delivery endpoints. Aether signs each delivery w
 - `notifications:channels:write` — channel registration/removal
 
 ---
+
+## Agent Deployment Evidence and Projection Recovery
+
+Tenant routes require `agent:manage` and always use the authenticated tenant:
+
+- `GET /v1/agent/deployments/marketplace/catalog` — returns bounded public listing labels, URLs, observation status, and graph projection status. The default-off observer does not return bot configuration.
+- `GET /v1/agent/deployments/{deployment_id}/runs` — lists bounded run references from that tenant's deployment-filtered Silver facts.
+- `GET /v1/agent/deployments/{deployment_id}/runs/{run_id}/explanation` — returns the observed task, trigger, policy, delegation, tool, and outcome evidence for one deployment-scoped run. Evidence is labelled source-asserted and includes coverage gaps; the route does not claim hidden reasoning or independently verified authority.
+- `POST /v1/agent/deployments` — accepts optional tenant-declared `marketplace_origin` provenance. When graph projection is enabled, writes are queued for asynchronous projection.
+- `PUT /v1/agent/deployments/{deployment_id}/identity-binding` — tenant admin explicitly binds the deployment's source namespace and agent reference to an existing canonical Agent owned by the same tenant. This binding is not automatic identity merge evidence.
+- `GET /v1/agent/deployments/{deployment_id}/identity-binding` — returns the binding status (`matched`, `unresolved`, `ambiguous`, or `unavailable`) and provenance without crossing tenant boundaries.
+
+If the Silver query for a run explanation fails, the response sets
+`source_status=unavailable` and omits `coverage`; clients must not interpret
+that response as evidence that coverage was absent.
+
+Kyber operator routes require admin permission and an explicit tenant scope for reconciliation and repair:
+
+- `POST /v1/admin/kyber/agent-telemetry/graph-projection/drain?tenant_id=...&limit=100` — drains a bounded outbox batch.
+- `GET /v1/admin/kyber/agent-telemetry/graph-projection/reconcile?tenant_id=...` — reports source-to-outbox coverage, pending and dead-lettered rows; it does not inspect graph state. The source cursor pages platform catalog observations or tenant deployment/Silver facts; the outbox cursor pages tenant queue status. The response returns `source_next_cursor` and `outbox_next_cursor`; an empty page may still return a cursor. Missing mutations are checked by direct outbox key lookup. `scan_consistency=best_effort_non_snapshot` means cursor exhaustion is not a consistent snapshot guarantee; restart from page one after concurrent writes settle when full coverage is required.
+- `POST /v1/admin/kyber/agent-telemetry/graph-projection/repair?tenant_id=...` — re-enqueues missing source mutations and requeues dead letters. Pass the returned `source_next_cursor` as `cursor` and `outbox_next_cursor` as `outbox_cursor` to continue each scan. `replay_persisted=true` explicitly replays persisted queue rows.
+- `GET /v1/admin/kyber/agent-telemetry/graph-projection/state-check?tenant_id=...&limit=...` — bounded read-only check of known tenant deployment, Silver, delegation, and economic references against supported graph vertices/edges. Reports `consistent`, `inconsistent`, or `partial`, with missing/extra/mismatched/unresolved/unauthorized findings and truncation/coverage. It is `best_effort_non_snapshot`, does not mutate or drain the outbox, and does not certify all graph contents.
+
+Run-explanation evidence separates `delegation_resolution` (canonical record/party binding), `delegation_authorization` (event-time scope result), and `execution_occurrence`. Canonical grant data may support `within_scope`, `out_of_scope`, or `indeterminate`; action, resource, and event time are source-asserted. Target party binding uses source `delegatedToNamespace` (`delegated_to_namespace` in Silver); missing/invalid namespace remains unresolved and does not fall back to the actor namespace. Without a server-owned external execution receipt, occurrence remains `source_reported` and `verified=false`. A grant match is not proof the reported action occurred.
 
 ## Agentic Observability Layer
 

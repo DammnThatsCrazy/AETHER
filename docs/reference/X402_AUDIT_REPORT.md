@@ -8,11 +8,27 @@ status: stable
 since_version: "0.1.0"
 source_files:
   - services/api/value/x402/
+  - services/api/actions/agent/deployment_routes.py
+  - services/api/actions/agent_marketplace/authority.py
+  - services/api/actions/agent_marketplace/identity_binding.py
+  - services/api/actions/agent_marketplace/graph_state_check.py
+  - services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py
+  - services/api/alembic/versions/20261011_agent_delegated_to_namespace.py
+  - services/api/ingestion/ingestion/lifecycle_worker.py
+  - services/api/repositories/repos.py
 canonical_owner: security@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "services/api/value/x402/": "sha256:69071092cc6527dca201b9ff15cb9a5308bf8d56ab18286c82e51ca1aa40b522"
+  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
+  "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
+  "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
+  "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
+  "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
+  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
+  "services/api/repositories/repos.py": "sha256:18ffc6df66bfc4484aaab821c791fda4579382634a23066ddbe5276d4408ec04"
+  "services/api/value/x402/": "sha256:5d041fbb1a1fb7494c5a547b4aac97804e0dcf478261170546663918a509377f"
 ---
 # x402 Protocol Support Audit — Aether Repository
 
@@ -278,6 +294,36 @@ Aether's x402 support is now **full-stack**: challenge-side (returning HTTP 402 
 | `services/api/graph/rwa/models.py` | RWA policy enforcement (adjacent) |
 
 ---
+
+## Scoped update — external-agent economic correlation (2026-10-11)
+
+External-agent run events may report payment-intent and settlement-event IDs
+as source references. They resolve only when an exact same-tenant record has
+server-owned x402 provenance and its agent reference matches the tenant's
+deployment registry reference. Public SDK x402 observations remain
+observations; they do not establish or overwrite canonical payment state. The
+run graph links use amount, currency and lifecycle state from the authoritative
+record. They do not verify that the external action occurred as reported,
+establish causality, or prove settlement finality. Same-ID lifecycle writes
+cannot overwrite another tenant's record, and a delayed lower-state event
+cannot roll back a later settlement. See the Agent Marketplace Lineage
+source-of-truth page for the implementation boundaries.
+
+The run authority path separately resolves delegation references to exact
+tenant-owned records. External deployment and delegated-target identities
+require explicit tenant-admin bindings scoped by source namespace; target
+resolution uses the source-declared `delegatedToNamespace` and does not infer
+the actor's namespace. Backend-owned delegation parties, scope, status, and
+effective/revoked times are compared with the source-reported action,
+resource, event time, and (when available) authoritative economic amount. The
+result is `within_scope`, `out_of_scope`, or `indeterminate`; this evaluates a
+grant, not whether the external action occurred. Without a server-owned
+execution receipt, occurrence remains `source_reported` and unverified.
+
+The separate Kyber graph-state check is bounded and read-only. It compares
+supported tenant source references with graph links and reports coverage and
+findings on a best-effort, non-snapshot basis; it does not mutate graph state,
+drain the projection outbox, or certify the complete tenant graph.
 
 ## 5. Conclusion
 
