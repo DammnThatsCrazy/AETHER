@@ -8,22 +8,25 @@ status: experimental
 since_version: 0.1.0
 source_files: [services/api/value/x402/, services/api/actions/agent/, services/api/actions/agent_marketplace/, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/value/commerce/order_payment_reconciliation.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/shared/store.py, services/api/workers/runtime/specs.py, packages/sdk/server/src/agent-telemetry.ts, packages/shared/events.ts, packages/shared/contracts/event-registry.json, packages/shared/agentic-observability.ts]
 source_hashes:
-  "packages/sdk/server/src/agent-telemetry.ts": "sha256:55f13fdd3cb7e31ce798496d35cffb3c26620e88699dc67ec7eac414b64b593a"
+  "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
-  "packages/shared/events.ts": "sha256:fef893ad42c100bc3fb8ee5762e23f56bcdfacb3229b9f8de9760ef830331c41"
-  "services/api/actions/agent/": "sha256:db5330122ad01bed96925b6b090dcf78de680d9dec15ac37c6e3aa720e73d846"
-  "services/api/actions/agent_marketplace/": "sha256:4fbb08692823b710cda2591a4b0c7d97a2f7c24c1a6dc3f2072059982b3b67b3"
+  "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
+  "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
+  "services/api/actions/agent/": "sha256:9611953b1fad6b68720c08a4eb19f2349398c5d0a33aeb266edf840afca90ca0"
+  "services/api/actions/agent_marketplace/": "sha256:a7489675c5f6b8aeeb78724946428e67028ad95f191eb2861bbccc1b0961979c"
+  "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
+  "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:ac5c38e755dd2720a76fcca31bf7877d7e2e5d2e5ea19c3a37bc5344e495ecc4"
   "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:b6617b0dd888b02ede69696d3d4e46906120c5f0fca4bb4f5393145218d6200c"
   "services/api/identity/profile/agent.py": "sha256:ef4434e8cf518e4a04073a6e3356be9119708e156ecdab018692ed4a6350853a"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
-  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:b1b18e74155a06cc4c68a535ae13c1e3997e84ddd8c5702c52905b06106bbee4"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
   "services/api/shared/store.py": "sha256:ff4198cf285ac4c250481ef0ae476037c26b1f4d1fa00751964638ff1f91fa8c"
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:84b3f00bfa6e0c1b4df5405636163a2650edf8651b3b36823a7f2ba26ca7b77e"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
   "services/api/value/economic/operation_linkage.py": "sha256:29544d6511463065fed4bba6acb212b9a1c57bb12800733bf6de00a56cf046fa"
-  "services/api/value/x402/": "sha256:9c5d531c3e37c8e4e8586d109160af739d5022df90fb9a7f9b821cc6af6c719a"
+  "services/api/value/x402/": "sha256:5d041fbb1a1fb7494c5a547b4aac97804e0dcf478261170546663918a509377f"
   "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
 

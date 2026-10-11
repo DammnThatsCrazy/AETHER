@@ -14,9 +14,13 @@ source_files:
   - services/api/actions/agent_marketplace/lineage.py
   - services/api/actions/agent_marketplace/projection.py
   - services/api/actions/agent_marketplace/authority.py
+  - services/api/actions/agent_marketplace/identity_binding.py
+  - services/api/actions/agent_marketplace/graph_state_check.py
   - services/api/ingestion/ingestion/lifecycle_worker.py
   - services/api/ingestion/silver/projectors/agent_execution_projector.py
   - services/api/ingestion/silver/projectors/silver_graph_projector.py
+  - services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py
+  - services/api/alembic/versions/20261011_agent_delegated_to_namespace.py
   - services/api/repositories/repos.py
   - services/api/value/x402/provenance.py
   - services/api/workers/profile360_workers/workers.py
@@ -29,19 +33,23 @@ estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "infra/legacy-staging/bootstrap.sh": "sha256:33e18270618ab4ff6af6836c173d2b116fdcf700230cf040cae5ab06cd4b1e3a"
-  "services/api/actions/agent/deployment_routes.py": "sha256:bd4f6345b5e9a5f5a7650489a691e67e09ec50e9a6e6e4a3906cdaab0c0dae22"
-  "services/api/actions/agent_marketplace/authority.py": "sha256:9240dcffbde1284fc670518df56d781e70a96848a6d72809d73b773e0349ca4c"
+  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:696f7db917fe642c7d39195660d9956eeea4971f4e135eb1fc5826807f7ac506"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
+  "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
+  "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/actions/agent_marketplace/lineage.py": "sha256:bfe247f42c3360f30b3f4fa92b1f39e95f654be0862303d6f74b9fb2363e6566"
-  "services/api/actions/agent_marketplace/projection.py": "sha256:8ce9d1725efab4d11afea2c74711eddac2a2d7f46721344445c6edf6eb81f4c9"
+  "services/api/actions/agent_marketplace/projection.py": "sha256:5354b080f686377d2b74124bb6b56b8522cb2cb51ea5e5a7164ffdf81fc89e2d"
+  "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
+  "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/config/settings.py": "sha256:4d507b4ac3cab63aec2df92c69bcb20c42d6c6f9fb54441e06353ccd34619246"
   "services/api/connectors/provider_runtime/": "sha256:5769171596f5a3c50af0a39ed9ec1b6fcddd4f67ee352d05d85ddc708cd84302"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
-  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:b1b18e74155a06cc4c68a535ae13c1e3997e84ddd8c5702c52905b06106bbee4"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
   "services/api/main.py": "sha256:91c7168bf4a5d88cf019ac753bfa0d9c35cec9308cb0191f3ba1bada5418c6b1"
   "services/api/repositories/repos.py": "sha256:9d45ac53e8e307d497da4e28d552ca6ef909c0b278dfe32ec825281aab6ec58e"
-  "services/api/value/x402/provenance.py": "sha256:442c16e4e3d0c656610f68ee068f6fd816bed8f32674fe4ba681bd0541595e94"
+  "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
   "services/api/workers/profile360_workers/workers.py": "sha256:2e2074a22e3091514b0340b8cf68d7e37ee8150a23e89f8cb115c18c9f02a04a"
   "services/api/workers/runtime/roles.py": "sha256:24f2e24879828f8f340e91086f57c0e99940e9db96791edc6a1d24d590ba26b1"
   "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
@@ -615,6 +623,41 @@ x402 repositories. Follow the source and outbox cursors until each scan is
 complete. A successful repair confirms that expected mutations reached the
 outbox; it does not confirm the graph contains them, prove a referenced
 delegation authorized the action, or establish economic causality.
+
+### Independent graph-state check
+
+After outbox reconciliation or repair, compare canonical tenant evidence with
+the persisted graph using the separate read-only check:
+
+```http
+GET /v1/admin/kyber/agent-telemetry/graph-projection/state-check?tenant_id=<tenant>&limit=5000
+```
+
+The caller must pass the Kyber `admin` gate and the Kyber external-agent
+telemetry route must be enabled. The check reads tenant-scoped execution facts,
+deployment identity bindings, canonical delegation and economic records, and
+persisted graph edges/endpoints. It does not consult the outbox, enqueue work,
+or mutate graph state. Review the `missing`, `extra`, `mismatched`,
+`unresolved`, and `unauthorized` finding groups and the corresponding scan
+coverage fields.
+
+Treat `consistent` as evidence only when coverage is `complete`; the scan is a
+best-effort comparison across non-snapshot stores. A bounded, truncated, or
+unavailable source/graph scan is `partial`, and cannot establish that all
+links are present. The route accepts a limit from 1 to 5,000; raising the
+limit increases scan work but does not remove the checker's backend bounds.
+Use `reconcile` to diagnose source-to-outbox coverage and `repair` only when
+that report identifies mutations to recover. The state check is read-only and
+does not replace a deliberate repair followed by another independent check.
+
+For delegated-run findings, the resolver compares tenant-bound canonical
+Agents and the canonical delegation grant at the source-reported event time,
+using the reported action/resource and authoritative economic amount when the
+grant has an amount limit. An `within_scope` result means the claim fits the
+recorded grant; execution occurrence remains `source_reported` and
+unverified unless a server-authoritative external execution receipt exists.
+Economic links are checked against tenant-owned canonical payment and
+settlement records, not against SDK-provided payment status.
 
 ---
 

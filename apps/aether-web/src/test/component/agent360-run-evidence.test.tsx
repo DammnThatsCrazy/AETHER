@@ -175,6 +175,64 @@ describe('Agent 360 external run evidence', () => {
     expect(screen.queryByText('Policy evaluation: not observed')).not.toBeInTheDocument();
   });
 
+  it('shows canonical grant evaluation separately from unverified execution occurrence', async () => {
+    server.use(
+      http.get(`${API}/v1/agent/deployments/deployment-demo/runs/run-delegated-demo/explanation`, () =>
+        HttpResponse.json(envelope({
+          tenant_id: tenantId,
+          deployment_id: 'deployment-demo',
+          run_id: 'run-delegated-demo',
+          source_status: 'available',
+          evidence: [{
+            source_event_id: 'event-delegated',
+            event_type: 'agent_delegated_task',
+            occurred_at: '2026-10-10T11:30:00Z',
+            evidence_authority: 'tenant_source_asserted',
+            delegation_ref: 'grant-42',
+            delegated_to_ref: 'worker-2',
+            delegation_resolution: {
+              status: 'matched_reference',
+              party_identity_status: 'matched',
+              source_authority: 'delegations',
+            },
+            delegation_authorization: {
+              status: 'within_scope',
+              reason: 'canonical_delegation_scope_matches',
+              grant_scope_authority: 'delegations',
+              binding_authority: 'tenant_admin_explicit',
+              time_state: 'active',
+              actor_entity_id: 'agent-parent',
+              target_entity_id: 'agent-worker',
+              action_type: 'support.respond',
+              resource_ref: 'ticket:123',
+              event_time: '2026-10-10T11:30:00+00:00',
+            },
+            execution_occurrence: {
+              status: 'source_reported',
+              verified: false,
+              reason: 'no_server_authoritative_external_execution_receipt',
+            },
+          }],
+          coverage: {
+            trigger_evidence: 'not_observed',
+            policy_evaluation: 'not_observed',
+            delegation: 'observed',
+            outcome: 'not_observed',
+          },
+        })),
+      ),
+    );
+    renderPanel();
+
+    fireEvent.change(await screen.findByLabelText('Source run reference'), { target: { value: 'run-delegated-demo' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Load run evidence' }));
+
+    expect(await screen.findByRole('region', { name: 'Delegation authorization evaluation' })).toHaveTextContent('Within recorded grant scope');
+    expect(screen.getByText('support.respond')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Execution occurrence evidence' })).toHaveTextContent('Source reported · unverified');
+    expect(screen.getByRole('region', { name: 'Execution occurrence evidence' })).toHaveTextContent('A grant-scope match does not prove that the action ran.');
+  });
+
   it('does not present a catalog outage as an empty public marketplace', async () => {
     server.use(
       http.get(`${API}/v1/agent/deployments/marketplace/catalog`, () =>

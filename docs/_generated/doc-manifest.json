@@ -3931,20 +3931,6 @@
       "canonical_owner": "platform@aether"
     },
     {
-      "path": "docs/operations/incident-response.md",
-      "title": "Incident Response",
-      "slug": "ops-incident-response",
-      "section": "operations",
-      "visibility": "I",
-      "audience": [
-        "ops",
-        "architect",
-        "security"
-      ],
-      "status": "experimental",
-      "since_version": "0.1.0"
-    },
-    {
       "path": "docs/operations/internal/noesis-security-checklist.md",
       "title": "Noesis Production Security Checklist",
       "slug": "internal/noesis-security-checklist",
@@ -3987,20 +3973,6 @@
       "canonical_owner": "platform@aether"
     },
     {
-      "path": "docs/operations/local-development.md",
-      "title": "Local Development Operations",
-      "slug": "ops-local-development",
-      "section": "operations",
-      "visibility": "I",
-      "audience": [
-        "dev-junior",
-        "dev-senior",
-        "ops"
-      ],
-      "status": "experimental",
-      "since_version": "0.1.0"
-    },
-    {
       "path": "docs/operations/migrations.md",
       "title": "Migrations",
       "slug": "ops-migrations",
@@ -4011,7 +3983,10 @@
         "ops"
       ],
       "status": "experimental",
-      "since_version": "0.1.0"
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/operations/noesis-operator-guide.md",

@@ -9,19 +9,25 @@ since_version: 0.1.0
 source_files: [services/api/shared/graph/graph.py, services/api/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/actions/agent_marketplace/graph_state_check.py, services/api/actions/agent/deployment_routes.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, packages/sdk/server/src/agent-telemetry.ts, services/api/actions/agent_marketplace/catalog.py, services/api/actions/agent_marketplace/lineage.py, services/api/actions/agent_marketplace/projection.py, services/api/repositories/repos.py, services/api/value/x402/economic_mutations.py, services/api/value/x402/lifecycle_mapper.py, services/api/value/x402/provenance.py, services/api/workers/profile360_workers/workers.py]
 canonical_owner: platform@aether
 source_hashes:
-  "packages/shared/graph-contract.ts": "sha256:c6a02d317dfc34d73c0ea8bdb70b7df9f76b9b8de7adfb6734028401e07a7e17"
-  "services/api/actions/agent_marketplace/authority.py": "sha256:9240dcffbde1284fc670518df56d781e70a96848a6d72809d73b773e0349ca4c"
+  "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
+  "packages/shared/graph-contract.ts": "sha256:662e10a7d4737ba53c673173105344ccf1720ac7e62497d36346734898575087"
+  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:696f7db917fe642c7d39195660d9956eeea4971f4e135eb1fc5826807f7ac506"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
+  "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
+  "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/actions/agent_marketplace/lineage.py": "sha256:bfe247f42c3360f30b3f4fa92b1f39e95f654be0862303d6f74b9fb2363e6566"
-  "services/api/actions/agent_marketplace/projection.py": "sha256:8ce9d1725efab4d11afea2c74711eddac2a2d7f46721344445c6edf6eb81f4c9"
-  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:b1b18e74155a06cc4c68a535ae13c1e3997e84ddd8c5702c52905b06106bbee4"
+  "services/api/actions/agent_marketplace/projection.py": "sha256:5354b080f686377d2b74124bb6b56b8522cb2cb51ea5e5a7164ffdf81fc89e2d"
+  "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
+  "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
   "services/api/repositories/repos.py": "sha256:9d45ac53e8e307d497da4e28d552ca6ef909c0b278dfe32ec825281aab6ec58e"
-  "services/api/shared/graph/graph.py": "sha256:c368f04d2ba341f97110626f43edc3f088f64bda86bb64ab77ee7d51a03befa7"
+  "services/api/shared/graph/graph.py": "sha256:07c5a70eb15c7924fad58de63eba5d3d984b6eac21c328cd3072de0f77ee14fd"
   "services/api/shared/graph/relationship_layers.py": "sha256:592a96efb98c32148e7f6911beef348f49dbf2b6db8430e4d403969d62430ba6"
   "services/api/value/x402/economic_mutations.py": "sha256:bdd180a936e048840636f221fdee3b142c0babab5d8e2bcc59b4a51983198f51"
   "services/api/value/x402/lifecycle_mapper.py": "sha256:77066a174bdf8e3feed32e1a7b81feb321983975b5cd9e6116a4fa5a588c473e"
-  "services/api/value/x402/provenance.py": "sha256:442c16e4e3d0c656610f68ee068f6fd816bed8f32674fe4ba681bd0541595e94"
+  "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
   "services/api/workers/profile360_workers/workers.py": "sha256:2e2074a22e3091514b0340b8cf68d7e37ee8150a23e89f8cb115c18c9f02a04a"
 ---
 

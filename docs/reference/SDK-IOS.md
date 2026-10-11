@@ -13,7 +13,8 @@ toc_depth: 3
 source_hashes:
   "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:8e74e347fd0bd27a34523b84235f5d8e4b1004ed930e0967430e82ef5ff30981"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
-  "packages/shared/events.ts": "sha256:46bc12934b7c41c02f9304a77315bba2d3f71be253e7b30b1186208b40f8a59a"
+  "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
+  "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
 ---
 
 # Aether iOS SDK v0.1.0-alpha.0 — Integration Guide

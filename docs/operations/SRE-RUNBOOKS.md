@@ -11,7 +11,7 @@ source_files:
   - services/api/governance/reliability/service.py
 related:
   - reliability/operations
-  - reliability/incident-response
+  - ops-incident-response
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 source_hashes:

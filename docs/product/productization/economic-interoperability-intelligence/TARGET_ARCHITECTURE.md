@@ -9,8 +9,15 @@ since_version: 0.1.0
 source_files: [services/api/main.py, services/api/config/settings.py, services/api/actions/agent/deployment_routes.py, services/api/actions/agent_marketplace/catalog.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/graph_state_check.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py]
 canonical_owner: platform@aether
 source_hashes:
-  "services/api/config/settings.py": "sha256:0c59864b351aaa3558edf56cc3e550803ed212c05c716f8ec24311ccfcf9779b"
-  "services/api/main.py": "sha256:d3c8f2c63bfedaa93e0d0cafd11c0fe1a25983dd48e64ac3a3de7d9a364d63d4"
+  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:696f7db917fe642c7d39195660d9956eeea4971f4e135eb1fc5826807f7ac506"
+  "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
+  "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
+  "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
+  "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
+  "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
+  "services/api/config/settings.py": "sha256:4d507b4ac3cab63aec2df92c69bcb20c42d6c6f9fb54441e06353ccd34619246"
+  "services/api/main.py": "sha256:91c7168bf4a5d88cf019ac753bfa0d9c35cec9308cb0191f3ba1bada5418c6b1"
 ---
 
 # Target Architecture

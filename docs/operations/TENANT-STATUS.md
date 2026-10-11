@@ -12,7 +12,7 @@ source_files:
   - apps/aether-web/src/pages/system-status/system-status-page.tsx
 related:
   - reliability/operations
-  - reliability/incident-response
+  - ops-incident-response
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 source_hashes:

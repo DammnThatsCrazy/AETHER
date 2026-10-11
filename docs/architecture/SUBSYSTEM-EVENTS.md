@@ -11,16 +11,19 @@ canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
-  "packages/sdk/server/src/agent-telemetry.ts": "sha256:55f13fdd3cb7e31ce798496d35cffb3c26620e88699dc67ec7eac414b64b593a"
-  "packages/shared/contracts/event-registry.json": "sha256:d7507199ec0837a4c77f7fe4d54d2590f4ad49d98b10c35fc3bbb9bddd37c64a"
-  "services/api/actions/agent_marketplace/authority.py": "sha256:9240dcffbde1284fc670518df56d781e70a96848a6d72809d73b773e0349ca4c"
+  "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
+  "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
+  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:696f7db917fe642c7d39195660d9956eeea4971f4e135eb1fc5826807f7ac506"
+  "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
+  "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/ingestion/validation.py": "sha256:03544e3ad77f59db7eb04bb57d32ae0ce77a23a423cd0136529a09aab8615641"
-  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:b1b18e74155a06cc4c68a535ae13c1e3997e84ddd8c5702c52905b06106bbee4"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
   "services/api/repositories/repos.py": "sha256:9d45ac53e8e307d497da4e28d552ca6ef909c0b278dfe32ec825281aab6ec58e"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
-  "services/api/value/x402/provenance.py": "sha256:442c16e4e3d0c656610f68ee068f6fd816bed8f32674fe4ba681bd0541595e94"
+  "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
 ---
 
 # Events / Kafka Subsystem

@@ -13,6 +13,8 @@
 
 /** All four canonical relationship layers. Must never be reduced to three. */
 export type RelationshipLayer = 'H2H' | 'H2A' | 'A2H' | 'A2A';
+/** Non-canonical graph references are retained but excluded from four-layer counts. */
+export type GraphEdgeLayer = RelationshipLayer | 'EXCLUDED';
 
 export const RELATIONSHIP_LAYERS: readonly RelationshipLayer[] = [
   'H2H', // Human-to-Human
@@ -46,7 +48,7 @@ export const LAYER_DESCRIPTIONS: Record<RelationshipLayer, { label: string; desc
 // ── Edge type classification ──────────────────────────────────────────────────
 
 /** Canonical edge types with their layer classification. */
-export const EDGE_LAYER_MAP: Record<string, RelationshipLayer> = {
+export const EDGE_LAYER_MAP: Record<string, GraphEdgeLayer> = {
   // H2H edges
   // Metadata/topology relationships already classified H2H by the backend;
   // they are not agent activity events or evidence of delegated authority.
@@ -225,7 +227,8 @@ export const EDGE_LAYER_MAP: Record<string, RelationshipLayer> = {
 
 /** Classify an edge type string into its relationship layer. */
 export function classifyEdgeType(edgeType: string): RelationshipLayer | null {
-  return (EDGE_LAYER_MAP[edgeType] as RelationshipLayer) ?? null;
+  const layer = EDGE_LAYER_MAP[edgeType];
+  return layer && layer !== 'EXCLUDED' ? layer : null;
 }
 
 // ── Layer counts ──────────────────────────────────────────────────────────────

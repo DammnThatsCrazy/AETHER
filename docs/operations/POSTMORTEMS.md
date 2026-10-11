@@ -7,7 +7,7 @@ audience: [ops, buyer, architect]
 status: beta
 since_version: "0.1.0"
 source_files: [services/api/governance/reliability/service.py, services/api/governance/reliability/routes.py]
-related: [reliability/incident-response, reliability/operations]
+related: [ops-incident-response, reliability/operations]
 canonical_owner: platform@aether
 estimated_read_minutes: 3
 source_hashes:

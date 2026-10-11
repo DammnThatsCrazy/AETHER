@@ -1,20 +1,24 @@
 export {
   fetchAgentDeployments,
   fetchAgentDeployment,
+  fetchAgentDeploymentIdentityBinding,
   fetchAgentDeploymentHealth,
   fetchAgentDeploymentActivity,
   createAgentDeployment,
+  bindAgentDeploymentIdentity,
   updateAgentDeployment,
   pauseAgentDeployment,
   reactivateAgentDeployment,
   revokeAgentDeployment,
   archiveAgentDeployment,
   agentDeploymentSchema,
+  agentDeploymentIdentityBindingSchema,
   agentDeploymentHealthSchema,
   agentDeploymentActivitySchema,
 } from './api';
 export type {
   AgentDeploymentRecord,
+  AgentDeploymentIdentityBindingRecord,
   AgentDeploymentHealthRecord,
   AgentDeploymentActivityRecord,
   CreateAgentDeploymentInput,
@@ -25,9 +29,11 @@ export type {
 export {
   useAgentDeployments,
   useAgentDeployment,
+  useAgentDeploymentIdentityBinding,
   useAgentDeploymentHealth,
   useAgentDeploymentActivity,
   useCreateAgentDeployment,
+  useBindAgentDeploymentIdentity,
   useUpdateAgentDeployment,
   useDeploymentLifecycle,
 } from './use-deployments';

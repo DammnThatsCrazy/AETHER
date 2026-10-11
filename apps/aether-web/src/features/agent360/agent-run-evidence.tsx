@@ -85,7 +85,7 @@ function EconomicOutcome({ outcome }: { outcome: unknown }) {
       {matchedRecords.length > 0 && (
         <div className="space-y-2">
           {matchedRecords.map((record, index) => (
-            <div key={`${display(record.payment_intent_id, 'payment-intent')}-${display(record.settlement_event_id, index)}-${index}`} className="space-y-1 rounded border border-border-default p-2">
+            <div key={`${display(record.payment_intent_id, 'payment-intent')}-${display(record.settlement_event_id, String(index))}-${index}`} className="space-y-1 rounded border border-border-default p-2">
               <p className="text-[11px] font-medium text-text-primary">Matched economic record {index + 1}</p>
               <div className="grid gap-1 sm:grid-cols-2">
                 <EvidenceValue label="Payment intent" value={record.payment_intent_id} />
@@ -113,7 +113,7 @@ function DelegationResolution({ resolution }: { resolution: unknown }) {
   const result = asRecord(resolution);
   const status = result.status;
   const message = status === 'matched_reference'
-    ? 'The source reference matches a canonical delegation record in this tenant. The deployment agent has not been identity-matched to either canonical party, so this link does not establish who acted, that the action was authorized, or that it was within scope.'
+    ? 'The source reference matches a canonical delegation record in this tenant. Party identity and authorization are evaluated separately below; a record match alone does not establish that the external action occurred.'
     : status === 'not_supplied'
       ? 'This source event supplied no delegation reference. That does not establish that no delegation exists.'
       : status === 'unresolved'
@@ -141,6 +141,83 @@ function DelegationResolution({ resolution }: { resolution: unknown }) {
           <EvidenceValue label="Record authority" value={result.source_authority} />
         </div>
       )}
+    </section>
+  );
+}
+
+function DelegationAuthorization({ authorization }: { authorization: unknown }) {
+  if (authorization === null || authorization === undefined) return null;
+
+  const result = asRecord(authorization);
+  const status = result.status;
+  const variant = status === 'within_scope'
+    ? 'success'
+    : status === 'out_of_scope'
+      ? 'danger'
+      : status === 'indeterminate'
+        ? 'warning'
+        : 'default';
+  const label = status === 'within_scope'
+    ? 'Within recorded grant scope'
+    : status === 'out_of_scope'
+      ? 'Outside recorded grant scope'
+      : status === 'indeterminate'
+        ? 'Authorization indeterminate'
+        : status === 'not_supplied'
+          ? 'No delegation supplied'
+          : `Authorization: ${display(status)}`;
+  const message = status === 'within_scope'
+    ? 'The canonical grant, bound parties, reported action and event time match the recorded scope. This evaluates the source claim; it does not verify that the action occurred.'
+    : status === 'out_of_scope'
+      ? 'The reported action does not fit the canonical grant at the reported event time. This is a policy comparison, not proof that the external action occurred.'
+      : status === 'indeterminate'
+        ? 'The available canonical records or source-reported details are insufficient to determine whether the action fit the grant.'
+        : 'No canonical delegation authorization evaluation is available for this event.';
+
+  return (
+    <section aria-label="Delegation authorization evaluation" className="space-y-2 rounded border border-border-subtle bg-surface-raised p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-xs font-medium text-text-primary">Delegation authorization evaluation</h4>
+        <Badge size="sm" variant={variant}>{label}</Badge>
+      </div>
+      <p className="text-[11px] text-text-secondary">{message}</p>
+      <div className="grid gap-1 sm:grid-cols-2">
+        <EvidenceValue label="Reason" value={result.reason} />
+        <EvidenceValue label="Grant authority" value={result.grant_scope_authority ?? result.source_authority} />
+        <EvidenceValue label="Identity binding authority" value={result.binding_authority} />
+        <EvidenceValue label="Delegation state at event time" value={result.time_state} />
+        <EvidenceValue label="Canonical actor Agent" value={result.actor_entity_id} />
+        <EvidenceValue label="Canonical target Agent" value={result.target_entity_id} />
+        <EvidenceValue label="Reported action" value={result.action_type} />
+        <EvidenceValue label="Reported resource" value={result.resource_ref} />
+        <EvidenceValue label="Reported event time" value={result.event_time} />
+      </div>
+    </section>
+  );
+}
+
+function ExecutionOccurrence({ occurrence }: { occurrence: unknown }) {
+  if (occurrence === null || occurrence === undefined) return null;
+
+  const result = asRecord(occurrence);
+  const verified = result.verified === true;
+  return (
+    <section aria-label="Execution occurrence evidence" className="space-y-2 rounded border border-border-subtle bg-surface-raised p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-xs font-medium text-text-primary">Execution occurrence</h4>
+        <Badge size="sm" variant={verified ? 'success' : 'warning'}>
+          {verified ? 'Independently verified' : 'Source reported · unverified'}
+        </Badge>
+      </div>
+      <p className="text-[11px] text-text-secondary">
+        {verified
+          ? 'A server-authoritative receipt is associated with this occurrence.'
+          : 'No server-authoritative external execution receipt is available. A grant-scope match does not prove that the action ran.'}
+      </p>
+      <div className="grid gap-1 sm:grid-cols-2">
+        <EvidenceValue label="Occurrence status" value={result.status} />
+        <EvidenceValue label="Evidence reason" value={result.reason} />
+      </div>
     </section>
   );
 }
@@ -234,7 +311,7 @@ function RunTimeline({ evidence }: { evidence: ValueRecord[] }) {
               <EvidenceValue label="Trace" value={item.trace_id} />
               <EvidenceValue label="Causation reference" value={item.causation_id} />
             </div>
-            {(item.payment_intent_ref || item.settlement_event_ref || item.delegation_ref) && (
+            {Boolean(item.payment_intent_ref || item.settlement_event_ref || item.delegation_ref) && (
               <div className="space-y-2 border-t border-border-subtle pt-2">
                 <h4 className="text-[11px] font-medium text-text-secondary">Matched records and authority lookups</h4>
                 {(item.payment_intent_ref || item.settlement_event_ref)
@@ -242,6 +319,12 @@ function RunTimeline({ evidence }: { evidence: ValueRecord[] }) {
                   : null}
                 {item.delegation_ref
                   ? <DelegationResolution resolution={item.delegation_resolution} />
+                  : null}
+                {item.delegation_ref
+                  ? <DelegationAuthorization authorization={item.delegation_authorization} />
+                  : null}
+                {item.delegation_ref
+                  ? <ExecutionOccurrence occurrence={item.execution_occurrence} />
                   : null}
               </div>
             )}

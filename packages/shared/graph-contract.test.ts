@@ -18,8 +18,15 @@ describe('graph-contract', () => {
   describe('classifyEdgeType', () => {
     it('returns the correct layer for known edge types', () => {
       for (const [edgeType, layer] of Object.entries(EDGE_LAYER_MAP)) {
-        expect(classifyEdgeType(edgeType)).toBe(layer);
+        expect(classifyEdgeType(edgeType)).toBe(layer === 'EXCLUDED' ? null : layer);
       }
+    });
+
+    it('keeps reference edges outside the four relationship-layer counts', () => {
+      expect(EDGE_LAYER_MAP.REFERENCES_DELEGATION_RECORD).toBe('EXCLUDED');
+      expect(EDGE_LAYER_MAP.CORRELATED_WITH_ECONOMIC_RECORD).toBe('EXCLUDED');
+      expect(classifyEdgeType('REFERENCES_DELEGATION_RECORD')).toBeNull();
+      expect(classifyEdgeType('CORRELATED_WITH_ECONOMIC_RECORD')).toBeNull();
     });
 
     it('returns null for unknown edge types', () => {
