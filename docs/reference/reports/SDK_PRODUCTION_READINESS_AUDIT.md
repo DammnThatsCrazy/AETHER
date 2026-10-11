@@ -7,7 +7,7 @@ audience: [dev-senior, architect, ops]
 status: experimental
 since_version: 0.1.0
 canonical_owner: sdk@aether
-source_files: [packages/shared/events.ts, packages/shared/consent.ts, packages/shared/sdk-version.ts, packages/sdk/web/src/index.ts, packages/sdk/web/src/core/event-queue.ts, packages/sdk/web/src/health/sdk-health-agent.ts, docs/reference/source-of-truth/PLATFORM_PARITY.md]
+source_files: [packages/shared/events.ts, packages/shared/consent.ts, packages/shared/contracts/event-registry.json, packages/shared/sdk-version.ts, packages/sdk/web/src/index.ts, packages/sdk/web/src/core/event-queue.ts, packages/sdk/web/src/health/sdk-health-agent.ts, docs/reference/source-of-truth/PLATFORM_PARITY.md]
 source_hashes:
   "docs/reference/source-of-truth/PLATFORM_PARITY.md": "sha256:abb0660e91963d129b1f5d4a5b472c24bfb55001cd336952b709fdf9dbf13771"
   "packages/sdk/web/src/core/event-queue.ts": "sha256:839b25762ec01f03c4f5faa12c73fbfd31d41551dde584fa32c46b7305c6c8c1"
@@ -326,7 +326,7 @@ All Tier B items are now fully implemented across the applicable platforms.
 - iOS: `AetherQueue.swift` updated to write queue to `Documents/aether_queue.json`
 - Android: `AetherQueue.kt` updated to write queue to internal files directory
 
-### 4.2 Granular Agent Lifecycle Emitters (19 methods)
+### 4.2 Granular Agent Lifecycle Type and Wrapper Surface (19 types)
 
 All 19 granular agent lifecycle event types (see `EventType` union in `packages/shared/events.ts`) are now exposed on iOS, Android, and React Native bridges in addition to the existing Web SDK namespace.
 
@@ -334,6 +334,16 @@ Event types: `agent_registered`, `agent_updated`, `agent_authorized`, `agent_dea
 
 **Evidence test:**
 - `packages/shared/events-registry.test.ts`: verifies all 19 agent types exist and are agent-family
+
+**Acceptance boundary clarification:** this audit's 19-method count describes
+wrapper/type exposure across platforms. It is not the backend's current public
+SDK event allowlist. The canonical event registry marks only
+`agent_task_started`, `agent_task_completed`, `agent_task_failed`,
+`agent_delegated_task`, `agent_policy_evaluated`, `agent_outcome_recorded`, and
+`agent_tool_invocation_observed` as `sdkEmitable`. Their event properties are
+source-asserted, while identifiers such as `context.agentDeployment`, payment, settlement,
+and delegation IDs remain source references. Consent-map presence and wrapper
+tests do not imply acceptance or verification of other event types.
 
 ### 4.3 Granular x402 Lifecycle Emitters (14 methods)
 

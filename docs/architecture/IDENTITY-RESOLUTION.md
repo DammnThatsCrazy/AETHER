@@ -14,6 +14,10 @@ source_files:
   - services/api/intelligence/analytics/routes.py
   - services/api/identity/profile/composer.py
   - services/api/identity/profile/aggregator.py
+  - services/api/actions/agent/deployment_routes.py
+  - services/api/actions/agent_marketplace/identity_binding.py
+  - services/api/actions/agent_marketplace/authority.py
+  - services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py
   - packages/shared/identity.ts
 canonical_owner: identity@aether
 estimated_read_minutes: 12
@@ -110,6 +114,15 @@ flow; a claim match does not merge profiles by itself, and approval revalidates
 the evidence and requires server-verified identity-link consent.
 
 `merge_policy.py` additionally enforces a **non-merge-eligible signal denylist** (`NON_MERGE_ELIGIBLE_SIGNAL_NAMES`): `deployment_id`, `agent_id`, `external_platform`, `external_channel_id`, and `external_workspace_id` are filtered out before merge scoring, so external agent deployment/platform telemetry can never contribute to an identity merge on its own. Exclusions are recorded with reason code `non_merge_eligible_signal_excluded`.
+
+External agent deployment identity uses a separate explicit binding authority.
+A tenant administrator may bind `(tenant_id, source_namespace, source_agent_ref)`
+to an existing canonical Agent in that same tenant. The binding is durable and records the acting tenant administrator and
+binding time; resolution checks that the binding still matches the deployment's
+namespace/reference and canonical entity. Missing, ambiguous, stale, or
+cross-tenant bindings remain unresolved. This does not alter the identity
+resolver's automatic merge policy: `agent_id` and deployment/platform signals
+remain excluded from merge scoring, and a binding is not merge evidence.
 
 ```
 SDK event

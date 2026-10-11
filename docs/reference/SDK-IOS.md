@@ -6,7 +6,7 @@ visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/sdk/ios/Sources/AetherSDK/Aether.swift, packages/shared/events.ts, packages/shared/consent.ts]
+source_files: [packages/sdk/ios/Sources/AetherSDK/Aether.swift, packages/shared/events.ts, packages/shared/consent.ts, packages/shared/contracts/event-registry.json]
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
@@ -449,6 +449,20 @@ Aether.shared.agentOutcomeRecorded(taskId:, outcome:, properties:)
 // ... 13 more — see AetherHealthAgent for full list
 ```
 
+**Public SDK acceptance boundary:** wrappers, `EventType` entries, consent-map
+entries, and native emitter methods describe SDK surface area; they do not by
+themselves authorize an event type for public SDK ingestion. The canonical
+`packages/shared/contracts/event-registry.json` currently marks exactly these
+seven agent events `sdkEmitable`: `agent_task_started`,
+`agent_task_completed`, `agent_task_failed`, `agent_delegated_task`,
+`agent_policy_evaluated`, `agent_outcome_recorded`, and
+`agent_tool_invocation_observed`. Their properties are source-asserted; IDs
+such as `paymentIntentId`, `settlementEventId`, `delegationId`,
+`delegatedToAgentId`, and `context.agentDeployment` are source references, not
+verified facts. Consent and
+active tenant deployment validation still apply. Other wrapper/type-exposed
+events are not publicly SDK-emittable under the current registry contract.
+
 ## x402 Lifecycle Emitters
 
 ```swift
@@ -491,7 +505,7 @@ Emit using `Aether.shared.track()` with `campaignId`, `ruleId`, and `rewardIdemp
 
 ## Agentic Observability Event Types
 
-47 new event types support passive observation of external agentic activity. All are registered in the SDK's `eventConsentPurpose` map and flow through `POST /v1/batch` like any other event.
+47 event types are present in SDK-facing type or wrapper surfaces for passive observation of external agentic activity. Consent-map registration controls consent handling, not public ingestion eligibility; only the seven agent events listed under the lifecycle emitters are currently marked `sdkEmitable` in the canonical event registry. The source registry's acceptance boundary and trust classes govern `POST /v1/batch`; wrapper exposure alone does not.
 
 **Consent purpose:** `"agent"` for agentic observation events and `"commerce"` for x402 protocol observation events, with five exceptions: the Robinhood-style trading-state observations `agent_trade_order_observed`, `agent_trade_fill_observed`, `agent_position_observed`, `agent_portfolio_snapshot_observed`, and `agent_performance_snapshot_observed` are consent-gated on the explicit opt-in purpose `financial_activity` (grant it via `grantConsent(categories: ["financial_activity"])`; it is never included in `grantAll()`).
 

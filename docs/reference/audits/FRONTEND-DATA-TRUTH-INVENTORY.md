@@ -54,8 +54,12 @@ commerce reference; it does not synthesize a match or copy operation value.
 
 Agent 360's external-agent panels read tenant deployment/run evidence and a
 separately source-labelled public marketplace catalog from backend routes. The
-catalog display does not treat public listings as tenant graph nodes, and run
-coverage is withheld when the evidence source is unavailable.
+deployment view exposes explicit identity-binding status. Run evidence presents
+economic matches, canonical delegation resolution, event-time grant evaluation,
+and occurrence as separate states; source assertions are labelled, and an
+external action remains unverified without a server-owned receipt. The catalog
+display does not treat public listings as tenant graph nodes, and run coverage
+is withheld when the evidence source is unavailable.
 
 The generated artifact distinguishes:
 

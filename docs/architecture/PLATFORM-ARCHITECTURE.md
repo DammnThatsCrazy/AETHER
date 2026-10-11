@@ -16,6 +16,12 @@ source_files:
   - packages/shared/
   - services/api/actions/agent/deployment_routes.py
   - services/api/actions/agent_marketplace/catalog.py
+  - services/api/actions/agent_marketplace/authority.py
+  - services/api/alembic/versions/20261011_agent_delegated_to_namespace.py
+  - services/api/ingestion/silver/projectors/agent_execution_projector.py
+  - services/api/actions/agent_marketplace/identity_binding.py
+  - services/api/actions/agent_marketplace/graph_state_check.py
+  - services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py
   - services/api/actions/agent_marketplace/lineage.py
   - services/api/actions/agent_marketplace/projection.py
   - services/api/workers/runtime/specs.py
@@ -1006,18 +1012,30 @@ See `docs/architecture/AGENT-CONTROLLER.md` for the full specification and `serv
 The tenant-facing `/v1/agent/deployments` registry stores an external agent's
 tenant-declared marketplace origin and validated source telemetry. The
 run-explanation route returns a chronological evidence timeline for task,
-action, trigger, policy, delegation, tool, and outcome events. Silver facts are
-the detailed record; the graph carries bounded run/action/decision relationships
-for cross-entity exploration. Neither surface claims access to hidden model
-reasoning or independently verifies source-reported policy and delegation.
+action, trigger, policy, delegation, tool, and outcome events. It separates
+canonical party binding, grant-scope evaluation, economic matches, and
+execution occurrence. Party binding is an explicit tenant-admin mapping from
+the deployment's `(source_namespace, agent_id)` reference to a canonical Agent
+in the same tenant; missing or ambiguous mappings fail closed and do not feed
+automatic identity merging. When canonical parties resolve, grant status,
+endpoints, supported scope, and effective/revocation timestamps are evaluated
+at the reported event time using backend-owned delegation data. Target binding
+uses the source-declared `delegated_to_namespace`; missing or invalid target
+namespace remains unresolved instead of inheriting the actor namespace. Since
+action, resource, and time are source claims and there is no server-owned external
+action receipt, a scope match does not verify that the action occurred.
 
 When `AETHER_AGENT_DEPLOYMENT_GRAPH_ENABLED` is enabled, marketplace and run
 projection mutations are queued in the supervised `graph-writer` outbox and
 applied through `GraphMutationGateway`. Kyber's
 `/v1/admin/kyber/agent-telemetry/graph-projection/{drain,reconcile,repair}`
-routes support bounded draining and source-to-outbox recovery. Reconciliation
-does not inspect or certify graph contents; replay is idempotent and can
-recreate missing queue work from the deployment registry and Silver facts.
+routes support bounded draining and source-to-outbox recovery. A distinct,
+read-only `GET /v1/admin/kyber/agent-telemetry/graph-projection/state-check`
+compares bounded tenant source references against supported graph entities and
+links. It may report consistent, inconsistent, or partial results and
+findings such as missing, extra, mismatched, unresolved, or unauthorized links.
+It is best-effort and non-snapshot, has coverage limits, and neither changes nor
+certifies the whole graph. Recovery and inspection remain separate operations.
 
 The separate, default-off `AETHER_AGENT_MARKETPLACE_CATALOG_ENABLED` observer
 reads minimal public listing metadata from xAI's JSON-LD catalog index. It does

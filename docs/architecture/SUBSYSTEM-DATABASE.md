@@ -6,7 +6,7 @@ visibility: P
 audience: [dev-senior, architect, ops]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/repositories/repos.py, services/api/repositories/lake.py]
+source_files: [services/api/repositories/repos.py, services/api/repositories/lake.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py]
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
@@ -124,6 +124,19 @@ table and caches it. Writes and filters are then bound to the migrated types:
 | `economic_resources` | `EconomicResourceRepository` | Purchasable capabilities: inference, GPU compute, APIs, data, memory |
 | `facilitators` | `FacilitatorRepository` | x402 facilitators, trust brokers, and authorization rails |
 | `agent_economic_identities` | `AgentEconomicIdentityRepository` | Derived long-running economic identity per agent, keyed as `{tenant_id}:{agent_id}:economic_identity` |
+| `agent_deployment_identity_bindings` | `AgentDeploymentIdentityBindingRepository` | Explicit tenant-admin binding from source namespace/reference to a same-tenant canonical Agent; uniquely scoped by tenant + namespace + source reference |
+
+**Agent deployment identity bindings:** The additive
+`20261011_agent_deployment_identity_bindings` migration creates the durable
+binding store and its tenant/namespace/source-reference uniqueness guard. Each
+binding records the canonical Agent ID and explicit `tenant_admin_explicit`
+authority. The identity-binding service revalidates tenant ownership and the
+current deployment source reference before returning a match; missing,
+ambiguous, stale, or cross-tenant rows are unresolved. A follow-on migration adds the nullable
+`delegated_to_namespace` column to `silver_agent_execution_facts`, so target
+source references retain their own declared namespace and cannot inherit the
+actor's namespace. These migration files are authored in the branch; this page
+does not claim that either has been applied.
 
 **Tenant isolation enforcement:** The following repository methods require an explicit `tenant_id` argument (no default) — callers must always pass the tenant from request context:
 - `AgentExecutionRepository.list_for_agent(agent_id, tenant_id)`

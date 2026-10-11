@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/main.py, services/api/config/settings.py]
+source_files: [services/api/main.py, services/api/config/settings.py, services/api/actions/agent/deployment_routes.py, services/api/actions/agent_marketplace/catalog.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/graph_state_check.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py]
 canonical_owner: platform@aether
 source_hashes:
   "services/api/config/settings.py": "sha256:0c59864b351aaa3558edf56cc3e550803ed212c05c716f8ec24311ccfcf9779b"
@@ -21,6 +21,19 @@ independently merged observer-stack implementations — `services/api/value/stab
 at `/v1/stablecoin` and the derivatives ingestion/accounting layer at
 `/v1/derivatives` — coexist with these domains; this branch's derivatives
 runtime is namespaced under `/v1/derivatives/runtime`.)
+
+
+The external-agent economy slice extends the same observation-only foundation.
+Tenant deployment source references acquire canonical identity only through
+explicit tenant-admin, tenant-and-namespace-scoped bindings. Canonical
+Delegation records are evaluated at the source-reported event time using
+backend-owned status, endpoints, validity, and supported scope; action, resource,
+and time remain source claims. A scope result does not prove an external action
+occurred, and occurrence remains unverified without a server-owned execution
+receipt. The bounded read-only graph state check compares supported graph links
+to tenant source evidence, reports partial/non-snapshot coverage honestly, and
+does not repair or certify the graph. Public marketplace observations remain
+platform-scoped and separate from tenant deployment identity.
 
 A fourth observation-only slice, card-linked payment rails, follows the
 same wiring pattern: `main.py` mounts

@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior, architect]
 status: experimental
 since_version: 0.1.0
-source_files: [services/api/value/x402/, services/api/actions/agent/, services/api/actions/agent_marketplace/, services/api/value/commerce/order_payment_reconciliation.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/shared/store.py, services/api/workers/runtime/specs.py, packages/sdk/server/src/agent-telemetry.ts, packages/shared/events.ts, packages/shared/agentic-observability.ts]
+source_files: [services/api/value/x402/, services/api/actions/agent/, services/api/actions/agent_marketplace/, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/value/commerce/order_payment_reconciliation.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/shared/store.py, services/api/workers/runtime/specs.py, packages/sdk/server/src/agent-telemetry.ts, packages/shared/events.ts, packages/shared/contracts/event-registry.json, packages/shared/agentic-observability.ts]
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:55f13fdd3cb7e31ce798496d35cffb3c26620e88699dc67ec7eac414b64b593a"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
@@ -49,14 +49,20 @@ identify `best_effort_non_snapshot` consistency and do not certify graph state.
 
 The default-off xAI catalog observer adds minimal public listing metadata as a
 separate `platform`-scoped source. It does not fetch bot configuration or join
-public listing slugs to canonical Agents. Associated x.com posts and x.ai news,
-canonical external-agent identity resolution, delegation-party identity joins,
-grant-scope authorization checks, private bot contents, and graph-state drift
-detection remain follow-on work. An exact delegation ID can now link a source
-action to a same-tenant canonical delegation record, but the deployment's
-tenant registry agent reference is not joined to the record's canonical entity
-parties. This link does not prove that the source action was authorized or
-within scope.
+public listing slugs to canonical Agents. Tenant admins can explicitly bind a
+deployment source namespace/reference to a same-tenant canonical Agent; the
+binding is separate from automatic identity merge and fails closed when absent
+or ambiguous. A source delegation reference resolves to a same-tenant
+canonical grant, and when actor/target bindings resolve, backend-owned grant
+status, endpoints, effective/revocation window and supported scope are
+evaluated at source event time. The result remains separate from execution
+occurrence: action/resource/time are source claims, and without a server-owned
+receipt occurrence is unverified. A new bounded read-only graph state check
+compares supported tenant links to source evidence and reports partial,
+non-snapshot coverage; it neither repairs nor certifies the whole graph.
+Associated x.com posts and x.ai news, private bot contents, server-owned
+external execution receipts, and comprehensive snapshot-consistent graph
+certification remain follow-on work.
 
 For economic outcomes, optional task/outcome payment-intent and settlement-event
 references resolve only against exact same-tenant records with server-owned

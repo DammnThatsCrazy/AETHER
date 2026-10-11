@@ -6,7 +6,7 @@ visibility: P
 audience: [dev-senior, architect, ops]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/shared/events/events.py, services/api/ingestion/ingestion/validation.py, packages/shared/contracts/event-registry.json, packages/sdk/server/src/agent-telemetry.ts, services/api/actions/agent_marketplace/authority.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/repositories/repos.py, services/api/value/x402/provenance.py]
+source_files: [services/api/shared/events/events.py, services/api/ingestion/ingestion/validation.py, packages/shared/contracts/event-registry.json, packages/sdk/server/src/agent-telemetry.ts, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/actions/agent/deployment_routes.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/repositories/repos.py, services/api/value/x402/provenance.py]
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
@@ -131,8 +131,15 @@ was not observed. Graph projection links bounded action and policy-decision
 records to a tenant-scoped run through the retryable graph-writer outbox.
 Optional payment, settlement and delegation IDs remain source references.
 Economic links require exact same-tenant records with server-owned x402
-provenance and the registered deployment agent reference; reported payment
-values are not accepted as facts. A delegation link confirms only an exact
-same-tenant record reference: the deployment's tenant registry agent ID is not
-identity-matched to the canonical grant parties. Neither link verifies the
-source action, proves authorization, or infers causation.
+provenance and the validated deployment agent reference; reported payment
+values are not accepted as facts. For delegation, the tenant-admin binding
+service resolves deployment source namespace/reference to a same-tenant
+canonical Agent, and an exact delegation reference resolves the canonical
+Delegation. Target binding requires the source-declared `delegated_to_namespace`
+and never falls back to the actor namespace. If both endpoints resolve, the
+backend evaluates canonical grant status, endpoints, effective/revocation window, action, resource, and supported
+amount limit at the source-reported event time as `within_scope`,
+`out_of_scope`, or `indeterminate`. Event payload action/resource/time remain
+source-asserted. This grant-policy evaluation does not prove external execution;
+without a server-owned receipt occurrence remains source-reported and
+unverified.

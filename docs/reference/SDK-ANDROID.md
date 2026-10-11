@@ -6,7 +6,7 @@ visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt, packages/shared/events.ts, packages/shared/consent.ts]
+source_files: [packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt, packages/shared/events.ts, packages/shared/consent.ts, packages/shared/contracts/event-registry.json]
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
@@ -479,6 +479,20 @@ Aether.agentEscalatedToHuman(taskId, reason, properties)
 Aether.agentOutcomeRecorded(taskId, outcome, properties)
 // ... 13 more — see AetherHealthAgent for full list
 ```
+
+**Public SDK acceptance boundary:** wrappers, `EventType` entries, consent-map
+entries, and native emitter methods describe SDK surface area; they do not by
+themselves authorize an event type for public SDK ingestion. The canonical
+`packages/shared/contracts/event-registry.json` currently marks exactly these
+seven agent events `sdkEmitable`: `agent_task_started`,
+`agent_task_completed`, `agent_task_failed`, `agent_delegated_task`,
+`agent_policy_evaluated`, `agent_outcome_recorded`, and
+`agent_tool_invocation_observed`. Their properties are source-asserted; IDs
+such as `paymentIntentId`, `settlementEventId`, `delegationId`,
+`delegatedToAgentId`, and `context.agentDeployment` are source references, not
+verified facts. Consent and
+active tenant deployment validation still apply. Other wrapper/type-exposed
+events are not publicly SDK-emittable under the current registry contract.
 
 ## x402 Lifecycle Emitters
 

@@ -528,9 +528,14 @@ or replace source lifecycle status.
 
 Agent 360 also presents tenant-scoped external deployment origins, recent
 source-reported run timelines, and the separately observed public marketplace
-catalog. A source outage is shown as unavailable rather than as missing
-coverage. Public catalog records remain platform-scoped and are not loaded into
-the tenant graph view.
+catalog. The deployment panel exposes the explicit tenant-admin identity binding
+status. Run evidence displays economic record matches, canonical delegation
+resolution, event-time grant-scope evaluation, and execution occurrence as
+separate facts. Source claims remain source-asserted; without a server-owned
+execution receipt the UI marks occurrence source-reported and unverified. A
+source outage is shown as unavailable rather than as missing coverage. Public
+catalog records remain platform-scoped and are not loaded into the tenant graph
+view.
 
 ---
 

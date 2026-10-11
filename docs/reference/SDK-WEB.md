@@ -6,7 +6,7 @@ visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/sdk/web/src/index.ts, packages/sdk/web/src/tracking/traffic-source-tracker.ts, packages/shared/acquisition-evidence.ts, packages/shared/events.ts, packages/shared/consent.ts]
+source_files: [packages/sdk/web/src/index.ts, packages/sdk/web/src/tracking/traffic-source-tracker.ts, packages/shared/acquisition-evidence.ts, packages/shared/events.ts, packages/shared/consent.ts, packages/shared/contracts/event-registry.json]
 canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
@@ -655,6 +655,20 @@ The SDK ships granular lifecycle emitters for agent activity and x402 payment fl
 | `aether.agent.outcomeRecorded(props)` | `agent_outcome_recorded` | Final agent outcome captured |
 
 Legacy aliases (backward compatible): `aether.agent.task()` → `agent_task`, `aether.agent.decision()` → `agent_decision`, `aether.agent.interaction()` → `a2h_interaction`.
+
+**Public SDK acceptance boundary:** wrappers, `EventType` entries, consent-map
+entries, and native emitter methods describe SDK surface area; they do not by
+themselves authorize an event type for public SDK ingestion. The canonical
+`packages/shared/contracts/event-registry.json` currently marks exactly these
+seven agent events `sdkEmitable`: `agent_task_started`,
+`agent_task_completed`, `agent_task_failed`, `agent_delegated_task`,
+`agent_policy_evaluated`, `agent_outcome_recorded`, and
+`agent_tool_invocation_observed`. Their properties are source-asserted; IDs
+such as `paymentIntentId`, `settlementEventId`, `delegationId`,
+`delegatedToAgentId`, and `context.agentDeployment` are source references, not
+verified facts. Consent and
+active tenant deployment validation still apply. Other wrapper/type-exposed
+events are not publicly SDK-emittable under the current registry contract.
 
 ### x402 payment lifecycle events (`commerce` consent)
 

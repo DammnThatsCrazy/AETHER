@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/value/commerce/, services/api/value/x402/, services/api/actions/agent/economic.py, services/api/actions/agent_marketplace/authority.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/repositories/repos.py, services/api/workers/profile360_workers/workers.py, packages/sdk/server/src/agent-telemetry.ts]
+source_files: [services/api/value/commerce/, services/api/value/x402/, services/api/actions/agent/economic.py, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/actions/agent_marketplace/graph_state_check.py, services/api/actions/agent/deployment_routes.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/repositories/repos.py, services/api/workers/profile360_workers/workers.py, packages/sdk/server/src/agent-telemetry.ts]
 canonical_owner: commerce@aether
 estimated_read_minutes: 45
 toc_depth: 3
@@ -170,11 +170,27 @@ server-authoritative x402 rows and a matching `agent_id` from the validated
 deployment registry. Amount, currency, provider, protocol and lifecycle state
 come from those rows. The ActionRecord links are correlation evidence only;
 they do not prove causality, settlement finality, or the source's action claim.
-A supplied delegation ID can link to an exact same-tenant canonical delegation
-record, but the deployment's registry `agent_id` is not identity-matched to the
-delegation's canonical entity endpoints. The link does not establish party
-identity, grant scope or authorization. Canonical delegation relationships
-remain sourced from the delegation authority projector.
+A tenant administrator can explicitly bind the deployment's source namespace
+and agent reference to an existing canonical Agent through the tenant-scoped
+identity-binding authority. Missing or ambiguous bindings fail closed; this is
+separate from automatic identity resolution and does not turn source telemetry
+into merge evidence. A supplied delegation ID is resolved only to a canonical
+same-tenant Delegation. The delegated-to source reference carries an explicit
+`delegated_to_namespace`; the resolver does not infer the target namespace from
+the actor. Missing or invalid namespace leaves target binding unresolved. When
+both parties resolve, the backend evaluates the
+canonical grant's status, effective/revocation window, endpoints, action,
+resource and supported amount limit at the source-reported event time. The
+result is `within_scope`, `out_of_scope`, or `indeterminate`; action, resource,
+and event time remain source-asserted inputs. Evaluation is policy evidence,
+not proof that an external action occurred: absent a server-owned execution
+receipt, occurrence remains `source_reported` and `verified=false`.
+
+The Kyber graph-projection state check is a separate bounded, read-only
+comparison of known tenant source references with graph vertices and edges. It
+can report missing, extra, mismatched, unresolved, or unauthorized findings,
+but it is best-effort and non-snapshot; it does not mutate, drain, replay, or
+certify the whole graph.
 
 
 ---

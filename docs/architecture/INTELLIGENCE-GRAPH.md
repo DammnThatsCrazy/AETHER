@@ -14,6 +14,10 @@ source_files:
   - services/api/actions/agent_marketplace/projection.py
   - services/api/actions/agent_marketplace/catalog.py
   - services/api/actions/agent_marketplace/authority.py
+  - services/api/actions/agent_marketplace/identity_binding.py
+  - services/api/alembic/versions/20261011_agent_delegated_to_namespace.py
+  - services/api/actions/agent_marketplace/graph_state_check.py
+  - services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py
   - services/api/actions/agent/deployment_routes.py
   - services/api/ingestion/ingestion/lifecycle_worker.py
   - services/api/workers/profile360_workers/workers.py
@@ -856,30 +860,36 @@ and delegation references are represented as bounded `ActionRecord` and
 `DecisionRecord` evidence connected to the run. These records preserve event
 IDs and observed times so graph traversal can show the reported sequence.
 
-The source event and run explanation remain evidence, not a claim about hidden
-model reasoning. The tenant's delegated-to reference is not resolved to a
-canonical Agent, and a policy label is not proof that the runtime enforced that
-policy. Marketplace origin is tenant-declared lineage. All these graph writes
-are queued and replayed through the supervised projection outbox and
-`GraphMutationGateway`; Kyber recovery reports source-to-outbox coverage and
-does not assert that it independently compared the persisted graph state.
+Deployment source identity is linked to a canonical Agent only through the
+explicit tenant-admin binding authority, keyed by tenant, source namespace, and
+source agent reference. Missing, ambiguous, stale, or cross-tenant bindings
+fail closed. This is a separate audited relationship and does not enable
+automatic identity merging. The source event and run explanation remain
+evidence, not a claim about hidden model reasoning or a guarantee that a
+reported policy was enforced.
 
 An exact same-tenant payment-intent or settlement-event reference can add an
-`EXCLUDED` `CORRELATED_WITH_ECONOMIC_RECORD` edge from an ActionRecord when the
-record has server-authoritative x402 provenance and its agent reference matches
-the deployment registry reference. Amount and lifecycle state come from that
-record; the edge is correlation evidence, not causality or independent proof
-of the source event. A delegation ID can add an `EXCLUDED`
-`REFERENCES_DELEGATION_RECORD` edge when it exactly matches a same-tenant
-canonical record. The deployment's `agent_id` is a tenant registry reference,
-not a canonical entity ID, so the link does not assert that either delegation
-party is the deployed agent. Party identity and grant-scope authorization
-remain unresolved. The canonical Delegation vertex and its
-`DELEGATES`/`GRANTED_BY`/`GRANTED_TO` relationships are projected from the
-delegation authority event, independently of run telemetry.
+`EXCLUDED` `CORRELATED_WITH_ECONOMIC_RECORD` edge when the record has
+server-authoritative x402 provenance and its agent reference matches the
+validated deployment. A source delegation reference can link an action to an
+exact same-tenant canonical Delegation. The target source reference uses the
+explicit `delegated_to_namespace`; no actor-namespace fallback is used. Where
+explicit actor and target bindings resolve, the backend evaluates the delegation record's endpoints,
+status, effective/revocation window, action, resource, and supported amount
+limit at the source-reported event time. The separate evaluation is
+`within_scope`, `out_of_scope`, or `indeterminate`; source-supplied action,
+resource, and event time remain claims. It does not establish execution. In
+the absence of a server-owned execution receipt, occurrence remains
+`source_reported` and unverified. Canonical `DELEGATES`, `GRANTED_BY`, and
+`GRANTED_TO` relationships continue to come from delegation authority records.
 
-The optional public xAI catalog observer creates separately versioned,
-platform-scoped listing observations from the public index. The authenticated
-Agent 360 catalog panel presents those public labels beside tenant-declared
-deployment origins; tenant graph queries do not include platform-scoped nodes.
-No public listing is joined to a tenant deployment or canonical Agent by slug.
+Kyber source-to-outbox reconcile/repair remains distinct from the read-only
+`GET /v1/admin/kyber/agent-telemetry/graph-projection/state-check` endpoint.
+The state check compares a bounded set of known tenant source references with
+graph state and reports consistency, partial coverage, or findings; it can
+surface missing/extra/mismatched links and unresolved/unauthorized evidence.
+It is best-effort, non-snapshot, and limited to the supported agent execution,
+economic, delegation, and identity link families. It neither mutates the graph
+nor certifies all graph contents. The optional public xAI catalog remains a
+separate platform-scoped source; tenant graph queries do not include its nodes,
+and no public slug is joined to a tenant deployment or canonical Agent.

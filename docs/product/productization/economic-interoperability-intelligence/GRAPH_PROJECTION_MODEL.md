@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/shared/graph/graph.py, services/api/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/catalog.py, services/api/actions/agent_marketplace/lineage.py, services/api/actions/agent_marketplace/projection.py, services/api/repositories/repos.py, services/api/value/x402/economic_mutations.py, services/api/value/x402/lifecycle_mapper.py, services/api/value/x402/provenance.py, services/api/workers/profile360_workers/workers.py]
+source_files: [services/api/shared/graph/graph.py, services/api/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/actions/agent_marketplace/graph_state_check.py, services/api/actions/agent/deployment_routes.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, packages/sdk/server/src/agent-telemetry.ts, services/api/actions/agent_marketplace/catalog.py, services/api/actions/agent_marketplace/lineage.py, services/api/actions/agent_marketplace/projection.py, services/api/repositories/repos.py, services/api/value/x402/economic_mutations.py, services/api/value/x402/lifecycle_mapper.py, services/api/value/x402/provenance.py, services/api/workers/profile360_workers/workers.py]
 canonical_owner: platform@aether
 source_hashes:
   "packages/shared/graph-contract.ts": "sha256:c6a02d317dfc34d73c0ea8bdb70b7df9f76b9b8de7adfb6734028401e07a7e17"
@@ -115,10 +115,12 @@ tenant-scoped, gated on `SEMANTIC_GRAPH_PROJECTOR_ENABLED` (default OFF). See
 ## External agent execution lineage
 
 Marketplace listings, tenant-declared deployments, and observed execution are
-separate graph evidence. A deployment's marketplace origin remains a
-tenant-declared reference; its agent ID is not linked to a canonical Agent
-until identity authority resolves it. Runs are grouped using the validated
-deployment plus source run ID, or trace ID when no run ID is supplied.
+separate graph evidence. A tenant administrator can explicitly bind a
+deployment's `(tenant_id, source_namespace, source_agent_ref)` to an existing
+canonical Agent in that tenant. This durable binding is audited and separate
+from automatic identity resolution; absent, ambiguous, stale, or cross-tenant
+bindings fail closed. Runs are grouped using the validated deployment plus
+source run ID, or trace ID when no run ID is supplied.
 
 The graph links each run to the deployment and source-scoped task/outcome
 records. Source-reported actions, tool calls, triggers, policy decisions, and
@@ -129,25 +131,30 @@ not an inference about hidden reasoning or a verification of reported policy.
 
 An `ActionRecord` links to `PaymentIntent` or `SettlementEvent` only when the
 caller-supplied record reference exactly matches a same-tenant server-owned
-x402 row and that row's agent reference matches the tenant registry's
-deployment `agent_id`. Amount, currency and lifecycle state come from those
-authoritative rows. `CORRELATED_WITH_ECONOMIC_RECORD` is `EXCLUDED` from
-relationship-layer counts and denotes a record match, not causality or proof
-that the source action occurred as described. A delegation ID can link an
-action to an exact same-tenant `Delegation` record through
-`REFERENCES_DELEGATION_RECORD`, also `EXCLUDED`. The deployment's agent ID is
-a tenant registry reference while delegation endpoints are canonical entity
-IDs; their identity relationship remains unresolved. This link records the
-source's exact record reference, not party identity, authorization, or scope
-validation. Canonical `DELEGATES`, `GRANTED_BY` and `GRANTED_TO` links remain
+x402 row and that row's agent reference matches the tenant registry deployment
+reference. These economic links remain correlation evidence, not causality or
+proof that a source action occurred. A delegation ID can link an action to an
+exact same-tenant `Delegation` record. The backend resolves the actor and target
+through explicit bindings; target resolution requires the source-declared
+`delegated_to_namespace` and never falls back to the actor namespace. It then
+evaluates canonical delegation
+endpoints, status, effective/revocation window, action, resource, and supported
+amount limit at source event time. The result is `within_scope`,
+`out_of_scope`, or `indeterminate`; event time, action, and resource remain
+source-reported inputs. A matching grant is not proof of execution. Without a
+server-owned execution receipt, occurrence remains `source_reported` and
+unverified. Canonical `DELEGATES`, `GRANTED_BY` and `GRANTED_TO` links remain
 projected from the delegation authority record, independently of run telemetry.
 
 Graph writes use a store-backed outbox and the canonical `GraphMutationGateway`.
-Kyber can reconcile expected mutations from deployment/Silver sources, enqueue
-missing work, and replay dead-lettered or stale processing rows. This proves
-source-to-outbox coverage only; it does not detect graph-side drift. The
-projection is feature-flagged and local in-memory store mode is not durable
-across processes.
+Kyber reconcile/repair can restore source-to-outbox coverage and replay dead
+letters; that path is distinct from the read-only bounded graph state check.
+`GET /v1/admin/kyber/agent-telemetry/graph-projection/state-check` compares
+supported tenant source references against graph state and reports missing,
+extra, mismatched, unresolved, or unauthorized findings. It can return partial
+coverage and is best-effort/non-snapshot; it does not mutate the graph or
+certify all tenant graph state. The projection remains feature-flagged and
+local in-memory store mode is not durable across processes.
 
 Public catalog state transitions are retained as append-only observations so a
 later poll cannot erase a version whose outbox enqueue failed. Platform
