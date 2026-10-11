@@ -363,6 +363,11 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return AgentMarketplaceGraphOutboxWorker().build_coro()
 
+    def _agent_marketplace_catalog_observer() -> Coroutine[Any, Any, None]:
+        from actions.agent_marketplace.catalog import build_public_marketplace_catalog_loop
+
+        return build_public_marketplace_catalog_loop()
+
     def _stablecoin_provider_polling() -> Coroutine[Any, Any, None]:
         from value.stablecoins.polling import build_stablecoin_polling_loop
 
@@ -771,6 +776,13 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
             name="agent_marketplace_graph_outbox",
             factory=_agent_marketplace_graph_outbox,
             enabled=lambda: bool(settings.external_agent_telemetry.graph_enabled),
+        ),
+        WorkerSpec(
+            name="agent_marketplace_catalog_observer",
+            factory=_agent_marketplace_catalog_observer,
+            enabled=lambda: bool(
+                settings.external_agent_telemetry.marketplace_catalog_enabled
+            ),
         ),
         # Stablecoin provider/finality polling: polls stablecoin providers and
         # confirms finality on a cooldown cadence. Gated on the stablecoin

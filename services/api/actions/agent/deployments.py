@@ -384,6 +384,17 @@ class AgentDeploymentRepository:
         records = await self._store.find(**filters)
         return sorted(records, key=lambda r: r.get("updated_at", ""), reverse=True)
 
+    async def list_page(
+        self, tenant_id: str, *, limit: int, cursor: Optional[str] = None,
+    ) -> tuple[list[dict], Optional[str], bool]:
+        """Read one tenant-prefixed store page for projection recovery."""
+        return await self._store.find_page(
+            limit=limit,
+            cursor=cursor,
+            key_prefix=f"{tenant_id}:",
+            tenant_id=tenant_id,
+        )
+
     async def list_all(self) -> list[dict]:
         """Cross-tenant listing — Kyber operator fleet views only."""
         records = await self._store.find()

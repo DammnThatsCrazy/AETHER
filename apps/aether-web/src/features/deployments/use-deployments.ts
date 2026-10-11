@@ -32,7 +32,7 @@ export function useAgentDeployments(params?: DeploymentListParams): {
   readonly error: string | null;
   readonly refresh: () => void;
 } {
-  const key = `${KEY_PREFIX}:list:${params?.status ?? 'all'}:${params?.platform ?? 'all'}`;
+  const key = `${KEY_PREFIX}:list:${params?.status ?? 'all'}:${params?.platform ?? 'all'}:${params?.agent_id ?? 'all'}`;
   const { data, isLoading, error, refetch } = useQuery<DeploymentListResult>({
     key,
     fetcher: () => fetchAgentDeployments(params),

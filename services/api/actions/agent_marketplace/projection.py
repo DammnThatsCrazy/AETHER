@@ -1,12 +1,14 @@
 """Durable retry and operator recovery for agent graph projections."""
 from __future__ import annotations
 
+import asyncio
+import base64
 import hashlib
 import json
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from shared.logger.logger import get_logger
+from shared.logger.logger import get_logger, metrics
 from shared.outbox import (
     GenericOutboxWorker,
     STATUS_DEAD_LETTERED,
@@ -72,6 +74,49 @@ def _processing_is_stale(value: Any) -> bool:
         return True
 
 
+def _encode_tenant_source_cursor(
+    tenant_id: str, *, deployment_cursor: Optional[str], deployment_done: bool,
+    silver_cursor: Optional[str], silver_done: bool,
+) -> str:
+    payload = json.dumps({
+        "v": 1,
+        "scope": "tenant_agent_sources",
+        "tenant_id": tenant_id,
+        "deployment_cursor": deployment_cursor,
+        "deployment_done": deployment_done,
+        "silver_cursor": silver_cursor,
+        "silver_done": silver_done,
+    }, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+
+
+def _decode_tenant_source_cursor(cursor: Optional[str], tenant_id: str) -> dict[str, Any]:
+    if cursor is None:
+        return {
+            "deployment_cursor": None, "deployment_done": False,
+            "silver_cursor": None, "silver_done": False,
+        }
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")))
+    except (ValueError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError("invalid tenant source page cursor") from exc
+    if (
+        not isinstance(payload, dict)
+        or payload.get("v") != 1
+        or payload.get("scope") != "tenant_agent_sources"
+        or payload.get("tenant_id") != tenant_id
+        or not isinstance(payload.get("deployment_done"), bool)
+        or not isinstance(payload.get("silver_done"), bool)
+        or payload.get("deployment_cursor") is not None
+        and not isinstance(payload.get("deployment_cursor"), str)
+        or payload.get("silver_cursor") is not None
+        and not isinstance(payload.get("silver_cursor"), str)
+    ):
+        raise ValueError("tenant source page cursor does not match this tenant")
+    return payload
+
+
 class AgentMarketplaceGraphOutboxRepository:
     """Store-backed outbox; Redis/Dynamo are durable in deployed profiles."""
 
@@ -120,10 +165,20 @@ class AgentMarketplaceGraphOutboxRepository:
         await self._store.set(row_id, data)
         return data
 
+    async def get(self, row_id: str) -> Optional[dict]:
+        return await self._store.get(row_id)
+
     async def list_for_tenant(self, tenant_id: str, limit: int = 100_000) -> list[dict]:
         rows = await self._store.find(tenant_id=tenant_id)
         rows.sort(key=lambda row: row.get("created_at") or "")
         return rows[:limit]
+
+    async def list_for_tenant_page(
+        self, tenant_id: str, *, limit: int, cursor: Optional[str] = None,
+    ) -> tuple[list[dict], Optional[str], bool]:
+        return await self._store.find_page(
+            limit=limit, cursor=cursor, tenant_id=tenant_id,
+        )
 
 
 class AgentMarketplaceGraphProjectionOutbox:
@@ -160,8 +215,11 @@ class AgentMarketplaceGraphProjectionOutbox:
             "graph_projection_status": projection_status,
         }
 
-    async def _expected_mutations(self, tenant_id: str, limit: int) -> tuple[list[tuple[str, Any]], bool]:
+    async def _expected_mutations(
+        self, tenant_id: str, limit: int, *, cursor: Optional[str] = None,
+    ) -> tuple[list[tuple[str, Any]], bool, Optional[str]]:
         from actions.agent.deployments import get_deployment_repository
+        from actions.agent_marketplace.catalog import MarketplaceCatalogRepository
         from actions.agent_marketplace.lineage import build_marketplace_origin_mutations
         from config.settings import settings
         from dependencies.providers import get_cache
@@ -171,36 +229,96 @@ class AgentMarketplaceGraphProjectionOutbox:
         from repositories.repos import AnalyticsRepository
 
         expected: list[tuple[str, Any]] = []
-        deployments = (await get_deployment_repository().list(tenant_id))[:limit]
-        truncated = len(deployments) >= limit
+        if tenant_id == "platform":
+            from actions.agent_marketplace.lineage import (
+                build_public_marketplace_listing_mutations,
+            )
+
+            rows, next_cursor, truncated = await MarketplaceCatalogRepository().list_projection_observations(
+                limit=limit, cursor=cursor,
+            )
+            for row in rows:
+                source_event_id = f"marketplace_catalog:{row.get('source_namespace')}:{row.get('observation_id') or row.get('id')}"
+                expected.extend(
+                    (source_event_id, mutation)
+                    for mutation in build_public_marketplace_listing_mutations(row)
+                )
+            return expected, truncated, next_cursor
+
+        cursor_state = _decode_tenant_source_cursor(cursor, tenant_id)
+        deployments_done = bool(cursor_state["deployment_done"])
+        silver_done = bool(cursor_state["silver_done"])
+        deployment_cursor = cursor_state.get("deployment_cursor")
+        silver_cursor = cursor_state.get("silver_cursor")
+
+        deployments: list[dict[str, Any]] = []
+        if not deployments_done:
+            deployments, deployment_cursor, deployment_truncated = (
+                await get_deployment_repository().list_page(
+                    tenant_id, limit=limit, cursor=deployment_cursor,
+                )
+            )
+            deployments_done = not deployment_truncated
         for deployment in deployments:
             if deployment.get("marketplace_origin"):
                 for mutation in build_marketplace_origin_mutations(deployment):
                     expected.append((str(deployment.get("id") or ""), mutation))
 
-        if settings.external_agent_telemetry.graph_enabled:
-            rows = await AnalyticsRepository(get_cache()).query_silver(
-                "silver_agent_execution_facts", {"tenant_id": tenant_id}, limit=limit
+        if settings.external_agent_telemetry.graph_enabled and not silver_done:
+            rows, silver_cursor, silver_truncated = await AnalyticsRepository(
+                get_cache()
+            ).query_silver_page(
+                "silver_agent_execution_facts", {"tenant_id": tenant_id},
+                limit=limit, cursor=silver_cursor,
             )
-            truncated = truncated or len(rows) >= limit
+            silver_done = not silver_truncated
             for row in rows:
                 mutations = build_external_agent_run_mutations(row)
                 source_event_id = str(row.get("source_event_id") or "")
                 if source_event_id:
                     expected.extend((source_event_id, mutation) for mutation in mutations)
-        return expected, truncated
+        else:
+            silver_done = True
 
-    async def reconcile(self, tenant_id: str, *, limit: int = 500) -> dict[str, Any]:
-        rows = await self.repo.list_for_tenant(tenant_id, limit=limit * 10)
+        truncated = not deployments_done or not silver_done
+        next_cursor = (
+            _encode_tenant_source_cursor(
+                tenant_id,
+                deployment_cursor=deployment_cursor,
+                deployment_done=deployments_done,
+                silver_cursor=silver_cursor,
+                silver_done=silver_done,
+            )
+            if truncated else None
+        )
+        return expected, truncated, next_cursor
+
+    async def reconcile(
+        self, tenant_id: str, *, limit: int = 500, cursor: Optional[str] = None,
+        outbox_cursor: Optional[str] = None,
+    ) -> dict[str, Any]:
+        outbox_limit = min(limit * 10, 1_000)
+        rows, outbox_next_cursor, outbox_truncated = await self.repo.list_for_tenant_page(
+            tenant_id, limit=outbox_limit, cursor=outbox_cursor,
+        )
         by_status = {
             status: sum(1 for row in rows if row.get("status") == status)
             for status in (STATUS_QUEUED, STATUS_PROCESSING, STATUS_FAILED, STATUS_DEAD_LETTERED, STATUS_PERSISTED)
         }
-        expected, truncated = await self._expected_mutations(tenant_id, limit)
-        have = {row.get("outbox_id") for row in rows}
+        expected, truncated, next_cursor = await self._expected_mutations(
+            tenant_id, limit, cursor=cursor,
+        )
+        semaphore = asyncio.Semaphore(24)
+
+        async def is_missing(mutation: Any) -> bool:
+            outbox_id = self.repo.outbox_id(tenant_id, _mutation_payload(mutation))
+            async with semaphore:
+                return await self.repo.get(outbox_id) is None
+
+        missing_flags = await asyncio.gather(*(is_missing(mutation) for _, mutation in expected))
         missing = [
-            mutation for source_event_id, mutation in expected
-            if self.repo.outbox_id(tenant_id, _mutation_payload(mutation)) not in have
+            mutation for (_, mutation), is_absent in zip(expected, missing_flags)
+            if is_absent
         ]
         stale_processing = sum(
             1 for row in rows
@@ -221,24 +339,33 @@ class AgentMarketplaceGraphProjectionOutbox:
             "missing_truncated": len(missing) > 50,
             "source_scan_limit": limit,
             "source_scan_truncated": truncated,
+            "source_next_cursor": next_cursor,
+            "outbox_scan_limit": outbox_limit,
+            "outbox_scan_truncated": outbox_truncated,
+            "outbox_next_cursor": outbox_next_cursor,
+            "scan_consistency": "best_effort_non_snapshot",
+            "scan_pages_exhausted": not truncated and not outbox_truncated,
             "graph_state_checked": False,
         }
 
     async def repair(
         self, tenant_id: str, *, enqueue_missing: bool = True,
         replay_dead_letters: bool = True, replay_persisted: bool = False,
-        limit: int = 500,
+        limit: int = 500, cursor: Optional[str] = None,
+        outbox_cursor: Optional[str] = None,
     ) -> dict[str, Any]:
         enqueued = 0
+        source_truncated = False
+        source_next_cursor = None
+        outbox_truncated = False
+        outbox_limit = min(limit * 10, 1_000)
         if enqueue_missing:
-            expected, _ = await self._expected_mutations(tenant_id, limit)
-            have = {
-                row.get("outbox_id")
-                for row in await self.repo.list_for_tenant(tenant_id, limit=limit * 10)
-            }
+            expected, source_truncated, source_next_cursor = await self._expected_mutations(
+                tenant_id, limit, cursor=cursor,
+            )
             for source_event_id, mutation in expected:
                 payload = _mutation_payload(mutation)
-                if self.repo.outbox_id(tenant_id, payload) not in have:
+                if await self.repo.get(self.repo.outbox_id(tenant_id, payload)) is None:
                     _, created = await self.repo.enqueue(tenant_id, source_event_id, payload)
                     enqueued += int(created)
 
@@ -246,7 +373,10 @@ class AgentMarketplaceGraphProjectionOutbox:
         statuses = {STATUS_DEAD_LETTERED} if replay_dead_letters else set()
         if replay_persisted:
             statuses.add(STATUS_PERSISTED)
-        for row in await self.repo.list_for_tenant(tenant_id, limit=limit * 10):
+        recovery_rows, outbox_next_cursor, outbox_truncated = await self.repo.list_for_tenant_page(
+            tenant_id, limit=outbox_limit, cursor=outbox_cursor,
+        )
+        for row in recovery_rows:
             status = row.get("status")
             recoverable = status in statuses or (
                 status == STATUS_PROCESSING and _processing_is_stale(row.get("updated_at"))
@@ -267,7 +397,16 @@ class AgentMarketplaceGraphProjectionOutbox:
             "tenant_id": tenant_id,
             "enqueued_missing": enqueued,
             "requeued_terminal": reset,
+            "source_scan_performed": enqueue_missing,
             "source_scan_limit": limit,
+            "source_scan_truncated": source_truncated,
+            "source_next_cursor": source_next_cursor,
+            "outbox_scan_limit": outbox_limit,
+            "outbox_scan_truncated": outbox_truncated,
+            "outbox_next_cursor": outbox_next_cursor,
+            "scan_consistency": "best_effort_non_snapshot",
+            "scan_pages_exhausted": (not enqueue_missing or not source_truncated)
+            and not outbox_truncated,
         }
 
 

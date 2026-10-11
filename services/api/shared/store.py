@@ -25,12 +25,16 @@ The store automatically:
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
+import heapq
 import json
 import os
+import secrets
 import threading
 import time
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import quote
 
 from shared.logger.logger import get_logger
@@ -95,6 +99,21 @@ class DurableStore(ABC):
     async def find(self, **filters) -> list[dict]:
         ...
 
+    async def find_page(
+        self, *, limit: int, cursor: Optional[str] = None,
+        key_prefix: str = "", **filters,
+    ) -> tuple[list[dict], Optional[str], bool]:
+        """Read one bounded backend page of matching records.
+
+        This is a storage scan, not an indexed query: filters are evaluated
+        within the backend page. A continuation cursor can therefore produce
+        an empty page while still reporting more storage rows to scan. Backend
+        scans are not snapshot-consistent. In-memory mode visits the key set to
+        select a bounded page; Redis may return more keys than SCAN's COUNT
+        hint, but only ``limit`` records are fetched and decoded here.
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not support paged scans")
+
     @abstractmethod
     async def append_list(self, key: str, value: dict) -> None:
         ...
@@ -106,6 +125,55 @@ class DurableStore(ABC):
     @abstractmethod
     async def count(self, **filters) -> int:
         ...
+
+
+_MAX_FIND_PAGE_SIZE = 1_000
+
+
+def _page_query_fingerprint(store_name: str, key_prefix: str, filters: dict) -> str:
+    query = json.dumps(
+        [store_name, key_prefix, filters], ensure_ascii=False,
+        sort_keys=True, separators=(",", ":"), default=str,
+    )
+    return hashlib.sha256(query.encode("utf-8")).hexdigest()[:20]
+
+
+def _encode_page_cursor(backend: str, fingerprint: str, state: object) -> str:
+    payload = json.dumps(
+        {"v": 1, "b": backend, "q": fingerprint, "s": state},
+        ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")
+    return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+
+
+def _decode_page_cursor(cursor: Optional[str], backend: str, fingerprint: str) -> object:
+    if cursor is None:
+        return None
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")))
+    except (ValueError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError("invalid durable store page cursor") from exc
+    if (
+        not isinstance(payload, dict)
+        or payload.get("v") != 1
+        or payload.get("b") != backend
+        or payload.get("q") != fingerprint
+        or "s" not in payload
+    ):
+        raise ValueError("durable store page cursor does not match this query")
+    return payload["s"]
+
+
+def _page_limit(limit: int) -> int:
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        raise ValueError("durable store page limit must be a positive integer")
+    return min(limit, _MAX_FIND_PAGE_SIZE)
+
+
+def _redis_escape_glob(value: str) -> str:
+    """Escape Redis SCAN glob metacharacters in a literal key prefix."""
+    return "".join("\\" + char if char in "*?[]\\" else char for char in value)
 
 
 # =========================================================================
@@ -149,6 +217,35 @@ class InMemoryStore(DurableStore):
                 if all(record.get(k) == v for k, v in filters.items()):
                     results.append(record)
             return results
+
+    async def find_page(
+        self, *, limit: int, cursor: Optional[str] = None,
+        key_prefix: str = "", **filters,
+    ) -> tuple[list[dict], Optional[str], bool]:
+        page_limit = _page_limit(limit)
+        fingerprint = _page_query_fingerprint(self.name, key_prefix, filters)
+        state = _decode_page_cursor(cursor, "memory", fingerprint)
+        after_key = str(state) if state is not None else None
+        with self._lock:
+            self._expire_all()
+            page_keys = heapq.nsmallest(
+                page_limit + 1,
+                (
+                    key for key in self._data
+                    if key.startswith(key_prefix) and (after_key is None or key > after_key)
+                ),
+            )
+            scanned = page_keys[:page_limit]
+            rows = [
+                self._data[key] for key in scanned
+                if all(self._data[key].get(field) == value for field, value in filters.items())
+            ]
+            truncated = len(page_keys) > len(scanned)
+            next_cursor = (
+                _encode_page_cursor("memory", fingerprint, scanned[-1])
+                if truncated and scanned else None
+            )
+            return rows, next_cursor, truncated
 
     async def append_list(self, key: str, value: dict) -> None:
         with self._lock:
@@ -196,6 +293,7 @@ class RedisStore(DurableStore):
         self.name = name
         self._prefix = f"aether:{name}:"
         self._list_prefix = f"aether:{name}:list:"
+        self._page_state_prefix = f"{self._prefix}__page_state__:"
         self._redis = None
         # Do not construct the local fallback eagerly: InMemoryStore correctly
         # raises in hosted environments, and a Redis-backed hosted store must
@@ -258,12 +356,93 @@ class RedisStore(DurableStore):
         # Scan all keys with prefix (production: use secondary index)
         results = []
         async for key in r.scan_iter(match=self._prefix + "*"):
+            if key.startswith(self._page_state_prefix):
+                continue
             raw = await r.get(key)
             if raw:
                 record = json.loads(raw)
                 if all(record.get(k) == v for k, v in filters.items()):
                     results.append(record)
         return results
+
+    async def find_page(
+        self, *, limit: int, cursor: Optional[str] = None,
+        key_prefix: str = "", **filters,
+    ) -> tuple[list[dict], Optional[str], bool]:
+        page_limit = _page_limit(limit)
+        r = await self._get_redis()
+        if r is None:
+            return await self._fallback_store().find_page(
+                limit=page_limit, cursor=cursor, key_prefix=key_prefix, **filters,
+            )
+        fingerprint = _page_query_fingerprint(self.name, key_prefix, filters)
+        state = _decode_page_cursor(cursor, "redis", fingerprint)
+        pending_keys: list[str] = []
+        try:
+            if state is None:
+                scan_cursor = 0
+                pending_state_id = None
+            elif isinstance(state, dict):
+                scan_cursor = int(state.get("scan_cursor", 0))
+                pending_state_id = state.get("pending_state_id")
+                if pending_state_id is not None and (
+                    not isinstance(pending_state_id, str)
+                    or not pending_state_id
+                    or not all(char.isalnum() or char in "-_" for char in pending_state_id)
+                ):
+                    raise ValueError("invalid Redis pending page state")
+                if pending_state_id:
+                    pending_raw = await r.get(self._page_state_prefix + pending_state_id)
+                    if pending_raw is None:
+                        raise ValueError("Redis page cursor state expired; restart the scan")
+                    pending_keys = json.loads(pending_raw)
+                    if not isinstance(pending_keys, list) or not all(
+                        isinstance(key, str) for key in pending_keys
+                    ):
+                        raise ValueError("invalid Redis pending page state")
+            else:
+                # Accept cursors written by the initial v1 implementation.
+                scan_cursor = int(state)
+                pending_state_id = None
+        except (TypeError, ValueError) as exc:
+            raise ValueError("invalid Redis page cursor") from exc
+
+        scan_pattern = self._prefix + _redis_escape_glob(key_prefix) + "*"
+        next_scan_cursor = scan_cursor
+        if not pending_keys:
+            next_scan_cursor, keys = await r.scan(
+                scan_cursor, match=scan_pattern, count=page_limit,
+            )
+            pending_keys = [
+                key for key in keys
+                if not key.startswith(self._list_prefix)
+                and not key.startswith(self._page_state_prefix)
+            ]
+        selected_keys = pending_keys[:page_limit]
+        remaining_keys = pending_keys[page_limit:]
+        raw_values = await r.mget(selected_keys) if selected_keys else []
+        rows = []
+        for key, raw in zip(selected_keys, raw_values):
+            if not raw:
+                continue
+            record = json.loads(raw)
+            if all(record.get(field) == value for field, value in filters.items()):
+                rows.append(record)
+        truncated = bool(remaining_keys) or int(next_scan_cursor) != 0
+        next_state: dict[str, Any] = {"scan_cursor": int(next_scan_cursor)}
+        if remaining_keys:
+            pending_state_id = secrets.token_urlsafe(18)
+            await r.setex(
+                self._page_state_prefix + pending_state_id,
+                86_400,
+                json.dumps(remaining_keys, separators=(",", ":")),
+            )
+            next_state["pending_state_id"] = pending_state_id
+        next_cursor = (
+            _encode_page_cursor("redis", fingerprint, next_state)
+            if truncated else None
+        )
+        return rows, next_cursor, truncated
 
     async def append_list(self, key: str, value: dict) -> None:
         r = await self._get_redis()
@@ -284,8 +463,9 @@ class RedisStore(DurableStore):
             return await self._fallback_store().count(**filters)
         if not filters:
             count = 0
-            async for _ in r.scan_iter(match=self._prefix + "*"):
-                count += 1
+            async for key in r.scan_iter(match=self._prefix + "*"):
+                if not key.startswith(self._page_state_prefix):
+                    count += 1
             return count
         return len(await self.find(**filters))
 
@@ -430,6 +610,52 @@ class DynamoDBStore(DurableStore):
                     return results
 
         return await self._run(_scan)
+
+    async def find_page(
+        self, *, limit: int, cursor: Optional[str] = None,
+        key_prefix: str = "", **filters,
+    ) -> tuple[list[dict], Optional[str], bool]:
+        page_limit = _page_limit(limit)
+        fingerprint = _page_query_fingerprint(self.name, key_prefix, filters)
+        state = _decode_page_cursor(cursor, "dynamodb", fingerprint)
+        if state is not None and not isinstance(state, dict):
+            raise ValueError("invalid DynamoDB page cursor")
+
+        def _scan_page() -> tuple[list[dict], Optional[dict]]:
+            kwargs: dict[str, Any] = {
+                "Limit": page_limit,
+                "ProjectionExpression": "cache_key, #value, #ttl",
+                "FilterExpression": "begins_with(#key, :prefix)",
+                "ExpressionAttributeNames": {
+                    "#key": "cache_key", "#value": "val", "#ttl": "ttl",
+                },
+                "ExpressionAttributeValues": {
+                    ":prefix": self._prefix + key_prefix,
+                },
+            }
+            if state:
+                kwargs["ExclusiveStartKey"] = state
+            response = self._get_table().scan(**kwargs)
+            rows: list[dict] = []
+            for item in response.get("Items", []):
+                item_key = item.get("cache_key", "")
+                if item_key.startswith(self._list_prefix) or self._expired(item):
+                    continue
+                raw = item.get("val")
+                if not raw:
+                    continue
+                record = json.loads(raw)
+                if all(record.get(field) == value for field, value in filters.items()):
+                    rows.append(record)
+            return rows, response.get("LastEvaluatedKey")
+
+        rows, last_key = await self._run(_scan_page)
+        truncated = bool(last_key)
+        next_cursor = (
+            _encode_page_cursor("dynamodb", fingerprint, last_key)
+            if last_key else None
+        )
+        return rows, next_cursor, truncated
 
     async def append_list(self, key: str, value: dict) -> None:
         encoded = json.dumps(value)

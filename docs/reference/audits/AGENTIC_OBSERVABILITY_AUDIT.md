@@ -6,19 +6,25 @@ visibility: I
 audience: [dev-senior, architect]
 status: experimental
 since_version: 0.1.0
-source_files: [services/api/value/x402/, services/api/actions/agent/, services/api/value/commerce/order_payment_reconciliation.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py, packages/shared/events.ts, packages/shared/agentic-observability.ts]
+source_files: [services/api/value/x402/, services/api/actions/agent/, services/api/actions/agent_marketplace/, services/api/value/commerce/order_payment_reconciliation.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/shared/store.py, services/api/workers/runtime/specs.py, packages/sdk/server/src/agent-telemetry.ts, packages/shared/events.ts, packages/shared/agentic-observability.ts]
 source_hashes:
+  "packages/sdk/server/src/agent-telemetry.ts": "sha256:c76f0910237bee7e7867f77ac38ede82bb33a6230f08094903c04561d77c9632"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
-  "packages/shared/events.ts": "sha256:46bc12934b7c41c02f9304a77315bba2d3f71be253e7b30b1186208b40f8a59a"
-  "services/api/actions/agent/": "sha256:c299158d9a24384bd4f66ba71c567435d43893a2c8fd5c64514232973c0da986"
+  "packages/shared/events.ts": "sha256:5530cfc7f2280519fbb8396aa6a60c8dafa0f19f4e2e02726db0316ace64c8ec"
+  "services/api/actions/agent/": "sha256:03188f4ff912a78f1acade65189c6607b86e67dd44bcd7829804f1876ff99e5c"
+  "services/api/actions/agent_marketplace/": "sha256:e928a85608e02676d3126307aef73e7eae324da735fddfe8e0628e5a2db8c775"
   "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:ac5c38e755dd2720a76fcca31bf7877d7e2e5d2e5ea19c3a37bc5344e495ecc4"
   "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:b6617b0dd888b02ede69696d3d4e46906120c5f0fca4bb4f5393145218d6200c"
   "services/api/identity/profile/agent.py": "sha256:ef4434e8cf518e4a04073a6e3356be9119708e156ecdab018692ed4a6350853a"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:43c2ddaea124e2f4996e24bc98fa81ecc134661ff071cc427d253c241df41e05"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:63f702d411c6e2f11349abb68f70f67bfc0cd22e5aff7d150614a43f3821486c"
+  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:5e1772ea0b72e26131503b6b98716a852d608a6704bf64579d24acb0ff510488"
+  "services/api/shared/store.py": "sha256:ff4198cf285ac4c250481ef0ae476037c26b1f4d1fa00751964638ff1f91fa8c"
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:84b3f00bfa6e0c1b4df5405636163a2650edf8651b3b36823a7f2ba26ca7b77e"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
   "services/api/value/economic/operation_linkage.py": "sha256:29544d6511463065fed4bba6acb212b9a1c57bb12800733bf6de00a56cf046fa"
   "services/api/value/x402/": "sha256:69071092cc6527dca201b9ff15cb9a5308bf8d56ab18286c82e51ca1aa40b522"
+  "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
 
 # Agentic Observability Audit
@@ -27,6 +33,28 @@ source_hashes:
 > AETHER must not execute, originate, sign, custody, settle, or facilitate those actions
 > unless a future explicit product scope, legal review, compliance review, and feature flag
 > enable it. For now, all `execution_by_aether` fields must be `false`.
+
+## Current-state addendum (2026-10-10)
+
+PR #771 closes the external-agent execution-lineage and graph-recovery gaps
+within its defined scope. The SDK contract, backend validation, Silver
+projector, and graph projector now carry source-asserted deployment/run,
+task/action, trigger, tool, policy, delegation, and outcome references. Agent
+360 presents run evidence with source and coverage labels; it does not claim
+hidden reasoning or independently verify source assertions. Kyber recovery
+pages tenant deployment/Silver sources or platform catalog observations
+separately from outbox status, checks missing work by deterministic outbox ID,
+and writes only through the graph mutation gateway. Scan reports explicitly
+identify `best_effort_non_snapshot` consistency and do not certify graph state.
+
+The default-off xAI catalog observer adds minimal public listing metadata as a
+separate `platform`-scoped source. It does not fetch bot configuration or join
+public listing slugs to canonical Agents. Associated x.com posts and x.ai news,
+canonical external-agent identity resolution, authoritative grant resolution,
+private bot contents, and graph-state drift detection remain follow-on work.
+The historical gap matrices below retain their original audit date and should
+not be read as a current inventory without this addendum and the linked
+source-of-truth documents.
 
 ## Bucket 1 — Correctly observation-only
 

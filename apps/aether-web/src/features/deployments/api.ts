@@ -96,6 +96,7 @@ const activityListSchema = z.union([
 export interface DeploymentListParams {
   readonly status?: string;
   readonly platform?: string;
+  readonly agent_id?: string;
 }
 
 export interface DeploymentListResult {
@@ -107,7 +108,7 @@ export interface DeploymentListResult {
 export async function fetchAgentDeployments(params?: DeploymentListParams): Promise<DeploymentListResult> {
   try {
     const r = await restClient.get(
-      `/v1/agent/deployments${buildQS({ status: params?.status, platform: params?.platform })}`,
+      `/v1/agent/deployments${buildQS({ status: params?.status, platform: params?.platform, agent_id: params?.agent_id })}`,
       wrap(deploymentListSchema),
     );
     const deployments = Array.isArray(r.data) ? r.data : r.data.deployments;

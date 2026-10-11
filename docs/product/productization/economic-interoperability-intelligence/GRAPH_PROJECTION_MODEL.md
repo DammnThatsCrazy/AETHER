@@ -6,12 +6,13 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/shared/graph/graph.py, services/api/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/actions/agent_marketplace/lineage.py, services/api/actions/agent_marketplace/projection.py]
+source_files: [services/api/shared/graph/graph.py, services/api/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/actions/agent_marketplace/catalog.py, services/api/actions/agent_marketplace/lineage.py, services/api/actions/agent_marketplace/projection.py]
 canonical_owner: platform@aether
 source_hashes:
   "packages/shared/graph-contract.ts": "sha256:1d8abee6ae4996435a52ec89e4631fb24a1db9a73009387f5c7c45ce9060a2ab"
-  "services/api/actions/agent_marketplace/lineage.py": "sha256:df30e2c21f5a763e3a778d32824d3d29e864ea62f04903174d65b96fe9471ba0"
-  "services/api/actions/agent_marketplace/projection.py": "sha256:174c8ab0c749ef7aa1611008aa9b3c1a456f13cb828d52c9937d49061e877e2d"
+  "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
+  "services/api/actions/agent_marketplace/lineage.py": "sha256:bfe247f42c3360f30b3f4fa92b1f39e95f654be0862303d6f74b9fb2363e6566"
+  "services/api/actions/agent_marketplace/projection.py": "sha256:b0f5977d5494ccc73bf88cd759e483073e125f489bc6ab1fe689478e5893c9cd"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:63f702d411c6e2f11349abb68f70f67bfc0cd22e5aff7d150614a43f3821486c"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:5e1772ea0b72e26131503b6b98716a852d608a6704bf64579d24acb0ff510488"
   "services/api/shared/graph/graph.py": "sha256:5ebd5c00091501ed11bac0bd49baf741261177a93ae1e99e5e9d6b0ec5054a06"
@@ -125,3 +126,11 @@ missing work, and replay dead-lettered or stale processing rows. This proves
 source-to-outbox coverage only; it does not detect graph-side drift. The
 projection is feature-flagged and local in-memory store mode is not durable
 across processes.
+
+Public catalog state transitions are retained as append-only observations so a
+later poll cannot erase a version whose outbox enqueue failed. Platform
+reconciliation and repair accept a source cursor to page those observations;
+reports expose source and outbox scan truncation so a bounded partial scan is
+not read as complete coverage. Public catalog graph records stay in the
+`platform` scope and are surfaced in Agent 360's separate catalog panel; they
+are not included by tenant graph queries.

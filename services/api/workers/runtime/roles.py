@@ -141,7 +141,10 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     # canonical observation spine (dune_polling): stablecoin provider polling and
     # the interop scan are polling/observation loops, not materialization.
     "stream-worker": frozenset(
-        {"event_replay", "dune_polling", "stablecoin_provider_polling", "interop_scan"}
+        {
+            "event_replay", "dune_polling", "stablecoin_provider_polling",
+            "interop_scan", "agent_marketplace_catalog_observer",
+        }
     ),
     "identity-worker": frozenset(),
     # The Kyber Graph projector consumes the graph mutation ledger into platform

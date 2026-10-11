@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [packages/shared/agent-deployment.ts, packages/sdk/server/src/agent-telemetry.ts, packages/sdk/python/aether_agentic/agentic.py, services/api/actions/agent/deployments.py, services/api/actions/agent/deployment_routes.py, services/api/ingestion/ingestion/batch.py]
+source_files: [config/environments/.env.example, packages/shared/agent-deployment.ts, packages/sdk/server/src/agent-telemetry.ts, packages/sdk/python/aether_agentic/agentic.py, services/api/actions/agent/deployments.py, services/api/actions/agent/deployment_routes.py, services/api/actions/agent_marketplace/catalog.py, services/api/actions/agent_marketplace/lineage.py, services/api/actions/agent_marketplace/projection.py, services/api/config/settings.py, services/api/ingestion/ingestion/batch.py, services/api/workers/runtime/roles.py, services/api/workers/runtime/specs.py]
 last_synced_commit: HEAD
 ---
 
@@ -22,10 +22,12 @@ context, enforces consent and tenant scope, resolves identity conservatively,
 expands graph relationships, and surfaces deployment intelligence in the
 Aether tenant app and diagnostics in Kyber.
 
-**This is a telemetry plane, not a marketplace.** Aether does not publish,
-host, list, review, or monetize agents. `custom_marketplace` is an
-external-platform enum value describing a tenant-owned or third-party
-surface only.
+**This is a telemetry plane, not an Aether-operated marketplace.** Aether does
+not host agents, accept listing submissions, review or distribute bots, or
+monetize listings. A separate opt-in observer reads only public listing labels,
+URLs, and order from xAI's public index; it does not ingest bot configuration
+or grant execution authority. `custom_marketplace` remains an external-platform
+enum value describing a tenant-owned or third-party surface.
 
 ## Boundaries
 
@@ -245,9 +247,14 @@ const telemetry = new AgentTelemetryClient({
 
 ## Graph / Profile360 / identity
 
-- Graph (flag `AETHER_AGENT_DEPLOYMENT_GRAPH_ENABLED`): aggregate
-  deployment→agent projection through the agentic-observability mutation
-  path; never node-per-event.
+- Graph (flag `AETHER_AGENT_DEPLOYMENT_GRAPH_ENABLED`): tenant-scoped
+  deployment lineage and bounded execution run/action evidence. Public catalog
+  snapshots are separately platform-scoped and source-attributed. External
+  IDs are not joined to canonical Agent vertices before identity authority
+  resolves them. Tenant graph queries do not include platform-scoped catalog
+  records; Agent 360 presents public listing metadata separately from tenant
+  declared deployment origins. See `AGENT_MARKETPLACE_LINEAGE.md` for projection
+  and recovery.
 - Profile360 (flag `AETHER_AGENT_DEPLOYMENT_PROFILE360_ENABLED`):
   `GET /v1/profile/{entity_id}/external-deployments` activity subresource.
 - Identity: deployment/agent/platform signals never merge identities.
@@ -258,7 +265,14 @@ const telemetry = new AgentTelemetryClient({
 `KYBER_EXTERNAL_AGENT_TELEMETRY_ENABLED`,
 `AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED`,
 `AETHER_AGENT_DEPLOYMENT_GRAPH_ENABLED`,
-`AETHER_AGENT_DEPLOYMENT_PROFILE360_ENABLED`.
+`AETHER_AGENT_DEPLOYMENT_PROFILE360_ENABLED`,
+`AETHER_AGENT_MARKETPLACE_CATALOG_ENABLED` (default OFF; public index reader).
+The catalog poll interval is configured by
+`AETHER_AGENT_MARKETPLACE_CATALOG_POLL_SECONDS` (default 21600; 900–86400
+seconds). The public catalog route is
+`GET /v1/agent/deployments/marketplace/catalog`; it is authenticated and
+requires `agent:manage`. `AETHER_AGENT_DEPLOYMENT_GRAPH_ENABLED` controls
+catalog graph enqueue separately from source capture.
 
 ## Security, privacy, abuse controls
 
@@ -271,18 +285,23 @@ const telemetry = new AgentTelemetryClient({
 
 ## Testing
 
-Backend: `BE/tests/agent/test_deployments.py` (state machine, tenant
-isolation, audit, sanitization), `test_deployment_routes.py` (routes,
-Kyber permission), `BE/tests/unit/test_ingestion_deployment_context.py`
-(accept/reject/strip, flag-off unchanged), identity merge-policy guards.
-SDK: `packages/sdk/server/src/agent-telemetry.test.ts` (15 tests),
-`packages/sdk/python/aether_agentic/test_agentic.py` (20 tests).
-Frontend: aether deployments feature tests; Kyber agent-telemetry page tests.
+Backend: deployment state, tenant isolation, audit, sanitization, ingestion
+context, marketplace catalog parsing/status, platform graph reconciliation,
+and run explanation coverage are checked in `services/api/tests/agent/`.
+SDK: `packages/sdk/server/src/agent-telemetry.test.ts` covers task, tool,
+policy, delegation, and outcome references. Frontend: Agent 360 evidence and
+graph presentation tests cover source labels, coverage gaps, and evidence
+authority.
 
 ## Known limitations / non-goals
 
-- No marketplace listing/search/discovery/submission/revenue features.
+- No Aether-operated marketplace, listing submissions/review/distribution, or
+  revenue features. Public catalog observations are read-only and
+  source-attributed.
 - SDK examples ship in docs; live external-platform credentials are
   tenant-supplied.
+- Associated X posts and newsroom news ingestion remain deferred until source
+  access and provider compliance are approved. The public index observer does
+  not bypass those controls.
 - Health counters are rolling 24h approximations (documented reset
   semantics in `deployments.py`), not billing-grade metering.

@@ -58,6 +58,12 @@ def _require_registry_enabled() -> None:
         raise BadRequestError("External agent deployment registry is not enabled")
 
 
+def _require_marketplace_catalog_route_enabled() -> None:
+    cfg = settings.external_agent_telemetry
+    if not (cfg.marketplace_catalog_enabled or cfg.registry_enabled):
+        raise BadRequestError("External agent marketplace catalog is not enabled")
+
+
 def _require_kyber_enabled() -> None:
     cfg = settings.external_agent_telemetry
     if not (cfg.enabled or cfg.kyber_enabled):
@@ -168,6 +174,40 @@ async def list_deployments(
     return APIResponse(data={"deployments": records, "count": len(records)}).to_dict()
 
 
+@deployments_router.get("/marketplace/catalog")
+async def public_marketplace_catalog(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=250),
+):
+    """Read the public-source catalog snapshot under the active tenant scope.
+
+    Public listing facts are shared observations, not tenant-owned deployment
+    data. Authentication and ``agent:manage`` still gate access to the route;
+    the response deliberately excludes marketplace configuration and private
+    bot content.
+    """
+    _require_marketplace_catalog_route_enabled()
+    tenant = _tenant(request)
+    from actions.agent_marketplace.catalog import MarketplaceCatalogRepository
+
+    repository = MarketplaceCatalogRepository()
+    status = await repository.status()
+    listings = await repository.list_listings(limit=limit)
+    if not settings.external_agent_telemetry.marketplace_catalog_enabled:
+        source_status = "disabled"
+    else:
+        source_status = str(status.get("source_status") or "never_observed")
+    return APIResponse(data={
+        "tenant_id": tenant.tenant_id,
+        "listings": listings,
+        "observed_at": status.get("observed_at"),
+        "source_status": source_status,
+        "last_success_at": status.get("last_success_at"),
+        "listing_count": status.get("listing_count", len(listings)),
+        "graph_projection_status": status.get("graph_projection_status", "not_started"),
+    }).to_dict()
+
+
 @deployments_router.get("/{deployment_id}")
 async def get_deployment(deployment_id: str, request: Request):
     """Fetch a single deployment (not-found for other tenants' deployments)."""
@@ -269,6 +309,80 @@ async def deployment_activity(
             "error_count_24h": record.get("error_count_24h", 0),
             "consent_blocked_count_24h": record.get("consent_blocked_count_24h", 0),
         },
+    }).to_dict()
+
+
+@deployments_router.get("/{deployment_id}/runs")
+async def list_agent_runs(
+    deployment_id: str,
+    request: Request,
+    limit: int = Query(default=500, ge=1, le=1000),
+):
+    """List bounded source-reported run references for one owned deployment."""
+    _require_registry_enabled()
+    tenant = _tenant(request)
+    await _repo().get(tenant.tenant_id, deployment_id)
+
+    try:
+        from dependencies.providers import get_cache
+        from repositories.repos import AnalyticsRepository
+
+        rows = await AnalyticsRepository(get_cache()).query_silver(
+            "silver_agent_execution_facts",
+            {"tenant_id": tenant.tenant_id, "deployment_id": deployment_id},
+            limit=limit,
+        )
+    except Exception as exc:
+        logger.warning(
+            "agent deployment run index unavailable",
+            extra={"tenant_id": tenant.tenant_id, "deployment_id": deployment_id,
+                   "error": type(exc).__name__},
+        )
+        return APIResponse(data={
+            "tenant_id": tenant.tenant_id,
+            "deployment_id": deployment_id,
+            "source_status": "unavailable",
+            "runs": [],
+            "source_rows_scanned": 0,
+            "runs_truncated": False,
+        }).to_dict()
+
+    runs: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        run_id = str(row.get("run_id") or "")
+        if (
+            not run_id
+            or len(run_id) > 256
+            or any(ord(char) < 32 or ord(char) == 127 for char in run_id)
+        ):
+            continue
+        occurred_at = str(row.get("occurred_at") or "")
+        summary = runs.get(run_id)
+        if summary is None:
+            summary = {
+                "run_id": run_id,
+                "first_event_at": occurred_at,
+                "last_event_at": occurred_at,
+                "event_count": 0,
+                "event_types": [],
+                "run_correlation_source": row.get("run_correlation_source"),
+            }
+            runs[run_id] = summary
+        # query_silver is newest-first: the first row for a run is its latest.
+        summary["first_event_at"] = occurred_at or summary["first_event_at"]
+        summary["event_count"] += 1
+        event_type = str(row.get("event_name") or row.get("event_type") or "")
+        if event_type and event_type not in summary["event_types"] and len(summary["event_types"]) < 12:
+            summary["event_types"].append(event_type)
+
+    recent_runs = list(runs.values())
+    return APIResponse(data={
+        "tenant_id": tenant.tenant_id,
+        "deployment_id": deployment_id,
+        "source_status": "available" if runs else "empty",
+        "runs": recent_runs[:100],
+        "source_rows_scanned": len(rows),
+        "runs_truncated": len(rows) >= limit or len(recent_runs) > 100,
     }).to_dict()
 
 
@@ -405,15 +519,20 @@ async def reconcile_agent_graph_projection(
     request: Request,
     tenant_id: str = Query(..., min_length=1, max_length=256),
     limit: int = Query(default=500, ge=1, le=1000),
+    cursor: str | None = Query(default=None, max_length=2048),
+    outbox_cursor: str | None = Query(default=None, max_length=2048),
 ):
     """Report queue coverage, pending retries, and dead letters for one tenant."""
     _require_kyber_enabled()
     _require_perm(request, "admin")
     from actions.agent_marketplace.projection import AgentMarketplaceGraphProjectionOutbox
 
-    report = await AgentMarketplaceGraphProjectionOutbox().reconcile(
-        tenant_id, limit=limit
-    )
+    try:
+        report = await AgentMarketplaceGraphProjectionOutbox().reconcile(
+            tenant_id, limit=limit, cursor=cursor, outbox_cursor=outbox_cursor,
+        )
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
     return APIResponse(data=report).to_dict()
 
 
@@ -425,19 +544,26 @@ async def repair_agent_graph_projection(
     replay_dead_letters: bool = Query(default=True),
     replay_persisted: bool = Query(default=False),
     limit: int = Query(default=500, ge=1, le=1000),
+    cursor: str | None = Query(default=None, max_length=2048),
+    outbox_cursor: str | None = Query(default=None, max_length=2048),
 ):
     """Re-enqueue missing source projections or replay terminal outbox rows."""
     _require_kyber_enabled()
     _require_perm(request, "admin")
     from actions.agent_marketplace.projection import AgentMarketplaceGraphProjectionOutbox
 
-    result = await AgentMarketplaceGraphProjectionOutbox().repair(
-        tenant_id,
-        enqueue_missing=enqueue_missing,
-        replay_dead_letters=replay_dead_letters,
-        replay_persisted=replay_persisted,
-        limit=limit,
-    )
+    try:
+        result = await AgentMarketplaceGraphProjectionOutbox().repair(
+            tenant_id,
+            enqueue_missing=enqueue_missing,
+            replay_dead_letters=replay_dead_letters,
+            replay_persisted=replay_persisted,
+            limit=limit,
+            cursor=cursor,
+            outbox_cursor=outbox_cursor,
+        )
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
     return APIResponse(data=result).to_dict()
 
 

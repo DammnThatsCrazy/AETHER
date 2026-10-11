@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/api/actions/": "sha256:8e66b0a6646a2ec98bd183fa200a4bfbfff505bf60394842abff8f7ca812e500"
+  "services/api/actions/": "sha256:0f6867f1dfa919702663de4e44f618f79887dd4d8048986bc994919fcb28e1b7"
   "services/api/billing/": "sha256:dd694b14e890adec41191a54a035ad863d9c14a2183ba5e9888c64c018658e77"
   "services/api/connectors/": "sha256:01f3d11694ce153f102de85133e514fe4548877376c05668c2ee6fe63e1ad633"
   "services/api/governance/": "sha256:4979f1d68790c9673561b70d97ad0710960603cc7228fd429539160d64db4f1d"
@@ -34,7 +34,7 @@ source_hashes:
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b3e28efab538d22bad132a158a150d7ac9872d05a14ce3bf858637dc58e18289"
   "services/api/value/": "sha256:f152a470584719e80d5d398c8e166cf34754b85c4aaae12803a1e3630bfffbc8"
-  "services/api/workers/": "sha256:a9bda8ead61b7bc7c9cb0e2cfc115458ed52c0f629661c3abcc187757e60b6a4"
+  "services/api/workers/": "sha256:edb1f748121600745df45ef634241e620be76c12a1476268865426e988f9874c"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -3032,14 +3032,20 @@ Tenant-managed outbound webhook delivery endpoints. Aether signs each delivery w
 
 Tenant routes require `agent:manage` and always use the authenticated tenant:
 
+- `GET /v1/agent/deployments/marketplace/catalog` — returns bounded public listing labels, URLs, observation status, and graph projection status. The default-off observer does not return bot configuration.
+- `GET /v1/agent/deployments/{deployment_id}/runs` — lists bounded run references from that tenant's deployment-filtered Silver facts.
 - `GET /v1/agent/deployments/{deployment_id}/runs/{run_id}/explanation` — returns the observed task, trigger, policy, delegation, tool, and outcome evidence for one deployment-scoped run. Evidence is labelled source-asserted and includes coverage gaps; the route does not claim hidden reasoning or independently verified authority.
 - `POST /v1/agent/deployments` — accepts optional tenant-declared `marketplace_origin` provenance. When graph projection is enabled, writes are queued for asynchronous projection.
+
+If the Silver query for a run explanation fails, the response sets
+`source_status=unavailable` and omits `coverage`; clients must not interpret
+that response as evidence that coverage was absent.
 
 Kyber operator routes require admin permission and an explicit tenant scope for reconciliation and repair:
 
 - `POST /v1/admin/kyber/agent-telemetry/graph-projection/drain?tenant_id=...&limit=100` — drains a bounded outbox batch.
-- `GET /v1/admin/kyber/agent-telemetry/graph-projection/reconcile?tenant_id=...` — reports source-to-outbox coverage, pending and dead-lettered rows; it does not inspect graph state.
-- `POST /v1/admin/kyber/agent-telemetry/graph-projection/repair?tenant_id=...` — re-enqueues missing source mutations and requeues dead letters. `replay_persisted=true` explicitly replays persisted queue rows.
+- `GET /v1/admin/kyber/agent-telemetry/graph-projection/reconcile?tenant_id=...` — reports source-to-outbox coverage, pending and dead-lettered rows; it does not inspect graph state. The source cursor pages platform catalog observations or tenant deployment/Silver facts; the outbox cursor pages tenant queue status. The response returns `source_next_cursor` and `outbox_next_cursor`; an empty page may still return a cursor. Missing mutations are checked by direct outbox key lookup. `scan_consistency=best_effort_non_snapshot` means cursor exhaustion is not a consistent snapshot guarantee; restart from page one after concurrent writes settle when full coverage is required.
+- `POST /v1/admin/kyber/agent-telemetry/graph-projection/repair?tenant_id=...` — re-enqueues missing source mutations and requeues dead letters. Pass the returned `source_next_cursor` as `cursor` and `outbox_next_cursor` as `outbox_cursor` to continue each scan. `replay_persisted=true` explicitly replays persisted queue rows.
 
 ## Agentic Observability Layer
 

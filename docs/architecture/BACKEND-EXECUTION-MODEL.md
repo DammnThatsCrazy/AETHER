@@ -12,17 +12,19 @@ source_files:
   - services/api/workers/runtime/roles.py
   - services/api/workers/runtime/run_role.py
   - services/api/workers/runtime/specs.py
+  - services/api/actions/agent_marketplace/catalog.py
   - services/api/workers/runtime/consumer_specs.py
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
-  "services/api/config/settings.py": "sha256:0c59864b351aaa3558edf56cc3e550803ed212c05c716f8ec24311ccfcf9779b"
-  "services/api/main.py": "sha256:d3c8f2c63bfedaa93e0d0cafd11c0fe1a25983dd48e64ac3a3de7d9a364d63d4"
+  "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
+  "services/api/config/settings.py": "sha256:4d507b4ac3cab63aec2df92c69bcb20c42d6c6f9fb54441e06353ccd34619246"
+  "services/api/main.py": "sha256:91c7168bf4a5d88cf019ac753bfa0d9c35cec9308cb0191f3ba1bada5418c6b1"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
-  "services/api/workers/runtime/roles.py": "sha256:eea55ed965e4a24945b60da138085129eebc19d5174130b0a18b1778322ab67d"
+  "services/api/workers/runtime/roles.py": "sha256:24f2e24879828f8f340e91086f57c0e99940e9db96791edc6a1d24d590ba26b1"
   "services/api/workers/runtime/run_role.py": "sha256:787c2388526da3d9bf77aa4d138e35fddf15afeb4aafef0d06f2501834785354"
-  "services/api/workers/runtime/specs.py": "sha256:24d26c3031cb512edb415033cea2c668d982df4db7bc659c2d41c40d51896aa0"
+  "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
 
 # Backend Execution Model
@@ -39,7 +41,7 @@ API process no longer starts every worker, consumer, and cron in-request.
 | `all` | Everything in one process (local/dev default). Rejected in staging/production. |
 | `api` | The FastAPI HTTP server only — no supervised workers, no stream consumers. |
 | `outbox-relay` | Outbox relay workers: the notification outbox, the ingestion `event_outbox` relay (FT-6), and the reward delivery outbox (drains `reward_delivery_jobs` through the rail-sender registry — the at-least-once delivery path for the reward plane). |
-| `stream-worker` | Stream loops plus Bronze/Silver projection, the analytics event-store projection (`analytics_event_recorder` → the `events`/`sessions` tables the analytics API reads), notification consumers, and safe SDK x402 request/intent observations. |
+| `stream-worker` | Stream loops plus Bronze/Silver projection, the analytics event-store projection (`analytics_event_recorder` → the `events`/`sessions` tables the analytics API reads), notification consumers, safe SDK x402 request/intent observations, and the default-off public agent marketplace catalog observer. |
 | `identity-worker` | Source-identity registration and canonical resolution for validated SDK observations; emits `IDENTITY_RESOLVED` only after a real decision. |
 | `graph-writer` | Profile/graph projection and delegation mutation consumers, including retryable card-linked and external-agent graph projection outboxes. |
 | `measurement-worker` | Identity merge/split journey rebuild and attribution restatement consumers. |
@@ -50,6 +52,10 @@ API process no longer starts every worker, consumer, and cron in-request.
 The canonical role set lives in `config/settings.py::RUNTIME_ROLES`; the
 role → loop-worker mapping lives in `services/api/workers/runtime/roles.py`; canonical
 stream ownership lives in `services/api/workers/runtime/consumer_specs.py::CONSUMER_SPECS`.
+The catalog observer is registered only when
+`AETHER_AGENT_MARKETPLACE_CATALOG_ENABLED` is true (default OFF); the API mounts
+the read endpoint when either the catalog observer or deployment registry is
+enabled.
 
 The stream worker also projects public SDK x402 request and intent stages through
 `services/api/ingestion/ingestion/lifecycle_worker.py` into the canonical durable lifecycle

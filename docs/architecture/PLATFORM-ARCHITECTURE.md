@@ -15,6 +15,8 @@ source_files:
   - services/api/shared/events/events.py
   - packages/shared/
   - services/api/actions/agent/deployment_routes.py
+  - services/api/actions/agent_marketplace/catalog.py
+  - services/api/actions/agent_marketplace/lineage.py
   - services/api/actions/agent_marketplace/projection.py
   - services/api/workers/runtime/specs.py
 canonical_owner: platform@aether
@@ -25,15 +27,17 @@ reviewed_source_commits:
     reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
 source_hashes:
   "packages/shared/": "sha256:85d85e07e1dc1d9cba7967d00c00e22e3e9e95200dafe0216f270f9b987c5834"
-  "services/api/actions/agent/deployment_routes.py": "sha256:a782f5db92c58ec7ae9ca5160f03a5d7a8e5c4b1c711818fd1c692982bd255ab"
-  "services/api/actions/agent_marketplace/projection.py": "sha256:174c8ab0c749ef7aa1611008aa9b3c1a456f13cb828d52c9937d49061e877e2d"
-  "services/api/config/settings.py": "sha256:0c59864b351aaa3558edf56cc3e550803ed212c05c716f8ec24311ccfcf9779b"
+  "services/api/actions/agent/deployment_routes.py": "sha256:cb311e5faeec006a81798de2873c469fe72256942d5dd49e9faa394d981468c9"
+  "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
+  "services/api/actions/agent_marketplace/lineage.py": "sha256:bfe247f42c3360f30b3f4fa92b1f39e95f654be0862303d6f74b9fb2363e6566"
+  "services/api/actions/agent_marketplace/projection.py": "sha256:b0f5977d5494ccc73bf88cd759e483073e125f489bc6ab1fe689478e5893c9cd"
+  "services/api/config/settings.py": "sha256:4d507b4ac3cab63aec2df92c69bcb20c42d6c6f9fb54441e06353ccd34619246"
   "services/api/ingestion/ingestion/replay.py": "sha256:ca77373185e811a47e354b28052901bc48ef309e62ea0133f1f55fdc37f5f687"
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
-  "services/api/main.py": "sha256:d3c8f2c63bfedaa93e0d0cafd11c0fe1a25983dd48e64ac3a3de7d9a364d63d4"
+  "services/api/main.py": "sha256:91c7168bf4a5d88cf019ac753bfa0d9c35cec9308cb0191f3ba1bada5418c6b1"
   "services/api/middleware/middleware.py": "sha256:4f984e6a2d3622df9652045c85dd323db990e11bfb4d8cf4af6f08aadfb935d6"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
-  "services/api/workers/runtime/specs.py": "sha256:24d26c3031cb512edb415033cea2c668d982df4db7bc659c2d41c40d51896aa0"
+  "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
 # Aether vNext — Architecture Guide
 
@@ -1014,3 +1018,9 @@ applied through `GraphMutationGateway`. Kyber's
 routes support bounded draining and source-to-outbox recovery. Reconciliation
 does not inspect or certify graph contents; replay is idempotent and can
 recreate missing queue work from the deployment registry and Silver facts.
+
+The separate, default-off `AETHER_AGENT_MARKETPLACE_CATALOG_ENABLED` observer
+reads minimal public listing metadata from xAI's JSON-LD catalog index. It does
+not collect template configuration or connect a public slug to a canonical
+Agent. Catalog graph snapshots use the `platform` tenant scope and can be
+reconciled with the same Kyber routes using `tenant_id=platform`.

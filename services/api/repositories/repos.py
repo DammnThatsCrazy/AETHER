@@ -12,6 +12,7 @@ Backend selection:
 from __future__ import annotations
 
 import asyncio
+import base64
 import copy
 import hashlib
 import json
@@ -1479,6 +1480,112 @@ class AnalyticsRepository:
             *[str(equals[key]) for key in keys],
         )
         return [dict(record) for record in records]
+
+    async def query_silver_page(
+        self, table: str, filters: dict[str, Any], *, limit: int = 50,
+        cursor: Optional[str] = None,
+    ) -> tuple[list[dict], Optional[str], bool]:
+        """Page one tenant-scoped Silver fact query with a fact-key cursor."""
+        if not _SILVER_TABLE_RE.fullmatch(table or ""):
+            raise ValueError(f"not a Silver fact table: {table!r}")
+        equals = {key: value for key, value in (filters or {}).items() if value is not None}
+        if not equals.get("tenant_id"):
+            raise ValueError("a Silver query must be scoped to a tenant")
+        page_limit = max(1, min(int(limit), 1000))
+        query_fingerprint = hashlib.sha256(json.dumps(
+            [table, equals], sort_keys=True, separators=(",", ":"), default=str,
+        ).encode("utf-8")).hexdigest()[:20]
+        cursor_state: Optional[dict[str, str]] = None
+        if cursor is not None:
+            try:
+                padded = cursor + "=" * (-len(cursor) % 4)
+                decoded = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")))
+            except (ValueError, UnicodeError, json.JSONDecodeError) as exc:
+                raise ValueError("invalid Silver page cursor") from exc
+            if (
+                not isinstance(decoded, dict)
+                or decoded.get("v") != 1
+                or decoded.get("q") != query_fingerprint
+                or not isinstance(decoded.get("occurred_at"), str)
+                or not isinstance(decoded.get("fact_id"), str)
+            ):
+                raise ValueError("Silver page cursor does not match this query")
+            cursor_state = decoded
+
+        from ingestion.silver import writer as silver_writer
+
+        pool = await get_pool()
+        if pool is None:
+            rows = [
+                dict(row) for row in silver_writer._local_tables.get(table, {}).values()
+                if all(str(row.get(key)) == str(value) for key, value in equals.items())
+            ]
+            utc_min = datetime.min.replace(tzinfo=timezone.utc)
+
+            def local_key(row: dict) -> tuple[datetime, str]:
+                instant = _as_utc_datetime(row.get("occurred_at")) or utc_min
+                fact_id = str(row.get("fact_id") or row.get("source_event_id") or "")
+                return instant, fact_id
+
+            rows.sort(key=local_key, reverse=True)
+            if cursor_state is not None:
+                after_instant = _as_utc_datetime(cursor_state["occurred_at"])
+                if after_instant is None:
+                    raise ValueError("Silver page cursor has an invalid timestamp")
+                after_key = (after_instant, cursor_state["fact_id"])
+                rows = [row for row in rows if local_key(row) < after_key]
+            truncated = len(rows) > page_limit
+            page = rows[:page_limit]
+        else:
+            columns = dict(await silver_writer.SilverFactWriter()._table_columns(pool, table))
+            if not columns:
+                raise ValueError(f"unknown Silver table: {table}")
+            unknown = sorted(set(equals) - set(columns))
+            if unknown:
+                raise ValueError(f"unknown {table} columns: {', '.join(unknown)}")
+            if "occurred_at" not in columns or "fact_id" not in columns:
+                raise ValueError(f"{table} lacks the stable keys required for paged reads")
+            keys = sorted(equals)
+            clauses = [f"{key}::text = ${index + 1}" for index, key in enumerate(keys)]
+            params: list[Any] = [str(equals[key]) for key in keys]
+            if cursor_state is not None:
+                instant = _as_utc_datetime(cursor_state["occurred_at"])
+                try:
+                    fact_id = uuid.UUID(cursor_state["fact_id"])
+                except (ValueError, AttributeError) as exc:
+                    raise ValueError("Silver page cursor has an invalid fact id") from exc
+                if instant is None:
+                    raise ValueError("Silver page cursor has an invalid timestamp")
+                timestamp_param = len(params) + 1
+                fact_param = len(params) + 2
+                clauses.append(f"(occurred_at, fact_id) < (${timestamp_param}, ${fact_param})")
+                params.extend([instant, fact_id])
+            params.append(page_limit + 1)
+            where = " AND ".join(clauses)
+            records = await pool.fetch(
+                f"SELECT * FROM {table} WHERE {where} "
+                f"ORDER BY occurred_at DESC, fact_id DESC LIMIT ${len(params)}",
+                *params,
+            )
+            fetched = [dict(record) for record in records]
+            truncated = len(fetched) > page_limit
+            page = fetched[:page_limit]
+
+        next_cursor = None
+        if truncated and page:
+            last = page[-1]
+            instant = _as_utc_datetime(last.get("occurred_at"))
+            fact_id = str(last.get("fact_id") or last.get("source_event_id") or "")
+            if instant is None or not fact_id:
+                raise ValueError("Silver row lacks cursor keys for paged recovery")
+            token = json.dumps({
+                "v": 1,
+                "q": query_fingerprint,
+                "occurred_at": instant.isoformat(),
+                "fact_id": fact_id,
+            }, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            next_cursor = base64.urlsafe_b64encode(token).decode("ascii").rstrip("=")
+        return page, next_cursor, truncated
 
     async def get_event(self, event_id: str, tenant_id: Optional[str] = None) -> dict:
         """Fetch one event.

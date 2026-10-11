@@ -43,7 +43,7 @@ reviewed_source_commits:
   - commit: "95e6c54f"
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
 source_hashes:
-  "apps/aether-web/src/": "sha256:ba6389d417254b32994d9c9450dacb1603c7726d100d2a14fd1ac2d1cfd76f32"
+  "apps/aether-web/src/": "sha256:d1ee1ff448980073de281d8f1f655c3d5145d83ad44f345d86f77940361feea5"
   "apps/kyber-web/src/": "sha256:7a31deaee6f5e047df21f6cd1115604f956f283b23e904128385824ab2fbf32a"
   "packages/ui/core/src/": "sha256:75ba669073aebf48fe1bb982913d32019b79b5fdcfe8dce5266f95412325f2b9"
 ---
@@ -525,6 +525,12 @@ operation evidence from the tenant-scoped `x402_flows` projection. It shows the
 source-record roles and evidence relations for exact-matched intent,
 authorization, execution and settlement records; it does not duplicate amounts
 or replace source lifecycle status.
+
+Agent 360 also presents tenant-scoped external deployment origins, recent
+source-reported run timelines, and the separately observed public marketplace
+catalog. A source outage is shown as unavailable rather than as missing
+coverage. Public catalog records remain platform-scoped and are not loaded into
+the tenant graph view.
 
 ---
 

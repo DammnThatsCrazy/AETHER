@@ -9,6 +9,12 @@ since_version: "0.1.0"
 source_files:
   - services/api/main.py
   - services/api/config/settings.py
+  - services/api/actions/agent/deployment_routes.py
+  - services/api/actions/agent_marketplace/catalog.py
+  - services/api/actions/agent_marketplace/lineage.py
+  - services/api/actions/agent_marketplace/projection.py
+  - services/api/workers/runtime/roles.py
+  - services/api/workers/runtime/specs.py
   - services/api/connectors/provider_runtime/
   - infra/legacy-staging/bootstrap.sh
 canonical_owner: platform@aether
@@ -16,9 +22,15 @@ estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "infra/legacy-staging/bootstrap.sh": "sha256:33e18270618ab4ff6af6836c173d2b116fdcf700230cf040cae5ab06cd4b1e3a"
-  "services/api/config/settings.py": "sha256:0c59864b351aaa3558edf56cc3e550803ed212c05c716f8ec24311ccfcf9779b"
+  "services/api/actions/agent/deployment_routes.py": "sha256:cb311e5faeec006a81798de2873c469fe72256942d5dd49e9faa394d981468c9"
+  "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
+  "services/api/actions/agent_marketplace/lineage.py": "sha256:bfe247f42c3360f30b3f4fa92b1f39e95f654be0862303d6f74b9fb2363e6566"
+  "services/api/actions/agent_marketplace/projection.py": "sha256:b0f5977d5494ccc73bf88cd759e483073e125f489bc6ab1fe689478e5893c9cd"
+  "services/api/config/settings.py": "sha256:4d507b4ac3cab63aec2df92c69bcb20c42d6c6f9fb54441e06353ccd34619246"
   "services/api/connectors/provider_runtime/": "sha256:5769171596f5a3c50af0a39ed9ec1b6fcddd4f67ee352d05d85ddc708cd84302"
-  "services/api/main.py": "sha256:d3c8f2c63bfedaa93e0d0cafd11c0fe1a25983dd48e64ac3a3de7d9a364d63d4"
+  "services/api/main.py": "sha256:91c7168bf4a5d88cf019ac753bfa0d9c35cec9308cb0191f3ba1bada5418c6b1"
+  "services/api/workers/runtime/roles.py": "sha256:24f2e24879828f8f340e91086f57c0e99940e9db96791edc6a1d24d590ba26b1"
+  "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
 # Operations Runbook v0.1.0-alpha.0
 
@@ -539,6 +551,7 @@ Two additional routers mount conditionally in `main.py` (all default OFF):
 ```
 AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED=true  → mounts services/api/actions/agent/deployment_routes at /v1/agent/deployments
 KYBER_EXTERNAL_AGENT_TELEMETRY_ENABLED=true    → mounts Kyber diagnostics at /v1/admin/kyber/agent-telemetry
+AETHER_AGENT_MARKETPLACE_CATALOG_ENABLED=true  → starts the public xAI catalog observer and mounts its read route
 ```
 
 Enable by setting the flags and restarting; the deployment registry persists
@@ -546,6 +559,40 @@ via the shared durable store (`agent_deployments` / `agent_deployment_audit`
 tables — run Alembic migrations first in hosted modes). Disable by clearing
 the flags and restarting; registry data is preserved. See
 `docs/reference/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md` for the full runbook.
+
+The catalog observer is independent from tenant telemetry collection. It reads
+the public xAI Marketplace JSON-LD index every six hours by default (override
+with `AETHER_AGENT_MARKETPLACE_CATALOG_POLL_SECONDS`, bounded 900–86400
+seconds) and stores listing names, public URLs, positions, hashes, and
+observation times only. It does not collect bot instructions or configuration.
+Check the authenticated `GET /v1/agent/deployments/marketplace/catalog` response
+for `source_status`, `observed_at`, and `listing_count`. A failed fetch leaves
+the last successful snapshot available and marks the status unavailable. An
+unsupported or over-limit JSON-LD shape is treated as a failed observation so
+it cannot turn parser omissions into listing-removal claims.
+
+When `AETHER_AGENT_DEPLOYMENT_GRAPH_ENABLED=true`, new catalog observations
+enter the durable graph outbox and the `graph-writer` role applies them through
+`GraphMutationGateway`. Kyber can inspect and recover coverage with
+`GET /v1/admin/kyber/agent-telemetry/graph-projection/reconcile?tenant_id=platform`
+and the corresponding `repair` route. Follow `source_next_cursor` to page
+append-only catalog transitions and `outbox_next_cursor` to page tenant outbox
+status. Each request fetches and decodes at most the requested number of
+records; a page can contain no matching rows and still return a continuation
+cursor. Responses include
+`scan_consistency=best_effort_non_snapshot`: cursor exhaustion is not a
+snapshot guarantee, and concurrent writes can fall behind the cursor. Restart
+from the first page after writes settle when complete coverage is required.
+The store caps fetched and decoded rows per request. Redis `SCAN COUNT` is only
+a hint, so a Redis scan response itself can contain more keys than the request.
+Reconcile checks each source mutation's outbox key directly, so its
+missing-mutation result does not depend on which outbox status page is being
+viewed. Follow each non-null cursor until its corresponding
+`source_scan_truncated` or `outbox_scan_truncated` field is false. This
+validates source-to-outbox coverage; it does not certify graph contents or make
+platform-scoped catalog nodes visible in tenant graph queries. The catalog
+feature is default OFF and requires the configured Redis/Dynamo store for
+cross-process durability in hosted profiles.
 
 ---
 
