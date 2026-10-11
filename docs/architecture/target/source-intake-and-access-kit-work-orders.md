@@ -369,8 +369,11 @@ integration lane, which stopped before tests because Docker Desktop was not
 running. After starting Docker Desktop, `make integration-durable` passed all 9
 tests in 21.79 seconds. The aggregate artifact remains `FAILED`; no single
 aggregate PASS was recorded. No hosted checks were reported for the ready PR at
-the time of this record. No live Auth0 setup, customer tenant/provider
-credentials, remote MCP host, or mobile device/store environment is available.
+the time of this record. The final `make docs-check` passed all 10 gates with
+the project virtualenv, including idempotency across 42 generated and
+sync-managed files and strict source-linked documentation drift. No live Auth0
+setup, customer tenant/provider credentials, remote MCP host, or mobile
+device/store environment is available.
 Therefore live cross-tenant denial, tenant/provider-to-graph hydration, device
 lifecycle, remote host conformance, customer beta, and release readiness remain
 unproven until their specific environments are supplied.
