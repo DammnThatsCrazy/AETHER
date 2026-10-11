@@ -111,6 +111,20 @@ mock_provider "aws" {
     }
   }
 
+  mock_resource "aws_ecr_repository" {
+    defaults = {
+      arn            = "arn:aws:ecr:us-east-1:111122223333:repository/aether-access-mcp"
+      name           = "aether-access-mcp"
+      repository_url = "111122223333.dkr.ecr.us-east-1.amazonaws.com/aether-access-mcp"
+    }
+  }
+
+  mock_resource "aws_lb_listener" {
+    defaults = {
+      arn = "arn:aws:elasticloadbalancing:us-east-1:111122223333:listener/app/aether-ci-mock/0000000000000000/0000000000000000"
+    }
+  }
+
   mock_resource "aws_lambda_function" {
     defaults = {
       arn = "arn:aws:lambda:us-east-1:111122223333:function:aether-ci-mock"
@@ -1669,4 +1683,60 @@ run "vpc_endpoints_egress_mode_is_rejected" {
   }
 
   expect_failures = [var.network_egress_mode]
+}
+
+# ---------------------------------------------------------------------------
+# Customer-facing Access Kit MCP is opt-in and cannot use a mutable image tag.
+# ---------------------------------------------------------------------------
+
+run "access_mcp_service_opt_in" {
+  # Apply uses the provider mocks only; this lets the assertion inspect the
+  # final task-definition image string after the mocked ECR URL is resolved.
+  command = apply
+
+  variables {
+    deployment_profile           = "staging"
+    environment                  = "staging"
+    network_egress_mode          = null
+    aurora_min_acu               = 0
+    aurora_max_acu               = 2
+    aurora_express_mode          = true
+    skip_aurora                  = false
+    log_retention_days           = 3
+    enable_access_mcp_repository = true
+    enable_access_mcp            = true
+    access_mcp_image_digest      = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  }
+
+  assert {
+    condition = alltrue([
+      length(module.access_mcp) == 1,
+      contains(keys(module.ecr.repository_urls), "aether-access-mcp"),
+      length(module.alb.access_mcp_target_group_arns) == 1,
+      module.access_mcp[0].desired_count == 2,
+      endswith(
+        module.access_mcp[0].image,
+        "@sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      ),
+    ])
+    error_message = "The opt-in Access Kit MCP plan must create its dedicated ECR repository, target group and bounded ECS service pinned to an immutable digest."
+  }
+}
+
+run "access_mcp_service_requires_repository_and_digest" {
+  command = plan
+
+  variables {
+    deployment_profile  = "staging"
+    environment         = "staging"
+    network_egress_mode = null
+    aurora_min_acu      = 0
+    aurora_max_acu      = 2
+    aurora_express_mode = true
+    skip_aurora         = false
+    log_retention_days  = 3
+    enable_access_mcp   = true
+  }
+
+  expect_failures = [var.enable_access_mcp]
 }

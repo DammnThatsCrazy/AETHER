@@ -54,6 +54,73 @@ variable "ml_image_digest" {
   }
 }
 
+variable "enable_access_mcp_repository" {
+  type        = bool
+  description = "Opt in to the dedicated aether-access-mcp ECR repository. Provision this first, then publish an immutable image before enabling the service."
+  default     = false
+}
+
+variable "enable_access_mcp" {
+  type        = bool
+  description = "Opt in to the customer-facing Access Kit MCP ECS service and ALB route. Requires the dedicated image repository and an immutable image digest."
+  default     = false
+  validation {
+    condition = !var.enable_access_mcp || (
+      var.enable_access_mcp_repository &&
+      can(regex("^sha256:[0-9a-f]{64}$", var.access_mcp_image_digest))
+    )
+    error_message = "enable_access_mcp requires enable_access_mcp_repository=true and an immutable access_mcp_image_digest."
+  }
+}
+
+variable "access_mcp_image_digest" {
+  type        = string
+  description = "Immutable sha256 digest of the image in the aether-access-mcp ECR repository; required only when enable_access_mcp is true."
+  default     = ""
+  validation {
+    condition     = var.access_mcp_image_digest == "" || can(regex("^sha256:[0-9a-f]{64}$", var.access_mcp_image_digest))
+    error_message = "access_mcp_image_digest must be empty or an immutable sha256 digest."
+  }
+}
+
+variable "access_mcp_path" {
+  type        = string
+  description = "HTTP path routed from the API hostname to the Access Kit MCP service."
+  default     = "/v1/access/mcp"
+  validation {
+    condition = (
+      can(regex("^/[A-Za-z0-9/_-]{1,127}$", var.access_mcp_path)) &&
+      !startswith(var.access_mcp_path, "//") &&
+      !endswith(var.access_mcp_path, "/") &&
+      !strcontains(var.access_mcp_path, "//")
+    )
+    error_message = "access_mcp_path must be a bounded absolute path of letters, numbers, underscores, slashes, or hyphens without a trailing or repeated slash."
+  }
+}
+
+variable "access_mcp_desired_count" {
+  type        = number
+  description = "Fixed number of customer Access Kit MCP Fargate tasks. The deployment has no autoscaling and caps this at four tasks."
+  default     = 2
+  validation {
+    condition     = var.access_mcp_desired_count >= 1 && var.access_mcp_desired_count <= 4 && floor(var.access_mcp_desired_count) == var.access_mcp_desired_count
+    error_message = "access_mcp_desired_count must be an integer between 1 and 4."
+  }
+}
+
+variable "access_mcp_allowed_origins" {
+  type        = list(string)
+  description = "Optional exact HTTPS origins permitted by the Access Kit MCP CORS/Origin guard. Empty allows server-to-server requests without Origin and rejects browser Origins."
+  default     = []
+  validation {
+    condition = alltrue([
+      for origin in var.access_mcp_allowed_origins :
+      can(regex("^https://[^/?#]+$", origin)) && !strcontains(origin, "@")
+    ])
+    error_message = "access_mcp_allowed_origins must contain exact HTTPS origins without credentials, paths, query strings, or fragments."
+  }
+}
+
 variable "environment" {
   type        = string
   description = "Deployment environment (production, staging, dev, demo, preview)"
@@ -125,23 +192,27 @@ variable "ecr_repository_encryption_types" {
   validation {
     condition = alltrue([
       for repository, encryption_type in var.ecr_repository_encryption_types :
-      contains(["aether-backend", "aether-ml-serving", "aether-kyber", "aether-aether"], repository) && contains(["KMS", "AES256"], encryption_type)
+      contains(["aether-backend", "aether-ml-serving", "aether-kyber", "aether-aether", "aether-access-mcp"], repository) &&
+      contains(["KMS", "AES256"], encryption_type) &&
+      (repository != "aether-access-mcp" || encryption_type == "KMS")
     ])
-    error_message = "ECR encryption overrides must target a reviewed repository and use KMS or AES256."
+    error_message = "ECR overrides must target a reviewed repository; aether-access-mcp must use KMS encryption."
   }
 }
 
 variable "ecr_repository_tag_mutabilities" {
   type        = map(string)
   default     = {}
-  description = "Optional per-repository ECR tag mutability overrides. Defaults to MUTABLE."
+  description = "Optional per-repository ECR tag mutability overrides. Existing repositories default to MUTABLE; aether-access-mcp is immutable."
 
   validation {
     condition = alltrue([
       for repository, mutability in var.ecr_repository_tag_mutabilities :
-      contains(["aether-backend", "aether-ml-serving", "aether-kyber", "aether-aether"], repository) && contains(["MUTABLE", "IMMUTABLE"], mutability)
+      contains(["aether-backend", "aether-ml-serving", "aether-kyber", "aether-aether", "aether-access-mcp"], repository) &&
+      contains(["MUTABLE", "IMMUTABLE"], mutability) &&
+      (repository != "aether-access-mcp" || mutability == "IMMUTABLE")
     ])
-    error_message = "ECR mutability overrides must target a reviewed repository and use MUTABLE or IMMUTABLE."
+    error_message = "ECR mutability overrides must target a reviewed repository; aether-access-mcp tags must remain immutable."
   }
 }
 

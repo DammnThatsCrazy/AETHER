@@ -6,6 +6,7 @@
 #   - aether-ml-serving  (ML inference service)
 #   - aether-kyber       (Kyber cryptography service)
 #   - aether-aether      (Core AETHER service)
+#   - aether-access-mcp  (customer-facing Access Kit MCP; explicit opt-in)
 #
 # Each repo has:
 #   - KMS encryption
@@ -38,19 +39,26 @@ resource "aws_kms_alias" "ecr" {
 # --------------------------------------------------------------------------
 
 locals {
-  repos = [
-    "aether-backend",
-    "aether-ml-serving",
-    "aether-kyber",
-    "aether-aether",
-  ]
+  repos = concat(
+    [
+      "aether-backend",
+      "aether-ml-serving",
+      "aether-kyber",
+      "aether-aether",
+    ],
+    var.enable_access_mcp_repository ? ["aether-access-mcp"] : [],
+  )
 
   encryption_types = {
     for repository in local.repos : repository => lookup(var.repository_encryption_types, repository, "KMS")
   }
 
   tag_mutabilities = {
-    for repository in local.repos : repository => lookup(var.repository_tag_mutabilities, repository, "MUTABLE")
+    for repository in local.repos : repository => lookup(
+      var.repository_tag_mutabilities,
+      repository,
+      repository == "aether-access-mcp" ? "IMMUTABLE" : "MUTABLE",
+    )
   }
 }
 
@@ -122,7 +130,12 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
 resource "aws_ecr_repository_policy" "this" {
-  for_each   = aws_ecr_repository.this
+  # The customer MCP uses a dedicated execution role with identity permissions
+  # scoped to this one repository. It has no broad repository resource policy.
+  for_each = {
+    for name, repository in aws_ecr_repository.this : name => repository
+    if name != "aether-access-mcp"
+  }
   repository = each.value.name
 
   policy = jsonencode({

@@ -18,7 +18,7 @@ own authentication, tenant selection, capability grants, policy, billing,
 readiness, rights, graph access, or action execution.
 
 ```text
-REST / CLI / local MCP stdio bridge
+REST / local CLI / cloud CLI / local MCP stdio / hosted MCP HTTP
                   │
                   ▼
        Aether authenticated API
@@ -60,10 +60,12 @@ Kit targets.
 
 ## Implemented vertical slices in this branch
 
-`packages/access-kit` adds a Node CLI and local MCP stdio bridge over existing
-Agent Access Intelligence reads, named tenant entity reads, and canonical
-intake. The surfaces use the same small REST client. No new service route or
-data authority is added.
+`packages/access-kit` adds a Node CLI, local MCP stdio bridge, and deployable
+stateless Streamable HTTP MCP service over existing Agent Access Intelligence
+reads, named tenant entity reads, account context, and canonical intake. The
+surfaces use the same REST client and preserve the current API as the tenant,
+permission, and data authority. The hosted process adds a transport adapter,
+not a new service route or data authority.
 
 | Surface | Supported call | Existing API | Classification |
 |---|---|---|---|
@@ -81,6 +83,7 @@ data authority is added.
 | CLI | `aether auth logout [--json]` | `DELETE /v1/me/sessions/{session_id}` for stored session | Tenant-scoped revocation, then credential-store removal |
 | CLI | `aether auth sessions list [--limit N] [--offset N] [--json]` | `GET /v1/me/sessions`, max 100 | Auth session inventory, tenant-scoped |
 | CLI | `aether auth sessions revoke SESSION_ID [--json]` | `DELETE /v1/me/sessions/{session_id}` | Auth session revocation, tenant-scoped |
+| CLI | `aether ...` with `AETHER_API_KEY` or `AETHER_SESSION_TOKEN` in a CloudShell/CI/ECS environment | Existing named Aether API routes | Headless cloud use; no OS keyring login required for explicit credentials |
 | MCP | `agent_access_capabilities_overview` | Catalog overview | Read-only tool, `read` |
 | MCP | `agent_access_capabilities_list` | Catalog list | Read-only tool, `read` |
 | MCP | `entities_list` | Entity list, max 50 | Read-only tool, `read` |
@@ -211,36 +214,67 @@ owning diagnostic/readiness contract exists.
   using the in-memory session token.
 - The package currently declares Node `>=20` because the pinned MCP SDK release
   requires it. CLI and MCP calls use Node's built-in `fetch`.
+- Non-interactive CLI commands with explicit `AETHER_API_KEY` or
+  `AETHER_SESSION_TOKEN` do not need the OS credential store. CloudShell, CI,
+  or an ECS task can run the CLI with a secret manager injecting one supported
+  credential into the process environment. Interactive `aether auth login`
+  still requires the native OS credential store.
 - Local MCP uses explicit `AETHER_API_KEY` or `AETHER_SESSION_TOKEN` when set;
   otherwise it best-effort loads the CLI human session from the same OS
   credential store. Missing or unavailable keyring access does not stop stdio
   startup, so publishable-key-only `observe` still works. Observe sends only
-  its bound publishable key and never the saved human session. Remote MCP still
-  requires a separately owned host authorization and client-registration path.
+  its bound publishable key and never the saved human session.
 
 ### MCP
 
-This branch provides a **local stdio bridge**, not a remotely hosted MCP server.
-It uses the official `@modelcontextprotocol/server` TypeScript SDK pinned at
-`2.3.1` and its `serveStdio` entry point. That SDK release supports both the
-current `2026-07-28` revision and the 2025-era protocol on stdio; the bridge
-keeps the SDK's compatibility behavior. It has no protocol session business
-state. Every tool call makes a fresh authenticated REST request.
+#### Local stdio
 
-The official `2026-07-28` Streamable HTTP binding requires the
-`MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name` routing headers and validates
-them against the JSON-RPC body. This package does not ship that remote transport,
-so these HTTP requirements are not implemented here. A remote service requires
-a separate design for delegated customer authorization, issuer/client
-registration, tenant isolation, rate limiting, and edge header validation; a
-stdio bridge or API key must not be placed behind an unauthenticated shared MCP
-endpoint.
+The local `aether-mcp` bridge uses the official
+`@modelcontextprotocol/server` TypeScript SDK pinned at `2.3.1` and its
+`serveStdio` entry point. It supports the current `2026-07-28` revision and
+supported 2025-era stdio clients. The bridge keeps no business state in an MCP
+session; each tool call makes a fresh authenticated REST request.
 
-Example local host configuration should execute `aether-mcp` with the relevant
-environment variables supplied by the host's secret mechanism. Do not paste a
-live key into a tracked config file. The capability inventory tools are
-read-only; `observe` is an ingestion write and must be shown accordingly. The
-server-side REST permission check remains authoritative.
+#### Hosted Streamable HTTP
+
+The package also ships `aether-mcp-http`, a stateless Node service using the
+same pinned SDK and tool registrations. The container listens on port `8080`
+by default and serves `POST /v1/access/mcp`; `AETHER_MCP_PATH` can set another
+exact path. It accepts modern protocol revision `2026-07-28` and the SDK's
+required `MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name` routing headers.
+It supports one-request/one-response tool calls, without protocol session
+state or long-lived SSE streams. Every protocol request, including initialize
+and tools/list, requires the caller's existing Aether API key or revocable
+human-session bearer credential. The service validates it through
+`GET /v1/me`, then forwards that request-scoped credential to the existing
+tenant API route; the API rechecks authorization and resolves tenant and actor.
+The service has no shared service-level customer key and accepts no caller
+tenant override.
+
+The service requires `AETHER_API_URL` and exact `AETHER_MCP_ALLOWED_HOSTS`
+configuration. Optional `AETHER_MCP_ALLOWED_ORIGINS` allows exact HTTPS browser
+origins; server-to-server clients can omit `Origin`. It rejects wildcards and
+invalid host/origin headers. `GET /healthz` is process liveness; `GET /readyz`
+checks configuration but does not claim live Aether API reachability or tenant
+readiness. The dedicated AWS Terraform service is opt-in, uses an immutable ECR
+image digest, and is routed separately from the privileged operator `tfmcp`
+service. The customer MCP task role has no workload AWS permissions.
+
+Remote `observe` is listed only when that MCP request supplies both
+`X-Aether-Observe-Key` and `X-Aether-Site-ID`. The pair is passed only to
+canonical `POST /v1/batch`, whose existing admission path verifies site binding
+and tenant scope. Without both headers the tool is omitted; partial or
+malformed values are rejected. Tenant reads still require the caller bearer.
+
+This is a usable bearer-authenticated hosted MCP endpoint, not MCP OAuth. It
+does not implement OAuth protected-resource metadata, dynamic client
+registration, authorization-code login, refresh, or token exchange. A remote
+client must securely provision an Aether API key or human session and attach it
+to each request. OAuth/DCR, host-specific onboarding, live tenant isolation,
+and remote client conformance remain separate identity-owner and deployment
+gates. The capability inventory tools are read-only; `observe` is an ingestion
+write and must be shown accordingly. The server-side REST permission check
+remains authoritative.
 
 ## Ownership for work beyond this slice
 
@@ -280,16 +314,17 @@ server-side REST permission check remains authoritative.
   detail routes above; additional identity, graph, and domain queries need
   per-endpoint capability classification, scopes, pagination, output limits,
   and owner review before exposure.
-- There is no MCP API server, OAuth authorization server for remote MCP, HTTP
-  adapter, MCP Apps surface, Aether invocation registry, arbitrary external
-  capability execution, or graph-write/action tool in this branch. CLI/MCP
-  intake is limited to the generic, site-bound `track` path described above;
-  batch collections, identity writes, and arbitrary direct route payloads are
-  not exposed.
-- Remote MCP delegated authorization remains target-only. The local stdio
-  bridge can receive an existing session token through its environment, but the
-  REST session header is not a remote MCP client-registration/delegated identity
-  contract.
+- There is no OAuth authorization server or dynamic client-registration flow
+  for remote MCP, MCP Apps surface, Aether invocation registry, arbitrary
+  external capability execution, or graph-write/action tool in this branch.
+  The hosted HTTP adapter accepts only existing request-scoped Aether bearer
+  credentials. CLI/MCP intake is limited to the generic site-bound `track`
+  path described above; batch collections, identity writes, and arbitrary
+  direct route payloads are not exposed.
+- Host-specific registration and delegated OAuth remain target-only. Live AWS
+  apply, public-host setup, two-tenant denial evidence, customer remote-client
+  conformance, and OAuth resource metadata/token exchange are not established
+  by a deployable image or passing local protocol tests.
 - This package has no usage-consumption or pricing interpretation, combined
   customer-facing doctor report, hosted protocol probe, or provider-backed
   graph hydration proof.
@@ -306,6 +341,7 @@ The following evidence is required before the associated claim:
 | Site-bound intake | A matching key/site accepts or returns canonical validation outcomes; missing and mismatched site headers are denied; retrying the same event ID returns the server's idempotent result. |
 | CLI human-session login | Apply the Auth0 module in a non-production tenant; verify the public Native client, Device Authorization grant, API audience/client grant, and enabled login connection; set the three `AETHER_AUTH0_*` values; complete device sign-in with API human sessions enabled; verify session list/revoke, then repeat with sessions disabled and confirm refusal without storing a reusable API key. Exercise keyring-unavailable and post-issuance storage-failure cleanup. |
 | MCP protocol compatible | Run the official SDK/host conformance path for the pinned release on modern `2026-07-28` and supported 2025-era stdio clients; verify deterministic tool names/schemas and that a failed API authorization is returned as an error. |
+| Hosted MCP service deployable | Build and publish an immutable Access Kit image to its dedicated ECR repository; plan the opt-in Fargate service and ALB route; verify the separate task role, host/path configuration, `/healthz`, `/readyz`, and caller bearer requirement. A Terraform plan and local HTTP exchange do not prove an applied AWS endpoint. |
 | MCP customer beta | Above plus actual host connection evidence, secure host secret injection, request correlation, error visibility, privacy/security review, and rollout support. A local bridge build alone is not beta evidence. |
 | Graph data available | A real tenant's observation-to-normalization-to-identity-to-projection proof and a separately authenticated read of that tenant's governed graph result. Catalog rows or a successful API response do not prove graph hydration. |
 | PR readiness / production readiness | The single normal PR authority and applicable release scorecard; focused package evidence is not a substitute. |
@@ -313,16 +349,19 @@ The following evidence is required before the associated claim:
 Focused local Node tests cover REST wrapper behavior, projection and response
 normalization, CLI output/error contracts, Auth0 device polling/expiry,
 human-session storage/revocation, human-session header use and session
-list/revoke mapping, MCP tool schemas/handlers, and an
-actual pinned-SDK stdio subprocess `initialize` plus `tools/list` exchange with
-no live API call. These tests do not prove official host conformance on modern
-or legacy clients, tenant isolation against a live API, publishable-key site
-binding, provider execution, graph hydration, or customer beta readiness. The
-current deliverable remains an experimental inventory, account/entity reads,
-one-event intake adapter, and CLI human-session sign-in slice. Local mocked
-tests do not prove live Auth0 tenant configuration, provider login, deployed
-human-session flags, supported OS keyring availability, or customer onboarding
-readiness.
+Focused local Node tests cover REST wrapper behavior, projection and response
+normalization, CLI output/error contracts, Auth0 device polling/expiry,
+human-session storage/revocation, human-session header use and session
+list/revoke mapping, MCP tool schemas/handlers, the pinned-SDK stdio
+`initialize`/`tools/list` exchange, and a real local Node HTTP Streamable MCP
+`tools/list` exchange with mocked API authority. These tests do not prove remote
+host conformance, live tenant isolation, deployed AWS topology, registry/image
+publication, publishable-key site binding against a live API, provider
+execution, graph hydration, OAuth, or customer beta readiness. The current
+deliverable remains an experimental inventory, account/entity reads, one-event
+intake adapter, local CLI authentication, and a deployable bearer-authenticated
+remote MCP service. Local tests do not prove live Auth0 setup, AWS apply,
+supported OS keyring availability, or customer onboarding readiness.
 
 ## Protocol reference
 

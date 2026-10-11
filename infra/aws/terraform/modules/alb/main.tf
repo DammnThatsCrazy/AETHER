@@ -7,8 +7,11 @@
 #   - Target group for aether-backend  (port 8000, /v1/health)
 #   - Target group for aether-ml-serving (port 8080, /health) — only when
 #     enable_dedicated_ml is set; cost-capped profiles serve ML inline
+#   - Target group for aether-access-mcp (port 8080, /readyz) — only when
+#     enable_access_mcp is explicitly set
 #   - Path-based routing:
 #       /v1/ml/* → ml-serving target group (only when enable_dedicated_ml)
+#       /v1/access/mcp* → Access Kit MCP target group (only when enabled)
 #       *         → backend target group (default)
 #
 # Access logs are written to S3 (bucket must exist and have the correct
@@ -166,6 +169,42 @@ resource "aws_lb_target_group" "ml" {
 }
 
 # --------------------------------------------------------------------------
+# Target Group — customer-facing Access Kit MCP (port 8080)
+# --------------------------------------------------------------------------
+
+resource "aws_lb_target_group" "access_mcp" {
+  count = var.enable_access_mcp ? 1 : 0
+
+  name        = "${lower(var.project)}-${var.environment}-access-mcp"
+  port        = 8080
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "ip"
+
+  health_check {
+    path                = "/readyz"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    healthy_threshold   = 3
+    unhealthy_threshold = 3
+    interval            = 30
+    timeout             = 5
+    matcher             = "200"
+  }
+
+  deregistration_delay = 30
+
+  tags = {
+    Name    = "${var.project}-${var.environment}-access-mcp-tg"
+    Service = "access-mcp"
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# --------------------------------------------------------------------------
 # HTTP Listener — redirect all traffic to HTTPS
 # --------------------------------------------------------------------------
 
@@ -236,5 +275,31 @@ resource "aws_lb_listener_rule" "ml_serving" {
 
   tags = {
     Name = "${var.project}-${var.environment}-ml-serving-rule"
+  }
+}
+
+# --------------------------------------------------------------------------
+# Listener Rule — customer-facing Access Kit MCP endpoint
+# --------------------------------------------------------------------------
+
+resource "aws_lb_listener_rule" "access_mcp" {
+  count = var.enable_access_mcp ? 1 : 0
+
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 20
+
+  condition {
+    path_pattern {
+      values = [var.access_mcp_path, "${var.access_mcp_path}/*"]
+    }
+  }
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.access_mcp[0].arn
+  }
+
+  tags = {
+    Name = "${var.project}-${var.environment}-access-mcp-rule"
   }
 }

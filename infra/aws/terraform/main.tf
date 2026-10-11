@@ -78,10 +78,11 @@ module "vpc" {
 module "ecr" {
   source = "./modules/ecr"
 
-  environment                 = var.environment
-  project                     = var.project
-  repository_encryption_types = var.ecr_repository_encryption_types
-  repository_tag_mutabilities = var.ecr_repository_tag_mutabilities
+  environment                  = var.environment
+  project                      = var.project
+  enable_access_mcp_repository = var.enable_access_mcp_repository
+  repository_encryption_types  = var.ecr_repository_encryption_types
+  repository_tag_mutabilities  = var.ecr_repository_tag_mutabilities
 }
 
 # ---------------------------------------------------------------------------
@@ -381,6 +382,8 @@ module "alb" {
   # them. Without it a lean plan still creates a forbidden, permanently empty
   # dedicated-ML target group.
   enable_dedicated_ml               = local.enable_dedicated_ml
+  enable_access_mcp                 = var.enable_access_mcp
+  access_mcp_path                   = var.access_mcp_path
   staging_listener_target_group_arn = var.staging_listener_target_group_arn
 }
 
@@ -589,6 +592,44 @@ module "ecs" {
   ml_max_capacity = var.ecs_ml_max_capacity
 
   log_retention_days = var.log_retention_days
+}
+
+# ---------------------------------------------------------------------------
+# 6b. Customer-facing Access Kit MCP (opt-in, isolated task identity)
+#
+# This service shares only the existing ECS cluster and ALB. It has a dedicated
+# task definition, task/execution roles, security group, log group and target
+# group; it receives no application secret and its task role has no AWS policy.
+# The ECR repository is provisioned separately so an immutable image can be
+# published before the service is enabled.
+# ---------------------------------------------------------------------------
+
+module "access_mcp" {
+  source = "./modules/access_mcp"
+  count  = var.enable_access_mcp ? 1 : 0
+
+  # The ECS service may only attach after the ALB has associated this target
+  # group with its HTTPS listener rule.
+  depends_on = [module.alb]
+
+  environment        = var.environment
+  project            = var.project
+  aws_region         = var.aws_region
+  vpc_id             = module.vpc.vpc_id
+  subnet_ids         = values(local.ecs_task_subnets)
+  assign_public_ip   = local.assign_public_ip
+  alb_sg_id          = module.vpc.alb_sg_id
+  cluster_arn        = module.ecs.cluster_arn
+  target_group_arn   = module.alb.access_mcp_target_group_arn
+  ecr_repository_url = try(module.ecr.repository_urls["aether-access-mcp"], "")
+  ecr_repository_arn = try(module.ecr.repository_arns["aether-access-mcp"], "")
+  image_digest       = var.access_mcp_image_digest
+  api_url            = "https://${var.domain_name}"
+  allowed_host       = var.domain_name
+  allowed_origins    = var.access_mcp_allowed_origins
+  access_mcp_path    = var.access_mcp_path
+  log_retention_days = var.log_retention_days
+  desired_count      = var.access_mcp_desired_count
 }
 
 # ---------------------------------------------------------------------------
