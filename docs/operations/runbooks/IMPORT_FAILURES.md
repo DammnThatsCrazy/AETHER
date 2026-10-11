@@ -9,16 +9,21 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 2
-source_files: [services/api/ingestion/imports/service.py, services/api/ingestion/imports/commit.py, services/api/ingestion/imports/kyber_routes.py, services/api/repositories/imports_repo.py, services/api/shared/graph/graph.py]
+source_files: [services/api/ingestion/imports/service.py, services/api/ingestion/imports/commit.py, services/api/ingestion/imports/rights_admission.py, services/api/ingestion/imports/kyber_routes.py, services/api/repositories/imports_repo.py, services/api/repositories/graph_mutation_ledger.py, services/api/shared/graph/graph.py, services/api/shared/graph/mutation_gateway.py]
 reviewed_source_commits:
   - commit: "30d10ccb6"
     reason: "Reviewed the CSV Rights Authority import-admission change. This runbook now describes the required purposes/source grant, fail-closed no-write behavior, persisted attempt history, and recovery path."
+  - commit: "af851e21c"
+    reason: "Reviewed commit failure and retry handling for missing graph-ledger Rights ancestry, including repair of an already projected same-commit edge."
 source_hashes:
-  "services/api/ingestion/imports/commit.py": "sha256:1622aeeae1d7cd5478d19b50cc81aa0b85a70928753b6141ba5425fc34ccbbeb"
+  "services/api/ingestion/imports/commit.py": "sha256:8c9a53efb8ff51e7a28a301ca2d047d91c8732bc49782608ac547c1f596a9cf8"
   "services/api/ingestion/imports/kyber_routes.py": "sha256:72539f001ee0853b94b1c2abce5d8f2eb98231b2676bf124e6f9c2e84bdeb749"
+  "services/api/ingestion/imports/rights_admission.py": "sha256:32d5bcdec7c74afc55e6c86e45b89f6930169a912bf185099d90fe27db3f3f7a"
   "services/api/ingestion/imports/service.py": "sha256:6d9c346282442e8af10b462367ebb187ca0d574521fe5f13b2f68152aeeacd98"
+  "services/api/repositories/graph_mutation_ledger.py": "sha256:b347022c798f92360a89fb13cae1a2086792510cd37cb9b92c3ddc9988640f31"
   "services/api/repositories/imports_repo.py": "sha256:6bdc0f6089e66d63b93456e5cf99b79653b896a338e3548f19551c48ae3c4f0e"
   "services/api/shared/graph/graph.py": "sha256:58b03f8407597f9b6b72910a3c30a51b71f44b1ad07942c0ca5f9a79a3d6a2e7"
+  "services/api/shared/graph/mutation_gateway.py": "sha256:a8ca036dfcd27dc2627ff4643c529a3c024719d087f8da339e9e8382d228ffa9"
 ---
 
 # Runbook — Tenant Import Failures
@@ -127,6 +132,18 @@ died mid-commit) is resumed — never restarted — only when the `import.commit
 is re-driven (see above); the status-requeue endpoint itself never accepts a
 `committing` session. Confirm via the detail endpoint that the session lands
 `committed`.
+
+If the `import.commit` job reports
+`import_graph_mutation_rights_ancestry_not_durable`, the Rights Authority
+admission succeeded, but the graph mutation ledger did not durably retain a
+required decision reference. The graph gateway is in shadow mode for CSV
+projection, so the graph write can succeed before its ledger append fails. The
+commit is not recorded as complete. Requeue the failed import under its
+preserved `active_commit_id`; Bronze and vertex writes are idempotent, and an
+already projected edge owned by this commit is repaired in the ledger without
+being projected again. Do not delete graph rows or edit ledger rows manually.
+If the referenced ledger row is missing or has no durable `rdec_*` reference,
+the retry fails closed; escalate the durable ledger/rights evidence for review.
 
 ### Import commit denied by consent policy (`import_consent_policy_denied`)
 The WS-B3 T-class commit gate runs **before any Bronze write** (after staging,

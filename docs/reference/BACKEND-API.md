@@ -22,6 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
   - {'commit': 'fcfe08b7b', 'reason': 'Reviewed V1/V2 SDK batch observation-envelope parity. Both storage branches preserve the flat normalized event contract and add the same optional Envelope-B projection only when adoption is enabled; no route or response schema changed.'}
+  - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
 source_hashes:
   "services/api/actions/": "sha256:cc762b94faad369af1d66f4f3e3ca0728a99860f2d5133a2522ecdcff2413a65"
   "services/api/billing/": "sha256:dd694b14e890adec41191a54a035ad863d9c14a2183ba5e9888c64c018658e77"
@@ -29,7 +30,7 @@ source_hashes:
   "services/api/governance/": "sha256:88d555a3245092c8b9359f48213c260d0e370b82d615858a14c11ac744bd48a6"
   "services/api/graph/": "sha256:7372bf88ff18200edd21b53649b25098a9b1e1ec474a79ee36cd28a480093706"
   "services/api/identity/": "sha256:e983d0dc2e0dae26c6254cdc8bcff4fff0cb2a8d4e418eefdbbb37bd8103e253"
-  "services/api/ingestion/": "sha256:6fa6c5bcaae4773bacd16dfd7b886e6594f2ac2fd88e7c4a43b375c996513d56"
+  "services/api/ingestion/": "sha256:921054b467c5e35f807386ba1c05b40cab87b7d484d6f50a9ea7e82221ad7e92"
   "services/api/intelligence/": "sha256:6f97e244ba5d4ab36c14ce27c6a207ba4e428b61173821f33d0e387411a7c737"
   "services/api/journeys/": "sha256:5d7336fa8f43bb5107a9314f09a08c16132ba1c1cf1f57762344f55a1192608a"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
@@ -4188,7 +4189,11 @@ denied, wrong-source, revoked, or unavailable rights fail closed as
 durable decision references. Successful commit records and Bronze/Silver
 evidence retain those references, and governed graph mutations carry the graph
 decision reference. Silver remains a best-effort projection under its existing
-contract.
+contract. CSV graph writes currently use the mutation gateway's shadow mode,
+but the commit is not acknowledged complete unless its graph-ledger rows retain
+durable rights references. If projection succeeds and a ledger append fails,
+the import remains failed; requeue resumes under the preserved commit ID and
+repairs an already projected same-commit edge without adding a duplicate.
 
 ### Saved import mappings
 

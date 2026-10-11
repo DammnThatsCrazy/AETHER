@@ -83,11 +83,11 @@ package presence or mocked tests.
 
 | Carry-forward item | Delivered on this stack | Remaining proof or owner gate |
 |---|---|---|
-| CSV import rights admission | Commit requires allowed, durable Rights Authority decisions for `tenant_lake`, `write_tenant_graph`, and `tenant_insights`; source grant is checked and held through writes; decision refs are retained on attempts, Bronze, Silver, and governed graph mutations. Missing, denied, mismatched, revoked, or unavailable authority fails before data writes. | Run the migration and accepted/denied import against a live tenant with configured grants; local tests do not prove deployed policy or production data behavior. |
-| SDK/mobile evidence | Web, Server, and React Native suites pass and exercise the shared wire fixture; iOS and Android fixture tests exist but are not runnable here. A macOS Swift package build passes. | Xcode is not installed (`xcode-select` points to Command Line Tools and `simctl` is absent), so `swift test` cannot load `XCTest`; Android has no Java runtime, Gradle, Android SDK, or ADB. Device install, store beta, and tenant graph hydration need those toolchains, credentials, and a live tenant. |
+| CSV import rights admission | Commit requires allowed, durable Rights Authority decisions for `tenant_lake`, `write_tenant_graph`, and `tenant_insights`; source grant is checked and held through writes; decision refs are retained on attempts, Bronze, Silver, and governed graph mutations. Rights denials fail before writes. A graph-ledger durability failure after a shadow projection leaves the commit failed and retryable; recovery records the existing commit-owned edge without duplicating it. | Run the migration and accepted/denied import against a live tenant with configured grants; local tests do not prove deployed policy or production data behavior. |
+| SDK/mobile evidence | Web, Server, and React Native suites exercise the shared wire fixture; React Native's 127 tests and TypeScript package build pass. `swift build` passes for the available macOS target. iOS and Android fixture tests exist but are not runnable here. | Xcode is not installed (`xcode-select` points to Command Line Tools and `simctl` is absent); `swift test` fails resolving `XCTest`. Android has no Java runtime, Gradle, Android SDK, or ADB. Device install, store beta, and tenant graph hydration need those toolchains, credentials, and a live tenant. |
 | Customer CLI onboarding | Auth0 Device Authorization login, `session_required` Aether session exchange, OS keyring storage, session context/list/revoke/logout, and local MCP reuse of that session are implemented. Reusable API-key fallback is refused. | Configure the Auth0 Native client and API audience, enable human sessions, and prove a real invited user login/session revoke and OS keyring on supported platforms. Tenant switching remains owner-gated because no membership chooser contract exists. |
-| Remote MCP | Local stdio protocol uses the pinned official SDK, exposes bounded supported tools, and reuses the existing API/session authorities. | Remote HTTP transport, delegated client registration/auth, and host conformance need an owning product runtime/auth contract and an actual supported remote host. IAM/Auth must define OAuth resource discovery plus caller-bound token issuance or introspection returning principal, tenant membership, audience, scopes, expiry, and revocation. Opaque `sess_...` credentials are not treated as if they had OAuth claims. `tfmcp` remains operator infrastructure and is not repurposed. |
-| Request-to-usage correlation | Batch responses join the middleware request ID to the actual usage event/evidence IDs and, when the existing audit write succeeds, to an `auditEventId` whose audit row also carries the authenticated request correlation. Allowed authoritative consent is stored as the actual receipt reference in each accepted observation's gateway-stamped Envelope-B privacy block. Access Kit preserves API-returned audit, usage, and evidence references. | The ordinary `WRITE` permission check still has no durable authorization-decision ID; it is not represented as a Rights Authority decision. General billing/payment receipts remain owned by their billing/payment flows. Audit persistence is best-effort after ingestion, and no missing IDs are synthesized. |
+| Remote MCP | Local stdio protocol uses the pinned official SDK, exposes bounded supported tools, and reuses the existing API/session authorities. The observe output schema now declares and validates optional API-returned usage, evidence, and audit IDs. | Remote HTTP transport, delegated client registration/auth, and host conformance need an owning product runtime/auth contract and an actual supported remote host. IAM/Auth must define OAuth resource discovery plus caller-bound token issuance or introspection returning principal, tenant membership, audience, scopes, expiry, and revocation. Opaque `sess_...` credentials are not treated as if they had OAuth claims. `tfmcp` remains operator infrastructure and is not repurposed. |
+| Request-to-usage correlation | Batch responses join the middleware request ID to the actual usage event/evidence IDs and, when the existing audit write succeeds, to an `auditEventId` whose audit row also carries the authenticated request correlation. Allowed authoritative consent is stored as the actual receipt reference in each accepted observation's gateway-stamped Envelope-B privacy block. Access Kit validates and preserves API-returned audit, usage, and evidence references. | The ordinary `WRITE` permission check still has no durable authorization-decision ID; it is not represented as a Rights Authority decision. General billing/payment receipts remain owned by their billing/payment flows. Audit persistence is best-effort after ingestion, and no missing IDs are synthesized. |
 | Live tenant/provider proof | Local SDK, import, provider-admission, batch, CLI, MCP, and auth route contracts are covered by focused tests below. | Real provider credentials, customer tenant/API credentials, and a separately authenticated graph read are required to prove provider-to-graph hydration, tenant isolation, and time-to-value. No such credentials are configured in this environment. |
 
 The work-order matrix below records the broader disposition for the
@@ -96,11 +96,11 @@ implemented surface and its still-open external proof.
 | Work order | Disposition | Evidence or specific continuation gate |
 |---|---|---|
 | WO-0 | Complete | Current #734/#733 ownership and surface map reviewed against this tree; stale standalone source-governance runtime removed from scope. |
-| WO-1 | Local implementation complete; live policy proof deferred | V1/V2 SDK envelope parity, existing provider admission, and CSV import Rights Authority admission are implemented. Two focused import suites pass (25 tests); deployed migration and active-grant behavior still need a live tenant. |
-| WO-2 | Cross-platform contract evidence complete where tools are available; device proof deferred | Web 382, Server 97, and React Native 127 tests pass and exercise the shared wire fixture; the iOS XCTest target cannot resolve `XCTest`; Android Gradle/ADB are unavailable. The Swift package builds for the available macOS target. Device/store beta and tenant graph hydration remain separate gates. |
+| WO-1 | Local implementation complete; live policy proof deferred | V1/V2 SDK envelope parity, existing provider admission, and CSV import Rights Authority admission are implemented. The import commit regression suite passes 23 tests, including durable ancestry failure and retry recovery; deployed migration and active-grant behavior still need a live tenant. |
+| WO-2 | Cross-platform contract evidence complete where tools are available; device proof deferred | Web 382, Server 97, and React Native 127 tests pass and exercise the shared wire fixture; the React Native package build passes. The iOS XCTest target cannot resolve `XCTest`; Android Gradle/ADB are unavailable. The Swift package builds for the available macOS target. Device/store beta and tenant graph hydration remain separate gates. |
 | WO-3 | Supported interaction normalization complete; invocation deferred | Query and observe outcomes share one response envelope. A generic invoker waits for an owning capability execution API, grant model, and server authorization contract. |
 | WO-4 | Supported API surface complete | Existing entity list/detail, account context, capability inventory, and canonical batch intake are composed with fixed projections and bounds. Broad graph search, export, and unsupported queries are not claimed. |
-| WO-5 | Local MCP slice complete; remote MCP deferred | Local stdio initialize/tool listing, read and observe handlers, session reuse, and error contracts are tested. Remote transport needs an owning delegated-auth/client identity contract and host conformance evidence. |
+| WO-5 | Local MCP slice complete; remote MCP deferred | Local stdio initialize/tool listing, read and observe handlers, session reuse, and error contracts are tested. The Access Kit suite passes 44 tests, including schema validation of server-issued usage, evidence, and audit references. Remote transport needs an owning delegated-auth/client identity contract and host conformance evidence. |
 | WO-6 | CLI login and local onboarding implemented; live configuration and tenant selection deferred | Auth0 Device Authorization, revocable Aether session storage, context/list/revoke/logout, and safe reads/intake are implemented. Live Auth0/API setup and OS keyring proof remain; tenant switching needs a supported membership-selection API. |
 | WO-7 | Supported request, consent, usage, and audit references joined | Batch request IDs correlate to returned usage/evidence IDs and tenant audit rows; accepted observations preserve the real allowed consent receipt in gateway-stamped Envelope-B. Durable per-request authorization decisions and general billing/payment receipt joins remain owner-gated. |
 | WO-8 | Local proof complete for supported paths; live/release proof deferred | Exact focused results and toolchain limitations are listed under WO-8. Customer tenant, device, provider, hosted PR, and release evidence remain independent gates. |
@@ -195,7 +195,7 @@ Each work order produces a commit on the same PR branch. An acceptance condition
 
 **Acceptance:** every changed adapter has an explicit end-to-end handoff to the canonical authority, and no client or adapter makes identity, rights, or graph decisions. Legacy route removal or storage consolidation requires the #734 migration proof, not a parallel destructive cutover.
 
-**Current stack status:** the SDK and provider handoffs use their existing canonical authorities, and this stack now closes the CSV import admission gap with an explicit-grant rule. Every import commit resolves allowed durable decisions for tenant lake storage, graph write, and tenant insights against the submitted source and retains the active source grant through writes. Denial, missing or wrong-source grant, revocation, and resolver/store failure stop before import data writes. Import attempt, Bronze, Silver, and graph-mutation evidence retain their durable decision references. Focused commit/projector suites pass (25 tests total); live tenant grants and deployed migration execution remain unproven.
+**Current stack status:** the SDK and provider handoffs use their existing canonical authorities, and this stack closes the CSV import admission gap with an explicit-grant rule. Every import commit resolves allowed durable decisions for tenant lake storage, graph write, and tenant insights against the submitted source and retains the active source grant through writes. Denial, missing or wrong-source grant, revocation, and resolver/store failure stop before import data writes. Import attempt, Bronze, Silver, and graph-mutation evidence retain durable decision references. CSV continues to use the graph gateway's shadow rollout mode; commit success additionally requires durable graph-ledger ancestry. If a shadow projection succeeds and its ledger append fails, the attempt is marked failed; retry repairs the ledger for a same-commit edge without applying a duplicate graph edge. Focused evidence and live tenant grants/deployed migration execution are reported separately below.
 
 ### WO-2 — SDK productization and mobile evidence
 
@@ -279,6 +279,9 @@ and `observe` through the existing REST authorities. It best-effort reuses a
 stored human session for reads while preserving site-bound publishable-key-only
 observe. Focused handler tests and a pinned-SDK stdio subprocess smoke test
 cover schemas, projections, bounds, errors, initialization, and tool listing.
+The observe result contract includes optional `usageEventId`,
+`usageEvidenceId`, and `auditEventId`; a structured-output test verifies those
+API-issued values survive schema validation.
 Remote MCP HTTP, delegated client registration, host conformance, live tenant
 isolation, and customer beta evidence remain deferred to an owning runtime/auth
 contract and supported remote host.
@@ -352,24 +355,26 @@ with their owning flows; neither is synthesized by the adapter.
 **Acceptance:** all claims map to retained evidence; no production, certification, customer-beta, or broad merge-readiness claim is made without its canonical release/PR evidence.
 
 **Current stack status:** focused local evidence is complete for the supported
-surface. Current integrated results: Access Kit 43 tests; Web SDK 382; Server
-SDK 97; React Native SDK 127; 90 combined tests across CSV import commit and
-Silver projection, V1/V2 batch route, consent authority, observation envelope,
-and golden-fixture suites; 59 tests across provider-rights admission, batch
-identity/idempotency, and security governance; and 28 auth route/session tests
-from the delegated CLI slice. The batch identity/idempotency suite contains 7
-tests. The Access Kit security fix for terminal-control injection is also
-covered. `swift build` passes for the available macOS target. `swift test`
-cannot run because Xcode/XCTest and `simctl` are unavailable; Android has no
-Java runtime, Gradle, Android SDK, or ADB.
+surface. Current change-specific results: Access Kit 44 tests, CSV import
+commit 23 tests, and graph mutation gateway 18 tests. Earlier integrated
+results on this stack include Web SDK 382, Server SDK 97, and React Native SDK
+127 tests; 90 combined tests across CSV import/Silver projection, V1/V2 batch
+route, consent authority, observation envelope, and golden-fixture suites; 59
+tests across provider-rights admission, batch identity/idempotency, and
+security governance; and 28 auth route/session tests from the delegated CLI
+slice. The React Native package build and `swift build` for the available
+macOS target pass. `swift test` fails because the installed Command Line Tools
+cannot resolve `XCTest`; full Xcode and `simctl` are unavailable. Android has
+no Java runtime, Gradle, Android SDK, or ADB.
 
 The full local `verification-disposition` run at `32bb77cb1` selected 46 suites
 and recorded 58 passing checks. Its sole failed check was the Docker-backed
 integration lane, which stopped before tests because Docker Desktop was not
 running. After starting Docker Desktop, `make integration-durable` passed all 9
 tests in 21.79 seconds. The aggregate artifact remains `FAILED`; no single
-aggregate PASS was recorded. No hosted checks were reported for the ready PR at
-the time of this record. The final `make docs-check` passed all 10 gates with
+aggregate PASS was recorded. No hosted checks were reported for this PR before
+the current source edits; read hosted status after finalization. The final
+`make docs-check` passed all 10 gates with
 the project virtualenv, including idempotency across 42 generated and
 sync-managed files and strict source-linked documentation drift. No live Auth0
 setup, customer tenant/provider credentials, remote MCP host, or mobile
