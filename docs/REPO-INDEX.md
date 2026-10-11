@@ -204,6 +204,8 @@ The following authored docs are expected to stay aligned with code changes:
 - `operations/billing-attachment-runbook.md`
 - `operations/ci-cd.md`
 - `operations/docs-stamping.md`
+- `operations/incident-response.md`
+- `operations/local-development.md`
 - `operations/migrations.md`
 - `operations/noesis-operator-guide.md`
 - `operations/noesis-operator-runbook.md`

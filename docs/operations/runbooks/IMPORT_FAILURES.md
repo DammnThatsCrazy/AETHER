@@ -15,7 +15,7 @@ source_hashes:
   "services/api/ingestion/imports/kyber_routes.py": "sha256:72539f001ee0853b94b1c2abce5d8f2eb98231b2676bf124e6f9c2e84bdeb749"
   "services/api/ingestion/imports/service.py": "sha256:091068a1132e6ef688f14830ec2381d082165afba5e875f4b09a21f4d280e8ce"
   "services/api/repositories/imports_repo.py": "sha256:ba56c9a87416921bc39fd169df7f13a4ef1565947a15761089d11b4295c46870"
-  "services/api/shared/graph/graph.py": "sha256:58b03f8407597f9b6b72910a3c30a51b71f44b1ad07942c0ca5f9a79a3d6a2e7"
+  "services/api/shared/graph/graph.py": "sha256:07c5a70eb15c7924fad58de63eba5d3d984b6eac21c328cd3072de0f77ee14fd"
 ---
 
 # Runbook — Tenant Import Failures
