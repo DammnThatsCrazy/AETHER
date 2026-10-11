@@ -1,0 +1,38 @@
+{
+  "contract": "aether.sdk.batch-wire",
+  "version": "1.0.0",
+  "endpoint": "/v1/batch",
+  "description": "Minimum stable SDK observation wire shape. Transport timestamps and optional platform context may vary; tenant scope, consent decisions, identity resolution, and graph state are server-owned.",
+  "request": {
+    "batch": [
+      {
+        "id": "evt_contract_vector_1",
+        "type": "track",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "sessionId": "sess_contract_vector_1",
+        "anonymousId": "anon_contract_vector_1",
+        "properties": {
+          "event": "contract_vector"
+        },
+        "context": {
+          "library": {
+            "name": "aether-contract-test",
+            "version": "1.0.0"
+          }
+        }
+      }
+    ],
+    "sentAt": "2026-01-01T00:00:01.000Z"
+  },
+  "requiredBatchFields": ["batch", "sentAt"],
+  "requiredEventFields": [
+    "id",
+    "type",
+    "timestamp",
+    "sessionId",
+    "anonymousId",
+    "properties",
+    "context"
+  ],
+  "optionalBatchFields": ["context", "consents"]
+}

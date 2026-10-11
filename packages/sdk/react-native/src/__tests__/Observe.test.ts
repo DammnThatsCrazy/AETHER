@@ -5,6 +5,7 @@
 // envelope is exposed via collectSemanticContext(sessionId, eventId) around
 // caller-held canonical ids — never around a JS-minted session id.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 const { nativeMethods, listeners } = vi.hoisted(() => ({
   nativeMethods: {
@@ -32,6 +33,10 @@ vi.mock('react-native', () => ({
 
 import Aether from '../bridge';
 
+const batchWireVector = JSON.parse(
+  readFileSync(new URL('../../../../shared/contracts/sdk-batch-wire-v1.json', import.meta.url), 'utf8'),
+) as { request: { batch: Array<{ type: string; properties: Record<string, unknown> }> } };
+
 describe('Aether RN bridge — observe() parity (§2.6)', () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -43,6 +48,12 @@ describe('Aether RN bridge — observe() parity (§2.6)', () => {
   it('observe passes empty properties when none provided', () => {
     Aether.observe('page_viewed');
     expect(nativeMethods.observe).toHaveBeenCalledWith('page_viewed', {});
+  });
+
+  it('forwards the shared canonical event vector to native observation', () => {
+    const event = batchWireVector.request.batch[0];
+    Aether.observe(event.type, event.properties);
+    expect(nativeMethods.observe).toHaveBeenCalledWith(event.type, event.properties);
   });
 
   it('queueDepth resolves the native queue depth', async () => {

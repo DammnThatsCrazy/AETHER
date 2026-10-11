@@ -804,6 +804,18 @@ public struct BatchHealth {
 
 // MARK: - Main SDK Class
 
+let sdkBatchPath = "/v1/batch"
+
+/// Serialize the stable request envelope shared by the legacy and durable-ack senders.
+func encodeBatchPayload(batch: [AetherEvent], sentAt: String) -> Data? {
+    let encodedBatch = batch.map { try? JSONEncoder().encode($0) }
+        .compactMap { $0 }
+        .map { try? JSONSerialization.jsonObject(with: $0) }
+        .compactMap { $0 }
+    let payload: [String: Any] = ["batch": encodedBatch, "sentAt": sentAt]
+    return try? JSONSerialization.data(withJSONObject: payload)
+}
+
 public final class Aether: NSObject {
     public static let shared = Aether()
 
@@ -2774,7 +2786,7 @@ public final class Aether: NSObject {
     private func sendDurableAckBatch(batch: [AetherEvent], config: AetherConfig, retryCount: Int) {
         let maxRetries = 3
         guard !batch.isEmpty,
-              let url = URL(string: "\(config.endpoint)/v1/batch") else { return }
+              let url = URL(string: "\(config.endpoint)\(sdkBatchPath)") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -2782,12 +2794,10 @@ public final class Aether: NSObject {
         request.setValue("ios", forHTTPHeaderField: "X-Aether-SDK")
         request.timeoutInterval = 10.0
 
-        let encodedBatch = batch.map { try? JSONEncoder().encode($0) }
-            .compactMap { $0 }
-            .map { try? JSONSerialization.jsonObject(with: $0) }
-            .compactMap { $0 }
-        let payload: [String: Any] = ["batch": encodedBatch, "sentAt": ISO8601DateFormatter().string(from: Date())]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        request.httpBody = encodeBatchPayload(
+            batch: batch,
+            sentAt: ISO8601DateFormatter().string(from: Date())
+        )
 
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             guard let self = self else { return }
@@ -2819,7 +2829,7 @@ public final class Aether: NSObject {
 
     private func sendBatchWithRetry(batch: [AetherEvent], config: AetherConfig, retryCount: Int) {
         let maxRetries = 3
-        guard let url = URL(string: "\(config.endpoint)/v1/batch") else { return }
+        guard let url = URL(string: "\(config.endpoint)\(sdkBatchPath)") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -2827,12 +2837,10 @@ public final class Aether: NSObject {
         request.setValue("ios", forHTTPHeaderField: "X-Aether-SDK")
         request.timeoutInterval = 10.0
 
-        let encodedBatch = batch.map { try? JSONEncoder().encode($0) }
-            .compactMap { $0 }
-            .map { try? JSONSerialization.jsonObject(with: $0) }
-            .compactMap { $0 }
-        let payload: [String: Any] = ["batch": encodedBatch, "sentAt": ISO8601DateFormatter().string(from: Date())]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        request.httpBody = encodeBatchPayload(
+            batch: batch,
+            sentAt: ISO8601DateFormatter().string(from: Date())
+        )
 
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             guard let self = self else { return }

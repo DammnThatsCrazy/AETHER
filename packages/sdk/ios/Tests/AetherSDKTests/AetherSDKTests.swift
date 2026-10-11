@@ -4,6 +4,55 @@ import CryptoKit
 
 final class AetherSDKTests: XCTestCase {
 
+    func testSharedSDKBatchWireVectorUsesTheNativeEncoderAndEnvelope() throws {
+        let fixtureURL = try sharedBatchWireFixtureURL()
+        let fixture = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: fixtureURL)) as? [String: Any]
+        )
+        XCTAssertEqual(fixture["endpoint"] as? String, sdkBatchPath)
+        let request = try XCTUnwrap(fixture["request"] as? [String: Any])
+        let vectorBatch = try XCTUnwrap(request["batch"] as? [[String: Any]])
+        let vectorEvent = try XCTUnwrap(vectorBatch.first)
+        let vectorSentAt = try XCTUnwrap(request["sentAt"] as? String)
+
+        // Decode through the SDK's public Codable model, then serialize through
+        // the same helper used by both production batch send modes.
+        let eventData = try JSONSerialization.data(withJSONObject: vectorEvent)
+        let event = try JSONDecoder().decode(AetherEvent.self, from: eventData)
+        let payloadData = try XCTUnwrap(encodeBatchPayload(batch: [event], sentAt: vectorSentAt))
+        let payload = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
+        )
+        let requiredBatchFields = try XCTUnwrap(fixture["requiredBatchFields"] as? [String])
+        for field in requiredBatchFields {
+            XCTAssertNotNil(payload[field], "Missing batch field: \(field)")
+        }
+        XCTAssertEqual(payload["sentAt"] as? String, vectorSentAt)
+
+        let events = try XCTUnwrap(payload["batch"] as? [[String: Any]])
+        let encodedEvent = try XCTUnwrap(events.first)
+        let requiredEventFields = try XCTUnwrap(fixture["requiredEventFields"] as? [String])
+        for field in requiredEventFields {
+            XCTAssertNotNil(encodedEvent[field], "Missing event field: \(field)")
+        }
+        XCTAssertEqual(encodedEvent["id"] as? String, vectorEvent["id"] as? String)
+        XCTAssertEqual(encodedEvent["type"] as? String, vectorEvent["type"] as? String)
+    }
+
+    private func sharedBatchWireFixtureURL() throws -> URL {
+        var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        while directory.path != "/" {
+            let candidate = directory.appendingPathComponent("packages/shared/contracts/sdk-batch-wire-v1.json")
+            if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
+            directory = directory.deletingLastPathComponent()
+        }
+        throw NSError(
+            domain: "AetherSDKTests",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "Shared batch wire fixture not found"]
+        )
+    }
+
     func testCanonicalConsentReceiptGoldenVector() throws {
         let receipt = try Aether.shared.buildCanonicalConsentReceipt(
             CanonicalConsentReceiptInput(

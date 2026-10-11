@@ -66,11 +66,20 @@ Relevant implementation: `services/api/ingestion/ingestion/batch.py`,
 | Fleet heartbeat | Health agent sends heartbeat and reports delivery diagnostics | Local flush counters exist; no equivalent remote fleet heartbeat is established by the SDK implementation | RN health agent sends heartbeat | Native health agent sends heartbeat | Native health agent sends heartbeat |
 | Remote SDK manifest | Fetches, verifies, and applies manifest configuration | No manifest client established | Fetches and applies manifest values to JS feature flags, sampling, and endpoint overrides; signature verification is owned by native code | Fetches and applies manifest; signature verification is supported when configured | Fetches and applies manifest; signature verification is supported when configured |
 
-The code supports useful features on every client family, but there is no
-single cross-platform conformance fixture proving API, consent, schema,
-retry/idempotency, and failure-outcome parity. Package presence and local
-source-level behavior do not establish publish readiness or customer graph
-hydration.
+The code supports useful features on every client family. A versioned minimum
+wire vector now pins the stable observation fields and `/v1/batch` envelope in
+`packages/shared/contracts/sdk-batch-wire-v1.json`. Focused tests consume that
+same file in Web, Server, React Native, iOS, and Android. Web and Server tests
+exercise their HTTP senders; iOS and Android tests exercise the shared envelope
+builders used by their production send modes; the React Native test verifies
+that the canonical observation is delegated unchanged to native, where the
+platform sender owns serialization.
+
+This is deliberately a narrow wire conformance check. The vector permits the
+existing optional outer `context` and `consents` fields. It does not standardize
+consent decisions, client identity behavior, tenant/site scope, retry outcomes,
+or graph results. Package presence and local conformance checks do not establish
+publish readiness, device lifecycle behavior, or customer graph hydration.
 
 Primary inspection points include `packages/sdk/web/src/index.ts`,
 `packages/sdk/server/src/index.ts` and `durable-queue.ts`,
@@ -79,14 +88,41 @@ Primary inspection points include `packages/sdk/web/src/index.ts`,
 and `packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt` and
 `AetherHealthAgent.kt`.
 
+### Shared conformance vector coverage
+
+`packages/shared/contracts/sdk-batch-wire-v1.json` pins one minimum observation
+with its stable event fields, the `/v1/batch` path, and the required batch
+fields. The consumers intentionally check the seam each package owns:
+
+| SDK | Fixture-backed check | What it establishes |
+|---|---|---|
+| Web | `packages/sdk/web/test/sdk-batch-wire-contract.test.ts` | The `EventQueue` sends the vector unchanged in `batch` to `/v1/batch` and emits ISO-8601 `sentAt`. |
+| Server | `packages/sdk/server/src/transport.test.ts` | `sendBatch` sends the vector in the canonical envelope; its optional `consents` hint remains an SDK input. |
+| React Native | `packages/sdk/react-native/src/__tests__/Observe.test.ts` | `observe(type, properties)` forwards the canonical event and properties to native unchanged; native owns the wire sender. |
+| iOS | `packages/sdk/ios/Tests/AetherSDKTests/AetherSDKTests.swift` | `AetherEvent` decodes/encodes the fixture through the same batch-envelope helper used by legacy and durable-ack senders. |
+| Android | `packages/sdk/android/src/test/java/com/aether/sdk/AetherTest.kt` | The shared batch-envelope helper used by legacy and durable-ack senders preserves the event vector and required envelope fields. |
+
+The vector is not a complete schema conformance suite: the iOS/Android checks
+exercise serialization/envelope helpers, and the React Native check covers its
+bridge handoff. None boots an installed mobile app or exercises a device queue.
+Consent filtering, identity/retry policy, resolved tenant/site scope,
+observation admission, and graph projection remain separate proof obligations.
+
 ## Remaining work and proof gates
 
-1. **Shared contract conformance.** Define a versioned fixture set consumed by
-   each supported SDK implementation. Cover canonical event typing, envelope
-   fields, server-owned tenant/site scope, consent gating, stable retry identity,
-   and parsing of accepted, duplicate, rejected, and transport-failure outcomes.
-   Keep platform-specific APIs where appropriate; prove their wire behavior
-   against the same contract rather than requiring identical surface methods.
+1. **Shared wire conformance.** The v1 vector now covers the stable required
+   event fields, canonical `/v1/batch` path, `batch`, and ISO-8601 `sentAt`;
+   focused platform tests verify those values through each SDK's current
+   transport or native handoff seam. The Server SDK may add its optional
+   `consents` hint, Web may add batch context, and native platforms may attach
+   platform-specific event context. Remaining proof: execute the iOS test with
+   an XCTest-capable Xcode toolchain, execute the Android test with Gradle, and
+   retain runtime/device evidence for installed clients. On the source-intake
+   branch, focused Web, Server, and React Native Vitest files passed and
+   `swift build --package-path packages/sdk/ios` passed. The focused `swift test`
+   could not resolve `XCTest` under the active Command Line Tools selection, and
+   Android execution was unavailable because neither `gradle` nor a wrapper is
+   present. No identity or consent semantics are introduced by this fixture.
 2. **V1/V2 intake proof.** Focused local route coverage now sends the same SDK
    event through V1 and V2 with Envelope-B and gateway flags on, then compares
    stable envelope fields in the V1 published payload and V2 Bronze/outbox
