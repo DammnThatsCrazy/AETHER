@@ -89,9 +89,14 @@ async def test_retry_of_identify_event_is_published_once_and_never_resolved_inli
     )
     monkeypatch.setattr(batch, "BronzeRepository", lambda _name: _Bronze())
     monkeypatch.setattr(batch, "_emit_sequence_integrity_meters", lambda *args: None)
-    async def no_meter(*args, **kwargs):
-        return None
-    monkeypatch.setattr(batch, "meter_family_usage", no_meter)
+    metering_calls = []
+    async def meter(*args, **kwargs):
+        metering_calls.append(kwargs)
+        return SimpleNamespace(
+            metered_event_id="usage-event-1",
+            evidence_id="usage-evidence-1",
+        )
+    monkeypatch.setattr(batch, "meter_family_usage", meter)
     monkeypatch.setattr(
         "ingestion.sdk_distribution.install_verifier.schedule_install_projection",
         lambda *args, **kwargs: None,
@@ -110,7 +115,7 @@ async def test_retry_of_identify_event_is_published_once_and_never_resolved_inli
     first = await batch.ingest_events(
         [event], tenant_id="tenant-a", request_privacy=batch.RequestPrivacySignals(),
         server_context=None, granted_consents=frozenset(), sent_at=None,
-        producer=producer,
+        producer=producer, request_id="req-batch-first",
     )
     await asyncio.sleep(0)
     second = await batch.ingest_events(
@@ -121,6 +126,10 @@ async def test_retry_of_identify_event_is_published_once_and_never_resolved_inli
     await asyncio.sleep(0)
 
     assert first.accepted == 1
+    assert first.requestId == "req-batch-first"
+    assert first.usageEventId == "usage-event-1"
+    assert first.usageEvidenceId == "usage-evidence-1"
+    assert metering_calls[0]["metadata"] == {"request_id": "req-batch-first"}
     assert second.duplicates == 1
     assert len(producer.batches) == 1
     # Resolution is the identity-worker's job (it consumes SDK_EVENTS_VALIDATED),
@@ -159,6 +168,66 @@ async def test_retry_of_identify_event_is_published_once_and_never_resolved_inli
     await asyncio.sleep(0)
     assert len(producer.batches) == publish_count
     assert resolver_calls == []
+
+
+@pytest.mark.asyncio
+async def test_v2_batch_response_correlates_request_and_usage_evidence(monkeypatch):
+    event = batch.BaseEvent(
+        id="event-v2-correlation",
+        type="track",
+        timestamp="2026-10-11T10:00:00+00:00",
+        sessionId="session-v2",
+        anonymousId="anon-v2",
+        properties={"event": "opened"},
+    )
+    request = batch.BatchRequest(
+        batch=[event], sentAt="2026-10-11T10:00:01+00:00",
+    )
+    tenant = SimpleNamespace(tenant_id="tenant-v2")
+    normalized = {"event_id": event.id, "event_type": "track", "properties": {}}
+    metering_calls = []
+
+    async def validate(**kwargs):
+        return SimpleNamespace(
+            allowed=True, normalized_event=dict(normalized), deployment_id=None,
+        )
+
+    async def ingest_many(candidates, outbox):
+        assert len(candidates) == 1
+        assert len(outbox) == 1
+        return SimpleNamespace(statuses=["accepted"])
+
+    async def meter(*args, **kwargs):
+        metering_calls.append(kwargs)
+        return SimpleNamespace(
+            metered_event_id="usage-event-v2",
+            evidence_id="usage-evidence-v2",
+        )
+
+    monkeypatch.setattr(batch, "validate_event", validate)
+    monkeypatch.setattr(batch, "sdk_version_ingress_blocked", lambda _version: False)
+    monkeypatch.setattr(batch, "sdk_version_advisory", lambda _version: None)
+    monkeypatch.setattr(batch, "_apply_temporal_enforcement", lambda **kwargs: kwargs["result"])
+    monkeypatch.setattr(batch, "_stamp_identity_namespace", lambda *_args: None)
+    monkeypatch.setattr(batch, "_attach_observation_envelope", lambda *args, **kwargs: None)
+    monkeypatch.setattr(batch, "_get_event_family", lambda _event_type: "engagement")
+    monkeypatch.setattr(batch, "ingest_many", ingest_many)
+    monkeypatch.setattr(batch, "_emit_sequence_integrity_meters", lambda *_args: None)
+    monkeypatch.setattr(batch, "meter_family_usage", meter)
+    monkeypatch.setattr(
+        "ingestion.sdk_distribution.install_verifier.schedule_install_projection",
+        lambda *args, **kwargs: None,
+    )
+
+    response = await batch._ingest_batch_v2(
+        request, tenant, request_privacy=batch.RequestPrivacySignals(),
+        request_id="req-v2-correlation",
+    )
+
+    assert response["requestId"] == "req-v2-correlation"
+    assert response["usageEventId"] == "usage-event-v2"
+    assert response["usageEvidenceId"] == "usage-evidence-v2"
+    assert metering_calls[0]["metadata"] == {"request_id": "req-v2-correlation"}
 
 
 @pytest.mark.asyncio

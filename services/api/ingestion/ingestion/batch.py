@@ -344,6 +344,9 @@ class BatchResponse(BaseModel):
     events: list[EventResult]
     batchId: str
     receivedAt: str
+    requestId: Optional[str] = None
+    usageEventId: Optional[str] = None
+    usageEvidenceId: Optional[str] = None
 
 
 # ── Route ─────────────────────────────────────────────────────────────────────
@@ -383,6 +386,7 @@ async def ingest_batch(
             request_privacy=request_privacy,
             server_context=server_context,
             declared_site=declared_site,
+            request_id=getattr(request.state, "request_id", None),
         )
 
     response = await ingest_events(
@@ -394,6 +398,7 @@ async def ingest_batch(
         sent_at=body.sentAt,
         producer=producer,
         declared_site=declared_site,
+        request_id=getattr(request.state, "request_id", None),
     )
     # The /v1/batch handler keeps returning the plain BatchResponse dict
     # (ingest_events returns the model); ingest_events is the shared spine the
@@ -420,6 +425,7 @@ async def ingest_events(
     sent_at: str | None,          # None → temporal enforcement uses received_at
     producer: EventProducer,
     declared_site: str | None = None,
+    request_id: str | None = None,
 ) -> BatchResponse:
     """Canonical V1 ingestion spine over a sequence of SDK events.
 
@@ -680,10 +686,12 @@ async def ingest_events(
 
     # Family seam: durable meter + evidence for accepted ingestion only
     # (advisory — no entitlement gate; metering never breaks the request).
+    metering_outcome = None
     if n_accepted > 0:
-        await meter_family_usage(
+        metering_outcome = await meter_family_usage(
             "ingestion", tenant_id, event_id=batch_id,
             quantity=n_accepted, enforce=False, raise_on_metering_error=False,
+            metadata={"request_id": request_id} if request_id else None,
         )
 
     return BatchResponse(
@@ -693,6 +701,9 @@ async def ingest_events(
         events=results,
         batchId=batch_id,
         receivedAt=received_at,
+        requestId=request_id,
+        usageEventId=getattr(metering_outcome, "metered_event_id", None),
+        usageEvidenceId=getattr(metering_outcome, "evidence_id", None),
     )
 
 
@@ -704,6 +715,7 @@ async def _ingest_batch_v2(
     request_privacy: RequestPrivacySignals = RequestPrivacySignals(),
     server_context: Optional[dict] = None,
     declared_site: Optional[str] = None,
+    request_id: str | None = None,
 ) -> dict:
     """Transactional /v1/batch path.
 
@@ -900,10 +912,12 @@ async def _ingest_batch_v2(
 
     # Family seam: durable meter + evidence for accepted ingestion only
     # (advisory — no entitlement gate; metering never breaks the request).
+    metering_outcome = None
     if n_accepted > 0:
-        await meter_family_usage(
+        metering_outcome = await meter_family_usage(
             "ingestion", tenant.tenant_id, event_id=batch_id,
             quantity=n_accepted, enforce=False, raise_on_metering_error=False,
+            metadata={"request_id": request_id} if request_id else None,
         )
 
     return BatchResponse(
@@ -913,6 +927,9 @@ async def _ingest_batch_v2(
         events=results,
         batchId=batch_id,
         receivedAt=received_at,
+        requestId=request_id,
+        usageEventId=getattr(metering_outcome, "metered_event_id", None),
+        usageEvidenceId=getattr(metering_outcome, "evidence_id", None),
     ).model_dump()
 
 
