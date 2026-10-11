@@ -2,7 +2,7 @@
   "name": "@aether/access-kit",
   "version": "0.1.0-alpha.0",
   "private": true,
-  "description": "Aether agent-access inventory and site-bound canonical intake CLI/MCP bridge.",
+  "description": "Aether tenant entity and agent-access reads plus site-bound canonical intake CLI/MCP bridge.",
   "type": "module",
   "bin": {
     "aether": "./bin/aether.js",
@@ -16,7 +16,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "start:mcp": "node ./bin/aether-mcp.js"
+    "start:mcp": "node ./bin/aether-mcp.js",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.3.1",

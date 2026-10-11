@@ -1,10 +1,12 @@
 # Aether Access Kit
 
-The Access Kit package provides a Node CLI and local MCP stdio bridge for two
+The Access Kit package provides a Node CLI and local MCP stdio bridge for three
 bounded customer operations:
 
 - Read the observed third-party agent access inventory owned by Agent Access
   Intelligence.
+- Read a bounded tenant entity page or one tenant entity through the existing
+  identity API.
 - Send one custom application observation through canonical `POST /v1/batch`.
 
 The observed inventory is not an Aether callable-capability registry. Listing a
@@ -27,8 +29,9 @@ Supply only the credential required by the command being used:
 | Command | Environment |
 |---|---|
 | `aether agents capabilities ...` | `AETHER_API_KEY` with `read` permission |
+| `aether entities ...` | `AETHER_API_KEY` with `read` permission |
 | `aether ingest ...` | `AETHER_PUBLISHABLE_KEY` and its bound `AETHER_SITE_ID` |
-| MCP inventory tools | `AETHER_API_KEY` with `read` permission |
+| MCP inventory and entity read tools | `AETHER_API_KEY` with `read` permission |
 | MCP `observe` tool | `AETHER_PUBLISHABLE_KEY` and its bound `AETHER_SITE_ID` |
 
 The publishable key must be a `pk_` credential. The caller supplies the
@@ -43,11 +46,31 @@ send a tenant ID override. The Access Kit uses a publishable key only for
 aether agents capabilities overview
 aether agents capabilities list --provider example --limit 25 --json
 aether agents capabilities show cap_0123456789abcdef01234567 --json
+aether entities list --entity-type organization --limit 25 --json
+aether entities show entity_123 --json
 ```
 
 The list API is capped at 100 rows per call. Filters and pagination are passed
 to the existing tenant-scoped REST routes. Results describe observed external
 agent access; they are not grants, Aether tools, or execution permissions.
+
+## Tenant entity reads
+
+`entities list` and `entities show` call the existing read-protected
+`GET /v1/entities` and `GET /v1/entities/{entity_id}` endpoints. Tenant scope
+comes from `AETHER_API_KEY`; there is no tenant override. List calls request a
+single first page with a default limit of 25 and a hard client maximum of 50.
+The existing route has no cursor or offset, so the CLI does not imply complete
+tenant enumeration when more rows exist.
+
+Entity responses contain only `entity_id`, `entity_type`, `display_name`,
+`parent_entity_id`, `created_at`, and `updated_at`. The client omits
+`tenant_id`, duplicate repository IDs, arbitrary `metadata`, and unrecognized
+fields. String lengths are bounded before they are returned. This is a named
+entity read, not graph search, traversal, identity resolution, or a governed
+write. Successful JSON responses include request IDs; with `--json`, CLI
+errors are emitted as an `error` object with the API status/code and request
+IDs when supplied by the API.
 
 ## CLI ingestion
 
@@ -79,8 +102,9 @@ success. It does not automatically retry.
 
 Start `aether-mcp` using the MCP host's environment or secure secret-injection
 mechanism. The bridge supports `agent_access_capabilities_list`,
-`agent_access_capabilities_overview`, and `observe`. Read tools require the
-read credential; `observe` requires the publishable key and its bound site ID.
+`agent_access_capabilities_overview`, `entities_list`, `entities_get`, and
+`observe`. Inventory and entity read tools require the read credential;
+`observe` requires the publishable key and its bound site ID.
 Each call makes a fresh REST request. There is no remote HTTP MCP server,
 OAuth flow, stored session, or MCP host configuration file in this package.
 
@@ -90,6 +114,9 @@ non-negative `sequence`, and optional `properties`. It sends the same one-event
 the API batch counts, per-event statuses/reasons, batch ID, receive time, and
 request ID. A rejected observation remains a server rejection.
 
+Entity tool errors set MCP `isError` and include a JSON `error` object with the
+API status/code and request IDs when available.
+
 The package uses the official `@modelcontextprotocol/server` SDK pinned to
 `2.3.1`. The SDK `serveStdio` transport owns protocol framing and compatibility.
 This package does not implement Streamable HTTP or an OAuth server.
@@ -98,6 +125,7 @@ This package does not implement Streamable HTTP or an OAuth server.
 
 This is an experimental adapter slice. It has no saved profiles, login/device
 authorization, tenant switching, general query language, callable-capability
-registry, arbitrary external tool execution, graph mutation, or action
-dispatch. The owning REST authorities remain the source of permission and
-policy decisions.
+registry, arbitrary external tool execution, graph traversal, graph mutation,
+or action dispatch. Entity reads are limited to the two existing tenant-scoped
+REST operations described above. The owning REST authorities remain the source
+of permission and policy decisions.

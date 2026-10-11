@@ -5,14 +5,16 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const CAPABILITY_ID_PATTERN = /^cap_[a-f0-9]{24}$/;
 const SITE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const MAX_INGEST_BODY_BYTES = 64 * 1024;
+export const MAX_ENTITY_PAGE_SIZE = 50;
 
 export class AccessApiError extends Error {
-  constructor(message, { status, code, requestId } = {}) {
+  constructor(message, { status, code, requestId, apiRequestId } = {}) {
     super(message);
     this.name = 'AccessApiError';
     this.status = status;
     this.code = code;
     this.requestId = requestId;
+    this.apiRequestId = apiRequestId;
   }
 }
 
@@ -88,6 +90,7 @@ async function readRequest(path, query = undefined, env = process.env) {
   try {
     response = await fetch(url, {
       method: 'GET',
+      redirect: 'error',
       headers: {
         accept: 'application/json',
         authorization: `Bearer ${apiKey}`,
@@ -100,9 +103,8 @@ async function readRequest(path, query = undefined, env = process.env) {
     throw new AccessApiError(reason, { requestId: correlationId });
   }
 
-  const headerRequestId = response.headers.get('x-correlation-id')
-    || response.headers.get('x-request-id')
-    || correlationId;
+  const headerCorrelationId = response.headers.get('x-correlation-id');
+  const headerRequestId = headerCorrelationId || response.headers.get('x-request-id') || correlationId;
   let payload;
   try {
     payload = await response.json();
@@ -115,9 +117,12 @@ async function readRequest(path, query = undefined, env = process.env) {
 
   if (!response.ok) {
     const errorCode = payload?.error?.code ?? payload?.code;
+    const apiRequestId = typeof payload?.meta?.request_id === 'string'
+      ? payload.meta.request_id
+      : (typeof payload?.request_id === 'string' ? payload.request_id : undefined);
     throw new AccessApiError(
       `Aether API request failed (HTTP ${response.status}${errorCode ? `, ${errorCode}` : ''}).`,
-      { status: response.status, code: errorCode, requestId: headerRequestId || payload?.request_id },
+      { status: response.status, code: errorCode, requestId: headerRequestId, apiRequestId },
     );
   }
 
@@ -130,7 +135,10 @@ async function readRequest(path, query = undefined, env = process.env) {
 
   return {
     data: payload.data,
-    requestId: headerRequestId || payload.meta?.request_id || correlationId,
+    requestId: headerRequestId,
+    responseRequestId: typeof payload.meta?.request_id === 'string'
+      ? payload.meta.request_id
+      : (typeof payload.request_id === 'string' ? payload.request_id : undefined),
   };
 }
 
@@ -196,6 +204,70 @@ export async function getCapability(capabilityId) {
   return { ...result, data: safeCapability(result.data) };
 }
 
+function safeEntity(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+  const entityId = row.entity_id;
+  if (typeof entityId !== 'string' || !entityId.trim() || entityId.length > 256) return null;
+  const entityType = typeof row.entity_type === 'string' && row.entity_type.length <= 64
+    ? row.entity_type
+    : 'unknown';
+  const displayName = typeof row.display_name === 'string' && row.display_name.length <= 512
+    ? row.display_name
+    : '';
+  return {
+    entity_id: entityId,
+    entity_type: entityType,
+    display_name: displayName,
+    parent_entity_id: typeof row.parent_entity_id === 'string'
+      && row.parent_entity_id.length <= 256
+      ? row.parent_entity_id
+      : null,
+    created_at: typeof row.created_at === 'string' && row.created_at.length <= 64
+      ? row.created_at
+      : null,
+    updated_at: typeof row.updated_at === 'string' && row.updated_at.length <= 64
+      ? row.updated_at
+      : null,
+  };
+}
+
+export async function listEntities({ entityType, limit = 25 } = {}, env = process.env) {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_ENTITY_PAGE_SIZE) {
+    throw new Error(`Entity page size must be an integer from 1 through ${MAX_ENTITY_PAGE_SIZE}.`);
+  }
+  if (entityType !== undefined
+      && (typeof entityType !== 'string' || !entityType.trim() || entityType.length > 64)) {
+    throw new Error('Entity type filters must contain 1 through 64 characters.');
+  }
+  const result = await readRequest('/v1/entities', {
+    entity_type: entityType?.trim(),
+    limit,
+  }, env);
+  const rows = Array.isArray(result.data?.entities) ? result.data.entities.slice(0, limit) : [];
+  const entities = rows.map(safeEntity).filter(Boolean);
+  return {
+    ...result,
+    data: {
+      entities,
+      count: entities.length,
+    },
+  };
+}
+
+export async function getEntity(entityId, env = process.env) {
+  if (typeof entityId !== 'string' || !entityId.trim() || entityId.length > 256) {
+    throw new Error('Entity IDs must contain 1 through 256 characters.');
+  }
+  const result = await readRequest(`/v1/entities/${encodeURIComponent(entityId.trim())}`, undefined, env);
+  const entity = safeEntity(result.data);
+  if (!entity) {
+    throw new AccessApiError('Aether API returned an unexpected entity response.', {
+      requestId: result.requestId,
+    });
+  }
+  return { ...result, data: entity };
+}
+
 export function buildTrackBatch({
   eventName,
   eventId,
@@ -259,6 +331,7 @@ export async function ingestTrackObservation(input, env = process.env) {
   try {
     response = await fetch(new URL('/v1/batch', `${apiOrigin}/`), {
       method: 'POST',
+      redirect: 'error',
       headers: {
         accept: 'application/json',
         'content-type': 'application/json',
@@ -288,12 +361,19 @@ export async function ingestTrackObservation(input, env = process.env) {
   }
   if (!response.ok) {
     const errorCode = result?.error?.code ?? result?.code;
+    const apiRequestId = typeof result?.meta?.request_id === 'string'
+      ? result.meta.request_id
+      : (typeof result?.request_id === 'string' ? result.request_id : undefined);
     throw new AccessApiError(
       `Aether API request failed (HTTP ${response.status}${errorCode ? `, ${errorCode}` : ''}).`,
-      { status: response.status, code: errorCode, requestId },
+      { status: response.status, code: errorCode, requestId, apiRequestId },
     );
   }
-  return { data: result, requestId };
+  return {
+    data: result,
+    requestId,
+    responseRequestId: typeof result?.meta?.request_id === 'string' ? result.meta.request_id : undefined,
+  };
 }
 
 export function validateReadConfig(env = process.env) {

@@ -5,6 +5,9 @@ import {
   getCapability,
   getCapabilityOverview,
   listCapabilities,
+  getEntity,
+  listEntities,
+  MAX_ENTITY_PAGE_SIZE,
 } from '../src/api.mjs';
 
 const HELP = `Aether Access Kit — agent access inventory and canonical intake
@@ -14,13 +17,16 @@ Usage:
   aether agents capabilities list [--provider NAME] [--server-name NAME] [--tool-name NAME]
                                   [--limit N] [--offset N] [--json]
   aether agents capabilities show CAPABILITY_ID [--json]
+  aether entities list [--entity-type TYPE] [--limit N] [--json]
+  aether entities show ENTITY_ID [--json]
   aether ingest EVENT_NAME --event-id ID --session-id ID --anonymous-id ID --sequence N
                            [--properties-json JSON] [--json]
 
 Authentication:
-  AETHER_API_KEY           Tenant-scoped API key with read permission, for agents commands
+  AETHER_API_KEY           Tenant-scoped API key with read permission, for agents
+                           and entities queries
   AETHER_PUBLISHABLE_KEY   Site-bound pk_ key, for ingest only
-  AETHER_SITE_ID           site_ ID bound to AETHER_PUBLISHABLE_KEY, for ingest only
+  AETHER_SITE_ID           Site ID bound to AETHER_PUBLISHABLE_KEY, for ingest only
   AETHER_API_URL           API origin (default: https://api.aether.io)
 
 Read and ingestion credentials are separate. Ingestion sends one generic track event to
@@ -77,9 +83,38 @@ function formatList(data, requestId) {
 }
 
 function printError(error) {
+  if (process.argv.includes('--json')) {
+    const details = {
+      message: error.message,
+      ...(Number.isInteger(error.status) ? { status: error.status } : {}),
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.requestId ? { request_id: error.requestId } : {}),
+      ...(error.apiRequestId ? { api_request_id: error.apiRequestId } : {}),
+    };
+    process.stderr.write(`${JSON.stringify({ error: details })}\n`);
+    process.exitCode = 1;
+    return;
+  }
   const suffix = error.requestId ? `\nRequest: ${error.requestId}` : '';
-  process.stderr.write(`${error.message}${suffix}\n`);
+  const apiRequest = error.apiRequestId ? `\nAPI request: ${error.apiRequestId}` : '';
+  process.stderr.write(`${error.message}${suffix}${apiRequest}\n`);
   process.exitCode = 1;
+}
+
+function writeRequestIds(result) {
+  return {
+    request_id: result.requestId,
+    ...(result.responseRequestId ? { api_request_id: result.responseRequestId } : {}),
+  };
+}
+
+function formatEntities(entities, requestId, apiRequestId) {
+  process.stdout.write(`Entities (${entities.length} returned)\n`);
+  for (const entity of entities) {
+    process.stdout.write(`- ${entity.display_name || '(unnamed)'}  ${entity.entity_id}  [${entity.entity_type}]\n`);
+  }
+  process.stdout.write(`Request: ${requestId}\n`);
+  if (apiRequestId) process.stdout.write(`API request: ${apiRequestId}\n`);
 }
 
 async function main() {
@@ -122,7 +157,7 @@ async function main() {
       properties,
       surface: 'cli',
     });
-    if (json) writeJson({ ...result.data, request_id: result.requestId });
+    if (json) writeJson({ ...result.data, ...writeRequestIds(result) });
     else {
       const data = result.data;
       process.stdout.write(`Aether ingestion: ${data.accepted ?? 0} accepted, ${data.duplicates ?? 0} duplicate, ${data.rejected ?? 0} rejected\n`);
@@ -130,8 +165,41 @@ async function main() {
         process.stdout.write(`- ${event.id}: ${event.status}${event.reason ? ` (${event.reason})` : ''}\n`);
       }
       process.stdout.write(`Request: ${result.requestId}\n`);
+      if (result.responseRequestId) process.stdout.write(`API request: ${result.responseRequestId}\n`);
     }
     if (result.data?.rejected > 0) process.exitCode = 2;
+    return;
+  }
+
+  if (area === 'entities' && command === 'list') {
+    if (positionals.length !== 2) throw new Error(`Unexpected argument for entities list.\n\n${HELP}`);
+    const supportedOptions = new Set(['entity-type', 'limit']);
+    for (const key of Object.keys(options)) {
+      if (!supportedOptions.has(key)) throw new Error(`Unknown option: --${key}`);
+    }
+    const result = await listEntities({
+      entityType: options['entity-type'],
+      limit: options.limit
+        ? positiveInteger(options.limit, '--limit', { min: 1, max: MAX_ENTITY_PAGE_SIZE })
+        : 25,
+    });
+    const ids = writeRequestIds(result);
+    const output = { ...result.data, ...ids };
+    if (json) writeJson(output);
+    else formatEntities(result.data.entities, result.requestId, result.responseRequestId);
+    return;
+  }
+
+  if (area === 'entities' && command === 'show' && subcommand && positionals.length === 3) {
+    if (Object.keys(options).length > 0) throw new Error(`Unexpected option for entities show.\n\n${HELP}`);
+    const result = await getEntity(subcommand);
+    const output = { ...result.data, ...writeRequestIds(result) };
+    if (json) writeJson(output);
+    else {
+      process.stdout.write(`${JSON.stringify(result.data, null, 2)}\n`);
+      process.stdout.write(`Request: ${result.requestId}\n`);
+      if (result.responseRequestId) process.stdout.write(`API request: ${result.responseRequestId}\n`);
+    }
     return;
   }
 

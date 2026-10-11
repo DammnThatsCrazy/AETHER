@@ -54,9 +54,10 @@ Kit targets.
 
 ## Implemented vertical slices in this branch
 
-`packages/access-kit` adds a Node CLI and local MCP stdio bridge over the
-existing Agent Access Intelligence reads and canonical intake route. Both use
-the same small REST client. No new service route or data authority is added.
+`packages/access-kit` adds a Node CLI and local MCP stdio bridge over existing
+Agent Access Intelligence reads, named tenant entity reads, and canonical
+intake. The surfaces use the same small REST client. No new service route or
+data authority is added.
 
 | Surface | Supported call | Existing API | Classification |
 |---|---|---|---|
@@ -66,8 +67,12 @@ the same small REST client. No new service route or data authority is added.
 | CLI | `aether agents capabilities overview [--json]` | Catalog overview | Query, `read` |
 | CLI | `aether agents capabilities list [filters] [--json]` | Catalog list | Query, `read` |
 | CLI | `aether agents capabilities show CAPABILITY_ID [--json]` | Catalog detail | Query, `read` |
+| CLI | `aether entities list [--entity-type TYPE] [--limit N] [--json]` | Entity list, max 50 | Query, `read` |
+| CLI | `aether entities show ENTITY_ID [--json]` | Entity detail | Query, `read` |
 | MCP | `agent_access_capabilities_overview` | Catalog overview | Read-only tool, `read` |
 | MCP | `agent_access_capabilities_list` | Catalog list | Read-only tool, `read` |
+| MCP | `entities_list` | Entity list, max 50 | Read-only tool, `read` |
+| MCP | `entities_get` | Entity detail | Read-only tool, `read` |
 | CLI | `aether ingest EVENT_NAME ...` | `POST /v1/batch`, one `track` event | Ingestion, `ingest` + handler `write` |
 | MCP | `observe` | `POST /v1/batch`, one `track` event | Ingestion, `ingest` + handler `write` |
 
@@ -103,14 +108,27 @@ The list request is capped at 100 rows per call (`offset` is bounded to 100,000)
 The current REST response's `count` is the number of rows in the returned page,
 not a total count. Clients must not infer a total catalog size from it.
 
+The entity query is deliberately narrow. `entities list` and `entities_list`
+request the first page only, with default limit 25 and hard client maximum 50;
+the existing endpoint has no cursor or offset. Detail calls use the existing
+tenant-checked entity route. The Access Kit REST client and its CLI/MCP output
+projections allow only `entity_id`, `entity_type`, `display_name`,
+`parent_entity_id`, `created_at`, and
+`updated_at`. They omit `tenant_id`, duplicate storage IDs, arbitrary
+`metadata`, and other response fields. No graph traversal or direct repository
+access is added. API status/code and request correlation are retained; CLI
+`--json` failures carry these fields in an `error` object, and MCP failures set
+`isError` with a JSON error object. Successful results may contain both the
+middleware request ID and response envelope request ID.
+
 ## Authentication and transport
 
 ### CLI and local MCP bridge
 
 - Configure `AETHER_API_KEY` with a tenant-scoped API key that has `read`
-  permission for `agents capabilities` commands. It is passed only in the HTTPS
-  `Authorization: Bearer` header; it is never included in a URL, output, or
-  persisted by this package.
+  permission for `agents capabilities` and `entities` commands. It is passed
+  only in the HTTPS `Authorization: Bearer` header; it is never included in a
+  URL, output, or persisted by this package.
 - Configure `AETHER_PUBLISHABLE_KEY` with a `pk_` key and `AETHER_SITE_ID` with
   its bound site ID for `ingest` / `observe`. A publishable key is designed to
   be public and middleware confines it to ingestion routes plus the public-safe
@@ -181,8 +199,9 @@ server-side REST permission check remains authoritative.
   tenant switching, token refresh, or revocation command. Initial auth is an
   externally supplied server-side API key. A future delegated login must reuse
   the approved identity/session owner and define secure OS credential storage.
-- No graph search/traversal or broad `entities`, `campaigns`, or `agents`
-  command/tool is registered in the Access Kit. Those reads and writes need
+- No graph search/traversal or broad `campaigns` or `agents` command/tool is
+  registered in the Access Kit. Entity reads are limited to the named list and
+  detail routes above; additional identity, graph, and domain queries need
   per-endpoint capability classification, scopes, pagination, output limits,
   and owner review before exposure.
 - There is no MCP API server, OAuth authorization server for remote MCP, HTTP
@@ -200,8 +219,9 @@ The following evidence is required before the associated claim:
 
 | Claim | Required evidence |
 |---|---|
-| CLI package usable | Clean package install, Node version check, valid-key inventory reads, publishable-key site-bound observation, JSON output, bad-key/permission/site-mismatch errors, network timeout, and absence of secret output. |
+| CLI package usable | Clean package install, Node version check, valid-key inventory/entity reads, publishable-key site-bound observation, JSON output, bad-key/permission/site-mismatch errors, network timeout, and absence of secret output. |
 | Tenant-safe read | Two tenant keys and records; a key cannot list or resolve another tenant's catalog row. A missing/insufficient read scope is denied by API middleware/route authority. |
+| Tenant-safe entity query | Exercise entity list/detail with two tenants and confirm cross-tenant detail is denied; verify CLI/MCP omit tenant IDs and metadata and list results never exceed 50. Local mocked contract tests do not replace this live API proof. |
 | Site-bound intake | A matching key/site accepts or returns canonical validation outcomes; missing and mismatched site headers are denied; retrying the same event ID returns the server's idempotent result. |
 | MCP protocol compatible | Run the official SDK/host conformance path for the pinned release on modern `2026-07-28` and supported 2025-era stdio clients; verify deterministic tool names/schemas and that a failed API authorization is returned as an error. |
 | MCP customer beta | Above plus actual host connection evidence, secure host secret injection, request correlation, error visibility, privacy/security review, and rollout support. A local bridge build alone is not beta evidence. |

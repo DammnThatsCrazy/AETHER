@@ -10,6 +10,7 @@ import {
   ingestTrackObservation,
   listCapabilities,
 } from '../src/api.mjs';
+import { registerEntityTools } from '../src/entity-tools.mjs';
 
 const capabilitySchema = z.object({
   capability_id: z.string(),
@@ -43,14 +44,16 @@ function safeCapability(row) {
 
 function toolError(error) {
   const requestId = error?.requestId ? ` Request: ${error.requestId}.` : '';
+  const apiRequestId = error?.apiRequestId ? ` API request: ${error.apiRequestId}.` : '';
   const message = error instanceof AccessApiError
-    ? `${error.message}${requestId}`
+    ? `${error.message}${requestId}${apiRequestId}`
     : 'The Aether API operation could not be completed.';
   return { content: [{ type: 'text', text: message }], isError: true };
 }
 
 function createServer() {
   const server = new McpServer({ name: 'aether-access-kit', version: '0.1.0-alpha.0' });
+  registerEntityTools(server);
 
   server.registerTool(
     'agent_access_capabilities_list',
@@ -142,6 +145,7 @@ function createServer() {
         batchId: z.string(),
         receivedAt: z.string(),
         request_id: z.string(),
+        api_request_id: z.string().optional(),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -156,7 +160,11 @@ function createServer() {
           properties,
           surface: 'mcp',
         });
-        const output = { ...result.data, request_id: result.requestId };
+        const output = {
+          ...result.data,
+          request_id: result.requestId,
+          ...(result.responseRequestId ? { api_request_id: result.responseRequestId } : {}),
+        };
         return {
           content: [{ type: 'text', text: JSON.stringify(output) }],
           structuredContent: output,

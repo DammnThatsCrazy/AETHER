@@ -70,7 +70,7 @@ PR #734 and PR #733 are merged into `Development`. They provide substantial arch
 | Rights and identity | Rights decisions, source namespaces, identity resolution, and governed mutation primitives exist | Preserve authority decisions and references across source-to-graph handoffs; do not decide rights or canonical identity in clients |
 | SDKs | Web, Server, React Native, iOS, and Android packages exist | Close contract and productization gaps with a shared cross-platform acceptance surface; package presence is not device or tenant graph proof |
 | Aether Mobile | The first-party app has a client, navigation, projection, and continuation shell | Keep this as a graph consumer; beta readiness remains a separate product release gate from customer SDK ingestion |
-| REST, MCP, CLI, Access Kit | Auth, policy, capability, billing, graph, and domain APIs exist in parts; the current Access Kit target page is only a sketch | Compose existing authorities behind usable, consistent calls. Do not expose new authority by adding a protocol adapter |
+| REST, MCP, CLI, Access Kit | Auth, policy, capability, billing, graph, and domain APIs exist in parts; this feature stack now includes an experimental CLI and local MCP bridge for observed-capability reads, site-bound intake, and two bounded tenant entity reads | Compose existing authorities behind usable, consistent calls. Do not expose new authority by adding a protocol adapter |
 | Live end-to-end evidence | Repository-level contracts exist; provider-backed, customer SDK, and beta/device proof must be evaluated independently | Record exact evidence and limitations; never equate accepted ingestion or a passing unit check with graph or beta readiness |
 
 This work starts from `Development` after #734/#733. PR #771 is an unrelated open draft and is not the base of this program.
@@ -177,6 +177,13 @@ Each work order produces a commit on the same PR branch. An acceptance condition
 
 **Acceptance:** an authorization decision cannot be bypassed by changing transport; tenant and actor are server-resolved; denied/degraded/success results carry consistent correlation and evidence references; no second policy, billing, or capability registry is introduced.
 
+**Current stack status:** partial. The Access Kit routes the implemented reads
+through the existing REST client and leaves tenant/actor resolution to API
+middleware. It does not add the protocol-neutral invocation/router seam because
+there is no identified owner contract for such a runtime in this slice. The
+remaining outcome normalization and authoritative receipt behavior are deferred
+until WO-0 identifies an owning dispatch boundary used by multiple surfaces.
+
 ### WO-4 — REST/API access contract
 
 **Owner:** access track  
@@ -188,6 +195,15 @@ Each work order produces a commit on the same PR branch. An acceptance condition
 - Explicitly classify each endpoint as observe, query, or act and state its required capability and authority owner.
 
 **Acceptance:** every newly exposed API path maps to an owning service and contract artifact, with scopes, error behavior, pagination, and tenant isolation defined. Unsupported capabilities are absent or explicitly unavailable, not mocked.
+
+**Current stack status:** partial. The package exposes only the existing
+`GET /v1/entities` first page and `GET /v1/entities/{entity_id}` detail reads
+through the identity API; both remain protected by tenant middleware and the
+route's `read` permission. The client caps list results at 50, accepts no tenant
+override, and projects a fixed entity field allowlist. The API has no cursor or
+offset for this route, so later pages and broad graph/search queries remain
+unavailable. API error code/status and request correlation are preserved by the
+CLI/MCP wrappers.
 
 ### WO-5 — Aether MCP adapter
 
@@ -202,6 +218,14 @@ Each work order produces a commit on the same PR branch. An acceptance condition
 
 **Acceptance:** protocol conformance, authentication, tenant isolation, scope denial, deterministic listing, error mapping, and request correlation are documented and reviewable. MCP-specific tests and remote-client evidence are required before claiming MCP beta; they are not implied by API evidence.
 
+**Current stack status:** partial. The pinned official TypeScript SDK local
+stdio bridge exposes read-only `entities_list` and `entities_get` tools using
+the same entity REST wrapper, alongside the previously implemented capability
+inventory reads and `observe` ingestion tool. Focused local registration and
+handler contract tests cover schemas, output projection, bounds, and mapped
+errors. Remote MCP HTTP, delegated OAuth, full host conformance, live tenant
+isolation, and customer beta evidence remain deferred.
+
 ### WO-6 — Customer CLI adapter
 
 **Owner:** access track  
@@ -213,6 +237,14 @@ Each work order produces a commit on the same PR branch. An acceptance condition
 - Provide JSON output for automation and readable terminal output for humans. Errors must retain machine-readable codes and correlation IDs.
 
 **Acceptance:** CLI commands do not call graph stores directly or embed privileged service credentials; install/auth/tenant/read/denied paths are documented; revocation and credential storage have an explicit supported behavior.
+
+**Current stack status:** partial. The customer CLI now supports
+`aether entities list` and `aether entities show`, plus the existing observed
+capability inventory commands and site-bound one-event `aether ingest`. All
+reads use externally supplied `AETHER_API_KEY` and the existing API; no graph
+store access or tenant override exists. Login, tenant selection, profile and
+secure credential storage, revocation flow, and live denied/cross-tenant
+evidence remain target-only.
 
 ### WO-7 — Receipts, telemetry, and developer handoff
 
@@ -237,6 +269,14 @@ Each work order produces a commit on the same PR branch. An acceptance condition
 - Update owned/generated/source-linked documentation according to repository instructions before final PR readiness.
 
 **Acceptance:** all claims map to retained evidence; no production, certification, customer-beta, or broad merge-readiness claim is made without its canonical release/PR evidence.
+
+**Current stack status:** partial. Focused Node built-in tests use a mocked fetch
+and fake MCP registration boundary to verify the REST, CLI, and MCP contracts;
+syntax checks and `git diff --check` are run for this commit. They do not prove
+live API tenant isolation, network timeout behavior against the service,
+successful customer-key calls, MCP-host conformance, ingestion-to-graph
+hydration, or any release/production readiness gate. Those remain explicit
+external requirements.
 
 ## 6. Single-PR commit sequence
 
