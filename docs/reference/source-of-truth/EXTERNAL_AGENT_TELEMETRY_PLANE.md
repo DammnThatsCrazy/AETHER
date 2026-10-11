@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [config/environments/.env.example, packages/shared/agent-deployment.ts, packages/sdk/server/src/agent-telemetry.ts, packages/sdk/python/aether_agentic/agentic.py, services/api/actions/agent/deployments.py, services/api/actions/agent/deployment_routes.py, services/api/actions/agent_marketplace/catalog.py, services/api/actions/agent_marketplace/lineage.py, services/api/actions/agent_marketplace/projection.py, services/api/config/settings.py, services/api/ingestion/ingestion/batch.py, services/api/workers/runtime/roles.py, services/api/workers/runtime/specs.py]
+source_files: [config/environments/.env.example, packages/shared/agent-deployment.ts, packages/shared/contracts/event-registry.json, packages/sdk/server/src/agent-telemetry.ts, packages/sdk/python/aether_agentic/agentic.py, services/api/alembic/versions/20261010_agent_economic_correlation_refs.py, services/api/actions/agent/deployments.py, services/api/actions/agent/deployment_routes.py, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/catalog.py, services/api/actions/agent_marketplace/lineage.py, services/api/actions/agent_marketplace/projection.py, services/api/config/settings.py, services/api/ingestion/ingestion/batch.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/repositories/repos.py, services/api/shared/graph/graph.py, services/api/shared/graph/relationship_layers.py, services/api/value/x402/economic_mutations.py, services/api/value/x402/lifecycle_mapper.py, services/api/value/x402/provenance.py, services/api/workers/profile360_workers/workers.py, services/api/workers/runtime/roles.py, services/api/workers/runtime/specs.py]
 last_synced_commit: HEAD
 ---
 
@@ -105,12 +105,23 @@ Construction requires a validated `AgentDeploymentContext`; every event gets
 | Helper | Canonical event(s) |
 |---|---|
 | `interaction(...)` | `track` |
-| `task({status})` | `agent_task_started` / `agent_task_completed` / `agent_task_failed` |
+| `task({status, paymentIntentId?, settlementEventId?})` | `agent_task_started` / `agent_task_completed` / `agent_task_failed`; optional payment IDs are caller-reported references |
 | `toolInvocation(...)` | `agent_tool_invocation_observed` |
 | `walletObservation({kind})` | `wallet` / `transaction` |
 | `paymentObservation({status})` | `payment_initiated` / `payment_completed` / `payment_failed` |
-| `outcomeRecorded(...)` | `agent_outcome_recorded` |
+| `delegatedTask({delegationId, delegatedToAgentId})` | `agent_delegated_task`; both IDs remain source references |
+| `outcomeRecorded({paymentIntentId?, settlementEventId?, ...})` | `agent_outcome_recorded`; optional payment IDs are caller-reported references |
 | `riskSignal(...)` | `agent_risk_signal_observed` |
+
+Payment and settlement references resolve only to exact tenant-scoped records
+whose provenance comes from the server-owned x402 commerce event registry.
+Their amount, currency, provider, protocol, and lifecycle state come from
+those records. A delegation reference resolves only when the exact canonical
+record belongs to the tenant. The deployment's `agent_id` is a tenant registry
+reference, while delegation endpoints are canonical entity IDs; this feature
+does not identity-match the deployment to either party or evaluate grant
+scope. These links express correlation; they do not establish causality,
+grant-scope authorization, or payment finality.
 
 Python (`packages/sdk/python/aether_agentic`): `build_deployment_context(...)`
 plus an optional `deployment=` parameter on all envelope builders; emits the

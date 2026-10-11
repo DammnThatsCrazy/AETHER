@@ -6,18 +6,23 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/value/commerce/, services/api/value/x402/, services/api/actions/agent/economic.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py]
+source_files: [services/api/value/commerce/, services/api/value/x402/, services/api/actions/agent/economic.py, services/api/actions/agent_marketplace/authority.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/repositories/repos.py, services/api/workers/profile360_workers/workers.py, packages/sdk/server/src/agent-telemetry.ts]
 canonical_owner: commerce@aether
 estimated_read_minutes: 45
 toc_depth: 3
 source_hashes:
+  "packages/sdk/server/src/agent-telemetry.ts": "sha256:55f13fdd3cb7e31ce798496d35cffb3c26620e88699dc67ec7eac414b64b593a"
   "services/api/actions/agent/economic.py": "sha256:97ae74cc0595758a6bfc23ff9be140a442dd445ca193ea84b5df63327c3de976"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:9240dcffbde1284fc670518df56d781e70a96848a6d72809d73b773e0349ca4c"
   "services/api/identity/profile/agent.py": "sha256:ef4434e8cf518e4a04073a6e3356be9119708e156ecdab018692ed4a6350853a"
-  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:43c2ddaea124e2f4996e24bc98fa81ecc134661ff071cc427d253c241df41e05"
+  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
+  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
+  "services/api/repositories/repos.py": "sha256:9d45ac53e8e307d497da4e28d552ca6ef909c0b278dfe32ec825281aab6ec58e"
   "services/api/value/commerce/": "sha256:50e5a942d3debd0a6c5aef8fbdab3c56fb95f024dd1e129d457beda76d67b9a8"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
   "services/api/value/economic/operation_linkage.py": "sha256:29544d6511463065fed4bba6acb212b9a1c57bb12800733bf6de00a56cf046fa"
-  "services/api/value/x402/": "sha256:69071092cc6527dca201b9ff15cb9a5308bf8d56ab18286c82e51ca1aa40b522"
+  "services/api/value/x402/": "sha256:9c5d531c3e37c8e4e8586d109160af739d5022df90fb9a7f9b821cc6af6c719a"
+  "services/api/workers/profile360_workers/workers.py": "sha256:2e2074a22e3091514b0340b8cf68d7e37ee8150a23e89f8cb115c18c9f02a04a"
 ---
 # Aether Agentic Commerce — Day-1 Build Specification
 
@@ -158,6 +163,18 @@ reconstruction and production journey evidence remain open. Linked source
 references retain source event time, validity/revision time where available,
 and first-persisted time where available so later as-of reconstruction can be
 built without conflating source time with ingestion time.
+
+External-agent run evidence accepts optional caller-reported payment-intent
+and settlement-event IDs. The resolver requires an exact same-tenant match to
+server-authoritative x402 rows and a matching `agent_id` from the validated
+deployment registry. Amount, currency, provider, protocol and lifecycle state
+come from those rows. The ActionRecord links are correlation evidence only;
+they do not prove causality, settlement finality, or the source's action claim.
+A supplied delegation ID can link to an exact same-tenant canonical delegation
+record, but the deployment's registry `agent_id` is not identity-matched to the
+delegation's canonical entity endpoints. The link does not establish party
+identity, grant scope or authorization. Canonical delegation relationships
+remain sourced from the delegation authority projector.
 
 
 ---

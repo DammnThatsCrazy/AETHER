@@ -14,7 +14,7 @@ source_hashes:
   "packages/sdk/react-native/src/bridge.ts": "sha256:790445142865418604fbda5b12d7524c3a6df40c8be9065ad3b308b811b1efc9"
   "packages/sdk/react-native/src/index.tsx": "sha256:8861ddc797def68d8580f489007f78a65d6f3dd882b4538fdbeb99ddecb54fbe"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
-  "packages/shared/events.ts": "sha256:46bc12934b7c41c02f9304a77315bba2d3f71be253e7b30b1186208b40f8a59a"
+  "packages/shared/events.ts": "sha256:fef893ad42c100bc3fb8ee5762e23f56bcdfacb3229b9f8de9760ef830331c41"
 ---
 
 # Aether React Native SDK v0.1.0-alpha.0 — Integration Guide
@@ -481,6 +481,12 @@ Aether.agent.handoff(fromId, toId, properties?);
 Aether.agent.escalatedToHuman(taskId, reason?, properties?);
 Aether.agent.outcomeRecorded(taskId, outcome, properties?);
 ```
+
+Properties such as `paymentIntentId`, `settlementEventId`, and `delegationId`
+are caller-reported source references. Backend resolution requires an exact
+tenant record match; economic values come from server-authoritative x402
+records. A delegation reference does not establish the deployment agent's
+identity as either canonical grant party or prove that the task was authorized.
 
 ## x402 Lifecycle Emitters (15 methods)
 

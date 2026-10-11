@@ -13,7 +13,13 @@ source_files:
   - services/api/actions/agent_marketplace/lineage.py
   - services/api/actions/agent_marketplace/projection.py
   - services/api/actions/agent_marketplace/catalog.py
+  - services/api/actions/agent_marketplace/authority.py
   - services/api/actions/agent/deployment_routes.py
+  - services/api/ingestion/ingestion/lifecycle_worker.py
+  - services/api/workers/profile360_workers/workers.py
+  - services/api/repositories/repos.py
+  - services/api/value/x402/economic_mutations.py
+  - services/api/value/x402/provenance.py
   - services/api/graph/web3/classifier.py
   - services/api/graph/web3/routes.py
   - scripts/allowlists/graph_write_paths.json
@@ -28,15 +34,21 @@ source_hashes:
   "docs/reference/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:77e53b782c1633240ba44d8151a7b0f3712f44a497cf9691b7c0421a466c56f8"
   "scripts/allowlists/graph_write_paths.json": "sha256:37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
   "scripts/validate_graph_write_paths.py": "sha256:b8e155e472289a5a0024e91e1af025f0c300b927f91cb9b6f3d34e02dfaf00c6"
-  "services/api/actions/agent/deployment_routes.py": "sha256:cb311e5faeec006a81798de2873c469fe72256942d5dd49e9faa394d981468c9"
+  "services/api/actions/agent/deployment_routes.py": "sha256:bd4f6345b5e9a5f5a7650489a691e67e09ec50e9a6e6e4a3906cdaab0c0dae22"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:9240dcffbde1284fc670518df56d781e70a96848a6d72809d73b773e0349ca4c"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/actions/agent_marketplace/lineage.py": "sha256:bfe247f42c3360f30b3f4fa92b1f39e95f654be0862303d6f74b9fb2363e6566"
-  "services/api/actions/agent_marketplace/projection.py": "sha256:b0f5977d5494ccc73bf88cd759e483073e125f489bc6ab1fe689478e5893c9cd"
+  "services/api/actions/agent_marketplace/projection.py": "sha256:8ce9d1725efab4d11afea2c74711eddac2a2d7f46721344445c6edf6eb81f4c9"
   "services/api/graph/web3/classifier.py": "sha256:4ced74981c964a8e2442071071289d7d28dbd6bf4042200ce05934cdbd781a0e"
   "services/api/graph/web3/routes.py": "sha256:99f06d0b04993a9e61061bfb036da76e571d3084106db18f4c3e7696c1421d37"
-  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:63f702d411c6e2f11349abb68f70f67bfc0cd22e5aff7d150614a43f3821486c"
-  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:5e1772ea0b72e26131503b6b98716a852d608a6704bf64579d24acb0ff510488"
-  "services/api/shared/graph/": "sha256:bb8717642057ad588d97ecbc23ee41bc160b3cebc145bb267aeeeae8e436317c"
+  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:b1b18e74155a06cc4c68a535ae13c1e3997e84ddd8c5702c52905b06106bbee4"
+  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
+  "services/api/repositories/repos.py": "sha256:9d45ac53e8e307d497da4e28d552ca6ef909c0b278dfe32ec825281aab6ec58e"
+  "services/api/shared/graph/": "sha256:5f10b2a00971dc5e7ef0d308347930a51d98f3267fa754d783aae530a47a5524"
+  "services/api/value/x402/economic_mutations.py": "sha256:bdd180a936e048840636f221fdee3b142c0babab5d8e2bcc59b4a51983198f51"
+  "services/api/value/x402/provenance.py": "sha256:442c16e4e3d0c656610f68ee068f6fd816bed8f32674fe4ba681bd0541595e94"
+  "services/api/workers/profile360_workers/workers.py": "sha256:2e2074a22e3091514b0340b8cf68d7e37ee8150a23e89f8cb115c18c9f02a04a"
 ---
 # Unified On-Chain Intelligence Graph v0.1.0-alpha.0
 
@@ -851,6 +863,20 @@ policy. Marketplace origin is tenant-declared lineage. All these graph writes
 are queued and replayed through the supervised projection outbox and
 `GraphMutationGateway`; Kyber recovery reports source-to-outbox coverage and
 does not assert that it independently compared the persisted graph state.
+
+An exact same-tenant payment-intent or settlement-event reference can add an
+`EXCLUDED` `CORRELATED_WITH_ECONOMIC_RECORD` edge from an ActionRecord when the
+record has server-authoritative x402 provenance and its agent reference matches
+the deployment registry reference. Amount and lifecycle state come from that
+record; the edge is correlation evidence, not causality or independent proof
+of the source event. A delegation ID can add an `EXCLUDED`
+`REFERENCES_DELEGATION_RECORD` edge when it exactly matches a same-tenant
+canonical record. The deployment's `agent_id` is a tenant registry reference,
+not a canonical entity ID, so the link does not assert that either delegation
+party is the deployed agent. Party identity and grant-scope authorization
+remain unresolved. The canonical Delegation vertex and its
+`DELEGATES`/`GRANTED_BY`/`GRANTED_TO` relationships are projected from the
+delegation authority event, independently of run telemetry.
 
 The optional public xAI catalog observer creates separately versioned,
 platform-scoped listing observations from the public index. The authenticated

@@ -6,15 +6,21 @@ visibility: P
 audience: [dev-senior, architect, ops]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/shared/events/events.py, services/api/ingestion/ingestion/validation.py, packages/shared/contracts/event-registry.json, packages/sdk/server/src/agent-telemetry.ts]
+source_files: [services/api/shared/events/events.py, services/api/ingestion/ingestion/validation.py, packages/shared/contracts/event-registry.json, packages/sdk/server/src/agent-telemetry.ts, services/api/actions/agent_marketplace/authority.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/repositories/repos.py, services/api/value/x402/provenance.py]
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
-  "packages/sdk/server/src/agent-telemetry.ts": "sha256:c76f0910237bee7e7867f77ac38ede82bb33a6230f08094903c04561d77c9632"
-  "packages/shared/contracts/event-registry.json": "sha256:9a7bd7fa8b2fb9ae18b178a6076c71d573d262f7eb4dd403a48f8042a638eb15"
+  "packages/sdk/server/src/agent-telemetry.ts": "sha256:55f13fdd3cb7e31ce798496d35cffb3c26620e88699dc67ec7eac414b64b593a"
+  "packages/shared/contracts/event-registry.json": "sha256:d7507199ec0837a4c77f7fe4d54d2590f4ad49d98b10c35fc3bbb9bddd37c64a"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:9240dcffbde1284fc670518df56d781e70a96848a6d72809d73b773e0349ca4c"
+  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/ingestion/validation.py": "sha256:03544e3ad77f59db7eb04bb57d32ae0ce77a23a423cd0136529a09aab8615641"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:b1b18e74155a06cc4c68a535ae13c1e3997e84ddd8c5702c52905b06106bbee4"
+  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
+  "services/api/repositories/repos.py": "sha256:9d45ac53e8e307d497da4e28d552ca6ef909c0b278dfe32ec825281aab6ec58e"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
+  "services/api/value/x402/provenance.py": "sha256:442c16e4e3d0c656610f68ee068f6fd816bed8f32674fe4ba681bd0541595e94"
 ---
 
 # Events / Kafka Subsystem
@@ -123,3 +129,10 @@ SDK-supplied agent identity and delegation targets remain source references.
 Silver preserves the event timeline and run explanation reports which evidence
 was not observed. Graph projection links bounded action and policy-decision
 records to a tenant-scoped run through the retryable graph-writer outbox.
+Optional payment, settlement and delegation IDs remain source references.
+Economic links require exact same-tenant records with server-owned x402
+provenance and the registered deployment agent reference; reported payment
+values are not accepted as facts. A delegation link confirms only an exact
+same-tenant record reference: the deployment's tenant registry agent ID is not
+identity-matched to the canonical grant parties. Neither link verifies the
+source action, proves authorization, or infers causation.

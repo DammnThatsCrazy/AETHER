@@ -169,6 +169,10 @@ export class AgentTelemetryClient extends AetherServerSDK {
     taskId: string;
     /** Stable caller-owned run reference; scoped to this deployment by Aether. */
     runId?: string;
+    /** Caller-reported payment record reference for later tenant-scoped correlation. */
+    paymentIntentId?: string;
+    /** Caller-reported settlement record reference for later tenant-scoped correlation. */
+    settlementEventId?: string;
     status: 'started' | 'completed' | 'failed';
     durationMs?: number;
     errorCode?: string;
@@ -186,6 +190,8 @@ export class AgentTelemetryClient extends AetherServerSDK {
       properties: {
         taskId: params.taskId,
         runId: params.runId,
+        paymentIntentId: params.paymentIntentId,
+        settlementEventId: params.settlementEventId,
         durationMs: params.durationMs,
         errorCode: params.errorCode,
         triggerId: params.triggerId,
@@ -346,6 +352,10 @@ export class AgentTelemetryClient extends AetherServerSDK {
     taskId?: string;
     /** Stable caller-owned run reference; scoped to this deployment by Aether. */
     runId?: string;
+    /** Caller-reported payment record reference for later tenant-scoped correlation. */
+    paymentIntentId?: string;
+    /** Caller-reported settlement record reference for later tenant-scoped correlation. */
+    settlementEventId?: string;
     success?: boolean;
     score?: number;
     properties?: Record<string, unknown>;
@@ -358,6 +368,8 @@ export class AgentTelemetryClient extends AetherServerSDK {
         outcome: params.outcome,
         taskId: params.taskId,
         runId: params.runId,
+        paymentIntentId: params.paymentIntentId,
+        settlementEventId: params.settlementEventId,
         success: params.success,
         score: params.score,
         ...params.properties,

@@ -249,3 +249,13 @@ accepted only when the external-agent feature is enabled and the deployment is
 active for the authenticated tenant. See
 [Agent Marketplace Lineage](source-of-truth/AGENT_MARKETPLACE_LINEAGE.md) for
 the graph and run-explanation evidence boundaries.
+
+`task(...)` and `outcomeRecorded(...)` also accept optional
+`paymentIntentId` and `settlementEventId` source references. `delegatedTask(...)`
+accepts `delegationId` and `delegatedToAgentId` references. These IDs remain
+caller-reported: the graph links them only after exact tenant-scoped matching
+against server-authoritative x402 records. A delegation ID can link to an exact
+same-tenant canonical record; the link does not resolve the deployment's source
+agent ID to either canonical delegation party or prove that the action was
+authorized. Caller-supplied amounts and payment states are not accepted as
+economic facts.

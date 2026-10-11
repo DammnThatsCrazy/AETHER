@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [config/environments/.env.example, packages/sdk/server/src/agent-telemetry.ts, packages/shared/agent-deployment.ts, packages/shared/contracts/event-registry.json, packages/shared/graph-contract.ts, services/api/alembic/versions/20261010_agent_execution_lineage.py, services/api/actions/agent/deployment_routes.py, services/api/actions/agent/deployments.py, services/api/actions/agent_marketplace/catalog.py, services/api/actions/agent_marketplace/models.py, services/api/actions/agent_marketplace/lineage.py, services/api/actions/agent_marketplace/projection.py, services/api/config/settings.py, services/api/ingestion/ingestion/generated_registry.py, services/api/ingestion/ingestion/validation.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/shared/graph/graph.py, services/api/shared/graph/relationship_layers.py, services/api/shared/store.py, services/api/workers/runtime/roles.py, services/api/workers/runtime/specs.py]
+source_files: [config/environments/.env.example, packages/sdk/server/src/agent-telemetry.ts, packages/shared/agent-deployment.ts, packages/shared/contracts/event-registry.json, packages/shared/graph-contract.ts, services/api/alembic/versions/20261010_agent_execution_lineage.py, services/api/alembic/versions/20261010_agent_economic_correlation_refs.py, services/api/actions/agent/deployment_routes.py, services/api/actions/agent/deployments.py, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/catalog.py, services/api/actions/agent_marketplace/models.py, services/api/actions/agent_marketplace/lineage.py, services/api/actions/agent_marketplace/projection.py, services/api/config/settings.py, services/api/ingestion/ingestion/generated_registry.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/ingestion/validation.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/repositories/repos.py, services/api/shared/graph/graph.py, services/api/shared/graph/relationship_layers.py, services/api/shared/store.py, services/api/value/x402/economic_mutations.py, services/api/value/x402/provenance.py, services/api/value/x402/lifecycle_mapper.py, services/api/workers/profile360_workers/workers.py, services/api/workers/runtime/roles.py, services/api/workers/runtime/specs.py]
 ---
 
 # Agent Marketplace Lineage V1
@@ -117,6 +117,21 @@ evaluations, and delegation references become action/decision records linked
 from the run. Each record carries the source event ID and observed timestamp;
 the full event payload remains in Silver. A delegated-to agent remains a
 tenant/deployment-scoped source reference and is not joined to an Agent vertex.
+When a source action supplies a delegation ID that exactly matches a
+same-tenant canonical delegation, the action links to a deterministic
+tenant-scoped `Delegation` vertex with `REFERENCES_DELEGATION_RECORD`. This is
+an exact record-reference match only: the deployment's `agent_id` is a tenant
+registry reference, while grantor and grantee are canonical entity IDs, so the
+link does not assert that the deployment agent is either party. That party
+identity join remains unresolved until identity authority resolves it. The
+edge records correlation only; it does not claim that the grant authorized the
+action. `delegated_to_ref` also remains unresolved until an external-agent
+identity authority can resolve it. The
+reference edge is classified `EXCLUDED` from operational relationship-layer
+counts; canonical `DELEGATES`, `GRANTED_BY`, and `GRANTED_TO` relationships
+retain their existing H2A semantics. Revocation soft-revokes the aggregate
+entity-to-entity edge and restores it only if another current or scheduled
+canonical grant still supports that pair.
 When a task-completed, task-failed, or outcome-recorded event omits an explicit
 outcome ID, its stable source event ID becomes the graph outcome reference.
 Task/outcome graph IDs are tenant- and deployment-scoped hashes; their raw source
@@ -136,14 +151,46 @@ to an active deployment owned by the authenticated tenant. The validated
 registry identity, not SDK `agentId`, is used in Silver attribution. Canonical
 graph identity linkage remains deferred to the identity authority.
 
+Task and outcome events can also carry optional `paymentIntentId` and
+`settlementEventId` references. The SDK and Silver projector preserve only
+bounded printable references; they do not accept source-reported payment
+amounts, currencies, provider status, or settlement status as canonical facts.
+Only records marked by the closed server-owned x402 commerce event registry
+resolve as economic evidence. Public SDK x402 rows remain observations, and a
+later SDK event cannot replace a server-authoritative lifecycle state. A
+server-owned event may promote an earlier SDK-only row with the same exact
+record ID using its tenant, amount, status, and source metadata.
+The run explanation resolves an intent by exact ID and tenant, then requires
+its `agent_id` to equal the agent reference on the validated deployment row. A
+supplied settlement ID must also match the same tenant, intent, and agent. The
+payment and settlement repositories supply lifecycle state, amount, currency,
+provider, and protocol from server-authoritative x402 events. A matched
+`ActionRecord` links to those canonical
+economic vertices with `CORRELATED_WITH_ECONOMIC_RECORD`; this relationship
+records an exact reference match and does not imply that the payment caused the
+task outcome. These source-reference edges are classified `EXCLUDED` from
+operational relationship-layer counts. A malformed amount is omitted from the
+graph vertex without preventing the execution record from being projected.
+When an explicit settlement event is matched, the existing
+canonical x402 projection represents its `PaymentIntent` → `SettlementEvent`
+relationship with `SETTLED_AS`.
+
 The run index returns a bounded list of recent source run references from the
 authenticated tenant's deployment-filtered Silver facts. The run explanation
 route then assembles a chronological, tenant-scoped timeline from task/action
 references, declared triggers, policy decisions, delegation references, tool
 invocations, and reported outcomes. It reports coverage gaps and labels these
 claims `tenant_source_asserted`; it does not infer causality, verify source
-policy or grant authority, or collect hidden model reasoning. A delegation
-reference stays unresolved until AETHER's delegation authority resolves it.
+policy or grant authority, or collect hidden model reasoning. Economic
+lookups report `matched`, `not_supplied`, `unresolved`, or `unavailable`;
+delegation lookups report `matched_reference` when an exact same-tenant record
+exists, separately from the source event. A delegation reference match reports
+the record state at the observed event time when that timestamp is available,
+but does not match the deployment identity to a canonical party, evaluate the
+action against grant scope, or prove the grant was used. Source IDs that do not
+match an exact tenant authority produce no graph link. Projection recovery
+repeats the same lookups while rebuilding expected outbox mutations, so records
+that arrive later can create missing links.
 
 Agent marketplace and execution graph mutations enter a store-backed outbox
 and are written through `GraphMutationGateway` by the supervised graph-writer
@@ -169,11 +216,14 @@ settle when complete coverage is required; cursors are continuation aids, not
 snapshot tokens. `scan_pages_exhausted` describes the current response's
 continuation state; follow each non-null cursor until its corresponding
 `*_scan_truncated` field is false.
-The local migration adds indexed execution, trigger, policy, and delegation
-references to `silver_agent_execution_facts`; it was applied and inspected on
-a disposable local PostgreSQL 16 database. The public catalog uses the existing
-durable key-value store and adds no SQL migration. Projection recovery uses the
-configured durable store; local in-memory mode is not cross-process durable.
+The execution-lineage migration adds indexed execution, trigger, policy, and
+delegation references to `silver_agent_execution_facts`; that earlier migration
+was applied and inspected on a disposable local PostgreSQL 16 database. This
+draft adds a follow-on migration with tenant-plus-reference indexes and nullable
+columns for payment-intent and settlement-event correlations. The public
+catalog uses the existing durable key-value store and adds no SQL migration.
+Projection recovery uses the configured durable store; local in-memory mode is
+not cross-process durable.
 Redis `SCAN COUNT` is advisory and may return more keys than requested. The
 store retains excess keys in short-lived server-side cursor state and limits
 the records fetched and decoded per request, although a single backend scan

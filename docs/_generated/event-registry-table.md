@@ -69,7 +69,7 @@
 | `agent_task_failed` | `agent` | agent | behavioral | standard_90d | External agent task failure reported by its source |
 | `agent_tool_called` | `agent` | agent | behavioral | standard_90d | Agent called an external tool |
 | `agent_resource_requested` | `agent` | agent | behavioral | standard_90d | Agent requested a resource |
-| `agent_delegated_task` | `agent` | agent | behavioral | standard_90d | External agent delegation reported by its source |
+| `agent_delegated_task` | `agent` | agent | behavioral | standard_90d | External agent delegation reported by its source; a graph link requires an exact tenant delegation match |
 | `agent_subagent_spawned` | `agent` | agent | behavioral | standard_90d | Agent spawned a subagent |
 | `agent_policy_evaluated` | `agent` | agent | behavioral | standard_90d | External agent policy evaluation reported by its source |
 | `agent_handoff` | `agent` | agent | behavioral | standard_90d | Agent handed off to another system |

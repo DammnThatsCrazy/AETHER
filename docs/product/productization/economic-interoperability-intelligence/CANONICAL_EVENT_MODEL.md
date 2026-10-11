@@ -9,7 +9,7 @@ since_version: 0.1.0
 source_files: [packages/shared/contracts/event-registry.json]
 canonical_owner: platform@aether
 source_hashes:
-  "packages/shared/contracts/event-registry.json": "sha256:62be9bb37cd7b87cee90914a63abee464838f61074ae02be8baf72a35333fd12"
+  "packages/shared/contracts/event-registry.json": "sha256:d7507199ec0837a4c77f7fe4d54d2590f4ad49d98b10c35fc3bbb9bddd37c64a"
 ---
 
 # Canonical Event Model
@@ -38,3 +38,11 @@ Rules:
   every declared `silverProjection` token maps to a registered projector.
 - Metering uses ONLY the 8 canonical meter names validated by
   `scripts/validate_meter_names.py` against `MeteringEventType`.
+
+External-agent task, outcome and delegation events may carry payment-intent,
+settlement-event or delegation IDs as `SOURCE_REFERENCE` fields. These are
+caller-reported references, not economic facts: payment amount, currency and
+status come only from server-authoritative x402 records. The registry maps
+`agent_delegated_task` to `REFERENCES_DELEGATION_RECORD`; this records an exact
+same-tenant record reference and does not assert canonical party identity,
+delegation authorization, or that the action occurred as reported.

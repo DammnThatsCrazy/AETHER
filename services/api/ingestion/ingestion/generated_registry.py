@@ -1471,18 +1471,32 @@ EVENT_FIELD_TRUST: dict[str, dict[str, dict[str, object]]] = {
     },
     "agent_task_started": {
         "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "properties.paymentIntentId": { "trustClass": "SOURCE_REFERENCE" },
+        "properties.settlementEventId": { "trustClass": "SOURCE_REFERENCE" },
+        "properties.delegationId": { "trustClass": "SOURCE_REFERENCE" },
+        "properties.delegatedToAgentId": { "trustClass": "SOURCE_REFERENCE" },
         "context.agentDeployment": { "trustClass": "SOURCE_REFERENCE" },
     },
     "agent_task_completed": {
         "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "properties.paymentIntentId": { "trustClass": "SOURCE_REFERENCE" },
+        "properties.settlementEventId": { "trustClass": "SOURCE_REFERENCE" },
+        "properties.delegationId": { "trustClass": "SOURCE_REFERENCE" },
+        "properties.delegatedToAgentId": { "trustClass": "SOURCE_REFERENCE" },
         "context.agentDeployment": { "trustClass": "SOURCE_REFERENCE" },
     },
     "agent_task_failed": {
         "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "properties.paymentIntentId": { "trustClass": "SOURCE_REFERENCE" },
+        "properties.settlementEventId": { "trustClass": "SOURCE_REFERENCE" },
+        "properties.delegationId": { "trustClass": "SOURCE_REFERENCE" },
+        "properties.delegatedToAgentId": { "trustClass": "SOURCE_REFERENCE" },
         "context.agentDeployment": { "trustClass": "SOURCE_REFERENCE" },
     },
     "agent_delegated_task": {
         "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "properties.delegationId": { "trustClass": "SOURCE_REFERENCE" },
+        "properties.delegatedToAgentId": { "trustClass": "SOURCE_REFERENCE" },
         "context.agentDeployment": { "trustClass": "SOURCE_REFERENCE" },
     },
     "agent_policy_evaluated": {
@@ -1491,6 +1505,8 @@ EVENT_FIELD_TRUST: dict[str, dict[str, dict[str, object]]] = {
     },
     "agent_outcome_recorded": {
         "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "properties.paymentIntentId": { "trustClass": "SOURCE_REFERENCE" },
+        "properties.settlementEventId": { "trustClass": "SOURCE_REFERENCE" },
         "context.agentDeployment": { "trustClass": "SOURCE_REFERENCE" },
     },
     "x402_payment": {

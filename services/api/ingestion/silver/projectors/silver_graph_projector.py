@@ -146,7 +146,9 @@ def _edge(
     )
 
 
-def build_external_agent_run_mutations(row: dict[str, Any]) -> list[Any]:
+def build_external_agent_run_mutations(
+    row: dict[str, Any], authority_links: dict[str, Any] | None = None,
+) -> list[Any]:
     """Build a bounded, tenant-scoped run path from one Silver fact.
 
     Source agent, task, outcome, and policy references remain tenant/deployment
@@ -266,6 +268,12 @@ def build_external_agent_run_mutations(row: dict[str, Any]) -> list[Any]:
                 tenant_id, source_event_id, occurred_at,
             ),
         ])
+        if authority_links:
+            from actions.agent_marketplace.authority import (
+                build_agent_run_authority_mutations,
+            )
+
+            mutations.extend(build_agent_run_authority_mutations(row, authority_links))
         if row.get("policy_id") or row.get("policy_decision") or event_name == "agent_policy_evaluated":
             decision_vertex_id = _tenant_scoped_graph_id(
                 "agent_policy_decision", tenant_id, deployment_id, source_event_id
@@ -534,7 +542,10 @@ class SilverGraphProjector:
 
         if not settings.external_agent_telemetry.graph_enabled:
             return
-        mutations = build_external_agent_run_mutations(row)
+        from actions.agent_marketplace.authority import AgentRunAuthorityResolver
+
+        authority_links = await AgentRunAuthorityResolver().resolve(row)
+        mutations = build_external_agent_run_mutations(row, authority_links)
         if not mutations:
             return
         from actions.agent_marketplace.projection import (

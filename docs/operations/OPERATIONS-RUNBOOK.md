@@ -13,6 +13,13 @@ source_files:
   - services/api/actions/agent_marketplace/catalog.py
   - services/api/actions/agent_marketplace/lineage.py
   - services/api/actions/agent_marketplace/projection.py
+  - services/api/actions/agent_marketplace/authority.py
+  - services/api/ingestion/ingestion/lifecycle_worker.py
+  - services/api/ingestion/silver/projectors/agent_execution_projector.py
+  - services/api/ingestion/silver/projectors/silver_graph_projector.py
+  - services/api/repositories/repos.py
+  - services/api/value/x402/provenance.py
+  - services/api/workers/profile360_workers/workers.py
   - services/api/workers/runtime/roles.py
   - services/api/workers/runtime/specs.py
   - services/api/connectors/provider_runtime/
@@ -22,13 +29,20 @@ estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "infra/legacy-staging/bootstrap.sh": "sha256:33e18270618ab4ff6af6836c173d2b116fdcf700230cf040cae5ab06cd4b1e3a"
-  "services/api/actions/agent/deployment_routes.py": "sha256:cb311e5faeec006a81798de2873c469fe72256942d5dd49e9faa394d981468c9"
+  "services/api/actions/agent/deployment_routes.py": "sha256:bd4f6345b5e9a5f5a7650489a691e67e09ec50e9a6e6e4a3906cdaab0c0dae22"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:9240dcffbde1284fc670518df56d781e70a96848a6d72809d73b773e0349ca4c"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/actions/agent_marketplace/lineage.py": "sha256:bfe247f42c3360f30b3f4fa92b1f39e95f654be0862303d6f74b9fb2363e6566"
-  "services/api/actions/agent_marketplace/projection.py": "sha256:b0f5977d5494ccc73bf88cd759e483073e125f489bc6ab1fe689478e5893c9cd"
+  "services/api/actions/agent_marketplace/projection.py": "sha256:8ce9d1725efab4d11afea2c74711eddac2a2d7f46721344445c6edf6eb81f4c9"
   "services/api/config/settings.py": "sha256:4d507b4ac3cab63aec2df92c69bcb20c42d6c6f9fb54441e06353ccd34619246"
   "services/api/connectors/provider_runtime/": "sha256:5769171596f5a3c50af0a39ed9ec1b6fcddd4f67ee352d05d85ddc708cd84302"
+  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:b1b18e74155a06cc4c68a535ae13c1e3997e84ddd8c5702c52905b06106bbee4"
+  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
   "services/api/main.py": "sha256:91c7168bf4a5d88cf019ac753bfa0d9c35cec9308cb0191f3ba1bada5418c6b1"
+  "services/api/repositories/repos.py": "sha256:9d45ac53e8e307d497da4e28d552ca6ef909c0b278dfe32ec825281aab6ec58e"
+  "services/api/value/x402/provenance.py": "sha256:442c16e4e3d0c656610f68ee068f6fd816bed8f32674fe4ba681bd0541595e94"
+  "services/api/workers/profile360_workers/workers.py": "sha256:2e2074a22e3091514b0340b8cf68d7e37ee8150a23e89f8cb115c18c9f02a04a"
   "services/api/workers/runtime/roles.py": "sha256:24f2e24879828f8f340e91086f57c0e99940e9db96791edc6a1d24d590ba26b1"
   "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
@@ -593,6 +607,14 @@ validates source-to-outbox coverage; it does not certify graph contents or make
 platform-scoped catalog nodes visible in tenant graph queries. The catalog
 feature is default OFF and requires the configured Redis/Dynamo store for
 cross-process durability in hosted profiles.
+
+Run evidence uses the same reconcile and repair surfaces. The expected source
+mutations are rebuilt from tenant Silver rows, and reference resolution is
+repeated against the tenant deployment, delegation, and server-authoritative
+x402 repositories. Follow the source and outbox cursors until each scan is
+complete. A successful repair confirms that expected mutations reached the
+outbox; it does not confirm the graph contains them, prove a referenced
+delegation authorized the action, or establish economic causality.
 
 ---
 

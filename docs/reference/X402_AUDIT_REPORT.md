@@ -8,11 +8,17 @@ status: stable
 since_version: "0.1.0"
 source_files:
   - services/api/value/x402/
+  - services/api/actions/agent_marketplace/authority.py
+  - services/api/ingestion/ingestion/lifecycle_worker.py
+  - services/api/repositories/repos.py
 canonical_owner: security@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "services/api/value/x402/": "sha256:69071092cc6527dca201b9ff15cb9a5308bf8d56ab18286c82e51ca1aa40b522"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:9240dcffbde1284fc670518df56d781e70a96848a6d72809d73b773e0349ca4c"
+  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
+  "services/api/repositories/repos.py": "sha256:9d45ac53e8e307d497da4e28d552ca6ef909c0b278dfe32ec825281aab6ec58e"
+  "services/api/value/x402/": "sha256:9c5d531c3e37c8e4e8586d109160af739d5022df90fb9a7f9b821cc6af6c719a"
 ---
 # x402 Protocol Support Audit — Aether Repository
 
@@ -278,6 +284,20 @@ Aether's x402 support is now **full-stack**: challenge-side (returning HTTP 402 
 | `services/api/graph/rwa/models.py` | RWA policy enforcement (adjacent) |
 
 ---
+
+## Scoped update — external-agent economic correlation (2026-10-11)
+
+External-agent run events may report payment-intent and settlement-event IDs
+as source references. They resolve only when an exact same-tenant record has
+server-owned x402 provenance and its agent reference matches the tenant's
+deployment registry reference. Public SDK x402 observations remain
+observations; they do not establish or overwrite canonical payment state. The
+run graph links use amount, currency and lifecycle state from the authoritative
+record. They do not verify that the external action occurred as reported,
+establish causality, or prove settlement finality. Same-ID lifecycle writes
+cannot overwrite another tenant's record, and a delayed lower-state event
+cannot roll back a later settlement. See the Agent Marketplace Lineage
+source-of-truth page for the implementation boundaries.
 
 ## 5. Conclusion
 

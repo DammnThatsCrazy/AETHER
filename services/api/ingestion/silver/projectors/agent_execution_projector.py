@@ -6,6 +6,12 @@ from typing import Any
 from .base import BaseProjector, ProjectionResult
 
 _SOURCE_REF_MAX_LENGTH = 256
+_ECONOMIC_CORRELATION_EVENT_TYPES = frozenset({
+    "agent_task_started",
+    "agent_task_completed",
+    "agent_task_failed",
+    "agent_outcome_recorded",
+})
 
 
 def _source_reference(value: Any) -> str | None:
@@ -111,6 +117,17 @@ class AgentExecutionProjector(BaseProjector):
         )
         task_ref = _source_reference(p.get("taskId") or p.get("task_id"))
         outcome_ref = _source_reference(p.get("outcomeId") or p.get("outcome_id"))
+        # These are caller-reported record references for later exact lookup.
+        # They do not make the SDK authoritative for payment state or value.
+        payment_intent_ref = None
+        settlement_event_ref = None
+        if event_name in _ECONOMIC_CORRELATION_EVENT_TYPES:
+            payment_intent_ref = _source_reference(
+                p.get("paymentIntentId") or p.get("payment_intent_id")
+            )
+            settlement_event_ref = _source_reference(
+                p.get("settlementEventId") or p.get("settlement_event_id")
+            )
         if not outcome_ref and event_name in {
             "agent_task_completed", "agent_task_failed", "agent_outcome_recorded",
         }:
@@ -185,6 +202,8 @@ class AgentExecutionProjector(BaseProjector):
             ),
             "task_ref": task_ref,
             "outcome_ref": outcome_ref,
+            "payment_intent_ref": payment_intent_ref,
+            "settlement_event_ref": settlement_event_ref,
             "model_id": p.get("modelId") or p.get("model"),
             "prompt_tokens": p.get("promptTokens"),
             "completion_tokens": p.get("completionTokens"),

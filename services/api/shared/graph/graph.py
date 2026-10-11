@@ -406,6 +406,8 @@ class EdgeType:
 
     # Intelligence Graph — Action tracking
     PERFORMED_ACTION = "PERFORMED_ACTION"  # Agent → ActionRecord
+    REFERENCES_DELEGATION_RECORD = "REFERENCES_DELEGATION_RECORD"  # ActionRecord → canonical Delegation, correlation only
+    CORRELATED_WITH_ECONOMIC_RECORD = "CORRELATED_WITH_ECONOMIC_RECORD"  # ActionRecord → PaymentIntent|SettlementEvent
 
     # Decision & Outcome Intelligence OODA loop
     HAS_RECOMMENDATION = "HAS_RECOMMENDATION"

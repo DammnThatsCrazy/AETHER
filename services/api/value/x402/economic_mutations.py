@@ -52,6 +52,103 @@ def _money_str(value: object) -> str:
     return s
 
 
+def _optional_money_str(value: object) -> Optional[str]:
+    """Return normalized money when usable; malformed source rows stay linkable."""
+    try:
+        return _money_str(value)
+    except (TypeError, ValueError, ArithmeticError):
+        return None
+
+
+def agent_payment_intent_vertex(intent: dict) -> Vertex:
+    """Build the canonical graph vertex for a repository-owned agent intent."""
+    tenant_id = str(intent.get("tenant_id") or "").strip()
+    intent_id = str(intent.get("intent_id") or "").strip()
+    if not tenant_id or not intent_id:
+        raise ValueError("agent payment intent graph vertex requires tenant and intent IDs")
+    properties = {
+        "payment_intent_id": intent_id,
+        "agent_id": str(intent.get("agent_id") or ""),
+        "provider": str(intent.get("provider") or ""),
+        "protocol": str(intent.get("protocol") or ""),
+        "lifecycle_state": str(intent.get("settlement_status") or "unknown"),
+        "currency": str(intent.get("currency") or ""),
+        "occurred_at": intent.get("occurred_at"),
+        "observed_at": intent.get("created_at"),
+        "tenant_id": tenant_id,
+        "source_authority": "agent_payment_intent",
+    }
+    amount = _optional_money_str(intent.get("amount"))
+    if amount is not None:
+        properties["amount"] = amount
+    metadata = intent.get("metadata")
+    if isinstance(metadata, dict) and metadata.get("source_topic"):
+        properties["source_topic"] = str(metadata["source_topic"])
+    return Vertex(
+        vertex_type=VertexType.PAYMENT_INTENT,
+        vertex_id=_tkey(tenant_id, intent_id),
+        properties=properties,
+    )
+
+
+def agent_settlement_event_vertex(settlement: dict) -> Vertex:
+    """Build the canonical graph vertex for a repository-owned settlement."""
+    tenant_id = str(settlement.get("tenant_id") or "").strip()
+    settlement_id = str(settlement.get("settlement_event_id") or "").strip()
+    if not tenant_id or not settlement_id:
+        raise ValueError("agent settlement graph vertex requires tenant and settlement IDs")
+    properties = {
+        "settlement_event_id": settlement_id,
+        "intent_id": str(settlement.get("intent_id") or ""),
+        "agent_id": str(settlement.get("agent_id") or ""),
+        "provider": str(settlement.get("provider") or ""),
+        "protocol": str(settlement.get("protocol") or ""),
+        "lifecycle_state": str(settlement.get("status") or "unknown"),
+        "currency": str(settlement.get("currency") or ""),
+        "occurred_at": settlement.get("occurred_at"),
+        "observed_at": settlement.get("created_at"),
+        "tenant_id": tenant_id,
+        "source_authority": "agent_settlement_event",
+    }
+    amount = _optional_money_str(settlement.get("amount"))
+    if amount is not None:
+        properties["amount"] = amount
+    metadata = settlement.get("metadata")
+    if isinstance(metadata, dict) and metadata.get("source_topic"):
+        properties["source_topic"] = str(metadata["source_topic"])
+    return Vertex(
+        vertex_type=VertexType.SETTLEMENT_EVENT,
+        vertex_id=_tkey(tenant_id, settlement_id),
+        properties=properties,
+    )
+
+
+def agent_settlement_edge(intent: dict, settlement: dict) -> Edge:
+    """Build the canonical intent-to-settlement edge after exact record checks."""
+    tenant_id = str(intent.get("tenant_id") or "").strip()
+    intent_id = str(intent.get("intent_id") or "").strip()
+    settlement_id = str(settlement.get("settlement_event_id") or "").strip()
+    if (
+        not tenant_id
+        or not intent_id
+        or not settlement_id
+        or settlement.get("tenant_id") != tenant_id
+        or settlement.get("intent_id") != intent_id
+        or settlement.get("agent_id") != intent.get("agent_id")
+    ):
+        raise ValueError("settlement edge requires a matching tenant, intent, and agent")
+    return Edge(
+        edge_type=EdgeType.SETTLED_AS,
+        from_vertex_id=_tkey(tenant_id, intent_id),
+        to_vertex_id=_tkey(tenant_id, settlement_id),
+        properties={
+            "tenant_id": tenant_id,
+            "lifecycle_state": str(settlement.get("status") or "unknown"),
+            "source_authority": "agent_settlement_event",
+        },
+    )
+
+
 class EconomicGraphMutations:
     """All commerce graph writes. Each method is idempotent."""
 
@@ -252,21 +349,7 @@ class EconomicGraphMutations:
         if not tenant_id or not intent_id:
             raise ValueError("agent payment graph projection requires tenant and intent IDs")
 
-        intent_vertex = Vertex(
-            vertex_type=VertexType.PAYMENT_INTENT,
-            vertex_id=_tkey(tenant_id, intent_id),
-            properties={
-                "payment_intent_id": intent_id,
-                "agent_id": str(intent.get("agent_id") or ""),
-                "provider": str(intent.get("provider") or ""),
-                "protocol": str(intent.get("protocol") or ""),
-                "lifecycle_state": str(intent.get("settlement_status") or "unknown"),
-                "occurred_at": intent.get("occurred_at"),
-                "observed_at": intent.get("created_at"),
-                "tenant_id": tenant_id,
-                "source_authority": "agent_payment_intent",
-            },
-        )
+        intent_vertex = agent_payment_intent_vertex(intent)
         await self._put_vertex(intent_vertex)
         self._trace("vertex", VertexType.PAYMENT_INTENT, intent_vertex.properties)
         agent_id = str(intent.get("agent_id") or "").strip()
@@ -292,31 +375,10 @@ class EconomicGraphMutations:
                 or settlement.get("agent_id") != intent.get("agent_id")
             ):
                 continue
-            settlement_vertex = Vertex(
-                vertex_type=VertexType.SETTLEMENT_EVENT,
-                vertex_id=_tkey(tenant_id, settlement_id),
-                properties={
-                    "settlement_event_id": settlement_id,
-                    "agent_id": str(settlement.get("agent_id") or ""),
-                    "provider": str(settlement.get("provider") or ""),
-                    "lifecycle_state": str(settlement.get("status") or "unknown"),
-                    "occurred_at": settlement.get("occurred_at"),
-                    "observed_at": settlement.get("created_at"),
-                    "tenant_id": tenant_id,
-                    "source_authority": "agent_settlement_event",
-                },
-            )
+            settlement_vertex = agent_settlement_event_vertex(settlement)
             await self._put_vertex(settlement_vertex)
             self._trace("vertex", VertexType.SETTLEMENT_EVENT, settlement_vertex.properties)
-            edge = Edge(
-                edge_type=EdgeType.SETTLED_AS,
-                from_vertex_id=_tkey(tenant_id, intent_id),
-                to_vertex_id=_tkey(tenant_id, settlement_id),
-                properties={
-                    "lifecycle_state": str(settlement.get("status") or "unknown"),
-                    "source_authority": "agent_settlement_event",
-                },
-            )
+            edge = agent_settlement_edge(intent, settlement)
             await self._put_edge(
                 edge, tenant_id, subject_id=_tkey(tenant_id, intent_id)
             )

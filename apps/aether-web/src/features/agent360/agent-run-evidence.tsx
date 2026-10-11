@@ -31,6 +31,120 @@ function EvidenceValue({ label, value }: { label: string; value: unknown }) {
   );
 }
 
+function ResolutionStatusBadge({ status }: { status: unknown }) {
+  const variant = status === 'matched' || status === 'matched_reference'
+    ? 'success'
+    : status === 'unavailable'
+      ? 'danger'
+      : status === 'ambiguous'
+        ? 'warning'
+        : 'default';
+  const label = status === 'matched'
+    ? 'Record matched'
+    : status === 'matched_reference'
+      ? 'Record reference matched'
+    : status === 'not_supplied'
+      ? 'Reference not supplied'
+      : status === 'unresolved'
+        ? 'No matching record'
+        : status === 'ambiguous'
+          ? 'Multiple possible records'
+          : status === 'unavailable'
+            ? 'Lookup unavailable'
+            : `Resolution: ${display(status)}`;
+
+  return <Badge size="sm" variant={variant}>{label}</Badge>;
+}
+
+function EconomicOutcome({ outcome }: { outcome: unknown }) {
+  if (outcome === null || outcome === undefined) return null;
+
+  const result = asRecord(outcome);
+  const status = result.status;
+  const records = Array.isArray(result.records) ? result.records.map(asRecord) : [];
+  const matchedRecords = status === 'matched' ? records : [];
+  const message = status === 'matched'
+    ? matchedRecords.length === 0
+      ? 'The response reports a match but includes no economic record details.'
+      : 'These tenant-scoped records were matched to the source event. A match does not independently verify the event claim or prove settlement finality.'
+    : status === 'not_supplied'
+      ? 'This source event supplied no economic reference for matching. That does not establish that no economic activity occurred.'
+      : status === 'unresolved'
+        ? 'No matching tenant economic record was found for the supplied reference. This does not establish that no economic activity occurred.'
+        : status === 'unavailable'
+          ? 'Economic record lookup is unavailable. No conclusion about a match or absence can be drawn.'
+          : 'Economic record resolution was returned separately from the source-reported event details.';
+
+  return (
+    <section aria-label="Economic record resolution" className="space-y-2 rounded border border-border-subtle bg-surface-raised p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-xs font-medium text-text-primary">Economic record match</h4>
+        <ResolutionStatusBadge status={status} />
+      </div>
+      <p className="text-[11px] text-text-secondary">{message}</p>
+      {matchedRecords.length > 0 && (
+        <div className="space-y-2">
+          {matchedRecords.map((record, index) => (
+            <div key={`${display(record.payment_intent_id, 'payment-intent')}-${display(record.settlement_event_id, index)}-${index}`} className="space-y-1 rounded border border-border-default p-2">
+              <p className="text-[11px] font-medium text-text-primary">Matched economic record {index + 1}</p>
+              <div className="grid gap-1 sm:grid-cols-2">
+                <EvidenceValue label="Payment intent" value={record.payment_intent_id} />
+                <EvidenceValue label="Settlement event" value={record.settlement_event_id} />
+                <EvidenceValue label="Intent status" value={record.intent_status} />
+                <EvidenceValue label="Settlement status" value={record.settlement_status} />
+                <EvidenceValue label="Amount" value={record.amount} />
+                <EvidenceValue label="Currency" value={record.currency} />
+                <EvidenceValue label="Provider" value={record.provider} />
+                <EvidenceValue label="Protocol" value={record.protocol} />
+                <EvidenceValue label="Record authority" value={record.source_authority} />
+                <EvidenceValue label="Authority event" value={record.source_topic} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DelegationResolution({ resolution }: { resolution: unknown }) {
+  if (resolution === null || resolution === undefined) return null;
+
+  const result = asRecord(resolution);
+  const status = result.status;
+  const message = status === 'matched_reference'
+    ? 'The source reference matches a canonical delegation record in this tenant. The deployment agent has not been identity-matched to either canonical party, so this link does not establish who acted, that the action was authorized, or that it was within scope.'
+    : status === 'not_supplied'
+      ? 'This source event supplied no delegation reference. That does not establish that no delegation exists.'
+      : status === 'unresolved'
+        ? 'No matching tenant delegation record was found. This does not establish that no delegation exists elsewhere or that none was active.'
+        : status === 'ambiguous'
+          ? 'More than one possible record was found, so no delegation record was selected.'
+          : status === 'unavailable'
+            ? 'Delegation lookup is unavailable. No conclusion about a match or absence can be drawn.'
+            : 'Delegation resolution is shown separately from the source-reported claim.';
+
+  return (
+    <section aria-label="Delegation record resolution" className="space-y-2 rounded border border-border-subtle bg-surface-raised p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-xs font-medium text-text-primary">Delegation record match</h4>
+        <ResolutionStatusBadge status={status} />
+      </div>
+      <p className="text-[11px] text-text-secondary">{message}</p>
+      {status === 'matched_reference' && (
+        <div className="grid gap-1 sm:grid-cols-2">
+          <EvidenceValue label="Delegation record" value={result.delegation_id} />
+          <EvidenceValue label="State at event time" value={result.state_at_event} />
+          <EvidenceValue label="Grantor entity" value={result.grantor_entity_id} />
+          <EvidenceValue label="Grantee entity" value={result.grantee_entity_id} />
+          <EvidenceValue label="Deployment party identity" value={result.party_identity_status} />
+          <EvidenceValue label="Record authority" value={result.source_authority} />
+        </div>
+      )}
+    </section>
+  );
+}
+
 function MarketplaceOrigin({ deployment }: { deployment: AgentDeploymentRecord }) {
   const origin = asRecord(deployment.marketplace_origin);
   if (Object.keys(origin).length === 0) return null;
@@ -101,6 +215,7 @@ function RunTimeline({ evidence }: { evidence: ValueRecord[] }) {
               </div>
               <time className="text-xs text-text-secondary">{display(item.occurred_at)}</time>
             </div>
+            <h4 className="text-[11px] font-medium text-text-secondary">Source-reported event details</h4>
             <div className="grid gap-1 sm:grid-cols-2">
               <EvidenceValue label="Source event" value={item.source_event_id} />
               <EvidenceValue label="Task reference" value={item.task_ref} />
@@ -112,11 +227,24 @@ function RunTimeline({ evidence }: { evidence: ValueRecord[] }) {
               <EvidenceValue label="Reason codes" value={policy.reason_codes} />
               <EvidenceValue label="Delegation" value={item.delegation_ref} />
               <EvidenceValue label="Delegated to" value={item.delegated_to_ref} />
+              <EvidenceValue label="Payment intent reference" value={item.payment_intent_ref} />
+              <EvidenceValue label="Settlement reference" value={item.settlement_event_ref} />
               <EvidenceValue label="Status" value={item.status} />
               <EvidenceValue label="Outcome" value={item.outcome ?? item.outcome_ref} />
               <EvidenceValue label="Trace" value={item.trace_id} />
               <EvidenceValue label="Causation reference" value={item.causation_id} />
             </div>
+            {(item.payment_intent_ref || item.settlement_event_ref || item.delegation_ref) && (
+              <div className="space-y-2 border-t border-border-subtle pt-2">
+                <h4 className="text-[11px] font-medium text-text-secondary">Matched records and authority lookups</h4>
+                {(item.payment_intent_ref || item.settlement_event_ref)
+                  ? <EconomicOutcome outcome={item.economic_outcome} />
+                  : null}
+                {item.delegation_ref
+                  ? <DelegationResolution resolution={item.delegation_resolution} />
+                  : null}
+              </div>
+            )}
           </li>
         );
       })}

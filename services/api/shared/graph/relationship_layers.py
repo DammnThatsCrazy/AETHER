@@ -111,6 +111,8 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
     EdgeType.GOVERNED_BY: RelationshipLayer.A2A,
     EdgeType.DEPENDS_ON: RelationshipLayer.A2A,
     EdgeType.PERFORMED_ACTION: RelationshipLayer.A2A,
+    EdgeType.REFERENCES_DELEGATION_RECORD: RelationshipLayer.EXCLUDED,
+    EdgeType.CORRELATED_WITH_ECONOMIC_RECORD: RelationshipLayer.EXCLUDED,
     EdgeType.EXECUTED_AS: RelationshipLayer.A2A,
     EdgeType.PRODUCED: RelationshipLayer.A2A,
     EdgeType.UPDATES_CONFIDENCE_FOR: RelationshipLayer.A2A,
@@ -647,6 +649,7 @@ H2H_VERTEX_TYPES = frozenset({
 H2A_VERTEX_TYPES = frozenset({
     VertexType.USER, VertexType.AGENT, VertexType.SERVICE,
     VertexType.CAMPAIGN, VertexType.TRADING_ACCOUNT,
+    VertexType.ENTITY, VertexType.DELEGATION,
 })
 
 A2H_VERTEX_TYPES = frozenset({
@@ -660,6 +663,7 @@ A2A_VERTEX_TYPES = frozenset({
     VertexType.VERIFICATION_ACTOR, VertexType.DELIVERY_ACTOR,
     VertexType.EXTERNAL_AGENTIC_ACCOUNT, VertexType.AGENT_EXECUTION_RUN,
     VertexType.TASK, VertexType.OUTCOME_OBSERVATION,
+    VertexType.PAYMENT_INTENT, VertexType.SETTLEMENT_EVENT,
 })
 
 

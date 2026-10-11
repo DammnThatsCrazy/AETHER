@@ -12,6 +12,7 @@ agentic observability operator pattern (admin permission).
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Optional
 
 from fastapi import APIRouter, Query, Request
@@ -435,9 +436,15 @@ async def explain_agent_run(
         }).to_dict()
 
     rows.sort(key=lambda row: str(row.get("occurred_at") or ""))
-    evidence = []
-    for row in rows:
-        evidence.append({
+    from actions.agent_marketplace.authority import AgentRunAuthorityResolver
+
+    resolver = AgentRunAuthorityResolver()
+    lookup_limit = asyncio.Semaphore(16)
+
+    async def make_evidence(row: dict[str, Any]) -> dict[str, Any]:
+        async with lookup_limit:
+            resolved = await resolver.resolve(row)
+        return {
             "source_event_id": row.get("source_event_id"),
             "event_type": row.get("event_name"),
             "occurred_at": row.get("occurred_at"),
@@ -456,18 +463,26 @@ async def explain_agent_run(
             } if row.get("policy_id") or row.get("policy_decision") else None,
             "delegation_ref": row.get("delegation_id"),
             "delegated_to_ref": row.get("delegated_to_ref"),
+            "payment_intent_ref": row.get("payment_intent_ref"),
+            "settlement_event_ref": row.get("settlement_event_ref"),
+            "delegation_resolution": resolved["delegation_resolution"],
+            "economic_outcome": resolved["economic_outcome"],
             "tool_name": row.get("tool_name"),
             "status": row.get("status"),
             "outcome_ref": row.get("outcome_ref"),
             "outcome": row.get("outcome"),
             "trace_id": row.get("trace_id"),
             "causation_id": row.get("causation_id"),
-        })
+        }
+
+    evidence = await asyncio.gather(*(make_evidence(row) for row in rows))
 
     kinds = {item.get("event_type") for item in evidence}
     has_trigger = any(item.get("trigger_ref") or item.get("trigger_type") for item in evidence)
     has_policy = "agent_policy_evaluated" in kinds
-    has_delegation = "agent_delegated_task" in kinds
+    has_delegation = "agent_delegated_task" in kinds or any(
+        item.get("delegation_ref") for item in evidence
+    )
     has_outcome = bool(kinds.intersection({"agent_task_completed", "agent_task_failed", "agent_outcome_recorded"}))
     return APIResponse(data={
         "tenant_id": tenant.tenant_id,

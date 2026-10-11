@@ -8,22 +8,22 @@ status: experimental
 since_version: 0.1.0
 source_files: [services/api/value/x402/, services/api/actions/agent/, services/api/actions/agent_marketplace/, services/api/value/commerce/order_payment_reconciliation.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/shared/store.py, services/api/workers/runtime/specs.py, packages/sdk/server/src/agent-telemetry.ts, packages/shared/events.ts, packages/shared/agentic-observability.ts]
 source_hashes:
-  "packages/sdk/server/src/agent-telemetry.ts": "sha256:c76f0910237bee7e7867f77ac38ede82bb33a6230f08094903c04561d77c9632"
+  "packages/sdk/server/src/agent-telemetry.ts": "sha256:55f13fdd3cb7e31ce798496d35cffb3c26620e88699dc67ec7eac414b64b593a"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
-  "packages/shared/events.ts": "sha256:5530cfc7f2280519fbb8396aa6a60c8dafa0f19f4e2e02726db0316ace64c8ec"
-  "services/api/actions/agent/": "sha256:03188f4ff912a78f1acade65189c6607b86e67dd44bcd7829804f1876ff99e5c"
-  "services/api/actions/agent_marketplace/": "sha256:e928a85608e02676d3126307aef73e7eae324da735fddfe8e0628e5a2db8c775"
+  "packages/shared/events.ts": "sha256:fef893ad42c100bc3fb8ee5762e23f56bcdfacb3229b9f8de9760ef830331c41"
+  "services/api/actions/agent/": "sha256:db5330122ad01bed96925b6b090dcf78de680d9dec15ac37c6e3aa720e73d846"
+  "services/api/actions/agent_marketplace/": "sha256:4fbb08692823b710cda2591a4b0c7d97a2f7c24c1a6dc3f2072059982b3b67b3"
   "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:ac5c38e755dd2720a76fcca31bf7877d7e2e5d2e5ea19c3a37bc5344e495ecc4"
   "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:b6617b0dd888b02ede69696d3d4e46906120c5f0fca4bb4f5393145218d6200c"
   "services/api/identity/profile/agent.py": "sha256:ef4434e8cf518e4a04073a6e3356be9119708e156ecdab018692ed4a6350853a"
-  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:43c2ddaea124e2f4996e24bc98fa81ecc134661ff071cc427d253c241df41e05"
-  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:63f702d411c6e2f11349abb68f70f67bfc0cd22e5aff7d150614a43f3821486c"
-  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:5e1772ea0b72e26131503b6b98716a852d608a6704bf64579d24acb0ff510488"
+  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:b1b18e74155a06cc4c68a535ae13c1e3997e84ddd8c5702c52905b06106bbee4"
+  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
   "services/api/shared/store.py": "sha256:ff4198cf285ac4c250481ef0ae476037c26b1f4d1fa00751964638ff1f91fa8c"
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:84b3f00bfa6e0c1b4df5405636163a2650edf8651b3b36823a7f2ba26ca7b77e"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
   "services/api/value/economic/operation_linkage.py": "sha256:29544d6511463065fed4bba6acb212b9a1c57bb12800733bf6de00a56cf046fa"
-  "services/api/value/x402/": "sha256:69071092cc6527dca201b9ff15cb9a5308bf8d56ab18286c82e51ca1aa40b522"
+  "services/api/value/x402/": "sha256:9c5d531c3e37c8e4e8586d109160af739d5022df90fb9a7f9b821cc6af6c719a"
   "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
 
@@ -50,8 +50,21 @@ identify `best_effort_non_snapshot` consistency and do not certify graph state.
 The default-off xAI catalog observer adds minimal public listing metadata as a
 separate `platform`-scoped source. It does not fetch bot configuration or join
 public listing slugs to canonical Agents. Associated x.com posts and x.ai news,
-canonical external-agent identity resolution, authoritative grant resolution,
-private bot contents, and graph-state drift detection remain follow-on work.
+canonical external-agent identity resolution, delegation-party identity joins,
+grant-scope authorization checks, private bot contents, and graph-state drift
+detection remain follow-on work. An exact delegation ID can now link a source
+action to a same-tenant canonical delegation record, but the deployment's
+tenant registry agent reference is not joined to the record's canonical entity
+parties. This link does not prove that the source action was authorized or
+within scope.
+
+For economic outcomes, optional task/outcome payment-intent and settlement-event
+references resolve only against exact same-tenant records with server-owned
+x402 provenance and a matching deployment registry agent reference. Public SDK
+x402 observations remain source claims and cannot replace server-authoritative
+payment state. Linked amount, currency and lifecycle state come from the
+authoritative record; the correlation does not establish causality, verify the
+source action, or prove settlement finality.
 The historical gap matrices below retain their original audit date and should
 not be read as a current inventory without this addendum and the linked
 source-of-truth documents.

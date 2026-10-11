@@ -219,6 +219,7 @@ class AgentMarketplaceGraphProjectionOutbox:
         self, tenant_id: str, limit: int, *, cursor: Optional[str] = None,
     ) -> tuple[list[tuple[str, Any]], bool, Optional[str]]:
         from actions.agent.deployments import get_deployment_repository
+        from actions.agent_marketplace.authority import AgentRunAuthorityResolver
         from actions.agent_marketplace.catalog import MarketplaceCatalogRepository
         from actions.agent_marketplace.lineage import build_marketplace_origin_mutations
         from config.settings import settings
@@ -272,8 +273,10 @@ class AgentMarketplaceGraphProjectionOutbox:
                 limit=limit, cursor=silver_cursor,
             )
             silver_done = not silver_truncated
+            authority_resolver = AgentRunAuthorityResolver()
             for row in rows:
-                mutations = build_external_agent_run_mutations(row)
+                authority_links = await authority_resolver.resolve(row)
+                mutations = build_external_agent_run_mutations(row, authority_links)
                 source_event_id = str(row.get("source_event_id") or "")
                 if source_event_id:
                     expected.extend((source_event_id, mutation) for mutation in mutations)
