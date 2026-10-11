@@ -721,6 +721,12 @@ importers:
         specifier: ^2.6.0
         version: 2.6.1
     devDependencies:
+      '@testing-library/dom':
+        specifier: ^10.4.2
+        version: 10.4.2
+      '@testing-library/react':
+        specifier: ^16.3.3
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@types/react':
         specifier: ^19.0.0
         version: 19.3.0
@@ -730,6 +736,9 @@ importers:
       cytoscape:
         specifier: ^3.30.0
         version: 3.34.3
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.3.0(react@19.3.0)
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
