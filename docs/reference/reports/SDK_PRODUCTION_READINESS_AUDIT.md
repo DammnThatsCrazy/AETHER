@@ -341,9 +341,12 @@ SDK event allowlist. The canonical event registry marks only
 `agent_task_started`, `agent_task_completed`, `agent_task_failed`,
 `agent_delegated_task`, `agent_policy_evaluated`, `agent_outcome_recorded`, and
 `agent_tool_invocation_observed` as `sdkEmitable`. Their event properties are
-source-asserted, while identifiers such as `context.agentDeployment`, payment, settlement,
-and delegation IDs remain source references. Consent-map presence and wrapper
-tests do not imply acceptance or verification of other event types.
+source-asserted, while identifiers such as `context.agentDeployment`, payment,
+settlement, delegation, `delegatedToAgentId`, and `delegatedToNamespace` remain
+source references. Delegated-target resolution requires the explicit source
+namespace; missing or invalid namespace remains unresolved instead of
+inheriting the actor's namespace. Consent-map presence and wrapper tests do not
+imply acceptance or verification of other event types.
 
 ### 4.3 Granular x402 Lifecycle Emitters (14 methods)
 

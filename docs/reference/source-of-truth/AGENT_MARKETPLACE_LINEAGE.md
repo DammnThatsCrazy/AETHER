@@ -158,10 +158,10 @@ invocation, policy evaluation, delegation, and outcome events through
 `agent_tool_invocation_observed` as `sdkEmitable`; wrapper/type exposure alone
 does not authorize other event types for public SDK ingestion. Accepted event
 properties remain source-asserted, and deployment/payment/settlement/delegation
-IDs remain source references. The active deployment must belong to the
-authenticated tenant. The validated registry identity, not SDK `agentId`, is
-used in Silver attribution. Canonical graph identity linkage requires the
-separate tenant-admin binding described above.
+IDs plus `delegatedToNamespace` remain source references. The active deployment
+must belong to the authenticated tenant. The validated registry identity, not
+SDK `agentId`, is used in Silver attribution. Canonical graph identity linkage
+requires the separate tenant-admin binding described above.
 
 Task and outcome events can also carry optional `paymentIntentId` and
 `settlementEventId` references. The SDK and Silver projector preserve only

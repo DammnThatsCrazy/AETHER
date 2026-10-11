@@ -6,7 +6,7 @@ visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/sdk/react-native/src/bridge.ts, packages/sdk/react-native/src/index.tsx, packages/shared/events.ts, packages/shared/consent.ts]
+source_files: [packages/sdk/react-native/src/bridge.ts, packages/sdk/react-native/src/index.tsx, packages/shared/events.ts, packages/shared/contracts/event-registry.json, packages/shared/consent.ts]
 canonical_owner: sdk@aether
 estimated_read_minutes: 9
 toc_depth: 3
@@ -482,11 +482,30 @@ Aether.agent.escalatedToHuman(taskId, reason?, properties?);
 Aether.agent.outcomeRecorded(taskId, outcome, properties?);
 ```
 
-Properties such as `paymentIntentId`, `settlementEventId`, and `delegationId`
-are caller-reported source references. Backend resolution requires an exact
-tenant record match; economic values come from server-authoritative x402
-records. A delegation reference does not establish the deployment agent's
-identity as either canonical grant party or prove that the task was authorized.
+These methods describe the React Native wrapper surface, not the public
+ingestion allowlist. The canonical event registry currently marks seven agent
+events `sdkEmitable`: `agent_task_started`, `agent_task_completed`,
+`agent_task_failed`, `agent_delegated_task`, `agent_policy_evaluated`,
+`agent_outcome_recorded`, and `agent_tool_invocation_observed`. Wrapper/type or
+consent-map exposure alone does not make another event eligible for public
+`/v1/batch` ingestion.
+
+Agent event properties remain source-asserted. `context.agentDeployment`,
+`paymentIntentId`, `settlementEventId`, `delegationId`, `delegatedToAgentId`,
+and `delegatedToNamespace` are source references that the backend resolves
+against tenant-owned records. Canonical party identity requires an explicit
+tenant-admin binding. Delegation targets use the source-declared
+`delegatedToNamespace`; missing or invalid namespace remains unresolved and
+does not fall back to the actor namespace. A canonical event-time grant-scope
+result is not proof that the external action occurred; without a server-owned
+execution receipt, occurrence remains source-reported and unverified.
+
+Payment, settlement, and delegation IDs are caller-reported source references.
+Backend resolution requires exact tenant-scoped records; economic values come
+from server-authoritative x402 records. A raw delegation reference alone does
+not establish canonical party identity or authorization. The separate backend
+binding and event-time grant evaluation described above make those decisions
+from tenant-owned records.
 
 ## x402 Lifecycle Emitters (15 methods)
 

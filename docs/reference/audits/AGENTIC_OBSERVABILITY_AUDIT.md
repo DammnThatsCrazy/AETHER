@@ -57,7 +57,9 @@ canonical grant, and when actor/target bindings resolve, backend-owned grant
 status, endpoints, effective/revocation window and supported scope are
 evaluated at source event time. The result remains separate from execution
 occurrence: action/resource/time are source claims, and without a server-owned
-receipt occurrence is unverified. A new bounded read-only graph state check
+receipt occurrence is unverified. Deployment, payment, settlement, and
+delegation identifiers plus `delegatedToNamespace` remain source references.
+A new bounded read-only graph state check
 compares supported tenant links to source evidence and reports partial,
 non-snapshot coverage; it neither repairs nor certifies the whole graph.
 Associated x.com posts and x.ai news, private bot contents, server-owned

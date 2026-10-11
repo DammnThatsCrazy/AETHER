@@ -8,7 +8,12 @@ status: stable
 since_version: "0.1.0"
 source_files:
   - services/api/value/x402/
+  - services/api/actions/agent/deployment_routes.py
   - services/api/actions/agent_marketplace/authority.py
+  - services/api/actions/agent_marketplace/identity_binding.py
+  - services/api/actions/agent_marketplace/graph_state_check.py
+  - services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py
+  - services/api/alembic/versions/20261011_agent_delegated_to_namespace.py
   - services/api/ingestion/ingestion/lifecycle_worker.py
   - services/api/repositories/repos.py
 canonical_owner: security@aether
@@ -298,6 +303,22 @@ establish causality, or prove settlement finality. Same-ID lifecycle writes
 cannot overwrite another tenant's record, and a delayed lower-state event
 cannot roll back a later settlement. See the Agent Marketplace Lineage
 source-of-truth page for the implementation boundaries.
+
+The run authority path separately resolves delegation references to exact
+tenant-owned records. External deployment and delegated-target identities
+require explicit tenant-admin bindings scoped by source namespace; target
+resolution uses the source-declared `delegatedToNamespace` and does not infer
+the actor's namespace. Backend-owned delegation parties, scope, status, and
+effective/revoked times are compared with the source-reported action,
+resource, event time, and (when available) authoritative economic amount. The
+result is `within_scope`, `out_of_scope`, or `indeterminate`; this evaluates a
+grant, not whether the external action occurred. Without a server-owned
+execution receipt, occurrence remains `source_reported` and unverified.
+
+The separate Kyber graph-state check is bounded and read-only. It compares
+supported tenant source references with graph links and reports coverage and
+findings on a best-effort, non-snapshot basis; it does not mutate graph state,
+drain the projection outbox, or certify the complete tenant graph.
 
 ## 5. Conclusion
 

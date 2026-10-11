@@ -154,6 +154,12 @@ touchpoints/conversions as fraud evidence — it only voids the attribution.
 
 ## Graph Schema
 
+The shared graph contract keeps four counted relationship layers: H2H, H2A,
+A2H, and A2A. `EXCLUDED` is a separate classification for noncanonical
+references, including source-linked economic and delegation records; those
+references remain available for inspection but are omitted from the four-layer
+counts. The fraud edge assignments below remain unchanged.
+
 ### New Vertex Types
 
 | VertexType | Description |

@@ -489,8 +489,10 @@ seven agent events `sdkEmitable`: `agent_task_started`,
 `agent_policy_evaluated`, `agent_outcome_recorded`, and
 `agent_tool_invocation_observed`. Their properties are source-asserted; IDs
 such as `paymentIntentId`, `settlementEventId`, `delegationId`,
-`delegatedToAgentId`, and `context.agentDeployment` are source references, not
-verified facts. Consent and
+`delegatedToAgentId`, `delegatedToNamespace`, and `context.agentDeployment` are
+source references, not verified facts. A delegated target must carry its
+explicit source namespace; missing or invalid namespace remains unresolved and
+does not inherit the actor's namespace. Consent and
 active tenant deployment validation still apply. Other wrapper/type-exposed
 events are not publicly SDK-emittable under the current registry contract.
 
