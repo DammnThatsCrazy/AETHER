@@ -97,6 +97,11 @@ NON_SURFACE: dict[str, str] = {
         "profile-scoped journey data is not projected into the tenant graph; "
         "Kyber uses its separately authorized measurement journey operations"
     ),
+    "/agents/:agentId": (
+        "tenant-scoped Agent 360 detail has no exact Kyber Tenant Mirror route; "
+        "keep operator access on separately governed APIs until an owner defines "
+        "the tenant-visible parity contract"
+    ),
     "/compare": (
         "comparison definitions and runs are not projected into the tenant graph; "
         "operator comparison parity is not implemented"
