@@ -21,13 +21,13 @@ estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
-  "services/api/actions/agent_marketplace/authority.py": "sha256:696f7db917fe642c7d39195660d9956eeea4971f4e135eb1fc5826807f7ac506"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
-  "services/api/repositories/repos.py": "sha256:9d45ac53e8e307d497da4e28d552ca6ef909c0b278dfe32ec825281aab6ec58e"
+  "services/api/repositories/repos.py": "sha256:18ffc6df66bfc4484aaab821c791fda4579382634a23066ddbe5276d4408ec04"
   "services/api/value/x402/": "sha256:5d041fbb1a1fb7494c5a547b4aac97804e0dcf478261170546663918a509377f"
 ---
 # x402 Protocol Support Audit — Aether Repository

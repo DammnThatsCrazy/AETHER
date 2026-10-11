@@ -1584,7 +1584,7 @@ class AnalyticsRepository:
                 dict(row) for row in silver_writer._local_tables.get(table, {}).values()
                 if all(str(row.get(key)) == str(value) for key, value in equals.items())
             ]
-            utc_min = datetime.min.replace(tzinfo=timezone.utc)
+            utc_min = datetime(1, 1, 1, tzinfo=timezone.utc)
 
             def local_key(row: dict) -> tuple[datetime, str]:
                 instant = _as_utc_datetime(row.get("occurred_at")) or utc_min

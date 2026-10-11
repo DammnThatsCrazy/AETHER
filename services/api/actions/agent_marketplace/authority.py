@@ -25,6 +25,7 @@ from repositories.repos import (
 )
 from shared.graph.edge_properties import build_edge_properties, make_edge_idempotency_key
 from shared.graph.graph import Edge, EdgeType, Vertex, VertexType
+from shared.temporal.instant import coerce_utc_lenient
 from value.x402.provenance import is_server_authoritative_x402_metadata
 from value.value.models import to_decimal_string
 
@@ -216,18 +217,14 @@ def _evaluate_delegation_authorization(
 
 
 def _parse_timestamp(value: Any) -> Optional[datetime]:
-    if isinstance(value, datetime):
-        parsed = value
-    elif isinstance(value, str) and value.strip():
-        try:
-            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
-        except ValueError:
-            return None
-    else:
+    if not isinstance(value, (datetime, str)):
         return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+    if isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return None
+    parsed = coerce_utc_lenient(value)
+    return parsed.astimezone(timezone.utc) if parsed is not None else None
 
 
 def _graph_timestamp(value: Any) -> str:

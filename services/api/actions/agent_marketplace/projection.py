@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from shared.logger.logger import get_logger, metrics
+from shared.temporal.instant import coerce_utc_lenient
 from shared.outbox import (
     GenericOutboxWorker,
     STATUS_DEAD_LETTERED,
@@ -65,13 +66,10 @@ def _mutation_key(payload: dict[str, Any]) -> str:
 def _processing_is_stale(value: Any) -> bool:
     if not value:
         return True
-    try:
-        instant = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        if instant.tzinfo is None:
-            instant = instant.replace(tzinfo=timezone.utc)
-        return (datetime.now(timezone.utc) - instant).total_seconds() >= _PROCESSING_STALE_SECONDS
-    except ValueError:
+    instant = coerce_utc_lenient(value)
+    if instant is None:
         return True
+    return (datetime.now(timezone.utc) - instant).total_seconds() >= _PROCESSING_STALE_SECONDS
 
 
 def _encode_tenant_source_cursor(

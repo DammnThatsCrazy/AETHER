@@ -25,6 +25,7 @@ source_files:
   - services/api/actions/agent_marketplace/lineage.py
   - services/api/actions/agent_marketplace/projection.py
   - services/api/workers/runtime/specs.py
+  - scripts/generate_feature_surface_manifest.py
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
@@ -32,18 +33,19 @@ reviewed_source_commits:
   - commit: "5bfb9394"
     reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
 source_hashes:
-  "packages/shared/": "sha256:b951770101e486b6a347f32dd79265ece8ea903cc76f9b4bb5c9114e312e4cce"
+  "packages/shared/": "sha256:0daac7707280458784fc09e56d83696cc5889c024441e9501169aeb04193c898"
+  "scripts/generate_feature_surface_manifest.py": "sha256:b29cbf9968f8252f6c7b62e340ba5338d4758ce35c1b8952369a0c6049571b17"
   "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
-  "services/api/actions/agent_marketplace/authority.py": "sha256:696f7db917fe642c7d39195660d9956eeea4971f4e135eb1fc5826807f7ac506"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/actions/agent_marketplace/lineage.py": "sha256:bfe247f42c3360f30b3f4fa92b1f39e95f654be0862303d6f74b9fb2363e6566"
-  "services/api/actions/agent_marketplace/projection.py": "sha256:5354b080f686377d2b74124bb6b56b8522cb2cb51ea5e5a7164ffdf81fc89e2d"
+  "services/api/actions/agent_marketplace/projection.py": "sha256:92a5f5e457beebde9d161bf26f40ccb39fc5b76bc8ae4abfccc3e572b3c29de0"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/config/settings.py": "sha256:4d507b4ac3cab63aec2df92c69bcb20c42d6c6f9fb54441e06353ccd34619246"
-  "services/api/ingestion/ingestion/replay.py": "sha256:ca77373185e811a47e354b28052901bc48ef309e62ea0133f1f55fdc37f5f687"
+  "services/api/ingestion/ingestion/replay.py": "sha256:65f898480787b71d14c8f687351844fdf5585cd67664ff5c32699328594b24ce"
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/main.py": "sha256:91c7168bf4a5d88cf019ac753bfa0d9c35cec9308cb0191f3ba1bada5418c6b1"
@@ -574,6 +576,11 @@ runtime. The Aether `/explore` surface is nevertheless classified as
 parity-required in the generated Kyber feature-surface manifest, so authorized
 internal tenant-mirror inspection uses the existing generic mirror capability
 and disclosure policy rather than exposing Kyber in the customer product.
+The Aether `/agents/:agentId` Agent 360 route is explicitly parity-exempt:
+it combines a tenant profile, deployment-run evidence, and a public marketplace
+snapshot, while Kyber's agentic-observability surface is a separate operator
+contract and does not reproduce that customer view. It is not a byte-parity
+Tenant Mirror surface until an equivalent resolver and parity proof exist.
 
 Lens identity remains registry-governed: `packages/shared/contracts/lens-registry.json`
 generates `packages/shared/lenses_generated.ts`, and projection availability
