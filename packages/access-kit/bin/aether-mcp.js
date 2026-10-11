@@ -2,6 +2,7 @@
 
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
+import { pathToFileURL } from 'node:url';
 import * as z from 'zod/v4';
 
 import {
@@ -39,6 +40,34 @@ const capabilityOverviewSchema = z.object({
   by_provider: bucketMapSchema,
   sampled: z.boolean(),
 });
+
+export const observeOutputSchema = z.object({
+  accepted: z.number().int(),
+  duplicates: z.number().int(),
+  rejected: z.number().int(),
+  events: z.array(z.object({
+    id: z.string(),
+    status: z.enum(['accepted', 'duplicate', 'rejected']),
+    reason: z.string().nullable().optional(),
+  })),
+  batchId: z.string(),
+  receivedAt: z.string(),
+  request_id: z.string(),
+  api_request_id: z.string().optional(),
+  usageEventId: z.string().optional(),
+  usageEvidenceId: z.string().optional(),
+  auditEventId: z.string().optional(),
+  interaction: interactionSchema,
+});
+
+export function buildObserveOutput(result) {
+  return observeOutputSchema.parse({
+    ...result.data,
+    request_id: result.requestId,
+    ...(result.responseRequestId ? { api_request_id: result.responseRequestId } : {}),
+    interaction: result.interaction,
+  });
+}
 
 function toolError(error) {
   const requestId = error?.requestId ? ` Request: ${error.requestId}.` : '';
@@ -160,21 +189,7 @@ function createServer() {
         sequence: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
         properties: z.record(z.string(), z.unknown()).optional(),
       }),
-      outputSchema: z.object({
-        accepted: z.number().int(),
-        duplicates: z.number().int(),
-        rejected: z.number().int(),
-        events: z.array(z.object({
-          id: z.string(),
-          status: z.enum(['accepted', 'duplicate', 'rejected']),
-          reason: z.string().nullable().optional(),
-        })),
-        batchId: z.string(),
-        receivedAt: z.string(),
-        request_id: z.string(),
-        api_request_id: z.string().optional(),
-        interaction: interactionSchema,
-      }),
+      outputSchema: observeOutputSchema,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
     async ({ event_name, event_id, session_id, anonymous_id, sequence, properties }) => {
@@ -188,12 +203,7 @@ function createServer() {
           properties,
           surface: 'mcp',
         });
-        const output = {
-          ...result.data,
-          request_id: result.requestId,
-          ...(result.responseRequestId ? { api_request_id: result.responseRequestId } : {}),
-          interaction: result.interaction,
-        };
+        const output = buildObserveOutput(result);
         return {
           content: [{ type: 'text', text: JSON.stringify(output) }],
           structuredContent: output,
@@ -207,10 +217,12 @@ function createServer() {
   return server;
 }
 
-try {
-  await loadMcpStoredSession(process.env);
-  await serveStdio(createServer);
-} catch (error) {
-  process.stderr.write(`Aether MCP bridge could not start: ${error.message}\n`);
-  process.exitCode = 1;
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    await loadMcpStoredSession(process.env);
+    await serveStdio(createServer);
+  } catch (error) {
+    process.stderr.write(`Aether MCP bridge could not start: ${error.message}\n`);
+    process.exitCode = 1;
+  }
 }

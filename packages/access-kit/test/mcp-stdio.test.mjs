@@ -3,8 +3,42 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { buildObserveOutput } from '../bin/aether-mcp.js';
 
 const bridgePath = fileURLToPath(new URL('../bin/aether-mcp.js', import.meta.url));
+
+test('observe MCP output preserves server-issued usage, evidence, and audit references', () => {
+  const output = buildObserveOutput({
+    data: {
+      accepted: 1,
+      duplicates: 0,
+      rejected: 0,
+      events: [{ id: 'evt-1', status: 'accepted' }],
+      batchId: 'batch-1',
+      receivedAt: '2026-10-11T00:00:00Z',
+      usageEventId: 'usage-1',
+      usageEvidenceId: 'evidence-1',
+      auditEventId: 'audit-1',
+    },
+    requestId: 'request-1',
+    responseRequestId: 'api-request-1',
+    interaction: {
+      version: '1',
+      operation: 'observe',
+      status_class: 'successful',
+      request_id: 'request-1',
+      api_request_id: 'api-request-1',
+      http_status: 200,
+      references: { usage: 'usage-1' },
+    },
+  });
+
+  assert.equal(output.usageEventId, 'usage-1');
+  assert.equal(output.usageEvidenceId, 'evidence-1');
+  assert.equal(output.auditEventId, 'audit-1');
+  assert.equal(output.request_id, 'request-1');
+  assert.equal(output.api_request_id, 'api-request-1');
+});
 
 function waitForResponse(child, pending, id) {
   return new Promise((resolve, reject) => {
