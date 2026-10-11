@@ -74,9 +74,16 @@ async def test_delegation_projector_ledgers_authorized_delegation(set_mode):
     assert [e.edge_type for e in edges] == [EdgeType.DELEGATES]
 
     rows = await ledger.list_records(TENANT)
-    assert len(rows) == 1
-    assert rows[0]["operation"] == "edge_created"
-    assert rows[0]["causality_class"] == "authorized_delegation"
+    # The projector versions the canonical Delegation vertex and records its
+    # three relationships (DELEGATES, GRANTED_BY, and GRANTED_TO).
+    assert [row["operation"] for row in rows] == [
+        "node_versioned",
+        "edge_created",
+        "edge_created",
+        "edge_created",
+    ]
+    assert {row["source_event_id"] for row in rows} == {"delegation:d1"}
+    assert {row["causality_class"] for row in rows} == {"authorized_delegation"}
     assert replay_ledger(rows) == await current_graph_digest(client, TENANT)
 
 

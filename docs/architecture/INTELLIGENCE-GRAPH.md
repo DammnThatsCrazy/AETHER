@@ -56,7 +56,7 @@ source_hashes:
   "services/api/shared/graph/": "sha256:6a4870242b1476b2eca52b4645aa2034af8b345ac353b060a72b8d02cd41ad08"
   "services/api/value/x402/economic_mutations.py": "sha256:bdd180a936e048840636f221fdee3b142c0babab5d8e2bcc59b4a51983198f51"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
-  "services/api/workers/profile360_workers/workers.py": "sha256:2e2074a22e3091514b0340b8cf68d7e37ee8150a23e89f8cb115c18c9f02a04a"
+  "services/api/workers/profile360_workers/workers.py": "sha256:0c79f5ee2cc03eb0ae92d8690a8622b8ebaea245dc047c7643107fe909d7170a"
 ---
 # Unified On-Chain Intelligence Graph v0.1.0-alpha.0
 

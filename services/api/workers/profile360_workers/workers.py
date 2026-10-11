@@ -255,7 +255,12 @@ class DelegationProjector:
                 vertex_intent,
             )
 
-            source_event_id = str(event.event_id or f"delegation:{delegation_id}")
+            # Event is the canonical contract, but tolerate source adapters and
+            # test doubles that provide only the delegation identity. Keep the
+            # fallback deterministic so replay remains idempotent.
+            source_event_id = str(
+                getattr(event, "event_id", None) or f"delegation:{delegation_id}"
+            )
             gateway = GraphMutationGateway(graph_client=self._graph)
             await gateway.apply(vertex_intent(
                 delegation_vertex(record),
