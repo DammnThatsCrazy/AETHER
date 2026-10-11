@@ -453,9 +453,33 @@ async def _apply_graph(
     from shared.graph.mutation_gateway import GraphMutationGateway
     from shared.graph.mutation_intents import edge_intent, vertex_intent
     from tenancy.rights_authority.propagation import stamp_intent
+    from repositories.graph_mutation_ledger import GraphMutationLedgerRepository
 
     graph = get_graph_client()
     gateway = GraphMutationGateway(graph_client=graph)
+    ledger = GraphMutationLedgerRepository()
+
+    async def require_rights_ancestry(outcome: Any, operation: str) -> None:
+        if (
+            outcome.ledger_recorded
+            and outcome.record is not None
+            and str(outcome.record.rights_decision_ref or "").startswith("rdec_")
+        ):
+            return
+        if outcome.deduplicated and outcome.mutation_id:
+            persisted = await ledger.get_record_by_mutation_id(
+                tenant_id, outcome.mutation_id
+            )
+            if (
+                persisted is not None
+                and str(persisted.get("rights_decision_ref") or "").startswith("rdec_")
+            ):
+                return
+        raise ConflictError(
+            "import_graph_mutation_rights_ancestry_not_durable",
+            details={"operation": operation},
+        )
+
     for v in vertices:
         existing = await graph.get_vertex(v["vertex_id"])
         existing_props = dict(existing.properties or {}) if existing is not None else {}
@@ -480,15 +504,19 @@ async def _apply_graph(
             operation="node_versioned", tenant_id=tenant_id,
             actor_kind="import", actor_id=commit_id, correlation_id=commit_id,
         )
-        await gateway.apply(
+        outcome = await gateway.apply(
             stamp_intent(intent, rights_propagation), mode_override="shadow"
         )
+        await require_rights_ancestry(outcome, "node_versioned")
 
     created: list[dict] = []
     for e in edges:
         existing = await graph.get_edges(e["from"], edge_type=e["type"], direction="out")
-        if any(x.to_vertex_id == e["to"] for x in existing):
-            continue  # idempotent: this edge already connects these vertices
+        matching = next((x for x in existing if x.to_vertex_id == e["to"]), None)
+        if matching is not None:
+            matching_props = dict(matching.properties or {})
+            if matching_props.get("import_commit_id") != commit_id:
+                continue  # an existing edge owned by another source/commit
         intent = edge_intent(
             Edge(
                 edge_type=e["type"],
@@ -506,9 +534,15 @@ async def _apply_graph(
             source_event_id=commit_id,
             correlation_id=commit_id, causality_class="declared_reason",
         )
-        await gateway.apply(
-            stamp_intent(intent, rights_propagation), mode_override="shadow"
-        )
+        stamped_intent = stamp_intent(intent, rights_propagation)
+        if matching is not None:
+            # A prior shadow attempt may have projected this commit-owned edge
+            # before its best-effort ledger append failed. Repair only the
+            # missing ledger record; projecting it again would duplicate edges.
+            outcome = await gateway.ensure_shadow_record(stamped_intent)
+        else:
+            outcome = await gateway.apply(stamped_intent, mode_override="shadow")
+        await require_rights_ancestry(outcome, "edge_created")
         created.append(e)
     return created
 

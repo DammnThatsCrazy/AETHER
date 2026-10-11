@@ -253,12 +253,25 @@ class ImportRightsAdmission:
                 and not await service.is_durable()
             ):
                 raise ImportRightsDenied(evidence, "grant_store_not_durable")
+        except ImportRightsDenied:
+            raise
+        except Exception as exc:
+            raise ImportRightsDenied(evidence, "source_grant_unavailable") from exc
+
+        hold_active = False
+        try:
             async with service.hold_grant_unrevoked(
                 evidence.source_grant_ref, tenant_id=evidence.tenant_id
             ):
-                grant = await service.get_effective_grant(
-                    evidence.tenant_id, evidence.source_id
-                )
+                hold_active = True
+                try:
+                    grant = await service.get_effective_grant(
+                        evidence.tenant_id, evidence.source_id
+                    )
+                except Exception as exc:
+                    raise ImportRightsDenied(
+                        evidence, "source_grant_unavailable"
+                    ) from exc
                 status = getattr(getattr(grant, "status", None), "value", None)
                 if (
                     grant is None
@@ -270,9 +283,15 @@ class ImportRightsAdmission:
                 ):
                     raise ImportRightsDenied(evidence, "source_grant_revoked_or_changed")
                 yield
+                hold_active = False
         except ImportRightsDenied:
             raise
         except Exception as exc:
+            # Exceptions from the protected commit body must retain their real
+            # failure cause. Only errors acquiring/checking the grant are rights
+            # authority availability failures.
+            if hold_active:
+                raise
             raise ImportRightsDenied(evidence, "source_grant_unavailable") from exc
 
 

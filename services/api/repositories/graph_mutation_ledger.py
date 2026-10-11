@@ -517,6 +517,36 @@ class GraphMutationLedgerRepository:
 
     # ── Reads ────────────────────────────────────────────────────────────────
 
+    async def get_record_by_mutation_id(
+        self, tenant_id: str, mutation_id: str
+    ) -> Optional[dict]:
+        """Return one tenant-scoped ledger row by its immutable mutation id."""
+        pool = await get_pool()
+        if pool is None:
+            row = _MEM_LEDGER.get(mutation_id)
+            if row is None or row.get("tenant_id") != tenant_id:
+                return None
+            normalized = dict(
+                row,
+                payload=(
+                    _MEM_VERSIONS.get(row.get("after_version_id") or "") or {}
+                ).get("payload"),
+            )
+            return _normalize_row(normalized)
+
+        await self._ensure_schema(pool)
+        row = await pool.fetchrow(
+            """
+            SELECT l.*, v.payload AS payload
+            FROM graph_mutation_ledger l
+            LEFT JOIN graph_fact_versions v ON v.version_id = l.after_version_id
+            WHERE l.tenant_id = $1 AND l.mutation_id = $2
+            """,
+            tenant_id,
+            mutation_id,
+        )
+        return _normalize_row(dict(row)) if row is not None else None
+
     async def list_records(
         self,
         tenant_id: str,

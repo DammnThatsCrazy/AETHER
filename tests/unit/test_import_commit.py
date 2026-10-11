@@ -426,6 +426,53 @@ async def test_commit_is_idempotent_on_edges(clean):
     assert rec1["counts"]["edges"] == 4
 
 
+async def test_shadow_ledger_failure_fails_commit_and_retry_repairs_owned_edge(clean, monkeypatch):
+    from repositories.graph_mutation_ledger import GraphMutationLedgerRepository
+    from shared.graph.graph import get_graph_client
+
+    import_id = await _seed_approved()
+    original_append = GraphMutationLedgerRepository.append
+    failed_once = False
+
+    async def fail_first_edge_append(self, record, fact_payload=None):
+        nonlocal failed_once
+        if record.operation == "edge_created" and not failed_once:
+            failed_once = True
+            raise RuntimeError("simulated ledger outage after shadow projection")
+        return await original_append(self, record, fact_payload=fact_payload)
+
+    monkeypatch.setattr(GraphMutationLedgerRepository, "append", fail_first_edge_append)
+    with raises_named("ConflictError"):
+        await cm.commit_import(TENANT, import_id)
+
+    failed_session = await clean.get_session(TENANT, import_id)
+    commit_id = failed_session["active_commit_id"]
+    assert failed_session["status"] == "failed"
+    assert _edge_count() == 1  # the shadow projection happened before its ledger append
+
+    monkeypatch.setattr(GraphMutationLedgerRepository, "append", original_append)
+    committed = await cm.commit_import(TENANT, import_id)
+
+    assert committed["commit_id"] == commit_id
+    assert committed["status"] == "committed"
+    assert committed["counts"]["edges"] == 4
+    assert _edge_count() == 4  # recovery records the owned edge without projecting a duplicate
+
+    rows = await GraphMutationLedgerRepository().list_records(TENANT)
+    commit_mutations = [row for row in rows if row.get("actor_id") == commit_id]
+    assert commit_mutations
+    assert all(
+        str(row.get("rights_decision_ref") or "").startswith("rdec_")
+        for row in commit_mutations
+    )
+
+    rolled_back = await cm.rollback_import(TENANT, import_id, reason="retry recovery")
+    assert rolled_back["edges_revoked"] == 4
+    assert await get_graph_client().get_edges(
+        f"entity:{TENANT}:alice", direction="out"
+    ) == []
+
+
 # ── rollback ─────────────────────────────────────────────────────────────────
 
 
