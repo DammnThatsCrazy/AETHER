@@ -256,6 +256,7 @@ test('interaction outcome maps server partial observation decisions to degraded 
     rights_decision_ref: 'rdec-ref',
     usage_evidence_id: 'usage-evidence-ref',
     usageEvidenceId: 'camel-usage-evidence-ref',
+    auditEventId: 'audit-event-ref',
     events: [{ id: 'evt', status: 'rejected', reason: 'consent_required' }],
   }, { status: 207, headers: { 'x-correlation-id': 'observe-correlation' } });
 
@@ -272,6 +273,7 @@ test('interaction outcome maps server partial observation decisions to degraded 
     batch_id: 'batch-ref', receipt_ref: 'receipt-ref', rights_decision_ref: 'rdec-ref',
     usage_evidence_id: 'usage-evidence-ref',
     usageEvidenceId: 'camel-usage-evidence-ref',
+    auditEventId: 'audit-event-ref',
   });
   assert.equal(result.data.events[0].status, 'rejected');
   assert.equal(result.data.events[0].reason, 'consent_required');

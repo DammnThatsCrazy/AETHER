@@ -32,6 +32,7 @@ import importlib
 import sys
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -369,6 +370,7 @@ def test_v2_route_accepts_and_returns_batchresponse_schema():
         resp = _run(b.batch.ingest_batch(req, body, producer=_FakeProducer()))
         assert set(resp.keys()) == {
             "accepted", "duplicates", "rejected", "events", "batchId", "receivedAt",
+            "requestId", "usageEventId", "usageEvidenceId", "auditEventId",
         }
         assert resp["accepted"] == 3
         assert resp["duplicates"] == 0
@@ -377,6 +379,37 @@ def test_v2_route_accepts_and_returns_batchresponse_schema():
         # Went through the transactional path → typed Bronze + outbox populated.
         assert len(b.bronze_store) == 3
         assert len(b.outbox_store) == 3
+
+
+def test_v2_route_audit_reference_joins_request_and_batch():
+    with fresh(enabled=True) as b:
+        tenant = _FakeTenant("tenant-audit")
+        req = _FakeRequest(tenant)
+        req.state.context = SimpleNamespace(
+            tenant_id="tenant-audit", correlation_id="req-audit-join"
+        )
+        security_context = importlib.import_module("governance.security.request_context")
+        security_context.bind_current_request(req)
+        try:
+            response = _run(
+                b.batch.ingest_batch(
+                    req,
+                    _mk_body(b.batch, ["audit-join-event"]),
+                    producer=_FakeProducer(),
+                )
+            )
+        finally:
+            security_context.bind_current_request(None)
+
+        audit_rows = b.repos._IN_MEMORY_STORES["security_audit_events"]
+        audit = audit_rows[response["auditEventId"]]
+        assert response["auditEventId"].startswith("audit_")
+        assert audit["event_type"] == "ingestion.batch"
+        assert audit["actor_type"] == "system"
+        assert audit["actor_id"] == "aether_ingestion"
+        assert audit["resource_id"] == response["batchId"]
+        assert audit["correlation_id"] == "req-audit-join"
+        assert audit["metadata"]["accepted_count"] == 1
 
 
 def test_v2_route_dedupes_repeated_ids_in_request():
@@ -433,6 +466,7 @@ def test_flag_off_uses_v1_not_ingest_many():
         assert called["v2"] is False
         assert set(resp.keys()) == {
             "accepted", "duplicates", "rejected", "events", "batchId", "receivedAt",
+            "requestId", "usageEventId", "usageEvidenceId", "auditEventId",
         }
         assert resp["accepted"] == 2
 

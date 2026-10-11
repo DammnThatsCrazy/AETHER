@@ -7,6 +7,7 @@ const REFERENCE_FIELDS = [
   'task_id', 'taskId', 'result_id', 'resultId', 'export_id', 'exportId',
   'approval_id', 'approvalId', 'usage_event_id', 'usageEventId',
   'usage_evidence_id', 'usageEvidenceId', 'audit_id', 'auditId',
+  'audit_event_id', 'auditEventId',
 ];
 
 function classifyStatus({ operation, httpStatus, responseOk, contractError, data }) {

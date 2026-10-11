@@ -347,6 +347,7 @@ class BatchResponse(BaseModel):
     requestId: Optional[str] = None
     usageEventId: Optional[str] = None
     usageEvidenceId: Optional[str] = None
+    auditEventId: Optional[str] = None
 
 
 # ── Route ─────────────────────────────────────────────────────────────────────
@@ -380,7 +381,7 @@ async def ingest_batch(
     declared_site = getattr(request, "headers", {}).get("X-Aether-Site")
     iv2 = settings.ingestion_v2
     if iv2.enabled or tenant.tenant_id in iv2.canary_tenants:
-        return await _ingest_batch_v2(
+        response = await _ingest_batch_v2(
             body=body,
             tenant=tenant,
             request_privacy=request_privacy,
@@ -388,22 +389,73 @@ async def ingest_batch(
             declared_site=declared_site,
             request_id=getattr(request.state, "request_id", None),
         )
+    else:
+        response_model = await ingest_events(
+            events=body.batch,
+            tenant_id=tenant.tenant_id,
+            request_privacy=request_privacy,
+            server_context=server_context,
+            granted_consents=frozenset(body.consents or []),
+            sent_at=body.sentAt,
+            producer=producer,
+            declared_site=declared_site,
+            request_id=getattr(request.state, "request_id", None),
+        )
+        # The /v1/batch handler keeps returning the plain BatchResponse dict
+        # (ingest_events returns the model); ingest_events is the shared spine the
+        # deprecated aliases also converge onto.
+        response = response_model.model_dump()
 
-    response = await ingest_events(
-        events=body.batch,
-        tenant_id=tenant.tenant_id,
-        request_privacy=request_privacy,
-        server_context=server_context,
-        granted_consents=frozenset(body.consents or []),
-        sent_at=body.sentAt,
-        producer=producer,
-        declared_site=declared_site,
-        request_id=getattr(request.state, "request_id", None),
-    )
-    # The /v1/batch handler keeps returning the plain BatchResponse dict
-    # (ingest_events returns the model); ingest_events is the shared spine the
-    # deprecated aliases also converge onto.
-    return response.model_dump()
+    return await _record_batch_audit(tenant, response)
+
+
+async def _record_batch_audit(tenant: Any, response: dict) -> dict:
+    """Link a completed SDK batch to the existing tenant audit ledger.
+
+    The route's WRITE gate is the authorization authority; this record is an
+    audit of the permitted batch operation, not a newly minted authorization
+    decision. Audit persistence is best-effort because observation and usage
+    writes may already be durable by the time this function runs.
+    """
+    batch_id = response.get("batchId")
+    tenant_id = getattr(tenant, "tenant_id", None)
+    if not isinstance(batch_id, str) or not batch_id or not tenant_id:
+        return response
+
+    try:
+        from governance.security.audit_ledger import audit_ledger
+
+        user_id = getattr(tenant, "user_id", None)
+        event = await audit_ledger.record(
+            actor_id=str(user_id or "aether_ingestion"),
+            actor_type="tenant_user" if user_id else "system",
+            event_type="ingestion.batch",
+            resource_type="observation_batch",
+            resource_id=batch_id,
+            action="ingest",
+            outcome="allowed",
+            tenant_id=tenant_id,
+            metadata={
+                "accepted_count": response.get("accepted", 0),
+                "duplicate_count": response.get("duplicates", 0),
+                "rejected_count": response.get("rejected", 0),
+                "usage_event_id": response.get("usageEventId"),
+                "usage_evidence_id": response.get("usageEvidenceId"),
+            },
+        )
+        response["auditEventId"] = event.audit_event_id
+    except Exception:
+        # Intake has already written or acknowledged its governed result. Do not
+        # turn an audit-store outage into a retry that can only appear duplicate;
+        # the response omits auditEventId when no durable audit row was written.
+        logger.warning(
+            "ingestion batch audit write failed tenant=%s batch=%s",
+            tenant_id,
+            batch_id,
+            exc_info=True,
+        )
+        metrics.increment("ingestion_batch_audit_write_failed_total")
+    return response
 
 
 # ── Canonical V1 ingestion spine ─────────────────────────────────────────────
