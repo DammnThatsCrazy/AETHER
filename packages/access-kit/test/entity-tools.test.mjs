@@ -26,6 +26,11 @@ function entity(extra = {}) {
   };
 }
 
+const interaction = {
+  version: '1', operation: 'query', status_class: 'successful', request_id: 'mcp-middleware-id',
+  http_status: 200, references: {},
+};
+
 test('MCP entity list tool is read-only, bounded, and returns only the approved projection', async () => {
   let request;
   const tools = captureTools({
@@ -39,6 +44,7 @@ test('MCP entity list tool is read-only, bounded, and returns only the approved 
         })) },
         requestId: 'mcp-middleware-id',
         responseRequestId: 'mcp-api-id',
+        interaction: { ...interaction, api_request_id: 'mcp-api-id' },
       };
     },
   });
@@ -48,7 +54,7 @@ test('MCP entity list tool is read-only, bounded, and returns only the approved 
   assert.equal(tool.config.inputSchema.safeParse({ limit: 51 }).success, false);
   assert.equal(tool.config.inputSchema.safeParse({ limit: 1, tenant_id: 'tenant-override' }).success, false);
   assert.equal(tool.config.outputSchema.safeParse({
-    entities: [], count: 0, request_id: 'r', api_request_id: 'a',
+    entities: [], count: 0, request_id: 'r', api_request_id: 'a', interaction,
   }).success, true);
 
   const result = await tool.handler({ entity_type: 'human', limit: 50 });
@@ -57,6 +63,7 @@ test('MCP entity list tool is read-only, bounded, and returns only the approved 
   assert.equal(result.structuredContent.count, 50);
   assert.equal(result.structuredContent.request_id, 'mcp-middleware-id');
   assert.equal(result.structuredContent.api_request_id, 'mcp-api-id');
+  assert.equal(result.structuredContent.interaction.status_class, 'successful');
   assert.deepEqual(Object.keys(result.structuredContent.entities[0]), [
     'entity_id', 'entity_type', 'display_name', 'parent_entity_id', 'created_at', 'updated_at',
   ]);
@@ -73,6 +80,10 @@ test('MCP entity get tool preserves IDs and maps existing API errors', async () 
         code: 'not_found',
         requestId: 'mcp-denied-id',
         apiRequestId: 'mcp-api-denied-id',
+        interaction: {
+          version: '1', operation: 'query', status_class: 'denied', request_id: 'mcp-denied-id',
+          api_request_id: 'mcp-api-denied-id', http_status: 404, error_code: 'not_found', references: {},
+        },
       });
     },
   });
@@ -89,6 +100,7 @@ test('MCP entity get tool preserves IDs and maps existing API errors', async () 
   assert.equal(failure.code, 'not_found');
   assert.equal(failure.request_id, 'mcp-denied-id');
   assert.equal(failure.api_request_id, 'mcp-api-denied-id');
+  assert.equal(failure.interaction.status_class, 'denied');
   assert.match(failure.message, /HTTP 404, not_found/);
 });
 
@@ -98,6 +110,7 @@ test('MCP entity get tool keeps output fields allowlisted', async () => {
       return {
         data: entity({ tenant_id: 'private', metadata: { token: 'private' }, extra: 'private' }),
         requestId: 'mcp-read-id',
+        interaction: { ...interaction, request_id: 'mcp-read-id' },
       };
     },
   });

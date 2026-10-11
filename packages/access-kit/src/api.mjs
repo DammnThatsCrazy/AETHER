@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { normalizeInteractionOutcome } from './interaction.mjs';
 
 const DEFAULT_API_URL = 'https://api.aether.io';
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -6,15 +7,17 @@ const CAPABILITY_ID_PATTERN = /^cap_[a-f0-9]{24}$/;
 const SITE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const MAX_INGEST_BODY_BYTES = 64 * 1024;
 export const MAX_ENTITY_PAGE_SIZE = 50;
+export const MAX_OVERVIEW_BUCKETS = 50;
 
 export class AccessApiError extends Error {
-  constructor(message, { status, code, requestId, apiRequestId } = {}) {
+  constructor(message, { status, code, requestId, apiRequestId, interaction } = {}) {
     super(message);
     this.name = 'AccessApiError';
     this.status = status;
     this.code = code;
     this.requestId = requestId;
     this.apiRequestId = apiRequestId;
+    this.interaction = interaction;
   }
 }
 
@@ -100,7 +103,10 @@ async function readRequest(path, query = undefined, env = process.env) {
     });
   } catch (error) {
     const reason = error?.name === 'TimeoutError' ? 'request timed out' : 'could not reach the Aether API';
-    throw new AccessApiError(reason, { requestId: correlationId });
+    throw new AccessApiError(reason, {
+      requestId: correlationId,
+      interaction: normalizeInteractionOutcome({ operation: 'query', requestId: correlationId }),
+    });
   }
 
   const headerCorrelationId = response.headers.get('x-correlation-id');
@@ -112,96 +118,187 @@ async function readRequest(path, query = undefined, env = process.env) {
     throw new AccessApiError(`Aether API returned a non-JSON response (HTTP ${response.status}).`, {
       status: response.status,
       requestId: headerRequestId,
+      interaction: normalizeInteractionOutcome({
+        operation: 'query', httpStatus: response.status, requestId: headerRequestId,
+        responseOk: false, contractError: true,
+      }),
     });
   }
 
+  const apiRequestId = typeof payload?.meta?.request_id === 'string'
+    ? payload.meta.request_id
+    : (typeof payload?.request_id === 'string' ? payload.request_id : undefined);
   if (!response.ok) {
     const errorCode = payload?.error?.code ?? payload?.code;
-    const apiRequestId = typeof payload?.meta?.request_id === 'string'
-      ? payload.meta.request_id
-      : (typeof payload?.request_id === 'string' ? payload.request_id : undefined);
     throw new AccessApiError(
       `Aether API request failed (HTTP ${response.status}${errorCode ? `, ${errorCode}` : ''}).`,
-      { status: response.status, code: errorCode, requestId: headerRequestId, apiRequestId },
+      {
+        status: response.status, code: errorCode, requestId: headerRequestId, apiRequestId,
+        interaction: normalizeInteractionOutcome({
+          operation: 'query', httpStatus: response.status, requestId: headerRequestId,
+          apiRequestId, responseOk: false, code: errorCode,
+        }),
+      },
     );
   }
 
-  if (!payload || typeof payload !== 'object' || !Object.hasOwn(payload, 'data')) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)
+      || !Object.hasOwn(payload, 'data') || !payload.data || typeof payload.data !== 'object'
+      || Array.isArray(payload.data)) {
     throw new AccessApiError('Aether API returned an unexpected response envelope.', {
       status: response.status,
       requestId: headerRequestId,
+      apiRequestId,
+      interaction: normalizeInteractionOutcome({
+        operation: 'query', httpStatus: response.status, requestId: headerRequestId,
+        apiRequestId, responseOk: true, contractError: true,
+      }),
     });
   }
 
+  const responseRequestId = apiRequestId;
   return {
     data: payload.data,
     requestId: headerRequestId,
-    responseRequestId: typeof payload.meta?.request_id === 'string'
-      ? payload.meta.request_id
-      : (typeof payload.request_id === 'string' ? payload.request_id : undefined),
+    responseRequestId,
+    interaction: normalizeInteractionOutcome({
+      operation: 'query', httpStatus: response.status, requestId: headerRequestId,
+      apiRequestId: responseRequestId, responseOk: true, data: payload.data,
+    }),
   };
 }
 
-function safeCapability(row) {
-  if (!row || typeof row !== 'object') return null;
+function boundedString(value, maxLength = 256) {
+  return typeof value === 'string' && value.length <= maxLength ? value : null;
+}
+
+function safeAccountContext(profile) {
+  const plan = profile?.plan;
+  const billing = profile?.billing;
+  return {
+    name: boundedString(profile?.name, 256),
+    plan: plan && typeof plan === 'object' ? {
+      plan_id: boundedString(plan.plan_id, 128),
+      display_name: boundedString(plan.display_name, 128),
+      monthly_quota: Number.isSafeInteger(plan.monthly_quota) && plan.monthly_quota >= 0
+        ? plan.monthly_quota
+        : null,
+      burst_rpm: Number.isSafeInteger(plan.burst_rpm) && plan.burst_rpm >= 0
+        ? plan.burst_rpm
+        : null,
+    } : null,
+    billing: billing && typeof billing === 'object' ? {
+      subscription_status: boundedString(billing.subscription_status, 64),
+      current_period_end: boundedString(billing.current_period_end, 64),
+    } : null,
+    api_key_count: Number.isSafeInteger(profile?.api_key_count) && profile.api_key_count >= 0
+      ? profile.api_key_count
+      : null,
+    is_admin: typeof profile?.is_admin === 'boolean' ? profile.is_admin : null,
+  };
+}
+
+export async function getAccountContext(env = process.env) {
+  const result = await readRequest('/v1/me', undefined, env);
+  return { ...result, data: safeAccountContext(result.data) };
+}
+
+function boundedText(value, maxLength) {
+  return typeof value === 'string' && value.length <= maxLength ? value : null;
+}
+
+function nonNegativeInteger(value) {
+  return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
+export function projectObservedCapability(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)
+      || typeof row.capability_id !== 'string'
+      || !CAPABILITY_ID_PATTERN.test(row.capability_id)) return null;
   return {
     capability_id: row.capability_id,
-    capability_kind: row.capability_kind ?? 'unknown',
-    provider: row.provider ?? null,
-    server_name: row.server_name ?? null,
-    tool_name: row.tool_name ?? null,
-    protocol_version: row.protocol_version ?? null,
-    latest_risk_level: row.latest_risk_level ?? null,
-    discovery_state: row.discovery_state ?? 'observed',
-    first_seen_at: row.first_seen_at ?? null,
-    last_seen_at: row.last_seen_at ?? null,
-    observation_count: Number.isInteger(row.observation_count) ? row.observation_count : 0,
+    capability_kind: boundedText(row.capability_kind, 64) ?? 'unknown',
+    provider: boundedText(row.provider, 128),
+    server_name: boundedText(row.server_name, 128),
+    tool_name: boundedText(row.tool_name, 128),
+    protocol_version: boundedText(row.protocol_version, 64),
+    latest_risk_level: boundedText(row.latest_risk_level, 64),
+    discovery_state: boundedText(row.discovery_state, 64) ?? 'observed',
+    first_seen_at: boundedText(row.first_seen_at, 64),
+    last_seen_at: boundedText(row.last_seen_at, 64),
+    observation_count: nonNegativeInteger(row.observation_count),
   };
 }
 
-function safeCapabilityOverview(summary) {
-  if (!summary || typeof summary !== 'object') return {};
+function projectBuckets(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { buckets: {}, truncated: false };
+  }
+  const entries = [];
+  let validEntryCount = 0;
+  for (const [key, count] of Object.entries(value)) {
+    if (key.length === 0 || key.length > 64 || !Number.isSafeInteger(count) || count < 0) continue;
+    validEntryCount += 1;
+    if (entries.length < MAX_OVERVIEW_BUCKETS) entries.push([key, count]);
+  }
+  return { buckets: Object.fromEntries(entries), truncated: validEntryCount > MAX_OVERVIEW_BUCKETS };
+}
+
+export function projectObservedCapabilityOverview(summary) {
+  if (!summary || typeof summary !== 'object' || Array.isArray(summary)) {
+    return { capability_count: 0, installation_count: 0, by_kind: {}, by_provider: {}, sampled: false };
+  }
+  const byKind = projectBuckets(summary.by_kind);
+  const byProvider = projectBuckets(summary.by_provider);
   return {
-    capability_count: Number.isInteger(summary.capability_count) ? summary.capability_count : 0,
-    installation_count: Number.isInteger(summary.installation_count) ? summary.installation_count : 0,
-    by_kind: summary.by_kind && typeof summary.by_kind === 'object' && !Array.isArray(summary.by_kind)
-      ? summary.by_kind
-      : {},
-    by_provider: summary.by_provider && typeof summary.by_provider === 'object' && !Array.isArray(summary.by_provider)
-      ? summary.by_provider
-      : {},
-    sampled: summary.sampled === true,
+    capability_count: nonNegativeInteger(summary.capability_count),
+    installation_count: nonNegativeInteger(summary.installation_count),
+    by_kind: byKind.buckets,
+    by_provider: byProvider.buckets,
+    sampled: summary.sampled === true || byKind.truncated || byProvider.truncated,
   };
 }
 
-export async function listCapabilities({ provider, serverName, toolName, limit = 100, offset = 0 } = {}) {
+export async function listCapabilities(
+  { provider, serverName, toolName, limit = 100, offset = 0 } = {},
+  env = process.env,
+) {
   const result = await readRequest('/v1/capability-catalog', {
     provider,
     server_name: serverName,
     tool_name: toolName,
     limit,
     offset,
-  });
-  return {
-    ...result,
-    data: {
-      ...result.data,
-      items: (Array.isArray(result.data?.items) ? result.data.items : []).map(safeCapability),
-    },
-  };
+  }, env);
+  const items = (Array.isArray(result.data?.items) ? result.data.items : [])
+    .map(projectObservedCapability)
+    .filter(Boolean);
+  return { ...result, data: { items, count: items.length } };
 }
 
-export async function getCapabilityOverview() {
-  const result = await readRequest('/v1/capability-catalog/overview');
-  return { ...result, data: safeCapabilityOverview(result.data) };
+export async function getCapabilityOverview(env = process.env) {
+  const result = await readRequest('/v1/capability-catalog/overview', undefined, env);
+  return { ...result, data: projectObservedCapabilityOverview(result.data) };
 }
 
-export async function getCapability(capabilityId) {
+export async function getCapability(capabilityId, env = process.env) {
   if (!CAPABILITY_ID_PATTERN.test(capabilityId)) {
     throw new Error('Capability IDs must have the form cap_ followed by 24 lowercase hexadecimal characters.');
   }
-  const result = await readRequest(`/v1/capability-catalog/${encodeURIComponent(capabilityId)}`);
-  return { ...result, data: safeCapability(result.data) };
+  const result = await readRequest(`/v1/capability-catalog/${encodeURIComponent(capabilityId)}`, undefined, env);
+  const capability = projectObservedCapability(result.data);
+  if (!capability) {
+    throw new AccessApiError('Aether API returned an unexpected capability response.', {
+      requestId: result.requestId,
+      apiRequestId: result.responseRequestId,
+      interaction: normalizeInteractionOutcome({
+        operation: 'query', httpStatus: result.interaction.http_status,
+        requestId: result.requestId, apiRequestId: result.responseRequestId,
+        responseOk: true, contractError: true,
+      }),
+    });
+  }
+  return { ...result, data: capability };
 }
 
 function safeEntity(row) {
@@ -263,6 +360,12 @@ export async function getEntity(entityId, env = process.env) {
   if (!entity) {
     throw new AccessApiError('Aether API returned an unexpected entity response.', {
       requestId: result.requestId,
+      apiRequestId: result.responseRequestId,
+      interaction: normalizeInteractionOutcome({
+        operation: 'query', requestId: result.requestId,
+        httpStatus: result.interaction.http_status, responseOk: true, contractError: true,
+        apiRequestId: result.responseRequestId,
+      }),
     });
   }
   return { ...result, data: entity };
@@ -344,7 +447,10 @@ export async function ingestTrackObservation(input, env = process.env) {
     });
   } catch (error) {
     const reason = error?.name === 'TimeoutError' ? 'request timed out' : 'could not reach the Aether API';
-    throw new AccessApiError(reason, { requestId: correlationId });
+    throw new AccessApiError(reason, {
+      requestId: correlationId,
+      interaction: normalizeInteractionOutcome({ operation: 'observe', requestId: correlationId }),
+    });
   }
 
   const requestId = response.headers.get('x-correlation-id')
@@ -357,22 +463,48 @@ export async function ingestTrackObservation(input, env = process.env) {
     throw new AccessApiError(`Aether API returned a non-JSON response (HTTP ${response.status}).`, {
       status: response.status,
       requestId,
+      interaction: normalizeInteractionOutcome({
+        operation: 'observe', httpStatus: response.status, requestId,
+        responseOk: false, contractError: true,
+      }),
     });
   }
+  const apiRequestId = typeof result?.meta?.request_id === 'string'
+    ? result.meta.request_id
+    : (typeof result?.request_id === 'string' ? result.request_id : undefined);
   if (!response.ok) {
     const errorCode = result?.error?.code ?? result?.code;
-    const apiRequestId = typeof result?.meta?.request_id === 'string'
-      ? result.meta.request_id
-      : (typeof result?.request_id === 'string' ? result.request_id : undefined);
     throw new AccessApiError(
       `Aether API request failed (HTTP ${response.status}${errorCode ? `, ${errorCode}` : ''}).`,
-      { status: response.status, code: errorCode, requestId, apiRequestId },
+      {
+        status: response.status, code: errorCode, requestId, apiRequestId,
+        interaction: normalizeInteractionOutcome({
+          operation: 'observe', httpStatus: response.status, requestId, apiRequestId,
+          responseOk: false, code: errorCode,
+        }),
+      },
     );
   }
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    throw new AccessApiError('Aether API returned an unexpected ingestion response.', {
+      status: response.status,
+      requestId,
+      apiRequestId,
+      interaction: normalizeInteractionOutcome({
+        operation: 'observe', httpStatus: response.status, requestId, apiRequestId,
+        responseOk: true, contractError: true,
+      }),
+    });
+  }
+  const responseRequestId = apiRequestId;
   return {
     data: result,
     requestId,
-    responseRequestId: typeof result?.meta?.request_id === 'string' ? result.meta.request_id : undefined,
+    responseRequestId,
+    interaction: normalizeInteractionOutcome({
+      operation: 'observe', httpStatus: response.status, requestId,
+      apiRequestId: responseRequestId, responseOk: true, data: result,
+    }),
   };
 }
 

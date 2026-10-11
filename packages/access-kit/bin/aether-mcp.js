@@ -9,38 +9,35 @@ import {
   getCapabilityOverview,
   ingestTrackObservation,
   listCapabilities,
+  projectObservedCapability,
 } from '../src/api.mjs';
 import { registerEntityTools } from '../src/entity-tools.mjs';
+import { registerAccountContextTool } from '../src/account-context-tools.mjs';
+import { interactionSchema } from '../src/interaction-schema.mjs';
 
 const capabilitySchema = z.object({
-  capability_id: z.string(),
-  capability_kind: z.string(),
-  provider: z.string().nullable(),
-  server_name: z.string().nullable(),
-  tool_name: z.string().nullable(),
-  protocol_version: z.string().nullable(),
-  latest_risk_level: z.string().nullable(),
-  discovery_state: z.string(),
-  first_seen_at: z.string().nullable(),
-  last_seen_at: z.string().nullable(),
-  observation_count: z.number().int(),
+  capability_id: z.string().regex(/^cap_[a-f0-9]{24}$/),
+  capability_kind: z.string().max(64),
+  provider: z.string().max(128).nullable(),
+  server_name: z.string().max(128).nullable(),
+  tool_name: z.string().max(128).nullable(),
+  protocol_version: z.string().max(64).nullable(),
+  latest_risk_level: z.string().max(64).nullable(),
+  discovery_state: z.string().max(64),
+  first_seen_at: z.string().max(64).nullable(),
+  last_seen_at: z.string().max(64).nullable(),
+  observation_count: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
 });
 
-function safeCapability(row) {
-  return {
-    capability_id: row.capability_id,
-    capability_kind: row.capability_kind ?? 'unknown',
-    provider: row.provider ?? null,
-    server_name: row.server_name ?? null,
-    tool_name: row.tool_name ?? null,
-    protocol_version: row.protocol_version ?? null,
-    latest_risk_level: row.latest_risk_level ?? null,
-    discovery_state: row.discovery_state ?? 'observed',
-    first_seen_at: row.first_seen_at ?? null,
-    last_seen_at: row.last_seen_at ?? null,
-    observation_count: Number.isInteger(row.observation_count) ? row.observation_count : 0,
-  };
-}
+const bucketMapSchema = z.record(z.string().max(64),
+  z.number().int().min(0).max(Number.MAX_SAFE_INTEGER));
+const capabilityOverviewSchema = z.object({
+  capability_count: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  installation_count: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  by_kind: bucketMapSchema,
+  by_provider: bucketMapSchema,
+  sampled: z.boolean(),
+});
 
 function toolError(error) {
   const requestId = error?.requestId ? ` Request: ${error.requestId}.` : '';
@@ -48,12 +45,23 @@ function toolError(error) {
   const message = error instanceof AccessApiError
     ? `${error.message}${requestId}${apiRequestId}`
     : 'The Aether API operation could not be completed.';
-  return { content: [{ type: 'text', text: message }], isError: true };
+  const details = error instanceof AccessApiError
+    ? {
+      message: error.message,
+      ...(Number.isInteger(error.status) ? { status: error.status } : {}),
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.requestId ? { request_id: error.requestId } : {}),
+      ...(error.apiRequestId ? { api_request_id: error.apiRequestId } : {}),
+      ...(error.interaction ? { interaction: error.interaction } : {}),
+    }
+    : { message };
+  return { content: [{ type: 'text', text: JSON.stringify({ error: details }) }], isError: true };
 }
 
 function createServer() {
   const server = new McpServer({ name: 'aether-access-kit', version: '0.1.0-alpha.0' });
   registerEntityTools(server);
+  registerAccountContextTool(server);
 
   server.registerTool(
     'agent_access_capabilities_list',
@@ -68,9 +76,11 @@ function createServer() {
         offset: z.number().int().min(0).max(100_000).optional(),
       }),
       outputSchema: z.object({
-        items: z.array(capabilitySchema),
-        returned_count: z.number().int(),
+        items: z.array(capabilitySchema).max(100),
+        returned_count: z.number().int().min(0).max(100),
         request_id: z.string(),
+        api_request_id: z.string().optional(),
+        interaction: interactionSchema,
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     },
@@ -83,8 +93,17 @@ function createServer() {
           limit: limit ?? 100,
           offset: offset ?? 0,
         });
-        const items = (Array.isArray(result.data?.items) ? result.data.items : []).map(safeCapability);
-        const output = { items, returned_count: items.length, request_id: result.requestId };
+        const items = (Array.isArray(result.data?.items) ? result.data.items : [])
+          .map(projectObservedCapability)
+          .filter(Boolean)
+          .slice(0, 100);
+        const output = {
+          items,
+          returned_count: items.length,
+          request_id: result.requestId,
+          ...(result.responseRequestId ? { api_request_id: result.responseRequestId } : {}),
+          interaction: result.interaction,
+        };
         return {
           content: [{ type: 'text', text: JSON.stringify(output) }],
           structuredContent: output,
@@ -101,15 +120,22 @@ function createServer() {
       title: 'Summarize observed capabilities',
       description: 'Read this tenant’s observed third-party agent access inventory summary. This does not grant or invoke any Aether capability.',
       outputSchema: z.object({
-        summary: z.record(z.string(), z.unknown()),
+        summary: capabilityOverviewSchema,
         request_id: z.string(),
+        api_request_id: z.string().optional(),
+        interaction: interactionSchema,
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     },
     async () => {
       try {
         const result = await getCapabilityOverview();
-        const output = { summary: result.data ?? {}, request_id: result.requestId };
+        const output = {
+          summary: result.data ?? {},
+          request_id: result.requestId,
+          ...(result.responseRequestId ? { api_request_id: result.responseRequestId } : {}),
+          interaction: result.interaction,
+        };
         return {
           content: [{ type: 'text', text: JSON.stringify(output) }],
           structuredContent: output,
@@ -146,6 +172,7 @@ function createServer() {
         receivedAt: z.string(),
         request_id: z.string(),
         api_request_id: z.string().optional(),
+        interaction: interactionSchema,
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -164,6 +191,7 @@ function createServer() {
           ...result.data,
           request_id: result.requestId,
           ...(result.responseRequestId ? { api_request_id: result.responseRequestId } : {}),
+          interaction: result.interaction,
         };
         return {
           content: [{ type: 'text', text: JSON.stringify(output) }],

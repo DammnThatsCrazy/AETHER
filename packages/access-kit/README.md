@@ -1,12 +1,13 @@
 # Aether Access Kit
 
-The Access Kit package provides a Node CLI and local MCP stdio bridge for three
+The Access Kit package provides a Node CLI and local MCP stdio bridge for four
 bounded customer operations:
 
 - Read the observed third-party agent access inventory owned by Agent Access
   Intelligence.
 - Read a bounded tenant entity page or one tenant entity through the existing
   identity API.
+- Read a minimal tenant account context through the existing `/v1/me` route.
 - Send one custom application observation through canonical `POST /v1/batch`.
 
 The observed inventory is not an Aether callable-capability registry. Listing a
@@ -30,8 +31,10 @@ Supply only the credential required by the command being used:
 |---|---|
 | `aether agents capabilities ...` | `AETHER_API_KEY` with `read` permission |
 | `aether entities ...` | `AETHER_API_KEY` with `read` permission |
+| `aether account context` | `AETHER_API_KEY` with `read` permission |
 | `aether ingest ...` | `AETHER_PUBLISHABLE_KEY` and its bound `AETHER_SITE_ID` |
 | MCP inventory and entity read tools | `AETHER_API_KEY` with `read` permission |
+| MCP `account_context` | `AETHER_API_KEY` with `read` permission |
 | MCP `observe` tool | `AETHER_PUBLISHABLE_KEY` and its bound `AETHER_SITE_ID` |
 
 The publishable key must be a `pk_` credential. The caller supplies the
@@ -48,11 +51,17 @@ aether agents capabilities list --provider example --limit 25 --json
 aether agents capabilities show cap_0123456789abcdef01234567 --json
 aether entities list --entity-type organization --limit 25 --json
 aether entities show entity_123 --json
+aether account context --json
 ```
 
 The list API is capped at 100 rows per call. Filters and pagination are passed
 to the existing tenant-scoped REST routes. Results describe observed external
 agent access; they are not grants, Aether tools, or execution permissions.
+The client drops rows with malformed capability IDs, bounds every projected
+string, and accepts only safe non-negative observation counts. Overview counts
+and grouping maps are validated; maps expose at most 50 bounded keys with
+non-negative integer values, and the `sampled` flag is set when local
+projection truncates a map.
 
 ## Tenant entity reads
 
@@ -71,6 +80,15 @@ entity read, not graph search, traversal, identity resolution, or a governed
 write. Successful JSON responses include request IDs; with `--json`, CLI
 errors are emitted as an `error` object with the API status/code and request
 IDs when supplied by the API.
+
+## Account context
+
+`aether account context` calls existing tenant-scoped, read-protected
+`GET /v1/me`. Its fixed projection contains account name, plan ID/display name
+and limits, billing subscription status/period end, API key count, and the
+caller admin flag. It omits tenant and graph IDs, contact email, Stripe
+customer IDs, and all unrecognized fields. This read reports account context;
+it does not assess ingestion, graph, or product readiness.
 
 ## CLI ingestion
 
@@ -102,8 +120,9 @@ success. It does not automatically retry.
 
 Start `aether-mcp` using the MCP host's environment or secure secret-injection
 mechanism. The bridge supports `agent_access_capabilities_list`,
-`agent_access_capabilities_overview`, `entities_list`, `entities_get`, and
-`observe`. Inventory and entity read tools require the read credential;
+`agent_access_capabilities_overview`, `entities_list`, `entities_get`,
+`account_context`, and `observe`. Inventory, entity, and account-context read
+tools require the read credential;
 `observe` requires the publishable key and its bound site ID.
 Each call makes a fresh REST request. There is no remote HTTP MCP server,
 OAuth flow, stored session, or MCP host configuration file in this package.
@@ -116,6 +135,24 @@ request ID. A rejected observation remains a server rejection.
 
 Entity tool errors set MCP `isError` and include a JSON `error` object with the
 API status/code and request IDs when available.
+
+Each supported CLI JSON result and MCP structured result carries the same
+`interaction` object from the shared REST client. It includes `version`,
+`operation` (`query` or `observe`), `status_class`, `request_id`, optional
+`api_request_id`, `http_status`, and recognized server-returned `references`.
+401/403 map to `denied`; 423/429 to `blocked`; 206/207 and server responses
+with rejected observations to `degraded`; transport/contract failures to
+`failed`; other valid responses to `successful`. Original server response data
+is preserved, including per-event decisions and any returned batch, receipt,
+rights-decision, task, result, approval, usage, or audit reference. The client
+does not synthesize missing references or reinterpret server decisions.
+
+There is no combined `doctor` command. `/v1/health` and `/v1/ready` are
+infrastructure probes, `/v1/tenant/readiness` is an independent launch-readiness
+view, and `/v1/me/usage` is a separate usage view that can report
+`insufficient_evidence`. Combining them in the CLI would create an unsupported
+diagnostic/readiness authority. Account context must not be presented as a
+readiness signal.
 
 The package uses the official `@modelcontextprotocol/server` SDK pinned to
 `2.3.1`. The SDK `serveStdio` transport owns protocol framing and compatibility.

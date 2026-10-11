@@ -70,7 +70,7 @@ PR #734 and PR #733 are merged into `Development`. They provide substantial arch
 | Rights and identity | Rights decisions, source namespaces, identity resolution, and governed mutation primitives exist | Preserve authority decisions and references across source-to-graph handoffs; do not decide rights or canonical identity in clients |
 | SDKs | Web, Server, React Native, iOS, and Android packages exist | Close contract and productization gaps with a shared cross-platform acceptance surface; package presence is not device or tenant graph proof |
 | Aether Mobile | The first-party app has a client, navigation, projection, and continuation shell | Keep this as a graph consumer; beta readiness remains a separate product release gate from customer SDK ingestion |
-| REST, MCP, CLI, Access Kit | Auth, policy, capability, billing, graph, and domain APIs exist in parts; this feature stack now includes an experimental CLI and local MCP bridge for observed-capability reads, site-bound intake, and two bounded tenant entity reads | Compose existing authorities behind usable, consistent calls. Do not expose new authority by adding a protocol adapter |
+| REST, MCP, CLI, Access Kit | Auth, policy, capability, billing, graph, and domain APIs exist in parts; this feature stack includes observed-capability reads, site-bound intake, bounded entity reads, and a safe account-context projection on the experimental CLI/local MCP bridge | Compose existing authorities behind usable, consistent calls. Do not expose new authority by adding a protocol adapter |
 | Live end-to-end evidence | Repository-level contracts exist; provider-backed, customer SDK, and beta/device proof must be evaluated independently | Record exact evidence and limitations; never equate accepted ingestion or a passing unit check with graph or beta readiness |
 
 This work starts from `Development` after #734/#733. PR #771 is an unrelated open draft and is not the base of this program.
@@ -85,6 +85,12 @@ This work starts from `Development` after #734/#733. PR #771 is an unrelated ope
 6. **Access composes authorities.** Authentication, tenant resolution, capability lifecycle, policy, readiness, entitlements, billing, approvals, receipts, and Kyber have existing owners. A new Access layer may route and normalize calls but must not fork these decisions.
 7. **Observe, query, and act are distinct operations.** They have different scopes, data paths, receipts, and approval rules even when offered through the same client.
 8. **One deliverable, ordered commits.** Work orders below are not separate PRs. The integrator keeps one PR against `Development`, initially draft, and stacks all accepted work as commits.
+
+Capability names in existing APIs are not a callable registry. `/v1/capabilities`
+is tenant-facing SDK/release feature discovery; `/v1/capability-catalog` is
+observed third-party agent-access evidence. Neither grants or invokes an Aether
+capability. The Access Kit invocation registry remains target-only until an
+owning execution runtime and grant contract exist.
 
 ## 4. Shared interface contracts
 
@@ -120,6 +126,11 @@ capability ID and operation class (observe | query | act)
 idempotency key when the operation supports replay-safe execution
 trace/correlation context
 ```
+
+That list describes the target request context. The current Access Kit
+`interaction` response envelope includes only operation/status, request IDs,
+HTTP status, and returned references; tenant and actor stay inside the server's
+authenticated request context and are not echoed by the client adapter.
 
 Do not trust a client-supplied tenant ID, scope, rights decision, or capability grant as authorization. Preserve the resolved policy/readiness/entitlement decision and usage/receipt identifiers returned by the authority. Durable work uses explicit task, approval, result, export, or receipt handles rather than hidden protocol session state.
 
@@ -177,12 +188,17 @@ Each work order produces a commit on the same PR branch. An acceptance condition
 
 **Acceptance:** an authorization decision cannot be bypassed by changing transport; tenant and actor are server-resolved; denied/degraded/success results carry consistent correlation and evidence references; no second policy, billing, or capability registry is introduced.
 
-**Current stack status:** partial. The Access Kit routes the implemented reads
-through the existing REST client and leaves tenant/actor resolution to API
-middleware. It does not add the protocol-neutral invocation/router seam because
-there is no identified owner contract for such a runtime in this slice. The
-remaining outcome normalization and authoritative receipt behavior are deferred
-until WO-0 identifies an owning dispatch boundary used by multiple surfaces.
+**Current stack status:** partial. A shared REST-client result now carries the
+same protocol-neutral `interaction` envelope through CLI and MCP for supported
+query and observe calls: operation, `successful | denied | blocked | degraded |
+failed` status class, correlation/request IDs, HTTP status, and recognized
+references returned by the API. Existing observation decisions and response
+references remain intact in the original result data. Tenant and actor remain
+server-resolved and are deliberately not projected into this client envelope.
+This closes output normalization for the currently supported calls; it does
+not add a generic capability invocation/router runtime. Dispatch, decision
+receipt creation, and call-level authority aggregation remain deferred until
+WO-0 identifies an owning runtime contract.
 
 ### WO-4 — REST/API access contract
 
@@ -202,8 +218,12 @@ through the identity API; both remain protected by tenant middleware and the
 route's `read` permission. The client caps list results at 50, accepts no tenant
 override, and projects a fixed entity field allowlist. The API has no cursor or
 offset for this route, so later pages and broad graph/search queries remain
-unavailable. API error code/status and request correlation are preserved by the
-CLI/MCP wrappers.
+unavailable. It also exposes a minimal projection of tenant-scoped `GET /v1/me`
+for account context. API error code/status, correlation, and normalized
+interaction outcomes are preserved by the CLI/MCP wrappers.
+The observed-capability adapter drops malformed IDs, bounds projected string
+lengths and integer counts, strips unrecognized fields including tenant ID,
+and limits overview maps to 50 entries with `sampled` set on truncation.
 
 ### WO-5 — Aether MCP adapter
 
@@ -221,10 +241,13 @@ CLI/MCP wrappers.
 **Current stack status:** partial. The pinned official TypeScript SDK local
 stdio bridge exposes read-only `entities_list` and `entities_get` tools using
 the same entity REST wrapper, alongside the previously implemented capability
-inventory reads and `observe` ingestion tool. Focused local registration and
-handler contract tests cover schemas, output projection, bounds, and mapped
-errors. Remote MCP HTTP, delegated OAuth, full host conformance, live tenant
-isolation, and customer beta evidence remain deferred.
+inventory reads, `account_context`, and `observe` ingestion tool. Query and
+observe calls share a normalized interaction envelope. Focused local
+registration and handler contract tests cover schemas, output projection,
+bounds, and mapped errors; a pinned-SDK stdio subprocess smoke test covers a
+legacy `initialize` plus `tools/list` exchange without an API call. Remote MCP
+HTTP, delegated OAuth, full host conformance, live tenant isolation, and
+customer beta evidence remain deferred.
 
 ### WO-6 — Customer CLI adapter
 
@@ -239,12 +262,17 @@ isolation, and customer beta evidence remain deferred.
 **Acceptance:** CLI commands do not call graph stores directly or embed privileged service credentials; install/auth/tenant/read/denied paths are documented; revocation and credential storage have an explicit supported behavior.
 
 **Current stack status:** partial. The customer CLI now supports
-`aether entities list` and `aether entities show`, plus the existing observed
-capability inventory commands and site-bound one-event `aether ingest`. All
-reads use externally supplied `AETHER_API_KEY` and the existing API; no graph
-store access or tenant override exists. Login, tenant selection, profile and
-secure credential storage, revocation flow, and live denied/cross-tenant
-evidence remain target-only.
+`aether entities list` and `aether entities show`, `aether account context`,
+the observed capability inventory commands, and site-bound one-event
+`aether ingest`. All reads use externally supplied `AETHER_API_KEY` and the
+existing API; no graph store access or tenant override exists. Login, tenant
+selection, secure credential storage, revocation flow, and live
+denied/cross-tenant evidence remain target-only. A combined `doctor` command is
+excluded: `/v1/health` and `/v1/ready` describe infrastructure,
+`/v1/tenant/readiness` is a distinct launch-readiness evidence view, and
+`/v1/me/usage` has its own availability semantics. Aggregating these locally
+would invent a diagnostic or readiness authority; expose separate named reads
+or wait for an owner API.
 
 ### WO-7 — Receipts, telemetry, and developer handoff
 
@@ -258,6 +286,14 @@ evidence remain target-only.
 
 **Acceptance:** a call can be correlated across request, authorization, usage/audit, receipt, and result where those authorities support it; missing billing or observability integration is called out, not claimed complete.
 
+**Current stack status:** partial. CLI and MCP now carry the shared normalized
+interaction envelope and preserve any server decision, batch, receipt, rights,
+or other recognized reference returned in the original response. This does not
+create audit, usage, billing, or durable-receipt integration: none is inferred
+or synthesized when the API response omits it. A full cross-authority trace
+remains target-only pending correlation/receipt contracts from the owning
+authorities.
+
 ### WO-8 — Cross-surface proof and readiness record
 
 **Owner:** integrator  
@@ -270,11 +306,13 @@ evidence remain target-only.
 
 **Acceptance:** all claims map to retained evidence; no production, certification, customer-beta, or broad merge-readiness claim is made without its canonical release/PR evidence.
 
-**Current stack status:** partial. Focused Node built-in tests use a mocked fetch
-and fake MCP registration boundary to verify the REST, CLI, and MCP contracts;
-syntax checks and `git diff --check` are run for this commit. They do not prove
-live API tenant isolation, network timeout behavior against the service,
-successful customer-key calls, MCP-host conformance, ingestion-to-graph
+**Current stack status:** partial. Focused Node built-in tests use mocked fetch
+and fake MCP registration for REST/CLI/tool-handler contracts; an additional
+subprocess smoke test exercises the pinned stdio SDK's legacy `initialize` and
+`tools/list` exchange without making an API call. Syntax checks and
+`git diff --check` are also run for this commit. These do not prove live API
+tenant isolation, network timeout behavior against the service, successful
+customer-key calls, modern/legacy host conformance, ingestion-to-graph
 hydration, or any release/production readiness gate. Those remain explicit
 external requirements.
 

@@ -38,13 +38,14 @@ They have distinct owners and meanings:
 
 | Surface | Existing owner | Behavior and boundary |
 |---|---|---|
-| `GET /v1/capabilities` | `services/api/tenancy/capabilities/routes.py` | Tenant-facing release and feature discovery. Keep this path for its existing meaning; it is not the observed agent capability catalog. |
+| `GET /v1/capabilities` | `services/api/tenancy/capabilities/routes.py` | Tenant-facing SDK/release-surface and feature discovery. It is not an executable capability catalog, grant, or invocation registry; keep this path for its existing meaning. |
 | `GET /v1/capabilities/activation` and `GET /v1/capabilities/activation/{provider}/{capability}` | `services/api/tenancy/capabilities/routes.py`, `CapabilityLifecycleAuthority` | Read the authenticated tenant's persisted capability readiness and history. Lifecycle changes require `admin` and remain in the lifecycle authority. |
 | `GET /v1/capability-catalog`, `/overview`, `/{capability_id}` | `services/api/actions/agent_access_intelligence/routes.py`, `CapabilityCatalogService` | Read the tenant's observed external capability inventory. The catalog is evidence of observed agent access, not a grant or an Aether tool that can be executed. |
 | `GET /v1/capability-installations` and detail | Agent Access Intelligence | Read tenant-scoped observed agent-to-server installation records. |
 | `GET/POST /v1/capability-authorizations` and revoke | `CapabilityAuthorizationService` over the existing delegation store | Read grants or perform grant/revoke writes. Writes require `write`; do not duplicate delegation storage or lifecycle. |
 | `POST /v1/capability-policy/evaluate`, `GET /v1/capability-policy/decisions` | `PolicyEngine` and Agent Access Intelligence | Evaluation records a sensitive policy decision and audit event; it does not invoke the external capability or mutate a tenant resource. Decisions are tenant-scoped reads. |
 | `GET /v1/entities` and `GET /v1/entities/{entity_id}` | `services/api/identity/entities/routes.py` | Existing tenant-scoped entity reads (`read`). Entity and graph mutations remain in their owner API and mutation gateway. There is no catch-all `/v1/graph` query route added by this work. |
+| `GET /v1/me` | `services/api/tenancy/me/routes.py:get_my_profile` | Existing tenant-scoped caller account profile, plan, billing summary, API key count, and admin flag. Middleware requires `read`; client projection omits tenant/graph IDs, contact email, and Stripe customer ID. |
 
 Every listed customer route reads `request.state.tenant`, which middleware
 resolves from the API key or session JWT before the handler. The handlers enforce
@@ -69,10 +70,12 @@ data authority is added.
 | CLI | `aether agents capabilities show CAPABILITY_ID [--json]` | Catalog detail | Query, `read` |
 | CLI | `aether entities list [--entity-type TYPE] [--limit N] [--json]` | Entity list, max 50 | Query, `read` |
 | CLI | `aether entities show ENTITY_ID [--json]` | Entity detail | Query, `read` |
+| CLI | `aether account context [--json]` | `/v1/me` safe projection | Query, `read` |
 | MCP | `agent_access_capabilities_overview` | Catalog overview | Read-only tool, `read` |
 | MCP | `agent_access_capabilities_list` | Catalog list | Read-only tool, `read` |
 | MCP | `entities_list` | Entity list, max 50 | Read-only tool, `read` |
 | MCP | `entities_get` | Entity detail | Read-only tool, `read` |
+| MCP | `account_context` | `/v1/me` safe projection | Read-only tool, `read` |
 | CLI | `aether ingest EVENT_NAME ...` | `POST /v1/batch`, one `track` event | Ingestion, `ingest` + handler `write` |
 | MCP | `observe` | `POST /v1/batch`, one `track` event | Ingestion, `ingest` + handler `write` |
 
@@ -107,6 +110,11 @@ read tools omit tenant IDs, source event IDs, artifact digests, and server URLs.
 The list request is capped at 100 rows per call (`offset` is bounded to 100,000).
 The current REST response's `count` is the number of rows in the returned page,
 not a total count. Clients must not infer a total catalog size from it.
+Observed capability rows are emitted only for a valid `cap_` ID; projected
+strings and counts have field-specific length/type bounds. Overview maps omit
+invalid keys/counts, expose at most 50 entries per map, and set `sampled` when
+the client truncates a map. Tenant IDs and unrecognized catalog/overview fields
+are omitted.
 
 The entity query is deliberately narrow. `entities list` and `entities_list`
 request the first page only, with default limit 25 and hard client maximum 50;
@@ -121,14 +129,40 @@ access is added. API status/code and request correlation are retained; CLI
 `isError` with a JSON error object. Successful results may contain both the
 middleware request ID and response envelope request ID.
 
+Every supported CLI and MCP result also carries a protocol-neutral `interaction`
+object produced by the shared REST client. It contains version, operation
+(`query` or `observe`), status class (`successful`, `denied`, `blocked`,
+`degraded`, or `failed`), middleware/correlation request ID, optional API
+request ID, HTTP status, and recognized returned references. A 401/403 maps to
+`denied`, 423/429 to `blocked`, 206/207 and observation responses with rejected
+events to `degraded`, and transport/contract failures to `failed`. The original
+API data remains available: observation decisions and returned receipt or
+reference fields are passed through unchanged. The adapter does not create a
+receipt, infer a successful admission, or promote an HTTP status into a policy
+decision.
+
+`aether account context` and MCP `account_context` call the existing read-gated
+`GET /v1/me`. The projection is limited to account name, plan ID/display name
+and limits, billing subscription status/period end, API key count, and the
+caller admin flag. It deliberately removes tenant and graph IDs, contact email,
+and Stripe customer IDs before any CLI/MCP response.
+
+There is no combined `doctor` command. `/v1/health` and `/v1/ready` report
+infrastructure liveness/readiness, `/v1/tenant/readiness` reports a separate
+launch-readiness evidence view, and `/v1/me/usage` reports usage with explicit
+insufficient-evidence states. Combining these into a customer verdict would
+create a new readiness authority and could imply conclusions none of those
+endpoints own. Expose them later only as distinct named reads, or after an
+owning diagnostic/readiness contract exists.
+
 ## Authentication and transport
 
 ### CLI and local MCP bridge
 
 - Configure `AETHER_API_KEY` with a tenant-scoped API key that has `read`
-  permission for `agents capabilities` and `entities` commands. It is passed
-  only in the HTTPS `Authorization: Bearer` header; it is never included in a
-  URL, output, or persisted by this package.
+  permission for `agents capabilities`, `entities`, and `account context`
+  commands. It is passed only in the HTTPS `Authorization: Bearer` header; it
+  is never included in a URL, output, or persisted by this package.
 - Configure `AETHER_PUBLISHABLE_KEY` with a `pk_` key and `AETHER_SITE_ID` with
   its bound site ID for `ingest` / `observe`. A publishable key is designed to
   be public and middleware confines it to ingestion routes plus the public-safe
@@ -210,8 +244,9 @@ server-side REST permission check remains authoritative.
   intake is limited to the generic, site-bound `track` path described above;
   batch collections, identity writes, and arbitrary direct route payloads are
   not exposed.
-- This package has no usage-plan projection, customer-facing doctor report,
-  hosted protocol probe, or provider-backed graph hydration proof.
+- This package has no usage-consumption or pricing interpretation, combined
+  customer-facing doctor report, hosted protocol probe, or provider-backed
+  graph hydration proof.
 
 ## Proof gates and release claims
 
@@ -228,9 +263,14 @@ The following evidence is required before the associated claim:
 | Graph data available | A real tenant's observation-to-normalization-to-identity-to-projection proof and a separately authenticated read of that tenant's governed graph result. Catalog rows or a successful API response do not prove graph hydration. |
 | PR readiness / production readiness | The single normal PR authority and applicable release scorecard; focused package evidence is not a substitute. |
 
-No tests, conformance checks, host connection, live tenant, provider, or graph
-hydration checks are claimed by this source change. The current deliverable is
-an experimental inventory and one-event intake adapter slice.
+Focused local Node tests cover REST wrapper behavior, projection and response
+normalization, CLI output/error contracts, MCP tool schemas/handlers, and an
+actual pinned-SDK stdio subprocess `initialize` plus `tools/list` exchange with
+no live API call. These tests do not prove official host conformance on modern
+or legacy clients, tenant isolation against a live API, publishable-key site
+binding, provider execution, graph hydration, or customer beta readiness. The
+current deliverable remains an experimental inventory, account/entity reads,
+and one-event intake adapter slice.
 
 ## Protocol reference
 

@@ -2,6 +2,7 @@
 
 import {
   ingestTrackObservation,
+  getAccountContext,
   getCapability,
   getCapabilityOverview,
   listCapabilities,
@@ -19,12 +20,13 @@ Usage:
   aether agents capabilities show CAPABILITY_ID [--json]
   aether entities list [--entity-type TYPE] [--limit N] [--json]
   aether entities show ENTITY_ID [--json]
+  aether account context [--json]
   aether ingest EVENT_NAME --event-id ID --session-id ID --anonymous-id ID --sequence N
                            [--properties-json JSON] [--json]
 
 Authentication:
-  AETHER_API_KEY           Tenant-scoped API key with read permission, for agents
-                           and entities queries
+  AETHER_API_KEY           Tenant-scoped API key with read permission, for agents,
+                           entity, and account-context queries
   AETHER_PUBLISHABLE_KEY   Site-bound pk_ key, for ingest only
   AETHER_SITE_ID           Site ID bound to AETHER_PUBLISHABLE_KEY, for ingest only
   AETHER_API_URL           API origin (default: https://api.aether.io)
@@ -67,10 +69,11 @@ function writeJson(value) {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
-function formatList(data, requestId) {
+function formatList(data, requestId, interaction) {
   const items = Array.isArray(data?.items) ? data.items : [];
   process.stdout.write(`Observed agent access capabilities (${items.length} returned)\n`);
   process.stdout.write(`Request: ${requestId}\n`);
+  if (interaction) process.stdout.write(`Outcome: ${interaction.status_class}\n`);
   if (!items.length) {
     process.stdout.write('No observed capabilities in this page.\n');
     return;
@@ -90,6 +93,7 @@ function printError(error) {
       ...(error.code ? { code: error.code } : {}),
       ...(error.requestId ? { request_id: error.requestId } : {}),
       ...(error.apiRequestId ? { api_request_id: error.apiRequestId } : {}),
+      ...(error.interaction ? { interaction: error.interaction } : {}),
     };
     process.stderr.write(`${JSON.stringify({ error: details })}\n`);
     process.exitCode = 1;
@@ -108,13 +112,18 @@ function writeRequestIds(result) {
   };
 }
 
-function formatEntities(entities, requestId, apiRequestId) {
+function writeInteraction(result) {
+  return result.interaction ? { interaction: result.interaction } : {};
+}
+
+function formatEntities(entities, requestId, apiRequestId, interaction) {
   process.stdout.write(`Entities (${entities.length} returned)\n`);
   for (const entity of entities) {
     process.stdout.write(`- ${entity.display_name || '(unnamed)'}  ${entity.entity_id}  [${entity.entity_type}]\n`);
   }
   process.stdout.write(`Request: ${requestId}\n`);
   if (apiRequestId) process.stdout.write(`API request: ${apiRequestId}\n`);
+  if (interaction) process.stdout.write(`Outcome: ${interaction.status_class}\n`);
 }
 
 async function main() {
@@ -157,10 +166,11 @@ async function main() {
       properties,
       surface: 'cli',
     });
-    if (json) writeJson({ ...result.data, ...writeRequestIds(result) });
+    if (json) writeJson({ ...result.data, ...writeRequestIds(result), ...writeInteraction(result) });
     else {
       const data = result.data;
       process.stdout.write(`Aether ingestion: ${data.accepted ?? 0} accepted, ${data.duplicates ?? 0} duplicate, ${data.rejected ?? 0} rejected\n`);
+      process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
       for (const event of data.events ?? []) {
         process.stdout.write(`- ${event.id}: ${event.status}${event.reason ? ` (${event.reason})` : ''}\n`);
       }
@@ -168,6 +178,22 @@ async function main() {
       if (result.responseRequestId) process.stdout.write(`API request: ${result.responseRequestId}\n`);
     }
     if (result.data?.rejected > 0) process.exitCode = 2;
+    return;
+  }
+
+  if (area === 'account' && command === 'context') {
+    if (positionals.length !== 2 || Object.keys(options).length > 0) {
+      throw new Error(`Unexpected arguments for account context.\n\n${HELP}`);
+    }
+    const result = await getAccountContext();
+    const output = { account: result.data, ...writeRequestIds(result), ...writeInteraction(result) };
+    if (json) writeJson(output);
+    else {
+      process.stdout.write(`${JSON.stringify(result.data, null, 2)}\n`);
+      process.stdout.write(`Request: ${result.requestId}\n`);
+      process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
+      if (result.responseRequestId) process.stdout.write(`API request: ${result.responseRequestId}\n`);
+    }
     return;
   }
 
@@ -184,20 +210,21 @@ async function main() {
         : 25,
     });
     const ids = writeRequestIds(result);
-    const output = { ...result.data, ...ids };
+    const output = { ...result.data, ...ids, ...writeInteraction(result) };
     if (json) writeJson(output);
-    else formatEntities(result.data.entities, result.requestId, result.responseRequestId);
+    else formatEntities(result.data.entities, result.requestId, result.responseRequestId, result.interaction);
     return;
   }
 
   if (area === 'entities' && command === 'show' && subcommand && positionals.length === 3) {
     if (Object.keys(options).length > 0) throw new Error(`Unexpected option for entities show.\n\n${HELP}`);
     const result = await getEntity(subcommand);
-    const output = { ...result.data, ...writeRequestIds(result) };
+    const output = { ...result.data, ...writeRequestIds(result), ...writeInteraction(result) };
     if (json) writeJson(output);
     else {
       process.stdout.write(`${JSON.stringify(result.data, null, 2)}\n`);
       process.stdout.write(`Request: ${result.requestId}\n`);
+      process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
       if (result.responseRequestId) process.stdout.write(`API request: ${result.responseRequestId}\n`);
     }
     return;
@@ -212,11 +239,12 @@ async function main() {
       throw new Error(`Unexpected arguments for agents capabilities overview.\n\n${HELP}`);
     }
     const result = await getCapabilityOverview();
-    if (json) writeJson({ ...result.data, request_id: result.requestId });
+    if (json) writeJson({ ...result.data, ...writeRequestIds(result), ...writeInteraction(result) });
     else {
       process.stdout.write('Observed agent access inventory overview\n');
       process.stdout.write(`${JSON.stringify(result.data, null, 2)}\n`);
       process.stdout.write(`Request: ${result.requestId}\n`);
+      process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
     }
     return;
   }
@@ -234,18 +262,19 @@ async function main() {
       limit: options.limit ? positiveInteger(options.limit, '--limit', { min: 1, max: 100 }) : 100,
       offset: options.offset ? positiveInteger(options.offset, '--offset') : 0,
     });
-    const output = { ...result.data, request_id: result.requestId };
+    const output = { ...result.data, ...writeRequestIds(result), ...writeInteraction(result) };
     if (json) writeJson(output);
-    else formatList(result.data, result.requestId);
+    else formatList(result.data, result.requestId, result.interaction);
     return;
   }
 
   if (subcommand === 'show' && arg && positionals.length === 4 && Object.keys(options).length === 0) {
     const result = await getCapability(arg);
-    if (json) writeJson({ ...result.data, request_id: result.requestId });
+    if (json) writeJson({ ...result.data, ...writeRequestIds(result), ...writeInteraction(result) });
     else {
       process.stdout.write(`${JSON.stringify(result.data, null, 2)}\n`);
       process.stdout.write(`Request: ${result.requestId}\n`);
+      process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
     }
     return;
   }

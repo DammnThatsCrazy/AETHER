@@ -1,6 +1,7 @@
 import * as z from 'zod/v4';
 
 import { AccessApiError, getEntity, listEntities, MAX_ENTITY_PAGE_SIZE } from './api.mjs';
+import { interactionSchema } from './interaction-schema.mjs';
 
 const entitySchema = z.object({
   entity_id: z.string().max(256),
@@ -14,6 +15,7 @@ const entitySchema = z.object({
 const requestIdsSchema = {
   request_id: z.string(),
   api_request_id: z.string().optional(),
+  interaction: interactionSchema,
 };
 
 function projectEntity(entity) {
@@ -31,6 +33,7 @@ function requestIds(result) {
   return {
     request_id: result.requestId,
     ...(result.responseRequestId ? { api_request_id: result.responseRequestId } : {}),
+    interaction: result.interaction,
   };
 }
 
@@ -42,6 +45,7 @@ function toolError(error) {
       ...(error.code ? { code: error.code } : {}),
       ...(error.requestId ? { request_id: error.requestId } : {}),
       ...(error.apiRequestId ? { api_request_id: error.apiRequestId } : {}),
+      ...(error.interaction ? { interaction: error.interaction } : {}),
     }
     : { message: 'The Aether API operation could not be completed.' };
   return {
