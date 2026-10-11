@@ -1475,6 +1475,7 @@ EVENT_FIELD_TRUST: dict[str, dict[str, dict[str, object]]] = {
         "properties.settlementEventId": { "trustClass": "SOURCE_REFERENCE" },
         "properties.delegationId": { "trustClass": "SOURCE_REFERENCE" },
         "properties.delegatedToAgentId": { "trustClass": "SOURCE_REFERENCE" },
+        "properties.delegatedToNamespace": { "trustClass": "SOURCE_REFERENCE" },
         "context.agentDeployment": { "trustClass": "SOURCE_REFERENCE" },
     },
     "agent_task_completed": {
@@ -1483,6 +1484,7 @@ EVENT_FIELD_TRUST: dict[str, dict[str, dict[str, object]]] = {
         "properties.settlementEventId": { "trustClass": "SOURCE_REFERENCE" },
         "properties.delegationId": { "trustClass": "SOURCE_REFERENCE" },
         "properties.delegatedToAgentId": { "trustClass": "SOURCE_REFERENCE" },
+        "properties.delegatedToNamespace": { "trustClass": "SOURCE_REFERENCE" },
         "context.agentDeployment": { "trustClass": "SOURCE_REFERENCE" },
     },
     "agent_task_failed": {
@@ -1491,12 +1493,14 @@ EVENT_FIELD_TRUST: dict[str, dict[str, dict[str, object]]] = {
         "properties.settlementEventId": { "trustClass": "SOURCE_REFERENCE" },
         "properties.delegationId": { "trustClass": "SOURCE_REFERENCE" },
         "properties.delegatedToAgentId": { "trustClass": "SOURCE_REFERENCE" },
+        "properties.delegatedToNamespace": { "trustClass": "SOURCE_REFERENCE" },
         "context.agentDeployment": { "trustClass": "SOURCE_REFERENCE" },
     },
     "agent_delegated_task": {
         "properties": { "trustClass": "SOURCE_ASSERTED" },
         "properties.delegationId": { "trustClass": "SOURCE_REFERENCE" },
         "properties.delegatedToAgentId": { "trustClass": "SOURCE_REFERENCE" },
+        "properties.delegatedToNamespace": { "trustClass": "SOURCE_REFERENCE" },
         "context.agentDeployment": { "trustClass": "SOURCE_REFERENCE" },
     },
     "agent_policy_evaluated": {

@@ -43,6 +43,7 @@ _HEALTH_FIELDS = (
     "error_count_24h", "consent_blocked_count_24h", "graph_projection_lag_ms",
     "last_event_at", "last_seen_at",
 )
+_CANONICAL_AGENT_BINDING_LIST_LIMIT = 100
 
 
 def _request_id(request: Request) -> str:
@@ -237,6 +238,106 @@ async def bind_deployment_agent_identity(
     return APIResponse(data=record).to_dict()
 
 
+@deployments_router.get("/{deployment_id}/identity-binding")
+async def get_deployment_agent_identity_binding(
+    deployment_id: str,
+    request: Request,
+):
+    """Return this tenant deployment's validated canonical identity mapping."""
+    _require_registry_enabled()
+    tenant = _tenant(request)
+    deployment = await _repo().get(tenant.tenant_id, deployment_id)
+    source_namespace = str(deployment.get("agent_source_namespace") or "").strip().lower()
+    source_agent_ref = str(deployment.get("agent_id") or "").strip()
+    base = {
+        "tenant_id": tenant.tenant_id,
+        "deployment_id": deployment_id,
+        "source_namespace": source_namespace or None,
+        "source_agent_ref": source_agent_ref or None,
+    }
+    if not source_namespace or not source_agent_ref:
+        return APIResponse(data={
+            **base,
+            "status": "unresolved",
+            "reason": "deployment_source_reference_missing",
+        }).to_dict()
+
+    from actions.agent_marketplace.identity_binding import (
+        AgentDeploymentIdentityBindingRepository,
+    )
+
+    try:
+        bindings = await AgentDeploymentIdentityBindingRepository().find_for_source(
+            tenant.tenant_id, source_namespace, source_agent_ref,
+        )
+    except Exception as exc:
+        return APIResponse(data={
+            **base,
+            "status": "unavailable",
+            "reason": "identity_binding_authority_unavailable",
+            "error_type": type(exc).__name__,
+        }).to_dict()
+
+    if len(bindings) > 1:
+        return APIResponse(data={
+            **base,
+            "status": "ambiguous",
+            "reason": "multiple_active_identity_bindings",
+        }).to_dict()
+    if not bindings:
+        return APIResponse(data={
+            **base,
+            "status": "unresolved",
+            "reason": "identity_binding_not_found",
+        }).to_dict()
+
+    binding = bindings[0]
+    canonical_id = str(binding.get("canonical_agent_entity_id") or "")
+    if (
+        binding.get("tenant_id") != tenant.tenant_id
+        or binding.get("source_namespace") != source_namespace
+        or binding.get("source_agent_ref") != source_agent_ref
+        or binding.get("status") != "active"
+        or binding.get("binding_authority") != "tenant_admin_explicit"
+        or not canonical_id
+    ):
+        return APIResponse(data={
+            **base,
+            "status": "unresolved",
+            "reason": "identity_binding_record_invalid",
+        }).to_dict()
+
+    try:
+        entity = await EntityRepository().find_by_id(canonical_id)
+    except Exception as exc:
+        return APIResponse(data={
+            **base,
+            "status": "unavailable",
+            "reason": "canonical_agent_authority_unavailable",
+            "error_type": type(exc).__name__,
+        }).to_dict()
+    if (
+        not entity
+        or entity.get("tenant_id") != tenant.tenant_id
+        or entity.get("entity_type") != "agent"
+        or entity.get("entity_id") != canonical_id
+    ):
+        return APIResponse(data={
+            **base,
+            "status": "unresolved",
+            "reason": "canonical_agent_entity_not_found_in_tenant",
+        }).to_dict()
+
+    return APIResponse(data={
+        **base,
+        "status": "matched",
+        "reason": "tenant_admin_explicit_binding",
+        "binding_authority": "tenant_admin_explicit",
+        "canonical_agent_entity_id": canonical_id,
+        **({"bound_at": binding["bound_at"]} if isinstance(binding.get("bound_at"), str) else {}),
+    }).to_dict()
+
+
 @deployments_router.get("")
 async def list_deployments(
     request: Request,
@@ -247,10 +348,100 @@ async def list_deployments(
     """List the tenant's deployments with optional status/platform/agent filters."""
     _require_registry_enabled()
     tenant = _tenant(request)
-    records = await _repo().list(
+    deployment_repo = _repo()
+    records = await deployment_repo.list(
         tenant.tenant_id, status=status, platform=platform, agent_id=agent_id
     )
-    return APIResponse(data={"deployments": records, "count": len(records)}).to_dict()
+    identity_binding_lookup = {
+        "status": "not_requested" if not agent_id else "unresolved",
+        "bindings_scanned": 0,
+        "truncated": False,
+    }
+    if agent_id:
+        try:
+            canonical_entity = await EntityRepository().find_by_id(agent_id)
+        except Exception:
+            canonical_entity = None
+            identity_binding_lookup["status"] = "unavailable"
+        if (
+            canonical_entity
+            and canonical_entity.get("tenant_id") == tenant.tenant_id
+            and canonical_entity.get("entity_type") == "agent"
+            and canonical_entity.get("entity_id") == agent_id
+        ):
+            from actions.agent_marketplace.identity_binding import (
+                AgentDeploymentIdentityBindingRepository,
+            )
+
+            try:
+                bindings = await AgentDeploymentIdentityBindingRepository().find_many(
+                    filters={
+                        "tenant_id": tenant.tenant_id,
+                        "canonical_agent_entity_id": agent_id,
+                        "binding_authority": "tenant_admin_explicit",
+                        "status": "active",
+                    },
+                    limit=_CANONICAL_AGENT_BINDING_LIST_LIMIT + 1,
+                )
+            except Exception:
+                bindings = []
+                identity_binding_lookup["status"] = "unavailable"
+            else:
+                identity_binding_lookup["truncated"] = (
+                    len(bindings) > _CANONICAL_AGENT_BINDING_LIST_LIMIT
+                )
+                bindings = bindings[:_CANONICAL_AGENT_BINDING_LIST_LIMIT]
+                identity_binding_lookup["bindings_scanned"] = len(bindings)
+                matched_count = 0
+                try:
+                    for binding in bindings:
+                        namespace = str(binding.get("source_namespace") or "").strip().lower()
+                        source_ref = str(binding.get("source_agent_ref") or "").strip()
+                        source_deployment_id = str(binding.get("source_deployment_id") or "").strip()
+                        if (
+                            binding.get("tenant_id") != tenant.tenant_id
+                            or binding.get("canonical_agent_entity_id") != agent_id
+                            or binding.get("binding_authority") != "tenant_admin_explicit"
+                            or binding.get("status") != "active"
+                            or not namespace
+                            or not source_ref
+                            or not source_deployment_id
+                        ):
+                            continue
+                        deployment = await deployment_repo.get_record(
+                            tenant.tenant_id, source_deployment_id,
+                        )
+                        if (
+                            not deployment
+                            or deployment.get("tenant_id") != tenant.tenant_id
+                            or deployment.get("id") != source_deployment_id
+                            or str(deployment.get("agent_source_namespace") or "").lower() != namespace
+                            or deployment.get("agent_id") != source_ref
+                            or (status and deployment.get("status") != status)
+                            or (platform and deployment.get("external_platform") != platform)
+                        ):
+                            continue
+                        matched_count += 1
+                        if not any(row.get("id") == source_deployment_id for row in records):
+                            records.append(deployment)
+                except Exception:
+                    identity_binding_lookup["status"] = "unavailable"
+                else:
+                    if identity_binding_lookup["status"] != "unavailable":
+                        identity_binding_lookup["status"] = (
+                            "partial" if identity_binding_lookup["truncated"] else (
+                                "matched" if matched_count else "unresolved"
+                            )
+                        )
+        elif identity_binding_lookup["status"] != "unavailable":
+            identity_binding_lookup["status"] = "unresolved"
+
+    records.sort(key=lambda row: row.get("updated_at", ""), reverse=True)
+    return APIResponse(data={
+        "deployments": records,
+        "count": len(records),
+        "identity_binding_lookup": identity_binding_lookup,
+    }).to_dict()
 
 
 @deployments_router.get("/marketplace/catalog")
@@ -629,6 +820,48 @@ async def reconcile_agent_graph_projection(
         )
     except ValueError as exc:
         raise BadRequestError(str(exc)) from exc
+    return APIResponse(data=report).to_dict()
+
+
+@kyber_router.get("/graph-projection/state-check")
+async def check_agent_graph_projection_state(
+    request: Request,
+    tenant_id: str = Query(..., min_length=1, max_length=256),
+    limit: int = Query(default=500, ge=1, le=5000),
+):
+    """Compare canonical tenant evidence with persisted graph state, read-only.
+
+    This independent check does not consult the projection outbox and never
+    mutates graph state. A bounded or unavailable scan is reported as partial.
+    """
+    _require_kyber_enabled()
+    _require_perm(request, "admin")
+    from actions.agent_marketplace.authority import AgentRunAuthorityResolver
+    from actions.agent_marketplace.graph_state_check import (
+        AgentEconomyGraphStateChecker,
+        agent_run_authority_extension,
+    )
+
+    try:
+        checker = AgentEconomyGraphStateChecker(
+            authority_extensions=[
+                agent_run_authority_extension(AgentRunAuthorityResolver())
+            ],
+        )
+        report = await checker.reconcile(
+            tenant_id,
+            source_page_size=min(limit, 250),
+            max_source_rows=limit,
+            graph_edge_limit=limit,
+            issue_limit=min(limit, 500),
+        )
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+    report.update({
+        "read_only": True,
+        "graph_mutations_applied": False,
+        "outbox_consulted": False,
+    })
     return APIResponse(data=report).to_dict()
 
 

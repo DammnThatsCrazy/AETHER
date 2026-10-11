@@ -154,6 +154,7 @@ def test_agent_execution_projector_projects_validated_causality_and_bounds_refer
             "reasonCodes": ["within_scope", "bad\nreason", "x" * 300],
             "delegationId": "delegation-1",
             "delegatedToAgentId": "external-agent-2",
+            "delegatedToNamespace": " Vendor.Runtime ",
         },
         "context": {
             "tenantId": "tenant-a",
@@ -177,6 +178,7 @@ def test_agent_execution_projector_projects_validated_causality_and_bounds_refer
     assert row["run_correlation_source"] == "run_id"
     assert row["delegation_id"] == "delegation-1"
     assert row["delegated_to_ref"] == "external-agent-2"
+    assert row["delegated_to_namespace"] == "Vendor.Runtime"
     assert row["resource_ref"] == "repo:acme/project"
     assert row["policy_reason_codes"] == ["within_scope"]
 
@@ -823,12 +825,13 @@ async def test_run_authority_evaluates_canonical_delegation_separately_from_occu
             "binding_authority": "tenant_admin_explicit", "status": "active",
         }],
         "runtime-grantee": [{
-            "tenant_id": tenant_id, "source_namespace": "vendor.runtime",
+            "tenant_id": tenant_id, "source_namespace": "vendor.target",
             "source_agent_ref": "runtime-grantee",
             "canonical_agent_entity_id": "canonical-grantee",
             "binding_authority": "tenant_admin_explicit", "status": "active",
         }],
     }
+    binding_lookups: list[tuple[str, str]] = []
     delegation = {
         "delegation_id": "delegation-canonical-1",
         "tenant_id": tenant_id,
@@ -861,8 +864,11 @@ async def test_run_authority_evaluates_canonical_delegation_separately_from_occu
     class BindingRepositoryFake:
         async def find_for_source(self, requested_tenant, namespace, source_ref):
             assert requested_tenant == tenant_id
-            assert namespace == "vendor.runtime"
-            return identity_rows.get(source_ref, [])
+            binding_lookups.append((namespace, source_ref))
+            return [
+                row for row in identity_rows.get(source_ref, [])
+                if row["source_namespace"] == namespace
+            ]
 
     class EntityRepositoryFake:
         async def find_by_id(self, entity_id):
@@ -879,6 +885,7 @@ async def test_run_authority_evaluates_canonical_delegation_separately_from_occu
         deployment_id="deployment-grantor",
         delegation_id="delegation-canonical-1",
         delegated_to_ref="runtime-grantee",
+        delegated_to_namespace="vendor.target",
         action_type="issue.update",
         resource_ref="repo:acme:project",
         occurred_at="2026-10-10T10:00:00+00:00",
@@ -886,8 +893,14 @@ async def test_run_authority_evaluates_canonical_delegation_separately_from_occu
     resolved = await resolver.resolve(row)
     assert resolved["delegation_resolution"]["party_identity_status"] == "matched"
     assert resolved["delegation_authorization"]["status"] == "within_scope"
+    assert resolved["delegation_resolution"]["target_source_namespace"] == "vendor.target"
+    assert resolved["delegation_authorization"]["target_namespace_status"] == "matched"
     assert resolved["delegation_authorization"]["actor_entity_id"] == "canonical-grantor"
     assert resolved["delegation_authorization"]["target_entity_id"] == "canonical-grantee"
+    assert binding_lookups == [
+        ("vendor.runtime", "runtime-grantor"),
+        ("vendor.target", "runtime-grantee"),
+    ]
     assert resolved["execution_occurrence"] == {
         "status": "source_reported",
         "verified": False,
@@ -901,6 +914,37 @@ async def test_run_authority_evaluates_canonical_delegation_separately_from_occu
     assert link.properties["delegation_authorization_status"] == "within_scope"
     assert link.properties["execution_occurrence"] == "source_reported"
     assert link.properties["execution_verified"] is False
+
+    for invalid_namespace in (None, "invalid namespace"):
+        binding_lookups.clear()
+        unresolved = await resolver.resolve({
+            **row,
+            "delegated_to_namespace": invalid_namespace,
+        })
+        assert unresolved["delegation_resolution"]["target_identity_status"] == "unresolved"
+        assert unresolved["delegation_resolution"]["target_namespace_status"] == "unresolved"
+        assert unresolved["delegation_authorization"]["status"] == "indeterminate"
+        assert unresolved["delegation_authorization"]["reason"] == (
+            "target_source_namespace_missing_or_invalid"
+        )
+        # Only the actor lookup is attempted; the target is never guessed to
+        # share the actor's namespace.
+        assert binding_lookups == [("vendor.runtime", "runtime-grantor")]
+
+    actor_bindings = identity_rows.pop("runtime-grantor")
+    binding_lookups.clear()
+    actor_unresolved = await resolver.resolve(row)
+    assert actor_unresolved["delegation_resolution"]["actor_identity_status"] == "unresolved"
+    assert actor_unresolved["delegation_resolution"]["target_identity_status"] == "matched"
+    assert actor_unresolved["delegation_authorization"]["status"] == "indeterminate"
+    assert actor_unresolved["delegation_authorization"]["reason"] == (
+        "canonical_party_binding_unresolved"
+    )
+    assert binding_lookups == [
+        ("vendor.runtime", "runtime-grantor"),
+        ("vendor.target", "runtime-grantee"),
+    ]
+    identity_rows["runtime-grantor"] = actor_bindings
 
 
 @pytest.mark.asyncio
@@ -956,6 +1000,7 @@ async def test_run_authorization_is_indeterminate_for_ambiguous_bindings_and_mis
     row = _run_row(
         tenant_id=tenant_id, deployment_id="deployment-a",
         delegation_id="delegation-ambiguous", delegated_to_ref="runtime-b",
+        delegated_to_namespace="vendor.runtime",
         action_type="issue.update", resource_ref="repo:acme:project",
         occurred_at="2026-10-10T10:00:00+00:00",
     )

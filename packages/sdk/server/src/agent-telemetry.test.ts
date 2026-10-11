@@ -227,6 +227,7 @@ describe('typed emit helpers', () => {
       taskId: 'task-1',
       delegationId: 'delegation-1',
       delegatedToAgentId: 'external-agent-2',
+      delegatedToNamespace: 'vendor.runtime',
       actionId: 'action-1',
       triggerId: 'trigger-1',
     });
@@ -262,7 +263,8 @@ describe('typed emit helpers', () => {
     });
     expect(delegation.properties).toMatchObject({
       runId: 'run-1', delegationId: 'delegation-1',
-      delegatedToAgentId: 'external-agent-2', actionId: 'action-1',
+      delegatedToAgentId: 'external-agent-2', delegatedToNamespace: 'vendor.runtime',
+      actionId: 'action-1',
     });
     expect(outcome.properties).toMatchObject({
       outcomeId: 'outcome-1', outcome: 'completed', taskId: 'task-1',

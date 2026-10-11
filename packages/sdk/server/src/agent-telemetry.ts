@@ -268,6 +268,8 @@ export class AgentTelemetryClient extends AetherServerSDK {
     taskId?: string;
     delegationId: string;
     delegatedToAgentId: string;
+    /** Explicit target namespace; the backend never infers it from the actor. */
+    delegatedToNamespace?: string;
     actionId?: string;
     actionType?: string;
     triggerId?: string;
@@ -281,6 +283,7 @@ export class AgentTelemetryClient extends AetherServerSDK {
         taskId: params.taskId,
         delegationId: params.delegationId,
         delegatedToAgentId: params.delegatedToAgentId,
+        delegatedToNamespace: params.delegatedToNamespace,
         actionId: params.actionId,
         actionType: params.actionType,
         triggerId: params.triggerId,

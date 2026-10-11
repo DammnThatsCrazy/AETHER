@@ -452,11 +452,23 @@ class AgentRunAuthorityResolver:
 
         actor = await self._resolve_deployment_agent_identity(tenant_id, deployment_id)
         target_ref = _reference(row.get("delegated_to_ref"))
+        target_namespace = _source_namespace(row.get("delegated_to_namespace"))
         target: dict[str, Any] = {"status": "unresolved", "reason": "target_reference_missing"}
-        if actor.get("status") == "matched" and target_ref:
+        if target_ref and target_namespace is None:
+            # Never infer a target's namespace from the actor's provider. The
+            # same opaque source reference may identify different agents in
+            # different namespaces, so missing/invalid namespace is ambiguous.
+            target = {
+                "status": "unresolved",
+                "reason": "target_source_namespace_missing_or_invalid",
+            }
+        elif target_ref and target_namespace:
+            # Party identities are resolved independently. The target's own
+            # binding can be known even when the actor cannot be resolved;
+            # authorization still remains indeterminate until both match.
             target = await self._resolve_source_agent_identity(
                 tenant_id,
-                str(actor["source_namespace"]),
+                target_namespace,
                 target_ref,
             )
         identity_status = _combined_identity_status(actor, target)
@@ -469,6 +481,8 @@ class AgentRunAuthorityResolver:
             "party_identity_status": identity_status,
             "actor_identity_status": actor.get("status"),
             "target_identity_status": target.get("status"),
+            "target_source_namespace": target_namespace,
+            "target_namespace_status": "matched" if target_namespace else "unresolved",
             "source_authority": "delegations",
         }
         authorization = _evaluate_delegation_authorization(
@@ -481,6 +495,14 @@ class AgentRunAuthorityResolver:
             occurred_at=row.get("occurred_at"),
             authoritative_amount=authoritative_amount,
         )
+        if target.get("reason") == "target_source_namespace_missing_or_invalid":
+            authorization["reason"] = "target_source_namespace_missing_or_invalid"
+            authorization["target_namespace_status"] = "unresolved"
+        else:
+            authorization["target_namespace_status"] = (
+                "matched" if target_namespace else "unresolved"
+            )
+        authorization["target_source_namespace"] = target_namespace
         return resolution, record, authorization
 
     async def _resolve_deployment_agent_identity(

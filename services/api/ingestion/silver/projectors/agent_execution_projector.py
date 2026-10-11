@@ -167,6 +167,11 @@ class AgentExecutionProjector(BaseProjector):
                 p.get("delegatedToAgentId") or p.get("delegated_to_agent_id")
                 or p.get("targetAgentId") or p.get("target_agent_id")
             ),
+            # A delegation target is namespaced independently from the actor.
+            # Authority resolution must not infer this from the actor provider.
+            "delegated_to_namespace": _source_reference(
+                p.get("delegatedToNamespace") or p.get("delegated_to_namespace")
+            ),
             "action_ref": _source_reference(
                 p.get("actionId") or p.get("action_id")
             ),
