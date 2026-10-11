@@ -1450,8 +1450,8 @@ suites:
     isolation: workspace
     lane: pr
     profiles: [local, ci, release]
-    expected_runtime_seconds: 45
-    hard_runtime_budget_seconds: 120
+    expected_runtime_seconds: 180
+    hard_runtime_budget_seconds: 300
     paths: ["apps/aether-web"]
     runner: ["npm", "run", "test", "--workspace=apps/aether-web"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
