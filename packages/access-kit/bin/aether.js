@@ -69,10 +69,16 @@ function writeJson(value) {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
+function terminalText(value) {
+  return String(value).replace(/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/gu, (character) => {
+    return `\\u{${character.codePointAt(0).toString(16)}}`;
+  });
+}
+
 function formatList(data, requestId, interaction) {
   const items = Array.isArray(data?.items) ? data.items : [];
   process.stdout.write(`Observed agent access capabilities (${items.length} returned)\n`);
-  process.stdout.write(`Request: ${requestId}\n`);
+  process.stdout.write(`Request: ${terminalText(requestId)}\n`);
   if (interaction) process.stdout.write(`Outcome: ${interaction.status_class}\n`);
   if (!items.length) {
     process.stdout.write('No observed capabilities in this page.\n');
@@ -80,7 +86,7 @@ function formatList(data, requestId, interaction) {
   }
   for (const item of items) {
     const label = item.tool_name || item.server_name || item.provider || 'unnamed';
-    process.stdout.write(`- ${label}  ${item.capability_id}  [${item.capability_kind || 'unknown'}]\n`);
+    process.stdout.write(`- ${terminalText(label)}  ${terminalText(item.capability_id)}  [${terminalText(item.capability_kind || 'unknown')}]\n`);
   }
   process.stdout.write('Use --json for the complete response page.\n');
 }
@@ -99,9 +105,9 @@ function printError(error) {
     process.exitCode = 1;
     return;
   }
-  const suffix = error.requestId ? `\nRequest: ${error.requestId}` : '';
-  const apiRequest = error.apiRequestId ? `\nAPI request: ${error.apiRequestId}` : '';
-  process.stderr.write(`${error.message}${suffix}${apiRequest}\n`);
+  const suffix = error.requestId ? `\nRequest: ${terminalText(error.requestId)}` : '';
+  const apiRequest = error.apiRequestId ? `\nAPI request: ${terminalText(error.apiRequestId)}` : '';
+  process.stderr.write(`${terminalText(error.message)}${suffix}${apiRequest}\n`);
   process.exitCode = 1;
 }
 
@@ -119,10 +125,10 @@ function writeInteraction(result) {
 function formatEntities(entities, requestId, apiRequestId, interaction) {
   process.stdout.write(`Entities (${entities.length} returned)\n`);
   for (const entity of entities) {
-    process.stdout.write(`- ${entity.display_name || '(unnamed)'}  ${entity.entity_id}  [${entity.entity_type}]\n`);
+    process.stdout.write(`- ${terminalText(entity.display_name || '(unnamed)')}  ${terminalText(entity.entity_id)}  [${terminalText(entity.entity_type)}]\n`);
   }
-  process.stdout.write(`Request: ${requestId}\n`);
-  if (apiRequestId) process.stdout.write(`API request: ${apiRequestId}\n`);
+  process.stdout.write(`Request: ${terminalText(requestId)}\n`);
+  if (apiRequestId) process.stdout.write(`API request: ${terminalText(apiRequestId)}\n`);
   if (interaction) process.stdout.write(`Outcome: ${interaction.status_class}\n`);
 }
 
@@ -172,10 +178,10 @@ async function main() {
       process.stdout.write(`Aether ingestion: ${data.accepted ?? 0} accepted, ${data.duplicates ?? 0} duplicate, ${data.rejected ?? 0} rejected\n`);
       process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
       for (const event of data.events ?? []) {
-        process.stdout.write(`- ${event.id}: ${event.status}${event.reason ? ` (${event.reason})` : ''}\n`);
+        process.stdout.write(`- ${terminalText(event.id)}: ${terminalText(event.status)}${event.reason ? ` (${terminalText(event.reason)})` : ''}\n`);
       }
-      process.stdout.write(`Request: ${result.requestId}\n`);
-      if (result.responseRequestId) process.stdout.write(`API request: ${result.responseRequestId}\n`);
+      process.stdout.write(`Request: ${terminalText(result.requestId)}\n`);
+      if (result.responseRequestId) process.stdout.write(`API request: ${terminalText(result.responseRequestId)}\n`);
     }
     if (result.data?.rejected > 0) process.exitCode = 2;
     return;
@@ -190,9 +196,9 @@ async function main() {
     if (json) writeJson(output);
     else {
       process.stdout.write(`${JSON.stringify(result.data, null, 2)}\n`);
-      process.stdout.write(`Request: ${result.requestId}\n`);
+      process.stdout.write(`Request: ${terminalText(result.requestId)}\n`);
       process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
-      if (result.responseRequestId) process.stdout.write(`API request: ${result.responseRequestId}\n`);
+      if (result.responseRequestId) process.stdout.write(`API request: ${terminalText(result.responseRequestId)}\n`);
     }
     return;
   }
@@ -223,9 +229,9 @@ async function main() {
     if (json) writeJson(output);
     else {
       process.stdout.write(`${JSON.stringify(result.data, null, 2)}\n`);
-      process.stdout.write(`Request: ${result.requestId}\n`);
+      process.stdout.write(`Request: ${terminalText(result.requestId)}\n`);
       process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
-      if (result.responseRequestId) process.stdout.write(`API request: ${result.responseRequestId}\n`);
+      if (result.responseRequestId) process.stdout.write(`API request: ${terminalText(result.responseRequestId)}\n`);
     }
     return;
   }
@@ -243,7 +249,7 @@ async function main() {
     else {
       process.stdout.write('Observed agent access inventory overview\n');
       process.stdout.write(`${JSON.stringify(result.data, null, 2)}\n`);
-      process.stdout.write(`Request: ${result.requestId}\n`);
+      process.stdout.write(`Request: ${terminalText(result.requestId)}\n`);
       process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
     }
     return;
@@ -273,7 +279,7 @@ async function main() {
     if (json) writeJson({ ...result.data, ...writeRequestIds(result), ...writeInteraction(result) });
     else {
       process.stdout.write(`${JSON.stringify(result.data, null, 2)}\n`);
-      process.stdout.write(`Request: ${result.requestId}\n`);
+      process.stdout.write(`Request: ${terminalText(result.requestId)}\n`);
       process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
     }
     return;

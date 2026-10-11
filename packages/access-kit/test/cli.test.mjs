@@ -76,6 +76,20 @@ test('CLI preserves API status, code, and both request IDs on failure', () => {
   assert.equal(result.stdout, '');
 });
 
+test('CLI escapes terminal controls in observed capability labels and kinds', () => {
+  const result = runCli(['agents', 'capabilities', 'list'], {
+    ACCESS_KIT_MOCK_MODE: 'capabilities-terminal',
+    ACCESS_KIT_MOCK_TRACE: '0',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.includes('\u001b'), false);
+  assert.equal(result.stdout.includes('\u202e'), false);
+  assert.equal(result.stdout.split('\n').length, 6);
+  assert.doesNotMatch(result.stdout, /^forged/m);
+  assert.match(result.stdout, /safe\\u\{a\}forged\\u\{1b\}\[31mred\\u\{1b\}\[0m/);
+  assert.match(result.stdout, /\[tool\\u\{1b\}\[2J\\u\{202e\}hidden\]/);
+});
+
 test('CLI account context returns a minimal account projection with normalized request outcome', () => {
   const result = runCli(['account', 'context', '--json']);
   assert.equal(result.status, 0, result.stderr);

@@ -48,6 +48,24 @@ globalThis.fetch = async (url, init = {}) => {
     });
   }
 
+  if (parsedUrl.pathname === '/v1/capability-catalog') {
+    const hostile = mode === 'capabilities-terminal';
+    return new Response(JSON.stringify({
+      data: {
+        items: [{
+          capability_id: 'cap_0123456789abcdef01234567',
+          capability_kind: hostile ? 'tool\u001b[2J\u202ehidden' : 'tool',
+          tool_name: hostile ? 'safe\nforged\u001b[31mred\u001b[0m' : 'example_tool',
+        }],
+        count: 1,
+      },
+      meta: { request_id: 'api-envelope-id' },
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json', 'x-request-id': 'cli-request-id' },
+    });
+  }
+
   const entity = {
     entity_id: 'entity-cli',
     id: 'duplicate-id',
