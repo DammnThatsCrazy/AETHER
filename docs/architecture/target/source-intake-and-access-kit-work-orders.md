@@ -446,9 +446,15 @@ drift. Current local failure-remediation checks also pass: clean `npm ci`, the
 full root `npm run build`, 53 Access Kit tests, 3 focused batch/provider tests,
 65 migration/control/readiness tests, one Alembic head, the SDK contract
 validator, and the CI execution-contract validator. These are local checks;
-the previous hosted run is still on pre-fix head `ae66101c`, so final hosted PR
-authority remains pending. No live Auth0 setup, customer tenant/provider credentials, remote MCP
-host, or mobile device/store environment is configured. The production AWS
+they are not a full PR authority result. The latest local authority attempt
+selected 46 suites and failed in integration, root-unit-control, and
+root-unit-ingestion. After updating stale response-key assertions, the control
+and ingestion suites passed when rerun (55/55 and 99/99); the Docker-backed
+integration suite cannot start because this machine has no reachable Docker
+daemon. The previous hosted run is still on pre-fix head `ae66101c`, so final
+hosted PR authority remains pending. No live Auth0 setup, customer
+tenant/provider credentials, remote MCP host, or mobile device/store environment
+is configured. The production AWS
 publisher/apply workflow was not run because its protected GitHub environment
 is absent.
 Therefore live cross-tenant denial, tenant/provider-to-graph hydration, device
