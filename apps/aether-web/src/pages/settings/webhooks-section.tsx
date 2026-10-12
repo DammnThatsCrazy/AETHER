@@ -35,16 +35,7 @@ const AVAILABLE_EVENTS = [
 ] as const;
 
 type TestResult = { success: boolean; status_code?: number; latency_ms?: number; error?: string };
-type DeliveryItem = {
-  delivery_id: string;
-  event_type?: string | null;
-  created_at?: string | null;
-  status?: string | null;
-  attempts?: number;
-  last_status?: string | null;
-  status_code?: number | null;
-  error?: string | null;
-};
+type DeliveryItem = Awaited<ReturnType<typeof getWebhookDeliveries>>['items'][number];
 
 function WebhookRow({
   webhook,
