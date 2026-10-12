@@ -138,8 +138,11 @@ session succeeded for `linux/amd64`; its build context was 11.36 MB. Running
 the image locally returned healthy `/healthz` and ready `/readyz` responses,
 and the container CLI `--help` command succeeded. The host is Apple Silicon,
 so Docker used emulation. This is local image/runtime evidence, not an AWS ECS
-deployment or native x86 host result. The GitHub-hosted build workflow is
-configured, but its hosted result has not yet run. The repository currently
+deployment or native x86 host result. The GitHub-hosted build workflow passed
+on PR #772: [the run](https://github.com/DammnThatsCrazy/AETHER/actions/runs/38205347762)
+verified npm package contents, built the `linux/amd64` image, and passed
+health/readiness and headless CLI smoke checks. The job
+has no AWS credentials and performs no deployment. The repository currently
 has no production environment, so the publisher intentionally fails closed
 until that environment and at least one required reviewer are configured.
 
