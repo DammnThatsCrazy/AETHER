@@ -371,6 +371,7 @@ def test_v2_route_accepts_and_returns_batchresponse_schema():
         assert set(resp.keys()) == {
             "accepted", "duplicates", "rejected", "events", "batchId", "receivedAt",
             "requestId", "usageEventId", "usageEvidenceId", "auditEventId",
+            "consentReceiptIds",
         }
         assert resp["accepted"] == 3
         assert resp["duplicates"] == 0
@@ -534,6 +535,7 @@ def test_flag_off_uses_v1_not_ingest_many():
         assert set(resp.keys()) == {
             "accepted", "duplicates", "rejected", "events", "batchId", "receivedAt",
             "requestId", "usageEventId", "usageEvidenceId", "auditEventId",
+            "consentReceiptIds",
         }
         assert resp["accepted"] == 2
 
