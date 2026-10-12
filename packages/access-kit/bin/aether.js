@@ -11,6 +11,7 @@ import {
   listSessions,
   MAX_ENTITY_PAGE_SIZE,
   revokeSession,
+  getUsageSummary,
 } from '../src/api.mjs';
 import { credentialStore } from '../src/credential-store.mjs';
 import { loginWithAuth0Device, logoutStoredSession, readStoredSession } from '../src/auth.mjs';
@@ -25,6 +26,7 @@ Usage:
   aether entities list [--entity-type TYPE] [--limit N] [--json]
   aether entities show ENTITY_ID [--json]
   aether account context [--json]
+  aether usage summary [--json]
   aether auth context [--json]
   aether auth login [--no-browser] [--json]
   aether auth logout [--json]
@@ -178,6 +180,7 @@ async function main() {
   const isLogout = area === 'auth' && command === 'logout';
   const needsTenantRead = area === 'account'
     || area === 'entities'
+    || (area === 'usage' && command === 'summary')
     || area === 'agents'
     || (area === 'auth' && command !== 'login' && command !== 'logout');
   let storedSession = null;
@@ -186,6 +189,7 @@ async function main() {
     storedSession = await readStoredSession(process.env);
     if (storedSession) process.env.AETHER_SESSION_TOKEN = storedSession.token;
   }
+  if (needsTenantRead) process.env.AETHER_ACCESS_SURFACE = 'cli';
 
   if (isLogin) {
     if (positionals.length !== 2 || Object.keys(options).some(key => key !== 'no-browser')) {
@@ -296,6 +300,25 @@ async function main() {
       process.stdout.write(`Request: ${terminalText(result.requestId)}\n`);
       process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
       if (result.responseRequestId) process.stdout.write(`API request: ${terminalText(result.responseRequestId)}\n`);
+    }
+    return;
+  }
+
+  if (area === 'usage' && command === 'summary') {
+    if (positionals.length !== 2 || Object.keys(options).length > 0) {
+      throw new Error(`Unexpected arguments for usage summary.\n\n${HELP}`);
+    }
+    const result = await getUsageSummary();
+    const output = { usage: result.data, ...writeRequestIds(result), ...writeInteraction(result) };
+    if (json) writeJson(output);
+    else {
+      process.stdout.write(`Access Kit interactions: ${result.data.access_interaction_count}\n`);
+      if (result.data.billing_period_start && result.data.billing_period_end) {
+        process.stdout.write(`Period: ${result.data.billing_period_start} to ${result.data.billing_period_end}\n`);
+      }
+      process.stdout.write(`Usage status: ${result.data.status}\n`);
+      process.stdout.write(`Request: ${terminalText(result.requestId)}\n`);
+      process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
     }
     return;
   }

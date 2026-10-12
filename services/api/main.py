@@ -811,6 +811,8 @@ def create_app() -> FastAPI:
             "X-Quota-Remaining",
             "X-Quota-Reset",
             "X-Quota-Overage",
+            "X-Aether-Audit-Event-ID",
+            "X-Aether-Usage-Event-ID",
         ],
     )
 

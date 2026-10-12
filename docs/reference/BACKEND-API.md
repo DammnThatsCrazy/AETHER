@@ -27,14 +27,14 @@ reviewed_source_commits:
 source_hashes:
   "services/api/actions/": "sha256:f5e9afb088d3a8f9e93bdd981db2b6dd1fc522c67d22d37b72d20d1b720791cb"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
-  "services/api/billing/": "sha256:dd694b14e890adec41191a54a035ad863d9c14a2183ba5e9888c64c018658e77"
+  "services/api/billing/": "sha256:4dd92369eb7f8e3183dc069a284afb09450eeabbdd24a504a24401c270684e22"
   "services/api/connectors/": "sha256:01f3d11694ce153f102de85133e514fe4548877376c05668c2ee6fe63e1ad633"
   "services/api/governance/": "sha256:88d555a3245092c8b9359f48213c260d0e370b82d615858a14c11ac744bd48a6"
   "services/api/graph/": "sha256:7372bf88ff18200edd21b53649b25098a9b1e1ec474a79ee36cd28a480093706"
   "services/api/identity/": "sha256:3899aca8a5fe95b1f975945913ebbd0cef920109649676c9b48b49fd6fcd2a1f"
   "services/api/ingestion/": "sha256:f8792fdb52aa80d312f4e9dc4a8e29e6102fc65737d2783cef54fdc4d6bdc569"
   "services/api/intelligence/": "sha256:50d2fba35ca8b62431283aa909ae746d789f59dcf201dfb15ad297fd522f1a13"
-  "services/api/journeys/": "sha256:5d7336fa8f43bb5107a9314f09a08c16132ba1c1cf1f57762344f55a1192608a"
+  "services/api/journeys/": "sha256:1b39920846d458dde3378049c8d25a6a6eda06826de370862102305373c85cf8"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b8b5c4e0956e300494f051e9b82958da6caf3ca375b8c79f00d5b76dd061fc63"
   "services/api/value/": "sha256:b90c235210f77460e626c395c3011149dd7cbd4d5da0f58e797abfe7e9d24328"
@@ -173,6 +173,8 @@ Every successful response carries:
 | `X-Quota-Reset`       | ISO 8601 timestamp of next billing period start  |
 | `X-Quota-Overage`     | Present (`true`) only when the tenant is in overage |
 | `X-Access-Tier`       | Plan-specific access tier label for the matched service |
+| `X-Aether-Audit-Event-ID` | Present on attributed Access Kit reads when the audit record is persisted |
+| `X-Aether-Usage-Event-ID` | Present on attributed Access Kit reads when the usage event is persisted |
 
 ### Error Envelopes
 
@@ -279,6 +281,15 @@ coordinates are server authority: client input, URL state, tenant-record
 metadata, and `AETHER_ENV` cannot override them. Multi-workspace selection is
 not exposed by this model.
 
+The Access Kit CLI and MCP adapters use this tenant API rather than owning a
+second authorization or graph path. Attributed reads of account context,
+sessions, entities, and the observed capability catalog are written to the
+existing audit ledger and the non-billable `access_interaction` usage
+dimension. The API returns durable audit and usage IDs in
+`X-Aether-Audit-Event-ID` and `X-Aether-Usage-Event-ID`; the
+`X-Aether-Access-Surface` request label is limited to `cli`, `mcp_stdio`, and
+`mcp_http` and does not grant permission or choose a tenant.
+
 ### Contact & enterprise inquiries (`/v1/contact/*`)
 
 | Endpoint | Method | Auth | Purpose |
@@ -312,7 +323,7 @@ are returned in customer or operator responses.
 | `/v1/billing/plan` | GET | API key | Caller-safe contract profile and enabled billing modules |
 | `/v1/billing/entitlements` | GET | API key | Caller-safe tenant entitlements |
 | `/v1/billing/usage` | GET | API key | Caller tenant usage events for a requested or current billing window |
-| `/v1/billing/usage/summary` | GET | API key | Caller tenant billable-usage summary |
+| `/v1/billing/usage/summary` | GET | API key | Caller tenant usage dimensions, including non-billable visibility meters |
 | `/v1/billing/invoice-previews` | GET | API key | Caller-safe invoice previews with internal pricing notes removed |
 | `/v1/billing/value-created` | GET | API key | Caller-safe value-created events for value-based billing review |
 | `/v1/billing/payment-status` | GET | API key | Caller-safe payment status and active provider mode |
@@ -3042,14 +3053,24 @@ Redacted tenant-safe feed — no internal scoring or suppression metadata expose
 
 ### Webhook Endpoint Configuration
 
-Tenant-managed outbound webhook delivery endpoints. Aether signs each delivery with an HMAC-SHA256 signature in the `X-Aether-Signature` header.
+Tenant-managed Access Kit interaction endpoints. Aether signs each delivery
+with an HMAC-SHA256 signature in the `X-Aether-Signature` header. New endpoints
+remain inactive until a signed test succeeds. Aether generates a secret by
+default; an optional bounded custom secret is also accepted. Secrets are
+encrypted in the credential authority and shown only in the create or rotate
+response. URLs must resolve to public HTTPS addresses; delivery pins validated DNS addresses,
+refuses redirects, and uses the durable retry/dead-letter outbox. Payloads
+include minimized interaction and audit references, not request bodies, entity
+identifiers, or response content.
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/v1/notifications/webhooks` | List all registered webhook endpoints for the tenant |
-| POST | `/v1/notifications/webhooks` | Register a new endpoint (`url`, `events`, optional `secret`) |
+| POST | `/v1/notifications/webhooks` | Register a public HTTPS endpoint for `access.interaction.completed`, `.blocked`, or `.failed`; Aether generates a write-only signing secret |
 | DELETE | `/v1/notifications/webhooks/{webhook_id}` | Remove a webhook endpoint |
-| POST | `/v1/notifications/webhooks/{webhook_id}/test` | Ping the endpoint to verify reachability; returns `success`, `status_code`, and `latency_ms` |
+| POST | `/v1/notifications/webhooks/{webhook_id}/test` | Send a signed test; activates only on success and returns `success`, `status_code`, and `latency_ms` |
+| POST | `/v1/notifications/webhooks/{webhook_id}/rotate-secret` | Rotate the write-only secret, pause delivery, and require another successful test |
+| GET | `/v1/notifications/webhooks/{webhook_id}/deliveries?limit=50` | Read bounded tenant-scoped delivery status history |
 
 ### Interactive Callbacks
 

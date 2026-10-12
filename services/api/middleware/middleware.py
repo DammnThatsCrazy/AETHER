@@ -49,6 +49,120 @@ from dependencies.providers import get_registry
 
 logger = get_logger("aether.middleware")
 
+_ACCESS_KIT_CAPABILITIES = {
+    ("GET", "/v1/me"): "account.context.read",
+    ("GET", "/v1/me/sessions"): "auth.sessions.list",
+    ("DELETE", "/v1/me/sessions/{session_id}"): "auth.sessions.revoke",
+    ("GET", "/v1/entities"): "entities.list",
+    ("GET", "/v1/entities/{entity_id}"): "entities.get",
+    ("GET", "/v1/capability-catalog"): "agent_access.capabilities.list",
+    ("GET", "/v1/capability-catalog/overview"): "agent_access.capabilities.overview",
+    ("GET", "/v1/capability-catalog/{capability_id}"): "agent_access.capabilities.get",
+}
+_ACCESS_KIT_SURFACES = frozenset({"cli", "mcp_stdio", "mcp_http"})
+
+
+async def _record_access_interaction(request: Request, response: Response) -> dict[str, str]:
+    """Best-effort audit, non-billable metering, and event publication for Access Kit reads."""
+    surface = request.headers.get("x-aether-access-surface", "")
+    route_template = getattr(request.state, "access_route_template", None)
+    capability_id = _ACCESS_KIT_CAPABILITIES.get((request.method.upper(), route_template))
+    tenant = getattr(request.state, "tenant", None)
+    if surface not in _ACCESS_KIT_SURFACES or not capability_id or tenant is None:
+        return {}
+
+    request_id = getattr(request.state, "request_id", "")
+    if not isinstance(request_id, str) or not request_id:
+        return {}
+    status = int(response.status_code)
+    if status in {401, 403, 423, 429}:
+        outcome = "blocked"
+    elif status >= 400:
+        outcome = "failed"
+    else:
+        outcome = "allowed"
+    event_type = {
+        "allowed": "access.interaction.completed",
+        "blocked": "access.interaction.blocked",
+        "failed": "access.interaction.failed",
+    }[outcome]
+    operation = "revoke" if request.method.upper() == "DELETE" else "read"
+    metadata = {
+        "surface": surface,
+        "capability_id": capability_id,
+        "operation": operation,
+        "outcome": outcome,
+        "http_status": status,
+        "request_id": request_id,
+    }
+    references: dict[str, str] = {}
+
+    try:
+        from governance.security.audit_ledger import AuditLedger
+        from governance.security.request_context import tenant_actor
+
+        actor = tenant_actor(request)
+        audit_event = await AuditLedger().record(
+            actor_id=actor.actor_id,
+            actor_type=actor.actor_type,
+            tenant_id=tenant.tenant_id,
+            event_type="access.interaction",
+            resource_type="access_capability",
+            resource_id=capability_id,
+            action=operation,
+            outcome=outcome,
+            metadata=metadata,
+        )
+        references["X-Aether-Audit-Event-ID"] = str(audit_event.audit_event_id)
+    except Exception as exc:  # telemetry must not change an authorized read result
+        logger.warning("access interaction audit write failed (%s)", type(exc).__name__)
+
+    try:
+        from billing.billing.revops import MeteringService, UsageMeteringEvent
+
+        metering_event = UsageMeteringEvent(
+            tenant_id=tenant.tenant_id,
+            event_type="access_interaction",
+            quantity=1,
+            source_type="access_kit",
+            source_id=request_id,
+            billable=False,
+            metadata=metadata,
+        )
+        saved_event = await MeteringService().record_event(metering_event)
+        if saved_event and saved_event.get("metering_event_id"):
+            references["X-Aether-Usage-Event-ID"] = str(saved_event["metering_event_id"])
+    except Exception as exc:  # telemetry must not change an authorized read result
+        logger.warning("access interaction metering write failed (%s)", type(exc).__name__)
+
+    try:
+        from journeys.notification_intelligence.delivery_outbox import queue_access_interaction_event
+        from shared.common.common import utc_now
+
+        await queue_access_interaction_event(tenant.tenant_id, {
+            "schema_version": "1.0",
+            "id": request_id,
+            "type": event_type,
+            "occurred_at": utc_now().isoformat(),
+            "surface": surface,
+            "capability_id": capability_id,
+            "outcome": outcome,
+            "http_status": status,
+            "request_id": request_id,
+            "api_request_id": request_id,
+            "audit_event_id": references.get("X-Aether-Audit-Event-ID"),
+            "usage_event_id": references.get("X-Aether-Usage-Event-ID"),
+        })
+    except Exception as exc:  # outbound notification is asynchronous and fail-open
+        logger.warning("access interaction event enqueue failed (%s)", type(exc).__name__)
+    return references
+
+
+async def _finalize_access_response(request: Request, response: Response) -> Response:
+    for name, value in (await _record_access_interaction(request, response)).items():
+        response.headers[name] = value
+    return response
+
 # ---------------------------------------------------------------------------
 # Extraction defense — lazy import to avoid hard dependency
 # ---------------------------------------------------------------------------
@@ -444,6 +558,7 @@ def register_middleware(app: FastAPI) -> None:
             denial = ForbiddenError("ROUTE_POLICY_UNKNOWN_ROUTE")
             return JSONResponse(status_code=denial.code.value, content=denial.to_dict())
         route_template = route_template or request.url.path
+        request.state.access_route_template = route_template
 
         # Bind the request for service-layer code that authorizes against the
         # Kyber workforce plane but is not handed a Request (Noesis). The
@@ -467,9 +582,9 @@ def register_middleware(app: FastAPI) -> None:
             # unclassified / Kyber-mismatch routes). Never raises.
             _policy_denial = _evaluate_route_policy(request, route_template, context)
             if _policy_denial is not None:
-                return JSONResponse(
+                return await _finalize_access_response(request, JSONResponse(
                     status_code=_policy_denial.code.value, content=_policy_denial.to_dict()
-                )
+                ))
             plan_tier = _resolve_plan_tier(context)
             # Platform operators run Aether; they are not billed customers.
             # They get every service and skip the customer controls below
@@ -522,7 +637,7 @@ def register_middleware(app: FastAPI) -> None:
                         if rl_result.retry_after is not None
                         else max(1, int(rl_result.reset_at - time.time()))
                     )
-                    return problem_response(
+                    return await _finalize_access_response(request, problem_response(
                         429,
                         "Rate Limit Exceeded",
                         (
@@ -542,7 +657,7 @@ def register_middleware(app: FastAPI) -> None:
                             "Retry-After": str(retry_after),
                             "X-RateLimit-Remaining": "0",
                         },
-                    )
+                    ))
 
             # --- Feature Gate (per-plan service access control) ---
             feature_gate = getattr(registry, "feature_gate", None)
@@ -563,7 +678,7 @@ def register_middleware(app: FastAPI) -> None:
                     )
                     min_plan = PLAN_CATALOG[min_plan_tier]
                     current_plan = PLAN_CATALOG[plan_tier]
-                    return problem_response(
+                    return await _finalize_access_response(request, problem_response(
                         403,
                         "Service Not Available On Plan",
                         (
@@ -587,7 +702,7 @@ def register_middleware(app: FastAPI) -> None:
                             "endpoint": request.url.path,
                         },
                         headers=rate_headers,
-                    )
+                    ))
                 access_tier_header = gate_result.access_tier
 
             # --- Monthly Quota (meters only, never blocks) ---
@@ -645,13 +760,13 @@ def register_middleware(app: FastAPI) -> None:
                         request, api_key, context, request_id
                     )
                     if mesh_response is not None:
-                        return mesh_response
+                        return await _finalize_access_response(request, mesh_response)
                 elif mode == EXTRACTION_MODE_LEGACY:
                     legacy_response = await _apply_legacy_extraction_defense(
                         request, api_key, request_id
                     )
                     if legacy_response is not None:
-                        return legacy_response
+                        return await _finalize_access_response(request, legacy_response)
                 elif mode == EXTRACTION_MODE_FAIL_CLOSED:
                     metrics.increment(
                         "extraction_defense_fail_closed",
@@ -661,7 +776,7 @@ def register_middleware(app: FastAPI) -> None:
                         "Extraction defense unavailable for protected ML route "
                         f"{request.url.path} — failing closed (503)"
                     )
-                    return problem_response(
+                    return await _finalize_access_response(request, problem_response(
                         503,
                         "Extraction Defense Unavailable",
                         "Model protection is required for this route but no "
@@ -669,7 +784,7 @@ def register_middleware(app: FastAPI) -> None:
                         code="EXTRACTION_DEFENSE_UNAVAILABLE",
                         retryable=True,
                         request_id=request_id,
-                    )
+                    ))
                 else:  # EXTRACTION_MODE_DISABLED
                     metrics.increment(
                         "extraction_defense_unprotected",
@@ -683,6 +798,7 @@ def register_middleware(app: FastAPI) -> None:
 
         # --- Execute request ---
         response: Response = await call_next(request)
+        response = await _finalize_access_response(request, response)
 
         # --- Response headers ---
         elapsed_ms = (time.perf_counter() - start) * 1000

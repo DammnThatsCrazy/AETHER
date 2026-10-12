@@ -17,6 +17,16 @@ export function useCreateWebhook() {
   });
 }
 
+export function useRotateWebhookSecret() {
+  return useMutation({
+    mutationFn: (id: string) => api.notifications.rotateWebhookSecret(id),
+  });
+}
+
+export async function getWebhookDeliveries(id: string) {
+  return api.notifications.webhookDeliveries(id);
+}
+
 export function useDeleteWebhook() {
   return useMutation({
     mutationFn: (id: string) => api.notifications.deleteWebhook(id),

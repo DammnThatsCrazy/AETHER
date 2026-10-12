@@ -277,7 +277,10 @@ export function createRemoteMcpFetchHandler({ env = process.env } = {}) {
     const requestEnv = buildTenantEnv(config.apiOrigin, credential, observeInput.observe);
 
     const handler = createMcpHandler(
-      () => createAccessMcpServer(requestEnv, { includeObserve: Boolean(observeInput.observe) }),
+      () => createAccessMcpServer(requestEnv, {
+        includeObserve: Boolean(observeInput.observe),
+        surface: 'mcp_http',
+      }),
       {
         legacy: 'reject',
         keepAliveMs: 0,

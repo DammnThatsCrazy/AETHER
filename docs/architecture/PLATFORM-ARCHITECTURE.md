@@ -54,8 +54,8 @@ source_hashes:
   "services/api/ingestion/ingestion/replay.py": "sha256:65f898480787b71d14c8f687351844fdf5585cd67664ff5c32699328594b24ce"
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
-  "services/api/main.py": "sha256:91c7168bf4a5d88cf019ac753bfa0d9c35cec9308cb0191f3ba1bada5418c6b1"
-  "services/api/middleware/middleware.py": "sha256:4f984e6a2d3622df9652045c85dd323db990e11bfb4d8cf4af6f08aadfb935d6"
+  "services/api/main.py": "sha256:f76824db10962390701e0356564ecb69e7fc5c81f25fff6e51c685da359aeb75"
+  "services/api/middleware/middleware.py": "sha256:4c59cee4a525830eebcaf5045e42f6f55e195614006d03fcb2ba9667a4bb5037"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
   "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
@@ -118,6 +118,14 @@ Batch responses can return the real consent, usage, and audit references that
 their owning authorities persisted. SDK batch payloads share a minimum
 cross-platform wire vector, while the optional Envelope-B field remains behind
 the server's adoption flags.
+
+Authenticated Access Kit reads through the CLI, local MCP, and hosted MCP are
+attributed by an allowlisted surface label and recorded by the API middleware
+in the existing audit ledger plus a non-billable `access_interaction` usage
+dimension. Durable audit and usage event IDs are returned as response headers
+and preserved in the adapter interaction envelope. Subscribed tenant webhooks
+receive minimized interaction events from the notification outbox; they do not
+become another graph, identity, or access authority.
 
 The SDK also collects raw user interactions, device fingerprints, wallet events, and session data — then ships everything to the backend for processing, enrichment, identity resolution, and analysis.
 

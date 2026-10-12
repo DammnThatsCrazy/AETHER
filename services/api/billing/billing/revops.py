@@ -17,7 +17,7 @@ ContractStatus = Literal['draft','active','pending_signature','expired','cancell
 BillingModel = Literal['flat_subscription','usage_based','hybrid','enterprise_contract','value_based','pilot']
 BillingPeriod = Literal['monthly','quarterly','annual','custom']
 ResetPeriod = Literal['monthly','quarterly','annual','never']
-MeteringEventType = Literal['event_ingested','entity_resolved','graph_operation','profile_query','recommendation_generated','recommendation_previewed','decision_recorded','confidence_updated','action_logged','action_dispatched','outcome_observed','playbook_run','investigation_opened','audit_export_generated','integration_delivery','connector_sync','webhook_ingested','sdk_event_ingested','premium_connector_used','deployment_mode_active','managed_workflow_triggered','value_created','stablecoin_observation_ingested','stablecoin_flow_materialized','derivatives_event_ingested','derivatives_reconciliation_run','derivatives_stream_gap_detected','interop_observation_ingested','interop_message_correlated','interop_reconciliation_run','payment_rail_observation_ingested','model_runtime_token_usage']
+MeteringEventType = Literal['event_ingested','entity_resolved','graph_operation','profile_query','recommendation_generated','recommendation_previewed','decision_recorded','confidence_updated','action_logged','action_dispatched','outcome_observed','playbook_run','investigation_opened','audit_export_generated','integration_delivery','connector_sync','webhook_ingested','sdk_event_ingested','access_interaction','premium_connector_used','deployment_mode_active','managed_workflow_triggered','value_created','stablecoin_observation_ingested','stablecoin_flow_materialized','derivatives_event_ingested','derivatives_reconciliation_run','derivatives_stream_gap_detected','interop_observation_ingested','interop_message_correlated','interop_reconciliation_run','payment_rail_observation_ingested','model_runtime_token_usage']
 InvoiceStatus = Literal['draft','review_ready','approved','exported']
 ValueSourceType = Literal['outcome','playbook','recommendation_family','integration_action','manual_adjustment']
 ValueType = Literal['retained_revenue','expansion_revenue','avoided_loss','campaign_waste_reduced','operational_savings','agent_failure_cost_reduced','manual_review_savings']
@@ -33,6 +33,7 @@ DIMENSION_LABELS = {
     'recommendation_previewed': 'Recommendations previewed', 'confidence_updated': 'Confidence updates',
     'investigation_opened': 'Investigations opened', 'connector_sync': 'Connector syncs',
     'webhook_ingested': 'Webhook events ingested', 'sdk_event_ingested': 'SDK events ingested',
+    'access_interaction': 'Access Kit interactions',
     'premium_connector_used': 'Premium connector usage', 'deployment_mode_active': 'Deployment mode activations',
     'managed_workflow_triggered': 'Managed workflow triggers', 'value_created': 'Value-created events',
     'stablecoin_observation_ingested': 'Stablecoin observations ingested',

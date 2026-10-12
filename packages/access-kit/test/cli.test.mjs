@@ -108,6 +108,23 @@ test('CLI account context returns a minimal account projection with normalized r
   assert.equal(JSON.stringify(output).includes('private@example.test'), false);
   assert.equal(JSON.stringify(output).includes('cus_private'), false);
   assert.match(result.stderr, /MOCK_FETCH GET \/v1\/me redirect=error/);
+  assert.match(result.stderr, /surface=cli/);
+});
+
+test('CLI usage summary returns only the Access Kit dimension for the current billing period', () => {
+  const result = runCli(['usage', 'summary', '--json']);
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.deepEqual(output.usage, {
+    access_interaction_count: 7,
+    billing_period_start: '2026-10-01T00:00:00Z',
+    billing_period_end: '2026-11-01T00:00:00Z',
+    status: 'available',
+  });
+  assert.equal(output.request_id, 'cli-request-id');
+  assert.equal(output.interaction.status_class, 'successful');
+  assert.doesNotMatch(result.stdout, /tenant-private|profile_query|private-meter-id/);
+  assert.match(result.stderr, /MOCK_FETCH GET \/v1\/billing\/usage\/summary redirect=error surface=cli/);
 });
 
 test('CLI auth context works with an externally supplied human session token', () => {

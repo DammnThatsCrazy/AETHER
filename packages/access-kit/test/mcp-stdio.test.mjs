@@ -116,6 +116,7 @@ test('pinned MCP stdio SDK initializes and lists tools without making API calls'
   assert.ok(names.includes('entities_list'));
   assert.ok(names.includes('entities_get'));
   assert.ok(names.includes('account_context'));
+  assert.ok(names.includes('usage_summary'));
   assert.ok(names.includes('observe'));
   child.stdin.end();
   const [exitCode] = await once(child, 'exit');
