@@ -2,6 +2,7 @@ const STATUS_CLASSES = new Set(['successful', 'denied', 'blocked', 'degraded', '
 
 const REFERENCE_FIELDS = [
   'batch_id', 'batchId', 'receipt_id', 'receiptId', 'receipt_ref', 'receiptRef',
+  'consent_receipt_ids', 'consentReceiptIds',
   'session_id', 'sessionId',
   'decision_id', 'decisionId', 'decision_ref', 'decisionRef', 'rights_decision_ref',
   'task_id', 'taskId', 'result_id', 'resultId', 'export_id', 'exportId',
@@ -29,6 +30,14 @@ function extractReferences(data) {
     const value = data[field];
     if (typeof value === 'string' && value.length > 0 && value.length <= 256) {
       references[field] = value;
+    } else if (
+      (field === 'consent_receipt_ids' || field === 'consentReceiptIds')
+      && Array.isArray(value)
+      && value.length > 0
+      && value.length <= 100
+      && value.every((item) => typeof item === 'string' && item.length > 0 && item.length <= 256)
+    ) {
+      references[field] = [...value];
     }
   }
   return references;

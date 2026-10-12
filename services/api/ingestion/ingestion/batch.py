@@ -348,6 +348,18 @@ class BatchResponse(BaseModel):
     usageEventId: Optional[str] = None
     usageEvidenceId: Optional[str] = None
     auditEventId: Optional[str] = None
+    consentReceiptIds: list[str] = Field(default_factory=list)
+
+
+def _consent_receipt_ids(payloads: Sequence[dict[str, Any]]) -> list[str]:
+    """Return only authoritative receipt references on accepted observations."""
+    receipt_ids: dict[str, None] = {}
+    for payload in payloads:
+        privacy = payload.get("privacy")
+        receipt_id = privacy.get("consent_snapshot") if isinstance(privacy, dict) else None
+        if isinstance(receipt_id, str) and receipt_id:
+            receipt_ids.setdefault(receipt_id, None)
+    return list(receipt_ids)
 
 
 # ── Route ─────────────────────────────────────────────────────────────────────
@@ -441,6 +453,7 @@ async def _record_batch_audit(tenant: Any, response: dict) -> dict:
                 "rejected_count": response.get("rejected", 0),
                 "usage_event_id": response.get("usageEventId"),
                 "usage_evidence_id": response.get("usageEvidenceId"),
+                "consent_receipt_ids": response.get("consentReceiptIds", []),
             },
         )
         response["auditEventId"] = event.audit_event_id
@@ -756,6 +769,7 @@ async def ingest_events(
         requestId=request_id,
         usageEventId=getattr(metering_outcome, "metered_event_id", None),
         usageEvidenceId=getattr(metering_outcome, "evidence_id", None),
+        consentReceiptIds=_consent_receipt_ids(accepted_raw),
     )
 
 
@@ -890,6 +904,7 @@ async def _ingest_batch_v2(
         candidate_positions.append(len(results) - 1)
         candidate_deployments.append(validation.deployment_id)
 
+    accepted_payloads: list[dict[str, Any]] = []
     if candidates:
         try:
             bulk = await ingest_many(candidates, candidate_outbox)
@@ -982,6 +997,7 @@ async def _ingest_batch_v2(
         requestId=request_id,
         usageEventId=getattr(metering_outcome, "metered_event_id", None),
         usageEvidenceId=getattr(metering_outcome, "evidence_id", None),
+        consentReceiptIds=_consent_receipt_ids(accepted_payloads),
     ).model_dump()
 
 

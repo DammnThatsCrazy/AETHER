@@ -229,9 +229,10 @@ saved CLI human session.
 non-negative `sequence`, and optional `properties`. It sends the same one-event
 `track` batch as the CLI with `surface: "mcp"`. Its structured result preserves
 the API batch counts, per-event statuses/reasons, batch ID, receive time,
-request ID, and any server-returned `usageEventId`, `usageEvidenceId`, and
-`auditEventId`. Those correlation references are optional because the server
-may not return them. A rejected observation remains a server rejection.
+request ID, and any server-returned `usageEventId`, `usageEvidenceId`,
+`auditEventId`, and actual `consentReceiptIds`. Those correlation references
+are optional because the owning authority may not return them. A rejected
+observation remains a server rejection.
 
 Entity tool errors set MCP `isError` and include a JSON `error` object with the
 API status/code and request IDs when available.

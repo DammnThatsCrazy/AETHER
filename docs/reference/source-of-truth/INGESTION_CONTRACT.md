@@ -145,6 +145,16 @@ SDKs **must** use `/v1/batch`. These aliases are retained for internal tools onl
 - Native: in-memory queue with coroutine/async flush on lifecycle events.
 - RN: delegates to native.
 
+## Batch response correlation
+
+`POST /v1/batch` returns the accepted/duplicate/rejected event results and may
+include the server request ID, usage event/evidence IDs, and persisted audit
+event ID. `consentReceiptIds` lists only real tenant-scoped consent receipts
+used to admit accepted observations. The same receipt references are stored on
+the accepted observation and copied into the batch audit metadata. A reference
+is omitted when its owning authority did not return a durable record; ingestion
+does not invent authorization decisions, usage, audit rows, or receipts.
+
 ## Schema version
 
 Every SDK sets `context.library.name = '@aether/{platform}'` and

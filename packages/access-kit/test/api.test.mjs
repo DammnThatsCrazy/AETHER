@@ -457,3 +457,16 @@ test('interaction normalizer classifies session-management operations as auth', 
   assert.equal(result.operation, 'auth');
   assert.equal(result.status_class, 'denied');
 });
+
+test('interaction references retain server-returned consent receipt IDs', () => {
+  const result = normalizeInteractionOutcome({
+    operation: 'observe',
+    httpStatus: 200,
+    requestId: 'request-with-receipts',
+    responseOk: true,
+    data: { consentReceiptIds: ['consent-a', 'consent-b'] },
+  });
+  assert.deepEqual(result.references, {
+    consentReceiptIds: ['consent-a', 'consent-b'],
+  });
+});

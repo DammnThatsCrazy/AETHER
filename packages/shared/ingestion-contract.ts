@@ -59,6 +59,13 @@ export interface BatchIngestResponse {
   events: IngestEventResult[];
   batchId: string;
   receivedAt: string;
+  /** Server correlation references; absent when the owning authority did not persist one. */
+  requestId?: string;
+  usageEventId?: string;
+  usageEvidenceId?: string;
+  auditEventId?: string;
+  /** Actual tenant-scoped receipt IDs used to admit accepted events. */
+  consentReceiptIds?: string[];
 }
 
 /** Request envelope of POST /v1/batch (alias of the SDK BatchPayload). */
