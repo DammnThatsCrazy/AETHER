@@ -42,8 +42,10 @@ reviewed_source_commits:
     reason: "Reviewed the Aether test-only timeout stabilization (static Cluster360 import and controlled signup field changes); no runtime architecture or data-truth behavior changed, so no body update was required."
   - commit: "95e6c54f"
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
+  - commit: "453f71f9a"
+    reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:87b8d52b73080ee5d5281af13b67d7a16757dca91088a4832f0584e09f21ef9e"
+  "apps/aether-web/src/": "sha256:8d11e87d771978e7602ce4dc208db3850349fec44f2c380ae2b944dc4d2efea1"
   "apps/kyber-web/src/": "sha256:7a31deaee6f5e047df21f6cd1115604f956f283b23e904128385824ab2fbf32a"
   "packages/ui/core/src/": "sha256:75ba669073aebf48fe1bb982913d32019b79b5fdcfe8dce5266f95412325f2b9"
 ---
