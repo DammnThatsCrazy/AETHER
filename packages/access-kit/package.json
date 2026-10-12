@@ -1,8 +1,16 @@
 {
   "name": "@aether/access-kit",
   "version": "0.1.0-alpha.0",
-  "private": true,
   "description": "Aether tenant entity and agent-access reads plus site-bound canonical intake CLI/MCP bridge.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DammnThatsCrazy/AETHER.git",
+    "directory": "packages/access-kit"
+  },
+  "homepage": "https://github.com/DammnThatsCrazy/AETHER/tree/main/packages/access-kit",
+  "bugs": {
+    "url": "https://github.com/DammnThatsCrazy/AETHER/issues"
+  },
   "type": "module",
   "bin": {
     "aether": "./bin/aether.js",
@@ -16,6 +24,10 @@
   "engines": {
     "node": ">=20"
   },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
   "scripts": {
     "start:mcp": "node ./bin/aether-mcp.js",
     "start:mcp:http": "node ./bin/aether-mcp-http.js",
@@ -26,5 +38,5 @@
     "@napi-rs/keyring": "2.0.0",
     "zod": "4.2.0"
   },
-  "license": "UNLICENSED"
+  "license": "SEE LICENSE IN LICENSE"
 }

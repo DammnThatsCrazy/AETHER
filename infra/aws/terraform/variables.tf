@@ -58,6 +58,13 @@ variable "enable_access_mcp_repository" {
   type        = bool
   description = "Opt in to the dedicated aether-access-mcp ECR repository. Provision this first, then publish an immutable image before enabling the service."
   default     = false
+  validation {
+    condition = !var.enable_access_mcp_repository || (
+      var.deployment_profile == "production-scale" &&
+      var.environment == "production"
+    )
+    error_message = "The globally named aether-access-mcp ECR repository has one persistent owner: deployment_profile=production-scale and environment=production."
+  }
 }
 
 variable "enable_access_mcp" {
@@ -67,9 +74,11 @@ variable "enable_access_mcp" {
   validation {
     condition = !var.enable_access_mcp || (
       var.enable_access_mcp_repository &&
+      var.deployment_profile == "production-scale" &&
+      var.environment == "production" &&
       can(regex("^sha256:[0-9a-f]{64}$", var.access_mcp_image_digest))
     )
-    error_message = "enable_access_mcp requires enable_access_mcp_repository=true and an immutable access_mcp_image_digest."
+    error_message = "enable_access_mcp requires enable_access_mcp_repository=true, deployment_profile=production-scale, environment=production, and an immutable access_mcp_image_digest."
   }
 }
 
@@ -91,10 +100,11 @@ variable "access_mcp_path" {
     condition = (
       can(regex("^/[A-Za-z0-9/_-]{1,127}$", var.access_mcp_path)) &&
       !startswith(var.access_mcp_path, "//") &&
+      !startswith(lower(var.access_mcp_path), "/mcp") &&
       !endswith(var.access_mcp_path, "/") &&
       !strcontains(var.access_mcp_path, "//")
     )
-    error_message = "access_mcp_path must be a bounded absolute path of letters, numbers, underscores, slashes, or hyphens without a trailing or repeated slash."
+    error_message = "access_mcp_path must be a bounded absolute path of letters, numbers, underscores, slashes, or hyphens without a trailing or repeated slash, and must not overlap the reserved /mcp* tfmcp route."
   }
 }
 
@@ -115,9 +125,31 @@ variable "access_mcp_allowed_origins" {
   validation {
     condition = alltrue([
       for origin in var.access_mcp_allowed_origins :
-      can(regex("^https://[^/?#]+$", origin)) && !strcontains(origin, "@")
+      try(
+        can(regex("^https://[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*(:[0-9]{1,5})?$", origin)) &&
+        length(regex("^https://([^:/?#]+)", origin)[0]) <= 253 &&
+        (
+          can(regex("^https://[0-9.]+(:[0-9]+)?$", origin)) ? (
+            length(split(".", regex("^https://([0-9.]+)", origin)[0])) == 4 &&
+            alltrue([
+              for octet in split(".", regex("^https://([0-9.]+)", origin)[0]) :
+              try(
+                can(regex("^(0|[1-9][0-9]{0,2})$", octet)) && tonumber(octet) <= 255,
+                false,
+              )
+            ])
+          ) : true
+        ) &&
+        (
+          can(regex(":([0-9]+)$", origin)) ? (
+            tonumber(regex(":([0-9]+)$", origin)[0]) >= 1 &&
+            tonumber(regex(":([0-9]+)$", origin)[0]) <= 65535
+          ) : true
+        ),
+        false,
+      )
     ])
-    error_message = "access_mcp_allowed_origins must contain exact HTTPS origins without credentials, paths, query strings, or fragments."
+    error_message = "access_mcp_allowed_origins must contain exact HTTPS origins with valid DNS/IPv4 hosts and optional ports from 1 through 65535; credentials, paths, query strings, fragments, malformed hosts, and IPv6 literals are not accepted."
   }
 }
 

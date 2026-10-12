@@ -256,15 +256,28 @@ configuration. Optional `AETHER_MCP_ALLOWED_ORIGINS` allows exact HTTPS browser
 origins; server-to-server clients can omit `Origin`. It rejects wildcards and
 invalid host/origin headers. `GET /healthz` is process liveness; `GET /readyz`
 checks configuration but does not claim live Aether API reachability or tenant
-readiness. The dedicated AWS Terraform service is opt-in, uses an immutable ECR
-image digest, and is routed separately from the privileged operator `tfmcp`
-service. The customer MCP task role has no workload AWS permissions.
+readiness. The dedicated AWS Terraform service is opt-in, deploys only to the
+`production-scale` profile that canonically owns the globally named ECR
+repository, uses an immutable image digest, and is routed separately from the
+privileged operator `tfmcp` service. The customer MCP task role has no workload
+AWS permissions. A local emulated `linux/amd64` image build and container
+health/readiness plus CLI smoke passed; a clean hosted build workflow is
+configured but has not run. The OIDC image publisher verifies that the
+production GitHub environment has at least one required reviewer before
+waiting on its approval, and the reviewed plan/apply paths reject images
+without a completed clean ECR scan. The repository currently has no
+production environment. Its
+repository-first image-publish and reviewed plan/apply sequence is documented in the
+[`Access Kit MCP AWS deployment runbook`](../../../infra/aws/terraform/ACCESS_KIT_MCP_DEPLOYMENT.md).
 
 Remote `observe` is listed only when that MCP request supplies both
 `X-Aether-Observe-Key` and `X-Aether-Site-ID`. The pair is passed only to
 canonical `POST /v1/batch`, whose existing admission path verifies site binding
 and tenant scope. Without both headers the tool is omitted; partial or
 malformed values are rejected. Tenant reads still require the caller bearer.
+That bearer authenticates the MCP request but does not authorize the observation
+write or choose its tenant; the publishable key and site pair independently
+carry the existing site-bound intake authority.
 
 This is a usable bearer-authenticated hosted MCP endpoint, not MCP OAuth. It
 does not implement OAuth protected-resource metadata, dynamic client
@@ -325,6 +338,14 @@ remains authoritative.
   apply, public-host setup, two-tenant denial evidence, customer remote-client
   conformance, and OAuth resource metadata/token exchange are not established
   by a deployable image or passing local protocol tests.
+- The CLI package is configured for public npm distribution and has a manual
+  release workflow that fails closed unless npm-production has a required
+  reviewer, but no package version is published yet. That environment is not
+  currently configured. Customer
+  CloudShell/ECS/other-cloud installation by `npm install --global
+  @aether/access-kit` becomes available after that release. The ECR image
+  remains private to Aether AWS principals and is intended for the hosted MCP
+  service and authorized Aether runners.
 - This package has no usage-consumption or pricing interpretation, combined
   customer-facing doctor report, hosted protocol probe, or provider-backed
   graph hydration proof.

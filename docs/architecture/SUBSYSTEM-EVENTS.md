@@ -18,7 +18,7 @@ source_hashes:
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
-  "services/api/ingestion/ingestion/validation.py": "sha256:03544e3ad77f59db7eb04bb57d32ae0ce77a23a423cd0136529a09aab8615641"
+  "services/api/ingestion/ingestion/validation.py": "sha256:0b5528935209e6b9a75c0c58ece7cde8e5097ed13b5e199d3d76853ace69b2ee"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
   "services/api/repositories/repos.py": "sha256:18ffc6df66bfc4484aaab821c791fda4579382634a23066ddbe5276d4408ec04"

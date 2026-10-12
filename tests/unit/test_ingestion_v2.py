@@ -412,6 +412,73 @@ def test_v2_route_audit_reference_joins_request_and_batch():
         assert audit["metadata"]["accepted_count"] == 1
 
 
+def test_v2_batch_joins_meter_audit_and_authoritative_consent_evidence(monkeypatch):
+    with fresh(enabled=True) as b:
+        object.__setattr__(
+            b.settings,
+            "consent_authority",
+            dataclasses.replace(
+                b.settings.consent_authority,
+                authoritative_consent_enforcement_enabled=True,
+            ),
+        )
+        _enable_observation_envelope(b)
+        consent = importlib.import_module("governance.consent.authority")
+        _run(consent.ConsentReceiptRepository().record(
+            "receipt-route-proof", "tenant-proof", "analytics", "granted",
+            subject_id="user-proof",
+        ))
+
+        body = _mk_body(b.batch, ["correlated-event"], event_type="track")
+        body.consents = ["analytics"]
+        body.batch[0] = body.batch[0].model_copy(update={
+            "userId": "user-proof",
+            "context": b.batch.EventContext(consent={"analytics": True}),
+        })
+        request_id = "req-route-correlation-proof"
+        tenant = _FakeTenant("tenant-proof")
+        tenant.user_id = "user-proof"
+        request = _FakeRequest(tenant)
+        request.state.request_id = request_id
+        request.state.context = SimpleNamespace(
+            tenant_id="tenant-proof", correlation_id=request_id
+        )
+
+        meter_calls = []
+
+        async def meter(*_args, **kwargs):
+            meter_calls.append(kwargs)
+            return SimpleNamespace(
+                metered_event_id="usage-event-proof",
+                evidence_id="usage-evidence-proof",
+            )
+
+        monkeypatch.setattr(b.batch, "meter_family_usage", meter)
+        security_context = importlib.import_module("governance.security.request_context")
+        security_context.bind_current_request(request)
+        try:
+            response = _run(
+                b.batch.ingest_batch(request, body, producer=_FakeProducer())
+            )
+        finally:
+            security_context.bind_current_request(None)
+
+        assert response["accepted"] == 1
+        assert response["requestId"] == request_id
+        assert response["usageEventId"] == "usage-event-proof"
+        assert response["usageEvidenceId"] == "usage-evidence-proof"
+        assert meter_calls[0]["metadata"] == {"correlation_id": request_id}
+
+        audit = b.repos._IN_MEMORY_STORES["security_audit_events"][response["auditEventId"]]
+        assert audit["resource_id"] == response["batchId"]
+        assert audit["correlation_id"] == request_id
+        assert audit["metadata"]["usage_event_id"] == response["usageEventId"]
+        assert audit["metadata"]["usage_evidence_id"] == response["usageEvidenceId"]
+
+        bronze = next(iter(b.bronze_store.values()))
+        assert bronze["payload"]["observation_envelope"]["privacy"]["consent_snapshot"] == "receipt-route-proof"
+
+
 def test_v2_route_dedupes_repeated_ids_in_request():
     with fresh(enabled=True) as b:
         tenant = _FakeTenant("tenant-x")

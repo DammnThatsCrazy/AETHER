@@ -25,12 +25,12 @@ reviewed_source_commits:
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:5c1138601e7f849d2a1b6649957c32607fc1aacd25667bf910de280a4db4db0c"
   ".github/workflows/staging-lifecycle.yml": "sha256:ab0d86125cd2be277ba7e0a40a4dbc9fdd5db1480ff1c7cb816adf4874a55ae9"
-  ".github/workflows/terraform-promote.yml": "sha256:68788bf092927d34ca9228da38d64989c8360bde77b087945cf17e29e95e73de"
+  ".github/workflows/terraform-promote.yml": "sha256:4542ef7fd2d140d2cbcb2a02b232c22f1473bbfdcad250cbc81999c468bcb26c"
   "infra/aws/terraform/modules/ecs/main.tf": "sha256:a1b701301f9ebb1339cfa1ae1f07f24bc7c8b1f36c47d38b52f8e5050ccfe7b4"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "services/api/repositories/repos.py": "sha256:18ffc6df66bfc4484aaab821c791fda4579382634a23066ddbe5276d4408ec04"
-  "services/api/tenancy/auth/routes.py": "sha256:35dd9ffc6fe501bed1346c37fc1f455e65b9494f0d041b2ec9e70fcb930fe3d1"
+  "services/api/tenancy/auth/routes.py": "sha256:33de1a272f8eaf4ee635f01044703bf25888d45d27c5623ee5ca3bbbe003c9a5"
 ---
 
 # AETHER first-admin bootstrap

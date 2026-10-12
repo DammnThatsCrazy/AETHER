@@ -18,9 +18,12 @@ reviewed_source_commits:
 source_hashes:
   "services/api/ingestion/imports/commit.py": "sha256:8c9a53efb8ff51e7a28a301ca2d047d91c8732bc49782608ac547c1f596a9cf8"
   "services/api/ingestion/imports/kyber_routes.py": "sha256:72539f001ee0853b94b1c2abce5d8f2eb98231b2676bf124e6f9c2e84bdeb749"
-  "services/api/ingestion/imports/service.py": "sha256:091068a1132e6ef688f14830ec2381d082165afba5e875f4b09a21f4d280e8ce"
-  "services/api/repositories/imports_repo.py": "sha256:ba56c9a87416921bc39fd169df7f13a4ef1565947a15761089d11b4295c46870"
+  "services/api/ingestion/imports/rights_admission.py": "sha256:32d5bcdec7c74afc55e6c86e45b89f6930169a912bf185099d90fe27db3f3f7a"
+  "services/api/ingestion/imports/service.py": "sha256:6d9c346282442e8af10b462367ebb187ca0d574521fe5f13b2f68152aeeacd98"
+  "services/api/repositories/graph_mutation_ledger.py": "sha256:b347022c798f92360a89fb13cae1a2086792510cd37cb9b92c3ddc9988640f31"
+  "services/api/repositories/imports_repo.py": "sha256:6bdc0f6089e66d63b93456e5cf99b79653b896a338e3548f19551c48ae3c4f0e"
   "services/api/shared/graph/graph.py": "sha256:07c5a70eb15c7924fad58de63eba5d3d984b6eac21c328cd3072de0f77ee14fd"
+  "services/api/shared/graph/mutation_gateway.py": "sha256:a8ca036dfcd27dc2627ff4643c529a3c024719d087f8da339e9e8382d228ffa9"
 ---
 
 # Runbook — Tenant Import Failures

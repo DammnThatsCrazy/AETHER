@@ -956,13 +956,16 @@ def check_alarm_names(
 def check_service_cardinality(
     r: Reporter, results: list[dict[str, Any]], profile: str,
     runtime: dict[str, Any], resources: list[dict[str, Any]],
+    plan: dict[str, Any],
 ) -> None:
     """The ECS service count must equal the canonical runtime topology.
 
     `explicit_runtime_role_services` is only `at_least_one` in the contracts
     file, which any topology satisfies. The real invariant lives in
     config/runtime_deployment.yaml: exactly one ECS service per declared
-    service, plus the dedicated ML service iff `remote_ml`.
+    service, plus the dedicated ML service iff `remote_ml`. The separate
+    customer Access Kit MCP service is counted only when the plan explicitly
+    enables it and must use its dedicated Terraform module address.
 
     Both matrix schemas are accepted. Schema v2 declares a `services:` map
     (whose `execution_mode` may pack several logical roles into one task);
@@ -989,7 +992,37 @@ def check_service_cardinality(
         return
 
     remote_ml = bool(entry.get("remote_ml"))
-    expected = len(units) + (1 if remote_ml else 0)
+    variables = plan.get("variables") or {}
+    access_mcp_enabled = bool(
+        ((variables.get("enable_access_mcp") or {}).get("value"))
+    )
+    expected_access_mcp_address = "module.access_mcp[0].aws_ecs_service.this"
+    access_mcp_addresses = sorted(
+        res["address"] for res in resources
+        if res["type"] == "aws_ecs_service"
+        and res["address"].startswith("module.access_mcp")
+        and is_active(res)
+    )
+    expected_access_mcp_addresses = (
+        [expected_access_mcp_address] if access_mcp_enabled else []
+    )
+    if access_mcp_addresses != expected_access_mcp_addresses:
+        message = (
+            "ecs services: customer Access Kit MCP enablement/address mismatch; "
+            f"var.enable_access_mcp={access_mcp_enabled}, "
+            f"observed={access_mcp_addresses!r}, "
+            f"expected={expected_access_mcp_addresses!r}"
+        )
+        r.fail(message)
+        _record(results, "cardinality.access_mcp_service", False, message,
+                enabled=access_mcp_enabled, observed=access_mcp_addresses,
+                expected=expected_access_mcp_addresses)
+    else:
+        _record(results, "cardinality.access_mcp_service", True,
+                "customer Access Kit MCP service matches its explicit Terraform opt-in",
+                enabled=access_mcp_enabled)
+
+    expected = len(units) + (1 if remote_ml else 0) + int(access_mcp_enabled)
     mode = str(entry.get("execution_mode") or "unspecified")
     services = [
         res for res in resources if res["type"] == "aws_ecs_service" and is_active(res)
@@ -2053,7 +2086,7 @@ def check(argv: list[str] | None = None) -> int:
                     expensive_types(price_book))
     check_required(r, results, policy, contracts, rule_summary)
     check_alarm_names(r, results, policy, contracts, resources)
-    check_service_cardinality(r, results, profile, runtime, resources)
+    check_service_cardinality(r, results, profile, runtime, resources, plan)
     check_staging_autoscaling_capacity_state(r, results, profile, runtime, plan)
     check_network_egress(r, results, profile, contracts, plan, resources)
     check_static_frontends(r, results, profile, runtime, contracts, summary)

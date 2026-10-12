@@ -12,8 +12,8 @@ since_version: "0.1.0"
 
 **Program:** Source Intake and Access Kit Convergence<br>
 **Target branch:** `Development`<br>
-**Delivery shape:** one stacked branch and one draft PR; work orders become ordered commits in that PR<br>
-**Baseline:** `Development` at `b3cc28093` (2026-10-11)<br>
+**Delivery shape:** one stacked branch and one PR, kept draft during implementation and promoted when the review evidence is complete; work orders become ordered commits in that PR<br>
+**Baseline:** current `Development`, including PR #771 (merged into this stack by `af50af8a0` on 2026-10-11)<br>
 **Architecture anchors:** merged PR #734 (architecture reset and tenant-safe runtime) and merged PR #733 (universal connector runtime)
 
 ## 1. Objective
@@ -70,7 +70,7 @@ PR #734 and PR #733 are merged into `Development`. They provide substantial arch
 | Rights and identity | Rights decisions, source namespaces, identity resolution, and governed mutation primitives exist | Preserve authority decisions and references across source-to-graph handoffs; do not decide rights or canonical identity in clients |
 | SDKs | Web, Server, React Native, iOS, and Android packages exist | Close contract and productization gaps with a shared cross-platform acceptance surface; package presence is not device or tenant graph proof |
 | Aether Mobile | The first-party app has a client, navigation, projection, and continuation shell | Keep this as a graph consumer; beta readiness remains a separate product release gate from customer SDK ingestion |
-| REST, MCP, CLI, Access Kit | Auth, policy, capability, billing, graph, and domain APIs exist in parts; this feature stack includes observed-capability reads, site-bound intake, bounded entity reads, and a safe account-context projection on the experimental CLI/local MCP bridge | Compose existing authorities behind usable, consistent calls. Do not expose new authority by adding a protocol adapter |
+| REST, MCP, CLI, Access Kit | Auth, policy, capability, billing, graph, and domain APIs exist in parts; this feature stack adds observed-capability reads, site-bound intake, bounded entity reads, headless CLI credentials, local stdio MCP, and a stateless bearer-authenticated hosted MCP with an opt-in AWS Fargate deployment | Compose existing authorities behind usable, consistent calls. Do not expose new authority by adding a protocol adapter |
 | Live end-to-end evidence | Repository-level contracts exist; provider-backed, customer SDK, and beta/device proof must be evaluated independently | Record exact evidence and limitations; never equate accepted ingestion or a passing unit check with graph or beta readiness |
 
 ### Delivery disposition for this PR
@@ -86,7 +86,7 @@ package presence or mocked tests.
 | CSV import rights admission | Commit requires allowed, durable Rights Authority decisions for `tenant_lake`, `write_tenant_graph`, and `tenant_insights`; source grant is checked and held through writes; decision refs are retained on attempts, Bronze, Silver, and governed graph mutations. Rights denials fail before writes. A graph-ledger durability failure after a shadow projection leaves the commit failed and retryable; recovery records the existing commit-owned edge without duplicating it. | Run the migration and accepted/denied import against a live tenant with configured grants; local tests do not prove deployed policy or production data behavior. |
 | SDK/mobile evidence | Web, Server, and React Native suites exercise the shared wire fixture; React Native's 127 tests and TypeScript package build pass. `swift build` passes for the available macOS target. iOS and Android fixture tests exist but are not runnable here. | Xcode is not installed (`xcode-select` points to Command Line Tools and `simctl` is absent); `swift test` fails resolving `XCTest`. Android has no Java runtime, Gradle, Android SDK, or ADB. Device install, store beta, and tenant graph hydration need those toolchains, credentials, and a live tenant. |
 | Customer CLI onboarding | Auth0 Device Authorization login, `session_required` Aether session exchange, OS keyring storage, session context/list/revoke/logout, and local MCP reuse of that session are implemented. Reusable API-key fallback is refused. | Configure the Auth0 Native client and API audience, enable human sessions, and prove a real invited user login/session revoke and OS keyring on supported platforms. Tenant switching remains owner-gated because no membership chooser contract exists. |
-| Remote MCP | Local stdio protocol uses the pinned official SDK, exposes bounded supported tools, and reuses the existing API/session authorities. The observe output schema now declares and validates optional API-returned usage, evidence, and audit IDs. | Remote HTTP transport, delegated client registration/auth, and host conformance need an owning product runtime/auth contract and an actual supported remote host. IAM/Auth must define OAuth resource discovery plus caller-bound token issuance or introspection returning principal, tenant membership, audience, scopes, expiry, and revocation. Opaque `sess_...` credentials are not treated as if they had OAuth claims. `tfmcp` remains operator infrastructure and is not repurposed. |
+| Remote MCP and cloud CLI | Local stdio and stateless Streamable HTTP MCP use the pinned official SDK and existing API/session authorities. Remote requests validate an Aether bearer on every call; observe is exposed only with the request's site-bound publishable key and site ID. A dedicated optional AWS Fargate/ECR/ALB service, hosted linux/amd64 image build and runtime smoke, image publisher with completed-scan gate, and reviewed Terraform plan/apply path are implemented. CLI accepts an explicit Aether API key or revocable human session from an authorized CloudShell, CI, or ECS runner without an OS keyring. The npm package is configured for public distribution but remains unpublished; the ECR image is Aether-account-only. | The hosted image build has not run for this PR yet; no AWS image has been published and no AWS plan has been applied. Actual endpoint/client conformance needs an enabled production account and supported remote host. OAuth resource metadata, dynamic client registration, authorization-code login, token exchange, and a customer CLI release channel still need their release/identity owners. tfmcp remains operator infrastructure and is not repurposed. |
 | Request-to-usage correlation | Batch responses join the middleware request ID to the actual usage event/evidence IDs and, when the existing audit write succeeds, to an `auditEventId` whose audit row also carries the authenticated request correlation. Allowed authoritative consent is stored as the actual receipt reference in each accepted observation's gateway-stamped Envelope-B privacy block. Access Kit validates and preserves API-returned audit, usage, and evidence references. | The ordinary `WRITE` permission check still has no durable authorization-decision ID; it is not represented as a Rights Authority decision. General billing/payment receipts remain owned by their billing/payment flows. Audit persistence is best-effort after ingestion, and no missing IDs are synthesized. |
 | Live tenant/provider proof | Local SDK, import, provider-admission, batch, CLI, MCP, and auth route contracts are covered by focused tests below. | Real provider credentials, customer tenant/API credentials, and a separately authenticated graph read are required to prove provider-to-graph hydration, tenant isolation, and time-to-value. No such credentials are configured in this environment. |
 
@@ -100,12 +100,12 @@ implemented surface and its still-open external proof.
 | WO-2 | Cross-platform contract evidence complete where tools are available; device proof deferred | Web 382, Server 97, and React Native 127 tests pass and exercise the shared wire fixture; the React Native package build passes. The iOS XCTest target cannot resolve `XCTest`; Android Gradle/ADB are unavailable. The Swift package builds for the available macOS target. Device/store beta and tenant graph hydration remain separate gates. |
 | WO-3 | Supported interaction normalization complete; invocation deferred | Query and observe outcomes share one response envelope. A generic invoker waits for an owning capability execution API, grant model, and server authorization contract. |
 | WO-4 | Supported API surface complete | Existing entity list/detail, account context, capability inventory, and canonical batch intake are composed with fixed projections and bounds. Broad graph search, export, and unsupported queries are not claimed. |
-| WO-5 | Local MCP slice complete; remote MCP deferred | Local stdio initialize/tool listing, read and observe handlers, session reuse, and error contracts are tested. The Access Kit suite passes 44 tests, including schema validation of server-issued usage, evidence, and audit references. Remote transport needs an owning delegated-auth/client identity contract and host conformance evidence. |
-| WO-6 | CLI login and local onboarding implemented; live configuration and tenant selection deferred | Auth0 Device Authorization, revocable Aether session storage, context/list/revoke/logout, and safe reads/intake are implemented. Live Auth0/API setup and OS keyring proof remain; tenant switching needs a supported membership-selection API. |
+| WO-5 | Local and hosted MCP implementation complete; deployment and host proof deferred | Stdio and stateless Streamable HTTP use per-request Aether bearer validation and existing tenant APIs; hosted tools remain bounded, and observe remains site-bound. The Access Kit suite passes 52 tests. A dedicated opt-in AWS service, ECR publisher with completed-scan/HIGH/CRITICAL gate, and a hosted `linux/amd64` image build/health/CLI smoke workflow are implemented; the new hosted workflow has not yet run for this PR. The immutable image pin, ALB path, health checks, and reviewed promotion inputs are implemented. Repository and service ownership are limited to the `production-scale` state; OAuth/DCR and host-specific conformance remain identity/deployment gates. |
+| WO-6 | Interactive onboarding and headless cloud CLI implemented; live identity configuration deferred | Auth0 Device Authorization, revocable Aether sessions, native keyring storage, and session management support interactive local use. Explicit `AETHER_API_KEY` or `AETHER_SESSION_TOKEN` supports non-interactive CloudShell/CI/ECS use. Live Auth0/API setup and native keyring proof remain; tenant switching needs a supported membership-selection API. |
 | WO-7 | Supported request, consent, usage, and audit references joined | Batch request IDs correlate to returned usage/evidence IDs and tenant audit rows; accepted observations preserve the real allowed consent receipt in gateway-stamped Envelope-B. Durable per-request authorization decisions and general billing/payment receipt joins remain owner-gated. |
 | WO-8 | Local proof complete for supported paths; live/release proof deferred | Exact focused results and toolchain limitations are listed under WO-8. Customer tenant, device, provider, hosted PR, and release evidence remain independent gates. |
 
-This work starts from `Development` after #734/#733. PR #771 is an unrelated open draft and is not the base of this program.
+PR #771 has merged into `Development` and is included in the feature branch by merge commit `af50af8a0`. Source-linked documentation and generated artifacts have been reconciled against that base. This stack includes an opt-in AWS-hosted MCP service and explicit headless CLI credentials for CloudShell, CI, and ECS; it has not been deployed to an AWS account.
 
 ## 3. Authority rules
 
@@ -282,9 +282,30 @@ cover schemas, projections, bounds, errors, initialization, and tool listing.
 The observe result contract includes optional `usageEventId`,
 `usageEvidenceId`, and `auditEventId`; a structured-output test verifies those
 API-issued values survive schema validation.
-Remote MCP HTTP, delegated client registration, host conformance, live tenant
-isolation, and customer beta evidence remain deferred to an owning runtime/auth
-contract and supported remote host.
+The hosted service provides stateless Streamable HTTP at
+`POST /v1/access/mcp`, requires an Aether API key or revocable human session on
+every protocol request, validates that identity through `/v1/me`, and forwards
+the same request-scoped credential to existing tenant APIs. Request-scoped
+site credentials may add the bounded `observe` tool. The image, Dockerfile,
+health probes, dedicated ECR/Fargate/ALB Terraform module, immutable publisher,
+and inputs on the reviewed Terraform plan/apply workflow make the service
+deployable to AWS. The promotion runbook is
+[`ACCESS_KIT_MCP_DEPLOYMENT.md`](../../../infra/aws/terraform/ACCESS_KIT_MCP_DEPLOYMENT.md).
+The service remains off by default, is excluded from staging/demo/preview until
+their lifecycle contracts own it, and has not been published or applied to AWS
+from this PR. A local `linux/amd64` image build (11.36 MB context), container
+health/readiness check, and headless CLI smoke succeeded on Apple Silicon under
+Docker emulation. The hosted container workflow is in place but has not run.
+The new OIDC image publisher is restricted to `main` and the protected
+`production` GitHub environment; its AWS role, ECR repository creation, and
+image publication remain deployment prerequisites. The package is configured
+for public npm distribution and has a protected manual release workflow, but
+no version has been published. OAuth authorization-server metadata, dynamic
+client registration, token exchange, live AWS readiness, live tenant isolation,
+and a supported remote-host conformance run remain specific continuation
+gates. Remote access today requires a host that can securely attach a
+pre-provisioned Aether API key or session bearer. `tfmcp` stays the separate
+privileged operator service.
 
 ### WO-6 — Customer CLI adapter
 
@@ -303,12 +324,20 @@ implemented. Commands include bounded entity/account/capability reads,
 site-bound one-event intake, Auth0 Device Authorization login, revocable
 human-session context/list/revoke/logout, and native OS credential storage.
 The SSO exchange explicitly requires a human session and refuses the reusable
-API-key fallback. Local MCP can reuse the same stored session. Live Auth0
-configuration, enabled API human sessions, invited-user login, and native
-keyring proof remain deployment gates. Tenant switching remains target-only
-until the account/session authority exposes membership selection. A combined
-`doctor` command remains excluded because health, launch readiness, and usage
-have separate owners and semantics.
+API-key fallback. Local MCP can reuse the same stored session. Non-interactive
+commands also accept one explicit `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`,
+which supports CloudShell, CI, and ECS task use without an OS keyring or
+interactive prompt. The package is configured for public npm distribution with
+a main-only release workflow that checks for required npm-production
+reviewers, plus a standard global install command. The package remains
+unpublished and the required environment is not configured. Headless AWS and
+other cloud installations therefore become available after the reviewed npm release; the
+reviewed Aether-account ECR image also runs the CLI in authorized Aether AWS
+jobs. Live Auth0 configuration, enabled API human sessions, invited-user
+login, and native keyring proof remain deployment gates. Tenant
+switching remains target-only until the account/session authority exposes
+membership selection. A combined `doctor` command remains excluded because
+health, launch readiness, and usage have separate owners and semantics.
 
 ### WO-7 — Receipts, telemetry, and developer handoff
 
@@ -322,8 +351,9 @@ have separate owners and semantics.
 
 **Acceptance:** a call can be correlated across request, authorization, usage/audit, receipt, and result where those authorities support it; missing billing or observability integration is called out, not claimed complete.
 
-**Current stack status:** the supported request-to-usage join is implemented.
-Both batch handlers pass the middleware request ID into canonical metering
+**Current stack status:** the request-to-usage, audit, and consent receipt
+code paths are implemented, but the evidence remains split across component
+tests. Both batch handlers pass the middleware request ID into canonical metering
 correlation metadata and return the real meter event and evidence IDs when the
 metering owner supplies them. After the batch is accepted, the route writes an
 `ingestion.batch` row to the existing tenant Audit Ledger with the actual batch
@@ -340,7 +370,12 @@ the gateway-stamped Envelope-B privacy block. Denied or unreceipted consent
 does not receive a fabricated reference. This is consent evidence, not a
 durable per-request authorization decision. The general `WRITE` permission
 check still lacks a durable decision ID, and billing/payment receipts remain
-with their owning flows; neither is synthesized by the adapter.
+with their owning flows; neither is synthesized by the adapter. A V2 route
+test joins middleware correlation, the actual consent receipt, metering event
+and evidence references, the persisted audit row, and response IDs using a
+deterministic metering stub. Access Kit forwarding is covered separately. A
+full external HTTP/MCP exchange against live metering and a durable per-request
+WRITE-decision identity remain partial.
 
 ### WO-8 — Cross-surface proof and readiness record
 
@@ -354,8 +389,9 @@ with their owning flows; neither is synthesized by the adapter.
 
 **Acceptance:** all claims map to retained evidence; no production, certification, customer-beta, or broad merge-readiness claim is made without its canonical release/PR evidence.
 
-**Current stack status:** focused local evidence is complete for the supported
-surface. Current change-specific results: Access Kit 44 tests, CSV import
+**Current stack status:** focused local evidence exists for the implemented
+surface, but cross-authority and deployed end-to-end acceptance is incomplete.
+Current change-specific results: Access Kit 52 tests, CSV import
 commit 23 tests, and graph mutation gateway 18 tests. Earlier integrated
 results on this stack include Web SDK 382, Server SDK 97, and React Native SDK
 127 tests; 90 combined tests across CSV import/Silver projection, V1/V2 batch
@@ -367,18 +403,32 @@ macOS target pass. `swift test` fails because the installed Command Line Tools
 cannot resolve `XCTest`; full Xcode and `simctl` are unavailable. Android has
 no Java runtime, Gradle, Android SDK, or ADB.
 
-The full local `verification-disposition` run at `32bb77cb1` selected 46 suites
-and recorded 58 passing checks. Its sole failed check was the Docker-backed
-integration lane, which stopped before tests because Docker Desktop was not
-running. After starting Docker Desktop, `make integration-durable` passed all 9
-tests in 21.79 seconds. The aggregate artifact remains `FAILED`; no single
-aggregate PASS was recorded. No hosted checks were reported for this PR before
-the current source edits; read hosted status after finalization. The final
-`make docs-check` passed all 10 gates with
-the project virtualenv, including idempotency across 42 generated and
-sync-managed files and strict source-linked documentation drift. No live Auth0
-setup, customer tenant/provider credentials, remote MCP host, or mobile
-device/store environment is available.
+The latest local `verification-disposition` selected 46 suites and executed 42
+suite runs: 41 passed and the Docker-backed integration lane failed before
+tests because Docker Desktop's socket was unavailable. Its check summary was 58
+passing checks and one failed integration check. In a separate run after Docker
+Desktop was started, `make integration-durable` passed all 9 tests in 21.79
+seconds; the aggregate was not rerun with Docker available, so no aggregate
+PASS is claimed. A fresh `make integration-durable` retry could not start because
+the Docker daemon socket was unavailable again. The container context filter
+has since reduced the context from an initial 946 MB to 11.36 MB. The actual
+`linux/amd64` image build, `/healthz` and `/readyz` runtime smoke, and headless
+CLI `--help` passed locally on Apple Silicon using Docker emulation. The
+GitHub-hosted container job is configured but has not yet run. The AWS image
+publisher and public npm release workflows are configured but were not
+executed; no ECR image was published and no Terraform plan was applied. AWS
+CLI authentication was refreshed, but the selected principal is the account
+root user; the account has staging roles and no production deployment or image
+publisher role, so no AWS mutation was attempted. The GitHub repository also
+has no production or npm-production environment with release reviewers.
+This stack also passed the focused Access Kit suite (52
+tests), CSV import commit suite (23), graph mutation gateway suite (18), the
+project's selected Python suites (203), Terraform plan tests (18),
+`terraform fmt -check -recursive`, and `terraform validate`. `make docs-check`
+passed all 10 gates with the project virtualenv, including idempotency across
+42 generated and sync-managed files and strict source-linked documentation
+drift. No live Auth0 setup, customer tenant/provider credentials, remote MCP
+host, AWS apply credentials, or mobile device/store environment is available.
 Therefore live cross-tenant denial, tenant/provider-to-graph hydration, device
 lifecycle, remote host conformance, customer beta, and release readiness remain
 unproven until their specific environments are supplied.

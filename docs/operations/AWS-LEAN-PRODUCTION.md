@@ -27,17 +27,17 @@ reviewed_source_commits:
     reason: "Reviewed the linked root main.tf change; it updates the Auth0 section comment only. The dedicated Native CLI client change does not alter lean AWS topology, deployment lane, or runtime settings described here."
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:5c1138601e7f849d2a1b6649957c32607fc1aacd25667bf910de280a4db4db0c"
-  ".github/workflows/terraform-promote.yml": "sha256:68788bf092927d34ca9228da38d64989c8360bde77b087945cf17e29e95e73de"
+  ".github/workflows/terraform-promote.yml": "sha256:4542ef7fd2d140d2cbcb2a02b232c22f1473bbfdcad250cbc81999c468bcb26c"
   "config/deployment_profiles.yaml": "sha256:77d37f2c71472b5d644da32636bb68948263250739b62b621502cdfb09797475"
   "config/runtime_deployment.yaml": "sha256:ba7bd71d79e605a88076b6ea745582dce9c4bff38442ebd5d327cfee9bbf7284"
   "config/terraform_resource_contracts.yaml": "sha256:1f08c04dae8931f845c7918328504f748a9f643bc806670a32b644eb8231baca"
   "infra/aws/terraform/DECOMMISSION.md": "sha256:d6b05d282e02fcd6840078a75312165ca7a808f5344cc9e05f2eb234dcef7238"
-  "infra/aws/terraform/main.tf": "sha256:f170279d27753b2567c5229720e12dd054ecbc345ad7afa42fda62319cba7798"
+  "infra/aws/terraform/main.tf": "sha256:544d3d944840a88e3d6302f38d43b07eadcc0cbfbcb55672f3d152993696756d"
   "infra/aws/terraform/moved.tf": "sha256:aec15de07e356364018e3bdf09fdb6196d252bdb4e0451212f5b6a27a7b26816"
   "infra/aws/terraform/profiles.tf": "sha256:c197af7ebf1556be22a70dbf05c4ba85f5f93a2dd322dc39a42442f27226a89d"
   "infra/aws/terraform/profiles/production-lean.tfvars": "sha256:ba173dfc337349057b0d4f02d8be3e3c6d8d2ef92408e76b29166a881a5c13d2"
-  "infra/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:a2332459163543d270b1c7a0bb6157fdd5d11e67f600588eb1df425593f351fb"
-  "infra/aws/terraform/variables.tf": "sha256:a2903e0b695041ac8c457ed97683a904829c134dcfe888fdedf255a745b7dda8"
+  "infra/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:ff4cb51baf25e62b8df09757f677685ff998cf094f6331ac8a4f06afb06f0b28"
+  "infra/aws/terraform/variables.tf": "sha256:c19d9528adbb14d176471f96a9d74a2ad14dbc72fb5863731d19d21c451c2a38"
 ---
 
 # AWS Lean Production
@@ -296,16 +296,27 @@ so an already-applied RDS instance can be adopted and retired through
 
 ## Cost
 
-Modelled fixed baseline: **USD 187.13/month**, inside the USD 200 hard ceiling
-and USD 37.13 over the USD 150 target. That deviation is reviewed and accepted;
+Modelled fixed baseline: **USD 188.93/month**, inside the USD 200 hard ceiling
+and USD 38.93 over the USD 150 target. That deviation is reviewed and accepted;
 the full breakdown, the two rejected sizing levers, the estimation method and
 its assumptions are in [Cost Optimization](COST-OPTIMIZATION.md).
 
+The optional customer Access Kit MCP service adds approximately USD 18.02 per
+month for two continuously running 0.25-vCPU / 0.5-GiB Fargate tasks, plus
+about USD 0.50/month for 5 GiB of ECR storage. At roughly USD 207.45/month
+before variable ALB and CloudWatch charges, that option exceeds the fixed USD
+200 hard ceiling. The existing Terraform cost gate rejects the production-lean
+plan unless an active, time-bounded cost exception authorizes the overage.
+Access Kit MCP is currently constrained to the canonical `production-scale`
+state because that state owns the globally named ECR repository; this
+production-lean figure is a cost comparison, not an allowed deployment
+profile. See the [Access Kit MCP AWS deployment runbook](../../infra/aws/terraform/ACCESS_KIT_MCP_DEPLOYMENT.md).
+
 | Scenario | Fixed | Variable | Total |
 |---|---|---|---|
-| low — quiet pilot tenant | 187.13 | 15.25 | **202.38** |
-| expected — founding tenant | 187.13 | 107.22 | **294.35** |
-| high — 10× surprise | 187.13 | 955.40 | **1142.53** |
+| low — quiet pilot tenant | 188.93 | 15.25 | **204.18** |
+| expected — founding tenant | 188.93 | 107.22 | **296.15** |
+| high — 10× surprise | 188.93 | 955.40 | **1144.33** |
 
 **Operating range: roughly USD 200–300/month** at the traffic the commercial
 plan assumes. These are modelled figures from a pinned price book, not an
@@ -647,7 +658,7 @@ Verified in this repository, reproducibly:
 - `scripts/release/check_terraform_plan_policy.py` scores a real plan inventory
   against the contracts and passes.
 - `scripts/release/check_cost_model.py` prices that inventory at
-  USD 187.13/month fixed and passes with a target warning.
+  USD 188.93/month fixed and passes with a target warning.
 
 ## What is externally blocked
 

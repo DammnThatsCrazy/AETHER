@@ -23,6 +23,15 @@ action execution.
 
 Node.js 20 or later is required. In a workspace checkout, install the
 repository dependencies and invoke the package scripts or workspace binaries.
+After an approved npm release, install the customer CLI with
+`npm install --global @aether/access-kit`; `aether` is the installed command.
+Before that release, use the workspace checkout or the reviewed Aether AWS
+container image described below. Release validation is available through the
+manual `Publish Access Kit CLI and MCP` workflow; it defaults to a pack
+dry-run. Before enabling a public release, configure the npm-production
+environment with at least one required reviewer and an NPM_TOKEN. The
+workflow fails closed if that reviewer rule is absent. The package is not yet
+published.
 CLI login requires a persistent native credential store: macOS Keychain,
 Windows Credential Manager, or Linux Secret Service. Linux kernel keyutils is
 not used as a fallback because it does not persist across restarts.
@@ -70,6 +79,13 @@ site-bound ID separately. Aether resolves tenant scope from the key and checks
 the required `X-Aether-Site` header against the key's binding. Do not set or
 send a tenant ID override. The Access Kit uses a publishable key only for
 `POST /v1/batch`, never for reads.
+
+For hosted MCP, the bearer authenticates the MCP request and permits its
+tenant-scoped read surface; it does not grant observation-write authority or
+select the ingestion tenant. The separate `pk_` key and bound site ID are sent
+to `/v1/batch`, where the existing intake authority independently validates the
+site binding and resolves the tenant. Treat both credentials as sensitive and
+inject them from the remote host's secret manager.
 
 ## Agent access inventory
 
@@ -306,10 +322,10 @@ Readiness checks configuration, not live Aether API connectivity or a
 customer tenant. The remote handler verifies Aether reachability and the
 caller's current access on each MCP request.
 
-The same image includes the standalone CLI. In CloudShell or an ECS task, inject
-the credential through a secret-backed environment variable and run a CLI
-command directly; no interactive login or OS keyring service is required for
-explicit environment credentials:
+The same image includes the standalone CLI. In an Aether-authorized CloudShell
+or ECS task, inject the credential through a secret-backed environment
+variable and run a CLI command directly; no interactive login or OS keyring
+service is required for explicit environment credentials:
 
 ```sh
 docker run --rm \
@@ -323,16 +339,64 @@ human session. With a workspace checkout, install the locked package
 dependencies and run `node packages/access-kit/bin/aether.js ...`. Let the
 cloud secret manager inject the value; do not paste it into shell history,
 print it, write it to a file, or pass it as a literal command argument. The
-CLI does not log the credential.
+CLI does not log the credential. After public npm release, a customer-owned
+CloudShell, ECS task, Lambda container, CI job, or other Node 20+ cloud runner
+can install the CLI without ECR access:
+
+```sh
+npm install --global @aether/access-kit
+aether entities list --json
+```
+
+Configure `AETHER_API_KEY` or `AETHER_SESSION_TOKEN` using that platform's
+secret-injection mechanism. This package release is not complete until the
+Publish Access Kit CLI and MCP workflow publishes the reviewed version after
+its npm-production reviewer gate. For ECS, use the task definition's Secrets Manager/Parameter Store
+secret mapping instead of a plaintext environment value in the task
+definition.
+
+In a cloud runner with Docker and read access to the published ECR image, pin
+the same reviewed digest the MCP service uses and override its default HTTP
+server command to run the CLI:
+
+```sh
+AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+aws ecr get-login-password --region "$AWS_REGION" \
+  | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+ACCESS_KIT_IMAGE="${ECR_REGISTRY}/aether-access-mcp@${ACCESS_MCP_IMAGE_DIGEST}"
+docker run --rm \
+  -e AETHER_API_URL=https://api.aether.io \
+  -e AETHER_API_KEY \
+  "$ACCESS_KIT_IMAGE" node ./bin/aether.js entities list --json
+```
+
+Set `AWS_REGION`, `ACCESS_MCP_IMAGE_DIGEST`, and the Aether key through the
+runner's environment/secret manager. The image runs as the non-root `node`
+user. The MCP ECS service itself has no caller credential; do not add one to
+its task definition.
 
 ## Implementation status
 
-This is an experimental adapter slice. CLI Auth0 Device Authorization and
+The Access Kit is an alpha adapter slice. CLI Auth0 Device Authorization and
 revocable human-session storage are implemented, but saved profiles, tenant
 switching, token refresh, general query language, callable-capability registry,
 arbitrary external tool execution, graph traversal, graph mutation, and action
 dispatch remain outside scope. Entity reads are limited to the two existing
 tenant-scoped REST operations described above. The owning REST authorities
-remain the source of permission and policy decisions. Hosted MCP now provides
-a deployable stateless HTTP transport, but OAuth/DCR and a remotely registered
+remain the source of permission and policy decisions. Hosted MCP provides a
+deployable stateless HTTP transport, but OAuth/DCR and a remotely registered
 per-user delegated authorization flow remain external identity-owner work.
+The package is configured for public npm distribution but has not been
+published. Its release workflow validates and preserves the exact main-branch
+tarball; public publication requires the npm-production environment to have at
+least one required reviewer and an NPM_TOKEN, followed by an authorized
+release run. The AWS image is published to Aether's private ECR and
+is available only to principals granted pull access in that account. It is the
+runtime artifact for the hosted MCP service and Aether-owned AWS runners, not a
+cross-account distribution channel. Customer-owned AWS and other cloud jobs
+can install the npm package after release and inject a tenant API key or
+revocable session from their secret manager. The hosted MCP endpoint can be
+used from clients in any cloud after deployment by configuring its URL and
+pre-provisioned Aether bearer credential. It does not yet support OAuth
+discovery/login for hosts that require standard MCP OAuth onboarding.

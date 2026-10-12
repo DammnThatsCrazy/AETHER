@@ -1690,13 +1690,12 @@ run "vpc_endpoints_egress_mode_is_rejected" {
 # ---------------------------------------------------------------------------
 
 run "access_mcp_service_opt_in" {
-  # Apply uses the provider mocks only; this lets the assertion inspect the
-  # final task-definition image string after the mocked ECR URL is resolved.
-  command = apply
+  command = plan
 
   variables {
-    deployment_profile           = "staging"
-    environment                  = "staging"
+    deployment_profile           = "production-scale"
+    environment                  = "production"
+    ml_image_digest              = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
     network_egress_mode          = null
     aurora_min_acu               = 0
     aurora_max_acu               = 2
@@ -1714,12 +1713,8 @@ run "access_mcp_service_opt_in" {
       contains(keys(module.ecr.repository_urls), "aether-access-mcp"),
       length(module.alb.access_mcp_target_group_arns) == 1,
       module.access_mcp[0].desired_count == 2,
-      endswith(
-        module.access_mcp[0].image,
-        "@sha256:2222222222222222222222222222222222222222222222222222222222222222",
-      ),
     ])
-    error_message = "The opt-in Access Kit MCP plan must create its dedicated ECR repository, target group and bounded ECS service pinned to an immutable digest."
+    error_message = "The opt-in Access Kit MCP plan must create its dedicated ECR repository, target group and bounded ECS service pinned to an immutable digest in a persistent production-class profile."
   }
 }
 
@@ -1739,4 +1734,147 @@ run "access_mcp_service_requires_repository_and_digest" {
   }
 
   expect_failures = [var.enable_access_mcp]
+}
+
+run "access_mcp_service_is_rejected_on_staging" {
+  command = plan
+
+  variables {
+    deployment_profile      = "staging"
+    environment             = "staging"
+    network_egress_mode     = null
+    aurora_min_acu          = 0
+    aurora_max_acu          = 2
+    aurora_express_mode     = true
+    skip_aurora             = false
+    log_retention_days      = 3
+    enable_access_mcp       = true
+    access_mcp_image_digest = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  }
+
+  expect_failures = [var.enable_access_mcp]
+}
+
+run "access_mcp_service_is_rejected_on_preview" {
+  command = plan
+
+  variables {
+    deployment_profile      = "preview"
+    environment             = "preview"
+    network_egress_mode     = null
+    aurora_min_acu          = 0
+    aurora_max_acu          = 2
+    aurora_express_mode     = true
+    skip_aurora             = false
+    log_retention_days      = 3
+    enable_access_mcp       = true
+    access_mcp_image_digest = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  }
+
+  expect_failures = [var.enable_access_mcp]
+}
+
+run "access_mcp_repository_is_rejected_on_production_lean" {
+  command = plan
+
+  variables {
+    deployment_profile           = "production-lean"
+    environment                  = "production"
+    network_egress_mode          = null
+    aurora_min_acu               = 0
+    aurora_max_acu               = 2
+    aurora_express_mode          = true
+    skip_aurora                  = false
+    log_retention_days           = 3
+    enable_access_mcp_repository = true
+  }
+
+  expect_failures = [var.enable_access_mcp_repository]
+}
+
+run "access_mcp_path_cannot_overlap_tfmcp_route" {
+  command = plan
+
+  variables {
+    access_mcp_path     = "/McpOperator"
+    network_egress_mode = null
+    aurora_min_acu      = 0
+    aurora_max_acu      = 2
+    aurora_express_mode = true
+    skip_aurora         = false
+    log_retention_days  = 3
+  }
+
+  expect_failures = [var.access_mcp_path]
+}
+
+run "access_mcp_origin_rejects_invalid_hosts_and_ports" {
+  command = plan
+
+  variables {
+    access_mcp_allowed_origins = ["https://bad..example.test"]
+    network_egress_mode        = null
+    aurora_min_acu             = 0
+    aurora_max_acu             = 2
+    aurora_express_mode        = true
+    skip_aurora                = false
+    log_retention_days         = 3
+  }
+
+  expect_failures = [var.access_mcp_allowed_origins]
+}
+
+run "access_mcp_origin_rejects_zero_port" {
+  command = plan
+
+  variables {
+    access_mcp_allowed_origins = ["https://console.example.test:0"]
+    network_egress_mode        = null
+    aurora_min_acu             = 0
+    aurora_max_acu             = 2
+    aurora_express_mode        = true
+    skip_aurora                = false
+    log_retention_days         = 3
+  }
+
+  expect_failures = [var.access_mcp_allowed_origins]
+}
+
+run "access_mcp_origin_rejects_port_above_range" {
+  command = plan
+
+  variables {
+    access_mcp_allowed_origins = ["https://console.example.test:65536"]
+    network_egress_mode        = null
+    aurora_min_acu             = 0
+    aurora_max_acu             = 2
+    aurora_express_mode        = true
+    skip_aurora                = false
+    log_retention_days         = 3
+  }
+
+  expect_failures = [var.access_mcp_allowed_origins]
+}
+
+run "access_mcp_origin_accepts_dns_ipv4_and_valid_ports" {
+  command = plan
+
+  variables {
+    access_mcp_allowed_origins = [
+      "https://console.example.test",
+      "https://console.example.test:65535",
+      "https://192.0.2.10:1",
+    ]
+    network_egress_mode = null
+    aurora_min_acu      = 0
+    aurora_max_acu      = 2
+    aurora_express_mode = true
+    skip_aurora         = false
+    log_retention_days  = 3
+  }
+
+  assert {
+    condition     = length(var.access_mcp_allowed_origins) == 3
+    error_message = "Exact DNS and IPv4 HTTPS origins with no port or a valid 1–65535 port should be accepted."
+  }
 }

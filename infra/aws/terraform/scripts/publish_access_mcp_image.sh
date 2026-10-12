@@ -97,4 +97,9 @@ if [[ ! "$image_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
   exit 1
 fi
 
-printf '%s\n' "$image_digest"
+verified_digest="$(AWS_REGION="$aws_region" "$(dirname -- "${BASH_SOURCE[0]}")/verify_access_mcp_image_scan.sh" "$image_digest")"
+if [[ "$verified_digest" != "$image_digest" ]]; then
+  printf 'ECR scan verifier returned an unexpected digest.\n' >&2
+  exit 1
+fi
+printf '%s\n' "$verified_digest"
