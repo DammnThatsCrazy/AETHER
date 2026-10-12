@@ -261,8 +261,14 @@ readiness. The dedicated AWS Terraform service is opt-in, deploys only to the
 repository, uses an immutable image digest, and is routed separately from the
 privileged operator `tfmcp` service. The customer MCP task role has no workload
 AWS permissions. A local emulated `linux/amd64` image build and container
-health/readiness plus CLI smoke passed; a clean hosted build workflow is
-configured but has not run. The OIDC image publisher verifies that the
+health/readiness plus CLI smoke passed. The hosted container workflow also
+passed on PR #772 run
+[38206643725](https://github.com/DammnThatsCrazy/AETHER/actions/runs/38206643725)
+at head `ae66101c`, before the current local failure fixes were pushed. It
+verified package contents, built the `linux/amd64` image, and passed the
+container health, readiness, and headless CLI checks without AWS credentials.
+Neither the local nor hosted smoke published an image, applied Terraform, or
+started an ECS task. The OIDC image publisher verifies that the
 production GitHub environment has at least one required reviewer before
 waiting on its approval, and the reviewed plan/apply paths reject images
 without a completed clean ECR scan. The repository currently has no

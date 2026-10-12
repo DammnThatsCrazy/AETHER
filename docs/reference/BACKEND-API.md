@@ -23,6 +23,7 @@ reviewed_source_commits:
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
   - {'commit': 'fcfe08b7b', 'reason': 'Reviewed V1/V2 SDK batch observation-envelope parity. Both storage branches preserve the flat normalized event contract and add the same optional Envelope-B projection only when adoption is enabled; no route or response schema changed.'}
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
+  - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
   "services/api/actions/": "sha256:f5e9afb088d3a8f9e93bdd981db2b6dd1fc522c67d22d37b72d20d1b720791cb"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
@@ -31,7 +32,7 @@ source_hashes:
   "services/api/governance/": "sha256:88d555a3245092c8b9359f48213c260d0e370b82d615858a14c11ac744bd48a6"
   "services/api/graph/": "sha256:7372bf88ff18200edd21b53649b25098a9b1e1ec474a79ee36cd28a480093706"
   "services/api/identity/": "sha256:3899aca8a5fe95b1f975945913ebbd0cef920109649676c9b48b49fd6fcd2a1f"
-  "services/api/ingestion/": "sha256:912728dd12c03b0c591a0bbe51d44c1e0769f02322e331e6f101dd9ab3f62151"
+  "services/api/ingestion/": "sha256:f8792fdb52aa80d312f4e9dc4a8e29e6102fc65737d2783cef54fdc4d6bdc569"
   "services/api/intelligence/": "sha256:50d2fba35ca8b62431283aa909ae746d789f59dcf201dfb15ad297fd522f1a13"
   "services/api/journeys/": "sha256:5d7336fa8f43bb5107a9314f09a08c16132ba1c1cf1f57762344f55a1192608a"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
@@ -646,19 +647,23 @@ metering hook succeeds, it also returns the actual `usageEventId` and
 no accepted event was billable. The request ID is passed to the existing
 metering authority as correlation metadata. After intake completes, the route
 records an `ingestion.batch` event in the existing tenant Audit Ledger and
-returns its actual `auditEventId` when persisted. The audit row links the batch
-ID, outcome counts, available usage references, and authenticated request
-correlation. Because the observation may already be durable, audit persistence
-is best-effort and a missing `auditEventId` means no durable audit ID was
-returned; the server does not fabricate one.
+returns its actual `auditEventId` when persisted. When present, the
+`consentReceiptIds` response array contains only the real tenant-scoped receipt
+IDs used to admit accepted observations. The audit row links those references
+to the batch ID, outcome counts, available usage references, and authenticated
+request correlation. Because the observation may already be durable, audit
+persistence is best-effort and a missing `auditEventId` means no durable audit
+ID was returned; the server does not fabricate one.
 
 When authoritative consent allows an observation and provides a durable
-tenant-scoped consent receipt, the validation path preserves that actual
-receipt ID and purpose in the gateway-stamped Envelope-B privacy block.
-Denied or unreceipted consent receives no invented reference. These fields
-provide consent evidence, not a general authorization-decision or billing
-receipt. The ordinary `WRITE` permission check still has no durable decision
-ID, and billing/payment receipts remain owned by their existing flows.
+tenant-scoped consent receipt, validation preserves that actual receipt ID and
+purpose in the normalized event. With Envelope-B enabled, the ID is also
+present in its privacy block; when the universal ingress gateway is enabled,
+that projection is validated and stamped by the gateway. Denied or unreceipted
+consent receives no invented reference. These fields provide consent evidence,
+not a general authorization-decision or billing receipt. The ordinary `WRITE`
+permission check still has no durable decision ID, and billing/payment receipts
+remain owned by their existing flows.
 
 ---
 

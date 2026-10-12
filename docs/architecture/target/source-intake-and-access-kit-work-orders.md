@@ -92,11 +92,11 @@ lifecycle operation.
 | Carry-forward item | Delivered on this stack | Remaining proof or owner gate |
 |---|---|---|
 | CSV import rights admission | Commit requires allowed, durable Rights Authority decisions for `tenant_lake`, `write_tenant_graph`, and `tenant_insights`; source grant is checked and held through writes; decision refs are retained on attempts, Bronze, Silver, and governed graph mutations. Rights denials fail before writes. A graph-ledger durability failure after a shadow projection leaves the commit failed and retryable; recovery records the existing commit-owned edge without duplicating it. | Run the migration and accepted/denied import against a live tenant with configured grants; local tests do not prove deployed policy or production data behavior. |
-| SDK/mobile evidence | Web, Server, and React Native suites exercise the shared wire fixture; React Native's 127 tests and TypeScript package build pass. `swift build` passes for the available macOS target. iOS and Android fixture tests exist but are not runnable here. | Xcode is not installed (`xcode-select` points to Command Line Tools and `simctl` is absent); `swift test` fails resolving `XCTest`. Android has no Java runtime, Gradle, Android SDK, or ADB. Device install, store beta, and tenant graph hydration need those toolchains, credentials, and a live tenant. |
+| SDK/mobile evidence | Web, Server, and React Native suites exercise the shared wire fixture; React Native's 127 tests and TypeScript package build pass. Hosted SDK Release Validation run [38206643718](https://github.com/DammnThatsCrazy/AETHER/actions/runs/38206643718) passed Android unit/release-build checks and iOS XCTest on an iPhone 17 Pro simulator. | The same hosted run's JavaScript job failed during `npm ci` before SDK tests; the workspace lockfile correction is local and awaits the next final hosted run. No physical-device install, customer beta, store distribution, or authenticated tenant graph hydration is proven. |
 | Customer CLI onboarding | Auth0 Device Authorization login, `session_required` Aether session exchange, OS keyring storage, session context/list/revoke/logout, and local MCP reuse of that session are implemented. Reusable API-key fallback is refused. | Configure the Auth0 Native client and API audience, enable human sessions, and prove a real invited user login/session revoke and OS keyring on supported platforms. Tenant switching remains owner-gated because no membership chooser contract exists. |
-| Remote MCP and cloud CLI | Local stdio and stateless Streamable HTTP MCP use the pinned official SDK and existing API/session authorities. Remote requests validate an Aether bearer on every call; observe is exposed only with the request's site-bound publishable key and site ID. A dedicated optional Aether-account AWS Fargate/ECR/ALB service, hosted `linux/amd64` build/runtime smoke, image publisher with completed-scan gate, and reviewed Terraform plan/apply path are implemented. CLI accepts an explicit Aether API key or revocable human session from an authorized CloudShell, CI, or ECS runner without an OS keyring. The npm package is configured for public distribution but remains unpublished; the ECR image targets Aether's AWS account, not arbitrary customer AWS accounts. | The hosted image build passed for this PR; no AWS image has been published and no AWS plan has been applied. Actual endpoint/client conformance needs the configured production account and a supported remote host. OAuth resource metadata, dynamic client registration, authorization-code login, token exchange, and a customer CLI release channel still need their release/identity owners. tfmcp remains operator infrastructure and is not repurposed. |
-| Request-to-usage correlation | Batch responses join the middleware request ID to the actual usage event/evidence IDs and, when the existing audit write succeeds, to an `auditEventId` whose audit row also carries the authenticated request correlation. Allowed authoritative consent is stored as the actual receipt reference in each accepted observation's gateway-stamped Envelope-B privacy block. Access Kit validates and preserves API-returned audit, usage, and evidence references. | The ordinary `WRITE` permission check still has no durable authorization-decision ID; it is not represented as a Rights Authority decision. General billing/payment receipts remain owned by their billing/payment flows. Audit persistence is best-effort after ingestion, and no missing IDs are synthesized. |
-| Live tenant/provider proof | Local SDK, import, provider-admission, batch, CLI, MCP, and auth route contracts are covered by focused tests below. | Real provider credentials, customer tenant/API credentials, and a separately authenticated graph read are required to prove provider-to-graph hydration, tenant isolation, and time-to-value. No such credentials are configured in this environment. |
+| Remote MCP and cloud CLI | Local stdio and stateless Streamable HTTP MCP use the pinned official SDK and existing API/session authorities. Remote requests validate an Aether bearer on every call; observe is exposed only with the request's site-bound publishable key and site ID. A dedicated optional Aether-account AWS Fargate/ECR/ALB service, hosted `linux/amd64` build/runtime smoke, image publisher with completed-scan gate, and reviewed Terraform plan/apply path are implemented. CLI accepts an explicit Aether API key or revocable human session from an authorized CloudShell, CI, or ECS runner without an OS keyring. The npm package is configured for public distribution but remains unpublished; the ECR image targets Aether's AWS account, not arbitrary customer AWS accounts. | Hosted image build [38206643725](https://github.com/DammnThatsCrazy/AETHER/actions/runs/38206643725) passed; no AWS image has been published and no AWS plan has been applied. Actual endpoint/client conformance needs the configured production account and a supported remote host. OAuth resource metadata, dynamic client registration, authorization-code login, token exchange, and a customer CLI release channel still need their release/identity owners. tfmcp remains operator infrastructure and is not repurposed. |
+| Request-to-usage correlation | A route-composition test now uses the real consent receipt repository, SDK validation and Bronze path, usage metering/evidence services, Audit Ledger, and batch response. `consentReceiptIds` carries only receipt IDs used for accepted events; the audit row joins those receipts to returned usage/evidence IDs and the request correlation. Access Kit preserves the refs in its interaction envelope. | This is local repository proof, not a hosted HTTP/database run. The ordinary `WRITE` permission check still has no durable authorization-decision ID; it is not represented as a Rights Authority decision. General billing/payment receipts remain owned by their billing/payment flows. Audit persistence remains best-effort after ingestion. |
+| Live tenant/provider proof | Focused local tests cover SDK, import, provider admission, local rights-to-graph adapter composition, batch correlation, CLI, MCP, and auth route contracts. The Shopify fixture path separately resolves a `tenant_graph` decision, writes through the real `ConnectorGraphWriter`/`GraphMutationGateway`, and verifies tenant-filtered local reads. | That adapter-composition test is not production provider-to-graph wiring. A reviewed commerce fact mapping, source-authority route provisioning, runtime writer integration, provider credentials, customer tenant/API credentials, and a separately authenticated graph read are still required to prove live hydration and time-to-value. |
 
 The work-order matrix below records the broader disposition for the
 implemented surface and its still-open external proof.
@@ -105,13 +105,13 @@ implemented surface and its still-open external proof.
 |---|---|---|
 | WO-0 | Complete | Current #734/#733 ownership and surface map reviewed against this tree; stale standalone source-governance runtime removed from scope. |
 | WO-1 | Local implementation complete; live policy proof deferred | V1/V2 SDK envelope parity, existing provider admission, and CSV import Rights Authority admission are implemented. The import commit regression suite passes 23 tests, including durable ancestry failure and retry recovery; deployed migration and active-grant behavior still need a live tenant. |
-| WO-2 | Cross-platform contract evidence complete where tools are available; device proof deferred | Web 382, Server 97, and React Native 127 tests pass and exercise the shared wire fixture; the React Native package build passes. The iOS XCTest target cannot resolve `XCTest`; Android Gradle/ADB are unavailable. The Swift package builds for the available macOS target. Device/store beta and tenant graph hydration remain separate gates. |
+| WO-2 | Hosted simulator/emulator CI evidence complete; customer-device proof deferred | Web 382, Server 97, and React Native 127 tests pass and exercise the shared wire fixture; the React Native package build passes. Hosted run [38206643718](https://github.com/DammnThatsCrazy/AETHER/actions/runs/38206643718) passed iOS XCTest on an iPhone 17 Pro simulator plus Android unit/release-build checks. Its JavaScript job failed at dependency installation before SDK tests, now addressed in the lockfile. Physical-device, customer beta/store, and tenant graph hydration remain separate gates. |
 | WO-3 | Supported interaction normalization complete; invocation deferred | Query and observe outcomes share one response envelope. A generic invoker waits for an owning capability execution API, grant model, and server authorization contract. |
 | WO-4 | Supported API surface complete | Existing entity list/detail, account context, capability inventory, and canonical batch intake are composed with fixed projections and bounds. Broad graph search, export, and unsupported queries are not claimed. |
-| WO-5 | Local and hosted MCP implementation complete; deployment and host proof deferred | Stdio and stateless Streamable HTTP use per-request Aether bearer validation and existing tenant APIs; hosted tools remain bounded, and observe remains site-bound. The Access Kit suite passes 52 tests. A dedicated opt-in Aether-account AWS service, ECR publisher with completed-scan/HIGH/CRITICAL gate, and a hosted `linux/amd64` image build/health/CLI smoke workflow are implemented; [the hosted workflow passed](https://github.com/DammnThatsCrazy/AETHER/actions/runs/38205347762). The immutable image pin, ALB path, health checks, and reviewed promotion inputs are implemented. Repository and service ownership are limited to the `production-scale` state; OAuth/DCR and host-specific conformance remain identity/deployment gates. |
+| WO-5 | Local and hosted MCP implementation complete; deployment and host proof deferred | Stdio and stateless Streamable HTTP use per-request Aether bearer validation and existing tenant APIs; hosted tools remain bounded, and observe remains site-bound. The Access Kit suite passes 53 tests. A dedicated opt-in Aether-account AWS service, ECR publisher with completed-scan/HIGH/CRITICAL gate, and hosted `linux/amd64` image build/health/CLI smoke workflow are implemented; [run 38206643725 passed](https://github.com/DammnThatsCrazy/AETHER/actions/runs/38206643725). The immutable image pin, ALB path, health checks, and reviewed promotion inputs are implemented. Repository and service ownership are limited to the `production-scale` state; OAuth/DCR and host-specific conformance remain identity/deployment gates. |
 | WO-6 | Interactive onboarding and headless cloud CLI implemented; live identity configuration deferred | Auth0 Device Authorization, revocable Aether sessions, native keyring storage, and session management support interactive local use. Explicit `AETHER_API_KEY` or `AETHER_SESSION_TOKEN` supports non-interactive CloudShell/CI/ECS use. Live Auth0/API setup and native keyring proof remain; tenant switching needs a supported membership-selection API. |
-| WO-7 | Supported request, consent, usage, and audit references joined | Batch request IDs correlate to returned usage/evidence IDs and tenant audit rows; accepted observations preserve the real allowed consent receipt in gateway-stamped Envelope-B. Durable per-request authorization decisions and general billing/payment receipt joins remain owner-gated. |
-| WO-8 | Local proof complete for supported paths; live/release proof deferred | Exact focused results and toolchain limitations are listed under WO-8. Customer tenant, device, provider, hosted PR, and release evidence remain independent gates. |
+| WO-7 | Local request, consent, usage, audit, and response references joined | The new route-composition test reads back the actual allowed consent receipt, accepted SDK Bronze payload and Envelope-B privacy block, usage event, usage evidence, audit record, and final response IDs. The audit row ties the receipt IDs and usage IDs to the batch and request correlation. Durable per-request authorization decisions and general billing/payment receipt joins remain owner-gated. |
+| WO-8 | Local proof complete for supported paths; live/release proof deferred | Focused tests cover the provider-to-graph adapter seam without claiming production wiring. Exact focused results and toolchain limits are listed under WO-8. Customer tenant, physical device, live provider, hosted PR after the fixes, and release evidence remain independent gates. |
 
 PR #771 has merged into `Development` and is included in the feature branch by merge commit `af50af8a0`. Source-linked documentation and generated artifacts have been reconciled against that base. This stack includes an opt-in AWS-hosted MCP service and explicit headless CLI credentials for CloudShell, CI, and ECS; it has not been deployed to an AWS account.
 
@@ -304,10 +304,11 @@ their lifecycle contracts own it, and has not been published or applied to AWS
 from this PR. A local `linux/amd64` image build (11.36 MB context), container
 health/readiness check, and headless CLI smoke succeeded on Apple Silicon under
 Docker emulation. The hosted container workflow passed on GitHub Actions:
-[PR #772 run](https://github.com/DammnThatsCrazy/AETHER/actions/runs/38205347762)
-verified package contents, built the `linux/amd64` image, and passed the
-container health, readiness, and headless CLI checks. This image build used no
-AWS credentials and did not deploy or start staging.
+[PR #772 run](https://github.com/DammnThatsCrazy/AETHER/actions/runs/38206643725)
+at the pre-fix head `ae66101c`. It verified package contents, built the
+`linux/amd64` image, and passed the container health, readiness, and headless
+CLI checks. This image build used no AWS credentials and did not deploy or
+start staging.
 The new OIDC image publisher is restricted to `main` and the protected
 `production` GitHub environment; its AWS role, ECR repository creation, and
 image publication remain deployment prerequisites. The package is configured
@@ -403,7 +404,7 @@ WRITE-decision identity remain partial.
 
 **Current stack status:** focused local evidence exists for the implemented
 surface, but cross-authority and deployed end-to-end acceptance is incomplete.
-Current change-specific results: Access Kit 52 tests, CSV import
+Current change-specific results: Access Kit 53 tests, CSV import
 commit 23 tests, and graph mutation gateway 18 tests. Earlier integrated
 results on this stack include Web SDK 382, Server SDK 97, and React Native SDK
 127 tests; 90 combined tests across CSV import/Silver projection, V1/V2 batch
@@ -415,7 +416,7 @@ macOS target pass. `swift test` fails because the installed Command Line Tools
 cannot resolve `XCTest`; full Xcode and `simctl` are unavailable. Android has
 no Java runtime, Gradle, Android SDK, or ADB.
 
-The latest local `verification-disposition` selected 46 suites and executed 42
+An earlier local `verification-disposition` selected 46 suites and executed 42
 suite runs: 41 passed and the Docker-backed integration lane failed before
 tests because Docker Desktop's socket was unavailable. Its check summary was 58
 passing checks and one failed integration check. In a separate run after Docker
@@ -428,22 +429,28 @@ has since reduced the context from an initial 946 MB to 11.36 MB. The actual
 CLI `--help` passed locally on Apple Silicon using Docker emulation. The
 GitHub-hosted container job passed package validation, the `linux/amd64` image
 build, health/readiness, and CLI smoke on PR #772
-(https://github.com/DammnThatsCrazy/AETHER/actions/runs/38205347762). It uses no
-AWS credentials and does not deploy. The AWS image
+(https://github.com/DammnThatsCrazy/AETHER/actions/runs/38206643725) at the
+pre-fix head `ae66101c`; it uses no AWS credentials and does not deploy. The AWS image
 publisher and public npm release workflows are configured but were not
-executed; no ECR image was published and no Terraform plan was applied. AWS
-CLI authentication was refreshed, but the selected principal is the account
-root user; the account has staging roles and no production deployment or image
-publisher role, so no AWS mutation was attempted. The GitHub repository also
-has no production or npm-production environment with release reviewers.
-This stack also passed the focused Access Kit suite (52
+executed; no ECR image was published and no Terraform plan was applied. The
+repository lacks the protected `production` and `npm-production` environments
+required by those workflows, so AWS publication and npm release remain owner
+setup gates. No AWS mutation or staging wake was part of this stack.
+This stack also passed the focused Access Kit suite (53
 tests), CSV import commit suite (23), graph mutation gateway suite (18), the
 project's selected Python suites (203), Terraform plan tests (18),
 `terraform fmt -check -recursive`, and `terraform validate`. `make docs-check`
 passed all 10 gates with the project virtualenv, including idempotency across
 42 generated and sync-managed files and strict source-linked documentation
-drift. No live Auth0 setup, customer tenant/provider credentials, remote MCP
-host, AWS apply credentials, or mobile device/store environment is available.
+drift. Current local failure-remediation checks also pass: clean `npm ci`, the
+full root `npm run build`, 53 Access Kit tests, 3 focused batch/provider tests,
+65 migration/control/readiness tests, one Alembic head, the SDK contract
+validator, and the CI execution-contract validator. These are local checks;
+the previous hosted run is still on pre-fix head `ae66101c`, so final hosted PR
+authority remains pending. No live Auth0 setup, customer tenant/provider credentials, remote MCP
+host, or mobile device/store environment is configured. The production AWS
+publisher/apply workflow was not run because its protected GitHub environment
+is absent.
 Therefore live cross-tenant denial, tenant/provider-to-graph hydration, device
 lifecycle, remote host conformance, customer beta, and release readiness remain
 unproven until their specific environments are supplied.

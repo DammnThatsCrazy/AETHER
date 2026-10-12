@@ -25,8 +25,11 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
+reviewed_source_commits:
+  - commit: "c71ebc5cb"
+    reason: "Reviewed Access Kit container workflow cadence: pull requests build on ready_for_review, with explicit dispatch and Development/main push lanes for targeted or post-landing builds; no staging wake or deployment is added."
 source_hashes:
-  ".github/workflows/": "sha256:401172d8e9af45983a17e13224300fdf873a28ebe4451a866b84d771b783ddb1"
+  ".github/workflows/": "sha256:a5113005c3957b7126d7dc5b3f0a2a4fe943c8555c93fd1779a68aa380ba06c1"
   "config/delivery_workflow_authority.yaml": "sha256:7a23c16f192c2fcd9d742f25a447ac7a1d85659bdc51a303a1c61765a64332d6"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
@@ -429,11 +432,15 @@ canonical `production-scale` state, a clean reviewed commit is built as
 the repository's encryption, tag immutability, and scan-on-push settings,
 waits for a completed scan with zero HIGH/CRITICAL findings, and returns the
 immutable image digest. The plan and apply jobs recheck that digest and scan
-state before proceeding. A separate hosted workflow builds the clean
-`linux/amd64` image and smoke-checks health, readiness, and the headless CLI
-without AWS credentials. The reviewed Terraform promotion then pins that
-digest in the customer Fargate task. This image is separate from the backend
-release image and the privileged `tfmcp` image.
+state before proceeding. A separate hosted workflow runs on the PR
+`ready_for_review` event, builds the clean `linux/amd64` image, and smoke-checks
+health, readiness, and the headless CLI without AWS credentials. It does not
+publish an image, apply Terraform, or start an ECS task. The reviewed Terraform
+promotion then pins that digest in the customer Fargate task. This image is
+separate from the backend release image and the privileged `tfmcp` image;
+merging a PR into `Development` does not wake or deploy staging. The workflow
+also supports an explicit `workflow_dispatch` for a targeted rerun after a
+material fix, and runs on pushes to `Development` or `main` after landing.
 
 The separate `Publish Access Kit CLI and MCP` workflow runs a package check and
 preserves the exact npm tarball before publication. Public npm publishing is a
