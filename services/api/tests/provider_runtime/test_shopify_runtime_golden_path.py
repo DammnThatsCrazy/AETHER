@@ -13,11 +13,12 @@ record is retained, normalized, and published.
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
-
 import pytest
 
 import repositories.repos as repos
+from config.settings import Environment, settings
+from connectors.integrations.data_rights.models import DataRightsGrant, GrantStatus
+from connectors.integrations.data_rights.service import data_rights_service
 from repositories.lake import BronzeRepository
 from repositories.repos import reset_in_memory_stores
 from journeys.comms.sync_runs import SyncRunRepository, SyncRunService
@@ -25,18 +26,31 @@ from identity.identity.import_candidate_adapter import ImportIdentityCandidateAd
 from identity.identity.repository import IdentityResolutionRepository
 from identity.identity.source_identity_registry import SourceIdentityRegistry
 from connectors.provider_runtime.connection import ProviderConnection, ProviderConnectionRepository
+from connectors.provider_runtime.connector_graph_writer import ConnectorGraphWriter
 from connectors.provider_runtime.errors import ProviderPullFailed
 from connectors.provider_runtime.raw_store import RawProviderRecordStore
 from connectors.provider_runtime.rights_admission import (
-    ProviderRawRightsEvidence,
-    provider_account_source_id,
+    PROVIDER_RAW_RIGHTS_METADATA_KEY,
 )
 from connectors.provider_runtime.registry import ProviderRegistry
 from connectors.provider_runtime.scheduler import PullScheduler
+from connectors.provider_runtime.tenant_route_repository import (
+    RouteDecision,
+    RouteScope,
+    TenantRouteRepository,
+    reset_tenant_route_local_stores,
+)
 from connectors.providers.shopify.plugin import ShopifyOrdersPlugin
+from repositories.graph_mutation_ledger import (
+    GraphMutationLedgerRepository,
+    reset_graph_ledger_memory,
+)
+from shared.graph.graph import GraphClient, Vertex, VertexType
+from shared.graph.mutation_gateway import GraphMutationGateway, MutationIntent
 from shared.integration_contracts.lifecycle import ConnectionState
 from shared.integration_contracts.events import ReadBatch, make_raw_record
 from shared.integration_contracts.results import AdapterResult
+from tenancy.rights_authority.resolver import effective_rights_resolver
 
 
 class _PullFixture:
@@ -78,42 +92,12 @@ class _PullFixture:
 @pytest.fixture(autouse=True)
 def _isolated_stores():
     reset_in_memory_stores()
+    reset_graph_ledger_memory()
+    reset_tenant_route_local_stores()
     yield
     reset_in_memory_stores()
-
-
-class _GrantedRightsAdmission:
-    """Explicit tenant-grant seam; production defaults use EffectiveRightsResolver."""
-
-    async def admit(self, record):
-        return ProviderRawRightsEvidence(
-            tenant_id=record.tenant_id,
-            source_id=provider_account_source_id(record.connection_id, record.account_id),
-            source_grant_ref="drg_golden",
-            rights_decision_ref=f"rdec_{record.idempotency_key}",
-            decision_identity=f"rdid_{record.idempotency_key}",
-            policy_version="irrl-2",
-            evaluated_at="2026-10-03T00:00:00+00:00",
-        )
-
-    @asynccontextmanager
-    async def hold_grant(self, record, admission):
-        yield
-
-    async def verify_persisted(self, record, *, current_admission):
-        return None
-
-
-class _GrantedBronzeRepository(BronzeRepository):
-    """Bronze seam for rows whose provenance trusted setup has approved."""
-
-    async def ingest(self, **kwargs):
-        kwargs.update(
-            provenance_status="valid",
-            license_status="public_api",
-            terms_status="approved",
-        )
-        return await super().ingest(**kwargs)
+    reset_graph_ledger_memory()
+    reset_tenant_route_local_stores()
 
 
 class _CapturingBridge:
@@ -204,13 +188,43 @@ async def test_shopify_sync_without_tenant_rights_retains_and_promotes_nothing(m
 
 
 @pytest.mark.asyncio
-async def test_shopify_sync_with_tenant_rights_retains_normalizes_and_publishes():
+async def test_shopify_sync_with_canonical_tenant_rights_retains_normalizes_and_publishes(
+    monkeypatch,
+):
+    """Exercise the real resolver, grant service, raw store, and Shopify runtime.
+
+    The only fixture is the provider's remote response and outbound bus edge.
+    Rights evidence is minted and durably recorded by the same canonical
+    EffectiveRightsResolver used by the production raw-store default.
+    """
+    monkeypatch.setattr(settings, "env", Environment.LOCAL)
+    grant = DataRightsGrant(
+        data_rights_grant_id="drg_golden",
+        tenant_id="tenant-golden",
+        source_id="provider-account:conn-golden:shop-golden",
+        connector_id=ShopifyOrdersPlugin().identity().key,
+        connector_class="tenant_byod_data",
+        data_category="customer",
+        data_sensitivity="sensitive_pii",
+        raw_data_owner="tenant",
+        tenant_lake_allowed=True,
+        tenant_graph_allowed=True,
+        tenant_insights_allowed=True,
+        legal_basis="contract",
+        granted_by_user_id="tenant-admin",
+        granted_at="2026-01-01T00:00:00+00:00",
+        status=GrantStatus.ACTIVE,
+        audit_event_id="audit-golden",
+    )
+    monkeypatch.setattr(
+        data_rights_service._repository,
+        "_local_grants",
+        {grant.data_rights_grant_id: grant},
+    )
+
     bridge = _CapturingBridge()
     scheduler, connection, identity = await _scheduler(
-        raw_store=RawProviderRecordStore(
-            repository=_GrantedBronzeRepository("provider_records"),
-            rights_admission=_GrantedRightsAdmission(),
-        ),
+        raw_store=RawProviderRecordStore(repository=BronzeRepository("provider_records")),
         bridge=bridge,
     )
 
@@ -233,4 +247,111 @@ async def test_shopify_sync_with_tenant_rights_retains_normalizes_and_publishes(
     assert raw["tenant_id"] == "tenant-golden"
     assert raw["connection_id"] == "conn-golden"
     assert raw["account_id"] == "shop-golden"
-    assert raw["metadata"]["aether_rights_admission"]["source_grant_ref"] == "drg_golden"
+    rights_evidence = raw["metadata"][PROVIDER_RAW_RIGHTS_METADATA_KEY]
+    assert rights_evidence["source_grant_ref"] == grant.data_rights_grant_id
+    assert rights_evidence["rights_decision_ref"].startswith("rdec_")
+    from tenancy.rights_authority.repositories import rights_decision_repository
+
+    decision = await rights_decision_repository.get_for_tenant(
+        rights_evidence["rights_decision_ref"], tenant_id="tenant-golden",
+    )
+    assert decision is not None and decision["allowed"] is True
+    assert decision["source_grant_refs"] == [grant.data_rights_grant_id]
+
+    # This is a local adapter-contract composition, not evidence that the
+    # production Shopify runtime is wired to a graph writer. The graph-use
+    # decision is resolved separately from the raw-store tenant_lake decision.
+    # The test-only mapping creates an order vertex and deliberately does not
+    # infer or project customer identity from provider-supplied identifiers.
+    event = bridge.events[0]
+    graph_decision = await effective_rights_resolver.resolve(
+        tenant="tenant-golden",
+        source=rights_evidence["source_id"],
+        artifact=str(event.event_id),
+        actor="provider_runtime",
+        requested_use="tenant_graph",
+        purpose="provider_graph_projection",
+        destination="tenant",
+    )
+    assert graph_decision.allowed is True
+    assert graph_decision.tenant_id == "tenant-golden"
+    assert graph_decision.source_grant_refs == [grant.data_rights_grant_id]
+
+    # Route fields below are local test fixtures. Production route provisioning
+    # remains an explicit integration/cutover decision.
+    route_scope = RouteScope(
+        tenant_id="tenant-golden",
+        environment_id="local",
+        managed_integration_id="mi-shopify-golden",
+        provider_identity=identity,
+        account_id="shop-golden",
+        stream_id="orders",
+        fact_family="commerce.order",
+    )
+    routes = TenantRouteRepository()
+    await routes.create_legacy(
+        route_scope,
+        legacy_connection_ref=connection.connection_id,
+        decision=RouteDecision(
+            actor_ref="test:provider-graph-proof",
+            decision_ref="test-route-decision-shopify-golden",
+            reason="local provider graph adapter contract proof",
+        ),
+    )
+
+    graph = GraphClient()
+    ledger = GraphMutationLedgerRepository()
+    writer = ConnectorGraphWriter(
+        routes=routes,
+        gateway=GraphMutationGateway(graph_client=graph, ledger=ledger),
+    )
+    order_id = str(event.data["order_id"])
+    graph_vertex_id = f"tenant-golden:shopify:order:{order_id}"
+    intent = MutationIntent(
+        operation="node_created",
+        tenant_id="tenant-golden",
+        vertex=Vertex(
+            vertex_type=VertexType.ORDER,
+            vertex_id=graph_vertex_id,
+            properties={
+                "tenant_id": "tenant-golden",
+                "source_event_id": str(event.event_id),
+                "provider_identity": identity,
+                "account_id": "shop-golden",
+                "order_id": order_id,
+            },
+        ),
+        actor_kind="system",
+        actor_id="provider_runtime",
+        subject_kind="commerce_order",
+        subject_id=graph_vertex_id,
+        source_event_id=str(event.event_id),
+        idempotency_key=(
+            f"tenant-golden:shopify:order:{order_id}:{event.event_id}"
+        ),
+        rights_decision_ref=graph_decision.decision_id,
+    )
+    outcome = await writer.apply(
+        intent,
+        scope=route_scope,
+        writer="legacy",
+        writer_generation=1,
+        connection_ref=connection.connection_id,
+    )
+
+    assert outcome.applied is True
+    assert outcome.ledger_recorded is True
+    ledger_rows = await ledger.list_records("tenant-golden")
+    assert len(ledger_rows) == 1
+    assert ledger_rows[0]["rights_decision_ref"] == graph_decision.decision_id
+    assert ledger_rows[0]["payload"]["rights_decision_ref"] == graph_decision.decision_id
+
+    tenant_read = await graph.get_vertex_for_tenant("tenant-golden", graph_vertex_id)
+    assert tenant_read is not None
+    assert tenant_read.properties["tenant_id"] == "tenant-golden"
+    assert await graph.get_vertex_for_tenant("tenant-other", graph_vertex_id) is None
+    assert [
+        row.vertex_id
+        for row in await graph.get_vertices_for_tenant("tenant-golden", vertex_type=VertexType.ORDER)
+    ] == [graph_vertex_id]
+    assert await graph.get_vertices_for_tenant("tenant-other", vertex_type=VertexType.ORDER) == []
