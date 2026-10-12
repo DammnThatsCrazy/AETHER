@@ -174,6 +174,9 @@ const customerWebhookReadSchema = z.object({
   events: z.array(z.string()),
   active: z.boolean(),
   secret_configured: z.boolean(),
+  status: z.string().optional(),
+  verification_status: z.string().optional(),
+  last_test: z.unknown().optional(),
   created_at: z.string().optional(),
   updated_at: z.string().optional(),
 });
@@ -198,6 +201,23 @@ const webhookTestResultSchema = z.object({
   latency_ms: z.number().nullable().optional(),
   error: z.string().nullable().optional(),
   attempt_id: z.string().nullable().optional(),
+  webhook: customerWebhookReadSchema.optional(),
+});
+
+const webhookDeliveryListSchema = z.object({
+  items: z.array(z.object({
+    delivery_id: z.string(),
+    event_id: z.string().nullable().optional(),
+    event_type: z.string().nullable().optional(),
+    created_at: z.string().nullable().optional(),
+    status: z.string().nullable().optional(),
+    attempts: z.number().optional(),
+    last_status: z.string().nullable().optional(),
+    status_code: z.number().nullable().optional(),
+    latency_ms: z.number().nullable().optional(),
+    error: z.string().nullable().optional(),
+  })),
+  count: z.number(),
 });
 
 const deletionDomainSchema = z.object({
@@ -1541,8 +1561,16 @@ export const api = {
       restClient.get(`/v1/notifications/webhooks${buildQS({ tenant_id: tenantId, limit })}`, wrap(webhookPageSchema)).then(r => r.data),
 
     /** Register a new webhook; the signing secret is returned only once. */
-    createWebhook: (body: { url: string; events: string[]; secret?: string; active?: boolean }) =>
+    createWebhook: (body: { url: string; events: string[]; secret?: string }) =>
       restClient.post('/v1/notifications/webhooks', wrap(customerWebhookCreateResponseSchema), body).then(r => r.data),
+
+    /** Rotate the write-only signing secret; it is returned once in this response. */
+    rotateWebhookSecret: (webhookId: string) =>
+      restClient.post(`/v1/notifications/webhooks/${webhookId}/rotate-secret`, wrap(customerWebhookCreateResponseSchema), {}).then(r => r.data),
+
+    /** Read bounded delivery status for one tenant-owned endpoint. */
+    webhookDeliveries: (webhookId: string, limit = 50) =>
+      restClient.get(`/v1/notifications/webhooks/${webhookId}/deliveries${buildQS({ limit })}`, wrap(webhookDeliveryListSchema)).then(r => r.data),
 
     /** List all alert rules for this tenant. */
     alerts: (tenantId: string, limit = 50) =>

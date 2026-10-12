@@ -3,7 +3,7 @@ const mode = process.env.ACCESS_KIT_MOCK_MODE || 'entities-list';
 globalThis.fetch = async (url, init = {}) => {
   const parsedUrl = new URL(url);
   if (process.env.ACCESS_KIT_MOCK_TRACE === '1') {
-    process.stderr.write(`MOCK_FETCH ${init.method ?? 'GET'} ${parsedUrl.pathname}${parsedUrl.search} redirect=${init.redirect}\n`);
+    process.stderr.write(`MOCK_FETCH ${init.method ?? 'GET'} ${parsedUrl.pathname}${parsedUrl.search} redirect=${init.redirect} surface=${init.headers?.['x-aether-access-surface'] ?? ''}\n`);
   }
   if (mode === 'entities-denied') {
     return new Response(JSON.stringify({
@@ -26,6 +26,23 @@ globalThis.fetch = async (url, init = {}) => {
         billing: { subscription_status: 'active', current_period_end: '2026-11-01', stripe_customer_id: 'cus_private' },
         api_key_count: 2,
         is_admin: false,
+      },
+      meta: { request_id: 'api-envelope-id' },
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json', 'x-request-id': 'cli-request-id' },
+    });
+  }
+
+  if (parsedUrl.pathname === '/v1/billing/usage/summary') {
+    return new Response(JSON.stringify({
+      data: {
+        tenant_id: 'tenant-private',
+        usage_by_dimension: { access_interaction: 7, profile_query: 100 },
+        billing_period_start: '2026-10-01T00:00:00Z',
+        billing_period_end: '2026-11-01T00:00:00Z',
+        status: 'available',
+        source_event_ids_by_dimension: { profile_query: ['private-meter-id'] },
       },
       meta: { request_id: 'api-envelope-id' },
     }), {

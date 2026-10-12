@@ -8,6 +8,8 @@ stateless MCP HTTP service for bounded customer operations:
 - Read a bounded tenant entity page or one tenant entity through the existing
   identity API.
 - Read a minimal tenant account context through the existing `/v1/me` route.
+- Read the non-billable Access Kit interaction count through the existing
+  billing usage authority.
 - List and revoke durable human sessions through existing tenant account routes.
 - Sign in through Auth0 Device Authorization and keep the resulting revocable
   Aether session in the native OS credential store.
@@ -51,6 +53,7 @@ Supply only the credential required by the command being used:
 | `aether agents capabilities ...` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, or a saved OS credential-store session, with `read` permission |
 | `aether entities ...` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, or a saved OS credential-store session, with `read` permission |
 | `aether account context`, `aether auth context` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, or a saved OS credential-store session, with `read` permission |
+| `aether usage summary` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, or a saved OS credential-store session, through `/v1/billing/usage/summary` |
 | `aether auth login` | `AETHER_AUTH0_DOMAIN`, `AETHER_AUTH0_CLIENT_ID`, `AETHER_AUTH0_AUDIENCE` |
 | `aether auth logout` | Session stored by `aether auth login` |
 | `aether auth sessions list` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, or saved OS credential-store session, through the existing tenant session route |
@@ -96,6 +99,7 @@ aether agents capabilities show cap_0123456789abcdef01234567 --json
 aether entities list --entity-type organization --limit 25 --json
 aether entities show entity_123 --json
 aether account context --json
+aether usage summary --json
 aether auth context --json
 aether auth login
 aether auth logout
@@ -146,6 +150,43 @@ only session ID, status, credential class, and expiry timestamps; it drops
 principal IDs, token hashes, metadata, and unknown fields. Revocation passes
 the supplied session ID to the API and preserves the server response and
 request IDs. The adapter does not create, choose, or locally revoke a session.
+
+### Usage accounting and receipts
+
+`aether usage summary` calls `/v1/billing/usage/summary` and projects only the
+current billing period and `access_interaction` count. Authenticated CLI and
+MCP reads for account context, sessions, entities, and the observed capability
+catalog are recorded by the API's existing audit ledger and usage metering
+service. The API returns durable audit and usage event IDs in response headers;
+CLI/MCP results preserve those IDs in `interaction.references`.
+`X-Aether-Access-Surface` is a non-authoritative attribution label (`cli`,
+`mcp_stdio`, or `mcp_http`); it never grants access or changes tenant scope.
+
+The Access Kit dimension is explicitly non-billable until Aether configures
+and approves a price. The Console's Usage & Plan page shows it as “Access Kit
+interactions (non-billable)”; the CLI and MCP summary expose no other usage
+dimensions, tenant IDs, or event IDs. Calling the usage summary itself is not
+metered, so reading the counter does not increase it.
+
+### Customer Access Kit webhooks
+
+From **Settings → Webhooks**, add an HTTPS endpoint and select the Access Kit
+interaction events it should receive: `access.interaction.completed`,
+`access.interaction.blocked`, or `access.interaction.failed`.
+
+The endpoint is inactive until its signed test delivery succeeds. Aether
+generates the signing secret and displays it once at creation or rotation;
+store it in your receiver's secret manager. Rotating a secret disables the
+endpoint until it passes another test. Each delivery uses the durable
+notification outbox with retries and dead-letter handling; delivery history is
+available in the Console.
+
+Event bodies contain the event ID/type/time, surface label, capability ID,
+outcome, HTTP status, API request ID, audit event ID, and usage event ID when
+available. They omit request/query bodies, entity IDs, and response content.
+Destinations are checked for public HTTPS and revalidated with DNS-pinned
+delivery; redirects and private/metadata destinations are blocked. Webhook
+configuration and delivery history remain tenant-scoped.
 
 ### CLI Auth0 sign-in
 
@@ -217,8 +258,8 @@ success. It does not automatically retry.
 Start `aether-mcp` using the MCP host's environment or secure secret-injection
 mechanism. The bridge supports `agent_access_capabilities_list`,
 `agent_access_capabilities_overview`, `entities_list`, `entities_get`,
-`account_context`, and `observe`. Inventory, entity, and account-context read
-tools use exactly one read credential (`AETHER_API_KEY` or
+`account_context`, `usage_summary`, and `observe`. Inventory, entity, account,
+and usage read tools use exactly one read credential (`AETHER_API_KEY` or
 `AETHER_SESSION_TOKEN`), either explicitly supplied or loaded from the saved
 OS credential-store session;
 `observe` requires the publishable key and its bound site ID.
@@ -233,6 +274,10 @@ request ID, and any server-returned `usageEventId`, `usageEvidenceId`,
 `auditEventId`, and actual `consentReceiptIds`. Those correlation references
 are optional because the owning authority may not return them. A rejected
 observation remains a server rejection.
+
+`usage_summary` returns the current-period non-billable Access Kit interaction
+count through `/v1/billing/usage/summary`. It is available on local stdio and
+hosted MCP and does not expose unrelated billing dimensions.
 
 Entity tool errors set MCP `isError` and include a JSON `error` object with the
 API status/code and request IDs when available.
@@ -377,27 +422,58 @@ runner's environment/secret manager. The image runs as the non-root `node`
 user. The MCP ECS service itself has no caller credential; do not add one to
 its task definition.
 
-## Implementation status
+### V1 live acceptance
 
-The Access Kit is an alpha adapter slice. CLI Auth0 Device Authorization and
-revocable human-session storage are implemented, but saved profiles, tenant
-switching, token refresh, general query language, callable-capability registry,
-arbitrary external tool execution, graph traversal, graph mutation, and action
-dispatch remain outside scope. Entity reads are limited to the two existing
-tenant-scoped REST operations described above. The owning REST authorities
-remain the source of permission and policy decisions. Hosted MCP provides a
-deployable stateless HTTP transport, but OAuth/DCR and a remotely registered
-per-user delegated authorization flow remain external identity-owner work.
+After a deployment is available, run the acceptance runner against an explicitly
+selected API and, optionally, hosted MCP endpoint. It makes tenant-scoped
+read-only usage and one-row entity-list calls, checks returned audit and usage
+references, verifies the count advances, and checks that hosted MCP exposes and
+runs `entities_list` and `usage_summary`:
+
+```sh
+export AETHER_API_URL=https://api.example.com
+export AETHER_API_KEY # inject through the host's secret manager
+export AETHER_MCP_URL=https://mcp.example.com/v1/access/mcp # optional
+npm run acceptance:v1 --workspace @aether/access-kit
+```
+
+The runner requires `AETHER_API_URL` explicitly and performs no deployment,
+staging lifecycle, webhook creation, graph write, or action. Omitting
+`AETHER_MCP_URL` skips only the remote MCP checks; local stdio and API tests
+remain covered by the package test suite. Treat production live evidence
+separately from local tests and run this only against an environment where the
+supplied read credential is authorized.
+
+## V1 scope and remaining productization
+
+V1 is a usable, bounded access adapter across the API, CLI, local stdio MCP,
+and stateless hosted Streamable HTTP MCP. It supports tenant account context,
+observed capability inventory, tenant-scoped entity reads, human-session
+management, Auth0 Device Authorization, site-bound canonical observation
+ingestion, non-billable Access Kit interaction accounting, and signed outbound
+interaction webhooks. Audit and usage receipts come from the existing API
+authorities; each surface is an adapter and cannot grant itself tenant access
+or write directly to the graph.
+
+V1 does not implement saved named profiles, tenant switching, token refresh,
+a general query language, generated capability APIs, arbitrary external tool
+execution, graph traversal, graph mutation, action dispatch, exports, or
+long-running task/result handles. Hosted MCP uses pre-provisioned Aether bearer
+credentials; OAuth discovery/dynamic client registration and delegated client
+onboarding remain future identity-owner work. Mobile SDK parity and desktop
+bridge integration are also outside this V1 slice.
+
 The package is configured for public npm distribution but has not been
 published. Its release workflow validates and preserves the exact main-branch
 tarball; public publication requires the npm-production environment to have at
 least one required reviewer and an NPM_TOKEN, followed by an authorized
-release run. The AWS image is published to Aether's private ECR and
-is available only to principals granted pull access in that account. It is the
-runtime artifact for the hosted MCP service and Aether-owned AWS runners, not a
-cross-account distribution channel. Customer-owned AWS and other cloud jobs
-can install the npm package after release and inject a tenant API key or
-revocable session from their secret manager. The hosted MCP endpoint can be
-used from clients in any cloud after deployment by configuring its URL and
-pre-provisioned Aether bearer credential. It does not yet support OAuth
-discovery/login for hosts that require standard MCP OAuth onboarding.
+release run. The AWS image is published to Aether's private ECR and is
+available only to principals granted pull access in that account. It serves
+the hosted MCP runtime and Aether-owned AWS runners, not cross-account
+distribution. Customer-owned AWS and other cloud jobs can install the npm
+package after release and inject a tenant API key or revocable session from
+their secret manager. The live acceptance runner is included in the package,
+but it must be run against an explicitly selected, deployed API and (for the
+remote MCP checks) a deployed hosted MCP endpoint. Local package and backend
+checks do not claim production readiness or substitute for that environment
+evidence.

@@ -6,6 +6,7 @@ import {
   getAccountContext,
   getCapabilityOverview,
   getEntity,
+  getUsageSummary,
   ingestTrackObservation,
   listCapabilities,
   listEntities,
@@ -77,6 +78,54 @@ test('listEntities caps the page, scopes through the read key, and projects appr
   });
   assert.equal(JSON.stringify(result).includes('tenant-secret'), false);
   assert.equal(JSON.stringify(result).includes('must-not-escape'), false);
+});
+
+test('Access Kit surfaces carry an analytics-only label and response ledger IDs enter the interaction envelope', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let captured;
+  globalThis.fetch = async (_url, init) => {
+    captured = init;
+    return jsonResponse({ data: { entities: [], count: 0 } }, {
+      headers: {
+        'x-correlation-id': 'request-from-api',
+        'x-aether-audit-event-id': 'audit_1',
+        'x-aether-usage-event-id': 'meter_1',
+      },
+    });
+  };
+  const result = await listEntities({}, { ...readEnv, AETHER_ACCESS_SURFACE: 'mcp_http' });
+  assert.equal(captured.headers['x-aether-access-surface'], 'mcp_http');
+  assert.deepEqual(result.interaction.references, {
+    usage_event_id: 'meter_1',
+    audit_event_id: 'audit_1',
+  });
+});
+
+test('usage summary exposes only Access Kit usage and bounded period metadata', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let requested;
+  globalThis.fetch = async (url) => {
+    requested = new URL(url);
+    return jsonResponse({ data: {
+      tenant_id: 'tenant-private',
+      usage_by_dimension: { access_interaction: 12, profile_query: 99 },
+      billing_period_start: '2026-10-01T00:00:00Z',
+      billing_period_end: '2026-11-01T00:00:00Z',
+      status: 'available',
+      source_event_ids_by_dimension: { access_interaction: ['meter-private'] },
+    } });
+  };
+  const result = await getUsageSummary(readEnv);
+  assert.equal(requested.pathname, '/v1/billing/usage/summary');
+  assert.deepEqual(result.data, {
+    access_interaction_count: 12,
+    billing_period_start: '2026-10-01T00:00:00Z',
+    billing_period_end: '2026-11-01T00:00:00Z',
+    status: 'available',
+  });
+  assert.doesNotMatch(JSON.stringify(result), /tenant-private|profile_query|meter-private/);
 });
 
 test('observed capabilities receive bounded typed projections and malformed rows are dropped', async (t) => {

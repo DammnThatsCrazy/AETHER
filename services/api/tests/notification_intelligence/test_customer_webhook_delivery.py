@@ -234,6 +234,41 @@ async def test_delivery_claim_has_one_local_winner_and_recovers_stale_work(monke
 
 
 @pytest.mark.asyncio
+async def test_failed_delivery_claim_can_be_reclaimed_by_durable_outbox_retry(monkeypatch):
+    monkeypatch.setenv("AETHER_ENV", "local")
+    repository = CustomerWebhookDeliveryRepository()
+    now = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    _, acquired = await repository.claim(
+        "tenant-a", "wh-1", "event-key", now=now, owner_token="first-owner",
+    )
+    assert acquired is True
+    failed = WebhookDeliveryOutcome(
+        "failed", False, "wh-1", "tenant-a", "event-key", 3, error="provider unavailable",
+    )
+    await repository.complete_claim(
+        "tenant-a", "wh-1", "event-key", failed, "first-owner",
+    )
+
+    retried, acquired = await repository.claim(
+        "tenant-a", "wh-1", "event-key", now=now + timedelta(seconds=5),
+        owner_token="retry-owner",
+    )
+    assert acquired is True
+    assert retried["status"] == "in_flight"
+    assert retried["attempts"] == 2
+
+    delivered = WebhookDeliveryOutcome(
+        "delivered", True, "wh-1", "tenant-a", "event-key", 1,
+    )
+    await repository.complete_claim(
+        "tenant-a", "wh-1", "event-key", delivered, "retry-owner",
+    )
+    terminal, acquired = await repository.claim("tenant-a", "wh-1", "event-key")
+    assert acquired is False
+    assert terminal["status"] == "delivered"
+
+
+@pytest.mark.asyncio
 async def test_stale_worker_cannot_complete_over_recovered_claim(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     repository = CustomerWebhookDeliveryRepository()

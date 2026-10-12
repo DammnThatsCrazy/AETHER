@@ -8,6 +8,7 @@ const SITE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const MAX_INGEST_BODY_BYTES = 64 * 1024;
 export const MAX_ENTITY_PAGE_SIZE = 50;
 export const MAX_OVERVIEW_BUCKETS = 50;
+const ACCESS_SURFACES = new Set(['cli', 'mcp_stdio', 'mcp_http']);
 
 export class AccessApiError extends Error {
   constructor(message, { status, code, requestId, apiRequestId, interaction } = {}) {
@@ -104,6 +105,9 @@ async function readRequest(
   }
 
   const correlationId = randomUUID();
+  const surface = ACCESS_SURFACES.has(env.AETHER_ACCESS_SURFACE)
+    ? env.AETHER_ACCESS_SURFACE
+    : undefined;
   let response;
   try {
     response = await fetch(url, {
@@ -113,6 +117,7 @@ async function readRequest(
         accept: 'application/json',
         ...authHeaders,
         'x-correlation-id': correlationId,
+        ...(surface ? { 'x-aether-access-surface': surface } : {}),
       },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
@@ -143,6 +148,17 @@ async function readRequest(
   const apiRequestId = typeof payload?.meta?.request_id === 'string'
     ? payload.meta.request_id
     : (typeof payload?.request_id === 'string' ? payload.request_id : undefined);
+  const interactionData = {
+    ...(payload?.data && typeof payload.data === 'object' && !Array.isArray(payload.data)
+      ? payload.data
+      : {}),
+    ...(response.headers.get('x-aether-audit-event-id')
+      ? { audit_event_id: response.headers.get('x-aether-audit-event-id') }
+      : {}),
+    ...(response.headers.get('x-aether-usage-event-id')
+      ? { usage_event_id: response.headers.get('x-aether-usage-event-id') }
+      : {}),
+  };
   if (!response.ok) {
     const errorCode = payload?.error?.code ?? payload?.code;
     throw new AccessApiError(
@@ -151,7 +167,7 @@ async function readRequest(
         status: response.status, code: errorCode, requestId: headerRequestId, apiRequestId,
         interaction: normalizeInteractionOutcome({
           operation, httpStatus: response.status, requestId: headerRequestId,
-          apiRequestId, responseOk: false, code: errorCode,
+          apiRequestId, responseOk: false, code: errorCode, data: interactionData,
         }),
       },
     );
@@ -166,7 +182,7 @@ async function readRequest(
       apiRequestId,
       interaction: normalizeInteractionOutcome({
         operation, httpStatus: response.status, requestId: headerRequestId,
-        apiRequestId, responseOk: true, contractError: true,
+        apiRequestId, responseOk: true, contractError: true, data: interactionData,
       }),
     });
   }
@@ -178,7 +194,7 @@ async function readRequest(
     responseRequestId,
     interaction: normalizeInteractionOutcome({
       operation, httpStatus: response.status, requestId: headerRequestId,
-      apiRequestId: responseRequestId, responseOk: true, data: payload.data,
+      apiRequestId: responseRequestId, responseOk: true, data: interactionData,
     }),
   };
 }
@@ -216,6 +232,26 @@ function safeAccountContext(profile) {
 export async function getAccountContext(env = process.env) {
   const result = await readRequest('/v1/me', undefined, env);
   return { ...result, data: safeAccountContext(result.data) };
+}
+
+function safeUsageSummary(summary) {
+  const usage = summary?.usage_by_dimension;
+  const count = usage && typeof usage === 'object' && !Array.isArray(usage)
+    && Number.isFinite(usage.access_interaction)
+    && usage.access_interaction >= 0
+    ? usage.access_interaction
+    : 0;
+  return {
+    access_interaction_count: count,
+    billing_period_start: boundedString(summary?.billing_period_start, 64),
+    billing_period_end: boundedString(summary?.billing_period_end, 64),
+    status: ['available', 'truncated'].includes(summary?.status) ? summary.status : 'unavailable',
+  };
+}
+
+export async function getUsageSummary(env = process.env) {
+  const result = await readRequest('/v1/billing/usage/summary', undefined, env);
+  return { ...result, data: safeUsageSummary(result.data) };
 }
 
 const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;

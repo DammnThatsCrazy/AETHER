@@ -284,6 +284,33 @@ class _WebhookDeliveryClaimRepository(BaseRepository):
             existing = await self._find(claim_id, pool)
             if existing:
                 status = str(existing.get("status", "in_flight"))
+                if status in {"failed", "provider_unavailable"}:
+                    if pool is None:
+                        refreshed = dict(existing)
+                        refreshed.update({
+                            "status": "in_flight",
+                            "claimed_at": current.isoformat(),
+                            "updated_at": current.isoformat(),
+                            "attempts": int(existing.get("attempts", 0)) + 1,
+                            "claim_token": owner_token,
+                        })
+                        self._store[claim_id] = refreshed
+                        return refreshed, True
+                    row = await pool.fetchrow(
+                        f"""
+                        UPDATE {self.table_name}
+                        SET status = 'in_flight', claimed_at = $1, updated_at = $1,
+                            attempts = attempts + 1, claim_token = $3
+                        WHERE id = $2 AND status IN ('failed', 'provider_unavailable')
+                        RETURNING *
+                        """,
+                        current, claim_id, owner_token,
+                    )
+                    if row:
+                        return self._record(row), True
+                    refreshed = await self._find(claim_id, pool)
+                    if refreshed:
+                        return refreshed, False
                 claimed_at = existing.get("claimed_at")
                 stale = False
                 if claimed_at:
@@ -389,7 +416,6 @@ class _WebhookDeliveryClaimRepository(BaseRepository):
         values = {
             "status": outcome.status,
             "updated_at": datetime.now(timezone.utc),
-            "attempts": outcome.attempts,
             "status_code": outcome.status_code,
             "latency_ms": outcome.latency_ms,
             "failure_reason": outcome.error,
@@ -403,13 +429,13 @@ class _WebhookDeliveryClaimRepository(BaseRepository):
         await pool.execute(
             f"""
             UPDATE {self.table_name}
-            SET status = $1, updated_at = $2, attempts = $3, status_code = $4,
-                latency_ms = $5, failure_reason = $6, attempt_id = $7
-            WHERE id = $8 AND status = 'in_flight' AND claim_token = $9
+            SET status = $1, updated_at = $2, status_code = $3,
+                latency_ms = $4, failure_reason = $5, attempt_id = $6
+            WHERE id = $7 AND status = 'in_flight' AND claim_token = $8
             """,
-            values["status"], values["updated_at"], values["attempts"],
-            values["status_code"], values["latency_ms"], values["failure_reason"],
-            values["attempt_id"], claim_id, owner_token,
+            values["status"], values["updated_at"], values["status_code"],
+            values["latency_ms"], values["failure_reason"], values["attempt_id"],
+            claim_id, owner_token,
         )
 
     async def delete_by_tenant(self, tenant_id: str) -> int:
@@ -560,9 +586,6 @@ class CustomerWebhookSecretStore:
             "secret_ref": secret_ref,
             "secret_hash": secret_fingerprint(value),
             "secret_configured": True,
-            # The caller may return this only in the create response. It is
-            # never persisted in the webhook record or included in reads.
-            "secret": value,
         }
 
     async def resolve(self, tenant_id: str, secret_ref: str) -> str:
@@ -679,7 +702,7 @@ class CustomerWebhookDeliveryService:
             url=url,
             payload={"schema_version": "1.0", "type": "test", "message": "Aether notification channel test"},
             secret=secret,
-            event_id="test",
+            event_id=f"test:{uuid.uuid4().hex}",
             kind="test",
         )
 
@@ -913,7 +936,7 @@ class CustomerWebhookDeliveryService:
             webhook_id=str(record.get("webhook_id", "")),
             tenant_id=str(record.get("tenant_id", "")),
             idempotency_key=key,
-            attempts=int(record.get("attempt_number", 0)),
+            attempts=int(record.get("attempts", record.get("attempt_number", 0))),
             status_code=record.get("status_code"),
             latency_ms=record.get("latency_ms"),
             error=record.get("failure_reason"),

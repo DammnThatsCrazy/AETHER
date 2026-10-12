@@ -88,6 +88,14 @@ function installApiFetch(t, { onRequest } = {}) {
     if (parsed.pathname === '/v1/entities') {
       return apiResponse({ entities: [], count: 0 }, { requestId: 'middleware-entities' });
     }
+    if (parsed.pathname === '/v1/billing/usage/summary') {
+      return apiResponse({
+        usage_by_dimension: { access_interaction: 3, profile_query: 99 },
+        billing_period_start: '2026-10-01T00:00:00Z',
+        billing_period_end: '2026-11-01T00:00:00Z',
+        status: 'available',
+      }, { requestId: 'middleware-usage' });
+    }
     if (parsed.pathname === '/v1/batch') {
       return new Response(JSON.stringify({
         accepted: 1,
@@ -161,6 +169,7 @@ test('remote list validates caller session on every request and omits observe wi
   assert.ok(tools.includes('entities_list'));
   assert.ok(tools.includes('entities_get'));
   assert.ok(tools.includes('account_context'));
+  assert.ok(tools.includes('usage_summary'));
   assert.ok(tools.includes('agent_access_capabilities_list'));
   assert.ok(!tools.includes('observe'));
   assert.equal(requests.length, 1);
@@ -168,6 +177,25 @@ test('remote list validates caller session on every request and omits observe wi
   assert.equal(requests[0].init.headers['x-session-token'], SESSION_TOKEN);
   assert.equal('authorization' in requests[0].init.headers, false);
   assert.equal(JSON.stringify(result).includes('must-not-be-forwarded'), false);
+});
+
+test('remote usage_summary calls the shared tenant API with MCP HTTP attribution', async (t) => {
+  const requests = installApiFetch(t);
+  const handler = createRemoteMcpFetchHandler({ env });
+  const response = await handler(mcpRequest(mcpBody('tools/call', {
+    name: 'usage_summary', arguments: {},
+  })));
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.error, undefined, JSON.stringify(body));
+  assert.equal(body.result.structuredContent.usage.access_interaction_count, 3);
+  assert.equal(body.result.structuredContent.interaction.status_class, 'successful');
+  const summaryCall = requests.find((request) => request.url.pathname === '/v1/billing/usage/summary');
+  assert.ok(summaryCall);
+  assert.equal(summaryCall.init.headers['x-aether-access-surface'], 'mcp_http');
+  const preflight = requests.find((request) => request.url.pathname === '/v1/me');
+  assert.equal(preflight.init.headers['x-aether-access-surface'], undefined);
+  assert.doesNotMatch(JSON.stringify(body), /profile_query|usage_by_dimension/);
 });
 
 test('remote observe appears only with request-scoped publishable key and site, used only for batch', async (t) => {

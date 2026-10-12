@@ -14,6 +14,7 @@ import {
   listEntities,
   getEntity,
   projectObservedCapability,
+  getUsageSummary,
 } from '../src/api.mjs';
 import { registerEntityTools } from '../src/entity-tools.mjs';
 import { registerAccountContextTool } from '../src/account-context-tools.mjs';
@@ -91,13 +92,17 @@ function toolError(error) {
   return { content: [{ type: 'text', text: JSON.stringify({ error: details }) }], isError: true };
 }
 
-export function createAccessMcpServer(env = process.env, { includeObserve = true } = {}) {
+export function createAccessMcpServer(
+  env = process.env,
+  { includeObserve = true, surface = 'mcp_stdio' } = {},
+) {
+  const accessEnv = { ...env, AETHER_ACCESS_SURFACE: surface };
   const server = new McpServer({ name: 'aether-access-kit', version: '0.1.0-alpha.0' });
   registerEntityTools(server, {
-    list: (args) => listEntities(args, env),
-    get: (entityId) => getEntity(entityId, env),
+    list: (args) => listEntities(args, accessEnv),
+    get: (entityId) => getEntity(entityId, accessEnv),
   });
-  registerAccountContextTool(server, { get: () => getAccountContext(env) });
+  registerAccountContextTool(server, { get: () => getAccountContext(accessEnv) });
 
   server.registerTool(
     'agent_access_capabilities_list',
@@ -128,7 +133,7 @@ export function createAccessMcpServer(env = process.env, { includeObserve = true
           toolName: tool_name,
           limit: limit ?? 100,
           offset: offset ?? 0,
-        }, env);
+        }, accessEnv);
         const items = (Array.isArray(result.data?.items) ? result.data.items : [])
           .map(projectObservedCapability)
           .filter(Boolean)
@@ -165,9 +170,47 @@ export function createAccessMcpServer(env = process.env, { includeObserve = true
     },
     async () => {
       try {
-        const result = await getCapabilityOverview(env);
+        const result = await getCapabilityOverview(accessEnv);
         const output = {
           summary: result.data ?? {},
+          request_id: result.requestId,
+          ...(result.responseRequestId ? { api_request_id: result.responseRequestId } : {}),
+          interaction: result.interaction,
+        };
+        return {
+          content: [{ type: 'text', text: JSON.stringify(output) }],
+          structuredContent: output,
+        };
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'usage_summary',
+    {
+      title: 'Read Access Kit usage summary',
+      description: 'Read the authenticated tenant’s non-billable Access Kit interaction count for the current billing period. This is a read-only projection of Aether billing usage and does not expose other usage dimensions or tenant identifiers.',
+      inputSchema: z.object({}).strict(),
+      outputSchema: z.object({
+        usage: z.object({
+          access_interaction_count: z.number().nonnegative(),
+          billing_period_start: z.string().nullable(),
+          billing_period_end: z.string().nullable(),
+          status: z.enum(['available', 'truncated', 'unavailable']),
+        }),
+        request_id: z.string(),
+        api_request_id: z.string().optional(),
+        interaction: interactionSchema,
+      }),
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    },
+    async () => {
+      try {
+        const result = await getUsageSummary(accessEnv);
+        const output = {
+          usage: result.data,
           request_id: result.requestId,
           ...(result.responseRequestId ? { api_request_id: result.responseRequestId } : {}),
           interaction: result.interaction,
@@ -208,7 +251,7 @@ export function createAccessMcpServer(env = process.env, { includeObserve = true
           eventSequence: sequence,
           properties,
           surface: 'mcp',
-        }, env);
+        }, accessEnv);
         const output = buildObserveOutput(result);
         return {
           content: [{ type: 'text', text: JSON.stringify(output) }],

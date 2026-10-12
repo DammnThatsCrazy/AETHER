@@ -24,6 +24,7 @@ CORS_ALLOW_HEADERS: tuple[str, ...] = (
     "X-API-Key",
     "X-Request-ID",
     "X-Correlation-ID",
+    "X-Aether-Access-Surface",
     "X-Aether-Environment",
     "X-Kyber-Environment",
 )

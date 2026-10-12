@@ -42,8 +42,10 @@ reviewed_source_commits:
     reason: "Reviewed the Aether test-only timeout stabilization (static Cluster360 import and controlled signup field changes); no runtime architecture or data-truth behavior changed, so no body update was required."
   - commit: "95e6c54f"
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
+  - commit: "453f71f9a"
+    reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:51791b620620ea1d37354ad2eb133b3c70a4c424aac2b469c46b11e0b29f4883"
+  "apps/aether-web/src/": "sha256:8d11e87d771978e7602ce4dc208db3850349fec44f2c380ae2b944dc4d2efea1"
   "apps/kyber-web/src/": "sha256:7a31deaee6f5e047df21f6cd1115604f956f283b23e904128385824ab2fbf32a"
   "packages/ui/core/src/": "sha256:75ba669073aebf48fe1bb982913d32019b79b5fdcfe8dce5266f95412325f2b9"
 ---
@@ -130,7 +132,12 @@ the root.
 - Campaign management, attribution dashboards, Campaign 360 (`/campaigns/:id`) — per-campaign overview, population, clusters, conversions, and attribution with referral/source-class rollups; communication rates expose governed value state, sample sufficiency, Wilson uncertainty, and lineage, and the tenant UI withholds values that do not meet the registry minimum sample. Campaign 360 also hosts **Outcome 360** / **Economic 360** intelligence-projection tabs (`features/projection-360/`): they render typed projection section states for the campaign focus (available/degraded/empty …), never recomputing projection content
 - Profile360 and Journey Explorer source evidence — journey steps surface AI provider/product, mediation type, verification, confidence, classifier version, attribution eligibility, and attributed net revenue when backed by active credits; excluded crawler/scanner noise remains counted in journey quality metadata. Journey Explorer also renders exact-reference commerce operation links with source roles and relations, and explicitly states that the evidence does not imply settlement or add operation amounts to journey value.
 - API key management, plan management, usage metering
-- Webhook endpoint management — add/test/delete outbound delivery endpoints
+- Webhook endpoint management — create, signed-test, rotate the write-only
+  signing secret, inspect bounded delivery history, and delete tenant-owned
+  Access Kit interaction endpoints. New endpoints stay inactive until a test
+  succeeds; rotation pauses delivery until re-verification. The Usage & Plan
+  page shows the non-billable Access Kit interaction count without an included
+  quota or price bar.
 - **Notification center** — paginated inbox for notification-intelligence and agent alerts with severity filtering, read/acknowledge state, and quiet-hours/timezone preference persistence (`pages/notifications/notification-center-page.tsx`)
 - **Continue-on-phone** — continuation creation, recent mobile activity, and resume surfaces backed by the `/v1/continuations` and `/v1/client-sync` planes (`features/continuation/`)
 

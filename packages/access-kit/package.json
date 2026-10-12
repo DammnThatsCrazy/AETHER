@@ -19,7 +19,8 @@
   },
   "files": [
     "bin",
-    "src"
+    "src",
+    "scripts"
   ],
   "engines": {
     "node": ">=20"
@@ -31,6 +32,7 @@
   "scripts": {
     "start:mcp": "node ./bin/aether-mcp.js",
     "start:mcp:http": "node ./bin/aether-mcp-http.js",
+    "acceptance:v1": "node ./scripts/v1-acceptance.mjs",
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
