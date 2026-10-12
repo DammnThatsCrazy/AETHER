@@ -8,11 +8,21 @@ status: stable
 since_version: "0.1.0"
 source_files:
   - services/api/value/x402/
+  - services/api/value/x402/provenance.py
+  - services/api/actions/agent/deployment_routes.py
+  - services/api/actions/agent_marketplace/authority.py
+  - services/api/actions/agent_marketplace/graph_state_check.py
+  - services/api/ingestion/silver/projectors/agent_execution_projector.py
 canonical_owner: commerce@aether
 estimated_read_minutes: 3
 toc_depth: 3
 source_hashes:
-  "services/api/value/x402/": "sha256:69071092cc6527dca201b9ff15cb9a5308bf8d56ab18286c82e51ca1aa40b522"
+  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
+  "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
+  "services/api/value/x402/": "sha256:5d041fbb1a1fb7494c5a547b4aac97804e0dcf478261170546663918a509377f"
+  "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
 ---
 # Commerce Operator Runbook
 
@@ -95,14 +105,29 @@ source_hashes:
 2. The worker skips tenants whose x402 capability is SUSPENDED (kill switch) —
    resume the capability to re-enable reconciliation.
 
-## 6. Reconciliation drift (graph vs lake)
+## 6. Agent-reported economic outcomes
 
-**Symptom:** Nightly job reports drift > 0.
+**Symptom:** An Agent run reports a payment or settlement reference, or its
+timeline shows a missing, unavailable, or unmatched economic record.
 
 **Steps:**
-1. Inspect drift report: (extension point, see `services/api/value/x402/commerce_store.py` patterns).
-2. Replay silver into graph via `economic_mutations` rebuild helpers.
-3. Verify drift resolved.
+1. Read the tenant-scoped run timeline at
+   `GET /v1/agent/deployments/{deployment_id}/runs/{run_id}/explanation`.
+   Inspect `economic_outcome.status` and the exact payment-intent or
+   settlement-event references. `matched`, `unresolved`, `unavailable`, and
+   `not_supplied` describe the lookup result; `not_supplied` does not prove no
+   payment occurred.
+2. For a `matched` result, use the authoritative tenant payment-intent and
+   settlement records to confirm their current state and settlement finality.
+   A source-reported Agent event or a matching reference establishes neither
+   causation nor a completed payment.
+3. Treat public SDK x402 observations as telemetry only. They cannot create or
+   overwrite authoritative payment, settlement, or access-grant state. The
+   server commerce event registry and x402 provenance rules determine which
+   lifecycle records count as server-observed evidence.
+4. Do not replay a graph projection merely because a source claim is
+   unmatched. For graph evidence, use the independent Kyber state check in the
+   Operations Runbook; it reports graph drift without repairing it.
 
 ## 6. Override review
 

@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 source_hashes:
   "services/api/value/derivatives/admin_routes.py": "sha256:94eb1c95b844e86a866fc44b88e831116ebd1a8892ce2535520848e35b57924b"
-  "services/api/value/derivatives/materializer.py": "sha256:202d4cb73dfb080a617cfeb8db34dd7e03f085581b47d40640f3c3e68bb15130"
+  "services/api/value/derivatives/materializer.py": "sha256:06eb7520f79a89ba20de9ee7785da10b3e8ee70b49ee2022bbae0956f88c61ce"
 ---
 
 # Derivatives Reconciliation Runbook

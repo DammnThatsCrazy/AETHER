@@ -106,6 +106,13 @@ NON_SURFACE: dict[str, str] = {
         "comparison definitions and runs are not projected into the tenant graph; "
         "operator comparison parity is not implemented"
     ),
+    "/agents/:agentId": (
+        "Agent 360 combines a tenant-scoped profile with deployment run evidence "
+        "and a public marketplace snapshot; that composite view has no tenant "
+        "graph mirror contract. Kyber agent investigation uses the separately "
+        "authorized agentic-observability surface until a matching resolver and "
+        "byte-parity proof exist"
+    ),
 }
 
 MANIFEST_COMMENT = (

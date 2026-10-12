@@ -111,6 +111,8 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
     EdgeType.GOVERNED_BY: RelationshipLayer.A2A,
     EdgeType.DEPENDS_ON: RelationshipLayer.A2A,
     EdgeType.PERFORMED_ACTION: RelationshipLayer.A2A,
+    EdgeType.REFERENCES_DELEGATION_RECORD: RelationshipLayer.EXCLUDED,
+    EdgeType.CORRELATED_WITH_ECONOMIC_RECORD: RelationshipLayer.EXCLUDED,
     EdgeType.EXECUTED_AS: RelationshipLayer.A2A,
     EdgeType.PRODUCED: RelationshipLayer.A2A,
     EdgeType.UPDATES_CONFIDENCE_FOR: RelationshipLayer.A2A,
@@ -249,6 +251,7 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
 
     # ── Agent Lifecycle — Task control-flow ───────────────────────────────
     EdgeType.CREATED_TASK: RelationshipLayer.A2A,
+    EdgeType.RUN_CONTAINS_TASK: RelationshipLayer.A2A,
     EdgeType.DECOMPOSED_INTO: RelationshipLayer.A2A,
     EdgeType.STARTED_TASK: RelationshipLayer.A2A,
     EdgeType.COMPLETED_TASK: RelationshipLayer.A2A,
@@ -312,6 +315,7 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
     # ── Entity → Entity (universal relationship graph) ────────────────────
     EdgeType.CO_INVESTS_WITH: RelationshipLayer.H2H,
     EdgeType.LISTED_ON: RelationshipLayer.H2H,
+    EdgeType.LISTS_AGENT_TEMPLATE: RelationshipLayer.H2H,
     EdgeType.DISTRIBUTES_VIA: RelationshipLayer.H2H,
     EdgeType.CONTENT_ON: RelationshipLayer.H2H,
     EdgeType.COMPETES_WITH: RelationshipLayer.H2H,
@@ -637,12 +641,15 @@ H2H_VERTEX_TYPES = frozenset({
     VertexType.EMAIL, VertexType.PHONE, VertexType.WALLET,
     VertexType.DEVICE_FINGERPRINT, VertexType.IP_ADDRESS,
     VertexType.LOCATION, VertexType.IDENTITY_CLUSTER,
-    VertexType.TRADING_ACCOUNT,
+    VertexType.TRADING_ACCOUNT, VertexType.AGENT_TEMPLATE,
+    VertexType.AGENT_MARKETPLACE_LISTING,
+    VertexType.MARKETPLACE, VertexType.EXTERNAL_AGENTIC_ACCOUNT,
 })
 
 H2A_VERTEX_TYPES = frozenset({
     VertexType.USER, VertexType.AGENT, VertexType.SERVICE,
     VertexType.CAMPAIGN, VertexType.TRADING_ACCOUNT,
+    VertexType.ENTITY, VertexType.DELEGATION,
 })
 
 A2H_VERTEX_TYPES = frozenset({
@@ -654,6 +661,9 @@ A2A_VERTEX_TYPES = frozenset({
     VertexType.AGENT, VertexType.SERVICE, VertexType.CONTRACT,
     VertexType.PROTOCOL, VertexType.PAYMENT, VertexType.ACTION_RECORD,
     VertexType.VERIFICATION_ACTOR, VertexType.DELIVERY_ACTOR,
+    VertexType.EXTERNAL_AGENTIC_ACCOUNT, VertexType.AGENT_EXECUTION_RUN,
+    VertexType.TASK, VertexType.OUTCOME_OBSERVATION,
+    VertexType.PAYMENT_INTENT, VertexType.SETTLEMENT_EVENT,
 })
 
 

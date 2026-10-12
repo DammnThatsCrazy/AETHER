@@ -29,8 +29,8 @@ source_hashes:
   "infra/aws/terraform/modules/ecs/main.tf": "sha256:a1b701301f9ebb1339cfa1ae1f07f24bc7c8b1f36c47d38b52f8e5050ccfe7b4"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
-  "services/api/repositories/repos.py": "sha256:c03e0537e86217db3dc67aabc2ce179a589ece64870dcdcc1f76d7f79ae95dae"
-  "services/api/tenancy/auth/routes.py": "sha256:33de1a272f8eaf4ee635f01044703bf25888d45d27c5623ee5ca3bbbe003c9a5"
+  "services/api/repositories/repos.py": "sha256:18ffc6df66bfc4484aaab821c791fda4579382634a23066ddbe5276d4408ec04"
+  "services/api/tenancy/auth/routes.py": "sha256:35dd9ffc6fe501bed1346c37fc1f455e65b9494f0d041b2ec9e70fcb930fe3d1"
 ---
 
 # AETHER first-admin bootstrap

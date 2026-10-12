@@ -44,5 +44,5 @@ locally.
 
 Local mocked mode uses MSW (frontends) and in-memory repositories (backend).
 Deployment uses env-driven API URLs and the same adapters backed by real streams.
-See [Local Development](LOCAL-DEVELOPMENT.md) and
+See [Local Development](local-development.md) and
 [Deployment & Hosting Readiness](DEPLOYMENT-HOSTING-READINESS.md).

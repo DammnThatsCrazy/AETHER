@@ -141,13 +141,16 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     # canonical observation spine (dune_polling): stablecoin provider polling and
     # the interop scan are polling/observation loops, not materialization.
     "stream-worker": frozenset(
-        {"event_replay", "dune_polling", "stablecoin_provider_polling", "interop_scan"}
+        {
+            "event_replay", "dune_polling", "stablecoin_provider_polling",
+            "interop_scan", "agent_marketplace_catalog_observer",
+        }
     ),
     "identity-worker": frozenset(),
     # The Kyber Graph projector consumes the graph mutation ledger into platform
     # topology. The card-linked graph outbox projects card-linked ingestion
     # graph writes the same way, so it rides graph-writer.
-    "graph-writer": frozenset({"kyber_graph_projector", "card_linked_graph_outbox"}),
+    "graph-writer": frozenset({"kyber_graph_projector", "card_linked_graph_outbox", "agent_marketplace_graph_outbox"}),
     "measurement-worker": frozenset(),
     # Stream consumer is owned by consumer_specs.py; the reconciler + retention
     # supervised loop specs (each gated on its settings flag) are owned here.

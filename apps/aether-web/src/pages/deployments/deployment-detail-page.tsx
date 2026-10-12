@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   Badge,
@@ -20,8 +20,10 @@ import {
 } from '@aether/ui';
 import {
   useAgentDeployment,
+  useAgentDeploymentIdentityBinding,
   useAgentDeploymentHealth,
   useAgentDeploymentActivity,
+  useBindAgentDeploymentIdentity,
   useDeploymentLifecycle,
 } from '@aether-app/features/deployments';
 import type { DeploymentLifecycleAction } from '@aether-app/features/deployments';
@@ -114,6 +116,92 @@ const ACTION_LABELS: Record<DeploymentLifecycleAction, { pending: string; succes
   revoke: { pending: 'Revoking…', success: 'Deployment revoked' },
   archive: { pending: 'Archiving…', success: 'Deployment archived' },
 };
+
+function IdentityBindingPanel({ deploymentId }: { readonly deploymentId: string }) {
+  const { toast } = useToast();
+  const timeCtx = useTimeContext();
+  const { binding, loading, error, refresh } = useAgentDeploymentIdentityBinding(deploymentId);
+  const { bind, loading: bindLoading, error: bindError } = useBindAgentDeploymentIdentity();
+  const [canonicalAgentEntityId, setCanonicalAgentEntityId] = useState('');
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const canonicalId = canonicalAgentEntityId.trim();
+    if (!canonicalId) return;
+    const result = await bind(deploymentId, canonicalId);
+    if (result) {
+      toast.success('Canonical Agent identity linked');
+      setCanonicalAgentEntityId('');
+      refresh();
+    } else {
+      toast.error('Could not link canonical Agent identity');
+    }
+  };
+
+  const matched = binding?.status === 'matched';
+  const hasSourceIdentity = Boolean(binding?.source_namespace && binding?.source_agent_ref);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Canonical Agent identity</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-text-secondary">
+          The deployment Agent ID is a source reference. A tenant manager can explicitly link its namespaced identity to one canonical Agent entity; telemetry cannot create or change this binding.
+        </p>
+        {loading && !binding ? <LoadingState lines={2} /> : null}
+        {error ? <ErrorState title="Identity binding unavailable" message={error} onRetry={refresh} /> : null}
+        {binding && (
+          <div className="space-y-2 rounded border border-border-subtle bg-surface-raised p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-medium text-text-primary">Binding status</span>
+              <Badge size="sm" variant={matched ? 'success' : binding.status === 'unavailable' ? 'danger' : binding.status === 'ambiguous' ? 'warning' : 'default'}>
+                {matched ? 'Canonical Agent linked' : binding.status === 'unresolved' ? 'Not linked' : binding.status}
+              </Badge>
+            </div>
+            <div className="grid gap-1 text-xs sm:grid-cols-2">
+              <div><span className="text-text-muted">Source namespace: </span><span className="break-all font-mono text-text-primary">{binding.source_namespace || 'Not recorded'}</span></div>
+              <div><span className="text-text-muted">Source Agent ID: </span><span className="break-all font-mono text-text-primary">{binding.source_agent_ref || 'Not recorded'}</span></div>
+              {matched && <div className="sm:col-span-2"><span className="text-text-muted">Canonical Agent entity: </span><span className="break-all font-mono text-text-primary">{binding.canonical_agent_entity_id}</span></div>}
+              {matched && <div><span className="text-text-muted">Binding authority: </span><span className="font-mono text-text-primary">{binding.binding_authority}</span></div>}
+              {matched && binding.bound_at && <div><span className="text-text-muted">Bound at: </span><span className="font-mono text-text-primary">{formatDateTime(binding.bound_at, timeCtx)}</span></div>}
+              {binding.reason && <div className="sm:col-span-2 text-text-secondary">{binding.reason}</div>}
+            </div>
+          </div>
+        )}
+        {binding?.status === 'unresolved' && !hasSourceIdentity && (
+          <p className="text-xs text-warning">
+            This deployment has no complete source namespace and Agent ID pair. Register a source namespace before linking a canonical Agent.
+          </p>
+        )}
+        {binding?.status === 'unresolved' && hasSourceIdentity && (
+          <form className="space-y-2 rounded border border-border-default p-3" onSubmit={event => void handleSubmit(event)}>
+            <label className="block space-y-1 text-xs text-text-secondary" htmlFor="canonical-agent-entity-id">
+              <span>Canonical Agent entity ID in this tenant</span>
+              <input
+                id="canonical-agent-entity-id"
+                autoComplete="off"
+                className="w-full rounded border border-border-default bg-surface-raised px-3 py-2 font-mono text-sm text-text-primary"
+                maxLength={256}
+                onChange={event => setCanonicalAgentEntityId(event.target.value)}
+                placeholder="Agent entity ID"
+                value={canonicalAgentEntityId}
+              />
+            </label>
+            <p className="text-[11px] text-text-muted">
+              The backend verifies that this ID names an Agent owned by the current tenant. Bindings are immutable; verify the entity ID before submitting.
+            </p>
+            {bindError && <p role="alert" className="text-xs text-danger">{bindError}</p>}
+            <Button type="submit" variant="secondary" disabled={bindLoading || !canonicalAgentEntityId.trim()}>
+              {bindLoading ? 'Linking…' : 'Create immutable identity link'}
+            </Button>
+          </form>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export function DeploymentDetailPage() {
   const timeCtx = useTimeContext();
@@ -229,6 +317,8 @@ export function DeploymentDetailPage() {
           </div>
         </div>
       </div>
+
+      <IdentityBindingPanel deploymentId={deployment.id} />
 
       {/* Health counters (rolling 24h) */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">

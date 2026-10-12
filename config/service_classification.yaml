@@ -33,6 +33,7 @@ services:
   agent: {class: experimental, stage: intelligence, reason: "agent orchestration, task management and worker coordination"}
   agent_access_intelligence: {class: experimental, stage: intelligence, reason: "agent capability catalog, authority and governance"}
   agent_comm_observability: {class: experimental, stage: intake, reason: "observation-only agent communication routes"}
+  agent_marketplace: {class: experimental, stage: intake, reason: "provider-neutral, observation-only agent marketplace catalog and run lineage"}
   agentic_observability: {class: experimental, stage: intake, reason: "observation-only agent activity routes"}
   analytics: {class: beta, stage: product, reason: "dashboard, report and export query engine"}
   analytics_automation: {class: beta, stage: intelligence, reason: "automated campaign performance monitoring pipeline"}

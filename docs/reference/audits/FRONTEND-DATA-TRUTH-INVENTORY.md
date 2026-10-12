@@ -16,7 +16,7 @@ reviewed_source_commits:
   - commit: "95e6c54f"
     reason: "Reviewed the Aether frontend route/history context fixes, explicit shared ESM imports, and Data Exchange E2E graph-scope fixture. Runtime data-truth counts and the test-only fixture classification remain unchanged, so no body update was required."
 source_hashes:
-  "apps/aether-web/": "sha256:e2a46ef5f20e77699bc6e080195f166f983d59f392171e6a2c2c9d076acfab39"
+  "apps/aether-web/": "sha256:1ffa033222fb3ea2a1dab9761b4da9759152ded46e1241cc3d5f945c1ced5c13"
   "apps/demo/": "sha256:68e3f82d5ac29330519e833dc50bca0023c83e9d6e5b448f09129917617d1b7c"
   "apps/kyber-web/": "sha256:a7abed650f865514ee955f12df1f732bcd2ddfec88dc01a472f09ae6db5965c7"
   "scripts/docs_extract/extract_frontend_data_truth_inventory.py": "sha256:e51b21de00c3d6a4b38993c3aa40c3988477edf2c9987b5bf3b987d11b27dd47"
@@ -51,6 +51,15 @@ The Aether Journey Explorer's economic-operation panel calls the tenant-scoped
 Journey evidence endpoint. It displays only explicit source-linked operation
 references and reports an empty state when the journey contains no shared
 commerce reference; it does not synthesize a match or copy operation value.
+
+Agent 360's external-agent panels read tenant deployment/run evidence and a
+separately source-labelled public marketplace catalog from backend routes. The
+deployment view exposes explicit identity-binding status. Run evidence presents
+economic matches, canonical delegation resolution, event-time grant evaluation,
+and occurrence as separate states; source assertions are labelled, and an
+external action remains unverified without a server-owned receipt. The catalog
+display does not treat public listings as tenant graph nodes, and run coverage
+is withheld when the evidence source is unavailable.
 
 The generated artifact distinguishes:
 

@@ -8,6 +8,22 @@ status: stable
 since_version: 0.1.0
 source_files:
   - services/api/shared/graph/
+  - services/api/ingestion/silver/projectors/agent_execution_projector.py
+  - services/api/ingestion/silver/projectors/silver_graph_projector.py
+  - services/api/actions/agent_marketplace/lineage.py
+  - services/api/actions/agent_marketplace/projection.py
+  - services/api/actions/agent_marketplace/catalog.py
+  - services/api/actions/agent_marketplace/authority.py
+  - services/api/actions/agent_marketplace/identity_binding.py
+  - services/api/alembic/versions/20261011_agent_delegated_to_namespace.py
+  - services/api/actions/agent_marketplace/graph_state_check.py
+  - services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py
+  - services/api/actions/agent/deployment_routes.py
+  - services/api/ingestion/ingestion/lifecycle_worker.py
+  - services/api/workers/profile360_workers/workers.py
+  - services/api/repositories/repos.py
+  - services/api/value/x402/economic_mutations.py
+  - services/api/value/x402/provenance.py
   - services/api/graph/web3/classifier.py
   - services/api/graph/web3/routes.py
   - scripts/allowlists/graph_write_paths.json
@@ -23,9 +39,25 @@ source_hashes:
   "docs/reference/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:77e53b782c1633240ba44d8151a7b0f3712f44a497cf9691b7c0421a466c56f8"
   "scripts/allowlists/graph_write_paths.json": "sha256:37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
   "scripts/validate_graph_write_paths.py": "sha256:b8e155e472289a5a0024e91e1af025f0c300b927f91cb9b6f3d34e02dfaf00c6"
+  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
+  "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
+  "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
+  "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
+  "services/api/actions/agent_marketplace/lineage.py": "sha256:bfe247f42c3360f30b3f4fa92b1f39e95f654be0862303d6f74b9fb2363e6566"
+  "services/api/actions/agent_marketplace/projection.py": "sha256:92a5f5e457beebde9d161bf26f40ccb39fc5b76bc8ae4abfccc3e572b3c29de0"
+  "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
+  "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/graph/web3/classifier.py": "sha256:4ced74981c964a8e2442071071289d7d28dbd6bf4042200ce05934cdbd781a0e"
   "services/api/graph/web3/routes.py": "sha256:99f06d0b04993a9e61061bfb036da76e571d3084106db18f4c3e7696c1421d37"
-  "services/api/shared/graph/": "sha256:845d81636b7d7f7d5ed5048a18cb654164c80e333235d51635c72f2bb98d353f"
+  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
+  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
+  "services/api/repositories/repos.py": "sha256:18ffc6df66bfc4484aaab821c791fda4579382634a23066ddbe5276d4408ec04"
+  "services/api/shared/graph/": "sha256:6a4870242b1476b2eca52b4645aa2034af8b345ac353b060a72b8d02cd41ad08"
+  "services/api/value/x402/economic_mutations.py": "sha256:bdd180a936e048840636f221fdee3b142c0babab5d8e2bcc59b4a51983198f51"
+  "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
+  "services/api/workers/profile360_workers/workers.py": "sha256:0c79f5ee2cc03eb0ae92d8690a8622b8ebaea245dc047c7643107fe909d7170a"
 ---
 # Unified On-Chain Intelligence Graph v0.1.0-alpha.0
 
@@ -832,3 +864,46 @@ Aether graph nodes are styled based on `observation_class`:
 | `manually_asserted` | Solid + annotation icon | Human-annotated |
 
 Predicted nodes must never render with the same visual weight as observed nodes.
+
+## External agent execution evidence
+
+The external-agent observation path adds tenant-scoped `AgentExecutionRun`
+vertices linked to registered deployments, task references, and outcome
+references. Source-reported task actions, tool calls, triggers, policy decisions,
+and delegation references are represented as bounded `ActionRecord` and
+`DecisionRecord` evidence connected to the run. These records preserve event
+IDs and observed times so graph traversal can show the reported sequence.
+
+Deployment source identity is linked to a canonical Agent only through the
+explicit tenant-admin binding authority, keyed by tenant, source namespace, and
+source agent reference. Missing, ambiguous, stale, or cross-tenant bindings
+fail closed. This is a separate audited relationship and does not enable
+automatic identity merging. The source event and run explanation remain
+evidence, not a claim about hidden model reasoning or a guarantee that a
+reported policy was enforced.
+
+An exact same-tenant payment-intent or settlement-event reference can add an
+`EXCLUDED` `CORRELATED_WITH_ECONOMIC_RECORD` edge when the record has
+server-authoritative x402 provenance and its agent reference matches the
+validated deployment. A source delegation reference can link an action to an
+exact same-tenant canonical Delegation. The target source reference uses the
+explicit `delegated_to_namespace`; no actor-namespace fallback is used. Where
+explicit actor and target bindings resolve, the backend evaluates the delegation record's endpoints,
+status, effective/revocation window, action, resource, and supported amount
+limit at the source-reported event time. The separate evaluation is
+`within_scope`, `out_of_scope`, or `indeterminate`; source-supplied action,
+resource, and event time remain claims. It does not establish execution. In
+the absence of a server-owned execution receipt, occurrence remains
+`source_reported` and unverified. Canonical `DELEGATES`, `GRANTED_BY`, and
+`GRANTED_TO` relationships continue to come from delegation authority records.
+
+Kyber source-to-outbox reconcile/repair remains distinct from the read-only
+`GET /v1/admin/kyber/agent-telemetry/graph-projection/state-check` endpoint.
+The state check compares a bounded set of known tenant source references with
+graph state and reports consistency, partial coverage, or findings; it can
+surface missing/extra/mismatched links and unresolved/unauthorized evidence.
+It is best-effort, non-snapshot, and limited to the supported agent execution,
+economic, delegation, and identity link families. It neither mutates the graph
+nor certifies all graph contents. The optional public xAI catalog remains a
+separate platform-scoped source; tenant graph queries do not include its nodes,
+and no public slug is joined to a tenant deployment or canonical Agent.

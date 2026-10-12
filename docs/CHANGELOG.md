@@ -20,6 +20,7 @@ source_hashes:
 
 ### Added
 
+- Agent economy observation: tenant-scoped run/action evidence, bounded trigger/policy/delegation/outcome explanations, outbox recovery, and a default-off public xAI catalog observer with source-attributed Agent 360 and graph views. X posts/news ingestion and canonical external-agent identity joins remain gated follow-on work.
 - Exact-reference commerce reconciliation: Shopify order revisions and signed Stripe `payment_intent.succeeded` observations can join on explicit `aether_order_ref` metadata with exact decimal amount/currency checks; payment completion remains distinct from payout settlement.
 - SDK distribution layer: `@aether/web` build artifacts are emitted and guarded on the publish surface, and a CDN release pipeline (`.github/workflows/publish-sdk.yml`) ships verified manifests with a derived version.
 - Publishable (`pk_`) API keys — a site-scoped, ingestion-only key class alongside the existing secret (`ak_`) class, so a key in page HTML cannot reach the rest of the API.

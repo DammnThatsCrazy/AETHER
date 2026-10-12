@@ -6,19 +6,28 @@ visibility: I
 audience: [dev-senior, architect]
 status: experimental
 since_version: 0.1.0
-source_files: [services/api/value/x402/, services/api/actions/agent/, services/api/value/commerce/order_payment_reconciliation.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py, packages/shared/events.ts, packages/shared/agentic-observability.ts]
+source_files: [services/api/value/x402/, services/api/actions/agent/, services/api/actions/agent_marketplace/, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/value/commerce/order_payment_reconciliation.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/shared/store.py, services/api/workers/runtime/specs.py, packages/sdk/server/src/agent-telemetry.ts, packages/shared/events.ts, packages/shared/contracts/event-registry.json, packages/shared/agentic-observability.ts]
 source_hashes:
+  "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
-  "packages/shared/events.ts": "sha256:46bc12934b7c41c02f9304a77315bba2d3f71be253e7b30b1186208b40f8a59a"
-  "services/api/actions/agent/": "sha256:c299158d9a24384bd4f66ba71c567435d43893a2c8fd5c64514232973c0da986"
+  "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
+  "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
+  "services/api/actions/agent/": "sha256:9611953b1fad6b68720c08a4eb19f2349398c5d0a33aeb266edf840afca90ca0"
+  "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
+  "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
+  "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:ac5c38e755dd2720a76fcca31bf7877d7e2e5d2e5ea19c3a37bc5344e495ecc4"
   "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:b6617b0dd888b02ede69696d3d4e46906120c5f0fca4bb4f5393145218d6200c"
   "services/api/identity/profile/agent.py": "sha256:ef4434e8cf518e4a04073a6e3356be9119708e156ecdab018692ed4a6350853a"
-  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:43c2ddaea124e2f4996e24bc98fa81ecc134661ff071cc427d253c241df41e05"
+  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
+  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
+  "services/api/shared/store.py": "sha256:ff4198cf285ac4c250481ef0ae476037c26b1f4d1fa00751964638ff1f91fa8c"
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:84b3f00bfa6e0c1b4df5405636163a2650edf8651b3b36823a7f2ba26ca7b77e"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
   "services/api/value/economic/operation_linkage.py": "sha256:29544d6511463065fed4bba6acb212b9a1c57bb12800733bf6de00a56cf046fa"
-  "services/api/value/x402/": "sha256:69071092cc6527dca201b9ff15cb9a5308bf8d56ab18286c82e51ca1aa40b522"
+  "services/api/value/x402/": "sha256:5d041fbb1a1fb7494c5a547b4aac97804e0dcf478261170546663918a509377f"
+  "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
 
 # Agentic Observability Audit
@@ -27,6 +36,49 @@ source_hashes:
 > AETHER must not execute, originate, sign, custody, settle, or facilitate those actions
 > unless a future explicit product scope, legal review, compliance review, and feature flag
 > enable it. For now, all `execution_by_aether` fields must be `false`.
+
+## Current-state addendum (2026-10-10)
+
+PR #771 closes the external-agent execution-lineage and graph-recovery gaps
+within its defined scope. The SDK contract, backend validation, Silver
+projector, and graph projector now carry source-asserted deployment/run,
+task/action, trigger, tool, policy, delegation, and outcome references. Agent
+360 presents run evidence with source and coverage labels; it does not claim
+hidden reasoning or independently verify source assertions. Kyber recovery
+pages tenant deployment/Silver sources or platform catalog observations
+separately from outbox status, checks missing work by deterministic outbox ID,
+and writes only through the graph mutation gateway. Scan reports explicitly
+identify `best_effort_non_snapshot` consistency and do not certify graph state.
+
+The default-off xAI catalog observer adds minimal public listing metadata as a
+separate `platform`-scoped source. It does not fetch bot configuration or join
+public listing slugs to canonical Agents. Tenant admins can explicitly bind a
+deployment source namespace/reference to a same-tenant canonical Agent; the
+binding is separate from automatic identity merge and fails closed when absent
+or ambiguous. A source delegation reference resolves to a same-tenant
+canonical grant, and when actor/target bindings resolve, backend-owned grant
+status, endpoints, effective/revocation window and supported scope are
+evaluated at source event time. The result remains separate from execution
+occurrence: action/resource/time are source claims, and without a server-owned
+receipt occurrence is unverified. Deployment, payment, settlement, and
+delegation identifiers plus `delegatedToNamespace` remain source references.
+A new bounded read-only graph state check
+compares supported tenant links to source evidence and reports partial,
+non-snapshot coverage; it neither repairs nor certifies the whole graph.
+Associated x.com posts and x.ai news, private bot contents, server-owned
+external execution receipts, and comprehensive snapshot-consistent graph
+certification remain follow-on work.
+
+For economic outcomes, optional task/outcome payment-intent and settlement-event
+references resolve only against exact same-tenant records with server-owned
+x402 provenance and a matching deployment registry agent reference. Public SDK
+x402 observations remain source claims and cannot replace server-authoritative
+payment state. Linked amount, currency and lifecycle state come from the
+authoritative record; the correlation does not establish causality, verify the
+source action, or prove settlement finality.
+The historical gap matrices below retain their original audit date and should
+not be read as a current inventory without this addendum and the linked
+source-of-truth documents.
 
 ## Bucket 1 — Correctly observation-only
 

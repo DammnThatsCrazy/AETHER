@@ -56,6 +56,7 @@ function RegisterDeploymentModal({ open, onClose }: RegisterModalProps) {
   const { create, loading } = useCreateAgentDeployment();
   const [displayName, setDisplayName] = useState('');
   const [agentId, setAgentId] = useState('');
+  const [agentSourceNamespace, setAgentSourceNamespace] = useState('');
   const [platform, setPlatform] = useState<ExternalPlatform>('web_widget');
   const [environment, setEnvironment] = useState<AgentDeploymentEnvironment>('production');
   const [consentMode, setConsentMode] = useState<AgentDeploymentConsentMode>('tenant_managed');
@@ -68,6 +69,7 @@ function RegisterDeploymentModal({ open, onClose }: RegisterModalProps) {
     const created = await create({
       display_name: displayName.trim(),
       agent_id: agentId.trim(),
+      ...(agentSourceNamespace.trim() ? { agent_source_namespace: agentSourceNamespace.trim().toLowerCase() } : {}),
       external_platform: platform,
       environment,
       consent_mode: consentMode,
@@ -76,6 +78,7 @@ function RegisterDeploymentModal({ open, onClose }: RegisterModalProps) {
       toast.success('Deployment registered');
       setDisplayName('');
       setAgentId('');
+      setAgentSourceNamespace('');
       onClose();
     } else {
       toast.error('Failed to register deployment');
@@ -104,6 +107,15 @@ function RegisterDeploymentModal({ open, onClose }: RegisterModalProps) {
           onChange={e => setAgentId(e.target.value)}
           placeholder="agent_support_v2"
         />
+        <Input
+          label="Agent source namespace"
+          value={agentSourceNamespace}
+          onChange={e => setAgentSourceNamespace(e.target.value)}
+          placeholder="provider.account"
+        />
+        <p className="-mt-3 text-[11px] text-text-muted">
+          Use the stable source system namespace with this Agent ID. A tenant manager can later link this pair to a canonical Agent entity.
+        </p>
         <div className="flex flex-col gap-1">
           <label className="text-xs text-text-secondary" htmlFor="deployment-platform">External platform</label>
           <select

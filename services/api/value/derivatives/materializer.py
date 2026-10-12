@@ -24,12 +24,12 @@ measurement.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Awaitable, Callable, Optional
 
 from config.settings import settings
+from shared.temporal.instant import coerce_utc_lenient
 from repositories.derivatives_repos import (
     FillRepo,
     PnlSnapshotRepo,
@@ -162,11 +162,8 @@ def replay_epochs(facts: list[NormalizedFillFact]) -> tuple[list[ClosedEpoch], P
 def _ts(value: Any) -> Any:
     """An ISO timestamp string as a datetime for TIMESTAMPTZ columns; anything else as is."""
     if isinstance(value, str):
-        try:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except ValueError:
-            return value
-        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        parsed = coerce_utc_lenient(value)
+        return parsed if parsed is not None else value
     return value
 
 

@@ -2958,22 +2958,6 @@
       "canonical_owner": "platform@aether"
     },
     {
-      "path": "docs/operations/INCIDENT-RESPONSE.md",
-      "title": "Incident Response",
-      "slug": "reliability/incident-response",
-      "section": "operations",
-      "visibility": "I",
-      "audience": [
-        "ops",
-        "buyer",
-        "architect"
-      ],
-      "status": "beta",
-      "since_version": "0.1.0",
-      "estimated_read_minutes": 5,
-      "canonical_owner": "platform@aether"
-    },
-    {
       "path": "docs/operations/INTEGRATION-SECURITY.md",
       "title": "Integration Security",
       "slug": "enterprise/integration-security",
@@ -3052,22 +3036,6 @@
       ],
       "status": "stable",
       "since_version": "0.1.0",
-      "canonical_owner": "platform@aether"
-    },
-    {
-      "path": "docs/operations/LOCAL-DEVELOPMENT.md",
-      "title": "Local Development",
-      "slug": "operations/local-development",
-      "section": "operations",
-      "visibility": "I",
-      "audience": [
-        "dev-junior",
-        "dev-senior",
-        "ops"
-      ],
-      "status": "stable",
-      "since_version": "0.1.0",
-      "estimated_read_minutes": 6,
       "canonical_owner": "platform@aether"
     },
     {
@@ -3990,7 +3958,10 @@
         "security"
       ],
       "status": "experimental",
-      "since_version": "0.1.0"
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/operations/internal/noesis-security-checklist.md",
@@ -4046,7 +4017,10 @@
         "ops"
       ],
       "status": "experimental",
-      "since_version": "0.1.0"
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 7,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/operations/migrations.md",
@@ -4059,7 +4033,10 @@
         "ops"
       ],
       "status": "experimental",
-      "since_version": "0.1.0"
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/operations/noesis-operator-guide.md",
@@ -10541,6 +10518,18 @@
       "path": "docs/reference/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR3_PR4.md",
       "title": "Agent Access Intelligence Pr3 Pr4",
       "slug": "source-of-truth/agent_access_intelligence_pr3_pr4",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/reference/source-of-truth/AGENT_MARKETPLACE_LINEAGE.md",
+      "title": "Agent Marketplace Lineage",
+      "slug": "source-of-truth/agent_marketplace_lineage",
       "section": "reference",
       "visibility": "I",
       "audience": [

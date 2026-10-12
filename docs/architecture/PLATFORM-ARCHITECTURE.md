@@ -14,6 +14,18 @@ source_files:
   - services/api/ingestion/ingestion/replay_routes.py
   - services/api/shared/events/events.py
   - packages/shared/
+  - services/api/actions/agent/deployment_routes.py
+  - services/api/actions/agent_marketplace/catalog.py
+  - services/api/actions/agent_marketplace/authority.py
+  - services/api/alembic/versions/20261011_agent_delegated_to_namespace.py
+  - services/api/ingestion/silver/projectors/agent_execution_projector.py
+  - services/api/actions/agent_marketplace/identity_binding.py
+  - services/api/actions/agent_marketplace/graph_state_check.py
+  - services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py
+  - services/api/actions/agent_marketplace/lineage.py
+  - services/api/actions/agent_marketplace/projection.py
+  - services/api/workers/runtime/specs.py
+  - scripts/generate_feature_surface_manifest.py
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
@@ -25,13 +37,25 @@ reviewed_source_commits:
   - commit: "b9dc38da7"
     reason: "Reviewed the generated shared feature-surface manifest update: Agent 360 remains tenant-scoped and explicitly exempt from exact Kyber mirror parity until an owner defines that contract."
 source_hashes:
-  "packages/shared/": "sha256:15c68be54f0db370a3d992b9dc7d9d6151728e242bedbb9eabf2bfacf668ee95"
-  "services/api/config/settings.py": "sha256:0c59864b351aaa3558edf56cc3e550803ed212c05c716f8ec24311ccfcf9779b"
-  "services/api/ingestion/ingestion/replay.py": "sha256:ca77373185e811a47e354b28052901bc48ef309e62ea0133f1f55fdc37f5f687"
+  "packages/shared/": "sha256:0daac7707280458784fc09e56d83696cc5889c024441e9501169aeb04193c898"
+  "scripts/generate_feature_surface_manifest.py": "sha256:b29cbf9968f8252f6c7b62e340ba5338d4758ce35c1b8952369a0c6049571b17"
+  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
+  "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
+  "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
+  "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
+  "services/api/actions/agent_marketplace/lineage.py": "sha256:bfe247f42c3360f30b3f4fa92b1f39e95f654be0862303d6f74b9fb2363e6566"
+  "services/api/actions/agent_marketplace/projection.py": "sha256:92a5f5e457beebde9d161bf26f40ccb39fc5b76bc8ae4abfccc3e572b3c29de0"
+  "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
+  "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
+  "services/api/config/settings.py": "sha256:4d507b4ac3cab63aec2df92c69bcb20c42d6c6f9fb54441e06353ccd34619246"
+  "services/api/ingestion/ingestion/replay.py": "sha256:65f898480787b71d14c8f687351844fdf5585cd67664ff5c32699328594b24ce"
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
-  "services/api/main.py": "sha256:d3c8f2c63bfedaa93e0d0cafd11c0fe1a25983dd48e64ac3a3de7d9a364d63d4"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
+  "services/api/main.py": "sha256:91c7168bf4a5d88cf019ac753bfa0d9c35cec9308cb0191f3ba1bada5418c6b1"
   "services/api/middleware/middleware.py": "sha256:4f984e6a2d3622df9652045c85dd323db990e11bfb4d8cf4af6f08aadfb935d6"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
+  "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
 # Aether vNext — Architecture Guide
 
@@ -563,11 +587,11 @@ runtime. The Aether `/explore` surface is nevertheless classified as
 parity-required in the generated Kyber feature-surface manifest, so authorized
 internal tenant-mirror inspection uses the existing generic mirror capability
 and disclosure policy rather than exposing Kyber in the customer product.
-The generated feature-surface manifest classifies all 67 Aether routes: 40
-require tenant-visible parity and 27 have explicit exceptions. The
-tenant-scoped `/agents/:agentId` Agent 360 detail has no exact Kyber Tenant
-Mirror route today, so it remains an explicit exception until an owner defines
-the parity contract; operator access stays on separately governed APIs.
+The Aether `/agents/:agentId` Agent 360 route is explicitly parity-exempt:
+it combines a tenant profile, deployment-run evidence, and a public marketplace
+snapshot, while Kyber's agentic-observability surface is a separate operator
+contract and does not reproduce that customer view. It is not a byte-parity
+Tenant Mirror surface until an equivalent resolver and parity proof exist.
 
 Lens identity remains registry-governed: `packages/shared/contracts/lens-registry.json`
 generates `packages/shared/lenses_generated.ts`, and projection availability
@@ -1006,3 +1030,39 @@ Three additive service modules mount conditionally via `main.py` behind feature 
 These services are fully additive — they add no startup overhead when their flags are disabled. They share the graph client, event producer, and investigation repository with existing services. The `FraudIntelligenceConfig` dataclass in `config/settings.py` owns the fraud-intelligence flags and tuning parameters (`max_network_depth`, `max_flow_trace_hops`).
 
 See `docs/architecture/AGENT-CONTROLLER.md` for the full specification and `services/agents/README.md` for implementation details.
+
+## External agent observation and recovery
+
+The tenant-facing `/v1/agent/deployments` registry stores an external agent's
+tenant-declared marketplace origin and validated source telemetry. The
+run-explanation route returns a chronological evidence timeline for task,
+action, trigger, policy, delegation, tool, and outcome events. It separates
+canonical party binding, grant-scope evaluation, economic matches, and
+execution occurrence. Party binding is an explicit tenant-admin mapping from
+the deployment's `(source_namespace, agent_id)` reference to a canonical Agent
+in the same tenant; missing or ambiguous mappings fail closed and do not feed
+automatic identity merging. When canonical parties resolve, grant status,
+endpoints, supported scope, and effective/revocation timestamps are evaluated
+at the reported event time using backend-owned delegation data. Target binding
+uses the source-declared `delegated_to_namespace`; missing or invalid target
+namespace remains unresolved instead of inheriting the actor namespace. Since
+action, resource, and time are source claims and there is no server-owned external
+action receipt, a scope match does not verify that the action occurred.
+
+When `AETHER_AGENT_DEPLOYMENT_GRAPH_ENABLED` is enabled, marketplace and run
+projection mutations are queued in the supervised `graph-writer` outbox and
+applied through `GraphMutationGateway`. Kyber's
+`/v1/admin/kyber/agent-telemetry/graph-projection/{drain,reconcile,repair}`
+routes support bounded draining and source-to-outbox recovery. A distinct,
+read-only `GET /v1/admin/kyber/agent-telemetry/graph-projection/state-check`
+compares bounded tenant source references against supported graph entities and
+links. It may report consistent, inconsistent, or partial results and
+findings such as missing, extra, mismatched, unresolved, or unauthorized links.
+It is best-effort and non-snapshot, has coverage limits, and neither changes nor
+certifies the whole graph. Recovery and inspection remain separate operations.
+
+The separate, default-off `AETHER_AGENT_MARKETPLACE_CATALOG_ENABLED` observer
+reads minimal public listing metadata from xAI's JSON-LD catalog index. It does
+not collect template configuration or connect a public slug to a canonical
+Agent. Catalog graph snapshots use the `platform` tenant scope and can be
+reconciled with the same Kyber routes using `tenant_id=platform`.

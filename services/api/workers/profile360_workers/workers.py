@@ -216,10 +216,11 @@ class JourneyChainLinker:
 # ── DelegationProjector ────────────────────────────────────────────────
 
 class DelegationProjector:
-    """Mirrors authoritative delegations into the graph as DELEGATES edges.
+    """Projects canonical delegation nodes and grant relationships.
 
-    Listens to DELEGATION_CREATED / DELEGATION_REVOKED and adds (or marks
-    revoked) the corresponding edge. Authoritative store is unchanged.
+    Listens to DELEGATION_CREATED / DELEGATION_REVOKED and mirrors the
+    authoritative row as a Delegation vertex, DELEGATES edge, and GRANTED_BY /
+    GRANTED_TO links. Authoritative storage remains unchanged.
     """
 
     def __init__(
@@ -232,44 +233,109 @@ class DelegationProjector:
 
     async def handle(self, event: Event) -> None:
         delegation_id = (event.payload or {}).get("delegation_id")
-        if not delegation_id:
+        if not delegation_id or not event.tenant_id:
             return
         record = await self._repo.find_by_id(delegation_id)
         if record is None:
+            # The event is durable but the authority row may not be visible yet.
+            # Fail so EventConsumer retries instead of silently losing the link.
+            raise LookupError(f"delegation authority record {delegation_id!r} is not available")
+        if record.get("tenant_id") != event.tenant_id:
             return
         try:
+            from actions.agent_marketplace.authority import (
+                delegation_is_current_or_scheduled,
+                delegation_relationships,
+                delegation_vertex,
+            )
             from shared.graph.mutation_gateway import GraphMutationGateway
-            from shared.graph.mutation_intents import edge_intent
+            from shared.graph.mutation_intents import (
+                edge_intent,
+                revocation_intent,
+                vertex_intent,
+            )
 
-            await GraphMutationGateway(graph_client=self._graph).apply(edge_intent(
-                Edge(
-                    edge_type=EdgeType.DELEGATES,
-                    from_vertex_id=record["grantor_entity_id"],
-                    to_vertex_id=record["grantee_entity_id"],
-                    properties={
-                        "tenant_id": record.get("tenant_id", ""),
-                        "delegation_id": delegation_id,
-                        "valid_from": record.get("starts_at", ""),
-                        "valid_to": record.get("ends_at") or "",
-                        "revoked_at": record.get("revoked_at") or "",
-                        # DELEGATES is H2A — consent_purpose required in enforce.
-                        "consent_purpose": "agent",
-                    },
-                ),
-                operation="edge_created",
-                tenant_id=record.get("tenant_id", ""),
+            # Event is the canonical contract, but tolerate source adapters and
+            # test doubles that provide only the delegation identity. Keep the
+            # fallback deterministic so replay remains idempotent.
+            source_event_id = str(
+                getattr(event, "event_id", None) or f"delegation:{delegation_id}"
+            )
+            gateway = GraphMutationGateway(graph_client=self._graph)
+            await gateway.apply(vertex_intent(
+                delegation_vertex(record),
+                operation="node_versioned",
+                tenant_id=event.tenant_id,
                 actor_id="delegation_projector",
-                subject_kind="entity",
-                subject_id=record["grantor_entity_id"],
+                source_event_id=source_event_id,
                 causality_class="authorized_delegation",
-                # Key on the unique delegation_id so distinct delegations between
-                # the same grantor/grantee each project; a re-converge of the
-                # same delegation still dedups.
-                source_event_id=delegation_id,
             ))
+            is_revoked = bool(record.get("revoked_at"))
+            relationships = delegation_relationships(
+                record, source_event_id, include_delegate_edge=not is_revoked,
+            )
+            for edge in relationships:
+                await gateway.apply(edge_intent(
+                    edge,
+                    operation="edge_created",
+                    tenant_id=event.tenant_id,
+                    actor_id="delegation_projector",
+                    subject_kind="entity",
+                    subject_id=record["grantor_entity_id"],
+                    causality_class="authorized_delegation",
+                    source_event_id=source_event_id,
+                ))
+            if is_revoked:
+                await gateway.apply(revocation_intent(
+                    from_vertex_id=str(record["grantor_entity_id"]),
+                    to_vertex_id=str(record["grantee_entity_id"]),
+                    edge_type=EdgeType.DELEGATES,
+                    reason="delegation_revoked",
+                    tenant_id=event.tenant_id,
+                    actor_kind="system",
+                    actor_id="delegation_projector",
+                    subject_kind="entity",
+                    subject_id=str(record["grantor_entity_id"]),
+                    source_event_id=source_event_id,
+                    causality_class="authorized_delegation",
+                ))
+                # DELEGATES is an aggregate entity-to-entity relation and graph
+                # revocation applies to the endpoint pair. Restore one edge if
+                # another current or scheduled canonical grant still supports it.
+                candidates = await self._repo.find_many(
+                    filters={
+                        "tenant_id": event.tenant_id,
+                        "grantor_entity_id": record["grantor_entity_id"],
+                        "grantee_entity_id": record["grantee_entity_id"],
+                    },
+                    limit=1000,
+                )
+                now = datetime.now(timezone.utc).isoformat()
+                remaining = next((
+                    candidate for candidate in candidates
+                    if candidate.get("tenant_id") == event.tenant_id
+                    and delegation_is_current_or_scheduled(candidate, now)
+                ), None)
+                if remaining is not None:
+                    delegate_edge = delegation_relationships(
+                        remaining, source_event_id,
+                    )[0]
+                    await gateway.apply(edge_intent(
+                        delegate_edge,
+                        operation="edge_created",
+                        tenant_id=event.tenant_id,
+                        actor_id="delegation_projector",
+                        subject_kind="entity",
+                        subject_id=str(remaining["grantor_entity_id"]),
+                        causality_class="authorized_delegation",
+                        source_event_id=source_event_id,
+                    ))
             metrics.increment("profile360_delegation_projected")
         except Exception as e:  # pragma: no cover
             logger.warning(f"DelegationProjector failed for {delegation_id}: {e}")
+            # Let the durable event consumer retry and eventually dead-letter
+            # instead of acknowledging a failed authority projection.
+            raise
 
 
 # ── AnomalyFlagger ─────────────────────────────────────────────────────

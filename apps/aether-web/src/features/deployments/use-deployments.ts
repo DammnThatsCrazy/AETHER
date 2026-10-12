@@ -3,9 +3,11 @@ import { useQuery, useMutation, queryCache } from '@aether/ui';
 import {
   fetchAgentDeployments,
   fetchAgentDeployment,
+  fetchAgentDeploymentIdentityBinding,
   fetchAgentDeploymentHealth,
   fetchAgentDeploymentActivity,
   createAgentDeployment,
+  bindAgentDeploymentIdentity,
   updateAgentDeployment,
   pauseAgentDeployment,
   reactivateAgentDeployment,
@@ -14,6 +16,7 @@ import {
 } from './api';
 import type {
   AgentDeploymentRecord,
+  AgentDeploymentIdentityBindingRecord,
   AgentDeploymentHealthRecord,
   AgentDeploymentActivityRecord,
   CreateAgentDeploymentInput,
@@ -32,7 +35,7 @@ export function useAgentDeployments(params?: DeploymentListParams): {
   readonly error: string | null;
   readonly refresh: () => void;
 } {
-  const key = `${KEY_PREFIX}:list:${params?.status ?? 'all'}:${params?.platform ?? 'all'}`;
+  const key = `${KEY_PREFIX}:list:${params?.status ?? 'all'}:${params?.platform ?? 'all'}:${params?.agent_id ?? 'all'}`;
   const { data, isLoading, error, refetch } = useQuery<DeploymentListResult>({
     key,
     fetcher: () => fetchAgentDeployments(params),
@@ -62,6 +65,43 @@ export function useAgentDeployment(id: string | null): {
   });
 
   return { deployment: data, loading: isLoading, error, refresh: refetch };
+}
+
+export function useAgentDeploymentIdentityBinding(id: string | null): {
+  readonly binding: AgentDeploymentIdentityBindingRecord | null;
+  readonly loading: boolean;
+  readonly error: string | null;
+  readonly refresh: () => void;
+} {
+  const { data, isLoading, error, refetch } = useQuery<AgentDeploymentIdentityBindingRecord>({
+    key: `${KEY_PREFIX}:identity-binding:${id ?? 'none'}`,
+    fetcher: () => fetchAgentDeploymentIdentityBinding(id ?? ''),
+    staleTime: STALE,
+    enabled: id !== null,
+  });
+
+  return { binding: data ?? null, loading: isLoading, error, refresh: refetch };
+}
+
+export function useBindAgentDeploymentIdentity(): {
+  readonly bind: (id: string, canonicalAgentEntityId: string) => Promise<AgentDeploymentIdentityBindingRecord | null>;
+  readonly loading: boolean;
+  readonly error: string | null;
+} {
+  const { mutate, isLoading, error } = useMutation<
+    { id: string; canonicalAgentEntityId: string },
+    AgentDeploymentIdentityBindingRecord
+  >({
+    mutationFn: ({ id, canonicalAgentEntityId }) => bindAgentDeploymentIdentity(id, canonicalAgentEntityId),
+    onSuccess: () => queryCache.invalidatePrefix(KEY_PREFIX),
+  });
+
+  const bind = useCallback(
+    (id: string, canonicalAgentEntityId: string) => mutate({ id, canonicalAgentEntityId }),
+    [mutate],
+  );
+
+  return { bind, loading: isLoading, error };
 }
 
 export function useAgentDeploymentHealth(id: string | null): {

@@ -36,6 +36,7 @@ from shared.cache.cache import CacheClient
 from shared.graph.graph import GraphClient
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger
+from shared.temporal.instant import coerce_utc_lenient
 from dependencies.providers import get_cache, get_graph, get_producer
 from repositories.repos import IdentityRepository
 
@@ -1190,11 +1191,8 @@ async def admin_approve_conflict(
             from datetime import datetime, timedelta, timezone
 
             updated_raw = item.get("updated_at") or item.get("last_seen_at")
-            try:
-                updated = datetime.fromisoformat(str(updated_raw).replace("Z", "+00:00"))
-                if updated.tzinfo is None:
-                    updated = updated.replace(tzinfo=timezone.utc)
-            except (TypeError, ValueError):
+            updated = coerce_utc_lenient(updated_raw)
+            if updated is None:
                 updated = datetime.now(timezone.utc)
             if datetime.now(timezone.utc) - updated > timedelta(minutes=15):
                 await pending.compare_and_set_disposition(

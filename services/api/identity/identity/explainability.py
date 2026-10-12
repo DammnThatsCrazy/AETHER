@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from shared.logger.logger import get_logger
+from shared.temporal.instant import coerce_utc_lenient
 
 from .decision_evidence import DecisionType, IdentityDecisionEvidenceService
 from .exceptions import IdentityError
@@ -707,7 +708,7 @@ class AdminIdentityService:
         not imply an SDK is installed, and restatement is never reported active
         merely because the feature exists.
         """
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from config.settings import settings
         from repositories.imports_repo import ImportsRepository
@@ -770,17 +771,9 @@ class AdminIdentityService:
         parsed_sdk_seen: list[tuple[datetime, str]] = []
         for row in heartbeat_rows:
             raw_seen = row.get("last_seen_at")
-            if isinstance(raw_seen, datetime):
-                seen_at = raw_seen
-            elif raw_seen:
-                try:
-                    seen_at = datetime.fromisoformat(str(raw_seen).replace("Z", "+00:00"))
-                except ValueError:
-                    continue
-            else:
+            seen_at = coerce_utc_lenient(raw_seen)
+            if seen_at is None:
                 continue
-            if seen_at.tzinfo is None:
-                seen_at = seen_at.replace(tzinfo=timezone.utc)
             parsed_sdk_seen.append((seen_at, seen_at.isoformat()))
         latest_sdk_seen = max(parsed_sdk_seen, key=lambda item: item[0])[1] if parsed_sdk_seen else ""
         sdk_status = "not_connected"

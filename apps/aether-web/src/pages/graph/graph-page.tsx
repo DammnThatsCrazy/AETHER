@@ -158,6 +158,70 @@ type InspectorPayload =
   | { type: 'edge'; edge: GraphEdge }
   | { type: 'cluster'; cluster: GraphCluster };
 
+function AgentEvidenceProvenance({ node }: { node: GraphNode }) {
+  const assertion = node.metadata.assertion;
+  const evidenceStatus = node.metadata.evidence_status;
+  const isMarketplace = node.kind === 'AgentMarketplaceListing' || node.kind === 'AgentTemplate';
+  const isRunRecord = node.kind === 'AgentExecutionRun';
+  const isDeploymentRecord = node.kind === 'ExternalAgenticAccount'
+    && node.metadata.agent_reference_authority === 'tenant_deployment_registry';
+  const hasEvidenceLabel = assertion != null || evidenceStatus != null || isMarketplace || isRunRecord || isDeploymentRecord;
+  if (!hasEvidenceLabel) return null;
+
+  const authority = assertion === 'tenant_declared'
+    ? 'Tenant declared'
+    : assertion === 'public_source_observed'
+      ? 'Public source observed'
+    : evidenceStatus === 'source_reported'
+      ? 'Source reported'
+      : typeof node.metadata.agent_reference_authority === 'string'
+        ? 'Tenant scoped source reference'
+        : 'Observed evidence';
+  const coverage = node.metadata.coverage && typeof node.metadata.coverage === 'object'
+    ? node.metadata.coverage as Record<string, unknown>
+    : null;
+
+  return (
+    <div className="space-y-2 rounded border border-border-subtle bg-surface-raised p-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge size="sm" variant={assertion === 'tenant_declared' ? 'warning' : 'info'}>{authority}</Badge>
+        {typeof node.metadata.source_namespace === 'string' && (
+          <Badge size="sm">{node.metadata.source_namespace}</Badge>
+        )}
+      </div>
+      {isMarketplace && assertion === 'tenant_declared' && (
+        <p className="text-[11px] text-text-secondary">
+          Listing and template details are tenant-provided source references. Aether has not independently fetched or verified the marketplace record.
+        </p>
+      )}
+      {isMarketplace && assertion === 'public_source_observed' && (
+        <p className="text-[11px] text-text-secondary">
+          This record contains minimal metadata read from a public marketplace index. Listing content and agent capabilities are not verified.
+        </p>
+      )}
+      {isRunRecord && (
+        <p className="text-[11px] text-text-secondary">
+          This node is a bounded run correlation. Detailed timeline and coverage labels are available from the tenant-scoped run explanation using the source run reference.
+        </p>
+      )}
+      {isDeploymentRecord && (
+        <p className="text-[11px] text-text-secondary">
+          This is a deployment registry reference, not a resolved canonical Agent identity.
+        </p>
+      )}
+      {coverage && (
+        <div className="flex flex-wrap gap-1">
+          {Object.entries(coverage).map(([key, value]) => (
+            <Badge key={key} size="sm" variant={value === 'observed' ? 'success' : 'default'}>
+              {key.replace(/_/g, ' ')}: {String(value)}
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Inspector({ data, onClose, tenantId }: { data: InspectorPayload; onClose: () => void; tenantId: string }) {
   const navigate = useNavigate();
   return (
@@ -186,6 +250,7 @@ function Inspector({ data, onClose, tenantId }: { data: InspectorPayload; onClos
                     <span className="text-sm font-mono text-text-primary truncate">{data.node.label}</span>
                   </div>
                   <code className="text-xs text-text-muted break-all block">{data.node.id}</code>
+                  <AgentEvidenceProvenance node={data.node} />
                   {data.node.kind.toLowerCase() === 'entity' && (
                     <Button
                       variant="secondary"

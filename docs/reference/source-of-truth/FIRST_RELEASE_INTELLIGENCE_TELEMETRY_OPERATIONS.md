@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [packages/shared/contracts/event-registry.json, packages/shared/agent-deployment.ts, packages/shared/ai-execution.ts, packages/shared/payment-rails.ts, packages/shared/targeting-intelligence.ts, services/api/config/settings.py]
+source_files: [config/environments/.env.example, packages/shared/contracts/event-registry.json, packages/shared/agent-deployment.ts, packages/shared/ai-execution.ts, packages/shared/payment-rails.ts, packages/shared/targeting-intelligence.ts, services/api/actions/agent_marketplace/catalog.py, services/api/config/settings.py]
 last_synced_commit: HEAD
 ---
 
@@ -38,11 +38,12 @@ feature-flagged and default OFF.
 - **Kyber operates.** Internal operator console; must not leak tenant-private
   raw data across tenants. Cross-tenant aggregates only where raw
   tenant-private data and tenant existence are not exposed.
-- **No marketplace.** The External Agent Telemetry Plane observes tenant-owned
-  agents on external surfaces. `custom_marketplace` is an external-platform
-  enum value for tenant/third-party marketplaces only. There are no partner,
-  marketplace or developer-platform flags: the reserved ones gated nothing and
-  were retired.
+- **No Aether-operated marketplace.** The External Agent Telemetry Plane
+  observes tenant-owned agents on external surfaces. A separately gated,
+  read-only public catalog observer records minimal source labels and URLs; it
+  does not host agents, accept listing submissions, distribute bots, or
+  monetize listings. `custom_marketplace` remains an external-platform enum
+  value for tenant/third-party marketplaces.
 - **No generic payment webhook fallback.** Named providers only: Privy,
   Stripe merchant payment/onramp, Coinbase, MoonPay, Bridge.
 - **Staged mutation review.** Agents/workers/automation stage and recommend;
@@ -157,8 +158,9 @@ verbatim — no mapping layer was needed.
 
 ## Known limitations / explicit non-goals
 
-- No marketplace, app store, listing/search/discovery, submission/review,
-  or revenue-share features.
+- No Aether marketplace, app store, listing submission/review/distribution, or
+  revenue-share features. Public catalog capture is read-only, source-attributed,
+  and independently feature-flagged.
 - No generic webhook receiver; unsupported providers return 404.
 - No autonomous execution of campaigns, payments, trades, model changes,
   or graph mutations.

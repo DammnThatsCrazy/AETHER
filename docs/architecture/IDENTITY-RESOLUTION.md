@@ -14,6 +14,10 @@ source_files:
   - services/api/intelligence/analytics/routes.py
   - services/api/identity/profile/composer.py
   - services/api/identity/profile/aggregator.py
+  - services/api/actions/agent/deployment_routes.py
+  - services/api/actions/agent_marketplace/identity_binding.py
+  - services/api/actions/agent_marketplace/authority.py
+  - services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py
   - packages/shared/identity.ts
 canonical_owner: identity@aether
 estimated_read_minutes: 12
@@ -25,12 +29,16 @@ reviewed_source_commits:
     reason: "Reviewed request-to-usage correlation in the batch handler. The request ID becomes metering correlation metadata and actual usage references are returned; source namespace, canonical identity, and resolution decisions are unchanged."
 source_hashes:
   "packages/shared/identity.ts": "sha256:574974d03d8c4f8b99ad414c7b738b675cc293723f764e2ca3b76dc2ca40d8a2"
-  "services/api/identity/identity/": "sha256:4a4a8257dd3969d9591988d2b94ebaba91f1486ab7bf60b8f01ea512c8da5889"
+  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
+  "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
+  "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
+  "services/api/identity/identity/": "sha256:aa34bc8ac72018257066c21d8ed99c000083b6304ef7fed4ed18edfa6dddcb1c"
   "services/api/identity/profile/aggregator.py": "sha256:a901c1088e387bb967d425b1aed3673fc3942b7b6bf017648c78aad860bfe04b"
   "services/api/identity/profile/composer.py": "sha256:aae09f67a164f0e2b940676e52841ff325f36650ac4b1c022cc2a60a31505c20"
   "services/api/ingestion/ingestion/batch.py": "sha256:1be13c12153f070ceaf29a0761d49fd4ab11f4c4de66ce94efb7fe44607cd40b"
   "services/api/intelligence/analytics/routes.py": "sha256:b51cb890d703eb9c495b723fd79b6e03bf292300db82441024b5b645e6b341b7"
-  "services/api/repositories/repos.py": "sha256:c03e0537e86217db3dc67aabc2ce179a589ece64870dcdcc1f76d7f79ae95dae"
+  "services/api/repositories/repos.py": "sha256:18ffc6df66bfc4484aaab821c791fda4579382634a23066ddbe5276d4408ec04"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
 ---
 # Aether Identity Resolution v0.1.0-alpha.0 — Technical Guide
@@ -115,6 +123,15 @@ flow; a claim match does not merge profiles by itself, and approval revalidates
 the evidence and requires server-verified identity-link consent.
 
 `merge_policy.py` additionally enforces a **non-merge-eligible signal denylist** (`NON_MERGE_ELIGIBLE_SIGNAL_NAMES`): `deployment_id`, `agent_id`, `external_platform`, `external_channel_id`, and `external_workspace_id` are filtered out before merge scoring, so external agent deployment/platform telemetry can never contribute to an identity merge on its own. Exclusions are recorded with reason code `non_merge_eligible_signal_excluded`.
+
+External agent deployment identity uses a separate explicit binding authority.
+A tenant administrator may bind `(tenant_id, source_namespace, source_agent_ref)`
+to an existing canonical Agent in that same tenant. The binding is durable and records the acting tenant administrator and
+binding time; resolution checks that the binding still matches the deployment's
+namespace/reference and canonical entity. Missing, ambiguous, stale, or
+cross-tenant bindings remain unresolved. This does not alter the identity
+resolver's automatic merge policy: `agent_id` and deployment/platform signals
+remain excluded from merge scoring, and a binding is not merge evidence.
 
 ```
 SDK event

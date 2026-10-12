@@ -124,6 +124,7 @@ async def test_iter_bronze_observations_filters() -> None:
 async def test_occurrence_window_compares_utc_instants_and_excludes_unknown_times() -> None:
     _seed("before", occurred="2026-09-05T01:30:00+02:00")
     _seed("inside", occurred="2026-09-04T20:30:00-04:00")
+    _seed("legacy-naive", occurred="2026-09-05T00:45:00")
     _seed("after", occurred="2026-09-05T03:00:00+00:00")
     _seed("invalid", occurred="not-an-instant")
     _seed("missing", occurred="")
@@ -133,7 +134,7 @@ async def test_occurrence_window_compares_utc_instants_and_excludes_unknown_time
         occurred_from="2026-09-05T00:00:00Z",
         occurred_to="2026-09-05T02:00:00+00:00",
     )
-    assert [row["event_id"] for row in rows] == ["inside"]
+    assert {row["event_id"] for row in rows} == {"inside", "legacy-naive"}
 
 
 @pytest.mark.parametrize(

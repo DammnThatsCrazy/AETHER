@@ -22,4 +22,12 @@
 # docs were re-stamped to cf6a8c30. The CI/CD page was also re-reviewed
 # against the adaptive authority, runtime reporting, and impact-aware workflow
 # changes in this PR; its prose is accurate and its source hash is refreshed.
-docs: []
+docs:
+  - path: docs/operations/OPERATIONAL-INTELLIGENCE-AUDIT.md
+    reason: >-
+      This historical PR #107-#115 audit contains claims about lifecycle workers,
+      API envelopes, storage, and production readiness that need a separate
+      content review against current implementations. The repos.py hash
+      drift in this PR is from agent-economy tenant-safe writes and Silver paging;
+      it does not validate or update those legacy audit claims.
+    owner: platform@aether

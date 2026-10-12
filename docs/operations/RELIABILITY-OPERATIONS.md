@@ -7,7 +7,7 @@ audience: [buyer, ops, architect]
 status: beta
 since_version: "0.1.0"
 source_files: [services/api/governance/reliability/models.py, services/api/governance/reliability/service.py, services/api/governance/reliability/routes.py, services/api/governance/reliability/tenant_impact.py, apps/kyber-web/src/pages/reliability/reliability-page.tsx, apps/aether-web/src/pages/system-status/system-status-page.tsx]
-related: [reliability/sre-runbooks, reliability/incident-response, reliability/slo-tracking, reliability/tenant-status]
+related: [reliability/sre-runbooks, ops-incident-response, reliability/slo-tracking, reliability/tenant-status]
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
@@ -56,7 +56,7 @@ holding only the `admin` permission is not a Kyber operator.
 - **Queue/worker health** — 7 queues with depth, oldest-message age, worker
   counts, retry/dead-letter counts, processing latency (adapter/mock-backed).
 - **Incident management** — full lifecycle with internal audit trail and service
-  linkage. (See `INCIDENT-RESPONSE.md`.)
+  linkage. (See `incident-response.md`.)
 - **Runbooks** — 14 seeded operational runbooks plus custom runbook CRUD.
   (See `SRE-RUNBOOKS.md`.)
 - **SLO tracking** — 12 internal SLOs with status + error-budget computation.
@@ -82,7 +82,7 @@ holding only the `admin` permission is not a Kyber operator.
 ## Models
 
 See dedicated docs for each model:
-`PIPELINE-HEALTH.md`, `QUEUE-WORKER-HEALTH.md`, `INCIDENT-RESPONSE.md`,
+`PIPELINE-HEALTH.md`, `QUEUE-WORKER-HEALTH.md`, `incident-response.md`,
 `SLO-TRACKING.md`, `SRE-RUNBOOKS.md`, `POSTMORTEMS.md`, `TENANT-STATUS.md`.
 
 ## Known gaps
