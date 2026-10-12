@@ -1148,7 +1148,8 @@ def test_staging_reconciles_preexisting_immutable_aes256_backend_repository() ->
     assert "repository_encryption_types" in variables
     assert "repository_tag_mutabilities" in variables
     assert 'lookup(var.repository_encryption_types, repository, "KMS")' in module
-    assert 'lookup(var.repository_tag_mutabilities, repository, "MUTABLE")' in module
+    assert "lookup(\n      var.repository_tag_mutabilities,\n      repository," in module
+    assert 'repository == "aether-access-mcp" ? "IMMUTABLE" : "MUTABLE"' in module
     assert 'local.encryption_types[each.value] == "KMS" ? aws_kms_key.ecr.arn : null' in module
     assert 'aether-backend = "AES256"' in staging
     assert 'aether-backend = "IMMUTABLE"' in staging
