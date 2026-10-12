@@ -47,6 +47,9 @@ source_files:
   - scripts/release/check_terraform_state_access_policy.py
   - scripts/release/check_staging_lifecycle_policy.py
   - services/api/Dockerfile
+reviewed_source_commits:
+  - commit: "609a3ad37"
+    reason: "Reviewed the new Auth0 Native Aether CLI client and connection grants. The Auth0 deployment inventory now records the public Device Authorization client and its human-session deployment gate; the independent operator tfmcp service is unchanged."
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
@@ -57,7 +60,7 @@ source_hashes:
   ".github/workflows/staging-lifecycle.yml": "sha256:ab0d86125cd2be277ba7e0a40a4dbc9fdd5db1480ff1c7cb816adf4874a55ae9"
   ".github/workflows/staging-state-reconcile.yml": "sha256:c08a7521eee7fbe505195ab1e49f27272b6ef144d4ba2e9b0153fe6e2f07f33d"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
-  ".github/workflows/terraform-promote.yml": "sha256:68788bf092927d34ca9228da38d64989c8360bde77b087945cf17e29e95e73de"
+  ".github/workflows/terraform-promote.yml": "sha256:4542ef7fd2d140d2cbcb2a02b232c22f1473bbfdcad250cbc81999c468bcb26c"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
@@ -73,7 +76,7 @@ source_hashes:
   "infra/aws/config/": "sha256:cfe8d46db890f7855fbc7f28ece5c3a9ce4a891e065478060a254c1f36bf0bf0"
   "infra/aws/lead-intake/template.yaml": "sha256:f076101dd476c103f32b717444598ea2cbea181b292c61230ca9b02de4feb9a1"
   "infra/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "infra/aws/terraform/": "sha256:eace0b2cae355aa48d20b755a7e574613f7c9bb70882e70958e0c95b1eeffe21"
+  "infra/aws/terraform/": "sha256:167df80f7fced3abbf31086357796790db5da26c15bdd4bdaf43ebaf1a2bc513"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:124f62c1f1469281a3e19de2ec58d36b50f6f210410f1e79de8f79b2ef222e36"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
@@ -836,14 +839,52 @@ Seventeen module directories exist under `terraform/modules/`. Modules marked
 | `ecs` | Fargate cluster, backend service, per-service task definitions, IAM roles, autoscaling | always; **gated** dedicated ML service |
 | `monitoring` | SNS alerts, CloudWatch alarms, dashboard, S3 log archive | always; per-backend alarms **gated** |
 | `ml_drift_lambda` | Nightly PSI drift check → `Aether/MLDrift` namespace | always |
-| `auth0` | SPA clients + API resource server | always |
+| `auth0` | Aether and Kyber SPA clients, public Aether CLI Native client with Device Authorization, and the API resource server | always |
 | `elasticache` | Redis 7.x, TLS in transit, AUTH token, KMS at rest | **gated** — scale / enterprise |
 | `msk` | 3-broker MSK Kafka, TLS, KMS, CloudWatch metrics | **gated** — scale / enterprise |
 | `neptune` | Neptune cluster + instances, IAM auth, KMS | **gated** — scale / enterprise |
 | `rds` | Legacy RDS Postgres | **never** — superseded by Aurora |
 | `s3` | — | **not instantiated by this root** |
 | `tfmcp` | tfmcp MCP server (ECS Fargate, IAM, Secrets, ALB rule) | **gated** — production-scale / enterprise (default); production-lean opt-in via `enable_tfmcp_in_lean` |
+| `access_mcp` | Customer-facing Access Kit MCP (dedicated ECR, Fargate, task/execution roles, security group, log group, ALB target/rule) | **opt-in** — production-scale is the single persistent ECR/state owner; immutable image digest required; other profiles are blocked |
 | `vpc_endpoints` | — | **not instantiated by this root** |
+
+The Auth0 module's CLI client is a public Native application with no client
+secret. Terraform enables the Device Authorization grant, grants the API
+audience, associates the configured database/social connections, and exposes
+the non-secret `aether_cli_auth0_client_id` root output. A CLI installation
+also needs the Auth0 domain and API audience. Auth0 provisioning alone does not
+enable customer login: the API must advertise and issue revocable human
+sessions, and the user must have an existing tenant membership or invitation.
+This CLI client is customer identity configuration; it is not the operator
+`tfmcp` service or its privileged runtime role.
+
+### Customer Access Kit MCP service
+
+The optional `modules/access_mcp` service is the hosted customer MCP endpoint
+for the Access Kit. It uses its own immutable ECR image, task definition,
+roles, security group, CloudWatch log group, target group, and HTTPS path rule.
+It is not `tfmcp`: the Access Kit task has no shared Aether credential and no
+workload AWS permissions, while `tfmcp` can operate Terraform with a privileged
+operator policy. The customer endpoint requires a request-scoped Aether API key
+or revocable session and forwards that same identity to tenant APIs.
+
+The image is built from a clean reviewed commit by
+`infra/aws/terraform/scripts/publish_access_mcp_image.sh`; Terraform consumes
+the returned immutable digest. `.github/workflows/terraform-promote.yml`
+accepts these opt-ins on a reviewed `action=plan`, then applies only the exact
+stored plan by run ID and checksum. The service and globally named ECR
+repository are allowed only on the canonical `production-scale` state; one
+owner prevents profile-state races for that shared repository. The
+staging/demo/preview lifecycle does not yet manage its always-on task count.
+The route shares the existing API hostname and TLS listener. See the
+[deployment runbook](../../infra/aws/terraform/ACCESS_KIT_MCP_DEPLOYMENT.md)
+for the repository-first, image-publish, service-enable sequence and cost gate.
+The clean hosted container workflow builds the linux/amd64 image, verifies
+the npm package contents, and checks the container's health, readiness, and
+headless CLI entrypoint. The publisher, plan, and apply gates verify the
+immutable ECR digest's completed scan and reject HIGH
+or CRITICAL findings.
 
 ### tfmcp — Terraform MCP server
 

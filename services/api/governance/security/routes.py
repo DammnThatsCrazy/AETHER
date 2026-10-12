@@ -36,7 +36,7 @@ _audit_repo = SecurityAuditEventRepository()
 # Fields safe to expose to tenants (no integrity chain internals, no IP of others).
 _TENANT_AUDIT_FIELDS = (
     "audit_event_id", "tenant_id", "event_type", "resource_type", "resource_id",
-    "action", "outcome", "policy_decision_id", "created_at",
+    "action", "outcome", "policy_decision_id", "correlation_id", "created_at",
 )
 
 

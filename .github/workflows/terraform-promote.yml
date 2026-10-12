@@ -32,6 +32,35 @@ on:
         description: Immutable ML serving image digest from the approved release manifest (sha256:...) — required for plan
         type: string
         required: false
+      enable_access_mcp_repository:
+        description: Plan-only opt-in to create the dedicated immutable Access Kit MCP ECR repository
+        type: boolean
+        default: false
+        required: false
+      enable_access_mcp:
+        description: Plan-only opt-in for the customer-facing MCP Fargate service and ALB route; production-scale only
+        type: boolean
+        default: false
+        required: false
+      access_mcp_image_digest:
+        description: Plan-only immutable sha256 digest already published in aether-access-mcp; required when enabling the service
+        type: string
+        required: false
+      access_mcp_desired_count:
+        description: Plan-only fixed Access Kit MCP Fargate task count (1–4)
+        type: number
+        default: 2
+        required: false
+      access_mcp_allowed_origins:
+        description: Plan-only JSON array of exact HTTPS browser origins (use [] for server-to-server clients)
+        type: string
+        default: "[]"
+        required: false
+      access_mcp_path:
+        description: Plan-only customer MCP route path; must not overlap the reserved /mcp* operator route
+        type: string
+        default: /v1/access/mcp
+        required: false
       staging_state:
         description: >-
           Staging wake/sleep shape for the plan. `asleep` drives every ECS
@@ -194,6 +223,12 @@ jobs:
       TF_VAR_aether_app_url: ${{ secrets.TF_AETHER_APP_URL }}
       TF_VAR_kyber_app_url: ${{ secrets.TF_KYBER_APP_URL }}
       TF_VAR_kyber_google_hosted_domain: ${{ vars.KYBER_GOOGLE_HOSTED_DOMAIN || 'olympuslabs.ai' }}
+      TF_VAR_enable_access_mcp_repository: ${{ inputs.enable_access_mcp_repository }}
+      TF_VAR_enable_access_mcp: ${{ inputs.enable_access_mcp }}
+      TF_VAR_access_mcp_image_digest: ${{ inputs.access_mcp_image_digest }}
+      TF_VAR_access_mcp_desired_count: ${{ inputs.access_mcp_desired_count }}
+      TF_VAR_access_mcp_allowed_origins: ${{ inputs.access_mcp_allowed_origins || '[]' }}
+      TF_VAR_access_mcp_path: ${{ inputs.access_mcp_path || '/v1/access/mcp' }}
       # The custom KMS key policy must name the protected staging apply role as
       # an explicit administrator. Keep the value in the encrypted secret
       # store; the ARN is non-sensitive, but the repository variable was never
@@ -246,6 +281,16 @@ jobs:
             echo '::error::deployment_lane=pilot is valid only with the canonical profile=staging'
             exit 1
           fi
+      - name: Validate customer Access Kit MCP deployment inputs
+        env:
+          PROFILE: ${{ inputs.profile }}
+          ENABLE_ACCESS_MCP_REPOSITORY: ${{ inputs.enable_access_mcp_repository }}
+          ENABLE_ACCESS_MCP: ${{ inputs.enable_access_mcp }}
+          ACCESS_MCP_IMAGE_DIGEST: ${{ inputs.access_mcp_image_digest }}
+          ACCESS_MCP_DESIRED_COUNT: ${{ inputs.access_mcp_desired_count }}
+          ACCESS_MCP_ALLOWED_ORIGINS: ${{ inputs.access_mcp_allowed_origins || '[]' }}
+          ACCESS_MCP_PATH: ${{ inputs.access_mcp_path || '/v1/access/mcp' }}
+        run: python scripts/release/validate_access_mcp_inputs.py
       - name: Require secret-preflight bypass to be sleep-only
         if: inputs.profile == 'staging' && inputs.secret_preflight_required == false
         env:
@@ -469,6 +514,15 @@ jobs:
               --digest "$BACKEND_IMAGE_DIGEST" \
               --expected-commit "${{ inputs.expected_commit_sha }}"
           fi
+      - name: Verify Access Kit MCP ECR digest and scan before planning
+        if: inputs.enable_access_mcp
+        env:
+          AWS_REGION: us-east-1
+          ACCESS_MCP_IMAGE_DIGEST: ${{ inputs.access_mcp_image_digest }}
+        run: |
+          set -euo pipefail
+          bash infra/aws/terraform/scripts/verify_access_mcp_image_scan.sh \
+            "$ACCESS_MCP_IMAGE_DIGEST" >/dev/null
       - name: Record reviewed maintenance listener input
         env:
           STAGING_LISTENER_TARGET_GROUP_ARN: ${{ inputs.staging_listener_target_group_arn }}
@@ -1093,6 +1147,30 @@ jobs:
           else
             echo "Verified ${PROFILE} apply credentials resolve to the encrypted role ARN in the expected account."
           fi
+      - name: Recheck the reviewed Access Kit MCP image scan before apply
+        env:
+          AWS_REGION: us-east-1
+          REVIEWED_PLAN_JSON: ${{ runner.temp }}/reviewed-plan/reviewed.tfplan.json
+        run: |
+          set -euo pipefail
+          enabled="$(jq -r '.variables.enable_access_mcp.value // false' "$REVIEWED_PLAN_JSON")"
+          case "$enabled" in
+            true)
+              digest="$(jq -r '.variables.access_mcp_image_digest.value // empty' "$REVIEWED_PLAN_JSON")"
+              printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$' || {
+                echo '::error::reviewed Access Kit MCP plan is missing its exact immutable image digest'
+                exit 1
+              }
+              bash infra/aws/terraform/scripts/verify_access_mcp_image_scan.sh \
+                "$digest" >/dev/null
+              ;;
+            false)
+              ;;
+            *)
+              echo '::error::reviewed plan contains a missing or invalid Access Kit MCP enablement value'
+              exit 1
+              ;;
+          esac
       - name: Verify effective Terraform state permissions
         env:
           AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}

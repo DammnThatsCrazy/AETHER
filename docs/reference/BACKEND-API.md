@@ -21,19 +21,22 @@ reviewed_source_commits:
   - {'commit': '33dfedb4', 'reason': 'Reviewed 33dfedb4 — the /v1/rights surface is now MOUNTED in main.py (always mounted beside /v1/dsr); the routes carry the rollout-OFF 503 gate and require scalar source/purpose/destination matching RightsDecisionRequest; the durable repositories accept dict-or-model rows. This commit makes /v1/rights live and supersedes the earlier not-wired-into-main.py review notes. Body change: the Rights Authority section below documents the three endpoints and their rollout-gated 503 posture.'}
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
+  - {'commit': 'fcfe08b7b', 'reason': 'Reviewed V1/V2 SDK batch observation-envelope parity. Both storage branches preserve the flat normalized event contract and add the same optional Envelope-B projection only when adoption is enabled; no route or response schema changed.'}
+  - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
+  - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
   "services/api/actions/": "sha256:f5e9afb088d3a8f9e93bdd981db2b6dd1fc522c67d22d37b72d20d1b720791cb"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:dd694b14e890adec41191a54a035ad863d9c14a2183ba5e9888c64c018658e77"
   "services/api/connectors/": "sha256:01f3d11694ce153f102de85133e514fe4548877376c05668c2ee6fe63e1ad633"
-  "services/api/governance/": "sha256:4979f1d68790c9673561b70d97ad0710960603cc7228fd429539160d64db4f1d"
+  "services/api/governance/": "sha256:88d555a3245092c8b9359f48213c260d0e370b82d615858a14c11ac744bd48a6"
   "services/api/graph/": "sha256:7372bf88ff18200edd21b53649b25098a9b1e1ec474a79ee36cd28a480093706"
   "services/api/identity/": "sha256:3899aca8a5fe95b1f975945913ebbd0cef920109649676c9b48b49fd6fcd2a1f"
-  "services/api/ingestion/": "sha256:d0e00051fe3b5cde2ed9a3d4c1bcea3237e5a2628db64194b78e803b1fa227b0"
+  "services/api/ingestion/": "sha256:f8792fdb52aa80d312f4e9dc4a8e29e6102fc65737d2783cef54fdc4d6bdc569"
   "services/api/intelligence/": "sha256:50d2fba35ca8b62431283aa909ae746d789f59dcf201dfb15ad297fd522f1a13"
   "services/api/journeys/": "sha256:5d7336fa8f43bb5107a9314f09a08c16132ba1c1cf1f57762344f55a1192608a"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
-  "services/api/tenancy/": "sha256:b3e28efab538d22bad132a158a150d7ac9872d05a14ce3bf858637dc58e18289"
+  "services/api/tenancy/": "sha256:b8b5c4e0956e300494f051e9b82958da6caf3ca375b8c79f00d5b76dd061fc63"
   "services/api/value/": "sha256:b90c235210f77460e626c395c3011149dd7cbd4d5da0f58e797abfe7e9d24328"
   "services/api/workers/": "sha256:2ba7219cc4a6bb8a77040d5871b16f764631ca87da8f36de0ba2140b59a015e6"
 ---
@@ -221,8 +224,8 @@ signature-verification failures.
 | `/v1/auth/verify-email` | POST | Email sign-up step 2 — verify OTP, create tenant + first API key (20 requests per minute per client IP; 5 wrong codes per address per 15 minutes, then `429` even for the right code) |
 | `/v1/auth/resend-verification` | POST | Resend the OTP if the first email was lost (same IP and per-address limits as `register`) |
 | `/v1/auth/login` | POST | Email + password → API key (creates a new key per login). Throttled: 10 attempts per minute per client IP; 5 failed attempts per 15 minutes per address from one client IP (so one caller cannot lock the account holder out); and 25 failed attempts per 15 minutes per address from anywhere. A successful login clears both failure counts; over any limit answers `429`, and `errors[0].limiter` names which limit refused the request |
-| `/v1/auth/sso/callback` | POST | Auth0 JWT → session (API key with human sessions off). An unlinked sign-in first links a verified email to its existing user, joins a `PLATFORM_OPERATOR_EMAILS` address to the operator tenant as owner, or accepts a pending organization invitation; staging never self-provisions a tenant. A rejected token returns 400 and logs the reason (see [Access Control](../architecture/ACCESS-CONTROL.md#staging-sign-in-internal-only)) |
-| `/v1/auth/sso/providers` | GET | List configured SSO providers (no auth) |
+| `/v1/auth/sso/callback` | POST | Auth0 JWT → session (API key with human sessions off unless `session_required: true`, which refuses before token validation or membership side effects). The Access Kit CLI uses Auth0 Device Authorization and this guard. An unlinked sign-in first links a verified email to its existing user, joins a `PLATFORM_OPERATOR_EMAILS` address to the operator tenant as owner, or accepts a pending organization invitation; staging never self-provisions a tenant. A rejected token returns 400 and logs the reason (see [Access Control](../architecture/ACCESS-CONTROL.md#staging-sign-in-internal-only)) |
+| `/v1/auth/sso/providers` | GET | List configured SSO providers (no auth), including whether revocable human-session auth is enabled |
 | `/v1/auth/recover` | POST | Recover lost API key via signed email |
 | `/v1/billing/plans` | GET | Public plan catalog for signup and upgrade discovery |
 | `/v1/admin/billing/stripe/webhook` | POST | Stripe-signed webhook (subscription, invoice, and delayed Checkout payment events; delayed activation is fulfilled only after async payment success) |
@@ -627,6 +630,40 @@ publish semantics match `/v1/batch`, and the aliases now require the same
 `write` permission. Setting `AETHER_KILL_DEPRECATED_INGEST_ALIASES=true`
 retires them with HTTP 410 (routes stay mounted; their bodies return the
 retired error and direct callers to `/v1/batch`).
+
+**Optional observation envelope:** when `AETHER_OBSERVATION_ENVELOPE_ENABLED`
+is on, both the V1 event-bus path and V2 transactional Bronze/outbox path add
+the SDK adapter's `observation_envelope` to the persisted event. When
+`AETHER_UNIVERSAL_INGRESS_GATEWAY_ENABLED` is also on, that projection is
+validated and stamped through the existing gateway. The change is additive and
+default-off; envelope construction or gateway rejection degrades to the
+accepted flat event and records the corresponding metric. Downstream consumers
+must continue treating the flat event as the compatibility surface during this
+adoption phase.
+
+Each batch response echoes the middleware `requestId`. When the advisory
+metering hook succeeds, it also returns the actual `usageEventId` and
+`usageEvidenceId`; these fields may be absent when metering is unavailable or
+no accepted event was billable. The request ID is passed to the existing
+metering authority as correlation metadata. After intake completes, the route
+records an `ingestion.batch` event in the existing tenant Audit Ledger and
+returns its actual `auditEventId` when persisted. When present, the
+`consentReceiptIds` response array contains only the real tenant-scoped receipt
+IDs used to admit accepted observations. The audit row links those references
+to the batch ID, outcome counts, available usage references, and authenticated
+request correlation. Because the observation may already be durable, audit
+persistence is best-effort and a missing `auditEventId` means no durable audit
+ID was returned; the server does not fabricate one.
+
+When authoritative consent allows an observation and provides a durable
+tenant-scoped consent receipt, validation preserves that actual receipt ID and
+purpose in the normalized event. With Envelope-B enabled, the ID is also
+present in its privacy block; when the universal ingress gateway is enabled,
+that projection is validated and stamped by the gateway. Denied or unreceipted
+consent receives no invented reference. These fields provide consent evidence,
+not a general authorization-decision or billing receipt. The ordinary `WRITE`
+permission check still has no durable decision ID, and billing/payment receipts
+remain owned by their existing flows.
 
 ---
 
@@ -4172,6 +4209,21 @@ canonical `/v1/imports` and `/v1/exports` seams.
 | POST | `/v1/data-exchange/imports/{import_id}/preview/graph` | Graph-mutation preview | `write`; delegates to the canonical commit preview. |
 | POST | `/v1/data-exchange/imports/{import_id}/commit` | Commit the import | `admin`; enqueues the canonical `import.commit` durable job. |
 | POST | `/v1/data-exchange/imports/{import_id}/rollback` | Roll back a committed import | `admin`; uses canonical source-tag rollback. |
+
+For CSV commits, the worker resolves Rights Authority decisions for
+`tenant_lake`, `write_tenant_graph`, and `tenant_insights` against the import's
+source before identity, Bronze, Silver, or graph writes. A durable active grant
+for the exact tenant and source must remain valid through the writes. Missing,
+denied, wrong-source, revoked, or unavailable rights fail closed as
+`import_rights_denied`; the import session keeps the attempt history and any
+durable decision references. Successful commit records and Bronze/Silver
+evidence retain those references, and governed graph mutations carry the graph
+decision reference. Silver remains a best-effort projection under its existing
+contract. CSV graph writes currently use the mutation gateway's shadow mode,
+but the commit is not acknowledged complete unless its graph-ledger rows retain
+durable rights references. If projection succeeds and a ledger append fails,
+the import remains failed; requeue resumes under the preserved commit ID and
+repairs an already projected same-commit edge without adding a duplicate.
 
 ### Saved import mappings
 

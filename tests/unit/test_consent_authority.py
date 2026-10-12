@@ -77,8 +77,11 @@ class FakeCache:
         return None
 
 
-def _make_event(batch, *, event_type="track", user_id="u1", anonymous_id="a1", consent=None):
-    ctx = batch.EventContext(consent=consent) if consent is not None else batch.EventContext()
+def _make_event(
+    batch, *, event_type="track", user_id="u1", anonymous_id="a1",
+    consent=None, privacy=None,
+):
+    ctx = batch.EventContext(consent=consent, privacy=privacy)
     return batch.BaseEvent(
         id=f"evt-{user_id}-{event_type}",
         type=event_type,
@@ -120,6 +123,25 @@ class TestEvaluateConsent:
                 "r1", "t1", "analytics", "granted", subject_id="u1"))
             allowed, reason = _run(authority.evaluate_consent("t1", "u1", "a1", "analytics"))
             assert (allowed, reason) == (True, None)
+
+    def test_receipt_evidence_returns_only_the_actual_allowed_receipt_id(self):
+        with consent_env() as authority:
+            _run(authority.ConsentReceiptRepository().record(
+                "actual-receipt-1", "t1", "analytics", "granted", subject_id="u1"))
+            allowed = _run(authority.evaluate_consent_with_receipt(
+                "t1", "u1", "a1", "analytics"))
+            assert (allowed.allowed, allowed.reason_code, allowed.receipt_id) == (
+                True, None, "actual-receipt-1"
+            )
+
+            _run(authority.ConsentReceiptRepository().record(
+                "actual-receipt-2", "t1", "analytics", "revoked",
+                subject_id="u2", revoked_at="2026-01-01T00:00:00Z"))
+            denied = _run(authority.evaluate_consent_with_receipt(
+                "t1", "u2", "a2", "analytics"))
+            assert denied.allowed is False
+            assert denied.reason_code == authority.CONSENT_REVOKED
+            assert denied.receipt_id is None
 
     def test_denied_receipt_rejects(self):
         with consent_env() as authority:
@@ -253,6 +275,67 @@ class TestEvaluateDataPolicy:
 
 
 class TestIngestionEnforcement:
+
+    def test_authoritative_receipt_is_stamped_into_envelope_not_sdk_privacy_claim(self):
+        with consent_env(authoritative_consent_enforcement_enabled=True) as authority:
+            batch = importlib.import_module("ingestion.ingestion.batch")
+            validation = importlib.import_module("ingestion.ingestion.validation")
+            envelope_adapter = importlib.import_module(
+                "ingestion.ingestion.observation_envelope"
+            )
+            _run(authority.ConsentReceiptRepository().record(
+                "server-receipt-1", "t1", "analytics", "granted", subject_id="u1"))
+            event = _make_event(
+                batch,
+                consent={"analytics": True},
+                privacy={"consent_snapshot": "client-forged", "purposes": ["marketing"]},
+            )
+
+            result = _run(validation.validate_event(
+                sdk_event=event,
+                tenant_id="t1",
+                batch_id="batch-1",
+                received_at="2026-07-12T00:00:00Z",
+            ))
+
+            assert result.allowed is True
+            assert result.normalized_event["privacy"] == {
+                "consent_snapshot": "server-receipt-1",
+                "purposes": ["analytics"],
+                "GPC": False,
+                "DNT": False,
+            }
+            envelope = envelope_adapter.build_sdk_observation_envelope(
+                result.normalized_event
+            )
+            assert envelope.privacy.consent_snapshot == "server-receipt-1"
+            assert envelope.privacy.purposes == ["analytics"]
+
+    def test_sdk_privacy_receipt_claim_is_not_promoted_without_authoritative_lookup(self):
+        with consent_env(authoritative_consent_enforcement_enabled=False):
+            batch = importlib.import_module("ingestion.ingestion.batch")
+            validation = importlib.import_module("ingestion.ingestion.validation")
+            envelope_adapter = importlib.import_module(
+                "ingestion.ingestion.observation_envelope"
+            )
+            event = _make_event(
+                batch,
+                consent={"analytics": True},
+                privacy={"consent_snapshot": "client-forged", "purposes": ["analytics"]},
+            )
+            result = _run(validation.validate_event(
+                sdk_event=event,
+                tenant_id="t1",
+                batch_id="batch-1",
+                received_at="2026-07-12T00:00:00Z",
+            ))
+
+            assert result.allowed is True
+            assert "privacy" not in result.normalized_event
+            envelope = envelope_adapter.build_sdk_observation_envelope(
+                result.normalized_event
+            )
+            assert envelope.privacy is None
 
     def test_granted_sdk_snapshot_but_no_server_receipt_is_rejected(self):
         # The SDK claims consent; the server has no receipt. Server wins.

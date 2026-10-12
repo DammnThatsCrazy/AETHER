@@ -11,9 +11,29 @@ output "alb_dns" {
   value       = module.alb.alb_dns_name
 }
 
+output "access_mcp_repository_url" {
+  description = "Dedicated customer Access Kit MCP ECR repository URL, empty unless explicitly provisioned."
+  value       = try(module.ecr.repository_urls["aether-access-mcp"], "")
+}
+
+output "access_mcp_service_name" {
+  description = "Customer Access Kit MCP ECS service name, empty unless explicitly enabled."
+  value       = try(module.access_mcp[0].service_name, "")
+}
+
+output "access_mcp_endpoint" {
+  description = "Configured customer Access Kit MCP HTTPS endpoint, empty unless explicitly enabled."
+  value       = var.enable_access_mcp ? "https://${var.domain_name}${var.access_mcp_path}" : ""
+}
+
 output "backend_url" {
   description = "HTTPS URL for the AETHER backend API"
   value       = "https://${var.domain_name}"
+}
+
+output "aether_cli_auth0_client_id" {
+  description = "Public Auth0 client ID for the Aether CLI; not a secret"
+  value       = module.auth0.aether_cli_client_id
 }
 
 # --------------------------------------------------------------------------

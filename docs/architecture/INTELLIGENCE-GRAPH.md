@@ -34,6 +34,7 @@ estimated_read_minutes: 15
 toc_depth: 3
 reviewed_source_commits:
   - {'commit': '0efa07cb', 'reason': 'Reviewed graph traversal hardening: temporal path queries reconstruct only valid source-to-target paths, shortest and K-shortest expansion respects the total hop budget, and equal-cost candidates have a deterministic tie-break.'}
+  - {'commit': 'af851e21c', 'reason': 'Reviewed the CSV import shadow-ledger recovery contract: import success requires durable Rights ancestry, and retry repairs a verified same-commit projection without duplicating the edge.'}
 source_hashes:
   "docs/reference/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:77e53b782c1633240ba44d8151a7b0f3712f44a497cf9691b7c0421a466c56f8"
   "scripts/allowlists/graph_write_paths.json": "sha256:37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
@@ -53,7 +54,7 @@ source_hashes:
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
   "services/api/repositories/repos.py": "sha256:18ffc6df66bfc4484aaab821c791fda4579382634a23066ddbe5276d4408ec04"
-  "services/api/shared/graph/": "sha256:6a4870242b1476b2eca52b4645aa2034af8b345ac353b060a72b8d02cd41ad08"
+  "services/api/shared/graph/": "sha256:fde19e372f598d92ceb7e58bea28934d379495dfbd46aab44253efd7ec2119fd"
   "services/api/value/x402/economic_mutations.py": "sha256:bdd180a936e048840636f221fdee3b142c0babab5d8e2bcc59b4a51983198f51"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
   "services/api/workers/profile360_workers/workers.py": "sha256:0c79f5ee2cc03eb0ae92d8690a8622b8ebaea245dc047c7643107fe909d7170a"
@@ -146,6 +147,15 @@ the cluster, merge-approval and batch routes that remained as fail-closed
 tombstones. Zero direct writers does not prove
 that every gateway caller runs in `enforce` mode or that ledger and projection
 writes are atomic.
+
+CSV import is an additional tenant-governed caller of the same gateway. Rights
+admission is mandatory before import writes, while graph projection currently
+uses shadow mode. An import is not marked committed until each governed graph
+mutation has a durable ledger row carrying its `rdec_*` decision reference. If
+the shadow projection succeeds but ledger append fails, the import stays failed
+and retryable; recovery records a verified same-commit-owned edge without
+projecting a duplicate. This recovery contract is specific to the CSV import
+caller and does not make other shadow-mode graph writes atomic.
 
 A second, governed mutation path closes the "Gold is computed but never reaches
 the graph" gap for semantic intelligence: the **semantic graph projector**

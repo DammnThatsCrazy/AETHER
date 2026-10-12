@@ -11,6 +11,7 @@
     "packages/sdk/server",
     "packages/sdk/react-native",
     "packages/sdk/mobile-core",
+    "packages/access-kit",
     "packages/ui/mobile",
     "tests/e2e/proof/packages/contracts",
     "tests/e2e/proof/packages/fixtures",

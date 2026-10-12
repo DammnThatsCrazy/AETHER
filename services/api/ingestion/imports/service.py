@@ -78,7 +78,12 @@ def _ensure_not_terminal(session: dict) -> None:
 # ── lifecycle ────────────────────────────────────────────────────────────────
 
 
-async def create_import(tenant_id: str, *, created_by: Optional[str] = None) -> dict:
+async def create_import(
+    tenant_id: str,
+    *,
+    created_by: Optional[str] = None,
+    source_id: Optional[str] = None,
+) -> dict:
     repo = get_imports_repository()
     active = await repo.count_active_sessions(tenant_id)
     if active >= MAX_CONCURRENT_IMPORTS:
@@ -86,7 +91,11 @@ async def create_import(tenant_id: str, *, created_by: Optional[str] = None) -> 
             f"tenant has {active} imports in flight (max {MAX_CONCURRENT_IMPORTS}); "
             "finish, cancel, or roll back an existing import first"
         )
-    session = await repo.create_session(tenant_id, created_by=created_by)
+    session = await repo.create_session(
+        tenant_id,
+        created_by=created_by,
+        source_id=str(source_id or "").strip() or None,
+    )
     # Seed the program-spec lifecycle fields (JSONB) so the operator surface
     # and sweeper can rely on them being present on every session.
     await ensure_program_fields(repo, tenant_id, session["id"])

@@ -36,6 +36,7 @@ from typing import Any, Mapping, Optional
 from config.settings import settings
 from governance.consent.authority import (
     evaluate_consent,
+    evaluate_consent_with_receipt,
     evaluate_data_policy,
     evaluate_request_privacy_signals,
 )
@@ -395,6 +396,7 @@ async def validate_event(
             sdk_event.type,
         )
 
+    consent_receipt_id: Optional[str] = None
     if sdk_event.type != "consent" and required_purpose:
         consent_snapshot = sdk_event.context.consent
         if isinstance(consent_snapshot, dict) and consent_snapshot.get(required_purpose) is False:
@@ -427,18 +429,22 @@ async def validate_event(
             return reject(signal_reason or REJECT_CONSENT_DENIED)
 
         if settings.consent_authority.authoritative_consent_enforcement_enabled:
-            allowed, reason_code = await evaluate_consent(
+            consent_evaluation = await evaluate_consent_with_receipt(
                 tenant_id=tenant_id,
                 subject_id=sdk_event.userId,
                 anonymous_id=sdk_event.anonymousId,
                 purpose=required_purpose,
             )
-            if not allowed:
+            if not consent_evaluation.allowed:
                 metrics.increment(
                     "ingestion_consent_authority_blocked_total",
-                    labels={"purpose": required_purpose, "reason": reason_code or "unknown"},
+                    labels={
+                        "purpose": required_purpose,
+                        "reason": consent_evaluation.reason_code or "unknown",
+                    },
                 )
-                return reject(reason_code or REJECT_CONSENT_DENIED)
+                return reject(consent_evaluation.reason_code or REJECT_CONSENT_DENIED)
+            consent_receipt_id = consent_evaluation.receipt_id
 
     fingerprint_paths = classify_fingerprints({
         "properties": sdk_event.properties or {},
@@ -524,6 +530,16 @@ async def validate_event(
         batch_id=batch_id,
         received_at=received_at,
     )
+    # Keep the actual authority receipt reference as server-owned evidence for
+    # Envelope-B. Never copy context.privacy / consentSnapshotId from the SDK,
+    # and never manufacture a reference when legacy receipt rows lack one.
+    if required_purpose and consent_receipt_id:
+        normalized["privacy"] = {
+            "consent_snapshot": consent_receipt_id,
+            "purposes": [required_purpose],
+            "GPC": request_privacy.gpc,
+            "DNT": request_privacy.dnt,
+        }
     if deployment_id:
         # Keep client deployment claims separate from the registry decision.
         # Silver projectors use this server-owned marker for deployment and

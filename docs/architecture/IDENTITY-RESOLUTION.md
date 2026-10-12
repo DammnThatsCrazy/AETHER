@@ -22,6 +22,13 @@ source_files:
 canonical_owner: identity@aether
 estimated_read_minutes: 12
 toc_depth: 3
+reviewed_source_commits:
+  - commit: "fcfe08b7b"
+    reason: "Reviewed the SDK batch envelope refactor and V2 parity. The helper preserves the existing authenticated identity namespace stamp and only adds the optional flag-gated observation envelope; identity resolution behavior is unchanged."
+  - commit: "5da9690b0"
+    reason: "Reviewed request-to-usage correlation in the batch handler. The request ID becomes metering correlation metadata and actual usage references are returned; source namespace, canonical identity, and resolution decisions are unchanged."
+  - commit: "40af67902"
+    reason: "Reviewed the accepted-observation consent receipt correlation addition. The batch response and audit metadata now retain real receipt IDs; source namespace, canonical identity, and resolution decisions are unchanged."
 source_hashes:
   "packages/shared/identity.ts": "sha256:574974d03d8c4f8b99ad414c7b738b675cc293723f764e2ca3b76dc2ca40d8a2"
   "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
@@ -31,7 +38,7 @@ source_hashes:
   "services/api/identity/identity/": "sha256:aa34bc8ac72018257066c21d8ed99c000083b6304ef7fed4ed18edfa6dddcb1c"
   "services/api/identity/profile/aggregator.py": "sha256:a901c1088e387bb967d425b1aed3673fc3942b7b6bf017648c78aad860bfe04b"
   "services/api/identity/profile/composer.py": "sha256:aae09f67a164f0e2b940676e52841ff325f36650ac4b1c022cc2a60a31505c20"
-  "services/api/ingestion/ingestion/batch.py": "sha256:d91f4306575bad6127bd700158e90198e88a4f21427b748e019fee1a6f6438c3"
+  "services/api/ingestion/ingestion/batch.py": "sha256:fbb659145f6cf52cff5af991099fb2cd78bd306729b6144a3ddb93bb8dbdda45"
   "services/api/intelligence/analytics/routes.py": "sha256:b51cb890d703eb9c495b723fd79b6e03bf292300db82441024b5b645e6b341b7"
   "services/api/repositories/repos.py": "sha256:18ffc6df66bfc4484aaab821c791fda4579382634a23066ddbe5276d4408ec04"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"

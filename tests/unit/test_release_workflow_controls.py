@@ -1751,8 +1751,8 @@ def test_the_sanitiser_keeps_exactly_what_the_policy_gate_reads():
     assert clean["resource_changes"][0]["change"]["actions"] == ["create"]
 
 
-def test_the_variable_allow_list_is_exactly_what_the_policy_gate_reads():
-    """Derived from the consumer, so it cannot quietly widen.
+def test_the_variable_allow_list_matches_policy_and_apply_consumers():
+    """Keep safe plan variables explicit and secret values redacted by default.
 
     Widening the allow-list is how the leak comes back: it is the one layer that
     works without Terraform having told us which variables are sensitive.
@@ -1761,11 +1761,31 @@ def test_the_variable_allow_list_is_exactly_what_the_policy_gate_reads():
         encoding="utf-8"
     )
     consumed = set(re.findall(r'\(plan\.get\("variables"\) or \{\}\)\.get\("(\w+)"\)', policy))
+    consumed.update(re.findall(r'variables\.get\("(\w+)"\)', policy))
     assert consumed, "the policy gate no longer reads plan variables the way this test detects"
+    # The apply-time scan preflight reads this public digest from the reviewed
+    # plan artifact so it can revalidate the exact image before mutations.
+    consumed.add("access_mcp_image_digest")
     assert set(_sanitiser().KEEP_VARIABLE_VALUES) == consumed, (
-        "the sanitiser's variable allow-list no longer matches what "
-        f"check_terraform_plan_policy.py actually reads ({sorted(consumed)})"
+        "the sanitiser's variable allow-list no longer matches the policy and "
+        f"apply consumers ({sorted(consumed)})"
     )
+
+
+def test_the_mcp_apply_inputs_survive_sanitizing_without_widening_other_values():
+    plan = _plan_with_secret()
+    digest = "sha256:" + "a" * 64
+    plan["variables"].update({
+        "enable_access_mcp": {"value": True},
+        "access_mcp_image_digest": {"value": digest},
+        "access_mcp_allowed_origins": {"value": ["https://console.example.com"]},
+    })
+
+    clean = _sanitiser().sanitize(plan, environ={})
+
+    assert clean["variables"]["enable_access_mcp"]["value"] is True
+    assert clean["variables"]["access_mcp_image_digest"]["value"] == digest
+    assert clean["variables"]["access_mcp_allowed_origins"]["value"] == "__REDACTED_SENSITIVE__"
 
 
 def test_the_allow_list_holds_even_when_terraform_declares_no_sensitivity():

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -11,6 +12,7 @@ from governance.security import audit_ledger as audit_mod
 from governance.security import integration_security as integ_mod
 from governance.security.access_control import ROLE_GRANTS, access_control, build_role_grants
 from governance.security.audit_ledger import AuditLedger, audit_ledger
+from governance.security.request_context import bind_current_request
 from governance.security.break_glass import BreakGlassService
 from governance.security.contracts import sanitize_metadata
 from governance.security.evidence_packs import EvidencePackService
@@ -153,6 +155,8 @@ async def test_audit_chain_is_verifiable():
     result = await ledger.verify_chain('t1')
     assert result["chain_intact"] is True
     assert result["events_checked"] == 3
+    raw = await ledger._repo.list_for_tenant("t1", limit=10)
+    assert "correlation_id" not in raw[0]
 
 
 async def test_global_chain_verifies_per_tenant():
@@ -186,6 +190,62 @@ async def test_audit_metadata_tampering_is_detected():
     result = await ledger.verify_chain('t1')
     assert result["chain_intact"] is False
     assert ev.audit_event_id in result["broken_event_ids"]
+
+
+async def test_audit_ledger_persists_authenticated_tenant_request_correlation():
+    from governance.security.routes import _safe_audit
+
+    request = SimpleNamespace(state=SimpleNamespace(
+        tenant=SimpleNamespace(tenant_id="t1"),
+        context=SimpleNamespace(tenant_id="t1", correlation_id="req-123"),
+    ))
+    bind_current_request(request)
+    try:
+        ledger = AuditLedger()
+        event = await ledger.record(
+            actor_id="u1", actor_type="tenant_user", event_type="batch",
+            resource_type="observation_batch", action="write", outcome="allowed",
+            tenant_id="t1",
+        )
+    finally:
+        bind_current_request(None)
+
+    assert event.correlation_id == "req-123"
+    raw = await ledger._repo.find_by_id(event.audit_event_id)
+    assert raw["correlation_id"] == "req-123"
+    assert _safe_audit(raw)["correlation_id"] == "req-123"
+    assert (await ledger.verify_chain("t1"))["chain_intact"] is True
+
+
+async def test_audit_ledger_omits_mismatched_request_correlation_and_hashes_it_when_present():
+    request = SimpleNamespace(state=SimpleNamespace(
+        tenant=SimpleNamespace(tenant_id="t1"),
+        context=SimpleNamespace(tenant_id="t1", correlation_id="req-123"),
+    ))
+    bind_current_request(request)
+    try:
+        ledger = AuditLedger()
+        mismatched = await ledger.record(
+            actor_id="u2", actor_type="tenant_user", event_type="batch",
+            resource_type="observation_batch", action="write", outcome="allowed",
+            tenant_id="t2",
+        )
+        correlated = await ledger.record(
+            actor_id="u1", actor_type="tenant_user", event_type="batch",
+            resource_type="observation_batch", action="write", outcome="allowed",
+            tenant_id="t1",
+        )
+    finally:
+        bind_current_request(None)
+
+    assert mismatched.correlation_id is None
+    assert correlated.correlation_id == "req-123"
+    raw = await ledger._repo.find_by_id(correlated.audit_event_id)
+    raw["correlation_id"] = "tampered"
+    await ledger._repo.update(correlated.audit_event_id, raw)
+    result = await ledger.verify_chain()
+    assert result["chain_intact"] is False
+    assert correlated.audit_event_id in result["broken_event_ids"]
 
 
 # ── Break-glass lifecycle ─────────────────────────────────────────────────────

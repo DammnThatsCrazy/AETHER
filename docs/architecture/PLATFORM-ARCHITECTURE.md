@@ -32,9 +32,15 @@ toc_depth: 3
 reviewed_source_commits:
   - commit: "5bfb9394"
     reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
+  - commit: "181af52f4"
+    reason: "Reviewed the shared SDK batch wire vector and cross-platform conformance seam. It documents the existing canonical intake path and adds no client-owned tenant, identity, rights, or graph authority."
+  - commit: "b9dc38da7"
+    reason: "Reviewed the generated shared feature-surface manifest update: Agent 360 remains tenant-scoped and explicitly exempt from exact Kyber mirror parity until an owner defines that contract."
+  - commit: "40af67902"
+    reason: "Reviewed the optional server-returned consent, usage, and audit references for accepted batch observations. The contracts preserve the existing intake and authority boundaries."
 source_hashes:
-  "packages/shared/": "sha256:0daac7707280458784fc09e56d83696cc5889c024441e9501169aeb04193c898"
-  "scripts/generate_feature_surface_manifest.py": "sha256:b29cbf9968f8252f6c7b62e340ba5338d4758ce35c1b8952369a0c6049571b17"
+  "packages/shared/": "sha256:7cdc8a10e1cd74e5f6fcef8c3970e1eadb45fe6999a64b7c1748f72614d11208"
+  "scripts/generate_feature_surface_manifest.py": "sha256:9ab5609184818157683093d5cd2ab5472e5df3f2b0134dc692b2bbce96465ca9"
   "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
@@ -103,6 +109,15 @@ SDKs            →  /v1/ingest/*     →       ↓
                               ├──── ML Training → Model Registry
                               └──── Intelligence API (risk, analytics, clusters, alerts)
 ```
+
+SDK, CLI, and MCP observation requests use the canonical `POST /v1/batch`
+intake path. The Access Kit CLI and MCP adapters read through existing
+tenant-scoped APIs and use the same batch endpoint for site-bound observations;
+they do not create another graph writer, identity resolver, or action authority.
+Batch responses can return the real consent, usage, and audit references that
+their owning authorities persisted. SDK batch payloads share a minimum
+cross-platform wire vector, while the optional Envelope-B field remains behind
+the server's adoption flags.
 
 The SDK also collects raw user interactions, device fingerprints, wallet events, and session data — then ships everything to the backend for processing, enrichment, identity resolution, and analysis.
 

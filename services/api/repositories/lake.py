@@ -148,6 +148,7 @@ def make_raw_record(
     olympus_owned_source: bool = False,
     source_manifest_id: Optional[str] = None,
     sensitivity_classification: str = "unclassified",
+    rights_decision_refs: Optional[dict[str, str]] = None,
 ) -> dict:
     """Create a canonical raw record with required audit fields and provenance envelope."""
     now = utc_now().isoformat()
@@ -168,7 +169,7 @@ def make_raw_record(
 
     quarantine_status = _compute_quarantine_status(prov_status, license_status)
 
-    return {
+    record = {
         "id": str(uuid.uuid4()),
         "source": source,
         "source_tag": source_tag,
@@ -194,6 +195,12 @@ def make_raw_record(
         "sensitivity_classification": sensitivity_classification,
         "quarantine_status": quarantine_status,
     }
+    # Rights Authority lineage is additive metadata. Omit it for legacy callers
+    # that do not supply a decision envelope so existing Bronze record shapes
+    # remain stable.
+    if rights_decision_refs:
+        record["rights_decision_refs"] = dict(rights_decision_refs)
+    return record
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -345,6 +352,7 @@ class BronzeRepository(BaseRepository):
         olympus_owned_source: bool = False,
         source_manifest_id: Optional[str] = None,
         sensitivity_classification: str = "unclassified",
+        rights_decision_refs: Optional[dict[str, str]] = None,
     ) -> tuple[dict, bool]:
         """Ingest a raw record. Idempotent — skips duplicates.
 
@@ -372,6 +380,7 @@ class BronzeRepository(BaseRepository):
             olympus_owned_source=olympus_owned_source,
             source_manifest_id=source_manifest_id,
             sensitivity_classification=sensitivity_classification,
+            rights_decision_refs=rights_decision_refs,
         )
 
         if record.get("quarantine_status") == "quarantined":

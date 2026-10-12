@@ -64,3 +64,13 @@ output "ml_tg_arn_suffix" {
   description = "ARN suffix of the ML target group (empty string when enable_dedicated_ml = false)"
   value       = try(aws_lb_target_group.ml[0].arn_suffix, "")
 }
+
+output "access_mcp_target_group_arn" {
+  description = "Target group ARN for the customer Access Kit MCP service (empty when disabled)"
+  value       = try(aws_lb_target_group.access_mcp[0].arn, "")
+}
+
+output "access_mcp_target_group_arns" {
+  description = "Target group ARNs for the customer Access Kit MCP service; empty when disabled"
+  value       = aws_lb_target_group.access_mcp[*].arn
+}

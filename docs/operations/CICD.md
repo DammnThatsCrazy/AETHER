@@ -25,12 +25,15 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
+reviewed_source_commits:
+  - commit: "c71ebc5cb"
+    reason: "Reviewed Access Kit container workflow cadence: pull requests build on ready_for_review, with explicit dispatch and Development/main push lanes for targeted or post-landing builds; no staging wake or deployment is added."
 source_hashes:
-  ".github/workflows/": "sha256:101015e8b388b6381dac8cba47efb4aa5c85a8c105e9f58f79f5935f17fd618a"
+  ".github/workflows/": "sha256:a5113005c3957b7126d7dc5b3f0a2a4fe943c8555c93fd1779a68aa380ba06c1"
   "config/delivery_workflow_authority.yaml": "sha256:7a23c16f192c2fcd9d742f25a447ac7a1d85659bdc51a303a1c61765a64332d6"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
-  "infra/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
+  "infra/aws/terraform/modules/ecr/main.tf": "sha256:f880cb8a6a4dfec313b115d89e6714906dcfcf3dc1cd4496945d7e86814d6407"
   "infra/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:f872d926ac84a0bf3c473a69b9362d7bb72d3e36d0fa91ea2febc1f5b63d66e1"
   "infra/cicd/aether-cicd/README.md": "sha256:36a2b231349b26f17f945f32a223d35f482acc9fd82ccbcde4a728b1fa9e05a9"
@@ -420,6 +423,33 @@ enforced by any workflow in `.github/workflows/`.
 - TypeScript packages compiled; `packages/sdk/web/dist/` populated
 - SDK artefacts staged for release (see SDK Release below)
 - Gate: **all builds succeed, images < 500 MB compressed**
+
+The customer-facing Access Kit MCP image follows its own opt-in release path:
+after Terraform provisions the dedicated immutable ECR repository in the
+canonical `production-scale` state, a clean reviewed commit is built as
+`linux/amd64` and pushed by
+`infra/aws/terraform/scripts/publish_access_mcp_image.sh`. The publisher checks
+the repository's encryption, tag immutability, and scan-on-push settings,
+waits for a completed scan with zero HIGH/CRITICAL findings, and returns the
+immutable image digest. The plan and apply jobs recheck that digest and scan
+state before proceeding. A separate hosted workflow runs on the PR
+`ready_for_review` event, builds the clean `linux/amd64` image, and smoke-checks
+health, readiness, and the headless CLI without AWS credentials. It does not
+publish an image, apply Terraform, or start an ECS task. The reviewed Terraform
+promotion then pins that digest in the customer Fargate task. This image is
+separate from the backend release image and the privileged `tfmcp` image;
+merging a PR into `Development` does not wake or deploy staging. The workflow
+also supports an explicit `workflow_dispatch` for a targeted rerun after a
+material fix, and runs on pushes to `Development` or `main` after landing.
+
+The separate `Publish Access Kit CLI and MCP` workflow runs a package check and
+preserves the exact npm tarball before publication. Public npm publishing is a
+manual main-branch action and fails closed unless `npm-production` has at least
+one required reviewer. The image publisher applies the same required-reviewer
+check to the `production` environment before it can request AWS OIDC
+credentials. Neither environment is currently configured in the repository;
+the respective release paths remain blocked until release owners configure
+reviewers and their environment-scoped credentials.
 
 ### 7. E2E tests
 

@@ -1,9 +1,48 @@
 package com.aether.sdk
 
+import java.io.File
+import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 
 class AetherTest {
+
+    @Test
+    fun `batch sender preserves the shared v1 wire vector`() {
+        val fixtureFile = File(findRepositoryRoot(), "packages/shared/contracts/sdk-batch-wire-v1.json")
+        val fixture = JSONObject(fixtureFile.readText())
+        assertEquals(fixture.getString("endpoint"), SDK_BATCH_PATH)
+        val request = fixture.getJSONObject("request")
+        val vectorBatch = request.getJSONArray("batch")
+        val vectorEvent = vectorBatch.getJSONObject(0)
+        val payload = Aether.batchPayload(listOf(vectorEvent), request.getString("sentAt"))
+
+        val requiredBatchFields = fixture.getJSONArray("requiredBatchFields")
+        for (index in 0 until requiredBatchFields.length()) {
+            val field = requiredBatchFields.getString(index)
+            assertTrue("Missing batch field: $field", payload.has(field))
+        }
+        assertEquals(request.getString("sentAt"), payload.getString("sentAt"))
+
+        val encodedBatch = payload.getJSONArray("batch")
+        assertEquals(1, encodedBatch.length())
+        val encodedEvent = encodedBatch.getJSONObject(0)
+        val requiredEventFields = fixture.getJSONArray("requiredEventFields")
+        for (index in 0 until requiredEventFields.length()) {
+            val field = requiredEventFields.getString(index)
+            assertTrue("Missing event field: $field", encodedEvent.has(field))
+        }
+        assertTrue("Event vector changed during batch wrapping", vectorEvent.similar(encodedEvent))
+    }
+
+    private fun findRepositoryRoot(): File {
+        var directory = File(System.getProperty("user.dir")).absoluteFile
+        while (true) {
+            if (File(directory, "packages/shared/contracts/sdk-batch-wire-v1.json").isFile) return directory
+            directory = directory.parentFile ?: break
+        }
+        error("Shared batch wire fixture not found from ${System.getProperty("user.dir")}")
+    }
 
     @Test
     fun `health agent metrics tracking`() {

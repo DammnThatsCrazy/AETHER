@@ -107,6 +107,94 @@ def test_valid_production_scale_plan_passes(tmp_path):
     assert summary["prometheus_grafana_servers"]["count"] == 0
 
 
+def test_service_cardinality_accepts_only_the_explicit_access_mcp_service():
+    runtime = {
+        "profiles": {
+            "production-lean": {
+                "services": {"api": {}, "lean-worker": {}},
+                "remote_ml": False,
+                "execution_mode": "consolidated",
+            }
+        }
+    }
+    regular_addresses = [
+        "module.ecs.aws_ecs_service.backend",
+        'module.ecs.aws_ecs_service.runtime_role["lean-worker"]',
+    ]
+
+    def check(enabled: bool, addresses: list[str]):
+        reporter = MODULE.Reporter("Access MCP cardinality unit")
+        results: list[dict] = []
+        resources = [
+            {"type": "aws_ecs_service", "address": address, "actions": ["no-op"]}
+            for address in addresses
+        ]
+        plan = {"variables": {"enable_access_mcp": {"value": enabled}}}
+        MODULE.check_service_cardinality(
+            reporter, results, "production-lean", runtime, resources, plan,
+        )
+        return reporter, results
+
+    expected_address = "module.access_mcp[0].aws_ecs_service.this"
+    passing, passing_results = check(True, [*regular_addresses, expected_address])
+    assert passing.failures == []
+    assert next(
+        row for row in passing_results
+        if row["check"] == "cardinality.access_mcp_service"
+    )["status"] == "pass"
+
+    unexpected, unexpected_results = check(False, [*regular_addresses, expected_address])
+    assert unexpected.failures
+    assert next(
+        row for row in unexpected_results
+        if row["check"] == "cardinality.access_mcp_service"
+    )["status"] == "fail"
+
+    wrong_address, wrong_results = check(
+        True, [*regular_addresses, "module.ecs.aws_ecs_service.access_mcp"],
+    )
+    assert wrong_address.failures
+    assert next(
+        row for row in wrong_results
+        if row["check"] == "cardinality.access_mcp_service"
+    )["status"] == "fail"
+
+
+def test_access_mcp_service_cost_sizing_resolves_its_task_definition():
+    module_address = "module.access_mcp[0]"
+    resources = [
+        {
+            "type": "aws_ecs_service",
+            "address": f"{module_address}.aws_ecs_service.this",
+            "module_address": module_address,
+            "name": "this",
+            "index": None,
+            "actions": ["create"],
+            "values": {"desired_count": 2, "task_definition": None},
+        },
+        {
+            "type": "aws_ecs_task_definition",
+            "address": f"{module_address}.aws_ecs_task_definition.this",
+            "module_address": module_address,
+            "name": "this",
+            "index": None,
+            "actions": ["create"],
+            "values": {"family": "aether-production-access-mcp", "cpu": "256", "memory": "512"},
+        },
+    ]
+
+    sizing, unresolved = MODULE.resolve_fargate_sizing(resources)
+
+    assert unresolved == []
+    assert sizing == [{
+        "service": f"{module_address}.aws_ecs_service.this",
+        "source": "task_definition:name_and_index",
+        "task_definition": f"{module_address}.aws_ecs_task_definition.this",
+        "cpu": "256",
+        "memory": "512",
+    }]
+
+
 def test_staging_awake_plan_passes(tmp_path):
     code, result, _ = run("staging", "staging-awake.json", tmp_path)
     assert code == 0, f"awake staging plan rejected: {failed_checks(result)}"

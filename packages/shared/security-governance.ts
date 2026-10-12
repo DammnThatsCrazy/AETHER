@@ -122,6 +122,7 @@ export interface SecurityAuditEvent {
   action: string;
   outcome: SecurityAuditOutcome;
   policy_decision_id?: string | null;
+  correlation_id?: string | null;
   ip_address?: string | null;
   user_agent?: string | null;
   metadata?: Record<string, unknown> | null;

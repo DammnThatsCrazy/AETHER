@@ -6,24 +6,29 @@ visibility: I
 audience: [ops, architect]
 status: stable
 since_version: 0.1.0
-source_files: [config/deployment_profiles.yaml, config/runtime_deployment.yaml, config/terraform_resource_contracts.yaml, infra/aws/terraform/profiles.tf, infra/aws/terraform/main.tf, infra/aws/terraform/modules/alb/main.tf, infra/aws/terraform/modules/aurora/main.tf, infra/aws/terraform/modules/ecr/main.tf, infra/aws/terraform/modules/secrets/main.tf, infra/aws/terraform/modules/secrets/rotation.tf, infra/aws/terraform/modules/kms_credentials/main.tf, infra/aws/terraform/variables.tf, scripts/release/check_profile_config.py, scripts/release/check_profile_parity.py, scripts/release/check_staging_lane_contract.py, config/capability_overlays.yaml, scripts/validate_capability_overlays.py]
+source_files: [config/deployment_profiles.yaml, config/runtime_deployment.yaml, config/terraform_resource_contracts.yaml, config/aws_price_book.yaml, infra/aws/terraform/profiles.tf, infra/aws/terraform/main.tf, infra/aws/terraform/modules/alb/main.tf, infra/aws/terraform/modules/aurora/main.tf, infra/aws/terraform/modules/ecr/main.tf, infra/aws/terraform/modules/secrets/main.tf, infra/aws/terraform/modules/secrets/rotation.tf, infra/aws/terraform/modules/kms_credentials/main.tf, infra/aws/terraform/variables.tf, scripts/release/check_profile_config.py, scripts/release/check_profile_parity.py, scripts/release/check_staging_lane_contract.py, scripts/release/check_cost_model.py, config/capability_overlays.yaml, scripts/validate_capability_overlays.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
+reviewed_source_commits:
+  - commit: "609a3ad37"
+    reason: "Reviewed the Access Kit Auth0 client work. The linked root main.tf change is comment-only; the Native CLI application is an Auth0 module resource and does not alter deployment profile topology or runtime resource selection, so this profile guide needed no body change."
 source_hashes:
+  "config/aws_price_book.yaml": "sha256:b449237c5d4b11622f0f35278b3f5a22a17b39b1cea74a53596b6af94ba2d3dc"
   "config/capability_overlays.yaml": "sha256:aab4be2180c27275e54164100963b8c3fda947fbcceecb99114bc6412f923407"
   "config/deployment_profiles.yaml": "sha256:77d37f2c71472b5d644da32636bb68948263250739b62b621502cdfb09797475"
   "config/runtime_deployment.yaml": "sha256:ba7bd71d79e605a88076b6ea745582dce9c4bff38442ebd5d327cfee9bbf7284"
   "config/terraform_resource_contracts.yaml": "sha256:1f08c04dae8931f845c7918328504f748a9f643bc806670a32b644eb8231baca"
-  "infra/aws/terraform/main.tf": "sha256:a04ba5462686d78c59d9f03feb2a9261a39adc26814997133ee22a08503e293f"
-  "infra/aws/terraform/modules/alb/main.tf": "sha256:d019a2c18cda9a4e96d89165a4977e627dccacef34293c69e86c61ed43522097"
+  "infra/aws/terraform/main.tf": "sha256:544d3d944840a88e3d6302f38d43b07eadcc0cbfbcb55672f3d152993696756d"
+  "infra/aws/terraform/modules/alb/main.tf": "sha256:4ea488e53a1cdd02d47bd5d67d4d047fb43ee8eeaa04e2b419b29aab9d4a0d1a"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
-  "infra/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
+  "infra/aws/terraform/modules/ecr/main.tf": "sha256:f880cb8a6a4dfec313b115d89e6714906dcfcf3dc1cd4496945d7e86814d6407"
   "infra/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:f872d926ac84a0bf3c473a69b9362d7bb72d3e36d0fa91ea2febc1f5b63d66e1"
   "infra/aws/terraform/modules/secrets/rotation.tf": "sha256:2e3b0bc6336ee324e3a3829f4f08c94b901501902981f87034933c875549fb00"
   "infra/aws/terraform/profiles.tf": "sha256:c197af7ebf1556be22a70dbf05c4ba85f5f93a2dd322dc39a42442f27226a89d"
-  "infra/aws/terraform/variables.tf": "sha256:a2903e0b695041ac8c457ed97683a904829c134dcfe888fdedf255a745b7dda8"
+  "infra/aws/terraform/variables.tf": "sha256:c19d9528adbb14d176471f96a9d74a2ad14dbc72fb5863731d19d21c451c2a38"
+  "scripts/release/check_cost_model.py": "sha256:b80c15e6d0ceee9a161ad4259c82284469da10a395ac08c3b0e26f0c44e95aa7"
   "scripts/release/check_profile_config.py": "sha256:c1a16a2c7342d7be2d16306f1a15915cf4d37ffc4f1c6ea0466e3fe2df71782b"
   "scripts/release/check_profile_parity.py": "sha256:34c8ae168107d6c5e69c26dd2081c9774b42dd158b9663189ff5e70b6415adf2"
   "scripts/release/check_staging_lane_contract.py": "sha256:385a5e2316e8c38d33e10119f996854af3a7f3bc9034ca3b3545829638c8122d"
@@ -353,7 +358,7 @@ delete/recreate plan.
 | **Runtime topology** | `execution_mode: consolidated`. Two always-on tasks: `api` (1 vCPU / 2 GiB, max 4) and `lean-worker` (2 vCPU / 8 GiB, max 4) hosting all eight worker roles. No Spot at any capacity, because the task hosts `outbox-relay`. |
 | **Data behaviour** | Aurora Postgres is the database, graph and analytics of record. DynamoDB is the cache. SNS/SQS is the event substrate. ML runs in-process (`remote_ml: false`), so the semantic classifier is a resident model in the `lean-worker` task. |
 | **Network behaviour** | `network_egress_mode = "public_ip"` → `nat_mode = "none"`. NAT is *forbidden unless explicit*: setting this variable to a NAT mode is the explicit opt-in and must be reviewed as a cost-policy exception. |
-| **Cost posture** | Fixed baseline measures **USD 187.13/month** — USD 37.13 over the USD 150 target and USD 12.87 under the USD 200 hard ceiling. The gate warns and passes. The deviation is reviewed and **accepted**, with both closing levers examined and declined; the full analysis and approval record is in [Cost Optimization](../operations/COST-OPTIMIZATION.md). Expected usage-variable cost is a further USD 107.22/month and is not bounded by the ceiling. |
+| **Cost posture** | Fixed baseline measures **USD 188.93/month** — USD 38.93 over the USD 150 target and USD 11.07 under the USD 200 hard ceiling. The gate warns and passes. The deviation is reviewed and **accepted**, with both closing levers examined and declined; the full analysis and approval record is in [Cost Optimization](../operations/COST-OPTIMIZATION.md). Expected usage-variable cost is a further USD 107.22/month and is not bounded by the ceiling. |
 | **TTL / lifecycle** | None. This profile runs continuously; 730 h/month is the pricing basis. |
 | **Security posture** | Data stores in isolated subnets with no default route. Secrets fetched at container start from Secrets Manager; no secret values in task definitions or state. ALB enforces TLS 1.3 minimum. VPC flow logs on. Tasks carry a public IP for egress; inbound is ALB-only via the security group. |
 | **Validation** | `make deployment-profile-gate` runs the whole no-credentials chain. `make test-terraform-profiles` proves the planned module cardinality; `make validate-terraform-profile-policy` and `make validate-cost-model` score a plan inventory. |
@@ -372,6 +377,21 @@ when set. Enabling tfmcp raises the lean fixed baseline by roughly USD 18/month;
 the USD 200 hard ceiling is exceeded and must be reviewed as a cost-policy
 exception. See [AWS Deployment](../operations/AWS-DEPLOYMENT.md#tfmcp--terraform-mcp-server)
 and `infra/aws/terraform/modules/tfmcp`.
+
+**Customer Access Kit MCP (opt-in).** This is a separate, non-privileged
+customer endpoint from `tfmcp`. `enable_access_mcp_repository` provisions the
+immutable `aether-access-mcp` ECR repository; after a reviewed image publish,
+`enable_access_mcp` adds a digest-pinned Fargate service and HTTPS ALB route at
+`/v1/access/mcp`. It accepts caller Aether credentials per request and has no
+shared tenant secret or workload AWS permissions. The service is allowed only
+on `production-scale`, the single persistent state that owns the globally
+named ECR repository; production-lean, enterprise-isolated, staging, demo, and
+preview are rejected. The service is
+disabled by default. For cost comparison only, the modeled two-task service
+plus ECR adds about USD 18.52/month to a USD 188.93 fixed baseline, or USD
+207.45/month before variable charges; this exceeds the USD 200 hard ceiling.
+See the
+[Access Kit MCP AWS deployment runbook](../../infra/aws/terraform/ACCESS_KIT_MCP_DEPLOYMENT.md).
 ## `production-scale`
 
 | | |

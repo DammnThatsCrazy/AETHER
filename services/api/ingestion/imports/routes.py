@@ -103,10 +103,21 @@ async def delete_template(template_id: str, request: Request):
 
 
 @router.post("")
-async def create_import(request: Request):
+async def create_import(
+    request: Request,
+    source_id: Optional[str] = Query(
+        default=None,
+        description=(
+            "Tenant source ID with an active Rights Authority grant. Required "
+            "before commit; the grant is resolved server-side."
+        ),
+    ),
+):
     tenant = _tenant(request, "write")
     return await svc.create_import(
-        tenant.tenant_id, created_by=getattr(tenant, "user_id", None)
+        tenant.tenant_id,
+        created_by=getattr(tenant, "user_id", None),
+        source_id=source_id,
     )
 
 

@@ -8,6 +8,12 @@ variable "project" {
   description = "Project name"
 }
 
+variable "enable_access_mcp_repository" {
+  type        = bool
+  description = "Create the dedicated aether-access-mcp image repository. The service remains separately gated."
+  default     = false
+}
+
 variable "repository_encryption_types" {
   type        = map(string)
   default     = {}

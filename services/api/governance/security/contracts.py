@@ -155,6 +155,7 @@ class SecurityAuditEvent(BaseModel):
     action: str
     outcome: SecurityAuditOutcome
     policy_decision_id: Optional[str] = None
+    correlation_id: Optional[str] = None
     ip_address: Optional[str] = None
     user_agent: Optional[str] = None
     metadata: Optional[dict[str, Any]] = None

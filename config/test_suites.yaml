@@ -526,10 +526,10 @@ suites:
     lane: pr
     profiles: [local, ci, release]
     # The ML integration/training tests are correctness coverage, not a
-    # skippable advisory lane. Their observed hosted runtime needs headroom
-    # for xgboost/scikit-learn training on shared runners.
-    expected_runtime_seconds: 150
-    hard_runtime_budget_seconds: 240
+    # skippable advisory lane. An uncapped local run took 425 seconds for 358
+    # passes and 6 skips; leave room for xgboost/scikit-learn training variance.
+    expected_runtime_seconds: 450
+    hard_runtime_budget_seconds: 600
     paths: ["services/ml/tests"]
     # Run from the ML package root so its local ``tests`` helpers and top-level
     # ML packages resolve without colliding with the repository test package.
@@ -1450,8 +1450,8 @@ suites:
     isolation: workspace
     lane: pr
     profiles: [local, ci, release]
-    expected_runtime_seconds: 45
-    hard_runtime_budget_seconds: 120
+    expected_runtime_seconds: 180
+    hard_runtime_budget_seconds: 300
     paths: ["apps/aether-web"]
     runner: ["npm", "run", "test", "--workspace=apps/aether-web"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}

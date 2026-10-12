@@ -51,6 +51,7 @@ class ImportsRepository:
         *,
         created_by: Optional[str] = None,
         source_kind: str = "file_upload",
+        source_id: Optional[str] = None,
     ) -> dict:
         import_id = f"imp_{uuid.uuid4().hex}"
         return await self.sessions.insert(
@@ -59,6 +60,7 @@ class ImportsRepository:
                 "tenant_id": tenant_id,
                 "status": "created",
                 "source_kind": source_kind,
+                "source_id": str(source_id or "").strip() or None,
                 "file_count": 0,
                 "row_count": None,
                 "created_by": created_by,

@@ -20,7 +20,7 @@ source_hashes:
   "scripts/release/check_cost_model.py": "sha256:b80c15e6d0ceee9a161ad4259c82284469da10a395ac08c3b0e26f0c44e95aa7"
   "scripts/release/check_cost_policy.py": "sha256:2e547cdb3ce200a9f067b2a930a54ca622f29952fe4138693d942ddc1ec54e12"
   "scripts/release/check_cost_policy_terraform.py": "sha256:d43ff5de7727dda5ab8ca23785898accdc7bbcf2f82f4303d0f392b1e81cc4fb"
-  "scripts/release/check_terraform_plan_policy.py": "sha256:a7f41ddeebc975dbc9bdffec3bb82d41bb2088ed9573143d328b9730cea3e2d4"
+  "scripts/release/check_terraform_plan_policy.py": "sha256:546fa8186fa9b006342e6db74635d5cd1cd28261f0d86ee22033aa1bdb1dd07d"
 ---
 
 # Cost Optimization
@@ -122,6 +122,15 @@ that caveat.
 | ECR repositories | `module.ecr` | 4 repos, 10 GiB storage @ $0.10/GiB-mo | 2.00 |
 | Secrets Manager secrets | `module.secrets` | 4 secrets @ $0.40/secret-mo | 1.60 |
 | **Total fixed** | | | **188.93** |
+
+The optional customer Access Kit MCP service is not part of this baseline. Its
+Fargate task is priced by the same plan-derived CPU, memory, and desired-count
+formula. At the default two 0.25-vCPU / 0.5-GiB tasks, the fixed service adds
+about USD 18.02/month; the dedicated ECR repository adds about USD 0.50/month.
+That makes the production-lean fixed projection approximately USD 207.45/month
+before variable ALB and log costs, above the USD 200 hard ceiling. The normal
+cost gate rejects this plan unless a valid, time-bounded cost exception is
+active. The MCP service remains opt-in and the base profile remains unchanged.
 
 Priced at zero and accounted for explicitly rather than omitted: the
 `db.serverless` Aurora writer instance (ACU consumption bills on the cluster),
