@@ -67,6 +67,7 @@ vi.mock('@aether-app/features/account/use-notification-webhooks', () => ({
   useCreateWebhook: () => ({ mutate: vi.fn(), isLoading: false }),
   useDeleteWebhook: () => ({ mutate: vi.fn(), isLoading: false }),
   useTestWebhook: () => ({ mutate: vi.fn(), isLoading: false }),
+  useRotateWebhookSecret: () => ({ mutate: vi.fn(), isLoading: false }),
 }));
 
 vi.mock('@aether-app/features/notifications/use-notification-preferences', () => ({
