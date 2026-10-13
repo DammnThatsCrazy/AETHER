@@ -466,7 +466,7 @@ jobs:
           test -f packages/sdk/web/dist/aether.cjs.js
           test -f packages/sdk/web/dist/health/index.js
           test -f packages/sdk/web/dist/react.js
-          # A staging build without a redirect URI fails at startup, not here.
+          # Fail here: a staging bundle without a redirect URI cannot start.
           : "${TF_AETHER_APP_URL:?TF_AETHER_APP_URL is required for the Aether SPA build}"
           VITE_AETHER_ENV=staging \
             VITE_AETHER_ENDPOINT="$AETHER_API_BASE_URL" \

@@ -561,6 +561,12 @@ variable "auth0_domain" {
 variable "aether_app_url" {
   type        = string
   description = "Public URL of the Aether customer app (e.g. https://app.olympuslabsml.com)"
+
+  validation {
+    # Auth0 callback/logout URLs and the SPA's redirect URIs append paths to it.
+    condition     = !endswith(var.aether_app_url, "/")
+    error_message = "aether_app_url must not end with a slash."
+  }
 }
 
 variable "kyber_app_url" {

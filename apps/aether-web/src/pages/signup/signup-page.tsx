@@ -29,7 +29,6 @@ import { OtpInput } from "@aether-app/components/otp-input";
 
 type Step = 1 | 2 | 3;
 
-
 const RESEND_COOLDOWN = 30;
 /** The limiter that locks code checks for an address for 15 minutes, longer than a code lives. */
 const VERIFICATION_LOCKOUT = "verify-failures";

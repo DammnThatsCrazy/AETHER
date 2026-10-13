@@ -27,7 +27,7 @@ source_hashes:
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:f872d926ac84a0bf3c473a69b9362d7bb72d3e36d0fa91ea2febc1f5b63d66e1"
   "infra/aws/terraform/modules/secrets/rotation.tf": "sha256:2e3b0bc6336ee324e3a3829f4f08c94b901501902981f87034933c875549fb00"
   "infra/aws/terraform/profiles.tf": "sha256:c197af7ebf1556be22a70dbf05c4ba85f5f93a2dd322dc39a42442f27226a89d"
-  "infra/aws/terraform/variables.tf": "sha256:c19d9528adbb14d176471f96a9d74a2ad14dbc72fb5863731d19d21c451c2a38"
+  "infra/aws/terraform/variables.tf": "sha256:ee1cc98a2771c0051e2a313d235a864d17c9c2a9bd5eaa2f95b9152cadaa44a4"
   "scripts/release/check_cost_model.py": "sha256:b80c15e6d0ceee9a161ad4259c82284469da10a395ac08c3b0e26f0c44e95aa7"
   "scripts/release/check_profile_config.py": "sha256:c1a16a2c7342d7be2d16306f1a15915cf4d37ffc4f1c6ea0466e3fe2df71782b"
   "scripts/release/check_profile_parity.py": "sha256:34c8ae168107d6c5e69c26dd2081c9774b42dd158b9663189ff5e70b6415adf2"

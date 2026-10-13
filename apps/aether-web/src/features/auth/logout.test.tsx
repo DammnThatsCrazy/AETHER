@@ -6,8 +6,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AuthProvider, SESSION_TOKEN_KEY, useAuth } from "@aether-app/features/auth";
+import { appHref } from "@aether-app/lib/app-path";
 
-const auth0Logout = vi.fn(() => Promise.resolve());
+const auth0Logout = vi.fn((_options?: unknown) => Promise.resolve());
 vi.mock("@auth0/auth0-react", () => ({
   useAuth0: () => ({ logout: auth0Logout }),
 }));
@@ -69,6 +70,34 @@ describe("logout", () => {
       }),
     );
     expect(sessionStorage.getItem(SESSION_TOKEN_KEY)).toBeNull();
+  });
+
+  it("returns to the app's own login page when no logout URI is configured", async () => {
+    envState.VITE_AUTH0_DOMAIN = "tenant.us.auth0.com";
+    envState.VITE_AUTH0_CLIENT_ID = "client";
+    renderSignOut();
+
+    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
+
+    await waitFor(() =>
+      expect(auth0Logout).toHaveBeenCalledWith({
+        logoutParams: { returnTo: `${window.location.origin}${appHref("/login")}` },
+      }),
+    );
+  });
+
+  it("still leaves the app when Auth0 logout fails", async () => {
+    envState.VITE_AUTH0_DOMAIN = "tenant.us.auth0.com";
+    envState.VITE_AUTH0_CLIENT_ID = "client";
+    auth0Logout.mockRejectedValueOnce(new Error("network"));
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+    renderSignOut();
+
+    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
+
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(appHref("/login")));
+    vi.unstubAllGlobals();
   });
 
   it("leaves Auth0 alone when the build has no Auth0 settings", async () => {

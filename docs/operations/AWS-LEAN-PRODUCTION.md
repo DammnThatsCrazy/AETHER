@@ -36,8 +36,8 @@ source_hashes:
   "infra/aws/terraform/moved.tf": "sha256:aec15de07e356364018e3bdf09fdb6196d252bdb4e0451212f5b6a27a7b26816"
   "infra/aws/terraform/profiles.tf": "sha256:c197af7ebf1556be22a70dbf05c4ba85f5f93a2dd322dc39a42442f27226a89d"
   "infra/aws/terraform/profiles/production-lean.tfvars": "sha256:ba173dfc337349057b0d4f02d8be3e3c6d8d2ef92408e76b29166a881a5c13d2"
-  "infra/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:ff4cb51baf25e62b8df09757f677685ff998cf094f6331ac8a4f06afb06f0b28"
-  "infra/aws/terraform/variables.tf": "sha256:c19d9528adbb14d176471f96a9d74a2ad14dbc72fb5863731d19d21c451c2a38"
+  "infra/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:e2bfb6ee65dbe6a38894b76518c2ef8c1edd728a481bfd5559692a020b591d74"
+  "infra/aws/terraform/variables.tf": "sha256:ee1cc98a2771c0051e2a313d235a864d17c9c2a9bd5eaa2f95b9152cadaa44a4"
 ---
 
 # AWS Lean Production

@@ -102,12 +102,26 @@ def test_small_clock_skew_is_tolerated(jwks):
     assert _validate(_token(iat=int(time.time()) + 5))["sub"]
 
 
-def test_unknown_kid_refetches_rotated_keys_once(jwks):
+def _age_cache(seconds: float) -> None:
+    auth0_validator._JWKS_CACHE[DOMAIN]["fetched_at"] -= seconds
+
+
+def test_unknown_kid_refetches_rotated_keys(jwks):
     _validate(_token())
+    _age_cache(120)
     jwks["keys"] = [_jwk("k2")]
     assert _validate(_token(kid="k2"))["sub"]
     assert jwks["fetches"] == 2
 
+
+def test_unknown_kid_does_not_refetch_a_fresh_cache(jwks):
+    _validate(_token())
+    for kid in ("forged-1", "forged-2"):
+        with pytest.raises(ValueError):
+            _validate(_token(kid=kid))
+    assert jwks["fetches"] == 1
+
+
+def test_non_object_header_is_rejected_as_value_error(jwks):
     with pytest.raises(ValueError):
-        _validate(_token(kid="k3"))
-    assert jwks["fetches"] == 3
+        _validate("WzFd.e30.x")
