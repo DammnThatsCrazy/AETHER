@@ -84,7 +84,12 @@ the root.
   is shown as a wait message built from `retry_after_seconds`
   (`features/auth/rate-limit.ts`) rather than as a wrong password or code. When the
   build carries Auth0 settings, login offers **Continue with Olympus sign-in**
-  (Auth0 Universal Login); `/callback` exchanges the Auth0 token through
+  (Auth0 Universal Login) plus one button per social connection listed in
+  `VITE_AUTH0_SOCIAL_CONNECTIONS` (`google=aether-staging-google,…`), which
+  opens that Auth0 connection directly; Terraform lists none when social
+  connections are off (the pilot lane). Signing out also ends the Auth0
+  session (returning to `VITE_AUTH0_LOGOUT_URI`), so the next sign-in asks
+  again instead of silently reusing it. `/callback` exchanges the Auth0 token through
   `/v1/auth/sso/callback`, which links a verified email to its existing user or
   pending invitation, or provisions a new tenant when self sign-up is on. With
   Auth0 configured, `/signup` opens Auth0's hosted sign-up

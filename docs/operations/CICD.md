@@ -539,7 +539,10 @@ always-on lead intake (`VITE_LEAD_URL`; see AWS-DEPLOYMENT.md, "Production lead
 intake").
 The protected tenant and Kyber artifacts remain part of the immutable release.
 The canonical `deploy.yml` workflow publishes lane-selected SPA artifacts to
-their private S3 origins; the staging rehearsal verifies those origins against
+their private S3 origins. The tenant SPA is built with its Auth0 redirect and
+logout URIs under `TF_AETHER_APP_URL` (the app URL Terraform registers with
+Auth0), and the build fails if that secret is missing rather than shipping a
+bundle that cannot start. The staging rehearsal verifies those origins against
 the exact release bytes without publishing them a second time. This keeps
 Kyber internal and prevents a public marketing build from being mistaken for
 an operator deployment.

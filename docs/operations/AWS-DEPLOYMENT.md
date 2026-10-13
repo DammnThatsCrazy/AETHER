@@ -727,7 +727,8 @@ router redirects the previous
 marketing app's URLs to their new pages. Its status page reads the backend's 90-day per-component uptime feed (`VITE_STATUS_HISTORY_URL`, `GET /v1/status/history`). Because the product is served from `aether.*/app`, the staging Auth0 callback,
 logout and web-origin lists, the API's app URL and the Stripe checkout return
 URLs all use `https://aether.<domain>/app`, and the site build carries the
-product's `VITE_AUTH0_*` and `VITE_AETHER_*` settings. Other environments keep the
+product's `VITE_AUTH0_*` and `VITE_AETHER_*` settings (`VITE_AUTH0_SOCIAL_CONNECTIONS`
+only when the Auth0 social connections are provisioned). Other environments keep the
 prerendered `apps/marketing-aether` build, with index rewrites for its
 `/login`, `/signup` and `/forgot-password` routes, until the site prerenders
 its own route metadata. The end-user app and docs portal

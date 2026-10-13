@@ -1,6 +1,8 @@
 import { createContext, useContext, useCallback, useReducer, useEffect, useRef, type ReactNode } from 'react';
 import type { AuthState, AetherUser, AuthTokens } from '@aether-app/types';
 import type { HumanSessionGrant } from './grant';
+import { useAuth0 } from '@auth0/auth0-react';
+import { appHref } from '@aether-app/lib/app-path';
 
 /** Legacy reusable API-key credential (trust-plane flag off on the backend). */
 export const SESSION_KEY = 'aether_session_key';
@@ -126,6 +128,7 @@ function profileUser(profile: BackendProfile): AetherUser {
 }
 
 export function AuthProvider({ children }: { readonly children: ReactNode }) {
+  const { logout: auth0Logout } = useAuth0();
   const [state, dispatch] = useReducer(authReducer, {
     isAuthenticated: false,
     user: null,
@@ -320,10 +323,18 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
     dispatch({ type: 'AUTH_LOGOUT' });
 
     const { env } = await import('@aether-app/lib/env');
+    if (env.VITE_AUTH0_DOMAIN && env.VITE_AUTH0_CLIENT_ID) {
+      // Without this the Auth0 session outlives ours and the next sign-in
+      // silently returns the same user.
+      await auth0Logout({
+        logoutParams: { returnTo: env.VITE_AUTH0_LOGOUT_URI ?? `${window.location.origin}${appHref('/login')}` },
+      });
+      return;
+    }
     if (env.VITE_OIDC_AUTHORITY) {
       window.location.href = `${env.VITE_OIDC_AUTHORITY}/logout?post_logout_redirect_uri=${encodeURIComponent(window.location.origin)}`;
     }
-  }, []);
+  }, [auth0Logout]);
 
   return (
     <AuthContext.Provider value={{ ...state, login, logout, apiKeyLogin, sessionLogin }}>

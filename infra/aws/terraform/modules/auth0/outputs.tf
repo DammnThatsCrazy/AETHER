@@ -28,3 +28,13 @@ output "api_audience" {
   description = "API resource server audience — use as VITE_AUTH0_AUDIENCE build arg"
   value       = auth0_resource_server.api.identifier
 }
+
+output "aether_social_connections" {
+  description = "Auth0 connection name per social provider for the Aether SPA's sign-in buttons; empty when social connections are off"
+  value = var.enable_social_connections ? {
+    google    = auth0_connection.google[0].name
+    apple     = auth0_connection.apple[0].name
+    microsoft = auth0_connection.microsoft[0].name
+    slack     = auth0_connection.slack[0].name
+  } : {}
+}
