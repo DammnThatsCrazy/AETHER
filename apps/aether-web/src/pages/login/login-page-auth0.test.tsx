@@ -95,6 +95,18 @@ describe("LoginPage Auth0 sign-in", () => {
     expect(screen.queryByRole("button", { name: "Continue with Apple" })).toBeNull();
   });
 
+  it("ignores malformed social connection entries", () => {
+    envState.VITE_AUTH0_DOMAIN = "tenant.us.auth0.com";
+    envState.VITE_AUTH0_CLIENT_ID = "client";
+    envState.VITE_AUTH0_SOCIAL_CONNECTIONS = "google=,=x,apple,slack=a=b,microsoft=aether-staging-microsoft";
+    renderLogin();
+
+    expect(screen.getByRole("button", { name: "Continue with Microsoft" })).toBeTruthy();
+    for (const name of ["Continue with Google", "Continue with Apple", "Continue with Slack"]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+  });
+
   it("offers no social sign-in when no Auth0 social connection is enabled", () => {
     envState.VITE_AUTH0_DOMAIN = "tenant.us.auth0.com";
     envState.VITE_AUTH0_CLIENT_ID = "client";

@@ -22,6 +22,8 @@ logger = get_logger("aether.auth.auth0")
 _JWKS_CACHE: dict[str, Any] = {}      # {domain: {"keys": [...], "fetched_at": float}}
 _JWKS_TTL = 3600
 _CLOCK_SKEW_LEEWAY = 60  # seconds of drift tolerated between this host and Auth0
+# The callback is public: without a floor, any forged kid forces a JWKS fetch.
+_JWKS_REFRESH_MIN_AGE = 60
 
 
 def _b64url_to_int(val: str) -> int:
@@ -60,7 +62,10 @@ def _decode_claims(token: str) -> dict:
 def _get_header(token: str) -> dict:
     parts = token.split(".")
     padding = 4 - len(parts[0]) % 4
-    return json.loads(base64.urlsafe_b64decode(parts[0] + "=" * (padding % 4)))
+    header = json.loads(base64.urlsafe_b64decode(parts[0] + "=" * (padding % 4)))
+    if not isinstance(header, dict):
+        raise ValueError("Malformed token header")
+    return header
 
 
 async def validate_auth0_token(token: str) -> dict:
@@ -95,7 +100,8 @@ async def validate_auth0_token(token: str) -> dict:
     alg = header.get("alg", "RS256")
 
     matching = [k for k in jwks if k.get("kid") == kid and k.get("kty") == "RSA"]
-    if not matching:
+    cached = _JWKS_CACHE.get(domain)
+    if not matching and (not cached or time.time() - cached["fetched_at"] >= _JWKS_REFRESH_MIN_AGE):
         # Auth0 rotated its signing key since the cached fetch.
         try:
             jwks = await _fetch_jwks(domain, refresh=True)

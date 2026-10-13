@@ -326,9 +326,14 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
     if (env.VITE_AUTH0_DOMAIN && env.VITE_AUTH0_CLIENT_ID) {
       // Without this the Auth0 session outlives ours and the next sign-in
       // silently returns the same user.
-      await auth0Logout({
-        logoutParams: { returnTo: env.VITE_AUTH0_LOGOUT_URI ?? `${window.location.origin}${appHref('/login')}` },
-      });
+      try {
+        await auth0Logout({
+          logoutParams: { returnTo: env.VITE_AUTH0_LOGOUT_URI ?? `${window.location.origin}${appHref('/login')}` },
+        });
+      } catch (err) {
+        console.warn('[Aether] Auth0 logout failed; the Auth0 session may persist', err);
+        window.location.assign(appHref('/login'));
+      }
       return;
     }
     if (env.VITE_OIDC_AUTHORITY) {

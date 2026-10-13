@@ -45,7 +45,7 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:938b85088d5c6d9f7dfe39d83e7a7d20a49ce848b86d9840407adb511661abac"
+  "apps/aether-web/src/": "sha256:d3883a59f03ae0e3544dda57821396a29a0e319e23bc5785de13ea26faf2a583"
   "apps/kyber-web/src/": "sha256:7a31deaee6f5e047df21f6cd1115604f956f283b23e904128385824ab2fbf32a"
   "packages/ui/core/src/": "sha256:75ba669073aebf48fe1bb982913d32019b79b5fdcfe8dce5266f95412325f2b9"
 ---
@@ -88,8 +88,9 @@ the root.
   `VITE_AUTH0_SOCIAL_CONNECTIONS` (`google=aether-staging-google,…`), which
   opens that Auth0 connection directly; Terraform lists none when social
   connections are off (the pilot lane). Signing out also ends the Auth0
-  session (returning to `VITE_AUTH0_LOGOUT_URI`), so the next sign-in asks
-  again instead of silently reusing it. `/callback` exchanges the Auth0 token through
+  session (returning to `VITE_AUTH0_LOGOUT_URI`, else the app's `/login`), so
+  the next sign-in asks again instead of silently reusing it; if Auth0 cannot
+  be reached the app still leaves for `/login`. `/callback` exchanges the Auth0 token through
   `/v1/auth/sso/callback`, which links a verified email to its existing user or
   pending invitation, or provisions a new tenant when self sign-up is on. With
   Auth0 configured, `/signup` opens Auth0's hosted sign-up

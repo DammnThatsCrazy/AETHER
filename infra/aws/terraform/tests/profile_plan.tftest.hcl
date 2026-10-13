@@ -1878,3 +1878,14 @@ run "access_mcp_origin_accepts_dns_ipv4_and_valid_ports" {
     error_message = "Exact DNS and IPv4 HTTPS origins with no port or a valid 1–65535 port should be accepted."
   }
 }
+
+# Auth0 callback and logout URLs append paths to aether_app_url.
+run "aether_app_url_with_trailing_slash_is_rejected" {
+  command = plan
+
+  variables {
+    aether_app_url = "https://app.ci.aether.invalid/"
+  }
+
+  expect_failures = [var.aether_app_url]
+}
