@@ -21,6 +21,7 @@ logger = get_logger("aether.auth.auth0")
 
 _JWKS_CACHE: dict[str, Any] = {}      # {domain: {"keys": [...], "fetched_at": float}}
 _JWKS_TTL = 3600
+_CLOCK_SKEW_LEEWAY = 60  # seconds of drift tolerated between this host and Auth0
 
 
 def _b64url_to_int(val: str) -> int:
@@ -30,10 +31,10 @@ def _b64url_to_int(val: str) -> int:
     return int.from_bytes(data, "big")
 
 
-async def _fetch_jwks(domain: str) -> list[dict]:
-    """Fetch JWKS from Auth0. Cached for 1 hour."""
+async def _fetch_jwks(domain: str, refresh: bool = False) -> list[dict]:
+    """Fetch JWKS from Auth0. Cached for 1 hour unless ``refresh`` is set."""
     cached = _JWKS_CACHE.get(domain)
-    if cached and time.time() - cached["fetched_at"] < _JWKS_TTL:
+    if cached and not refresh and time.time() - cached["fetched_at"] < _JWKS_TTL:
         return cached["keys"]
     import httpx
 
@@ -95,24 +96,36 @@ async def validate_auth0_token(token: str) -> dict:
 
     matching = [k for k in jwks if k.get("kid") == kid and k.get("kty") == "RSA"]
     if not matching:
+        # Auth0 rotated its signing key since the cached fetch.
+        try:
+            jwks = await _fetch_jwks(domain, refresh=True)
+        except Exception as e:
+            raise ValueError(f"Failed to fetch Auth0 JWKS: {e}")
+        matching = [k for k in jwks if k.get("kid") == kid and k.get("kty") == "RSA"]
+    if not matching:
         raise ValueError(f"No matching JWKS key for kid={kid!r}")
 
     # Verify using PyJWT (prefers RS256 from cryptography package)
     try:
         import jwt as pyjwt  # type: ignore[import-not-found]
         from jwt.algorithms import RSAAlgorithm  # type: ignore[import-not-found]
-        import json as _json
-        public_key = RSAAlgorithm.from_jwk(_json.dumps(matching[0]))
-        claims = pyjwt.decode(
-            token,
-            public_key,
-            algorithms=["RS256"],
-            audience=audience,
-            options={"require": ["exp", "iat", "sub"]},
-        )
-        return claims
     except ImportError:
-        pass  # Fall through to manual check
+        pyjwt = None  # Fall through to manual check
+
+    if pyjwt is not None:
+        try:
+            public_key = RSAAlgorithm.from_jwk(json.dumps(matching[0]))
+            return pyjwt.decode(
+                token,
+                public_key,
+                algorithms=["RS256"],
+                audience=audience,
+                issuer=f"https://{domain}/",
+                leeway=_CLOCK_SKEW_LEEWAY,
+                options={"require": ["exp", "iat", "sub", "iss"]},
+            )
+        except pyjwt.PyJWTError as e:
+            raise ValueError(f"Token rejected: {e}")
 
     # PyJWT/cryptography is unavailable — refuse to accept tokens without
     # signature verification in non-local environments.
