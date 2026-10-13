@@ -743,7 +743,7 @@ module "auth0" {
   # var.aether_app_url, which on staging is the app host that now redirects
   # to it (kept while sessions and bookmarks move over).
   aether_callback_urls = concat(distinct(["${local.aether_app_base_url}/callback", "${var.aether_app_url}/callback"]), [for d in local.frontend_preview_domains : "https://*.${d}/callback"])
-  aether_logout_urls   = concat(distinct(["${local.aether_app_base_url}/login", local.aether_app_base_url, var.aether_app_url]), [for d in local.frontend_preview_domains : "https://*.${d}"])
+  aether_logout_urls   = concat(distinct(["${local.aether_app_base_url}/login", local.aether_app_base_url, "${var.aether_app_url}/login", var.aether_app_url]), [for d in local.frontend_preview_domains : "https://*.${d}"])
   aether_web_origins   = concat(distinct([local.aether_app_origin, var.aether_app_url]), [for d in local.frontend_preview_domains : "https://*.${d}"])
 
   kyber_callback_urls = ["${var.kyber_app_url}/callback"]
