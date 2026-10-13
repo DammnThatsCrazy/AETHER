@@ -19,7 +19,7 @@ source_hashes:
   "config/deployment_profiles.yaml": "sha256:77d37f2c71472b5d644da32636bb68948263250739b62b621502cdfb09797475"
   "config/runtime_deployment.yaml": "sha256:ba7bd71d79e605a88076b6ea745582dce9c4bff38442ebd5d327cfee9bbf7284"
   "config/terraform_resource_contracts.yaml": "sha256:1f08c04dae8931f845c7918328504f748a9f643bc806670a32b644eb8231baca"
-  "infra/aws/terraform/main.tf": "sha256:544d3d944840a88e3d6302f38d43b07eadcc0cbfbcb55672f3d152993696756d"
+  "infra/aws/terraform/main.tf": "sha256:273c4a47b1f9af356a523a77a88497266d5f3692df1da094465a75881bf7fcd7"
   "infra/aws/terraform/modules/alb/main.tf": "sha256:4ea488e53a1cdd02d47bd5d67d4d047fb43ee8eeaa04e2b419b29aab9d4a0d1a"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
   "infra/aws/terraform/modules/ecr/main.tf": "sha256:f880cb8a6a4dfec313b115d89e6714906dcfcf3dc1cd4496945d7e86814d6407"
