@@ -24,7 +24,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 
 from shared.common.common import APIResponse, BadRequestError, NotFoundError
@@ -146,15 +146,34 @@ async def create_entity(
 async def list_entities(
     request: Request,
     entity_type: Optional[str] = None,
-    limit: int = 100,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: Optional[int] = Query(default=None, ge=0, le=100_000),
 ):
     """List entities for the calling tenant."""
     tenant = request.state.tenant
     tenant.require_permission("read")
-    rows = await _entities.list_by_tenant(
-        tenant.tenant_id, entity_type=entity_type, limit=min(limit, 500),
+    # Explicit pagination uses a stable entity_id order. The legacy request
+    # shape retains its existing order for existing callers.
+    if offset is None:
+        rows = await _entities.list_by_tenant(
+            tenant.tenant_id, entity_type=entity_type, limit=limit,
+        )
+        return APIResponse(data={"entities": rows, "count": len(rows)}).to_dict()
+
+    page = await _entities.list_by_tenant(
+        tenant.tenant_id,
+        entity_type=entity_type,
+        limit=limit + 1,
+        offset=offset,
+        stable_order=True,
     )
-    return APIResponse(data={"entities": rows, "count": len(rows)}).to_dict()
+    has_more = len(page) > limit
+    rows = page[:limit]
+    return APIResponse(data={
+        "entities": rows,
+        "count": len(rows),
+        "next_offset": offset + limit if has_more else None,
+    }).to_dict()
 
 
 @router.get("/{entity_id}")

@@ -2409,11 +2409,18 @@ class EntityRepository(BaseRepository):
 
     async def list_by_tenant(
         self, tenant_id: str, entity_type: Optional[str] = None, limit: int = 100,
+        *, offset: int = 0, stable_order: bool = False,
     ) -> list[dict]:
         filters: dict[str, Any] = {"tenant_id": tenant_id}
         if entity_type:
             filters["entity_type"] = entity_type
-        return await self.find_many(filters=filters, limit=limit)
+        return await self.find_many(
+            filters=filters,
+            limit=limit,
+            offset=offset,
+            sort_by="entity_id" if stable_order else None,
+            sort_order="asc" if stable_order else "desc",
+        )
 
     async def count_by_tenant(self, tenant_id: str) -> int:
         """Count the complete tenant sampling frame."""

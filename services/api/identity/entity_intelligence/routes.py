@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 
 from dependencies.providers import get_graph
@@ -110,6 +110,67 @@ class RelationshipsResponse(BaseModel):
     entity: EntityRef
     relationships: list[ScoredRelationship]
     page: PageInfo
+
+
+@router.get("/{entity_id}/neighborhood")
+async def access_entity_neighborhood(
+    entity_id: str,
+    request: Request,
+    limit: int = Query(default=25, ge=1, le=50),
+    graph: GraphClient = Depends(get_graph),
+):
+    """Return a bounded one-hop graph view for a tenant-authorized entity.
+
+    This is a projection of the existing graph traversal authority. The caller
+    cannot select a tenant, filter on arbitrary properties, request evidence,
+    or expand past one hop. Graph and edge metadata stay with their owners.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    if not entity_id or len(entity_id) > 256:
+        raise NotFoundError("Entity")
+
+    anchor = await graph.get_vertex(entity_id)
+    if not _tenant_visible(anchor, tenant.tenant_id):
+        raise NotFoundError("Entity")
+
+    result = await GraphTraversalEngine(graph).bfs(
+        start_id=entity_id,
+        depth=1,
+        direction="both",
+        limit=limit,
+        tenant_id=tenant.tenant_id,
+    )
+    visible_ids = {entity_id, *(node.vertex_id for node in result.nodes)}
+    nodes = [
+        {
+            "entity_id": node.vertex_id,
+            "entity_type": str(getattr(node.vertex_type, "value", node.vertex_type)).lower(),
+            "display_name": str(
+                node.properties.get("display_name")
+                or node.properties.get("label")
+                or ""
+            )[:256],
+        }
+        for node in [anchor, *result.nodes]
+    ]
+    edges = [
+        {
+            "from_entity_id": edge.from_vertex_id,
+            "to_entity_id": edge.to_vertex_id,
+            "relationship_type": str(getattr(edge.edge_type, "value", edge.edge_type)),
+        }
+        for edge in result.edges
+        if edge.from_vertex_id in visible_ids and edge.to_vertex_id in visible_ids
+    ][:100]
+    metrics.increment("access_entity_neighborhood_read")
+    return APIResponse(data={
+        "anchor_entity_id": entity_id,
+        "nodes": nodes,
+        "edges": edges,
+        "limit": limit,
+        "limit_reached": len(result.nodes) >= limit,
+    }).to_dict()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
