@@ -18,7 +18,7 @@ PRs #772 and #773 established canonical observation forwarding, delegated CLI se
 
 ## Work order 1 — Declared callable operations
 
-Declare the Access Kit operations that actually exist, with stable names, input bounds, read/write classification, required server permission, owning REST route, and surface mappings. Generate CLI/MCP discovery from that declaration without reusing `/v1/capabilities` (SDK feature discovery) or `/v1/capability-catalog` (observed external agent inventory). Discovery reports adapter support; it does not claim a tenant grant, policy approval, or readiness to execute. Invocation still enters the owning API and uses its authorization, audit, and usage behavior.
+Declare the Access Kit operations that actually exist, with stable names, input bounds, read/write classification, required server permission, owning REST route, and surface mappings. Generate CLI/MCP and Node client discovery from that declaration without reusing `/v1/capabilities` (SDK feature discovery) or `/v1/capability-catalog` (observed external agent inventory). Discovery reports adapter support; it does not claim a tenant grant, policy approval, or readiness to execute. Invocation still enters the owning API and uses its authorization, audit, and usage behavior.
 
 **Acceptance:** a declared read has the same bounded inputs and server result semantics over CLI and MCP; unknown operations fail closed; discovery never returns a false authorization verdict.
 

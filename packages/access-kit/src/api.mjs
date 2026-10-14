@@ -8,7 +8,7 @@ const SITE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const MAX_INGEST_BODY_BYTES = 64 * 1024;
 export const MAX_ENTITY_PAGE_SIZE = 50;
 export const MAX_OVERVIEW_BUCKETS = 50;
-const ACCESS_SURFACES = new Set(['cli', 'mcp_stdio', 'mcp_http']);
+const ACCESS_SURFACES = new Set(['cli', 'mcp_stdio', 'mcp_http', 'access_sdk']);
 
 export class AccessApiError extends Error {
   constructor(message, { status, code, requestId, apiRequestId, interaction } = {}) {

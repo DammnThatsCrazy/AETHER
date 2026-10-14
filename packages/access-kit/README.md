@@ -86,6 +86,33 @@ the required `X-Aether-Site` header against the key's binding. Do not set or
 send a tenant ID override. The Access Kit uses a publishable key only for
 `POST /v1/batch`, never for reads.
 
+## Programmatic read client
+
+The package also exports a small Node ESM/TypeScript read client. It uses the
+same closed operation declaration and REST projections as the CLI and MCP.
+The caller supplies one tenant credential from its secret manager; the client
+does not accept tenant IDs or make graph/provider writes.
+
+```js
+import { createAccessClient } from '@aether/access-kit';
+
+const access = createAccessClient({
+  apiUrl: process.env.AETHER_API_URL,
+  apiKey: process.env.AETHER_API_KEY,
+});
+const page = await access.entities.list({ limit: 25, offset: 0 });
+const next = page.data.next_offset;
+const neighborhood = await access.entities.neighborhood('entity_123', { limit: 25 });
+```
+
+`page` and `neighborhood` include `data`, `request_id`, optional
+`api_request_id`, and the API-derived `interaction`. `operations.list()`
+describes adapter support; `operations.invoke(id, input)` calls the owning API,
+which decides permission and tenant scope per request. The public client sends
+`access_sdk` as its accounting surface. This is a read SDK; observation intake
+continues to use the Web, Server, and mobile SDKs or the explicit CLI/MCP
+site-bound path.
+
 For hosted MCP, the bearer authenticates the MCP request and permits its
 tenant-scoped read surface; it does not grant observation-write authority or
 select the ingestion tenant. The separate `pk_` key and bound site ID are sent

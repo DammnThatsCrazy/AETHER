@@ -92,6 +92,7 @@ not a new service route or data authority.
 | MCP | `entities_get` | Entity detail | Read-only tool, `read` |
 | MCP | `entities_neighborhood`, `access_operations_list`, `access_invoke_read` | Named graph read and closed adapter read declaration/dispatch | Read-only tools; API retains authorization |
 | MCP | `account_context` | `/v1/me` safe projection | Read-only tool, `read` |
+| Node ESM/TypeScript | `createAccessClient().operations.invoke(...)` and named entity/account/usage reads | Same closed REST adapters | Query, `read`; surface `access_sdk` |
 | CLI | `aether ingest EVENT_NAME ...` | `POST /v1/batch`, one `track` event | Ingestion, `ingest` + handler `write` |
 | MCP | `observe` | `POST /v1/batch`, one `track` event | Ingestion, `ingest` + handler `write` |
 
@@ -117,6 +118,11 @@ ID when present, and received time with the API request ID. They do not retry
 automatically. Repeating an event
 with the same caller-supplied event ID is the server-supported deduplication
 path.
+
+The public Node read client exports the same closed adapter operations and
+projects the same API-derived results. It accepts one API key or revocable
+session and sends `access_sdk` for canonical access-interaction audit and
+metering. It does not reuse the observation SDK's publishable key for reads.
 
 `aether ingest` and `observe` emit one generic `track` event with a custom event
 name, caller-supplied opaque event/session/anonymous IDs, caller-supplied

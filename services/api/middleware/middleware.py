@@ -60,7 +60,7 @@ _ACCESS_KIT_CAPABILITIES = {
     ("GET", "/v1/capability-catalog/overview"): "agent_access.capabilities.overview",
     ("GET", "/v1/capability-catalog/{capability_id}"): "agent_access.capabilities.get",
 }
-_ACCESS_KIT_SURFACES = frozenset({"cli", "mcp_stdio", "mcp_http"})
+_ACCESS_KIT_SURFACES = frozenset({"cli", "mcp_stdio", "mcp_http", "access_sdk"})
 # A delegated MCP token is accepted only for these named read routes. The
 # request header is merely a surface hint; the token is independently checked
 # for issuer, exact MCP audience, scope, user, membership, and tenant status.
