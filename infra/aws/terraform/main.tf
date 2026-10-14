@@ -998,8 +998,8 @@ locals {
 resource "aws_amplify_app" "frontend_preview" {
   count = local.enable_frontend_previews ? 1 : 0
 
-  name        = "${var.project}-${var.environment}-aether-app-preview"
-  description = "Per-PR previews of the Aether app (branches pr-<N>, managed by frontend-preview.yml)"
+  name        = "${var.project}-development-web"
+  description = "Development web app: per-PR previews of the Aether app (branches pr-<N>, managed by frontend-preview.yml)"
   platform    = "WEB"
 
   custom_rule {
@@ -1009,7 +1009,7 @@ resource "aws_amplify_app" "frontend_preview" {
   }
 
   tags = {
-    Name        = "${var.project}-${var.environment}-aether-app-preview"
+    Name        = "${var.project}-development-web"
     Purpose     = "Per-PR frontend previews"
     Environment = var.environment
   }

@@ -44,7 +44,7 @@ only when marked ready for review.
    replaces) public `VITE_*` settings, at the root of the
    preview host rather than under `/app`. It points the Auth0 redirect and logout URIs at the preview.
 2. It deploys the build to branch `pr-<N>` of the staging preview Amplify app
-   (`AETHER-staging-aether-app-preview`, not connected to the repository) and
+   (`AETHER-development-web` (formerly `AETHER-staging-aether-app-preview`), not connected to the repository) and
    comments `https://pr-<N>.<preview domain>` on the pull request.
 3. To refresh a preview after later pushes, or to preview a draft, a team
    member runs the workflow from `main` with the pull request number.
