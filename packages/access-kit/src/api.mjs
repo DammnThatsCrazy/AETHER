@@ -61,16 +61,19 @@ export function readConfig(env = process.env) {
   const sessionToken = typeof env.AETHER_SESSION_TOKEN === 'string' && env.AETHER_SESSION_TOKEN.trim()
     ? env.AETHER_SESSION_TOKEN
     : undefined;
-  if (apiKey && sessionToken) {
-    throw new Error('Set only one read credential: AETHER_API_KEY or AETHER_SESSION_TOKEN.');
+  const oauthToken = typeof env.AETHER_MCP_OAUTH_TOKEN === 'string' && env.AETHER_MCP_OAUTH_TOKEN.trim()
+    ? env.AETHER_MCP_OAUTH_TOKEN
+    : undefined;
+  if ([apiKey, sessionToken, oauthToken].filter(Boolean).length > 1) {
+    throw new Error('Set only one read credential: AETHER_API_KEY, AETHER_SESSION_TOKEN, or AETHER_MCP_OAUTH_TOKEN.');
   }
-  if (!apiKey && !sessionToken) {
-    throw new Error('Set AETHER_API_KEY or AETHER_SESSION_TOKEN for a tenant-scoped API request.');
+  if (!apiKey && !sessionToken && !oauthToken) {
+    throw new Error('Set AETHER_API_KEY, AETHER_SESSION_TOKEN, or AETHER_MCP_OAUTH_TOKEN for a tenant-scoped API request.');
   }
 
-  const authHeaders = apiKey
-    ? { authorization: `Bearer ${apiKey}` }
-    : { 'x-session-token': sessionToken };
+  const authHeaders = sessionToken
+    ? { 'x-session-token': sessionToken }
+    : { authorization: `Bearer ${apiKey || oauthToken}` };
   return { apiOrigin, authHeaders };
 }
 
@@ -439,7 +442,7 @@ function safeEntity(row) {
   };
 }
 
-export async function listEntities({ entityType, limit = 25 } = {}, env = process.env) {
+export async function listEntities({ entityType, limit = 25, offset } = {}, env = process.env) {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_ENTITY_PAGE_SIZE) {
     throw new Error(`Entity page size must be an integer from 1 through ${MAX_ENTITY_PAGE_SIZE}.`);
   }
@@ -447,10 +450,25 @@ export async function listEntities({ entityType, limit = 25 } = {}, env = proces
       && (typeof entityType !== 'string' || !entityType.trim() || entityType.length > 64)) {
     throw new Error('Entity type filters must contain 1 through 64 characters.');
   }
+  if (offset !== undefined && (!Number.isSafeInteger(offset) || offset < 0 || offset > 100_000)) {
+    throw new Error('Entity offset must be an integer from 0 through 100000.');
+  }
   const result = await readRequest('/v1/entities', {
     entity_type: entityType?.trim(),
     limit,
+    offset,
   }, env);
+  if (offset !== undefined && !Object.hasOwn(result.data, 'next_offset')) {
+    throw new AccessApiError('Aether API does not expose stable entity pagination.', {
+      requestId: result.requestId,
+      apiRequestId: result.responseRequestId,
+      interaction: normalizeInteractionOutcome({
+        operation: 'query', requestId: result.requestId,
+        httpStatus: result.interaction.http_status, responseOk: true, contractError: true,
+        apiRequestId: result.responseRequestId,
+      }),
+    });
+  }
   const rows = Array.isArray(result.data?.entities) ? result.data.entities.slice(0, limit) : [];
   const entities = rows.map(safeEntity).filter(Boolean);
   return {
@@ -458,6 +476,13 @@ export async function listEntities({ entityType, limit = 25 } = {}, env = proces
     data: {
       entities,
       count: entities.length,
+      ...(offset !== undefined ? {
+        next_offset: Number.isSafeInteger(result.data?.next_offset)
+          && result.data.next_offset > offset
+          && result.data.next_offset <= 100_000
+          ? result.data.next_offset
+          : null,
+      } : {}),
     },
   };
 }
@@ -480,6 +505,67 @@ export async function getEntity(entityId, env = process.env) {
     });
   }
   return { ...result, data: entity };
+}
+
+function safeNeighborhoodNode(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+  const entityId = boundedText(row.entity_id, 256);
+  if (!entityId) return null;
+  return {
+    entity_id: entityId,
+    entity_type: boundedText(row.entity_type, 64) ?? 'unknown',
+    display_name: boundedText(row.display_name, 512) ?? '',
+  };
+}
+
+export async function getEntityNeighborhood(entityId, { limit = 25 } = {}, env = process.env) {
+  if (typeof entityId !== 'string' || !entityId.trim() || entityId.length > 256) {
+    throw new Error('Entity IDs must contain 1 through 256 characters.');
+  }
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
+    throw new Error('Neighborhood limit must be an integer from 1 through 50.');
+  }
+  const anchor = entityId.trim();
+  const result = await readRequest(
+    `/v1/entities/${encodeURIComponent(anchor)}/neighborhood`, { limit }, env,
+  );
+  const data = result.data;
+  if (data?.anchor_entity_id !== anchor || !Array.isArray(data.nodes)
+      || !Array.isArray(data.edges) || !Number.isSafeInteger(data.limit)
+      || typeof data.limit_reached !== 'boolean'
+      || typeof data.edges_truncated !== 'boolean') {
+    throw new AccessApiError('Aether API returned an unexpected neighborhood response.', {
+      requestId: result.requestId,
+      apiRequestId: result.responseRequestId,
+      interaction: normalizeInteractionOutcome({
+        operation: 'query', requestId: result.requestId,
+        httpStatus: result.interaction.http_status, responseOk: true, contractError: true,
+        apiRequestId: result.responseRequestId,
+      }),
+    });
+  }
+  const nodes = data.nodes.slice(0, limit + 1).map(safeNeighborhoodNode).filter(Boolean);
+  const visibleIds = new Set([anchor, ...nodes.map((node) => node.entity_id)]);
+  const edges = data.edges.slice(0, 100).filter((edge) => (
+    edge && typeof edge === 'object' && !Array.isArray(edge)
+    && visibleIds.has(edge.from_entity_id) && visibleIds.has(edge.to_entity_id)
+    && boundedText(edge.relationship_type, 128)
+  )).map((edge) => ({
+    from_entity_id: edge.from_entity_id,
+    to_entity_id: edge.to_entity_id,
+    relationship_type: edge.relationship_type,
+  }));
+  return {
+    ...result,
+    data: {
+      anchor_entity_id: anchor,
+      nodes,
+      edges,
+      limit: Math.min(data.limit, limit),
+      limit_reached: data.limit_reached || data.nodes.length > limit + 1,
+      edges_truncated: data.edges_truncated || data.edges.length > 100,
+    },
+  };
 }
 
 export function buildTrackBatch({

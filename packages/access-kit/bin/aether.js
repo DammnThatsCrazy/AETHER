@@ -2,19 +2,17 @@
 
 import {
   ingestTrackObservation,
-  getAccountContext,
-  getCapability,
-  getCapabilityOverview,
-  listCapabilities,
-  getEntity,
-  listEntities,
   listSessions,
   MAX_ENTITY_PAGE_SIZE,
   revokeSession,
-  getUsageSummary,
 } from '../src/api.mjs';
 import { credentialStore } from '../src/credential-store.mjs';
 import { loginWithAuth0Device, logoutStoredSession, readStoredSession } from '../src/auth.mjs';
+import {
+  getAccessOperation,
+  invokeAccessOperation,
+  listAccessOperations,
+} from '../src/access-operations.mjs';
 
 const HELP = `Aether Access Kit — agent access inventory and canonical intake
 
@@ -23,8 +21,12 @@ Usage:
   aether agents capabilities list [--provider NAME] [--server-name NAME] [--tool-name NAME]
                                   [--limit N] [--offset N] [--json]
   aether agents capabilities show CAPABILITY_ID [--json]
-  aether entities list [--entity-type TYPE] [--limit N] [--json]
+  aether entities list [--entity-type TYPE] [--limit N] [--offset N] [--json]
   aether entities show ENTITY_ID [--json]
+  aether entities neighborhood ENTITY_ID [--limit N] [--json]
+  aether access operations list [--json]
+  aether access operations show OPERATION_ID [--json]
+  aether access invoke OPERATION_ID [--input-json JSON] [--json]
   aether account context [--json]
   aether usage summary [--json]
   aether auth context [--json]
@@ -145,7 +147,7 @@ function writeInteraction(result) {
   return result.interaction ? { interaction: result.interaction } : {};
 }
 
-function formatEntities(entities, requestId, apiRequestId, interaction) {
+function formatEntities(entities, requestId, apiRequestId, interaction, nextOffset) {
   process.stdout.write(`Entities (${entities.length} returned)\n`);
   for (const entity of entities) {
     process.stdout.write(`- ${terminalText(entity.display_name || '(unnamed)')}  ${terminalText(entity.entity_id)}  [${terminalText(entity.entity_type)}]\n`);
@@ -153,6 +155,7 @@ function formatEntities(entities, requestId, apiRequestId, interaction) {
   process.stdout.write(`Request: ${terminalText(requestId)}\n`);
   if (apiRequestId) process.stdout.write(`API request: ${terminalText(apiRequestId)}\n`);
   if (interaction) process.stdout.write(`Outcome: ${interaction.status_class}\n`);
+  if (nextOffset != null) process.stdout.write(`Next offset: ${nextOffset}\n`);
 }
 
 function formatSessions(sessions, requestId, apiRequestId, interaction) {
@@ -180,6 +183,7 @@ async function main() {
   const isLogout = area === 'auth' && command === 'logout';
   const needsTenantRead = area === 'account'
     || area === 'entities'
+    || (area === 'access' && command === 'invoke')
     || (area === 'usage' && command === 'summary')
     || area === 'agents'
     || (area === 'auth' && command !== 'login' && command !== 'logout');
@@ -242,6 +246,57 @@ async function main() {
     }
     return;
   }
+
+  if (area === 'access' && command === 'operations' && subcommand === 'list') {
+    if (positionals.length !== 3 || Object.keys(options).length > 0) {
+      throw new Error(`Unexpected arguments for access operations list.\n\n${HELP}`);
+    }
+    const operations = listAccessOperations();
+    if (json) writeJson({ catalog_kind: 'adapter_supported_operations', operations });
+    else {
+      process.stdout.write('Access Kit supported operations (server authorization required per call)\n');
+      for (const operation of operations) {
+        process.stdout.write(`- ${terminalText(operation.id)}  ${terminalText(operation.description)}\n`);
+      }
+    }
+    return;
+  }
+
+  if (area === 'access' && command === 'operations' && subcommand === 'show') {
+    if (positionals.length !== 4 || Object.keys(options).length > 0) {
+      throw new Error(`Unexpected arguments for access operations show.\n\n${HELP}`);
+    }
+    const operation = getAccessOperation(arg);
+    if (!operation) throw new Error('Unsupported Access Kit operation ID.');
+    if (json) writeJson({ catalog_kind: 'adapter_supported_operations', operation });
+    else process.stdout.write(`${JSON.stringify(operation, null, 2)}\n`);
+    return;
+  }
+
+  if (area === 'access' && command === 'invoke') {
+    if (positionals.length !== 3 || Object.keys(options).some((key) => key !== 'input-json')) {
+      throw new Error(`Unexpected arguments for access invoke.\n\n${HELP}`);
+    }
+    let input = {};
+    if (options['input-json']) {
+      try {
+        input = JSON.parse(options['input-json']);
+      } catch {
+        throw new Error('--input-json must contain valid JSON.');
+      }
+    }
+    const result = await invokeAccessOperation(subcommand, input, process.env);
+    const output = { operation_id: subcommand, data: result.data,
+      ...writeRequestIds(result), ...writeInteraction(result) };
+    if (json) writeJson(output);
+    else {
+      process.stdout.write(`${terminalText(JSON.stringify(result.data, null, 2))}\n`);
+      process.stdout.write(`Request: ${terminalText(result.requestId)}\n`);
+      process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
+      if (result.responseRequestId) process.stdout.write(`API request: ${terminalText(result.responseRequestId)}\n`);
+    }
+    return;
+  }
   if (area === 'ingest') {
     if (!command || positionals.length !== 2) throw new Error(`Usage: aether ingest EVENT_NAME ...\n\n${HELP}`);
     const supportedOptions = new Set([
@@ -292,7 +347,7 @@ async function main() {
     if (positionals.length !== 2 || Object.keys(options).length > 0) {
       throw new Error(`Unexpected arguments for account context.\n\n${HELP}`);
     }
-    const result = await getAccountContext();
+    const result = await invokeAccessOperation('account.context');
     const output = { account: result.data, ...writeRequestIds(result), ...writeInteraction(result) };
     if (json) writeJson(output);
     else {
@@ -308,7 +363,7 @@ async function main() {
     if (positionals.length !== 2 || Object.keys(options).length > 0) {
       throw new Error(`Unexpected arguments for usage summary.\n\n${HELP}`);
     }
-    const result = await getUsageSummary();
+    const result = await invokeAccessOperation('usage.summary');
     const output = { usage: result.data, ...writeRequestIds(result), ...writeInteraction(result) };
     if (json) writeJson(output);
     else {
@@ -327,7 +382,7 @@ async function main() {
     if (positionals.length !== 2 || Object.keys(options).length > 0) {
       throw new Error(`Unexpected arguments for auth context.\n\n${HELP}`);
     }
-    const result = await getAccountContext();
+    const result = await invokeAccessOperation('account.context');
     const output = { account: result.data, ...writeRequestIds(result), ...writeInteraction(result) };
     if (json) writeJson(output);
     else {
@@ -379,30 +434,57 @@ async function main() {
 
   if (area === 'entities' && command === 'list') {
     if (positionals.length !== 2) throw new Error(`Unexpected argument for entities list.\n\n${HELP}`);
-    const supportedOptions = new Set(['entity-type', 'limit']);
+    const supportedOptions = new Set(['entity-type', 'limit', 'offset']);
     for (const key of Object.keys(options)) {
       if (!supportedOptions.has(key)) throw new Error(`Unknown option: --${key}`);
     }
-    const result = await listEntities({
-      entityType: options['entity-type'],
+    const result = await invokeAccessOperation('entities.list', {
+      entity_type: options['entity-type'],
       limit: options.limit
         ? positiveInteger(options.limit, '--limit', { min: 1, max: MAX_ENTITY_PAGE_SIZE })
         : 25,
+      ...(options.offset !== undefined ? {
+        offset: positiveInteger(options.offset, '--offset', { max: 100_000 }),
+      } : {}),
     });
     const ids = writeRequestIds(result);
     const output = { ...result.data, ...ids, ...writeInteraction(result) };
     if (json) writeJson(output);
-    else formatEntities(result.data.entities, result.requestId, result.responseRequestId, result.interaction);
+    else formatEntities(
+      result.data.entities, result.requestId, result.responseRequestId,
+      result.interaction, result.data.next_offset,
+    );
     return;
   }
 
   if (area === 'entities' && command === 'show' && subcommand && positionals.length === 3) {
     if (Object.keys(options).length > 0) throw new Error(`Unexpected option for entities show.\n\n${HELP}`);
-    const result = await getEntity(subcommand);
+    const result = await invokeAccessOperation('entities.get', { entity_id: subcommand });
     const output = { ...result.data, ...writeRequestIds(result), ...writeInteraction(result) };
     if (json) writeJson(output);
     else {
       process.stdout.write(`${JSON.stringify(result.data, null, 2)}\n`);
+      process.stdout.write(`Request: ${terminalText(result.requestId)}\n`);
+      process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
+      if (result.responseRequestId) process.stdout.write(`API request: ${terminalText(result.responseRequestId)}\n`);
+    }
+    return;
+  }
+
+  if (area === 'entities' && command === 'neighborhood' && subcommand && positionals.length === 3) {
+    if (Object.keys(options).some((key) => key !== 'limit')) {
+      throw new Error(`Unexpected option for entities neighborhood.\n\n${HELP}`);
+    }
+    const result = await invokeAccessOperation('entities.neighborhood', {
+      entity_id: subcommand,
+      limit: options.limit
+        ? positiveInteger(options.limit, '--limit', { min: 1, max: 50 })
+        : 25,
+    });
+    const output = { ...result.data, ...writeRequestIds(result), ...writeInteraction(result) };
+    if (json) writeJson(output);
+    else {
+      process.stdout.write(`${terminalText(JSON.stringify(result.data, null, 2))}\n`);
       process.stdout.write(`Request: ${terminalText(result.requestId)}\n`);
       process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
       if (result.responseRequestId) process.stdout.write(`API request: ${terminalText(result.responseRequestId)}\n`);
@@ -418,7 +500,7 @@ async function main() {
     if (positionals.length !== 3 || Object.keys(options).length > 0) {
       throw new Error(`Unexpected arguments for agents capabilities overview.\n\n${HELP}`);
     }
-    const result = await getCapabilityOverview();
+    const result = await invokeAccessOperation('agent_access.observed.overview');
     if (json) writeJson({ ...result.data, ...writeRequestIds(result), ...writeInteraction(result) });
     else {
       process.stdout.write('Observed agent access inventory overview\n');
@@ -435,10 +517,10 @@ async function main() {
     for (const key of Object.keys(options)) {
       if (!supportedOptions.has(key)) throw new Error(`Unknown option: --${key}`);
     }
-    const result = await listCapabilities({
+    const result = await invokeAccessOperation('agent_access.observed.list', {
       provider: options.provider,
-      serverName: options['server-name'],
-      toolName: options['tool-name'],
+      server_name: options['server-name'],
+      tool_name: options['tool-name'],
       limit: options.limit ? positiveInteger(options.limit, '--limit', { min: 1, max: 100 }) : 100,
       offset: options.offset ? positiveInteger(options.offset, '--offset') : 0,
     });
@@ -449,7 +531,7 @@ async function main() {
   }
 
   if (subcommand === 'show' && arg && positionals.length === 4 && Object.keys(options).length === 0) {
-    const result = await getCapability(arg);
+    const result = await invokeAccessOperation('agent_access.observed.get', { capability_id: arg });
     if (json) writeJson({ ...result.data, ...writeRequestIds(result), ...writeInteraction(result) });
     else {
       process.stdout.write(`${JSON.stringify(result.data, null, 2)}\n`);

@@ -7,17 +7,13 @@ import * as z from 'zod/v4';
 
 import {
   AccessApiError,
-  getAccountContext,
-  getCapabilityOverview,
   ingestTrackObservation,
-  listCapabilities,
-  listEntities,
-  getEntity,
   projectObservedCapability,
-  getUsageSummary,
 } from '../src/api.mjs';
 import { registerEntityTools } from '../src/entity-tools.mjs';
 import { registerAccountContextTool } from '../src/account-context-tools.mjs';
+import { registerAccessOperationTools } from '../src/access-operation-tools.mjs';
+import { invokeAccessOperation } from '../src/access-operations.mjs';
 import { interactionSchema } from '../src/interaction-schema.mjs';
 import { loadMcpStoredSession } from '../src/mcp-auth.mjs';
 
@@ -99,10 +95,20 @@ export function createAccessMcpServer(
   const accessEnv = { ...env, AETHER_ACCESS_SURFACE: surface };
   const server = new McpServer({ name: 'aether-access-kit', version: '0.1.0-alpha.0' });
   registerEntityTools(server, {
-    list: (args) => listEntities(args, accessEnv),
-    get: (entityId) => getEntity(entityId, accessEnv),
+    list: (args) => invokeAccessOperation('entities.list', {
+      entity_type: args.entityType,
+      limit: args.limit,
+      offset: args.offset,
+    }, accessEnv),
+    get: (entityId) => invokeAccessOperation('entities.get', { entity_id: entityId }, accessEnv),
+    neighborhood: (entityId, args) => invokeAccessOperation('entities.neighborhood', {
+      entity_id: entityId, limit: args.limit,
+    }, accessEnv),
   });
-  registerAccountContextTool(server, { get: () => getAccountContext(accessEnv) });
+  registerAccountContextTool(server, {
+    get: () => invokeAccessOperation('account.context', {}, accessEnv),
+  });
+  registerAccessOperationTools(server, accessEnv);
 
   server.registerTool(
     'agent_access_capabilities_list',
@@ -127,10 +133,10 @@ export function createAccessMcpServer(
     },
     async ({ provider, server_name, tool_name, limit, offset }) => {
       try {
-        const result = await listCapabilities({
+        const result = await invokeAccessOperation('agent_access.observed.list', {
           provider,
-          serverName: server_name,
-          toolName: tool_name,
+          server_name,
+          tool_name,
           limit: limit ?? 100,
           offset: offset ?? 0,
         }, accessEnv);
@@ -170,7 +176,7 @@ export function createAccessMcpServer(
     },
     async () => {
       try {
-        const result = await getCapabilityOverview(accessEnv);
+        const result = await invokeAccessOperation('agent_access.observed.overview', {}, accessEnv);
         const output = {
           summary: result.data ?? {},
           request_id: result.requestId,
@@ -208,7 +214,7 @@ export function createAccessMcpServer(
     },
     async () => {
       try {
-        const result = await getUsageSummary(accessEnv);
+        const result = await invokeAccessOperation('usage.summary', {}, accessEnv);
         const output = {
           usage: result.data,
           request_id: result.requestId,
