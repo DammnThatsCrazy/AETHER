@@ -334,6 +334,9 @@ export function createRemoteMcpFetchHandler({ env = process.env } = {}) {
 
     const observeInput = readObserveHeaders(request);
     if (observeInput.error) return jsonResponse(400, observeInput.error, { origin: access.origin });
+    if (credential.kind === 'oauth' && observeInput.observe) {
+      return jsonResponse(403, 'oauth_read_scope_cannot_observe', { origin: access.origin });
+    }
     const requestEnv = buildTenantEnv(config.apiOrigin, credential, observeInput.observe);
 
     const handler = createMcpHandler(
