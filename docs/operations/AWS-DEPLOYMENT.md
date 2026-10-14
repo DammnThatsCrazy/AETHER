@@ -54,7 +54,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:7debcfe047fd42bdb4e6b18ed3b25ee0f4d843c4017154e497be3fe63bf2aaeb"
+  ".github/workflows/amplify-status-production.yml": "sha256:bd527b2194600610b7a3ebd602b4abbaa03b67e43bf295f0d368b5e0575d956e"
   ".github/workflows/deploy.yml": "sha256:103a856af062237e1e7fa6eab4072f17cb737ce66e78cb3d040fee1cac1959a8"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-lifecycle.yml": "sha256:ab0d86125cd2be277ba7e0a40a4dbc9fdd5db1480ff1c7cb816adf4874a55ae9"
@@ -78,7 +78,7 @@ source_hashes:
   "infra/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
   "infra/aws/terraform/": "sha256:167df80f7fced3abbf31086357796790db5da26c15bdd4bdaf43ebaf1a2bc513"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:124f62c1f1469281a3e19de2ec58d36b50f6f210410f1e79de8f79b2ef222e36"
+  "scripts/release/check_amplify_app_contract.py": "sha256:fdf5d317787370ad80fcd5653fe3497f1cf0fef4f91ff2abfdcabdc63722d23b"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
@@ -601,16 +601,13 @@ the caller's credentials when it updates a domain association.
 Route 53 records are keyed by host. Production also runs one app,
 `AETHER-production-web` (the former `aether-status` app), with the same build
 and the five hosts under `olympuslabsml.com`; Squarespace holds their CNAMEs.
-It has two branches built from the same `main` commit, because each site build
-prerenders its own pages: `main` builds the Aether site (with the product under
-`/app`) for `aether`, `docs`, `status` and `app`, and `production-olympus`
-builds the Olympus Labs site (`VITE_SITE=olympus`) for `www`.
-`amplify-status-production.yml` deploys both on each `main` push: it checks the
-commit is on `main`, force-pushes it to the `production-olympus` Git branch (a
-mirror only that workflow writes), binds both branches in `PRODUCTION` stage
-(`production-olympus` does not auto-build), and starts and waits for a
-commit-pinned release job on each. It verifies, without changing, that `www`
-maps to `production-olympus` and the other hosts to `main`. The staging
+It has one branch, `main`, which builds the unified site (with the product under
+`/app`) for all five hosts; the site picks Olympus Labs or Aether from the
+hostname at runtime. `amplify-status-production.yml` deploys it on each `main`
+push: it binds the branch in `PRODUCTION` stage and starts and waits for a
+commit-pinned release job. It verifies, without changing, that every host maps
+to `main`. The former `production-olympus` branch is retired; before deleting
+it, an administrator remaps `www` to `main` in Amplify. The staging
 lifecycle preflight checks the production settings, exact commit and host
 mappings. It is not Terraform-managed yet.
 
