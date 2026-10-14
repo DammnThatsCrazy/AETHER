@@ -11,6 +11,7 @@ responses matching the packages/shared/operational-intelligence.ts contracts.
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -22,6 +23,7 @@ from shared.common.common import APIResponse, ForbiddenError, NotFoundError
 from shared.graph.graph import GraphClient, Edge, Vertex, tenant_of
 from shared.graph.traversal import GraphTraversalEngine
 from shared.logger.logger import get_logger, metrics
+from billing.metering_evidence.families import meter_family_usage
 from graph.operational_intelligence.models import (
     EntityRef,
     GraphEdge,
@@ -154,7 +156,7 @@ async def access_entity_neighborhood(
         }
         for node in [anchor, *result.nodes]
     ]
-    edges = [
+    visible_edges = [
         {
             "from_entity_id": edge.from_vertex_id,
             "to_entity_id": edge.to_vertex_id,
@@ -162,7 +164,12 @@ async def access_entity_neighborhood(
         }
         for edge in result.edges
         if edge.from_vertex_id in visible_ids and edge.to_vertex_id in visible_ids
-    ][:100]
+    ]
+    edges = visible_edges[:100]
+    await meter_family_usage(
+        "graph", tenant.tenant_id, event_id=str(uuid.uuid4()),
+        enforce=False, raise_on_metering_error=False,
+    )
     metrics.increment("access_entity_neighborhood_read")
     return APIResponse(data={
         "anchor_entity_id": entity_id,
@@ -170,6 +177,7 @@ async def access_entity_neighborhood(
         "edges": edges,
         "limit": limit,
         "limit_reached": len(result.nodes) >= limit,
+        "edges_truncated": len(visible_edges) > len(edges),
     }).to_dict()
 
 
