@@ -61,10 +61,12 @@ def validate_inputs(
     desired_count: str,
     allowed_origins_json: str,
     access_mcp_path: str,
+    enable_oauth: str | bool = False,
 ) -> None:
     """Raise ValueError unless deployment inputs fit the reviewed contract."""
     repository_enabled = _boolean(enable_repository, "enable_access_mcp_repository")
     service_enabled = _boolean(enable_service, "enable_access_mcp")
+    oauth_enabled = _boolean(enable_oauth, "enable_access_mcp_oauth")
 
     if (repository_enabled or service_enabled) and profile != "production-scale":
         raise ValueError(
@@ -73,6 +75,8 @@ def validate_inputs(
         )
     if service_enabled and not repository_enabled:
         raise ValueError("enable_access_mcp requires enable_access_mcp_repository=true")
+    if oauth_enabled and not service_enabled:
+        raise ValueError("enable_access_mcp_oauth requires enable_access_mcp=true")
     if image_digest and not _DIGEST_RE.fullmatch(image_digest):
         raise ValueError("access_mcp_image_digest must be an immutable sha256 digest")
     if service_enabled and not image_digest:
@@ -112,6 +116,7 @@ def main() -> int:
             desired_count=os.environ.get("ACCESS_MCP_DESIRED_COUNT", ""),
             allowed_origins_json=os.environ.get("ACCESS_MCP_ALLOWED_ORIGINS", ""),
             access_mcp_path=os.environ.get("ACCESS_MCP_PATH", ""),
+            enable_oauth=os.environ.get("ENABLE_ACCESS_MCP_OAUTH", "false"),
         )
     except ValueError as exc:
         print(f"::error::{exc}", file=sys.stderr)

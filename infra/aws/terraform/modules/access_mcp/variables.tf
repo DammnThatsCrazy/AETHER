@@ -79,6 +79,16 @@ variable "api_url" {
   }
 }
 
+variable "oauth_resource_uri" {
+  type        = string
+  description = "Exact public MCP resource URI registered as the Auth0 API audience."
+}
+
+variable "oauth_issuer" {
+  type        = string
+  description = "HTTPS Auth0 authorization-server issuer URL."
+}
+
 variable "allowed_host" {
   type        = string
   description = "Exact public API hostname allowed by the Access Kit MCP host guard."

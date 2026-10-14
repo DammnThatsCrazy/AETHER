@@ -165,6 +165,8 @@ resource "aws_ecs_task_definition" "this" {
         { name = "AETHER_API_URL", value = var.api_url },
         { name = "AETHER_MCP_ALLOWED_HOSTS", value = var.allowed_host },
         { name = "AETHER_MCP_PATH", value = var.access_mcp_path },
+        { name = "AETHER_MCP_OAUTH_RESOURCE", value = var.oauth_resource_uri },
+        { name = "AETHER_MCP_OAUTH_ISSUER", value = var.oauth_issuer },
         ], length(var.allowed_origins) == 0 ? [] : [
         { name = "AETHER_MCP_ALLOWED_ORIGINS", value = join(",", var.allowed_origins) },
       ])

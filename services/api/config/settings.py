@@ -364,6 +364,8 @@ class Auth0Config:
     """
     domain: str = _env("AUTH0_DOMAIN", "")
     api_audience: str = _env("AUTH0_API_AUDIENCE", "")
+    # Exact public MCP resource URI. Empty keeps delegated MCP OAuth disabled.
+    mcp_audience: str = _env("AUTH0_MCP_AUDIENCE", "")
     client_id: str = _env("AUTH0_CLIENT_ID", "")
 
 

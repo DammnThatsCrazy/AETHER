@@ -26,6 +26,10 @@ _CLOCK_SKEW_LEEWAY = 60  # seconds of drift tolerated between this host and Auth
 _JWKS_REFRESH_MIN_AGE = 60
 
 
+class McpOAuthScopeError(ValueError):
+    """A valid delegated token lacks the MCP read scope."""
+
+
 def _b64url_to_int(val: str) -> int:
     padding = 4 - len(val) % 4
     val += "=" * (padding % 4)
@@ -156,6 +160,47 @@ async def validate_auth0_token(token: str) -> dict:
     if claims.get("iss") != expected_iss:
         raise ValueError(f"Token issuer mismatch: {claims.get('iss')!r}")
     claims["_sig_unverified"] = True
+    return claims
+
+
+async def validate_mcp_oauth_token(token: str) -> dict:
+    """Validate a delegated MCP access token for the exact MCP resource.
+
+    Unlike the legacy SSO exchange this never accepts an unsigned/local token
+    and never accepts a token minted for the general Aether API audience.
+    """
+    domain = settings.auth0.domain
+    audience = settings.auth0.mcp_audience
+    if not domain or not audience or not audience.startswith("https://"):
+        raise ValueError("MCP OAuth is not configured")
+    if len(token) > 8192:
+        raise ValueError("MCP OAuth token is too large")
+    try:
+        import jwt as pyjwt  # type: ignore[import-not-found]
+        from jwt.algorithms import RSAAlgorithm  # type: ignore[import-not-found]
+
+        header = pyjwt.get_unverified_header(token)
+        if header.get("alg") != "RS256" or not isinstance(header.get("kid"), str):
+            raise ValueError("MCP OAuth token algorithm is invalid")
+        matching = [key for key in await _fetch_jwks(domain)
+                    if key.get("kid") == header["kid"] and key.get("kty") == "RSA"]
+        if len(matching) != 1:
+            raise ValueError("MCP OAuth signing key is unknown")
+        public_key = RSAAlgorithm.from_jwk(json.dumps(matching[0]))
+        claims = pyjwt.decode(
+            token, public_key, algorithms=["RS256"], audience=audience,
+            issuer=f"https://{domain}/",
+            options={"require": ["exp", "iat", "sub", "iss", "aud"]},
+        )
+    except ImportError as exc:
+        raise ValueError("MCP OAuth signature verification is unavailable") from exc
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError("MCP OAuth token validation failed") from exc
+    scopes = claims.get("scope", "")
+    if not isinstance(scopes, str) or "access_kit:read" not in scopes.split():
+        raise McpOAuthScopeError("MCP OAuth read scope is missing")
     return claims
 
 

@@ -42,6 +42,11 @@ on:
         type: boolean
         default: false
         required: false
+      enable_access_mcp_oauth:
+        description: Plan-only opt-in for the dedicated Auth0 MCP resource audience and OAuth discovery; client onboarding is separately reviewed
+        type: boolean
+        default: false
+        required: false
       access_mcp_image_digest:
         description: Plan-only immutable sha256 digest already published in aether-access-mcp; required when enabling the service
         type: string
@@ -225,6 +230,7 @@ jobs:
       TF_VAR_kyber_google_hosted_domain: ${{ vars.KYBER_GOOGLE_HOSTED_DOMAIN || 'olympuslabs.ai' }}
       TF_VAR_enable_access_mcp_repository: ${{ inputs.enable_access_mcp_repository }}
       TF_VAR_enable_access_mcp: ${{ inputs.enable_access_mcp }}
+      TF_VAR_enable_access_mcp_oauth: ${{ inputs.enable_access_mcp_oauth }}
       TF_VAR_access_mcp_image_digest: ${{ inputs.access_mcp_image_digest }}
       TF_VAR_access_mcp_desired_count: ${{ inputs.access_mcp_desired_count }}
       TF_VAR_access_mcp_allowed_origins: ${{ inputs.access_mcp_allowed_origins || '[]' }}
@@ -286,6 +292,7 @@ jobs:
           PROFILE: ${{ inputs.profile }}
           ENABLE_ACCESS_MCP_REPOSITORY: ${{ inputs.enable_access_mcp_repository }}
           ENABLE_ACCESS_MCP: ${{ inputs.enable_access_mcp }}
+          ENABLE_ACCESS_MCP_OAUTH: ${{ inputs.enable_access_mcp_oauth }}
           ACCESS_MCP_IMAGE_DIGEST: ${{ inputs.access_mcp_image_digest }}
           ACCESS_MCP_DESIRED_COUNT: ${{ inputs.access_mcp_desired_count }}
           ACCESS_MCP_ALLOWED_ORIGINS: ${{ inputs.access_mcp_allowed_origins || '[]' }}

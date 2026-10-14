@@ -23,6 +23,30 @@ request and tenant-scoped read calls; it does not grant intake authority or
 select the intake tenant. The publishable key and site ID independently pass
 through the canonical site-binding check at `/v1/batch`.
 
+Delegated MCP OAuth is separately opt-in through `enable_access_mcp_oauth`.
+That flag creates a dedicated Auth0 resource server whose audience is the
+exact public MCP URL, with only `access_kit:read`. The MCP task serves
+`/.well-known/oauth-protected-resource` and the MCP-path-specific protected
+resource metadata path, advertising the configured Auth0 issuer. Missing or
+invalid credentials receive an OAuth bearer challenge. The backend validates
+the JWT signature, issuer, exact MCP audience, expiry and scope, then resolves
+the Auth0 subject against the current durable Aether user, membership, tenant,
+plan and read permission. MCP OAuth is confined to named Access Kit GET routes;
+it never creates a tenant, session or API key and grants no graph mutation or
+action authority. Legacy request-scoped API keys and revocable sessions remain
+available when OAuth is disabled.
+
+Auth0 Dynamic Client Registration is **not** enabled by Terraform. Auth0's
+open DCR permits unauthenticated client creation, while its third-party clients
+need an explicit API grant. A host can instead use a reviewed preregistered
+client. Before using DCR, the identity owner must approve Auth0 tenant settings,
+the exact third-party delegated read grant, application consent and connection
+policy, callback URI handling, rate limits, and client revocation. The MCP
+service does not proxy a registration endpoint or mint OAuth tokens. Current
+MCP guidance prefers Client ID Metadata Documents; DCR is a compatibility
+mechanism. This repository cannot claim host onboarding or delegated OAuth
+conformance until the Auth0 configuration and a real host are exercised.
+
 The ECS task role has no attached AWS permission policy. The separate task
 execution role can pull from only `aether-access-mcp` and write to only this
 service's CloudWatch log group, in addition to ECR's required authorization
@@ -48,12 +72,13 @@ task ingress, ECS Exec, autoscaling, or AWS mutation permission.
 | Liveness endpoint | `GET /healthz` |
 | TLS | Existing ALB HTTPS listener / ACM certificate |
 | Browser Origins | Optional exact HTTPS origin list; no wildcard |
+| Optional OAuth resource | Exact configured public MCP URL; no alternate audience |
+| Optional OAuth issuer | Auth0 HTTPS issuer; no local token validation fallback |
 
 `access_mcp_path` changes both the application mount and ALB path rule. The
 selected path must remain distinct from the internal `tfmcp` `/mcp*` reservation.
 Readiness confirms valid service configuration; it does not verify caller
-credentials or perform a downstream API health request. The service has no
-OAuth dynamic-client-registration flow.
+credentials or perform a downstream API health request.
 
 ## Staged publication and enablement
 
@@ -96,7 +121,9 @@ environments and credentials are not provisioned by this change.
    `enable_access_mcp_repository=true`, `enable_access_mcp=true`, and the
    published digest. Set `access_mcp_desired_count` from 1 to 4. Supply
    `access_mcp_allowed_origins` as a JSON array of exact HTTPS origins only
-   when browser clients need it. Review service count, cost, IAM, listener,
+   when browser clients need it. Enable `enable_access_mcp_oauth` only after
+   the Auth0 resource, consent and client onboarding configuration has been
+   reviewed; the default remains false. Review service count, cost, IAM, listener,
    and security-group changes before applying the exact plan artifact. The
    plan job independently confirms that the supplied digest exists in ECR and
    has a completed scan with zero HIGH/CRITICAL findings. Its OIDC plan role

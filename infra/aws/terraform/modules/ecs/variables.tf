@@ -231,6 +231,12 @@ variable "auth0_api_audience" {
   description = "Auth0 API audience passed to the hosted backend token validator."
 }
 
+variable "auth0_mcp_audience" {
+  type        = string
+  description = "Exact delegated MCP OAuth resource audience, empty when the MCP service is disabled."
+  default     = ""
+}
+
 variable "aether_app_url" {
   type        = string
   description = "Canonical Aether customer-app origin used by backend email and billing links."

@@ -82,6 +82,16 @@ variable "enable_access_mcp" {
   }
 }
 
+variable "enable_access_mcp_oauth" {
+  type        = bool
+  description = "Opt in to the dedicated Auth0 delegated-read resource and MCP OAuth discovery. Requires reviewed Auth0 client onboarding."
+  default     = false
+  validation {
+    condition     = !var.enable_access_mcp_oauth || (var.enable_access_mcp && var.auth0_domain != "")
+    error_message = "enable_access_mcp_oauth requires the customer MCP service and an Auth0 domain."
+  }
+}
+
 variable "access_mcp_image_digest" {
   type        = string
   description = "Immutable sha256 digest of the image in the aether-access-mcp ECR repository; required only when enable_access_mcp is true."

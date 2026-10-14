@@ -26,7 +26,7 @@ from typing import Callable, Optional
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
-from shared.common.common import AetherError, UnauthorizedError, problem_dict, problem_response
+from shared.common.common import AetherError, ForbiddenError, UnauthorizedError, problem_dict, problem_response
 from shared.context.request_context import (
     CORRELATION_HEADER,
     LEGACY_REQUEST_ID_HEADER,
@@ -55,11 +55,19 @@ _ACCESS_KIT_CAPABILITIES = {
     ("DELETE", "/v1/me/sessions/{session_id}"): "auth.sessions.revoke",
     ("GET", "/v1/entities"): "entities.list",
     ("GET", "/v1/entities/{entity_id}"): "entities.get",
+    ("GET", "/v1/entities/{entity_id}/neighborhood"): "entities.neighborhood.read",
     ("GET", "/v1/capability-catalog"): "agent_access.capabilities.list",
     ("GET", "/v1/capability-catalog/overview"): "agent_access.capabilities.overview",
     ("GET", "/v1/capability-catalog/{capability_id}"): "agent_access.capabilities.get",
 }
 _ACCESS_KIT_SURFACES = frozenset({"cli", "mcp_stdio", "mcp_http"})
+# A delegated MCP token is accepted only for these named read routes. The
+# request header is merely a surface hint; the token is independently checked
+# for issuer, exact MCP audience, scope, user, membership, and tenant status.
+_MCP_OAUTH_READ_ROUTES = frozenset(
+    path for (method, path), capability in _ACCESS_KIT_CAPABILITIES.items()
+    if method == "GET" and capability != "auth.sessions.list"
+)
 
 
 async def _record_access_interaction(request: Request, response: Response) -> dict[str, str]:
@@ -1376,6 +1384,11 @@ async def _authenticate_async(
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
+        if request.headers.get("x-aether-access-surface") == "mcp_http" and token.count(".") == 2:
+            route = getattr(request.state, "access_route_template", request.url.path)
+            if request.method.upper() not in {"GET"} or route not in _MCP_OAUTH_READ_ROUTES:
+                raise UnauthorizedError("MCP OAuth token is not valid for this route")
+            return await _resolve_mcp_oauth_token(token)
         # Try API key first (SDK pattern); fall back to JWT (SSO/user pattern)
         try:
             return await api_key_validator.validate_async(token)
@@ -1389,6 +1402,52 @@ async def _authenticate_async(
         return jwt_handler.extract_context(payload)
 
     raise UnauthorizedError("Missing API key or Bearer token")
+
+
+async def _resolve_mcp_oauth_token(token: str) -> TenantContext:
+    """Bind Auth0's delegated MCP token to durable Aether membership.
+
+    No tenant is created or selected from token claims. Revocation, role and
+    permission changes in Aether take effect on the next API request.
+    """
+    from shared.auth.auth0_validator import McpOAuthScopeError, validate_mcp_oauth_token
+    from repositories.repos import AdminRepository, UserRepository
+
+    try:
+        claims = await validate_mcp_oauth_token(token)
+        user = await UserRepository().find_by_auth0_sub(claims["sub"])
+        if not user or user.get("status") != "active" or user.get("membership_status") != "active":
+            raise UnauthorizedError("MCP OAuth principal is not an active member")
+        tenant_id = user.get("tenant_id")
+        tenant = await AdminRepository().find_by_id(tenant_id) if tenant_id else None
+        if not tenant or tenant.get("status") not in {"active", "active_limited"}:
+            raise UnauthorizedError("MCP OAuth tenant is not active")
+        permissions = user.get("permissions")
+        if not isinstance(permissions, list):
+            permissions = []
+        if "read" not in permissions and user.get("role") != "admin":
+            raise UnauthorizedError("MCP OAuth member has no read permission")
+        plan_tier = PlanTier(tenant.get("plan_tier") or tenant.get("plan"))
+    except McpOAuthScopeError as exc:
+        raise ForbiddenError("MCP OAuth read scope is missing") from exc
+    except (UnauthorizedError, ForbiddenError):
+        raise
+    except Exception as exc:
+        logger.warning("MCP OAuth authority resolution failed (%s)", type(exc).__name__)
+        raise UnauthorizedError("MCP OAuth credential is invalid") from exc
+    return TenantContext(
+        tenant_id=tenant_id,
+        user_id=user.get("user_id") or user.get("id"),
+        role=Role.VIEWER,
+        plan_tier=plan_tier,
+        permissions=["read"],
+        credential_class="mcp_oauth",
+        credential_status="active",
+        tenant_status=str(tenant["status"]),
+        organization_id=user.get("organization_id") or tenant.get("organization_id"),
+        organization_status=str(user.get("organization_status", "active")),
+        membership_status="active",
+    )
 
 
 async def _resolve_trust_plane_context(request: Request) -> Optional[TenantContext]:

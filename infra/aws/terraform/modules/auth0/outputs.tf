@@ -38,3 +38,8 @@ output "aether_social_connections" {
     slack     = auth0_connection.slack[0].name
   } : {}
 }
+
+output "access_mcp_resource_uri" {
+  description = "Exact delegated MCP OAuth audience; empty when the customer MCP service is disabled."
+  value       = try(auth0_resource_server.access_mcp[0].identifier, "")
+}

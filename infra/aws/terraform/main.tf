@@ -464,6 +464,7 @@ module "ecs" {
   deployment_profile         = var.deployment_profile
   auth0_domain               = var.auth0_domain
   auth0_api_audience         = var.auth0_api_audience
+  auth0_mcp_audience         = var.enable_access_mcp_oauth ? "https://${var.domain_name}${var.access_mcp_path}" : ""
   aether_app_url             = local.aether_app_base_url
   # The pilot lane is staging-only and keeps the one-time first-admin route
   # armed behind its Secrets Manager token and durable single-use marker. The
@@ -628,6 +629,8 @@ module "access_mcp" {
   allowed_host       = var.domain_name
   allowed_origins    = var.access_mcp_allowed_origins
   access_mcp_path    = var.access_mcp_path
+  oauth_resource_uri = var.enable_access_mcp_oauth ? "https://${var.domain_name}${var.access_mcp_path}" : ""
+  oauth_issuer       = var.enable_access_mcp_oauth ? "https://${var.auth0_domain}/" : ""
   log_retention_days = var.log_retention_days
   desired_count      = var.access_mcp_desired_count
 }
@@ -734,8 +737,9 @@ module "ml_drift_lambda" {
 module "auth0" {
   source = "./modules/auth0"
 
-  environment  = var.environment
-  api_audience = var.auth0_api_audience
+  environment      = var.environment
+  api_audience     = var.auth0_api_audience
+  mcp_resource_uri = var.enable_access_mcp_oauth ? "https://${var.domain_name}${var.access_mcp_path}" : ""
 
   # Per-PR previews (pr-<N>.<preview app domain>) sign in against the same
   # staging Auth0 application; Auth0 accepts a leading subdomain wildcard.
