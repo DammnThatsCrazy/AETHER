@@ -1,18 +1,13 @@
 name: Bind and deploy the production web app
 
 # Production runs ONE Amplify app (AETHER-production-web, the former
-# aether-status app) with two branches built from the same main commit:
-#
-# - main: the Aether site (with the product under /app) for aether, docs,
-#   status and app;
-# - production-olympus: the Olympus Labs site (VITE_SITE=olympus) for www.
-#
-# Each site build prerenders its own pages for search and link previews, so
-# the two hosts need separate builds. Every main push binds the app to this
-# repository with the reviewed build, rules and production settings, mirrors
-# the exact main SHA to the production-olympus Git branch, keeps both branches
-# in PRODUCTION stage, and starts a commit-pinned release job on each. It never
-# changes DNS or domain mappings; Squarespace remains the DNS authority.
+# aether-status app) with ONE branch, main. The unified site build serves every
+# host (www, aether, docs, status and app) and picks Olympus Labs or Aether
+# from the hostname at runtime (frontend/site/src/site/site.ts). Every main
+# push binds the app to this repository with the reviewed build, rules and
+# production settings, keeps main in PRODUCTION stage, and starts a
+# commit-pinned release job. It never changes DNS or domain mappings;
+# Squarespace remains the DNS authority.
 
 on:
   push:
@@ -38,9 +33,6 @@ env:
   AWS_REGION: us-east-1
   AMPLIFY_REPOSITORY: https://github.com/DammnThatsCrazy/AETHER
   AMPLIFY_APP_NAME: AETHER-production-web
-  # Git and Amplify branch for the Olympus Labs site: always an exact copy of
-  # a reviewed main commit, written only by this workflow.
-  OLYMPUS_BRANCH: production-olympus
 
 jobs:
   verify-main-integration:
@@ -90,7 +82,7 @@ jobs:
     timeout-minutes: 75
     environment: staging
     permissions:
-      contents: write
+      contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
@@ -151,21 +143,6 @@ jobs:
           printf 'app_id=%s\n' "${app_ids[0]}" >> "$GITHUB_OUTPUT"
           printf 'expected_commit_sha=%s\n' "$EXPECTED_COMMIT_SHA" >> "$GITHUB_OUTPUT"
 
-      - name: Mirror the exact main commit to the Olympus site branch
-        env:
-          GH_TOKEN: ${{ github.token }}
-          EXPECTED_COMMIT_SHA: ${{ steps.inputs.outputs.expected_commit_sha }}
-        run: |
-          set -euo pipefail
-          # Only a commit already on main may be published to www.
-          comparison="$(gh api "repos/$GITHUB_REPOSITORY/compare/$EXPECTED_COMMIT_SHA...main" --jq .status)"
-          case "$comparison" in
-            identical|ahead) ;;
-            *) echo "::error::$EXPECTED_COMMIT_SHA is not on main (compare status: ${comparison:-unknown})"; exit 1 ;;
-          esac
-          git push --force origin "${EXPECTED_COMMIT_SHA}:refs/heads/${OLYMPUS_BRANCH}"
-          echo "Mirrored ${EXPECTED_COMMIT_SHA} to ${OLYMPUS_BRANCH}."
-
       - name: Assess status app state before repository binding
         id: state
         env:
@@ -216,7 +193,7 @@ jobs:
             exit 0
           fi
 
-          unexpected_branches="$(jq -r --arg olympus "$OLYMPUS_BRANCH" 'map(select(. != "main" and . != $olympus)) | join(",")' <<<"$branches_json")"
+          unexpected_branches="$(jq -r 'map(select(. != "main")) | join(",")' <<<"$branches_json")"
           test -z "$unexpected_branches" || {
             echo "::error::repository-backed AETHER-production-web has unexpected branches: ${unexpected_branches}"; exit 1;
           }
@@ -226,7 +203,7 @@ jobs:
             exit 0
           fi
           printf 'bootstrap_required=false\n' >> "$GITHUB_OUTPUT"
-          echo 'Status app is repository-backed with only the main and Olympus site branches; CI will verify its domain mapping without mutating it.'
+          echo 'Status app is repository-backed with only the main branch; CI will verify its domain mapping without mutating it.'
 
       - name: Bind the production web app to the canonical repository
         id: bind
@@ -238,8 +215,7 @@ jobs:
           web_build_spec="$(mktemp)"
           web_environment="$(mktemp)"
           web_rules="$(mktemp)"
-          olympus_environment="$(mktemp)"
-          trap 'rm -f "$web_build_spec" "$web_environment" "$web_rules" "$olympus_environment"' EXIT
+          trap 'rm -f "$web_build_spec" "$web_environment" "$web_rules"' EXIT
           # The frontend/site entry of amplify.yml: the unified site plus the
           # product built under /app.
           cat > "$web_build_spec" <<'YAML'
@@ -296,7 +272,7 @@ jobs:
           # exists. Every page is a prerendered file (/platform is served from
           # platform.html); a path with no file gets the app shell with a 404
           # status ("404-200"), and the app renders the route or its not-found
-          # page. The rules are shared by both branches. When production opens,
+          # page. When production opens,
           # restore the staging web app's product rules (Terraform main.tf).
           cat > "$web_rules" <<'JSON'
           [
@@ -308,10 +284,8 @@ jobs:
             {"source": "/<*>", "target": "/index.html", "status": "404-200"}
           ]
           JSON
-          # The Olympus Labs site: the same settings, built as the Olympus site.
-          jq '. + {"VITE_SITE": "olympus"}' "$web_environment" > "$olympus_environment"
           jq -e 'type == "object"' "$web_environment" >/dev/null
-          jq -e '.VITE_SITE == "olympus"' "$olympus_environment" >/dev/null
+          jq -e 'has("VITE_SITE") | not' "$web_environment" >/dev/null
           jq -e 'type == "array" and length == 6' "$web_rules" >/dev/null
           aws amplify update-app \
             --app-id "$APP_ID" \
@@ -334,25 +308,11 @@ jobs:
           else
             aws amplify create-branch "${branch_args[@]}" >/dev/null
           fi
-          # The Olympus branch builds only the commits this workflow mirrors and
-          # releases; it does not auto-build on its own.
-          olympus_args=(
-            --app-id "$APP_ID"
-            --branch-name "$OLYMPUS_BRANCH"
-            --stage PRODUCTION
-            --no-enable-auto-build
-            --environment-variables "file://$olympus_environment"
-          )
-          if aws amplify get-branch --app-id "$APP_ID" --branch-name "$OLYMPUS_BRANCH" >/dev/null 2>&1; then
-            aws amplify update-branch "${olympus_args[@]}" >/dev/null
-          else
-            aws amplify create-branch "${olympus_args[@]}" >/dev/null
-          fi
           # Build settings apply only to jobs that start after this point; the
           # release step must not reuse a job started before it. Whole seconds:
           # the release step treats a job from this same second as stale.
           printf 'bound_at=%s\n' "$(date -u +%s)" >> "$GITHUB_OUTPUT"
-          echo "Bound the production web app to the reviewed repository, the site build with the product under /app, production settings and rules, and the PRODUCTION main and ${OLYMPUS_BRANCH} branches."
+          echo "Bound the production web app to the reviewed repository, the site build with the product under /app, production settings and rules, and the PRODUCTION main branch."
 
       - name: Verify canonical production domain mappings
         if: steps.state.outputs.bootstrap_required != 'true'
@@ -368,14 +328,13 @@ jobs:
           }
           for prefix in www aether docs status app; do
             branch=main
-            if [ "$prefix" = www ]; then branch="$OLYMPUS_BRANCH"; fi
             mapping_count="$(jq --arg prefix "$prefix" '[.domainAssociation.subDomains[]?.subDomainSetting] | map(select(.prefix == $prefix)) | length' <<<"$domain_json")"
             branch_mapping_count="$(jq --arg prefix "$prefix" --arg branch "$branch" '[.domainAssociation.subDomains[]?.subDomainSetting] | map(select(.prefix == $prefix and .branchName == $branch)) | length' <<<"$domain_json")"
             test "$mapping_count" = 1 && test "$branch_mapping_count" = 1 || {
               echo "::error::production domain must have exactly one ${prefix} mapping to the ${branch} branch"; exit 1;
             }
           done
-          echo "Verified the production domain is AVAILABLE and maps www to ${OLYMPUS_BRANCH} and aether, docs, status and app to main, without a CI domain mutation."
+          echo "Verified the production domain is AVAILABLE and maps www, aether, docs, status and app to main, without a CI domain mutation."
 
       - name: Complete one-time status app bootstrap
         if: steps.state.outputs.bootstrap_required == 'true'
@@ -463,9 +422,7 @@ jobs:
           }
 
           main_job_id="$(release_branch main)"
-          olympus_job_id="$(release_branch "$OLYMPUS_BRANCH")"
           printf 'main_job_id=%s\n' "$main_job_id" >> "$GITHUB_OUTPUT"
-          printf 'olympus_job_id=%s\n' "$olympus_job_id" >> "$GITHUB_OUTPUT"
 
       - name: Wait for the exact deployments
         if: steps.state.outputs.bootstrap_required != 'true'
@@ -473,7 +430,6 @@ jobs:
           APP_ID: ${{ steps.inputs.outputs.app_id }}
           EXPECTED_COMMIT_SHA: ${{ steps.inputs.outputs.expected_commit_sha }}
           MAIN_JOB_ID: ${{ steps.job.outputs.main_job_id }}
-          OLYMPUS_JOB_ID: ${{ steps.job.outputs.olympus_job_id }}
         run: |
           set -euo pipefail
           wait_for() {
@@ -503,7 +459,6 @@ jobs:
             echo "::error::the ${branch} deployment exceeded the 40-minute deadline"; return 1
           }
           wait_for main "$MAIN_JOB_ID"
-          wait_for "$OLYMPUS_BRANCH" "$OLYMPUS_JOB_ID"
 
       - name: Verify production status provenance and branch stage
         if: steps.state.outputs.bootstrap_required != 'true'
