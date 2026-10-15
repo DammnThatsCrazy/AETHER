@@ -21,10 +21,13 @@ source_hashes:
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
-  "services/api/value/x402/": "sha256:5d041fbb1a1fb7494c5a547b4aac97804e0dcf478261170546663918a509377f"
+  "services/api/value/x402/": "sha256:1866ae49577a4eb8b32c97fceed7c02c4e5ae10b8c94bec501693759a619a46c"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
 ---
 # Commerce Operator Runbook
+
+The `/v1/diagnostics/commerce/*` routes used below admit only platform
+operators (see [Access Control](../architecture/ACCESS-CONTROL.md#platform-operators)).
 
 ## 1. Stuck approval (past SLA)
 

@@ -25,12 +25,12 @@ reviewed_source_commits:
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:0b75f5f3df587ea210008ef2bd79babf74c832dd6746a5a218411dae3a90d5ad"
   ".github/workflows/staging-lifecycle.yml": "sha256:ab0d86125cd2be277ba7e0a40a4dbc9fdd5db1480ff1c7cb816adf4874a55ae9"
-  ".github/workflows/terraform-promote.yml": "sha256:804e3b437274475d5125b4dbf6c3988ff9387909af73a5aeb5690713cf310adf"
-  "infra/aws/terraform/modules/ecs/main.tf": "sha256:b639e5e6742dd68587e00123e3ed7cc2d2c8679a6bedc23d3967891a9d0db1a5"
+  ".github/workflows/terraform-promote.yml": "sha256:4542ef7fd2d140d2cbcb2a02b232c22f1473bbfdcad250cbc81999c468bcb26c"
+  "infra/aws/terraform/modules/ecs/main.tf": "sha256:1bdf8ec2093d66e6565cf7a4bcb697bfe263d90d91e1239cb5f67fb988193388"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
-  "services/api/repositories/repos.py": "sha256:4763340370ea7ef9e43d91b1156def3188a83114efa832e0a289f267957206e6"
-  "services/api/tenancy/auth/routes.py": "sha256:33de1a272f8eaf4ee635f01044703bf25888d45d27c5623ee5ca3bbbe003c9a5"
+  "services/api/repositories/repos.py": "sha256:18ffc6df66bfc4484aaab821c791fda4579382634a23066ddbe5276d4408ec04"
+  "services/api/tenancy/auth/routes.py": "sha256:28646c94b30efa7f437fe477209cb7877202c0692caf8076689b7bc407bf7c76"
 ---
 
 # AETHER first-admin bootstrap
@@ -70,7 +70,8 @@ claimed credential.
 
 The bootstrap tenant is the platform's own administrative tenant, so in
 staging it is a **platform operator** (top plan, no burst limit, quota metering
-or extraction budget; see [Access Control](../architecture/ACCESS-CONTROL.md#platform-operators)).
+or extraction budget, and access to the operator-only `/v1/admin/**` and
+`/v1/diagnostics/**` routes; see [Access Control](../architecture/ACCESS-CONTROL.md#platform-operators)).
 Signing in to `app.staging` through Auth0 with the bootstrap email, verified by
 the identity provider, links that Auth0 identity to the admin user and lands in
 this tenant. Use **Continue with Olympus sign-in** on the login page (Auth0

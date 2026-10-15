@@ -64,10 +64,10 @@ source_hashes:
   "config/staging_secret_preflight_iam_policy.yaml": "sha256:06ad4ef9c7777eff1190d01b02536542b902692051532f640635e128d5c1403d"
   "config/staging_secret_preflight_trust_policy.json": "sha256:38c81fbb5674275998114973bd151fccb23e510d999560e14f6c3dbf591e2fc5"
   "config/terraform_plan_state_access_policy.yaml": "sha256:3ef6bc24c567f84eb9a44c8a180d0f6f14e6c4a9fabb76138cb3543e4cf150e0"
-  "infra/aws/terraform/modules/ecs/main.tf": "sha256:b639e5e6742dd68587e00123e3ed7cc2d2c8679a6bedc23d3967891a9d0db1a5"
-  "infra/aws/terraform/profiles.tf": "sha256:da63e1f50e4030924713679445e3c365883a23821ac78df83bebe14436c67f60"
-  "infra/aws/terraform/profiles/staging.tfvars": "sha256:34b4d565d79a786e532b9cda5295cc745e1840b7f241abf1f0608772f2a18181"
-  "infra/aws/terraform/variables.tf": "sha256:5eed310106c5621fc91dc3961c3e2194a03c6d0181fa494df5ad376112638cdb"
+  "infra/aws/terraform/modules/ecs/main.tf": "sha256:1bdf8ec2093d66e6565cf7a4bcb697bfe263d90d91e1239cb5f67fb988193388"
+  "infra/aws/terraform/profiles.tf": "sha256:c197af7ebf1556be22a70dbf05c4ba85f5f93a2dd322dc39a42442f27226a89d"
+  "infra/aws/terraform/profiles/staging.tfvars": "sha256:bb1ab7c9aba90b504a367c418352ac87db6816fb0e8b8e12b62ceab523dd892c"
+  "infra/aws/terraform/variables.tf": "sha256:07d18a015db9196e8768822f33c671a0937cd96ad2c3d1ad651e24e8563f6bd9"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:b8ce2e914ba4878098b41c3bdfcf1ec5f0163876578610af5a5362004bc7bdfa"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
@@ -694,7 +694,8 @@ Steps, in order, with what each proves:
     command is allowed to turn an evidence error into a false green.
 14. **Tenant cleanup.** Every run-scoped tenant recorded by the bootstrap or
     registration marker is removed with `DELETE /v1/admin/tenants/{id}`, falling
-    back to `POST .../deactivate`. Both admin paths revoke durable API keys,
+    back to `POST .../deactivate`, using the first-admin bootstrap key, whose
+    tenant is a platform operator in staging. Both admin paths revoke durable API keys,
     invalidate and verify the Redis auth-cache entries, and revoke contained
     public ingest identifiers before deleting or deactivating the tenant. A
     successful DELETE must return a `cleanup_complete` receipt after erasing
