@@ -91,6 +91,13 @@ class _SuggestionRepo:
     async def find_by_id(self, record_id: str) -> dict | None:
         return self._store.get(record_id)
 
+    async def patch(self, record_id: str, tenant_id: str, data: dict) -> dict:
+        record = self._store.get(record_id)
+        if record is None or record.get("tenant_id") != tenant_id:
+            raise KeyError(record_id)
+        record.update(data)
+        return record
+
 
 # ─── Tests ───────────────────────────────────────────────────────────────────
 
@@ -167,7 +174,7 @@ async def test_generic_webhook_acknowledged_routes_to_suggestion():
     external_id = "ext-ref-001"
     suggestion_id = str(uuid.uuid4())
 
-    await suggestion_repo.update(suggestion_id, {"outcome_state": "pending"})
+    await suggestion_repo.update(suggestion_id, {"outcome_state": "pending", "tenant_id": tenant_id})
 
     link_id = str(uuid.uuid4())
     await link_repo.insert(link_id, {

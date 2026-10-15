@@ -85,6 +85,13 @@ class _SuggestionRepo:
     async def find_by_id(self, record_id: str) -> dict | None:
         return self._store.get(record_id)
 
+    async def patch(self, record_id: str, tenant_id: str, data: dict) -> dict:
+        record = self._store.get(record_id)
+        if record is None or record.get("tenant_id") != tenant_id:
+            raise KeyError(record_id)
+        record.update(data)
+        return record
+
 
 # ─── Tests ───────────────────────────────────────────────────────────────────
 
@@ -104,7 +111,7 @@ async def test_linear_status_changed_outcome_loop():
     suggestion_id = str(uuid.uuid4())
 
     # Pre-populate suggestion
-    await suggestion_repo.update(suggestion_id, {"outcome_state": "pending"})
+    await suggestion_repo.update(suggestion_id, {"outcome_state": "pending", "tenant_id": tenant_id})
 
     # ExternalResourceLink joins on the Linear issue UUID — the id the
     # LinearAdapter stores when it creates the issue, not the human ENG-42.
@@ -195,7 +202,7 @@ async def test_linear_remove_action_becomes_cancelled():
     issue_id = "lin-uuid-099"
     suggestion_id = str(uuid.uuid4())
 
-    await suggestion_repo.update(suggestion_id, {"outcome_state": "pending"})
+    await suggestion_repo.update(suggestion_id, {"outcome_state": "pending", "tenant_id": tenant_id})
 
     link_id = str(uuid.uuid4())
     await link_repo.insert(link_id, {
@@ -260,7 +267,7 @@ async def test_linear_loop_prevention_same_state():
     issue_id = "ENG-77"
     suggestion_id = str(uuid.uuid4())
 
-    await suggestion_repo.update(suggestion_id, {"outcome_state": "in_progress"})
+    await suggestion_repo.update(suggestion_id, {"outcome_state": "in_progress", "tenant_id": tenant_id})
 
     link_id = str(uuid.uuid4())
     await link_repo.insert(link_id, {

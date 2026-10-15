@@ -102,6 +102,13 @@ class _SuggestionRepo:
     async def find_by_id(self, record_id: str) -> dict | None:
         return self._store.get(record_id)
 
+    async def patch(self, record_id: str, tenant_id: str, data: dict) -> dict:
+        record = self._store.get(record_id)
+        if record is None or record.get("tenant_id") != tenant_id:
+            raise KeyError(record_id)
+        record.update(data)
+        return record
+
 
 # ─── Test ────────────────────────────────────────────────────────────────────
 
@@ -117,7 +124,7 @@ async def test_slack_outcome_loop_full():
 
     # 1. Pre-populate a suggestion in the suggestion repo
     suggestion_id = str(uuid.uuid4())
-    await suggestion_repo.update(suggestion_id, {"outcome_state": "pending"})
+    await suggestion_repo.update(suggestion_id, {"outcome_state": "pending", "tenant_id": "tenant-abc"})
 
     # 2. Create an ExternalResourceLink for the suggestion → Slack channel
     link_id = str(uuid.uuid4())
