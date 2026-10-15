@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from shared.graph.graph import GraphClient, VertexType, EdgeType
+from shared.graph.graph import GraphClient, VertexType, EdgeType, tenant_of
 from shared.cache.cache import CacheClient, TTL
 from shared.logger.logger import get_logger
 
@@ -118,14 +118,14 @@ class ProfileResolver:
             for v in neighbors:
                 if v.vertex_type == VertexType.USER:
                     # Tenant isolation: only return if vertex belongs to this tenant
-                    if v.properties.get("tenant_id", tenant_id) == tenant_id:
+                    if tenant_of(v.properties) == tenant_id:
                         return v.vertex_id
 
         # Fallback: try bidirectional search (still tenant-scoped)
         neighbors = await self._graph.get_neighbors(identifier, direction="both")
         for v in neighbors:
             if v.vertex_type == VertexType.USER:
-                if v.properties.get("tenant_id", tenant_id) == tenant_id:
+                if tenant_of(v.properties) == tenant_id:
                     return v.vertex_id
 
         return None
@@ -157,8 +157,8 @@ class ProfileResolver:
 
         neighbors = await self._graph.get_neighbors(user_id, direction="both")
         for v in neighbors:
-            # Tenant isolation: skip vertices from other tenants
-            if v.properties.get("tenant_id", tenant_id) != tenant_id:
+            # Tenant isolation: skip vertices from other tenants and untagged ones
+            if tenant_of(v.properties) != tenant_id:
                 logger.warning(
                     f"Skipped cross-tenant vertex {v.vertex_id} "
                     f"(expected tenant={tenant_id})"
