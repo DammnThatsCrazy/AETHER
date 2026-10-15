@@ -9,7 +9,7 @@ from typing import Any, Iterable, Optional
 
 from shared.auth.auth import TenantContext
 from shared.common.common import BadRequestError, ForbiddenError, RateLimitedError, ServiceUnavailableError, utc_now
-from shared.graph.graph import GraphClient, Vertex
+from shared.graph.graph import GraphClient, Vertex, tenant_of
 from shared.logger.logger import get_logger, metrics
 from governance.security.audit_ledger import AuditLedger
 from repositories.repos import (
@@ -129,7 +129,7 @@ class NoesisService:
         if body.conversation_id:
             try:
                 history = await self.conversation_store.get_recent(
-                    body.conversation_id, scope.effective_tenant_id
+                    body.conversation_id, tenant.tenant_id, user_id=tenant.user_id or "",
                 )
             except ConversationStoreUnavailable as exc:
                 logger.warning("Noesis conversation history unavailable: %s", exc)
@@ -190,11 +190,12 @@ class NoesisService:
         if body.conversation_id and response.intent not in ("rejected", "unsupported"):
             await self.conversation_store.append(
                 body.conversation_id,
-                scope.effective_tenant_id,
+                tenant.tenant_id,
                 body.message,
                 response.intent,
                 response.mode,
                 response.answer,
+                user_id=tenant.user_id or "",
             )
 
         return response
@@ -243,7 +244,7 @@ class NoesisService:
             if body.conversation_id:
                 try:
                     history = await self.conversation_store.get_recent(
-                        body.conversation_id, scope.effective_tenant_id
+                        body.conversation_id, tenant.tenant_id, user_id=tenant.user_id or "",
                     )
                 except ConversationStoreUnavailable as exc:
                     logger.warning("Noesis conversation history unavailable: %s", exc)
@@ -287,11 +288,12 @@ class NoesisService:
             if body.conversation_id and response.intent not in ("rejected", "unsupported"):
                 await self.conversation_store.append(
                     body.conversation_id,
-                    scope.effective_tenant_id,
+                    tenant.tenant_id,
                     body.message,
                     response.intent,
                     response.mode,
                     response.answer,
+                    user_id=tenant.user_id or "",
                 )
 
             yield _sse({"type": "complete", **response.model_dump(mode="json", exclude_none=True)})
@@ -768,10 +770,9 @@ class NoesisService:
         fetched_at = utc_now()
         vertex = await self._graph_cb.call(self.graph.get_vertex(plan.target), None)
         if vertex:
-            vtid = vertex.properties.get("tenant_id")
             if scope.cross_tenant and not scope.effective_tenant_id:
                 pass
-            elif vtid not in (scope.effective_tenant_id, None, ""):
+            elif tenant_of(vertex.properties) != scope.effective_tenant_id:
                 vertex = None
         depth = int(plan.filters.get("depth", 1))
         if depth > 1 and self.flags.multi_hop_enabled:
@@ -781,7 +782,7 @@ class NoesisService:
         if scope.cross_tenant and not scope.effective_tenant_id:
             safe_neighbors = list(neighbors)
         else:
-            safe_neighbors = [v for v in neighbors if v.properties.get("tenant_id") in (scope.effective_tenant_id, None, "")]
+            safe_neighbors = [v for v in neighbors if tenant_of(v.properties) == scope.effective_tenant_id]
         edges = await self._graph_cb.call(self.graph.get_edges(plan.target, direction="both"), []) if vertex else []
         visible_node_ids = {v.vertex_id for v in ([vertex] if vertex else []) + safe_neighbors}
         nodes = [self._vertex_to_node(v) for v in ([vertex] if vertex else []) + safe_neighbors]
