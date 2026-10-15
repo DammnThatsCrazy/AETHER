@@ -2428,6 +2428,18 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/engineering/ci-v2/architecture.md",
+      "title": "CI V2 Architecture",
+      "slug": "engineering/ci-v2-architecture",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/engineering/ci-v2/baseline.md",
       "title": "CI V2 Baseline",
       "slug": "engineering/ci-v2-baseline",

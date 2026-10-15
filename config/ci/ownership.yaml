@@ -39,20 +39,19 @@ fanout:
   - "packages/ui/**"
 
 # Extra path -> suite mappings for source the registry `paths` do not cover.
+# services/api is one tightly coupled runtime (shared graph/identity/tenancy
+# code is imported everywhere), so any change under it selects the whole
+# backend group. Parity replay against the legacy impact graph showed narrower
+# per-subdirectory rules missed suites (agent-layer, contracts, journey-service).
 extra:
-  - include: ["services/api/identity/**", "services/api/governance/**", "services/api/tenancy/**"]
-    suites: [backend-identity, backend-profile360, root-unit-identity-profile, root-unit-security]
-  - include: ["services/api/ingestion/**", "services/api/replay/**", "packages/sdk/**"]
+  - include: ["services/api/**"]
+    suites: [backend-identity, backend-ingestion, backend-campaigns, backend-profile360,
+             backend-agent, backend-computation, backend-value, backend-observability,
+             agent-layer, contracts, journey-service, root-unit-control,
+             root-unit-identity-profile, root-unit-ingestion, root-unit-graph,
+             root-unit-commerce-value, root-unit-security, root-unit-operations,
+             root-unit-platform, root-unit-frontend-sdk]
+  - include: ["packages/sdk/**"]
     suites: [backend-ingestion, root-unit-ingestion, functionality-proof-ts]
-  - include: ["services/api/graph/**", "services/api/intelligence/**"]
-    suites: [backend-computation, root-unit-graph]
-  - include: ["services/api/billing/**", "services/api/value/**", "services/api/journeys/**"]
-    suites: [backend-value, backend-campaigns, root-unit-commerce-value]
-  - include: ["services/api/alembic/**", "services/api/repositories/**"]
-    suites: [backend-identity, backend-ingestion, backend-value, root-unit-operations]
-  - include: ["services/api/actions/**", "services/api/connectors/**", "services/api/workers/**",
-              "services/api/middleware/**", "services/api/shared/**", "services/api/services/**",
-              "services/api/config/**", "services/api/dependencies/**", "services/api/main.py"]
-    suites: [backend-agent, backend-observability, root-unit-control, root-unit-platform]
   - include: ["infra/**", "amplify.yml", "docker-compose.yml"]
     suites: [root-unit-operations]
