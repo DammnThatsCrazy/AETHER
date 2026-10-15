@@ -17,6 +17,7 @@ Public paths (health, docs) bypass everything from step 3 onward.
 from __future__ import annotations
 
 import hashlib
+import base64
 import json
 import threading
 import time
@@ -59,15 +60,31 @@ _ACCESS_KIT_CAPABILITIES = {
     ("GET", "/v1/capability-catalog"): "agent_access.capabilities.list",
     ("GET", "/v1/capability-catalog/overview"): "agent_access.capabilities.overview",
     ("GET", "/v1/capability-catalog/{capability_id}"): "agent_access.capabilities.get",
+    ("GET", "/v1/billing/usage/summary"): "billing.usage.summary.read",
 }
 _ACCESS_KIT_SURFACES = frozenset({"cli", "mcp_stdio", "mcp_http", "access_sdk"})
 # A delegated MCP token is accepted only for these named read routes. The
-# request header is merely a surface hint; the token is independently checked
-# for issuer, exact MCP audience, scope, user, membership, and tenant status.
+# request header selects this path only when a per-request assertion from the
+# hosted MCP service is valid. The token is also checked for issuer, audience,
+# scope, user, membership, and tenant status.
 _MCP_OAUTH_READ_ROUTES = frozenset(
     path for (method, path), capability in _ACCESS_KIT_CAPABILITIES.items()
     if method == "GET" and capability != "auth.sessions.list"
 )
+
+
+def _token_declares_mcp_audience(token: str) -> bool:
+    """Prevent MCP-audience tokens from falling through to legacy JWT auth."""
+    audience = settings.auth0.mcp_audience
+    if not audience or len(token) > 8192 or token.count(".") != 2:
+        return False
+    try:
+        payload = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+        declared = claims.get("aud")
+        return declared == audience or (isinstance(declared, list) and audience in declared)
+    except (ValueError, TypeError, AttributeError):
+        return False
 
 
 async def _record_access_interaction(request: Request, response: Response) -> dict[str, str]:
@@ -1385,10 +1402,16 @@ async def _authenticate_async(
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
         if request.headers.get("x-aether-access-surface") == "mcp_http" and token.count(".") == 2:
+            from shared.auth.mcp_service_assertion import verify_mcp_service_assertion
+
+            if not verify_mcp_service_assertion(request, token):
+                raise UnauthorizedError("MCP service assertion is invalid")
             route = getattr(request.state, "access_route_template", request.url.path)
             if request.method.upper() not in {"GET"} or route not in _MCP_OAUTH_READ_ROUTES:
                 raise UnauthorizedError("MCP OAuth token is not valid for this route")
             return await _resolve_mcp_oauth_token(token)
+        if _token_declares_mcp_audience(token):
+            raise UnauthorizedError("MCP OAuth token requires the hosted MCP service")
         # Try API key first (SDK pattern); fall back to JWT (SSO/user pattern)
         try:
             return await api_key_validator.validate_async(token)

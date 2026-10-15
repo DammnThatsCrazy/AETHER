@@ -88,7 +88,7 @@ function parseAllowedOrigins(value) {
 
 function parseMcpPath(value) {
   const path = value || DEFAULT_REMOTE_MCP_PATH;
-  if (typeof path !== 'string' || !/^\/[A-Za-z0-9/_-]{1,127}$/.test(path)
+  if (typeof path !== 'string' || !/^\/[A-Za-z0-9/_-]{1,90}$/.test(path)
       || path.startsWith('//') || path.endsWith('/') || path.includes('//')) {
     throw new Error('AETHER_MCP_PATH must be a bounded absolute path without a trailing slash or repeated slash.');
   }
@@ -121,11 +121,15 @@ function parseOAuthConfig(env, path, allowedHostnames) {
 export function readRemoteMcpConfig(env = process.env) {
   const path = parseMcpPath(env.AETHER_MCP_PATH);
   const allowedHostnames = parseAllowedHostnames(env.AETHER_MCP_ALLOWED_HOSTS);
+  const oauth = parseOAuthConfig(env, path, allowedHostnames);
+  if (oauth && !/^[a-f0-9]{64}$/.test(env.AETHER_MCP_SERVICE_ASSERTION_KEY || '')) {
+    throw new Error('Delegated MCP OAuth requires a 32-byte service assertion key.');
+  }
   return {
     apiOrigin: readApiOrigin(env),
     path,
     allowedHostnames,
-    oauth: parseOAuthConfig(env, path, allowedHostnames),
+    oauth,
     ...parseAllowedOrigins(env.AETHER_MCP_ALLOWED_ORIGINS),
   };
 }
@@ -169,7 +173,7 @@ function readBearer(request, oauth) {
   return null;
 }
 
-function buildTenantEnv(apiOrigin, credential, observe) {
+function buildTenantEnv(apiOrigin, credential, observe, serviceAssertionKey) {
   const env = {
     AETHER_API_URL: apiOrigin,
     AETHER_ACCESS_SURFACE: 'mcp_http',
@@ -177,6 +181,7 @@ function buildTenantEnv(apiOrigin, credential, observe) {
       : credential.kind === 'session' ? { AETHER_SESSION_TOKEN: credential.token }
         : { AETHER_MCP_OAUTH_TOKEN: credential.token }),
   };
+  if (credential.kind === 'oauth') env.AETHER_MCP_SERVICE_ASSERTION_KEY = serviceAssertionKey;
   if (observe) {
     env.AETHER_PUBLISHABLE_KEY = observe.key;
     env.AETHER_SITE_ID = observe.siteId;
@@ -319,7 +324,7 @@ export function createRemoteMcpFetchHandler({ env = process.env } = {}) {
       jsonResponse(401, 'aether_bearer_required', { origin: access.origin }), config,
     );
 
-    const tenantEnv = buildTenantEnv(config.apiOrigin, credential, null);
+    const tenantEnv = buildTenantEnv(config.apiOrigin, credential, null, env.AETHER_MCP_SERVICE_ASSERTION_KEY);
     try {
       // Validate on every MCP protocol request. The API remains the source of
       // truth for credential validity, current tenant membership, and grants.
@@ -337,7 +342,8 @@ export function createRemoteMcpFetchHandler({ env = process.env } = {}) {
     if (credential.kind === 'oauth' && observeInput.observe) {
       return jsonResponse(403, 'oauth_read_scope_cannot_observe', { origin: access.origin });
     }
-    const requestEnv = buildTenantEnv(config.apiOrigin, credential, observeInput.observe);
+    const requestEnv = buildTenantEnv(config.apiOrigin, credential, observeInput.observe,
+      env.AETHER_MCP_SERVICE_ASSERTION_KEY);
 
     const handler = createMcpHandler(
       () => createAccessMcpServer(requestEnv, {

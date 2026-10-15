@@ -96,6 +96,28 @@ module "secrets" {
   project     = var.project
 }
 
+# A dedicated, randomly generated service assertion key prevents public REST
+# callers from replaying an MCP-audience bearer directly to the backend. Only
+# the customer MCP task and API task receive this secret at container start.
+resource "random_id" "access_mcp_service_assertion" {
+  count       = var.enable_access_mcp_oauth ? 1 : 0
+  byte_length = 32
+}
+
+resource "aws_secretsmanager_secret" "access_mcp_service_assertion" {
+  count                   = var.enable_access_mcp_oauth ? 1 : 0
+  name                    = "aether/access-mcp-service-assertion"
+  description             = "HMAC boundary between the hosted customer MCP service and Aether API"
+  kms_key_id              = module.secrets.kms_key_arn
+  recovery_window_in_days = 30
+}
+
+resource "aws_secretsmanager_secret_version" "access_mcp_service_assertion" {
+  count         = var.enable_access_mcp_oauth ? 1 : 0
+  secret_id     = aws_secretsmanager_secret.access_mcp_service_assertion[0].id
+  secret_string = random_id.access_mcp_service_assertion[0].hex
+}
+
 # ---------------------------------------------------------------------------
 # 3a. Provider-credential envelope-encryption CMK (modules/kms_credentials)
 #
@@ -444,28 +466,29 @@ module "ecs" {
     aws.untagged = aws.untagged
   }
 
-  environment                = var.environment
-  project                    = var.project
-  vpc_id                     = module.vpc.vpc_id
-  task_subnets               = local.ecs_task_subnets
-  ecs_sg_id                  = module.vpc.ecs_sg_id
-  ecr_backend_url            = module.ecr.repository_urls["aether-backend"]
-  backend_image_digest       = var.backend_image_digest
-  ecr_ml_url                 = module.ecr.repository_urls["aether-ml-serving"]
-  ml_image_digest            = var.ml_image_digest
-  alb_backend_tg_arn         = module.alb.backend_target_group_arn
-  alb_ml_tg_arn              = module.alb.ml_target_group_arn
-  database_host              = local.database_host
-  database_port              = local.database_port
-  database_name              = local.database_name
-  kyber_app_url              = var.kyber_app_url
-  api_base_url               = "https://${var.domain_name}"
-  kyber_google_hosted_domain = var.kyber_google_hosted_domain
-  deployment_profile         = var.deployment_profile
-  auth0_domain               = var.auth0_domain
-  auth0_api_audience         = var.auth0_api_audience
-  auth0_mcp_audience         = var.enable_access_mcp_oauth ? "https://${var.domain_name}${var.access_mcp_path}" : ""
-  aether_app_url             = local.aether_app_base_url
+  environment                      = var.environment
+  project                          = var.project
+  vpc_id                           = module.vpc.vpc_id
+  task_subnets                     = local.ecs_task_subnets
+  ecs_sg_id                        = module.vpc.ecs_sg_id
+  ecr_backend_url                  = module.ecr.repository_urls["aether-backend"]
+  backend_image_digest             = var.backend_image_digest
+  ecr_ml_url                       = module.ecr.repository_urls["aether-ml-serving"]
+  ml_image_digest                  = var.ml_image_digest
+  alb_backend_tg_arn               = module.alb.backend_target_group_arn
+  alb_ml_tg_arn                    = module.alb.ml_target_group_arn
+  database_host                    = local.database_host
+  database_port                    = local.database_port
+  database_name                    = local.database_name
+  kyber_app_url                    = var.kyber_app_url
+  api_base_url                     = "https://${var.domain_name}"
+  kyber_google_hosted_domain       = var.kyber_google_hosted_domain
+  deployment_profile               = var.deployment_profile
+  auth0_domain                     = var.auth0_domain
+  auth0_api_audience               = var.auth0_api_audience
+  auth0_mcp_audience               = var.enable_access_mcp_oauth ? "https://${var.domain_name}${var.access_mcp_path}" : ""
+  mcp_service_assertion_secret_arn = var.enable_access_mcp_oauth ? aws_secretsmanager_secret_version.access_mcp_service_assertion[0].arn : ""
+  aether_app_url                   = local.aether_app_base_url
   # The pilot lane is staging-only and keeps the one-time first-admin route
   # armed behind its Secrets Manager token and durable single-use marker. The
   # approved operator address reuses the required alert recipient; no secret
@@ -613,26 +636,28 @@ module "access_mcp" {
   # group with its HTTPS listener rule.
   depends_on = [module.alb]
 
-  environment        = var.environment
-  project            = var.project
-  aws_region         = var.aws_region
-  vpc_id             = module.vpc.vpc_id
-  subnet_ids         = values(local.ecs_task_subnets)
-  assign_public_ip   = local.assign_public_ip
-  alb_sg_id          = module.vpc.alb_sg_id
-  cluster_arn        = module.ecs.cluster_arn
-  target_group_arn   = module.alb.access_mcp_target_group_arn
-  ecr_repository_url = try(module.ecr.repository_urls["aether-access-mcp"], "")
-  ecr_repository_arn = try(module.ecr.repository_arns["aether-access-mcp"], "")
-  image_digest       = var.access_mcp_image_digest
-  api_url            = "https://${var.domain_name}"
-  allowed_host       = var.domain_name
-  allowed_origins    = var.access_mcp_allowed_origins
-  access_mcp_path    = var.access_mcp_path
-  oauth_resource_uri = var.enable_access_mcp_oauth ? "https://${var.domain_name}${var.access_mcp_path}" : ""
-  oauth_issuer       = var.enable_access_mcp_oauth ? "https://${var.auth0_domain}/" : ""
-  log_retention_days = var.log_retention_days
-  desired_count      = var.access_mcp_desired_count
+  environment                   = var.environment
+  project                       = var.project
+  aws_region                    = var.aws_region
+  vpc_id                        = module.vpc.vpc_id
+  subnet_ids                    = values(local.ecs_task_subnets)
+  assign_public_ip              = local.assign_public_ip
+  alb_sg_id                     = module.vpc.alb_sg_id
+  cluster_arn                   = module.ecs.cluster_arn
+  target_group_arn              = module.alb.access_mcp_target_group_arn
+  ecr_repository_url            = try(module.ecr.repository_urls["aether-access-mcp"], "")
+  ecr_repository_arn            = try(module.ecr.repository_arns["aether-access-mcp"], "")
+  image_digest                  = var.access_mcp_image_digest
+  api_url                       = "https://${var.domain_name}"
+  allowed_host                  = var.domain_name
+  allowed_origins               = var.access_mcp_allowed_origins
+  access_mcp_path               = var.access_mcp_path
+  oauth_resource_uri            = var.enable_access_mcp_oauth ? "https://${var.domain_name}${var.access_mcp_path}" : ""
+  oauth_issuer                  = var.enable_access_mcp_oauth ? "https://${var.auth0_domain}/" : ""
+  service_assertion_secret_arn  = var.enable_access_mcp_oauth ? aws_secretsmanager_secret_version.access_mcp_service_assertion[0].arn : ""
+  service_assertion_kms_key_arn = module.secrets.kms_key_arn
+  log_retention_days            = var.log_retention_days
+  desired_count                 = var.access_mcp_desired_count
 }
 
 # ---------------------------------------------------------------------------

@@ -237,6 +237,12 @@ variable "auth0_mcp_audience" {
   default     = ""
 }
 
+variable "mcp_service_assertion_secret_arn" {
+  type        = string
+  description = "Secrets Manager version ARN of the private MCP-to-API HMAC key; mounted only into the API task."
+  default     = ""
+}
+
 variable "aether_app_url" {
   type        = string
   description = "Canonical Aether customer-app origin used by backend email and billing links."

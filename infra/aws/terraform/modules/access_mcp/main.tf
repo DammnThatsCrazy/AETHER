@@ -43,8 +43,8 @@ resource "aws_cloudwatch_log_group" "this" {
 }
 
 # This role is used by the ECS/Fargate agent for ECR image pulls and awslogs.
-# The policy is scoped to this image repository and log group. No secret is
-# injected into this task, so no Secrets Manager or KMS permission is needed.
+# The policy is scoped to the image repository, log group, and optional
+# service assertion secret injected only when delegated OAuth is enabled.
 resource "aws_iam_role" "execution" {
   name               = "${local.service_name}-execution"
   assume_role_policy = data.aws_iam_policy_document.tasks_assume.json
@@ -61,7 +61,7 @@ resource "aws_iam_role_policy" "execution" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Sid      = "EcrAuthorizationToken"
         Effect   = "Allow"
@@ -87,12 +87,25 @@ resource "aws_iam_role_policy" "execution" {
         ]
         Resource = "${aws_cloudwatch_log_group.this.arn}:*"
       },
-    ]
+      ], var.service_assertion_secret_arn == "" ? [] : [
+      {
+        Sid      = "ReadMcpServiceAssertion"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = var.service_assertion_secret_arn
+      },
+      {
+        Sid      = "DecryptMcpServiceAssertion"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = var.service_assertion_kms_key_arn
+      },
+    ])
   })
 }
 
-# The customer-facing MCP process receives only caller-provided, per-request
-# Aether credentials. It does not receive an AWS permission policy.
+# The customer-facing MCP process receives caller-provided, per-request Aether
+# credentials and an injected service assertion key. It has no AWS API policy.
 resource "aws_iam_role" "task" {
   name               = "${local.service_name}-task"
   assume_role_policy = data.aws_iam_policy_document.tasks_assume.json
@@ -170,6 +183,9 @@ resource "aws_ecs_task_definition" "this" {
         ], length(var.allowed_origins) == 0 ? [] : [
         { name = "AETHER_MCP_ALLOWED_ORIGINS", value = join(",", var.allowed_origins) },
       ])
+      secrets = var.service_assertion_secret_arn == "" ? [] : [
+        { name = "AETHER_MCP_SERVICE_ASSERTION_KEY", valueFrom = var.service_assertion_secret_arn },
+      ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { normalizeInteractionOutcome } from './interaction.mjs';
+import { mcpServiceAssertionHeaders } from './mcp-service-assertion.mjs';
 
 const DEFAULT_API_URL = 'https://api.aether.io';
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -74,7 +75,7 @@ export function readConfig(env = process.env) {
   const authHeaders = sessionToken
     ? { 'x-session-token': sessionToken }
     : { authorization: `Bearer ${apiKey || oauthToken}` };
-  return { apiOrigin, authHeaders };
+  return { apiOrigin, authHeaders, oauthToken };
 }
 
 export function readPublishableConfig(env = process.env) {
@@ -99,7 +100,7 @@ async function readRequest(
   env = process.env,
   { method = 'GET', operation = 'query' } = {},
 ) {
-  const { apiOrigin, authHeaders } = readConfig(env);
+  const { apiOrigin, authHeaders, oauthToken } = readConfig(env);
   const url = new URL(path, `${apiOrigin}/`);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
@@ -121,6 +122,9 @@ async function readRequest(
         ...authHeaders,
         'x-correlation-id': correlationId,
         ...(surface ? { 'x-aether-access-surface': surface } : {}),
+        ...(oauthToken ? mcpServiceAssertionHeaders({
+          method, url, token: oauthToken, secret: env.AETHER_MCP_SERVICE_ASSERTION_KEY,
+        }) : {}),
       },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });

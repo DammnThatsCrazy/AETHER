@@ -108,7 +108,7 @@ variable "access_mcp_path" {
   default     = "/v1/access/mcp"
   validation {
     condition = (
-      can(regex("^/[A-Za-z0-9/_-]{1,127}$", var.access_mcp_path)) &&
+      can(regex("^/[A-Za-z0-9/_-]{1,90}$", var.access_mcp_path)) &&
       !startswith(var.access_mcp_path, "//") &&
       !startswith(lower(var.access_mcp_path), "/mcp") &&
       !endswith(var.access_mcp_path, "/") &&
