@@ -3,8 +3,9 @@
 Every self-serve customer owner holds role ``admin``, which satisfies every
 ``require_permission()`` check. The route policy and the handlers themselves
 must still refuse that owner on routes that act on other tenants or on
-platform-wide state, while a tenant listed in ``PLATFORM_OPERATOR_TENANT_IDS``
-keeps access and owners keep their own tenant's customer routes.
+platform-wide state, while an admin of a tenant listed in
+``PLATFORM_OPERATOR_TENANT_IDS`` keeps access (members and viewers of that
+tenant do not) and owners keep their own tenant's customer routes.
 """
 
 from __future__ import annotations
@@ -108,8 +109,11 @@ def _principal(name: str):
 
     owner_role, owner_permissions = grants_for("owner")
     member_role, member_permissions = grants_for("member")
+    viewer_role, viewer_permissions = grants_for("viewer")
     principals = {
         "operator": (OPERATOR_TENANT, owner_role, owner_permissions),
+        "operator_member": (OPERATOR_TENANT, member_role, member_permissions),
+        "operator_viewer": (OPERATOR_TENANT, viewer_role, viewer_permissions),
         "customer_owner": (CUSTOMER_TENANT, owner_role, owner_permissions),
         "customer_member": (CUSTOMER_TENANT, member_role, member_permissions),
     }
@@ -211,9 +215,9 @@ def observe_client(monkeypatch):
     platform_operator.reset_platform_operator_cache()
 
 
-@pytest.mark.parametrize("principal", ["customer_owner", "customer_member"])
+@pytest.mark.parametrize("principal", ["customer_owner", "customer_member", "operator_member", "operator_viewer"])
 @pytest.mark.parametrize(("method", "path", "body"), PLATFORM_ROUTES)
-def test_customer_principals_are_refused_on_platform_routes(enforced_client, principal, method, path, body):
+def test_non_operator_principals_are_refused_on_platform_routes(enforced_client, principal, method, path, body):
     response = _call(enforced_client, principal, method, path, body)
     assert response.status_code == 403, response.text
 
@@ -224,9 +228,10 @@ def test_platform_operator_reaches_platform_routes(enforced_client, method, path
     assert 200 <= response.status_code < 300, response.text
 
 
+@pytest.mark.parametrize("principal", ["customer_owner", "operator_member"])
 @pytest.mark.parametrize(("method", "path", "body"), HANDLER_GUARDED_ROUTES)
-def test_handlers_refuse_customer_owner_without_route_enforcement(observe_client, method, path, body):
-    response = _call(observe_client, "customer_owner", method, path, body)
+def test_handlers_refuse_non_operators_without_route_enforcement(observe_client, principal, method, path, body):
+    response = _call(observe_client, principal, method, path, body)
     assert response.status_code == 403, response.text
 
 
@@ -309,3 +314,28 @@ def test_registry_marks_platform_routes_operator_required():
         "/v1/billing/plan",
     ):
         assert classify(template).platform_operator_required is False, template
+
+
+def test_startup_warns_when_no_platform_operator_tenant_is_configured(monkeypatch):
+    from config.settings import Environment, settings
+    from shared.auth import platform_operator
+
+    warnings: list[str] = []
+    monkeypatch.setattr(platform_operator.logger, "warning", lambda msg, *a: warnings.append(msg % a if a else msg))
+    monkeypatch.setattr(settings, "security_governance", dataclasses.replace(
+        settings.security_governance, platform_operator_tenant_ids=[],
+    ))
+
+    monkeypatch.setattr(settings, "env", Environment.LOCAL)
+    platform_operator.warn_if_no_platform_operator_tenants()
+    assert warnings == []
+
+    monkeypatch.setattr(settings, "env", Environment.PRODUCTION)
+    platform_operator.warn_if_no_platform_operator_tenants()
+    assert len(warnings) == 1 and "PLATFORM_OPERATOR_TENANT_IDS" in warnings[0]
+
+    monkeypatch.setattr(settings, "security_governance", dataclasses.replace(
+        settings.security_governance, platform_operator_tenant_ids=[OPERATOR_TENANT],
+    ))
+    platform_operator.warn_if_no_platform_operator_tenants()
+    assert len(warnings) == 1

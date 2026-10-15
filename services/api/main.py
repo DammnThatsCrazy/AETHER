@@ -433,6 +433,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # non-local startup before any database/broker connections are opened.
     if settings.route_registry.route_registry_enforced:
         app.state.route_policy_inventory = validate_mounted_routes(app.routes)
+    from shared.auth.platform_operator import warn_if_no_platform_operator_tenants
+    warn_if_no_platform_operator_tenants()
 
     # Coherence guard (AAI PR-1): the canonical agentic-observability spine only
     # PROJECTS while the FT-6 outbox relay drains event_outbox. If delegation is
