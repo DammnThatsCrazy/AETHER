@@ -116,7 +116,7 @@ Redis/durable backing is missing (`shared/store.py` invariant).
   default-OFF, ops modules importable, runtime stores reachable, worker
   bridge fails closed in hosted mode, mutation commit approval-gated,
   all six source-of-truth docs present, and
-  `infra/aws/terraform/profiles/production-lean.tfvars` pins at least one
+  `infra/aws/terraform/profiles/production.tfvars` pins at least one
   `platform_operator_tenant_ids` entry. Wired into `make release-gate`
   after repo consistency and strict production status.
 - Backend suites: `BE/tests/one_person_ops/` (dispatch idempotency,
