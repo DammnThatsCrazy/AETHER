@@ -103,7 +103,10 @@ Aether resolves the tenant from that stored delivery, never from a header or
 signed the delivery; the platform-wide `DELIVERY_WEBHOOK_SIGNING_SECRET` is not
 accepted for callbacks. `X-Aether-Timestamp`
 (unix seconds) is required and must be within 300 seconds of receipt. Callbacks
-that match no stored delivery are dead-lettered and never applied.
+that match no stored delivery are dead-lettered and never applied. A channel
+without a signing secret sends unsigned deliveries, and callbacks for them can
+never verify, so they are dead-lettered too: give every webhook channel a
+secret.
 
 ## Secret Rotation
 
