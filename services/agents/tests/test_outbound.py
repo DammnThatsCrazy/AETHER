@@ -145,3 +145,44 @@ def test_api_scanner_rejects_non_public_destination(no_connection, domain):
     assert result.success is False
     assert "public" in result.error
     no_connection.assert_not_called()
+
+
+@pytest.mark.parametrize("domain", ["internal.example", "169.254.169.254", "evil.example@10.0.0.5"])
+def test_competitor_tracker_rejects_non_public_destination(no_connection, domain):
+    from workers.discovery.competitor_tracker import CompetitorTrackerWorker
+
+    result = CompetitorTrackerWorker(MagicMock())._execute(
+        _task(WorkerType.COMPETITOR_TRACKER, {"domain": domain, "watch_pages": ["/"]})
+    )
+    assert result.success is False
+    no_connection.assert_not_called()
+
+
+@pytest.mark.parametrize("website", ["https://internal.example", "http://169.254.169.254/latest", "127.0.0.1"])
+def test_profile_enricher_rejects_non_public_destination(no_connection, website):
+    from workers.enrichment.profile_enricher import ProfileEnricherWorker
+
+    enriched = {"website": website}
+    filled, sources = ProfileEnricherWorker(MagicMock())._enrich_company(enriched, ["description"])
+    assert (filled, sources) == (0, [])
+    no_connection.assert_not_called()
+
+
+def test_competitor_tracker_fetches_validated_address():
+    from workers.discovery.competitor_tracker import CompetitorTrackerWorker
+
+    seen: list[httpx.Request] = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(200, text="<html><title>A</title></html>")
+
+    real_client = httpx.Client
+    with patch("httpx.Client", lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw)):
+        result = CompetitorTrackerWorker(MagicMock())._execute(
+            _task(WorkerType.COMPETITOR_TRACKER, {"domain": "a.example", "watch_pages": ["/"], "track_jobs": False})
+        )
+    assert result.success is True
+    assert [r.url.host for r in seen] == ["93.184.216.34"]
+    assert seen[0].headers["host"] == "a.example"
+    assert result.data["snapshots"][0]["url"] == "https://a.example/"
