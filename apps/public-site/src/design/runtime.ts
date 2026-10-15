@@ -83,11 +83,13 @@ function important(decls: string): string {
     .join('; ');
 }
 
-export function hoverClass(decls: string | null | undefined, kind: 'hover' | 'focus' = 'hover'): string {
+const PSEUDO = { hover: ':hover', focus: ':focus-visible', active: ':active' } as const;
+
+export function hoverClass(decls: string | null | undefined, kind: 'hover' | 'focus' | 'active' = 'hover'): string {
   if (!decls) return '';
-  const name = `${kind === 'hover' ? 'hd' : 'fd'}-${hash(decls)}`;
+  const name = `${kind === 'hover' ? 'hd' : kind === 'focus' ? 'fd' : 'ad'}-${hash(decls)}`;
   if (!dynamicRules.has(name)) {
-    const pseudo = kind === 'hover' ? ':hover' : ':focus-visible';
+    const pseudo = PSEUDO[kind];
     const rule = `.${name}${pseudo} { ${important(decls)}; }`;
     dynamicRules.set(name, rule);
     if (typeof document !== 'undefined') {

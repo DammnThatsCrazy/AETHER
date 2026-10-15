@@ -2,7 +2,8 @@
  * Built from design/designs/Aether Detail Page.dc.html (copy, layout and styles verbatim).
  */
 import { Fragment } from 'react';
-import { css, useLink } from '@site/design/runtime';
+import { asset, css, useLink } from '@site/design/runtime';
+import { markSrc } from '@site/components/brand-mark';
 import { usePageMeta } from '@site/design/page-meta';
 import { SiteFooter } from '@site/components/site-footer';
 import { SiteHeader } from '@site/components/site-header';
@@ -44,6 +45,9 @@ export const DETAILS: Record<string, Detail> = {
 export const TRUST_TOPICS = ['privacy', 'governance', 'deployment'] as const;
 export const CONNECT_TOPICS = ['connectors', 'sdks', 'apis', 'imports'] as const;
 
+// Logos shown under each topic's call to action (AE = the Aether mark).
+const LG: Record<string, string[]> = { connectors: ['shopify', 'stripe', 'hubspot', 'salesforce', 'klaviyo', 'segment', 'slack'], sdks: ['AE', 'apple'], apis: ['AE', 'stripe', 'segment', 'slack'], imports: ['shopify', 'hubspot', 'stripe', 'salesforce'], privacy: ['AE'], governance: ['AE'], deployment: ['AE'] };
+
 export function AetherDetailPage() {
   const link = useLink();
   const { topic = '' } = useParams();
@@ -54,6 +58,7 @@ export function AetherDetailPage() {
   const nx = DETAILS[p.next]!;
   usePageMeta('aether-detail', { title: p.name + ' — Aether', description: p.lead });
   const d = { ...p, nextLabel: nx.name, nextHref: Self + p.next };
+  const logos = (LG[known ? topic : ''] ?? []).map((k) => ({ logo: k === 'AE' ? markSrc('aether') : asset('assets/brand/' + k + '.svg') }));
   const steps = p.steps.map(([t, b], i) => ({ t, b, n: '0' + (i + 1), style: 'display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 16px; align-items: baseline; padding: 20px 0; border-bottom: 1px solid #2a2a2f; animation: dtIn 320ms cubic-bezier(0.22,1,0.36,1) ' + (i * 80) + 'ms both;' }));
   if (!known) return <Navigate to={section === 'trust' ? '/trust' : '/connect'} replace />;
   return (
@@ -86,6 +91,13 @@ export function AetherDetailPage() {
                 {"→"}
               </span>
             </a>
+            <div style={css("display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px;")}>
+              {logos.map((l, lIndex) => (
+                <span key={lIndex} style={css("width: 44px; height: 44px; border-radius: 13px; background: #fff; border: 1px solid #e2e0da; display: inline-flex; align-items: center; justify-content: center;")}>
+                  <img src={l.logo} alt="" style={css("width: 26px; height: 26px; object-fit: contain;")} />
+                </span>
+              ))}
+            </div>
           </div>
         </section>
         <section data-theme="dark" style={css("background: #111114; color: #e8e6e1;")}>

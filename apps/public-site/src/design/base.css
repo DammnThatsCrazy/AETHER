@@ -100,3 +100,9 @@
   border-top: 1px solid #d8d6d0;
   margin: 32px 0;
 }
+
+/* The glass diagrams loop gentle float and line-flow animations; with reduced
+   motion they run once (in ~0ms) and hold still. */
+@media (prefers-reduced-motion: reduce) {
+  .dc *, .ax-app * { animation-iteration-count: 1 !important; }
+}

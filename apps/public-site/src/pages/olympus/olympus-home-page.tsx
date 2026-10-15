@@ -53,7 +53,7 @@ export function OlympusHomePage() {
             </div>
           </div>
         </section>
-        <section data-theme="dark" style={css("background: #111114; color: #e8e6e1;")}>
+        <section data-theme="dark" style={css("background: radial-gradient(60% 50% at 85% 18%, rgba(58,104,150,0.42), transparent 70%), radial-gradient(50% 45% at 8% 92%, rgba(107,154,124,0.24), transparent 70%), radial-gradient(45% 40% at 92% 92%, rgba(201,151,90,0.26), transparent 70%), #111114; color: #e8e6e1;")}>
           <div style={css("max-width: 960px; margin: 0 auto; padding: clamp(80px, 11vw, 144px) 24px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 20px;")}>
             <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;")}>
               {"The problem"}
@@ -154,22 +154,27 @@ export function OlympusHomePage() {
             </ul>
           </div>
         </section>
-        <section style={css("border-bottom: 1px solid #d8d6d0; background: #eceae5;")}>
-          <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(80px, 11vw, 144px) 24px; display: flex; flex-direction: column; gap: 40px;")}>
-            <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;")}>
-              {"Why the approach is different"}
-            </span>
-            <div style={css("display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: clamp(32px, 4vw, 56px);")}>
+        <section data-theme="dark" style={css("background: radial-gradient(60% 50% at 85% 18%, rgba(58,104,150,0.42), transparent 70%), radial-gradient(50% 45% at 8% 92%, rgba(107,154,124,0.24), transparent 70%), radial-gradient(45% 40% at 92% 92%, rgba(201,151,90,0.26), transparent 70%), #111114; color: #e8e6e1;")}>
+          <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(80px, 11vw, 144px) 24px; display: flex; flex-direction: column; gap: clamp(48px, 6vw, 88px);")}>
+            <div style={css("display: flex; flex-direction: column; gap: 20px;")}>
+              <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;")}>
+                {"Why the approach is different"}
+              </span>
+              <h2 style={css("font-size: clamp(40px, 6.4vw, 88px); font-weight: 500; letter-spacing: -0.045em; line-height: 0.96; margin: 0; max-width: 900px; text-wrap: balance; color: #e8e6e1;")}>
+                {"Three beliefs. Everything we build follows from them."}
+              </h2>
+            </div>
+            <div style={css("display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 0; border-top: 1px solid #2a2a2f;")}>
               {(beliefs).map((b: any, bIndex: number) => (
                 <Fragment key={bIndex}>
-                  <div style={css("display: flex; flex-direction: column; gap: 12px;")}>
-                    <span style={css("font-family: var(--font-mono); font-size: 12px; color: #9c9b95;")}>
+                  <div style={css("display: flex; flex-direction: column; gap: 20px; padding: clamp(28px, 3vw, 40px) clamp(0px, 2vw, 32px) clamp(28px, 3vw, 40px) 0; border-bottom: 1px solid #2a2a2f;")}>
+                    <span style={css("font-family: var(--font-mono); font-size: clamp(56px, 7vw, 96px); font-weight: 400; letter-spacing: -0.04em; line-height: 1; color: #5a85a8;")}>
                       {b.n}
                     </span>
-                    <span style={css("font-size: clamp(20px, 2vw, 24px); font-weight: 500; letter-spacing: -0.02em; line-height: 1.3;")}>
+                    <span style={css("font-size: clamp(26px, 3vw, 38px); font-weight: 500; letter-spacing: -0.03em; line-height: 1.1; color: #e8e6e1; text-wrap: balance;")}>
                       {b.t}
                     </span>
-                    <span style={css("font-size: 14px; line-height: 1.6; color: #6b6a65;")}>
+                    <span style={css("font-size: 15px; line-height: 1.6; color: #a09f99; max-width: 380px; text-wrap: pretty;")}>
                       {b.b}
                     </span>
                   </div>
