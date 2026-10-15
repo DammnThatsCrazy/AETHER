@@ -57,10 +57,13 @@ from shared.graph.edge_properties import (
 )
 from shared.graph.generated_mutation_taxonomy import GRAPH_MUTATION_TYPES
 from shared.graph.graph import (
+    RESERVED_GRAPH_TENANTS,
     Edge,
     Vertex,
+    VertexOwnershipError,
     _InMemoryGraphBackend,
     TENANT_PROPERTY,
+    check_vertex_owner,
     get_graph_client,
     tenant_of,
 )
@@ -236,6 +239,8 @@ class GraphMutationGateway:
         for every caller that does not opt in.
         """
         mode = mode_override if mode_override in _MODES else _gateway_mode()
+        if intent.vertex is not None:
+            await self._check_vertex_owner(intent)
         if mode == "off":
             # Zero behavior change: exactly what a direct writer does today.
             result = await self._project(intent)
@@ -396,6 +401,22 @@ class GraphMutationGateway:
         )
 
     # ── Pipeline stages ─────────────────────────────────────────────────────
+
+    async def _check_vertex_owner(self, intent: MutationIntent) -> None:
+        """Refuse a vertex write that would change its owner, before any ledger write.
+
+        The backends enforce the same rule atomically; this check also keeps a
+        tenant writer off ``platform``/``public`` reference vertices, which
+        only a write made for that reserved scope may create or modify.
+        """
+        vertex = intent.vertex
+        assert vertex is not None
+        existing = await self._client().get_vertex(vertex.vertex_id)
+        tenant = check_vertex_owner(
+            existing.properties if existing is not None else None, vertex.properties,
+        )
+        if tenant in RESERVED_GRAPH_TENANTS and intent.tenant_id != tenant:
+            raise VertexOwnershipError()
 
     def _check_shape(self, intent: MutationIntent) -> None:
         if intent.operation not in GRAPH_MUTATION_TYPES:
@@ -881,7 +902,7 @@ def replay_state(records: Iterable[dict]) -> GraphReplayState:
     Pure read: never mutates canonical state; the same records always produce
     the same state and digest.
     """
-    backend = _InMemoryGraphBackend()
+    backend = _InMemoryGraphBackend(enforce_ownership=False)
     _apply_records(backend, records)
     return GraphReplayState(
         vertices=dict(backend._vertices),

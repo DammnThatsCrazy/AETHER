@@ -124,6 +124,7 @@ class World:
         self.merged_entity = f"ent-merged-{tag}"
         self.other_entity = f"ent-other-{tag}"
         self.b_entity = f"ent-b-{tag}"
+        self.wallet = f"wallet-x-{tag}"
         self.job_id = f"job_{tag}"
 
 
@@ -191,14 +192,14 @@ async def _seed_graph(world: World) -> None:
     from shared.graph.graph import Edge, Vertex, get_graph_client
 
     graph = get_graph_client()
-    for vid in (world.entity, world.other_entity, "wallet-x"):
+    for vid in (world.entity, world.other_entity, world.wallet):
         await graph.add_vertex(Vertex(vertex_type="User", vertex_id=vid,
                                       properties={"tenant_id": world.tenant}))
-    await graph.add_edge(Edge("OWNS_WALLET", world.entity, "wallet-x",
+    await graph.add_edge(Edge("OWNS_WALLET", world.entity, world.wallet,
                               {"tenant_id": world.tenant}))
     await graph.add_edge(Edge("SIMILAR_TO", world.other_entity, world.entity,
                               {"tenant_id": world.tenant}))
-    await graph.add_edge(Edge("OWNS_WALLET", world.other_entity, "wallet-x",
+    await graph.add_edge(Edge("OWNS_WALLET", world.other_entity, world.wallet,
                               {"tenant_id": world.tenant}))
     # Same vertex id carrying another tenant's edge: never touched.
     await graph.add_edge(Edge("OWNS_WALLET", world.entity, "wallet-b",
@@ -545,7 +546,7 @@ async def _assert_stores_erased(world: World) -> None:
     live = await graph.get_edges(world.entity, direction="both")
     assert [e.properties["tenant_id"] for e in live] == [ot]
     other_live = await graph.get_edges(world.other_entity, direction="both")
-    assert [(e.to_vertex_id) for e in other_live] == ["wallet-x"]
+    assert [(e.to_vertex_id) for e in other_live] == [world.wallet]
 
     # profile360
     assert await _ProfileStore().find_by_id(USER) is None

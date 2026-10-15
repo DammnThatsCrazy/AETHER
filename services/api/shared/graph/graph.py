@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from shared.common.common import ConflictError
 from shared.logger.logger import get_logger
 
 logger = get_logger("aether.graph")
@@ -58,6 +59,44 @@ def tenant_of(properties: Optional[dict[str, Any]]) -> Optional[str]:
         if value is not None and value != "":
             return str(value)
     return None
+
+
+#: Owners of shared reference vertices (asset registry, interop topology).
+#: Writes made for any other tenant never modify a vertex they own.
+RESERVED_GRAPH_TENANTS = frozenset({"platform", "public"})
+
+
+class VertexOwnershipError(ConflictError):
+    """A vertex write that would change, or write across, a vertex's owner."""
+
+    def __init__(self, message: str = "graph vertex id is unavailable in this tenant") -> None:
+        super().__init__(message)
+
+
+def vertex_tenant(properties: Optional[dict[str, Any]]) -> Optional[str]:
+    """``tenant_of`` for a vertex being written; both spellings must agree."""
+    named = {
+        str(value) for key in _TENANT_PROPERTY_ALIASES
+        if (value := (properties or {}).get(key)) not in (None, "")
+    }
+    if len(named) > 1:
+        raise VertexOwnershipError("vertex tenant properties disagree")
+    return tenant_of(properties)
+
+
+def check_vertex_owner(
+    existing: Optional[dict[str, Any]], incoming: Optional[dict[str, Any]],
+) -> Optional[str]:
+    """Return the incoming vertex's tenant, refusing a write that changes the owner.
+
+    ``existing`` is the stored vertex's properties (``None`` when the vertex is
+    new). The stored and incoming tenants must be equal; a vertex with no
+    tenant can only be rewritten by a write that names none.
+    """
+    tenant = vertex_tenant(incoming)
+    if existing is not None and tenant_of(existing) != tenant:
+        raise VertexOwnershipError()
+    return tenant
 
 
 def _is_revoked_marker(value: Any) -> bool:
@@ -1012,13 +1051,24 @@ def _graph_backend() -> str:
 # ═══════════════════════════════════════════════════════════════════════════
 
 class _InMemoryGraphBackend:
-    """Dict-based graph for local development."""
+    """Dict-based graph for local development.
 
-    def __init__(self) -> None:
+    ``enforce_ownership=False`` is only for rebuilding state from the mutation
+    ledger, which replays writes already accepted in their original order.
+    """
+
+    def __init__(self, enforce_ownership: bool = True) -> None:
         self._vertices: dict[str, Vertex] = {}
         self._edges: list[Edge] = []
+        self._enforce_ownership = enforce_ownership
+
+    def _check_owner(self, vertex: Vertex) -> None:
+        if self._enforce_ownership:
+            existing = self._vertices.get(vertex.vertex_id)
+            check_vertex_owner(existing.properties if existing else None, vertex.properties)
 
     async def add_vertex(self, vertex: Vertex) -> str:
+        self._check_owner(vertex)
         self._vertices[vertex.vertex_id] = vertex
         return vertex.vertex_id
 
@@ -1245,6 +1295,7 @@ class _InMemoryGraphBackend:
         return []
 
     async def upsert_vertex(self, vertex: Vertex) -> str:
+        self._check_owner(vertex)
         existing = self._vertices.get(vertex.vertex_id)
         if existing:
             existing.properties.update(vertex.properties)
@@ -1420,9 +1471,11 @@ class _PostgresGraphBackend:
 
     # ── writes ───────────────────────────────────────────────────────────────
     async def add_vertex(self, vertex: Vertex) -> str:
-        # Last-write-wins overwrite (in-memory: ``self._vertices[id] = vertex``).
+        # Last-write-wins overwrite (in-memory: ``self._vertices[id] = vertex``),
+        # but only of a vertex with the same owner.
+        tenant = vertex_tenant(vertex.properties)
         async with self._pool.acquire() as conn:
-            await conn.execute(
+            status = await conn.execute(
                 """
                 INSERT INTO graph_vertices
                     (vertex_id, vertex_type, tenant_id, properties, created_at)
@@ -1433,13 +1486,16 @@ class _PostgresGraphBackend:
                     properties  = EXCLUDED.properties,
                     created_at  = EXCLUDED.created_at,
                     updated_at  = NOW()
+                WHERE graph_vertices.tenant_id IS NOT DISTINCT FROM EXCLUDED.tenant_id
                 """,
                 vertex.vertex_id,
                 vertex.vertex_type,
-                tenant_of(vertex.properties),
+                tenant,
                 self._dump(vertex.properties),
                 vertex.created_at,
             )
+        if status.endswith(" 0"):
+            raise VertexOwnershipError()
         return vertex.vertex_id
 
     async def add_edge(self, edge: Edge) -> None:
@@ -1522,8 +1578,10 @@ class _PostgresGraphBackend:
                     "FOR UPDATE",
                     vertex.vertex_id,
                 )
-                if row is not None:
-                    merged = {**self._load(row["properties"]), **(vertex.properties or {})}
+                stored = self._load(row["properties"]) if row is not None else None
+                check_vertex_owner(stored, vertex.properties)
+                if stored is not None:
+                    merged = {**stored, **(vertex.properties or {})}
                     await conn.execute(
                         "UPDATE graph_vertices SET properties = $2::jsonb, "
                         "tenant_id = $3, updated_at = NOW() WHERE vertex_id = $1",
@@ -1828,6 +1886,9 @@ class _NeptuneGraphBackend:
         return self._g
 
     async def add_vertex(self, vertex: Vertex) -> str:
+        # Neptune rejects ``addV`` for an id that already exists, so this never
+        # replaces another owner's vertex.
+        vertex_tenant(vertex.properties)
         g = await self._ensure_connected()
         t = g.addV(vertex.vertex_type).property(T.id, vertex.vertex_id)
         t = t.property("created_at", vertex.created_at)
@@ -2290,19 +2351,25 @@ class _NeptuneGraphBackend:
         return []
 
     async def upsert_vertex(self, vertex: Vertex) -> str:
+        tenant = vertex_tenant(vertex.properties)
         g = await self._ensure_connected()
         try:
-            # Try to find existing vertex first
-            existing = g.V(vertex.vertex_id).hasNext()
-            if existing:
-                t = g.V(vertex.vertex_id)
-                for k, v in vertex.properties.items():
-                    t = t.property(Cardinality.single, k, str(v))
-                t.next()
-            else:
-                await self.add_vertex(vertex)
+            exists = g.V(vertex.vertex_id).hasNext()
         except Exception:
+            exists = False
+        if not exists:
             await self.add_vertex(vertex)
+            return vertex.vertex_id
+        # Only a vertex with the same owner (either spelling) is updated.
+        t = g.V(vertex.vertex_id)
+        if tenant is None:
+            t = t.hasNot("tenantId").hasNot("tenant_id")
+        else:
+            t = t.or_(__.has("tenantId", tenant), __.has("tenant_id", tenant))
+        for k, v in vertex.properties.items():
+            t = t.property(Cardinality.single, k, str(v))
+        if not t.toList():
+            raise VertexOwnershipError()
         return vertex.vertex_id
 
     async def ping(self) -> bool:
