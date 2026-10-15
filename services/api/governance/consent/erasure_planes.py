@@ -298,7 +298,11 @@ async def erase_identity_plane(subject: ErasureSubject) -> dict[str, Receipt]:
     identity_edges = await _delete_where(
         repo._edges, tenant, ["source_entity_id", "target_entity_id"], ids  # noqa: SLF001
     )
-    graph_revoked = await _revoke_graph_edges(tenant, subject.refs)
+    from shared.graph.graph import user_vertex_id
+
+    graph_revoked = await _revoke_graph_edges(
+        tenant, set(subject.refs) | {user_vertex_id(tenant, subject.user_id)},
+    )
 
     return {
         IDENTITY_ALIASES_COMPONENT: Receipt(
@@ -366,7 +370,7 @@ async def _revoke_graph_edges(tenant_id: str, vertex_ids: Iterable[str]) -> int:
 async def erase_profile360_plane(subject: ErasureSubject) -> dict[str, Receipt]:
     """Hard-delete the Profile 360 snapshot stores for the subject.
 
-    ``profiles`` (the identity profile row, keyed by user id), the derived
+    ``profiles`` (the identity profile row, keyed ``{tenant}:{user id}``), the derived
     ``behavior_profiles`` snapshot (keyed by entity id) and the cross-journey
     ``journey_chains`` memory. All three are ``hard_delete`` by storage policy.
     """
@@ -374,11 +378,14 @@ async def erase_profile360_plane(subject: ErasureSubject) -> dict[str, Receipt]:
         BehaviorProfileRepository,
         JourneyChainRepository,
         _ProfileStore,
+        tenant_record_id,
     )
 
     tenant = subject.tenant_id
     ids = sorted(subject.entity_refs)
-    profiles = await _delete_where(_ProfileStore(), tenant, ["id"], ids)
+    profiles = await _delete_where(
+        _ProfileStore(), tenant, ["id"], [tenant_record_id(tenant, i) for i in ids],
+    )
     behavior = await _delete_where(BehaviorProfileRepository(), tenant, ["entity_id"], ids)
     chains = await _delete_where(JourneyChainRepository(), tenant, ["entity_id"], ids)
     return {

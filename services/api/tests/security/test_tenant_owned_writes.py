@@ -81,7 +81,7 @@ async def test_entity_id_reused_by_another_tenant_conflicts_and_keeps_the_row(ba
 
     with pytest.raises(ConflictError) as raised:
         await entities.create_entity(entity_id, b, "organization", display_name="Taken by B")
-    assert a not in str(raised.value) and b not in str(raised.value)
+    assert str(raised.value) == str(ConflictError())  # the same text as any conflict
 
     row = await entities.find_by_id(entity_id)
     assert row["tenant_id"] == a
@@ -127,6 +127,19 @@ async def test_delegation_id_reused_by_another_tenant_conflicts(backend):
         await delegations.grant(delegation_id, b, "grantor-b", "grantee-b", {"actions": ["*"]})
     row = await delegations.find_by_id(delegation_id)
     assert row["tenant_id"] == a and row["scope"] == {"actions": ["read"]}
+
+
+async def test_wallet_id_reused_by_another_tenant_conflicts_with_the_generic_text(backend):
+    from repositories.repos import WalletRepository
+
+    a, b, token = _ids()
+    wallets = WalletRepository()
+    wallet_id = f"wallet-{token}"
+    await wallets.link_wallet(wallet_id, "owner-a", a, "eth", "0xa")
+    with pytest.raises(ConflictError) as raised:
+        await wallets.link_wallet(wallet_id, "owner-b", b, "eth", "0xb")
+    assert str(raised.value) == str(ConflictError())
+    assert (await wallets.find_by_id(wallet_id))["tenant_id"] == a
 
 
 async def test_x402_resource_id_reused_by_another_tenant_conflicts(backend):
@@ -182,7 +195,7 @@ async def test_tenant_owned_upsert_refuses_a_row_without_an_owner(backend):
     assert (await BaseRepository.find_by_id(registry, record_id))["label"] == "legacy"
 
 
-async def test_profile_upsert_cannot_take_over_another_tenants_profile(backend):
+async def test_profiles_for_one_user_id_coexist_across_tenants(backend):
     a, b, token = _ids()
 
     class _Cache:
@@ -195,16 +208,40 @@ async def test_profile_upsert_cannot_take_over_another_tenants_profile(backend):
         async def delete(self, key):
             return None
 
-    from shared.graph.graph import GraphClient
+    from shared.graph.graph import GraphClient, user_vertex_id
 
-    identity = IdentityRepository(GraphClient(), _Cache())
+    graph = GraphClient()
+    identity = IdentityRepository(graph, _Cache())
     user_id = f"user-{token}"
     await identity.upsert_profile(a, user_id, {"email": "a@example.com"})
-    with pytest.raises(ConflictError):
-        await identity.upsert_profile(b, user_id, {"email": "b@example.com"})
-    profile = await identity.get_profile(a, user_id)
-    assert profile["email"] == "a@example.com"
-    assert await identity.get_profile(b, user_id) is None
+    await identity.upsert_profile(b, user_id, {"email": "b@example.com"})
+    await identity.upsert_profile(a, user_id, {"name": "A"})
+
+    profile_a = await identity.get_profile(a, user_id)
+    assert profile_a["email"] == "a@example.com" and profile_a["name"] == "A"
+    assert profile_a["user_id"] == user_id
+    assert (await identity.get_profile(b, user_id))["email"] == "b@example.com"
+    vertex_b = await graph.get_vertex(user_vertex_id(b, user_id))
+    assert vertex_b.properties["tenant_id"] == b and vertex_b.properties["user_id"] == user_id
+    assert await graph.get_vertex(user_id) is None
+
+
+async def test_restated_behavioral_signals_coexist_across_tenants(backend):
+    from repositories.repos import SignalRepository
+
+    a, b, token = _ids()
+    signals = SignalRepository()
+    signal_id = f"CHURN:entity-{token}:identity-restatement"
+    for tenant in (a, b):
+        await signals.upsert_signal({
+            "signal_id": signal_id, "entity_id": f"entity-{token}", "tenant_id": tenant,
+        })
+    for tenant in (a, b):
+        rows = await signals.list_for_entity(f"entity-{token}", tenant)
+        assert [(r["signal_id"], r["tenant_id"]) for r in rows] == [(signal_id, tenant)]
+    assert await signals.delete_for_entity(f"entity-{token}", a) == 1
+    assert await signals.list_for_entity(f"entity-{token}", a) == []
+    assert len(await signals.list_for_entity(f"entity-{token}", b)) == 1
 
 
 async def test_provenance_records_for_one_entity_coexist_across_tenants(monkeypatch):

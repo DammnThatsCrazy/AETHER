@@ -69,7 +69,8 @@ def _rows(conn, table: str) -> dict[str, tuple[str | None, dict]]:
 
 def _seed(conn) -> None:
     for table in ("entities", "event_envelopes", "behavior_profiles", "journey_chains",
-                  "commerce_facilitators", "commerce_resources", "web3_chains", "users"):
+                  "commerce_facilitators", "commerce_resources", "web3_chains", "users",
+                  "profiles", "behavioral_signals"):
         conn.exec_driver_sql(_JSONB_TABLE.format(name=table))
     conn.exec_driver_sql("""
         CREATE TABLE graph_vertices (
@@ -103,6 +104,15 @@ def _seed(conn) -> None:
     _put(conn, "commerce_resources", "demo-uuid",
          {"resource_id": "demo-uuid", "tenant_id": "ta", "data_origin": "synthetic_seed"}, "ta")
 
+    # The same SDK user id in two tenants; a new pod already wrote ta's keyed row
+    # for user-3, so its bare row is stale.
+    _put(conn, "profiles", "user-1", {"tenant_id": "ta", "email": "a@x"}, "ta")
+    _put(conn, "profiles", "user-3", {"tenant_id": "ta", "v": "old"}, "ta")
+    _put(conn, "profiles", "ta:user-3", {"tenant_id": "ta", "user_id": "user-3", "v": "new"}, "ta")
+    _put(conn, "behavioral_signals", "CHURN:e1:identity-restatement",
+         {"signal_id": "CHURN:e1:identity-restatement", "tenant_id": "ta"}, "ta")
+    _put(conn, "behavioral_signals", "obs-uuid", {"entity_id": "e1", "tenant_id": "ta"}, "ta")
+
     _put(conn, "web3_chains", "ethereum", {"chain_id": "ethereum", "source": "seed"}, None)
     _put(conn, "web3_chains", "custom", {"chain_id": "custom", "source": "provider"}, None)
 
@@ -129,7 +139,8 @@ def test_migration_rekeys_and_backfills_idempotently(conn):
     _upgrade(conn)
     first = {t: _rows(conn, t) for t in (
         "entities", "users", "event_envelopes", "behavior_profiles", "journey_chains",
-        "commerce_facilitators", "commerce_resources", "web3_chains",
+        "commerce_facilitators", "commerce_resources", "web3_chains", "profiles",
+        "behavioral_signals",
     )}
     _upgrade(conn)
     second = {t: _rows(conn, t) for t in first}
@@ -159,6 +170,19 @@ def test_migration_rekeys_and_backfills_idempotently(conn):
     assert facilitators["tb:fac_local_aether"][0] == "tb"
     assert set(first["commerce_resources"]) == {"demo-uuid"}
 
+    profile_rows = first["profiles"]
+    assert set(profile_rows) == {"ta:user-1", "ta:user-3"}
+    assert profile_rows["ta:user-1"][1] == {
+        "id": "ta:user-1", "user_id": "user-1", "tenant_id": "ta", "email": "a@x",
+    }
+    assert profile_rows["ta:user-3"][1]["v"] == "new"
+
+    signals = first["behavioral_signals"]
+    assert set(signals) == {"ta:CHURN:e1:identity-restatement", "obs-uuid"}
+    restated = signals["ta:CHURN:e1:identity-restatement"][1]
+    assert restated["signal_id"] == "CHURN:e1:identity-restatement"
+    assert restated["id"] == "ta:CHURN:e1:identity-restatement"
+
     chains_registry = first["web3_chains"]
     assert chains_registry["ethereum"][0] == "system"
     assert chains_registry["ethereum"][1]["tenant_id"] == "system"
@@ -173,6 +197,24 @@ def test_migration_rekeys_and_backfills_idempotently(conn):
         assert tenant == "platform"
         assert props["tenantId"] == props["tenant_id"] == "platform"
     assert vertices["user:1"][0] == "ta"
+
+
+def test_steps_run_without_alembic(conn):
+    from sqlalchemy import text
+
+    from repositories.tenant_row_keys import apply
+
+    _seed(conn)
+    _upgrade(conn)
+    before = _rows(conn, "profiles")
+    conn.exec_driver_sql(
+        "INSERT INTO profiles (id, data, tenant_id) "
+        "VALUES ('user-9', '{\"tenant_id\": \"tb\"}'::jsonb, 'tb')"
+    )
+    apply(lambda sql: conn.execute(text(sql)))
+    after = _rows(conn, "profiles")
+    assert set(after) == set(before) | {"tb:user-9"}
+    assert after["tb:user-9"][1]["user_id"] == "user-9"
 
 
 def test_migration_tolerates_missing_runtime_tables(conn):

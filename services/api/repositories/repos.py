@@ -26,7 +26,9 @@ from typing import Any, Optional, TypeVar
 
 from shared.cache.cache import TTL, CacheClient, CacheKey
 from shared.common.common import ConflictError, NotFoundError, utc_now
-from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType, tenant_of
+from shared.graph.graph import (
+    Edge, EdgeType, GraphClient, Vertex, VertexType, tenant_of, user_vertex_id,
+)
 from shared.logger.logger import get_logger
 from shared.temporal.instant import coerce_utc_lenient
 
@@ -676,7 +678,9 @@ class BaseRepository(ABC):
         return [r["tenant_id"] for r in rows]
 
     def _unavailable(self) -> ConflictError:
-        return ConflictError(f"{self.table_name} ID is unavailable in this tenant")
+        # The generic conflict text: it must not tell a caller that the id
+        # exists in another tenant.
+        return ConflictError()
 
     async def insert(self, record_id: str, data: dict) -> dict:
         """Create ``record_id`` or replace it when the stored row has the same tenant.
@@ -771,7 +775,7 @@ class BaseRepository(ABC):
         if pool is None:
             existing = self._store.get(record_id)
             if existing is not None and existing.get("tenant_id") != tenant_id:
-                raise ConflictError(f"{self.table_name} ID is unavailable in this tenant")
+                raise self._unavailable()
             self._store[record_id] = data
             logger.info(f"TENANT UPSERT {self.table_name} id={record_id} (in-memory)")
             return data
@@ -811,7 +815,7 @@ class BaseRepository(ABC):
                 *vals,
             )
         if status.endswith(" 0"):
-            raise ConflictError(f"{self.table_name} ID is unavailable in this tenant")
+            raise self._unavailable()
         logger.info(f"TENANT UPSERT {self.table_name} id={record_id}")
         return data
 
@@ -1128,26 +1132,27 @@ class IdentityRepository:
         if cached:
             return cached
 
-        profile = await self._profiles.find_by_id(user_id)
+        profile = await self._profiles.find_by_id(tenant_record_id(tenant_id, user_id))
         if profile is None or profile.get("tenant_id") != tenant_id:
             return None
         await self.cache.set_json(key, profile, TTL.PROFILE)
         return profile
 
     async def upsert_profile(self, tenant_id: str, user_id: str, data: dict) -> dict:
-        row = {**data, "tenant_id": tenant_id}
-        if await self._profiles.find_by_id(user_id):
-            profile = await self._profiles.update(user_id, row)
+        record_id = tenant_record_id(tenant_id, user_id)
+        row = {**data, "tenant_id": tenant_id, "user_id": user_id}
+        if await self._profiles.find_by_id(record_id):
+            profile = await self._profiles.update(record_id, row)
         else:
-            profile = await self._profiles.insert(user_id, row)
+            profile = await self._profiles.insert(record_id, row)
 
         from shared.graph.mutation_gateway import GraphMutationGateway
         from shared.graph.mutation_intents import vertex_intent
 
         vertex = Vertex(
             vertex_type=VertexType.USER,
-            vertex_id=user_id,
-            properties={"tenant_id": tenant_id, **data},
+            vertex_id=user_vertex_id(tenant_id, user_id),
+            properties={**data, "tenant_id": tenant_id, "user_id": user_id},
         )
         await GraphMutationGateway(graph_client=self.graph).apply(vertex_intent(
             vertex, operation="node_versioned",
@@ -1163,29 +1168,32 @@ class IdentityRepository:
         secondary_id: str,
     ) -> dict:
         """Merge two user profiles into one (identity resolution)."""
-        primary = await self._profiles.find_by_id_or_fail(primary_id)
-        secondary = await self._profiles.find_by_id_or_fail(secondary_id)
+        primary_key = tenant_record_id(tenant_id, primary_id)
+        secondary_key = tenant_record_id(tenant_id, secondary_id)
+        primary = await self._profiles.find_by_id_or_fail(primary_key)
+        secondary = await self._profiles.find_by_id_or_fail(secondary_key)
 
         for key, value in secondary.items():
             if key not in primary or primary[key] is None:
                 primary[key] = value
 
-        await self._profiles.update(primary_id, primary)
-        await self._profiles.delete(secondary_id)
+        await self._profiles.update(primary_key, primary)
+        await self._profiles.delete(secondary_key)
 
         from shared.graph.mutation_gateway import GraphMutationGateway
         from shared.graph.mutation_intents import edge_intent
 
+        secondary_vertex = user_vertex_id(tenant_id, secondary_id)
         edge = Edge(
             edge_type=EdgeType.RESOLVED_AS,
-            from_vertex_id=secondary_id,
-            to_vertex_id=primary_id,
+            from_vertex_id=secondary_vertex,
+            to_vertex_id=user_vertex_id(tenant_id, primary_id),
             properties={"tenant_id": tenant_id, "merged_at": utc_now().isoformat()},
         )
         await GraphMutationGateway(graph_client=self.graph).apply(edge_intent(
             edge, operation="identity_merged",
             tenant_id=tenant_id, actor_id="identity_repository",
-            subject_kind="entity", subject_id=secondary_id,
+            subject_kind="entity", subject_id=secondary_vertex,
             reason_code="profile_merge", causality_class="declared_reason",
         ))
 
@@ -1194,7 +1202,9 @@ class IdentityRepository:
         return primary
 
     async def get_graph_neighbors(self, user_id: str, tenant_id: str) -> list[dict]:
-        neighbors = await self.graph.get_neighbors(user_id, direction="out")
+        neighbors = await self.graph.get_neighbors(
+            user_vertex_id(tenant_id, user_id), direction="out",
+        )
         return [
             {"id": v.vertex_id, "type": v.vertex_type, "properties": v.properties}
             for v in neighbors
@@ -3679,7 +3689,13 @@ class SignalRepository(BaseRepository):
         super().__init__("behavioral_signals")
 
     async def upsert_signal(self, signal: dict) -> dict:
-        return await self.insert(signal["signal_id"], signal)
+        # Restated signal ids are deterministic per entity, so the row id carries
+        # the tenant; ``signal_id`` keeps the id callers see.
+        return await self.insert(tenant_record_id(signal["tenant_id"], signal["signal_id"]), signal)
+
+    async def get_signal(self, tenant_id: str, signal_id: str) -> Optional[dict]:
+        row = await self.find_by_id(tenant_record_id(tenant_id, signal_id))
+        return row if row is not None and row.get("tenant_id") == tenant_id else None
 
     async def list_for_entity(
         self,
@@ -3703,7 +3719,7 @@ class SignalRepository(BaseRepository):
     async def delete_for_entity(self, entity_id: str, tenant_id: str) -> int:
         rows = await self.list_for_entity(entity_id, tenant_id, include_stale=True, limit=1000)
         for r in rows:
-            await self.delete(r["signal_id"])
+            await self.delete(r["id"])
         return len(rows)
 
 
