@@ -1,3 +1,13 @@
+---
+title: CI V2 Baseline
+slug: engineering/ci-v2-baseline
+section: operations
+visibility: I
+audience: [ops]
+status: beta
+since_version: 0.1.0
+---
+
 # CI V2 baseline
 
 Point-in-time baseline for the CI V2 program (`AETHER_LEAN_CI_V2_BUILD_SPEC`),

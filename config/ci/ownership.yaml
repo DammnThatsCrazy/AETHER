@@ -1,0 +1,58 @@
+# CI V2 selection rules. Suite ids, paths and runner commands come from
+# config/test_suites.yaml; this file only adds what the registry cannot say.
+# A changed path selects every registered suite whose `paths` contain it, plus
+# the matches below. Anything unmatched fails closed to every PR-lane suite.
+version: 2
+fallback: broad-safe
+
+# Always selected when any non-text-only file changes. Owners cannot opt out.
+critical:
+  - backend-identity
+  - compliance
+  - root-unit-security
+
+# Text-only paths: selected suite is `docs` (static consistency) and nothing else.
+text_only:
+  - "**/*.md"
+  - "docs/**"
+  - "LICENSE"
+  - "reports/**"
+
+# Fan-out: root/toolchain config, lockfiles, shared packages, CI itself.
+# A change here selects every PR-lane suite.
+fanout:
+  - "package.json"
+  - "package-lock.json"
+  - "pnpm-lock.yaml"
+  - "pnpm-workspace.yaml"
+  - "pyproject.toml"
+  - "tsconfig.json"
+  - "eslint.config.mjs"
+  - "vitest.config.*"
+  - "Makefile"
+  - "config/test_suites.yaml"
+  - "config/ci/**"
+  - "scripts/**"
+  - ".github/workflows/**"
+  - "packages/shared/**"
+  - "packages/config/**"
+  - "packages/ui/**"
+
+# Extra path -> suite mappings for source the registry `paths` do not cover.
+extra:
+  - include: ["services/api/identity/**", "services/api/governance/**", "services/api/tenancy/**"]
+    suites: [backend-identity, backend-profile360, root-unit-identity-profile, root-unit-security]
+  - include: ["services/api/ingestion/**", "services/api/replay/**", "packages/sdk/**"]
+    suites: [backend-ingestion, root-unit-ingestion, functionality-proof-ts]
+  - include: ["services/api/graph/**", "services/api/intelligence/**"]
+    suites: [backend-computation, root-unit-graph]
+  - include: ["services/api/billing/**", "services/api/value/**", "services/api/journeys/**"]
+    suites: [backend-value, backend-campaigns, root-unit-commerce-value]
+  - include: ["services/api/alembic/**", "services/api/repositories/**"]
+    suites: [backend-identity, backend-ingestion, backend-value, root-unit-operations]
+  - include: ["services/api/actions/**", "services/api/connectors/**", "services/api/workers/**",
+              "services/api/middleware/**", "services/api/shared/**", "services/api/services/**",
+              "services/api/config/**", "services/api/dependencies/**", "services/api/main.py"]
+    suites: [backend-agent, backend-observability, root-unit-control, root-unit-platform]
+  - include: ["infra/**", "amplify.yml", "docker-compose.yml"]
+    suites: [root-unit-operations]

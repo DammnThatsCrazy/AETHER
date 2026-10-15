@@ -1,0 +1,121 @@
+name: ci
+
+# CI V2 (shadow phase). One workflow, one stable verdict check: `ci / verdict`.
+# Runs on every new PR head SHA (and merge queue SHAs). It is NOT yet a required
+# status; `verification / disposition` stays the merge authority until the
+# parity report in docs/engineering/ci-v2/ clears the cutover.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Base ref/sha to diff against (parity replays)
+        required: false
+        default: origin/Development
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  classify:
+    name: classify
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      mode: ${{ steps.select.outputs.mode }}
+      workers: ${{ steps.select.outputs.workers }}
+      has_workers: ${{ steps.select.outputs.has_workers }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --quiet pyyaml
+      - name: Select affected suites
+        id: select
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.base }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+        run: |
+          python scripts/ci_select.py --base "$BASE" --head "$HEAD" \
+            --output selection.json --github-output
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          d = json.load(open("selection.json"))
+          print(f"### Selection: `{d['mode']}` ({len(d['changed_files'])} files)")
+          for sid, why in d["suites"].items():
+              print(f"- `{sid}`: {why[0]}" + (f" (+{len(why)-1})" if len(why) > 1 else ""))
+          for r in d["reasons"][:20]:
+              print(f"- reason: {r}")
+          PY
+
+  suites:
+    name: suites (${{ matrix.worker.id }})
+    needs: classify
+    if: needs.classify.outputs.has_workers == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        worker: ${{ fromJson(needs.classify.outputs.workers) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: make bootstrap-ci-control
+      - name: Install the profile's Python extra
+        if: matrix.worker.python_extra
+        run: .venv/bin/python -m pip install -e ".[${{ matrix.worker.python_extra }}]"
+      - uses: actions/setup-node@v4
+        if: matrix.worker.node_required
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install and build Node workspace
+        if: matrix.worker.node_required
+        run: |
+          npm ci --ignore-scripts
+          npm run build --workspace=packages/shared
+      - name: Run selected suites
+        run: |
+          .venv/bin/python scripts/suite_worker.py \
+            --worker-id "${{ matrix.worker.id }}" --worker-class pooled \
+            --suite-ids '${{ toJson(matrix.worker.suite_ids) }}' \
+            --dependency-profile "${{ matrix.worker.dependency_profile }}" \
+            --runtime-class "${{ matrix.worker.runtime_class }}" \
+            --output "$RUNNER_TEMP/suite-${{ matrix.worker.id }}.json"
+
+  verdict:
+    name: verdict
+    needs: [classify, suites]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Evaluate the planned job set
+        env:
+          CLASSIFY: ${{ needs.classify.result }}
+          SUITES: ${{ needs.suites.result }}
+          HAS_WORKERS: ${{ needs.classify.outputs.has_workers }}
+          MODE: ${{ needs.classify.outputs.mode }}
+        run: |
+          echo "classify=$CLASSIFY suites=$SUITES has_workers=$HAS_WORKERS mode=$MODE"
+          [ "$CLASSIFY" = success ] || { echo "classification did not succeed"; exit 1; }
+          if [ "$HAS_WORKERS" = true ]; then
+            [ "$SUITES" = success ] || { echo "selected suites: $SUITES"; exit 1; }
+          else
+            # A legitimate no-op is only an empty selection with suites skipped.
+            [ "$SUITES" = skipped ] && [ "$MODE" = empty ] || { echo "no workers for mode '$MODE' is not a valid no-op"; exit 1; }
+          fi
