@@ -18,3 +18,15 @@ def test_only_unrelabelled_catalog_vertices_are_selected():
         "chain:eip155:1", "card_program:redotpay", "payment_network:visa",
     ]
     assert pending[0][1] == {"tenantId": "public", "tenant_id": "public"}
+
+
+def test_derivatives_venue_and_market_vertices_are_selected():
+    pending = to_relabel([
+        ("market_venue:hyperliquid", {"tenant_id": ["platform"]}),
+        ("derivative_market:hl:btc-perp", {"tenantId": ["tenant-a"], "tenant_id": ["platform"]}),
+        ("trading_account:dacct_1", {"tenantId": ["tenant-a"], "tenant_id": ["tenant-a"]}),
+    ])
+
+    assert [vertex_id for vertex_id, _ in pending] == [
+        "market_venue:hyperliquid", "derivative_market:hl:btc-perp",
+    ]

@@ -24,8 +24,13 @@ owner. These steps bring existing PostgreSQL rows in line:
    ``commerce_signer_refs``) are re-keyed ``{tenant}:{object id}``, the tenant
    being the one the row's JSON names. Demo-seed rows keep their tenant-unique
    ids.
-7. ``graph_vertices``: ``chain:`` and card catalog (``card_program:``,
-   ``card_issuer:``, ``payment_network:``) vertices become ``platform`` owned.
+7. ``graph_vertices``: ``chain:``, card catalog (``card_program:``,
+   ``card_issuer:``, ``payment_network:``) and derivatives registry
+   (``market_venue:``, ``derivative_market:``) vertices become ``platform``
+   owned. Shared intelligence evidence vertices (``policy:``, ``profile360:``,
+   ``graph:``) are not relabelled: one vertex carries links from several
+   tenants, and new writes use a ``{tenant}:`` id, so the old vertex is left
+   behind like a pre-``{tenant}:user:`` user vertex.
    A Neptune graph is relabelled by ``graph.platform_vertex_owners`` instead.
 
 Runtime-created tables are skipped when absent. A re-key never overwrites a row
@@ -65,7 +70,10 @@ _COMMERCE = (
     "commerce_treasuries", "commerce_budget_policies", "commerce_signer_refs",
 )
 
-PLATFORM_VERTEX_PREFIXES = ("chain:", "card_program:", "card_issuer:", "payment_network:")
+PLATFORM_VERTEX_PREFIXES = (
+    "chain:", "card_program:", "card_issuer:", "payment_network:",
+    "market_venue:", "derivative_market:",
+)
 
 
 def _if_table(table: str, body: str) -> str:
