@@ -31,7 +31,7 @@ def build_topology_mutations(
 
     for gateway in gateways:
         gateway_vid = f"interop_gateway:{gateway['gateway_id']}"
-        chain_vid = f"chain:{gateway.get('native_chain_id', 'unknown')}"
+        chain_vid = _chain_vertex_id(gateway.get("native_chain_id", ""))
         vertices.append(Vertex(
             vertex_id=gateway_vid,
             vertex_type=VertexType.INTEROP_GATEWAY,
@@ -107,6 +107,12 @@ def build_message_mutations(message: dict) -> tuple[list[Vertex], list[Edge]]:
             message["interop_message_id"],
         ))
     return vertices, edges
+
+
+def _chain_vertex_id(native_chain_id: str) -> str:
+    """The asset registry's CAIP-2 chain vertex id; a numeric id is an EVM chain id."""
+    chain = str(native_chain_id or "unknown")
+    return f"chain:eip155:{chain}" if chain.isdigit() else f"chain:{chain}"
 
 
 def _edge(edge_type: str, from_vid: str, to_vid: str, tenant_id: str,
