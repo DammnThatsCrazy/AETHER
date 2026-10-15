@@ -26,7 +26,7 @@ from typing import Any, Optional, TypeVar
 
 from shared.cache.cache import TTL, CacheClient, CacheKey
 from shared.common.common import ConflictError, NotFoundError, utc_now
-from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
+from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType, tenant_of
 from shared.logger.logger import get_logger
 from shared.temporal.instant import coerce_utc_lenient
 
@@ -1067,8 +1067,9 @@ class IdentityRepository:
             return cached
 
         profile = await self._profiles.find_by_id(user_id)
-        if profile:
-            await self.cache.set_json(key, profile, TTL.PROFILE)
+        if profile is None or profile.get("tenant_id") != tenant_id:
+            return None
+        await self.cache.set_json(key, profile, TTL.PROFILE)
         return profile
 
     async def upsert_profile(self, tenant_id: str, user_id: str, data: dict) -> dict:
@@ -1132,11 +1133,12 @@ class IdentityRepository:
         await self.cache.delete(CacheKey.profile(tenant_id, secondary_id))
         return primary
 
-    async def get_graph_neighbors(self, user_id: str) -> list[dict]:
+    async def get_graph_neighbors(self, user_id: str, tenant_id: str) -> list[dict]:
         neighbors = await self.graph.get_neighbors(user_id, direction="out")
         return [
             {"id": v.vertex_id, "type": v.vertex_type, "properties": v.properties}
             for v in neighbors
+            if tenant_of(v.properties) == tenant_id
         ]
 
 
@@ -2529,9 +2531,11 @@ class IdentityClusterRepository(BaseRepository):
         record["unlinked_at"] = utc_now().isoformat()
         return await self.update(cluster_id, record)
 
-    async def list_for_entity(self, entity_id: str) -> list[dict]:
+    async def list_for_entity(self, entity_id: str, tenant_id: str) -> list[dict]:
+        if not tenant_id:
+            raise ValueError("list_for_entity requires a tenant_id")
         results = await self.find_many(
-            filters={"entity_id": entity_id}, limit=500,
+            filters={"entity_id": entity_id, "tenant_id": tenant_id}, limit=500,
         )
         return [r for r in results if not r.get("unlinked_at")]
 

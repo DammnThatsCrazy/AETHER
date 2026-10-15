@@ -323,7 +323,9 @@ async def wallet_risk_score(address: str, request: Request):
     if gold_records:
         features = gold_records[0].get("value", {})
     else:
-        features = await materialize_wallet_features(address, cache=registry.cache)
+        features = await materialize_wallet_features(
+            address, request.state.tenant.tenant_id, cache=registry.cache,
+        )
 
     # Compute trust score using available features
     score = await scorer.compute(

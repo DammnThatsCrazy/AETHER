@@ -38,11 +38,17 @@ class _EmptyMoralis:
         return {}
 
 
+class _OneWallet:
+    async def find_many(self, filters=None, **_kw):
+        return [{"address": "0xe1", **(filters or {})}]
+
+
 def _calculator(ch, moralis=None) -> PNLCalculator:
     return PNLCalculator(
         clickhouse_client=ch,
         coingecko_provider=object(),
         moralis_provider=moralis,
+        wallet_repo=_OneWallet(),
     )
 
 

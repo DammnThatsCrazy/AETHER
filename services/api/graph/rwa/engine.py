@@ -6,7 +6,7 @@ reserve credibility, redemption pressure, compliance detection.
 from __future__ import annotations
 
 
-from repositories.repos import BaseRepository
+from repositories.repos import TenantOwnedRepository
 from repositories.lake import silver_onchain
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger, metrics
@@ -20,26 +20,27 @@ logger = get_logger("aether.rwa.engine")
 
 
 # ═══════════════════════════════════════════════════════════════════
-# REPOSITORIES
+# REPOSITORIES — rows belong to the tenant that wrote them; reads go
+# through ``<repo>.for_tenant(tenant_id)``.
 # ═══════════════════════════════════════════════════════════════════
 
-class RWAAssetRepository(BaseRepository):
+class RWAAssetRepository(TenantOwnedRepository):
     def __init__(self) -> None:
         super().__init__("rwa_assets")
 
-class RWAPolicyRepository(BaseRepository):
+class RWAPolicyRepository(TenantOwnedRepository):
     def __init__(self) -> None:
         super().__init__("rwa_policies")
 
-class RWACashflowRepository(BaseRepository):
+class RWACashflowRepository(TenantOwnedRepository):
     def __init__(self) -> None:
         super().__init__("rwa_cashflows")
 
-class RWAExposureRepository(BaseRepository):
+class RWAExposureRepository(TenantOwnedRepository):
     def __init__(self) -> None:
         super().__init__("rwa_exposures")
 
-class RWAHolderRepository(BaseRepository):
+class RWAHolderRepository(TenantOwnedRepository):
     def __init__(self) -> None:
         super().__init__("rwa_holders")
 
@@ -55,7 +56,7 @@ holder_repo = RWAHolderRepository()
 # ASSET MANAGEMENT
 # ═══════════════════════════════════════════════════════════════════
 
-async def register_asset(data: RWAAssetCreate, tenant_id: str = "") -> dict:
+async def register_asset(data: RWAAssetCreate, tenant_id: str) -> dict:
     """Register an RWA asset as an intelligence object."""
     record = make_rwa_asset(data, tenant_id)
     result = await asset_repo.insert(record["id"], record)
@@ -64,7 +65,7 @@ async def register_asset(data: RWAAssetCreate, tenant_id: str = "") -> dict:
     return result
 
 
-async def register_policy(data: PolicyCreate, tenant_id: str = "") -> dict:
+async def register_policy(data: PolicyCreate, tenant_id: str) -> dict:
     """Register a compliance/transfer policy for an asset."""
     record = make_policy(data, tenant_id)
     result = await policy_repo.insert(record["id"], record)
@@ -72,7 +73,7 @@ async def register_policy(data: PolicyCreate, tenant_id: str = "") -> dict:
     return result
 
 
-async def record_cashflow(data: CashflowEventCreate, tenant_id: str = "") -> dict:
+async def record_cashflow(data: CashflowEventCreate, tenant_id: str) -> dict:
     """Record a cashflow event (coupon, dividend, redemption, etc.)."""
     record = make_cashflow_event(data, tenant_id)
     result = await cashflow_repo.insert(record["id"], record)
@@ -86,19 +87,19 @@ async def record_cashflow(data: CashflowEventCreate, tenant_id: str = "") -> dic
 
 async def compute_exposure(
     entity_id: str,
+    tenant_id: str,
     entity_type: str = "wallet",
     include_inferred: bool = True,
     include_beneficial: bool = True,
-    tenant_id: str = "",
 ) -> dict:
     """Compute RWA exposure for a wallet/entity/profile."""
     # Direct holdings from holder records
-    direct_holdings = await holder_repo.find_many(
+    direct_holdings = await holder_repo.for_tenant(tenant_id).find_many(
         filters={"entity_id": entity_id}, limit=100
     )
 
     # Get all assets
-    all_assets = await asset_repo.find_many(filters={"tenant_id": tenant_id}, limit=1000)
+    all_assets = await asset_repo.for_tenant(tenant_id).find_many(limit=1000)
     asset_map = {a["id"]: a for a in all_assets}
 
     exposures = []
@@ -163,15 +164,15 @@ async def simulate_transfer(
     asset_id: str,
     from_entity: str,
     to_entity: str,
+    tenant_id: str,
     amount: float = 0.0,
-    tenant_id: str = "",
 ) -> dict:
     """Simulate whether a transfer would violate any policy."""
-    asset = await asset_repo.find_by_id(asset_id)
+    asset = await asset_repo.for_tenant(tenant_id).find_by_id(asset_id)
     if not asset:
         return {"permitted": False, "reason": "asset_not_found", "violations": []}
 
-    policies = await policy_repo.find_many(
+    policies = await policy_repo.for_tenant(tenant_id).find_many(
         filters={"asset_id": asset_id}, limit=50
     )
 
@@ -204,7 +205,7 @@ async def simulate_transfer(
         elif ptype == PolicyType.HOLDER_CAP.value:
             max_holders = rules.get("max_holders", 0)
             if max_holders > 0:
-                current_holders = await holder_repo.count(filters={"asset_id": asset_id})
+                current_holders = await holder_repo.for_tenant(tenant_id).count(filters={"asset_id": asset_id})
                 if current_holders >= max_holders:
                     violations.append({
                         "policy_id": policy["id"],
@@ -251,13 +252,13 @@ async def simulate_transfer(
 # RESERVE CREDIBILITY
 # ═══════════════════════════════════════════════════════════════════
 
-async def score_reserve_credibility(asset_id: str, tenant_id: str = "") -> dict:
+async def score_reserve_credibility(asset_id: str, tenant_id: str) -> dict:
     """Score the credibility of an asset's reserve/backing."""
-    asset = await asset_repo.find_by_id(asset_id)
+    asset = await asset_repo.for_tenant(tenant_id).find_by_id(asset_id)
     if not asset:
         return {"asset_id": asset_id, "credibility_score": 0.0, "reason": "asset_not_found"}
 
-    cashflows = await cashflow_repo.find_many(
+    cashflows = await cashflow_repo.for_tenant(tenant_id).find_many(
         filters={"asset_id": asset_id}, limit=500
     )
 
@@ -297,19 +298,19 @@ async def score_reserve_credibility(asset_id: str, tenant_id: str = "") -> dict:
 # REDEMPTION PRESSURE
 # ═══════════════════════════════════════════════════════════════════
 
-async def score_redemption_pressure(asset_id: str, tenant_id: str = "") -> dict:
+async def score_redemption_pressure(asset_id: str, tenant_id: str) -> dict:
     """Score redemption pressure on an asset."""
-    cashflows = await cashflow_repo.find_many(
+    cashflows = await cashflow_repo.for_tenant(tenant_id).find_many(
         filters={"asset_id": asset_id, "cashflow_type": CashflowType.REDEMPTION.value},
         limit=200,
     )
-    holders = await holder_repo.find_many(filters={"asset_id": asset_id}, limit=1000)
+    holders = await holder_repo.for_tenant(tenant_id).find_many(filters={"asset_id": asset_id}, limit=1000)
 
     redemption_count = len(cashflows)
     holder_count = len(holders)
     total_redeemed = sum(c.get("amount", 0) for c in cashflows)
 
-    asset = await asset_repo.find_by_id(asset_id)
+    asset = await asset_repo.for_tenant(tenant_id).find_by_id(asset_id)
     total_supply = asset.get("total_supply", 1) if asset else 1
 
     redemption_rate = total_redeemed / max(total_supply, 1)

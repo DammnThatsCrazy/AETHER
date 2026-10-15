@@ -2000,7 +2000,7 @@ async def get_profile_graph(
     profile = await repo.get_profile(tenant.tenant_id, user_id)
     if not profile:
         raise NotFoundError("Profile")
-    connections = await repo.get_graph_neighbors(user_id)
+    connections = await repo.get_graph_neighbors(user_id, tenant.tenant_id)
     return APIResponse(data={"user_id": user_id, "connections": connections}).to_dict()
 
 
