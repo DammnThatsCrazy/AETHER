@@ -124,6 +124,9 @@ class FakeGraph:
         self.edges = []
         self.neighbors = []
 
+    async def get_vertex(self, vertex_id):
+        return None
+
     async def upsert_vertex(self, vertex):
         self.vertices.append(vertex)
 

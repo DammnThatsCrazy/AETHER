@@ -33,8 +33,9 @@ def test_flow_projection_builds_expected_edges():
     from shared.graph.graph import EdgeType
 
     vertices, edges = build_flow_mutations(_flow())
-    vertex_types = {str(v.vertex_type) for v in vertices}
-    assert "CardLinkedFlow" in vertex_types and "CardProgram" in vertex_types
+    # The flow links to the platform-owned catalog vertex; it never writes it.
+    assert {str(v.vertex_type) for v in vertices} == {"CardLinkedFlow"}
+    assert {v.properties["tenant_id"] for v in vertices} == {"t1"}
 
     edge_types = {e.edge_type for e in edges}
     assert EdgeType.USED_PROVIDER in edge_types      # user → program
@@ -77,13 +78,16 @@ def test_catalog_projection_nodes():
     from value.card_linked_payments.graph_projector import build_catalog_mutations
     from shared.graph.graph import EdgeType
 
-    vertices, edges = build_catalog_mutations("t1", {
+    vertices, edges = build_catalog_mutations({
         "slug": "redotpay", "display_name": "RedotPay",
         "issuer_id": "rain", "payment_network": "visa",
     })
     types = {str(v.vertex_type) for v in vertices}
     assert types == {"CardProgram", "CardIssuer", "PaymentNetwork"}
     assert {e.edge_type for e in edges} == {EdgeType.ISSUED_BY, EdgeType.RUNS_ON}
+    owners = {v.properties["tenant_id"] for v in vertices}
+    owners |= {e.properties["tenant_id"] for e in edges}
+    assert owners == {"platform"}
 
 
 # ── Profile360 summary / story / filters ────────────────────────────────────
