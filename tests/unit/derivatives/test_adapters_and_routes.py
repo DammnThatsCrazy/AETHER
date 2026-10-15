@@ -300,3 +300,99 @@ def test_unentitled_tenant_is_denied(monkeypatch):
     })
     assert denied.status_code == 403
     assert denied.json()["detail"]["code"] == "derivatives_not_entitled"
+
+
+# ── Graph projection ─────────────────────────────────────────────────────────
+
+@pytest.fixture
+def graph(monkeypatch):
+    """A fresh in-memory graph behind the routes' ``get_graph_client``."""
+    from shared.graph import graph as graph_module
+
+    client = graph_module.GraphClient()
+    client._backend = graph_module._InMemoryGraphBackend()  # noqa: SLF001
+    monkeypatch.setattr(graph_module, "get_graph_client", lambda: client)
+    return client
+
+
+async def _seed_platform(graph, vertex_id: str, vertex_type: str) -> None:
+    from shared.graph.graph import Vertex
+
+    await graph.add_vertex(Vertex(
+        vertex_id=vertex_id, vertex_type=vertex_type,
+        properties={"tenant_id": "platform", "label": "registry"},
+    ))
+
+
+def _edges(graph, edge_type: str) -> list:
+    return [e for e in graph._backend._edges if e.edge_type == edge_type]  # noqa: SLF001
+
+
+def _link(client, ref: str = "acct-graph"):
+    return client.post("/v1/derivatives/runtime/accounts/link", json={
+        "venue_id": "venue:simulated", "external_account_ref": ref,
+    })
+
+
+def _position(client, trading_account_id: str, position_id: str = "p-graph"):
+    return client.post("/v1/derivatives/runtime/observations", json={
+        "event_name": "derivatives_position_opened_observed",
+        "payload": {
+            "position_id": position_id, "trading_account_id": trading_account_id,
+            "canonical_market_id": "sim:btc-perp", "side": "long", "status": "open",
+            "size": "1",
+        },
+    })
+
+
+async def test_account_link_never_writes_the_platform_venue(monkeypatch, graph):
+    from config.settings import settings
+    from shared.graph.graph import EdgeType
+
+    monkeypatch.setattr(settings, "derivatives", _FLAGS_ON)
+    linked = _link(_build_app(TENANT))
+    assert linked.status_code == 201, linked.text
+
+    account = await graph.get_vertex(f"trading_account:{linked.json()['trading_account_id']}")
+    assert account.properties["tenant_id"] == TENANT
+    assert await graph.get_vertex("market_venue:venue:simulated") is None
+    assert _edges(graph, EdgeType.AUTHENTICATES) == []
+
+
+async def test_account_link_links_the_registered_venue(monkeypatch, graph):
+    from config.settings import settings
+    from shared.graph.graph import EdgeType, VertexType
+
+    monkeypatch.setattr(settings, "derivatives", _FLAGS_ON)
+    await _seed_platform(graph, "market_venue:venue:simulated", VertexType.MARKET_VENUE)
+    linked = _link(_build_app(TENANT))
+    assert linked.status_code == 201, linked.text
+
+    venue = await graph.get_vertex("market_venue:venue:simulated")
+    assert venue.properties == {"tenant_id": "platform", "label": "registry"}
+    [edge] = _edges(graph, EdgeType.AUTHENTICATES)
+    assert edge.to_vertex_id == "market_venue:venue:simulated"
+    assert edge.properties["tenant_id"] == TENANT
+
+
+async def test_position_links_only_own_account_to_registered_market(monkeypatch, graph):
+    from config.settings import settings
+    from shared.graph.graph import EdgeType, VertexType
+
+    monkeypatch.setattr(settings, "derivatives", _FLAGS_ON)
+    client = _build_app(TENANT)
+    account_id = _link(client).json()["trading_account_id"]
+
+    # No registered market: the observation is stored, nothing is projected.
+    assert _position(client, account_id).status_code == 201
+    assert await graph.get_vertex("derivative_market:sim:btc-perp") is None
+    assert _edges(graph, EdgeType.HOLDS_POSITION) == []
+
+    await _seed_platform(graph, "derivative_market:sim:btc-perp", VertexType.MARKET)
+    assert _position(client, account_id).status_code == 201
+    [edge] = _edges(graph, EdgeType.HOLDS_POSITION)
+    assert edge.from_vertex_id == f"trading_account:{account_id}"
+
+    # Another tenant naming that account gets no edge from it.
+    assert _position(_build_app(OTHER_TENANT), account_id, "p-other").status_code == 201
+    assert len(_edges(graph, EdgeType.HOLDS_POSITION)) == 1

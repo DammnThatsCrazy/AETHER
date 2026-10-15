@@ -64,50 +64,63 @@ async def _record_usage(tenant_id: str, source_id: str, event_name: str) -> None
     ))
 
 
-async def _project_graph_account(account: dict) -> None:
+async def _linkable(graph: Any, edge: Any, tenant_id: str) -> bool:
+    """Both ends are registered platform reference vertices or not another tenant's."""
+    from shared.graph.graph import tenant_of
+    from value.derivatives.graph_mutations import PLATFORM_REFERENCE_PREFIXES
+
+    for vertex_id in (edge.from_vertex_id, edge.to_vertex_id):
+        vertex = await graph.get_vertex(vertex_id)
+        owner = tenant_of(vertex.properties) if vertex is not None else None
+        if vertex_id.startswith(PLATFORM_REFERENCE_PREFIXES):
+            if owner != "platform":
+                return False
+        elif vertex is not None and owner != tenant_id:
+            return False
+    return True
+
+
+async def _project_graph(vertices: list, edges: list, tenant_id: str, source_event_id: str) -> None:
     from shared.graph.graph import get_graph_client
     from shared.graph.mutation_gateway import GraphMutationGateway
     from shared.graph.mutation_intents import edge_intent, vertex_intent
+
+    graph = get_graph_client()
+    gateway = GraphMutationGateway(graph_client=graph)
+    for vertex in vertices:
+        await gateway.apply(vertex_intent(
+            vertex, operation="node_versioned", tenant_id=tenant_id,
+            actor_kind="service", actor_id="derivatives_runtime",
+            source_event_id=source_event_id,
+        ))
+    for edge in edges:
+        if not await _linkable(graph, edge, tenant_id):
+            _meter("derivatives_graph_link_skipped")
+            continue
+        await gateway.apply(edge_intent(
+            edge, operation="edge_created", tenant_id=tenant_id,
+            actor_kind="service", actor_id="derivatives_runtime",
+            source_event_id=source_event_id,
+        ))
+
+
+async def _project_graph_account(account: dict) -> None:
     from value.derivatives.graph_mutations import build_account_mutations
 
     vertices, edges = build_account_mutations(account)
-    gateway = GraphMutationGateway(graph_client=get_graph_client())
-    for vertex in vertices:
-        await gateway.apply(vertex_intent(
-            vertex, operation="node_versioned", tenant_id=account["tenant_id"],
-            actor_kind="service", actor_id="derivatives_runtime",
-            source_event_id=account["idempotency_key"],
-        ))
-    for edge in edges:
-        await gateway.apply(edge_intent(
-            edge, operation="edge_created", tenant_id=account["tenant_id"],
-            actor_kind="service", actor_id="derivatives_runtime",
-            source_event_id=account["idempotency_key"],
-        ))
+    await _project_graph(vertices, edges, account["tenant_id"], account["idempotency_key"])
 
 
 async def _project_graph_position(position: dict) -> None:
     if not position.get("trading_account_id") or not position.get("canonical_market_id"):
         return
-    from shared.graph.graph import get_graph_client
-    from shared.graph.mutation_gateway import GraphMutationGateway
-    from shared.graph.mutation_intents import edge_intent, vertex_intent
     from value.derivatives.graph_mutations import build_position_mutations
 
     vertices, edges = build_position_mutations(position)
-    gateway = GraphMutationGateway(graph_client=get_graph_client())
-    for vertex in vertices:
-        await gateway.apply(vertex_intent(
-            vertex, operation="node_versioned", tenant_id=position["tenant_id"],
-            actor_kind="service", actor_id="derivatives_runtime",
-            source_event_id=position.get("idempotency_key") or position["position_id"],
-        ))
-    for edge in edges:
-        await gateway.apply(edge_intent(
-            edge, operation="edge_created", tenant_id=position["tenant_id"],
-            actor_kind="service", actor_id="derivatives_runtime",
-            source_event_id=position.get("idempotency_key") or position["position_id"],
-        ))
+    await _project_graph(
+        vertices, edges, position["tenant_id"],
+        position.get("idempotency_key") or position["position_id"],
+    )
 
 router = APIRouter(prefix="/v1/derivatives/runtime", tags=["derivatives"])
 

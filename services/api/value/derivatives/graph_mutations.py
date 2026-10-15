@@ -1,6 +1,7 @@
 """Derivatives graph projections — deterministic, tenant-scoped,
-evidence-bearing. Orders/fills/positions stay silver facts; only accounts,
-venues, markets, and material relationships project into the graph."""
+evidence-bearing. Orders/fills/positions stay silver facts; only accounts and
+material relationships project into the graph. Venue and market vertices are
+platform-owned reference data: tenant projections only link to them."""
 
 from __future__ import annotations
 
@@ -10,9 +11,12 @@ from value.derivatives.foundation import utc_now_iso
 
 _PROVENANCE = "derivatives_intelligence"
 
+#: Platform-owned reference vertices a tenant edge may link to but never write.
+PLATFORM_REFERENCE_PREFIXES = ("market_venue:", "derivative_market:")
+
 
 def build_account_mutations(account: dict) -> tuple[list[Vertex], list[Edge]]:
-    """TRADING_ACCOUNT vertex + AUTHENTICATES edge to the venue, plus
+    """TRADING_ACCOUNT vertex + AUTHENTICATES edge to the platform venue, plus
     DELEGATES_TRADING_TO (H2A) when the account is agent-directed with a
     resolved human owner."""
     tenant_id = account["tenant_id"]
@@ -28,11 +32,6 @@ def build_account_mutations(account: dict) -> tuple[list[Vertex], list[Edge]]:
                 "venue_id": account["venue_id"],
                 "connector_state": account.get("connector_state", "configured"),
             },
-        ),
-        Vertex(
-            vertex_id=venue_vid,
-            vertex_type=VertexType.MARKET_VENUE,
-            properties={"tenant_id": "platform", "venue_id": account["venue_id"]},
         ),
     ]
     edges = [
@@ -80,21 +79,12 @@ def build_account_mutations(account: dict) -> tuple[list[Vertex], list[Edge]]:
 
 
 def build_position_mutations(position: dict) -> tuple[list[Vertex], list[Edge]]:
-    """HOLDS_POSITION edge from the owning account to the market vertex —
-    the position itself remains a silver fact (cardinality)."""
+    """HOLDS_POSITION edge from the owning account to the platform market
+    vertex — the position itself remains a silver fact (cardinality)."""
     tenant_id = position["tenant_id"]
     account_vid = f"trading_account:{position['trading_account_id']}"
     market_vid = f"derivative_market:{position['canonical_market_id']}"
-    vertices = [
-        Vertex(
-            vertex_id=market_vid,
-            vertex_type=VertexType.MARKET,
-            properties={
-                "tenant_id": "platform",
-                "canonical_market_id": position["canonical_market_id"],
-            },
-        ),
-    ]
+    vertices: list[Vertex] = []
     edges = [
         Edge(
             edge_type=EdgeType.HOLDS_POSITION,
