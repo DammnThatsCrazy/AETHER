@@ -60,7 +60,7 @@ module "vpc" {
   vpc_cidr           = var.vpc_cidr
   availability_zones = slice(data.aws_availability_zones.available.names, 0, 3)
 
-  # "none" for staging/production-lean: tasks egress via a public IP on the
+  # "none" for staging/production: tasks egress via a public IP on the
   # task ENI, so the profile pays for no NAT Gateway or EIP at all.
   nat_mode = local.nat_mode
 
@@ -1037,10 +1037,14 @@ resource "aws_amplify_app" "frontend_preview" {
   description = "Development web app: per-PR previews of the Aether app (branches pr-<N>, managed by frontend-preview.yml)"
   platform    = "WEB"
 
+  # The same single-page-app rewrite the other client-routed apps use. A bare
+  # "/<*>" 404-200 rule does not apply to branches uploaded by deployment: a
+  # deep link such as /callback (the Auth0 redirect) was answered with a 301 to
+  # /callback/ and then a 404, so sign-in could not complete on a preview.
   custom_rule {
-    source = "/<*>"
+    source = local.spa_route_pattern
     target = "/index.html"
-    status = "404-200"
+    status = "200"
   }
 
   tags = {

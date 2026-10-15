@@ -118,7 +118,10 @@ def test_previews_are_staging_only_in_terraform():
     preview = text[text.index('resource "aws_amplify_app" "frontend_preview"'):]
     preview = preview[:preview.index("\n}\n")]
     assert "repository" not in preview, "the preview app must not be connected to the repository"
-    assert 'status = "404-200"' in preview
+    # Deep links (the Auth0 /callback redirect) must rewrite to the app shell
+    # with a 200; a bare "/<*>" 404-200 rule does not apply to uploaded branches.
+    assert "source = local.spa_route_pattern" in preview and 'status = "200"' in preview
+    assert '"404-200"' not in preview
     # Staging declares the toggle explicitly (currently off pending the
     # account's Amplify app limit; see profiles/staging.tfvars).
     assert re.search(r"^enable_frontend_previews\s*=\s*(true|false)$", STAGING_TFVARS.read_text(), re.M)

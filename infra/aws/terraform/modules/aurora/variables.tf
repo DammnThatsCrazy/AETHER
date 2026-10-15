@@ -47,7 +47,9 @@ variable "auto_pause_seconds" {
   default     = null
 
   validation {
-    condition     = var.auto_pause_seconds == null || (var.auto_pause_seconds >= 300 && var.auto_pause_seconds <= 86400)
+    # A conditional, not `==  null || ...`: Terraform evaluates both operands of
+    # `||`, so comparing a null value fails the plan for every warm profile.
+    condition     = var.auto_pause_seconds == null ? true : (var.auto_pause_seconds >= 300 && var.auto_pause_seconds <= 86400)
     error_message = "auto_pause_seconds must be null or between 300 and 86400 seconds."
   }
 }

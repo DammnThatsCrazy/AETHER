@@ -56,6 +56,8 @@ statements:
     resource:
       - arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}/branches/pr-*
       - arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}/branches/development
+      # CreateDeployment and StartDeployment authorize on the deployments child.
+      - arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}/branches/development/deployments/*
     scope: frontend-preview-branches
   - sid: ReadPreviewDeploymentJobs
     actions:
