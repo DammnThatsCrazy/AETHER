@@ -11,9 +11,9 @@ since_version: 0.1.0
 # Branch migration runbook: `Development` to `development`
 
 Goal: three permanent branches, `development`, `staging`, `main`, without
-losing history, closing open pull requests, or breaking a deploy role. Nothing
-in this runbook has been executed. Steps marked **admin** need repository
-admin; step 3 needs AWS IAM write access.
+losing history, closing open pull requests, or breaking a deploy role. Steps
+marked **admin** need repository admin; the AWS steps need IAM write access.
+See Status below for what has been done.
 
 ## Inventory (measured 2026-10-15)
 
@@ -72,14 +72,25 @@ mirrored in these filters silently stops the workflows.
 7. **Amplify:** confirm the `development` app branch builds from the renamed
    Git branch.
 
+## Status (2026-10-15)
+
+| Step | State |
+|---|---|
+| 1. Repo accepts both spellings | **Done.** Merged in #793 (green on `verification / disposition` and `ci / verdict`) |
+| 2. AWS trust: add `refs/heads/development` | **Done.** `AetherStagingFrontendPreview` now trusts both `Development` and `development`; verified by re-reading the policy |
+| 3. Rename `Development` to `development` | **Done.** `origin` has only `development`; `Development` no longer exists |
+| 4. Retarget rulesets | Not verified from this session |
+| 5. Repo cleanup (drop capitalized spelling) | Pending; safe now that step 1 is merged, once nothing else needs the old name |
+| 6. AWS cleanup (remove `refs/heads/Development`) | Pending, after step 5 |
+| 7. Amplify `development` app branch | Not verified from this session |
+
+**Ordering:** the rename (step 3) landed before step 1, so push-triggered runs and
+the `development` web deploy were not firing for `development` between the
+rename and the merge of #793. With #793 merged, both spellings are accepted
+everywhere, so the remaining steps are cleanup only.
+
 ## Rollback
 
-Before step 5, both spellings work, so reverting the rename is safe. After step
-6, restoring the old subject and the filters is required before renaming back.
-A Git revert alone does not restore IAM or Amplify.
-
-## What was not done
-
-No branch was renamed, no ruleset changed, and no IAM policy was modified.
-The repo changes in step 1 were prepared but held: they widen which ref may
-deploy with the preview role and need an explicit decision.
+Before step 5, both spellings work in the repo and in AWS, so renaming back is
+safe. After step 6, restore the old subject in AWS and the old filters in the
+repo before renaming back. A Git revert alone does not restore IAM or Amplify.

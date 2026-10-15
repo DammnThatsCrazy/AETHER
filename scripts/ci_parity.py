@@ -26,7 +26,7 @@ def run(cmd, cwd):
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--rev", default="origin/Development")
+    ap.add_argument("--rev", default="origin/development")
     ap.add_argument("--count", type=int, default=25)
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
