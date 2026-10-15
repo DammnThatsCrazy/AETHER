@@ -25,10 +25,10 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:7228b4213d8f52eaecd75958c8c15bc2c0718aac82420959c83e5e69e917e41c"
+  "services/api/actions/": "sha256:f94be83dcba0c3791a9541878a80ca7c7c045c583ff89074bd090da277554fa7"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:0740c89ed3bf089b8ded5f9a319b7670a0afb18bda8f58a69a11a03c2a0a5d75"
-  "services/api/connectors/": "sha256:06b4abc320d568cc4bc5304da0af23cbd149a27f5c8dd28293f9b2aee6fcc0d3"
+  "services/api/connectors/": "sha256:2151fbe6405cb8c3a15a5abe623546ca532a5d49a6bff8c619b259710f571c46"
   "services/api/governance/": "sha256:4d1d5ebfff79f8e4e2aba0d960a87ae1d0aa19b5bb6b0878f93f33b0006086b7"
   "services/api/graph/": "sha256:2e5bb882df912a56ddf8bb116cf6887b2da46722ab9b07b08bb245c530cfa4e1"
   "services/api/identity/": "sha256:9d5a4ac51012e6a7d11856665e95cae3b82a4ce63e80673aada051fab60f7d4b"
@@ -3445,32 +3445,45 @@ routes ignore `X-Aether-Tenant-ID` and `?tenant_id=`, and the inbox processor
 derives the tenant from the stored `ExternalResourceLink` the delivery resolves
 to, together with that link's receipt and delivery job:
 
-- Linear — the link on `data.id`; where the bound delivery stored a team or
-  organisation, the event's team (`data.teamId`) and `organizationId` must match. `webhookTimestamp`
-  is required and must be within 60 seconds of receipt.
+- Linear — the link on `data.id`; where the bound delivery stored an
+  organisation, the event's `organizationId` must match it (the issue may since
+  have moved to another team); otherwise, where it stored a team, the event's
+  team (`data.teamId`) must match. `webhookTimestamp` is required and must be
+  within 60 seconds of receipt.
 - Jira — the link on the issue key, accepted only when the `issue.self` host is
   the Jira site the bound job created the issue on (issue keys repeat across
   sites). The route answers `404` when `INBOUND_JIRA_WEBHOOK_ENABLED` is off.
 - Aether callback — the link on the body's `delivery_id`; the signature is
   verified with that delivery channel's own secret (a platform-wide secret never
   verifies), and `X-Aether-Timestamp` (unix seconds) is required within 300
-  seconds of receipt.
+  seconds of receipt. A delivery job without a `provider_config.secret_ref` is
+  sent unsigned (counted as `delivery_webhook_unsigned_total`), so its callbacks
+  never verify.
 
-A callback that matches no stored delivery, or deliveries in more than one
-tenant, is dead-lettered as `unbound_delivery` and never routed. The delivery
+Receipt time is the inbox row's `received_at`, or its `created_at` for rows
+stored before `received_at` was recorded. A callback that matches no stored
+delivery, or deliveries in more than one tenant, is dead-lettered as
+`unbound_delivery` and never routed; one that fails verification is
+dead-lettered as `signature_unverified`. Both count in
+`delivery_inbox_dead_lettered_total{provider,reason}`. The delivery
 worker records the delivery intent's source on the link as `aether_object_type`
 / `aether_object_id`, and an inbound outcome only changes that object: a
 `suggestion` gets its `outcome_state` (through the tenant-checked
 `SuggestionRepository.patch`), a `notification` its last external outcome
-(skipped when it belongs to another tenant), and an `action` delivery records
+(`last_external_outcome` / `last_outcome_at` in its `operator_context`; skipped
+when it belongs to another tenant), and an `action` delivery records
 the outcome event only. Links written before those fields existed fall back to
 their legacy `resource_type` / `resource_id` / `notification_id` keys. Ids
 carried in the provider payload are never used. Likewise, a confirmed delivery receipt
 marks the source suggestion `delivered` only within the delivery job's tenant.
 
 The legacy public connector route `POST /v1/integrations/webhooks/{connector}`
-resolves a Shopify delivery's tenant from the signed body's shop domain, which
-must match exactly one enabled Shopify connector binding; other non-comms
+resolves a Shopify delivery's tenant from its shop domain — the
+`X-Shopify-Shop-Domain` header, else the body `domain`, which must agree when
+both are present — and that domain must match exactly one enabled Shopify
+connector binding (stored domains are compared without scheme, trailing slash
+or case). That tenant's own secret must then verify the HMAC over the raw body.
+Other non-comms
 connectors scope the secret lookup by `X-Aether-Tenant-ID` and must verify with
 that tenant's own stored secret. Every denial past connector lookup returns the
 same generic `400 webhook rejected`, so the response does not reveal whether a

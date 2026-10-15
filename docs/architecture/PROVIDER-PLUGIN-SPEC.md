@@ -19,8 +19,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "services/api/connectors/provider_runtime/": "sha256:9bba464d8af68941a26a69baee1102ff7a0748c4018e3e46ab448e111abef85c"
-  "services/api/connectors/providers/shopify/": "sha256:415167f6f05ab8a2ff3fcaa432c18e854f8b07a30e97e7d9e53b935028f45396"
+  "services/api/connectors/provider_runtime/": "sha256:96d47e6fee2e0fff4c6b3b3a9bb28c89414a7af87ed137bb489845519434f5d9"
+  "services/api/connectors/providers/shopify/": "sha256:07d79bcf0c1e0e098a1b009690c08ae5f28bcb82fd42e1dcaefc1defb22f490d"
   "services/api/shared/integration_contracts/capabilities.py": "sha256:0549328cc36de3ad566dcc2bbdf2792cab4eafbf3a6785141485d5cdf0058b6f"
   "services/api/shared/integration_contracts/events.py": "sha256:3db66be3c58959b1ac01cebaee21559d19069abf617ed8086c474f3161f5a80e"
   "services/api/shared/integration_contracts/identity.py": "sha256:8264880ababfa1eb2c6be6cbc099478d3e140e7caf1afcb52b664921b6b2871b"
@@ -287,7 +287,9 @@ Registration is additive and does not touch central type unions:
   brokered credentials; domain-only structural discovery is insufficient for
   v2 source-object mapping. In every orders mode the acquisition coordinator
   selects a shop only after discovery recorded its live identity, and rejects a
-  shop another tenant holds selected on a live connection.
+  shop another tenant holds selected on a live connection. A REST `/shop.json`
+  lookup that fails transiently (transport error, `429`, `5xx`, or no shop id)
+  is a retryable discovery failure rather than a shop without an id.
 - `pull.py` — `PullAdapter`: REST orders with `page_info` or `since_id`
   compatibility cursors; batches honor `has_more ⇒ next_cursor`.
 - `graphql_pull.py` — opt-in, version-pinned GraphQL Admin order snapshots with
@@ -297,7 +299,9 @@ Registration is additive and does not touch central type unions:
 - `webhook.py` — `WebhookAdapter`: constant-time `base64(HMAC-SHA256(secret,
   raw_body)) == X-Shopify-Hmac-SHA256` verification computed over the RAW
   body; on a missing secret it returns `False` (never auto-verifies), and the
-  gateway then DENIES the delivery fail-closed.
+  gateway then DENIES the delivery fail-closed. The shop a delivery names comes
+  from `X-Shopify-Shop-Domain`, else the body `domain` (the two must agree);
+  it only selects the candidate binding whose secret must then verify.
 - `plugin.py` — declares a **`webhook_secret`** credential field so the
   declared `shopify_hmac` scheme is actually verifiable; without it the
   gateway would deny every delivery (no secret ⇒ cannot prove ownership).

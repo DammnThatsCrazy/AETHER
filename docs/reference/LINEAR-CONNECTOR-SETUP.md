@@ -101,8 +101,10 @@ Aether verifies `Linear-Signature` using `HMAC-SHA256(DELIVERY_LINEAR_WEBHOOK_SE
 The webhook never names its tenant: an `X-Aether-Tenant-ID` header is ignored.
 Aether routes an event only to the tenant whose stored delivery created the issue
 (`data.id` must match a stored issue link). When Aether created the issue it
-stored the issue's team and organisation; the event's `data.teamId` and
-`organizationId` must match them. Events matching no stored issue are
+stored the issue's team and organisation; the event's `organizationId` must
+match that organisation, so an issue later moved to another team in the same
+workspace still routes. Where no organisation was stored, the event's
+`data.teamId` must match the stored team. Events matching no stored issue are
 dead-lettered and never applied.
 
 ## Troubleshooting
