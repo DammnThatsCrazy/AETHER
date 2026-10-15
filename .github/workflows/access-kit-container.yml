@@ -16,7 +16,7 @@ on:
       - 'pnpm-workspace.yaml'
       - '.npmrc'
   push:
-    branches: [Development, main]
+    branches: [Development, development, main]
     paths:
       - '.github/workflows/access-kit-container.yml'
       - 'packages/access-kit/**'

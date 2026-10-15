@@ -29,7 +29,7 @@ reviewed_source_commits:
   - commit: "c71ebc5cb"
     reason: "Reviewed Access Kit container workflow cadence: pull requests build on ready_for_review, with explicit dispatch and Development/main push lanes for targeted or post-landing builds; no staging wake or deployment is added."
 source_hashes:
-  ".github/workflows/": "sha256:f32a8da872842d5985ca9d53c35418815e65ddbac873dcda6d9f5a72680d3487"
+  ".github/workflows/": "sha256:6d3725b8261cdff63ed5ec6954a32de37f6e131192ff71e721c8cbb6c01901e5"
   "config/delivery_workflow_authority.yaml": "sha256:f9f6f8d8892aefe2b04ef6f2adbc95e5d514efbca7d8a833cf141a1ed17e7038"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
@@ -347,7 +347,10 @@ own environment:
 | Staging | `staging` | Aether Staging (`AETHER-staging-web`) | `deploy.yml` / `staging-lifecycle.yml` deliver from `staging` |
 | Production | `main` | Aether Production (`AETHER-production-web`) | promoted explicitly (`deploy.yml` dispatch with an approved immutable build) |
 
-Feature branches open PRs into `Development` (squash). `Development` is promoted
+Feature branches open PRs into `Development` (squash). The branch is being
+renamed to lowercase `development`; until the rename completes, workflow branch
+filters, the `development-web.yml` deploy guard and the preview role's trust list
+accept both spellings (see `docs/engineering/ci-v2/migration-runbook.md`). `Development` is promoted
 to `staging`, and `staging` to `main`, with merge commits, so after a promotion
 `Development` is an ancestor of `staging` and `staging` is an ancestor of `main`. Every merge to `main`
 deploys the production web app (`amplify-status-production.yml`); production

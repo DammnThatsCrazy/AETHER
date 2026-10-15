@@ -16,7 +16,7 @@ name: Development web
 
 on:
   push:
-    branches: [Development]
+    branches: [Development, development]
     paths:
       - "apps/aether-web/**"
       - "packages/shared/**"
@@ -41,7 +41,7 @@ jobs:
   deploy:
     name: Deploy the Development build
     # The role trusts only Development and main; the build must be Development.
-    if: github.ref == 'refs/heads/Development'
+    if: contains(fromJSON('["refs/heads/Development","refs/heads/development"]'), github.ref)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
