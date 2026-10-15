@@ -55,10 +55,10 @@ def resolve_public_addresses(url: str, *, allow_local: bool = False) -> list[str
         parts = urllib.parse.urlsplit(url)
         port = parts.port
     except (TypeError, ValueError) as exc:
-        raise UnsafeDestinationError(f"Cannot parse URL {url!r}: {exc}") from exc
+        raise UnsafeDestinationError("Cannot parse fetch URL") from exc
     host = parts.hostname
     if not host or parts.scheme not in ("http", "https"):
-        raise UnsafeDestinationError(f"Not an http(s) URL with a host: {url!r}")
+        raise UnsafeDestinationError("Not an http(s) URL with a host")
     try:
         ipaddress.ip_address(host)
         addresses = [host]
@@ -73,7 +73,7 @@ def resolve_public_addresses(url: str, *, allow_local: bool = False) -> list[str
     if not allow_local:
         for address in addresses:
             if not is_public_address(address):
-                raise UnsafeDestinationError(f"{url!r} resolves to non-public address {address!r}")
+                raise UnsafeDestinationError(f"Host {host!r} resolves to non-public address {address!r}")
     return addresses
 
 
@@ -109,4 +109,4 @@ def fetch_public(
         if httpx.URL(next_url).netloc != logical.netloc:
             headers = {k: v for k, v in headers.items() if k.lower() not in _CREDENTIAL_HEADERS}
         url = next_url
-    raise UnsafeDestinationError(f"Too many redirects (more than {max_redirects}) ending at {url!r}")
+    raise UnsafeDestinationError(f"Too many redirects (more than {max_redirects}) ending at host {httpx.URL(url).host!r}")

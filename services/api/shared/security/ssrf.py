@@ -286,12 +286,12 @@ def resolve_public_addresses(url: str, *, allow_local: bool = False) -> list[str
         parts = urllib.parse.urlsplit(url)
         port = parts.port
     except (TypeError, ValueError) as exc:
-        raise UnsafeDestinationError(f"Cannot parse URL {url!r}: {exc}") from exc
+        raise UnsafeDestinationError("Cannot parse outbound URL") from exc
     host = parts.hostname
     if not host:
-        raise UnsafeDestinationError(f"Cannot parse hostname from URL: {url!r}")
+        raise UnsafeDestinationError("Cannot parse hostname from outbound URL")
     if parts.scheme not in ("http", "https"):
-        raise UnsafeDestinationError(f"Unsupported URL scheme {parts.scheme!r}: {url!r}")
+        raise UnsafeDestinationError(f"Unsupported URL scheme {parts.scheme!r} for host {host!r}")
 
     try:
         ipaddress.ip_address(host)
@@ -308,7 +308,7 @@ def resolve_public_addresses(url: str, *, allow_local: bool = False) -> list[str
         for address in addresses:
             if not is_public_address(address):
                 raise UnsafeDestinationError(
-                    f"URL {url!r} resolves to non-public address {address!r}. SSRF protection active."
+                    f"Host {host!r} resolves to non-public address {address!r}. SSRF protection active."
                 )
     return addresses
 
@@ -377,7 +377,7 @@ async def send_public_request(
             if response.status_code == 303 or (response.status_code in (301, 302) and method.upper() == "POST"):
                 method, body = "GET", {}
             url = next_url
-    raise UnsafeDestinationError(f"Too many redirects (more than {max_redirects}) ending at {url!r}")
+    raise UnsafeDestinationError(f"Too many redirects (more than {max_redirects}) ending at host {httpx.URL(url).host!r}")
 
 
 __all__ = [
