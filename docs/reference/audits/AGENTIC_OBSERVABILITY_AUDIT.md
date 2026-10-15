@@ -26,7 +26,7 @@ source_hashes:
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:eefcfa3b35c8ff888be7141bcf91d2bfe08399a17b986b09abb9cafac41566b8"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
   "services/api/value/economic/operation_linkage.py": "sha256:29544d6511463065fed4bba6acb212b9a1c57bb12800733bf6de00a56cf046fa"
-  "services/api/value/x402/": "sha256:1866ae49577a4eb8b32c97fceed7c02c4e5ae10b8c94bec501693759a619a46c"
+  "services/api/value/x402/": "sha256:eb7566549524c97f9bc380fba57bfbecf3bc8c539844b7f3f1ba3e4d766dfb22"
   "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
 
