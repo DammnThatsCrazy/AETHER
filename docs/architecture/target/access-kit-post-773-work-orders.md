@@ -10,8 +10,8 @@ since_version: "0.1.0"
 
 # Access Kit work orders after PR #773
 
-**Base:** merged `Development` at PR #773 (`9157f7953`).  
-**Delivery:** ordered commits on one feature branch and one PR into `Development`.  
+**Base:** merged `Development` at PR #773 (`9157f7953`).
+**Delivery:** ordered commits on one feature branch and one PR into `Development`.
 **Environment:** this PR does not wake, apply, or deploy staging. Production remains `main`; publication and live customer evidence have separate release gates.
 
 PRs #772 and #773 established canonical observation forwarding, delegated CLI sessions, bearer-authenticated hosted MCP, bounded reads, tenant usage/audit correlation, and signed webhook delivery. The remaining program is a set of owner-specific extensions. A transport cannot become the tenant, rights, policy, graph, billing, or action authority.
