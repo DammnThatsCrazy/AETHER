@@ -301,6 +301,71 @@ async def test_verify_unavailable_without_rpc_outside_local(monkeypatch):
     assert error.startswith("verification_unavailable")
 
 
+# ── Verifier connects only to the validated RPC address ──────────────────
+
+
+def _staging_evm_auth():
+    from value.x402.commerce_models import PaymentAuthorization
+
+    return PaymentAuthorization(
+        tenant_id=f"t-{uuid.uuid4().hex[:8]}", challenge_id="c", approval_id="a",
+        payment_identifier="p", amount_usd=1.0, asset_symbol="USDC",
+        chain="eip155:8453", environment="live",
+        recipient="0x1", payer="0x2", facilitator_id="f",
+    )
+
+
+@pytest.mark.asyncio
+async def test_verifier_connects_to_validated_rpc_address(monkeypatch):
+    from unittest.mock import patch
+
+    from value.x402.verification import get_verification_engine
+
+    _mock_active_secret(monkeypatch, "https://tenant-rpc.example.com")
+    monkeypatch.setenv("AETHER_ENV", "staging")
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        is_head = json.loads(request.content)["method"] == "eth_blockNumber"
+        return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": hex(100) if is_head else None})
+
+    _patch_async_client(monkeypatch, httpx.MockTransport(handler))
+    with patch("socket.getaddrinfo", return_value=_mock_getaddrinfo("93.184.216.34")):
+        verified, error = await get_verification_engine()._verify_evm(_staging_evm_auth(), "0x" + "ab" * 32)
+
+    assert verified is False and error.startswith("not_finalized")
+    assert seen and all(r.url.host == "93.184.216.34" for r in seen)
+    assert all(r.headers["host"] == "tenant-rpc.example.com" for r in seen)
+    assert all(r.extensions["sni_hostname"] == "tenant-rpc.example.com" for r in seen)
+    assert seen[0].headers["authorization"] == "Bearer key-v1"
+
+
+@pytest.mark.asyncio
+async def test_verifier_refuses_rpc_rebound_to_non_public_address(monkeypatch):
+    """The address checked at resolution time must be the one connected to: a
+    second DNS answer pointing at a private address is refused, not followed."""
+    from unittest.mock import patch
+
+    from value.x402.verification import get_verification_engine
+
+    _mock_active_secret(monkeypatch, "https://tenant-rpc.example.com")
+    monkeypatch.setenv("AETHER_ENV", "staging")
+    seen: list[httpx.Request] = []
+    _patch_async_client(monkeypatch, httpx.MockTransport(lambda r: seen.append(r) or httpx.Response(200)))
+    answers = iter([_mock_getaddrinfo("93.184.216.34")])
+
+    def rebinding(*_args, **_kwargs):
+        return next(answers, _mock_getaddrinfo("10.0.0.5"))
+
+    with patch("socket.getaddrinfo", side_effect=rebinding):
+        verified, error = await get_verification_engine()._verify_evm(_staging_evm_auth(), "0x" + "ab" * 32)
+
+    assert verified is False
+    assert error.startswith("verification_unavailable")
+    assert seen == []
+
+
 # ── Multi-candidate transfer scan (batched/multicall payments) ────────────
 #
 # The EVM Transfer-log scan and the Solana instruction scan must examine
@@ -344,6 +409,7 @@ def _patch_async_client(monkeypatch, transport: httpx.MockTransport) -> None:
         return real_async_client(*args, **kwargs)
 
     monkeypatch.setattr(httpx, "AsyncClient", _factory)
+    monkeypatch.setattr("socket.getaddrinfo", lambda *a, **k: _mock_getaddrinfo("93.184.216.34"))
 
 
 @pytest.mark.asyncio

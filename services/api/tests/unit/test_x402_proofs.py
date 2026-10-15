@@ -7,8 +7,8 @@ paths directly — NOT ``verify()`` — so the local-mode short-circuit
 hit and the JSON-RPC decode/mapping logic is exercised end to end against fake
 ``eth_getTransactionReceipt`` / ``getTransaction`` payloads.
 
-The fake RPC client injects canned JSON-RPC responses by patching
-``value.x402.verification.httpx.AsyncClient``. Nothing touches the network.
+The fake RPC sender injects canned JSON-RPC responses by patching
+``value.x402.verification.send_public_request``. Nothing touches the network.
 """
 
 from __future__ import annotations
@@ -95,35 +95,18 @@ class _FakeResponse:
         return self._data
 
 
-class _FakeRPCClient:
-    """AsyncClient stand-in that answers JSON-RPC calls from a canned map."""
-
-    def __init__(self, responder):
-        self._responder = responder  # callable(method, params) -> jsonrpc result dict
-        self.calls = []
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc):
-        return False
-
-    async def post(self, url, json=None, headers=None):
-        self.calls.append(json)
-        method = json["method"]
-        params = json["params"]
-        # main's canonical EVM verifier makes a second JSON-RPC call to the
-        # current block height to enforce finality. Answer a sufficiently
-        # confirmed head so the receipt result drives the verdict.
-        if method == "eth_blockNumber":
-            return _FakeResponse({"result": "0x10"})
-        return _FakeResponse(self._responder(method, params))
-
-
 def _fake_rpc(responder):
-    """Context manager patching httpx.AsyncClient inside the verification module."""
-    return patch("value.x402.verification.httpx.AsyncClient",
-                 return_value=_FakeRPCClient(responder))
+    """Patch the verifier's outbound sender to answer JSON-RPC calls from *responder*."""
+
+    async def send(method, url, *, json=None, **_kwargs):
+        # The EVM verifier makes a second JSON-RPC call for the current block
+        # height to enforce finality. Answer a sufficiently confirmed head so
+        # the receipt result drives the verdict.
+        if json["method"] == "eth_blockNumber":
+            return _FakeResponse({"result": "0x10"})
+        return _FakeResponse(responder(json["method"], json["params"]))
+
+    return patch("value.x402.verification.send_public_request", side_effect=send)
 
 
 # ── EVM verification ────────────────────────────────────────────────────────
@@ -347,15 +330,9 @@ def test_verify_solana_transfer_in_inner_instructions():
 def test_verify_solana_rpc_timeout_is_honest_failure():
     auth = _solana_auth(5.0)
 
-    def responder(method, params):
-        raise AssertionError("network call attempted")  # pragma: no cover
+    import httpx
 
-    class _TimeoutClient(_FakeRPCClient):
-        async def post(self, url, json=None, headers=None):
-            import httpx
-            raise httpx.TimeoutException("timeout")
-
-    with patch("value.x402.verification.httpx.AsyncClient", return_value=_TimeoutClient(responder)):
+    with patch("value.x402.verification.send_public_request", side_effect=httpx.TimeoutException("timeout")):
         ok, error = _run(_engine()._verify_solana(auth, "5FakeBase58TxHash1" * 3))
     assert ok is False
     assert "timeout" in error
