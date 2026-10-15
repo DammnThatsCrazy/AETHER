@@ -21,7 +21,7 @@ toc_depth: 3
 source_hashes:
   "services/api/config/settings.py": "sha256:df9bdf848c96816ea19e07f07026fbdfb1a29d75b6c09cbe253191b9cbe72b36"
   "services/api/connectors/provider_runtime/": "sha256:96d47e6fee2e0fff4c6b3b3a9bb28c89414a7af87ed137bb489845519434f5d9"
-  "services/api/connectors/providers/": "sha256:277ad665e9aa795359f527b1073a8d444f3042d5266560cb3dad0aae3926edd0"
+  "services/api/connectors/providers/": "sha256:086060aa67b187df1b1ea59ab1d556fd0bca1df379b3162447117f3ecbff7aeb"
   "services/api/connectors/providers/shopify/": "sha256:4019dd90b0864d3f2b76fc1fac7a4a98bf10e98bfe41ae6c437c248f80814b09"
   "services/api/main.py": "sha256:52e672c1c82e17907041ba173b1fb7cee68bfb03b158eb370fd4f25b584cc726"
   "services/api/shared/commerce_contracts/": "sha256:d526680b50a3c4c5d334545c38df8872f1a1ab67d681a0fb61311323a8ade5b9"
@@ -372,7 +372,7 @@ manifest-driven UI (WS3) are all shipped in this follow-on program. SDK
 event-registry convergence (WS4) remains tracker-only — its merge stays
 deferred to a dedicated convergence program.
 
-**WS8 hardening scope:** the six host-bearing legacy connectors (Shopify, Salesforce, PostHog, Jira, Zendesk, Dune) and the Braze connector now validate tenant-supplied base URLs against provider allowlists (fail-closed). Intentional consequences: self-hosted PostHog on custom domains, Salesforce instances outside `*.salesforce.com` / `*.force.com`, and explicit `:443` in URLs are now denied; Salesforce `*.lightning.force.com` and `*.my.salesforce.com` remain covered. Empty-label and resolver-IP spellings are rejected by the shared seam. WooCommerce is the one native plugin whose host is tenant-supplied (`site_url`, empty allowlist); beyond the structural gate, every live WooCommerce request resolves the host, requires every address to be public, and connects only to a validated address via `shared.security.ssrf.send_public_request`.
+**WS8 hardening scope:** the six host-bearing legacy connectors (Shopify, Salesforce, PostHog, Jira, Zendesk, Dune) and the Braze connector now validate tenant-supplied base URLs against provider allowlists (fail-closed). Intentional consequences: self-hosted PostHog on custom domains, Salesforce instances outside `*.salesforce.com` / `*.force.com`, and explicit `:443` in URLs are now denied; Salesforce `*.lightning.force.com` and `*.my.salesforce.com` remain covered. Empty-label and resolver-IP spellings are rejected by the shared seam. WooCommerce is the one native plugin whose host is tenant-supplied (`site_url`, empty allowlist); beyond the structural gate, every live WooCommerce request resolves the host, requires every address to be public, and connects only to a validated address via `shared.security.ssrf.send_public_request`. A non-public answer is a permanent `site_url_not_public`; a host that does not resolve is a retryable `site_url_unresolved`.
 
 - **Not built in this program**: SDK event-registry convergence only — the
   dotted `commerce.*` types stay runtime-domain (mirroring the `comms`

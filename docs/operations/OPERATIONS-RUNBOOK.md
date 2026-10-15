@@ -42,7 +42,7 @@ source_hashes:
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/actions/agent_marketplace/lineage.py": "sha256:bfe247f42c3360f30b3f4fa92b1f39e95f654be0862303d6f74b9fb2363e6566"
   "services/api/actions/agent_marketplace/projection.py": "sha256:92a5f5e457beebde9d161bf26f40ccb39fc5b76bc8ae4abfccc3e572b3c29de0"
-  "services/api/actions/delivery/adapters/webhook.py": "sha256:80bf9eaaf36f1f90ee681351bde637fdfe8b7613b7e8a19587e1cad52294f563"
+  "services/api/actions/delivery/adapters/webhook.py": "sha256:e3ecc854d8b57fa74ba2a88b0867a81e40ce3f2a1a08dc675dd525085c3bc7f5"
   "services/api/actions/delivery/outcome_processor.py": "sha256:41f3f3623ba08361567fe7b17b13b6f39592358b5b0384ff9df52a66d305e79e"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"

@@ -11,8 +11,8 @@ source_files:
   - services/api/value/rewards/rails.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/api/value/rewards/delivery_outbox.py": "sha256:9fd28e34c6f74df4c5f77b8ed3ca0966214dfbdb3686b5f497d30f0701b44480"
-  "services/api/value/rewards/rails.py": "sha256:9a7cf5eb291884604e0d6c66d6385a13d731c3d1e5085eddb530b68a8dd36725"
+  "services/api/value/rewards/delivery_outbox.py": "sha256:02cc0babff609631153f2a84ffdf8f7ed670a5d23e29a18f3a58f708c02389f9"
+  "services/api/value/rewards/rails.py": "sha256:f9141675fa00dd5b1a00c0789b747e646b392b64561b770f4d9a7f0dff51d2a9"
 ---
 
 # Reward Delivery Runbook
@@ -71,6 +71,12 @@ follows a redirect. If the host resolves to a non-public address at send time
 (DNS changed after enqueue), the attempt fails as `SSRF-blocked destination`,
 which the sender classifies as fatal, so the job dead-letters instead of
 retrying.
+
+A host that does not resolve at all (resolver timeout or temporary DNS failure)
+is not a blocked destination: enqueue keeps the job, and a send fails as
+`destination could not be resolved`, which the sender classifies as retryable.
+The `rewards_actions_failed_total` reason label is `unresolved` for these and
+`ssrf_blocked` for refused destinations.
 
 ## Webhook signing secret could not be resolved
 
