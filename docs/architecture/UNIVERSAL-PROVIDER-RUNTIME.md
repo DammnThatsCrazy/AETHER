@@ -20,9 +20,9 @@ estimated_read_minutes: 14
 toc_depth: 3
 source_hashes:
   "services/api/config/settings.py": "sha256:df9bdf848c96816ea19e07f07026fbdfb1a29d75b6c09cbe253191b9cbe72b36"
-  "services/api/connectors/provider_runtime/": "sha256:9bba464d8af68941a26a69baee1102ff7a0748c4018e3e46ab448e111abef85c"
-  "services/api/connectors/providers/": "sha256:7439f7c76f1a5691b51f563ac542225b53588f820b85e5234f7770da059d9bfa"
-  "services/api/connectors/providers/shopify/": "sha256:415167f6f05ab8a2ff3fcaa432c18e854f8b07a30e97e7d9e53b935028f45396"
+  "services/api/connectors/provider_runtime/": "sha256:96d47e6fee2e0fff4c6b3b3a9bb28c89414a7af87ed137bb489845519434f5d9"
+  "services/api/connectors/providers/": "sha256:3085577ebcdaac40d8584a7185749cd3708b238e394e7c7ff7b01b586b43ff6a"
+  "services/api/connectors/providers/shopify/": "sha256:07d79bcf0c1e0e098a1b009690c08ae5f28bcb82fd42e1dcaefc1defb22f490d"
   "services/api/main.py": "sha256:52e672c1c82e17907041ba173b1fb7cee68bfb03b158eb370fd4f25b584cc726"
   "services/api/shared/commerce_contracts/": "sha256:d526680b50a3c4c5d334545c38df8872f1a1ab67d681a0fb61311323a8ade5b9"
   "services/api/shared/integration_contracts/": "sha256:54a124b718666f272272a9845ada4e8720cce2b81981b981db40a4e88674149e"
