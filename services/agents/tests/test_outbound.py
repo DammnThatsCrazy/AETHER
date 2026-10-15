@@ -50,13 +50,18 @@ def fake_dns():
         "127.0.0.1", "::1", "::ffff:127.0.0.1", "::ffff:169.254.169.254", "64:ff9b::a9fe:a9fe",
         "169.254.169.254", "fe80::1", "10.0.0.5", "172.16.0.1", "192.168.1.1", "fc00::1",
         "100.64.0.1", "100.100.100.200", "0.0.0.0", "224.0.0.1",
+        "2002:a9fe:a9fe::1", "2001:0:4136:e378:8000:63bf:80ff:fffe", "2001:0:a00:5:8000:63bf:f7f7:f7f7",
     ],
 )
 def test_rejects_non_public_address(ip):
     assert is_public_address(ip) is False
 
 
-@pytest.mark.parametrize("ip", ["93.184.216.34", "2001:4860:4860::8888", "64:ff9b::808:808"])
+@pytest.mark.parametrize(
+    "ip",
+    ["93.184.216.34", "2001:4860:4860::8888", "64:ff9b::808:808", "2002:808:808::1",
+     "2001:0:4136:e378:8000:63bf:f7f7:f7f7"],
+)
 def test_accepts_public_address(ip):
     assert is_public_address(ip) is True
 

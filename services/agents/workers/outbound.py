@@ -3,7 +3,7 @@
 Crawl and scan targets come from task payloads, so they are untrusted. A
 fetch resolves the host, requires every resolved address to be globally
 routable (``ipaddress`` ``is_global``, not multicast) after unwrapping
-IPv4-mapped IPv6 and the NAT64 well-known prefix ``64:ff9b::/96``, connects to
+IPv4-mapped IPv6, NAT64 (``64:ff9b::/96``), 6to4 and Teredo, connects to
 the validated address with the original ``Host`` header and TLS SNI, and
 follows at most three redirects by hand, re-validating every hop and dropping
 credentials when the host changes.
@@ -31,17 +31,22 @@ class UnsafeDestinationError(ValueError):
 
 
 def is_public_address(value: str) -> bool:
-    """True only for a globally routable unicast address (mapped/NAT64 unwrapped)."""
+    """True only for a globally routable unicast address (mapped/NAT64/6to4/Teredo unwrapped)."""
     try:
         addr = ipaddress.ip_address(value)
     except ValueError:
         return False
+    candidates = [addr]
     if isinstance(addr, ipaddress.IPv6Address):
         if addr.ipv4_mapped is not None:
-            addr = addr.ipv4_mapped
+            candidates = [addr.ipv4_mapped]
         elif addr in _NAT64_PREFIX:
-            addr = ipaddress.IPv4Address(int(addr) & 0xFFFFFFFF)
-    return addr.is_global and not addr.is_multicast
+            candidates = [ipaddress.IPv4Address(int(addr) & 0xFFFFFFFF)]
+        elif addr.sixtofour is not None:
+            candidates = [addr.sixtofour]
+        elif addr.teredo is not None:
+            candidates = list(addr.teredo)
+    return all(c.is_global and not c.is_multicast for c in candidates)
 
 
 def resolve_public_addresses(url: str, *, allow_local: bool = False) -> list[str]:

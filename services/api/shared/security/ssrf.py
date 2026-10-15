@@ -38,8 +38,9 @@ returns a raw or unvalidated value.
 The resolver-level check lives here too. :func:`resolve_public_addresses`
 resolves a URL's host and requires every resolved address to be globally
 routable (``ipaddress`` ``is_global``, not multicast), after unwrapping
-IPv4-mapped IPv6 (``::ffff:a.b.c.d``) and the NAT64 well-known prefix
-(``64:ff9b::/96``) to their embedded IPv4. That excludes loopback, link-local
+IPv4-mapped IPv6 (``::ffff:a.b.c.d``), the NAT64 well-known prefix
+(``64:ff9b::/96``), 6to4 (``2002::/16``) and Teredo (``2001::/32``) to their
+embedded IPv4. That excludes loopback, link-local
 and cloud metadata, RFC 1918, ULA, carrier-grade NAT (``100.64.0.0/10``),
 documentation and reserved ranges. :func:`send_public_request` issues the
 request against the validated address (original ``Host`` header, TLS SNI and
@@ -251,19 +252,27 @@ _NAT64_PREFIX = ipaddress.ip_network("64:ff9b::/96")
 def is_public_address(value: str) -> bool:
     """True only for a globally routable unicast address.
 
-    IPv4-mapped and NAT64 (``64:ff9b::/96``) IPv6 addresses are judged by the
-    IPv4 address they embed. Unparseable input is not public.
+    IPv4-mapped, NAT64 (``64:ff9b::/96``) and 6to4 (``2002::/16``) IPv6
+    addresses are judged by the IPv4 address they embed, Teredo
+    (``2001::/32``) by both its server and client IPv4, independent of how the
+    running Python version classifies the IPv6 prefix. Unparseable input is
+    not public.
     """
     try:
         addr = ipaddress.ip_address(value)
     except ValueError:
         return False
+    candidates = [addr]
     if isinstance(addr, ipaddress.IPv6Address):
         if addr.ipv4_mapped is not None:
-            addr = addr.ipv4_mapped
+            candidates = [addr.ipv4_mapped]
         elif addr in _NAT64_PREFIX:
-            addr = ipaddress.IPv4Address(int(addr) & 0xFFFFFFFF)
-    return addr.is_global and not addr.is_multicast
+            candidates = [ipaddress.IPv4Address(int(addr) & 0xFFFFFFFF)]
+        elif addr.sixtofour is not None:
+            candidates = [addr.sixtofour]
+        elif addr.teredo is not None:
+            candidates = list(addr.teredo)
+    return all(c.is_global and not c.is_multicast for c in candidates)
 
 
 def resolve_public_addresses(url: str, *, allow_local: bool = False) -> list[str]:
