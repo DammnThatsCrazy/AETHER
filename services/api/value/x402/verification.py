@@ -18,6 +18,7 @@ import httpx
 
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
+from shared.security.ssrf import UnsafeDestinationError, send_public_request
 
 from .commerce_models import Facilitator, FacilitatorMode, PaymentAuthorization, PaymentReceipt
 from .commerce_store import get_commerce_store
@@ -42,6 +43,21 @@ _VERDICT_PREFIXES = (
     "no_matching_transfer",
     "malformed",
 )
+
+
+async def _rpc_call(rpc, payload: dict, timeout: float) -> dict:
+    """POST one JSON-RPC call to the tenant RPC, connected to its validated address."""
+    resp = await send_public_request(
+        "POST",
+        rpc.request_url(),
+        headers=rpc.headers(),
+        json=payload,
+        timeout=timeout,
+        max_redirects=0,
+        allow_local=_is_local_env(),
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 def _receipt_id_for(tenant_id: str, authorization_id: str) -> str:
@@ -509,20 +525,18 @@ class VerificationEngine:
             return False, f"verification_unavailable: {exc}"
 
         try:
-            async with httpx.AsyncClient(timeout=8.0) as client:
-                resp = await client.post(rpc.request_url(), headers=rpc.headers(), json={
-                    "jsonrpc": "2.0", "id": 1,
-                    "method": "eth_getTransactionReceipt",
-                    "params": [tx_hash],
-                })
-                resp.raise_for_status()
-                data = resp.json()
-                # finality: current head vs tx block
-                head_resp = await client.post(rpc.request_url(), headers=rpc.headers(), json={
-                    "jsonrpc": "2.0", "id": 2, "method": "eth_blockNumber", "params": [],
-                })
-                head_resp.raise_for_status()
-                head = int(head_resp.json().get("result", "0x0"), 16)
+            data = await _rpc_call(rpc, {
+                "jsonrpc": "2.0", "id": 1,
+                "method": "eth_getTransactionReceipt",
+                "params": [tx_hash],
+            }, timeout=8.0)
+            # finality: current head vs tx block
+            head_data = await _rpc_call(rpc, {
+                "jsonrpc": "2.0", "id": 2, "method": "eth_blockNumber", "params": [],
+            }, timeout=8.0)
+            head = int(head_data.get("result", "0x0"), 16)
+        except UnsafeDestinationError:
+            return False, "verification_unavailable: EVM RPC endpoint is not a public address"
         except httpx.TimeoutException:
             return False, "verification_unavailable: EVM RPC timeout"
         except Exception as exc:
@@ -600,18 +614,17 @@ class VerificationEngine:
             return False, f"verification_unavailable: {exc}"
 
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post(rpc.request_url(), headers=rpc.headers(), json={
-                    "jsonrpc": "2.0", "id": 1,
-                    "method": "getTransaction",
-                    "params": [tx_hash, {
-                        "encoding": "jsonParsed",
-                        "maxSupportedTransactionVersion": 0,
-                        "commitment": "finalized",
-                    }],
-                })
-            resp.raise_for_status()
-            data = resp.json()
+            data = await _rpc_call(rpc, {
+                "jsonrpc": "2.0", "id": 1,
+                "method": "getTransaction",
+                "params": [tx_hash, {
+                    "encoding": "jsonParsed",
+                    "maxSupportedTransactionVersion": 0,
+                    "commitment": "finalized",
+                }],
+            }, timeout=10.0)
+        except UnsafeDestinationError:
+            return False, "verification_unavailable: Solana RPC endpoint is not a public address"
         except httpx.TimeoutException:
             return False, "verification_unavailable: Solana RPC timeout"
         except Exception as exc:
