@@ -25,7 +25,7 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:609af3d197977ffc03c6ded7902a475904f2cb204d204e43123a86eb2a3b0844"
+  "services/api/actions/": "sha256:7228b4213d8f52eaecd75958c8c15bc2c0718aac82420959c83e5e69e917e41c"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:0740c89ed3bf089b8ded5f9a319b7670a0afb18bda8f58a69a11a03c2a0a5d75"
   "services/api/connectors/": "sha256:06b4abc320d568cc4bc5304da0af23cbd149a27f5c8dd28293f9b2aee6fcc0d3"
@@ -3457,11 +3457,15 @@ to, together with that link's receipt and delivery job:
   seconds of receipt.
 
 A callback that matches no stored delivery, or deliveries in more than one
-tenant, is dead-lettered as `unbound_delivery` and never routed. An inbound
-outcome then only changes the objects named by that link: the linked suggestion
-(through the tenant-checked `SuggestionRepository.patch`) and the linked
-notification, which is skipped when it belongs to another tenant. Ids carried in
-the provider payload are never used. Likewise, a confirmed delivery receipt
+tenant, is dead-lettered as `unbound_delivery` and never routed. The delivery
+worker records the delivery intent's source on the link as `aether_object_type`
+/ `aether_object_id`, and an inbound outcome only changes that object: a
+`suggestion` gets its `outcome_state` (through the tenant-checked
+`SuggestionRepository.patch`), a `notification` its last external outcome
+(skipped when it belongs to another tenant), and an `action` delivery records
+the outcome event only. Links written before those fields existed fall back to
+their legacy `resource_type` / `resource_id` / `notification_id` keys. Ids
+carried in the provider payload are never used. Likewise, a confirmed delivery receipt
 marks the source suggestion `delivered` only within the delivery job's tenant.
 
 The legacy public connector route `POST /v1/integrations/webhooks/{connector}`

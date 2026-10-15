@@ -84,13 +84,11 @@ class OutcomeRouter:
         suggestion_outcome = self._map_event_type_to_suggestion_outcome(event_type)
 
         if link:
-            intent_id = link.get("intent_id")
-            source_type = link.get("resource_type", "suggestion")
-
-            if source_type == "suggestion" and suggestion_outcome is not None:
+            target_type, _ = _link_target(link)
+            if target_type == "suggestion" and suggestion_outcome is not None:
                 await self._route_to_suggestion(outcome, link=link, outcome_state=suggestion_outcome)
-
-            await self._route_to_notification(outcome, link=link)
+            elif target_type == "notification":
+                await self._route_to_notification(outcome, link=link)
 
         # Mark outcome as routed in raw_payload (persisted via update)
         try:
@@ -127,8 +125,8 @@ class OutcomeRouter:
         """
         if self._suggestion_repo is None:
             return
-        suggestion_id = link.get("resource_id")
-        if not suggestion_id:
+        target_type, suggestion_id = _link_target(link)
+        if target_type != "suggestion" or not suggestion_id:
             return
         try:
             await self._suggestion_repo.patch(suggestion_id, outcome.tenant_id, {
@@ -148,8 +146,8 @@ class OutcomeRouter:
         """Advance notification lifecycle if notification_repo is available."""
         if self._notification_repo is None:
             return
-        notification_id = link.get("notification_id") or link.get("resource_id")
-        if not notification_id:
+        target_type, notification_id = _link_target(link)
+        if target_type != "notification" or not notification_id:
             return
         try:
             row = await self._notification_repo.find_by_id(notification_id)
@@ -692,6 +690,19 @@ class WebhookInboxProcessor:
 
 
 # ─── Binding helpers ─────────────────────────────────────────────────────────
+
+def _link_target(link: dict) -> tuple[str, str]:
+    """``(object type, object id)`` the delivery link was written for.
+
+    Links stored before the ``aether_object_*`` fields existed carry the
+    legacy ``notification_id`` or ``resource_type``/``resource_id`` keys.
+    """
+    if link.get("aether_object_type") and link.get("aether_object_id"):
+        return link["aether_object_type"], link["aether_object_id"]
+    if link.get("notification_id"):
+        return "notification", link["notification_id"]
+    return link.get("resource_type", "suggestion"), link.get("resource_id") or ""
+
 
 def _delivery_id(payload: dict) -> str:
     event_data = payload.get("event_data")
