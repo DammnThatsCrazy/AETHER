@@ -47,14 +47,23 @@ def obs_routes(monkeypatch):
         yield mod
 
 
-def make_request(tenant_id: str = "t-001"):
+def make_request(tenant_id: str = "t-001", platform_operator: bool = False):
     tenant = SimpleNamespace(tenant_id=tenant_id, require_permission=lambda perm: None)
-    return SimpleNamespace(state=SimpleNamespace(tenant=tenant))
+    return SimpleNamespace(state=SimpleNamespace(tenant=tenant, platform_operator=platform_operator))
+
+
+@pytest.mark.asyncio
+async def test_metrics_require_a_platform_operator(obs_routes):
+    with pytest.raises(Exception) as exc:
+        await obs_routes.metrics_snapshot(make_request())
+    assert "operator" in str(exc.value).lower()
+    with pytest.raises(Exception):
+        await obs_routes.get_metric("http", make_request())
 
 
 @pytest.mark.asyncio
 async def test_metrics_snapshot_returns_dict(obs_routes):
-    res = await obs_routes.metrics_snapshot(make_request())
+    res = await obs_routes.metrics_snapshot(make_request(platform_operator=True))
     assert "counters" in res["data"]
     assert "histograms" in res["data"]
 
@@ -66,7 +75,7 @@ async def test_get_metric_filters_by_prefix(obs_routes):
     metrics.increment("test_observability_alpha", labels={"k": "v"})
     metrics.increment("unrelated_counter")
 
-    res = await obs_routes.get_metric("test_observability", make_request())
+    res = await obs_routes.get_metric("test_observability", make_request(platform_operator=True))
     assert all(k.startswith("test_observability") for k in res["data"]["counters"].keys())
 
 

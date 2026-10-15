@@ -23,6 +23,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
+from governance.security.request_context import require_platform_operator
 from shared.common.common import APIResponse, BadRequestError
 from shared.logger.logger import get_logger, metrics
 from shared.store import get_store
@@ -58,6 +59,7 @@ async def metrics_snapshot(request: Request):
     """Return the full counter + histogram snapshot."""
     tenant = request.state.tenant
     tenant.require_permission("admin")
+    require_platform_operator(request)
     snap = metrics.snapshot()
     return APIResponse(data=snap).to_dict()
 
@@ -67,6 +69,7 @@ async def get_metric(name: str, request: Request):
     """Return all counter + histogram series whose name starts with `name`."""
     tenant = request.state.tenant
     tenant.require_permission("admin")
+    require_platform_operator(request)
     snap = metrics.snapshot()
 
     counter_matches = {k: v for k, v in snap.get("counters", {}).items() if k.startswith(name)}
