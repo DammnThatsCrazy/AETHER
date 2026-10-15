@@ -14,7 +14,7 @@ estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
   "services/api/intelligence/intelligence/decision_models.py": "sha256:95d33e7eee251e14114ba3f538f78f32ffe2d1e3cdb9c122ddec7b80086e8e25"
-  "services/api/intelligence/intelligence/routes.py": "sha256:e1435c37fe23a4ef9a806db9e90f6048cee9364fae06b71336b24dfda362cded"
+  "services/api/intelligence/intelligence/routes.py": "sha256:58d87548dec926d8526d02b2b9cfd044adbf81569d3e6372cdaa80bf7496d5e6"
 ---
 # Playbooks
 

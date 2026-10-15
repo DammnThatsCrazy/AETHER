@@ -18,7 +18,7 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
-  "services/api/repositories/repos.py": "sha256:2d5aa0082287de033384f3ad7861b780d23b861a14c04c6af86ab89716a2776b"
+  "services/api/repositories/repos.py": "sha256:0526f10f7486f0e40a6b808400feaf9f65c787880ea5858c4db6b5f348645959"
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
 ---
 
