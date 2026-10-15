@@ -1086,6 +1086,55 @@ async def test_account_discovery_missing_domain() -> None:
     assert result.status == AdapterStatus.PERMANENT_ERROR
 
 
+def _shop_lookup(monkeypatch: pytest.MonkeyPatch, handler) -> None:
+    import connectors.providers.shopify.account as acct_mod
+
+    monkeypatch.setattr(
+        acct_mod, "_http_client",
+        lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [(503, AdapterStatus.RETRYABLE_ERROR), (429, AdapterStatus.RATE_LIMITED)],
+)
+async def test_account_discovery_transient_shop_lookup_failure_is_retryable(
+    monkeypatch: pytest.MonkeyPatch, status: int, expected: AdapterStatus,
+) -> None:
+    _shop_lookup(monkeypatch, lambda request: httpx.Response(status, json={}))
+    result = await ShopifyAccountAdapter().discover_accounts(_context())
+    assert result.success is False
+    assert result.status == expected
+    assert result.retryable is True
+
+
+@pytest.mark.asyncio
+async def test_account_discovery_unreachable_shop_is_retryable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    _shop_lookup(monkeypatch, handler)
+    result = await ShopifyAccountAdapter().discover_accounts(_context())
+    assert result.success is False
+    assert result.status == AdapterStatus.RETRYABLE_ERROR
+    assert result.retryable is True
+
+
+@pytest.mark.asyncio
+async def test_account_discovery_live_shop_carries_its_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    _shop_lookup(
+        monkeypatch,
+        lambda request: httpx.Response(200, json={"shop": {"id": 548380009, "name": "Synth"}}),
+    )
+    result = await ShopifyAccountAdapter().discover_accounts(_context())
+    assert result.success is True
+    assert result.data[0].external_id == "548380009"
+
+
 # ── Payload tolerance ───────────────────────────────────────────────────────
 
 
