@@ -57,7 +57,6 @@ from shared.graph.edge_properties import (
 )
 from shared.graph.generated_mutation_taxonomy import GRAPH_MUTATION_TYPES
 from shared.graph.graph import (
-    RESERVED_GRAPH_TENANTS,
     Edge,
     Vertex,
     VertexOwnershipError,
@@ -406,8 +405,9 @@ class GraphMutationGateway:
         """Refuse a vertex write that would change its owner, before any ledger write.
 
         The backends enforce the same rule atomically; this check also keeps a
-        tenant writer off ``platform``/``public`` reference vertices, which
-        only a write made for that reserved scope may create or modify.
+        writer off any vertex owned by a scope other than the one the write is
+        made for, so a tenant never touches another tenant's vertex or the
+        ``platform``/``public`` reference vertices.
         """
         vertex = intent.vertex
         assert vertex is not None
@@ -415,7 +415,7 @@ class GraphMutationGateway:
         tenant = check_vertex_owner(
             existing.properties if existing is not None else None, vertex.properties,
         )
-        if tenant in RESERVED_GRAPH_TENANTS and intent.tenant_id != tenant:
+        if tenant is not None and intent.tenant_id != tenant:
             raise VertexOwnershipError()
 
     def _check_shape(self, intent: MutationIntent) -> None:
