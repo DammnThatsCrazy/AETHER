@@ -88,6 +88,9 @@ def _seed(conn) -> None:
 
     _put(conn, "behavior_profiles", "user-1", {"entity_id": "user-1", "tenant_id": "ta"}, "ta")
     _put(conn, "behavior_profiles", "user-2", {"entity_id": "user-2", "tenant_id": "tb"}, "ta")
+    # Written under the new key by a new worker mid-deploy: the bare row is stale.
+    _put(conn, "behavior_profiles", "user-3", {"entity_id": "user-3", "tenant_id": "ta", "v": "old"}, "ta")
+    _put(conn, "behavior_profiles", "ta:user-3", {"entity_id": "user-3", "tenant_id": "ta", "v": "new"}, "ta")
     _put(conn, "journey_chains", "chain:user-1",
          {"entity_id": "user-1", "tenant_id": "ta", "chain_id": "chain:user-1"}, "ta")
 
@@ -144,7 +147,8 @@ def test_migration_rekeys_and_backfills_idempotently(conn):
     assert tenant == "ta" and data["envelope_id"] == "evt-1" and data["id"] == "ta:evt-1"
 
     profiles = first["behavior_profiles"]
-    assert set(profiles) == {"ta:user-1"}  # contaminated user-2 row removed
+    assert set(profiles) == {"ta:user-1", "ta:user-3"}  # contaminated user-2 row removed
+    assert profiles["ta:user-3"][1]["v"] == "new"
     assert profiles["ta:user-1"][1]["id"] == "ta:user-1"
     chains = first["journey_chains"]
     assert set(chains) == {"ta:user-1"}
