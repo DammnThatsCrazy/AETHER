@@ -54,7 +54,7 @@ source_hashes:
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
   "services/api/repositories/repos.py": "sha256:2d5aa0082287de033384f3ad7861b780d23b861a14c04c6af86ab89716a2776b"
-  "services/api/shared/graph/": "sha256:4c7aed1b6a8c6164d955f5d500790bddfdd947a32db80d8697a3137bb65b2f64"
+  "services/api/shared/graph/": "sha256:6750a2926f12158fbd9e0ec3653982ac7ca359e26baa17d200783386b749da0a"
   "services/api/value/x402/economic_mutations.py": "sha256:bdd180a936e048840636f221fdee3b142c0babab5d8e2bcc59b4a51983198f51"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
   "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
@@ -85,18 +85,29 @@ Vertex writes keep their owner. Every backend (in-memory, Postgres
 `GraphMutationGateway.apply` (before any ledger write, in every mode) compare
 the stored vertex's tenant with the incoming one: they must be equal, a vertex
 with no tenant can only be rewritten by a write naming none, and a vertex whose
-`tenantId` and `tenant_id` disagree is rejected. A refused write raises
+`tenantId` and `tenant_id` disagree is rejected. The gateway also refuses a
+write made for any scope other than the vertex's owner, so one tenant cannot
+rewrite another tenant's vertex even when the owner property is left unchanged.
+A refused write raises
 `VertexOwnershipError` (a `ConflictError` with the generic `Conflict` text, so
 a reused client-chosen id such as an agent id does not reveal that the vertex
 exists in another tenant). User vertices written for the legacy profile
 endpoint and agent lifecycle events use the tenant-scoped id
 `{tenant}:user:{user_id}` (`user_vertex_id`), so the same SDK user id in two
 tenants names two vertices. `platform` and `public` vertices
-(asset registry `chain:` / `asset:` vertices, card catalog vertices, interop
+(asset registry `chain:` / `asset:` vertices, card catalog vertices,
+derivatives `market_venue:` / `derivative_market:` vertices, interop
 topology) can only be created or changed by a write made for that scope; a
-tenant writer only adds edges to them. Interop topology links a gateway to a
-`chain:` vertex only when the asset registry has seeded it (otherwise the edge
-is skipped and counted as `interop_chain_link_skipped`). On Neptune, `make
+tenant writer only adds edges to them. An interop scan writes the topology as
+`public` whatever tenant it scans, and a tenant's interop messages only add
+that tenant's edges. Interop links a gateway to a `chain:` vertex, or a tenant
+message to an interop vertex, only when that vertex exists with its reference
+owner (otherwise the edge is skipped and counted as
+`interop_chain_link_skipped` / `interop_reference_link_skipped`). Derivatives
+account and position projections link to venue and market vertices only once
+they exist as `platform` and never to another tenant's account (otherwise the
+edge is skipped and counted as `derivatives_graph_link_skipped`); no runtime
+path registers venue or market vertices yet. On Neptune, `make
 graph-platform-owners` (a dry run unless `APPLY=1`) relabels existing `chain:`
 and card catalog vertices to the `platform` owner; the Postgres backend is
 relabelled by `make tenant-row-keys`. Ledger replay rebuilds state without the
