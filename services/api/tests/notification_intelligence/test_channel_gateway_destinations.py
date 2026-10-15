@@ -63,3 +63,33 @@ async def test_discord_gateway_connects_to_validated_address():
     assert request.url.host == "162.159.135.232"
     assert request.headers["host"] == "discord.com"
     assert request.extensions["sni_hostname"] == "discord.com"
+
+
+@pytest.mark.asyncio
+async def test_gateway_retries_destination_that_does_not_resolve_yet():
+    answers = iter([OSError("temporary failure"), OSError("temporary failure")])
+
+    def resolver(*_args, **_kwargs):
+        failure = next(answers, None)
+        if failure is not None:
+            raise failure
+        return [(2, 1, 6, "", ("162.159.135.232", 443))]
+
+    send = AsyncMock(return_value=httpx.Response(204))
+    with patch("socket.getaddrinfo", side_effect=resolver), \
+         patch.object(httpx.AsyncClient, "send", send), \
+         patch.object(gw.asyncio, "sleep", AsyncMock()):
+        result = await gw.DiscordChannelGateway().deliver(
+            _NOTIFICATION, {}, "https://discord.com/api/webhooks/1/x"
+        )
+    assert result.success is True
+    send.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_gateway_does_not_retry_non_public_destination():
+    with _network("10.0.0.5") as send, patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("10.0.0.5", 443))]) as dns:
+        result = await gw.WebhookChannelGateway().deliver(_NOTIFICATION, {}, _HOOK)
+    assert result.success is False
+    send.assert_not_called()
+    assert dns.call_count == 1

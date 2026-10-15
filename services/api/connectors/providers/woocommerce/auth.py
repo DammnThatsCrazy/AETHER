@@ -32,7 +32,12 @@ from shared.integration_contracts.results import (
     AdapterStatus,
     RateLimitInfo,
 )
-from shared.security.ssrf import UnsafeDestinationError, send_public_request, validated_https_host
+from shared.security.ssrf import (
+    DestinationResolutionError,
+    UnsafeDestinationError,
+    send_public_request,
+    validated_https_host,
+)
 
 REQUIRED_CREDENTIAL_FIELDS = ("consumer_key", "consumer_secret")
 # The WooCommerce REST API path is pinned in code — never tenant input.
@@ -111,7 +116,18 @@ async def _get(url: str, cred: dict[str, Any]):
     )
 
 
-def _not_public(latency_ms: Optional[float] = None) -> AdapterResult[Any]:
+def _destination_refused(
+    exc: UnsafeDestinationError, latency_ms: Optional[float] = None
+) -> AdapterResult[Any]:
+    if isinstance(exc, DestinationResolutionError):
+        return AdapterResult(
+            success=False,
+            status=AdapterStatus.RETRYABLE_ERROR,
+            error_code="site_url_unresolved",
+            retryable=True,
+            latency_ms=latency_ms,
+            data={"detail": "site_url host could not be resolved"},
+        )
     return AdapterResult(
         success=False,
         status=AdapterStatus.PERMANENT_ERROR,
@@ -206,8 +222,8 @@ class WooCommerceAuthAdapter:
         start = time.perf_counter()
         try:
             response = await _get(base, cred)
-        except UnsafeDestinationError:
-            return _not_public((time.perf_counter() - start) * 1000.0)
+        except UnsafeDestinationError as exc:
+            return _destination_refused(exc, (time.perf_counter() - start) * 1000.0)
         except Exception as exc:  # noqa: BLE001 - network failures are classified
             latency_ms = (time.perf_counter() - start) * 1000.0
             return AdapterResult(
@@ -272,7 +288,7 @@ __all__ = [
     "_base_url",
     "_credential_dict",
     "_get",
-    "_not_public",
+    "_destination_refused",
     "_raw_site_url",
     "_site_host",
 ]

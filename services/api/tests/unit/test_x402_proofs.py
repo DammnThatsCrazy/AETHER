@@ -336,3 +336,16 @@ def test_verify_solana_rpc_timeout_is_honest_failure():
         ok, error = _run(_engine()._verify_solana(auth, "5FakeBase58TxHash1" * 3))
     assert ok is False
     assert "timeout" in error
+
+
+@pytest.mark.parametrize("verify, auth", [("_verify_evm", _evm_auth), ("_verify_solana", _solana_auth)])
+def test_verify_rpc_resolution_failure_is_unavailable_not_refused(verify, auth):
+    from shared.security.ssrf import DestinationResolutionError
+
+    failure = DestinationResolutionError("DNS resolution failed for 'rpc.example'")
+    with patch("value.x402.verification.send_public_request", side_effect=failure):
+        ok, error = _run(getattr(_engine(), verify)(auth(5.0), "5FakeBase58TxHash1" * 3))
+    assert ok is False
+    assert error.startswith("verification_unavailable:")
+    assert "could not be resolved" in error
+    assert "not a public address" not in error

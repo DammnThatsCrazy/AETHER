@@ -18,7 +18,7 @@ import httpx
 
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
-from shared.security.ssrf import UnsafeDestinationError, send_public_request
+from shared.security.ssrf import DestinationResolutionError, UnsafeDestinationError, send_public_request
 
 from .commerce_models import Facilitator, FacilitatorMode, PaymentAuthorization, PaymentReceipt
 from .commerce_store import get_commerce_store
@@ -535,6 +535,8 @@ class VerificationEngine:
                 "jsonrpc": "2.0", "id": 2, "method": "eth_blockNumber", "params": [],
             }, timeout=8.0)
             head = int(head_data.get("result", "0x0"), 16)
+        except DestinationResolutionError:
+            return False, "verification_unavailable: EVM RPC endpoint could not be resolved"
         except UnsafeDestinationError:
             return False, "verification_unavailable: EVM RPC endpoint is not a public address"
         except httpx.TimeoutException:
@@ -623,6 +625,8 @@ class VerificationEngine:
                     "commitment": "finalized",
                 }],
             }, timeout=10.0)
+        except DestinationResolutionError:
+            return False, "verification_unavailable: Solana RPC endpoint could not be resolved"
         except UnsafeDestinationError:
             return False, "verification_unavailable: Solana RPC endpoint is not a public address"
         except httpx.TimeoutException:

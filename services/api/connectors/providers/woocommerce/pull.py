@@ -43,7 +43,7 @@ from connectors.providers.woocommerce.auth import (
     _base_url,
     _credential_dict,
     _get,
-    _not_public,
+    _destination_refused,
     _raw_site_url,
     _safe_json,
     _site_host,
@@ -189,8 +189,8 @@ class WooCommercePullAdapter:
 
         try:
             response = await _get(url, cred)
-        except UnsafeDestinationError:
-            return _not_public()
+        except UnsafeDestinationError as exc:
+            return _destination_refused(exc)
         except Exception as exc:  # noqa: BLE001 - network failures are classified
             return AdapterResult(
                 success=False,

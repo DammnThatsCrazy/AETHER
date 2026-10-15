@@ -23,6 +23,7 @@ Rail adapters do not:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -39,7 +40,7 @@ from pydantic import BaseModel
 
 from value.rewards.policy_engine import PolicyDecision, _amount_to_decimal
 from shared.logger.logger import get_logger, metrics
-from shared.security.ssrf import UnsafeDestinationError, send_public_request
+from shared.security.ssrf import DestinationResolutionError, UnsafeDestinationError, send_public_request
 
 logger = get_logger("aether.service.rewards.rails")
 
@@ -298,6 +299,11 @@ class ManualExportAdapter(RewardRailAdapter):
 # TENANT WEBHOOK
 # ═══════════════════════════════════════════════════════════════════════════
 
+# A resolver failure is transient: the outbox retries it instead of treating
+# it as a blocked destination, so this prefix carries no fatal keyword.
+UNRESOLVED_DESTINATION = "destination could not be resolved"
+
+
 class TenantWebhookAdapter(RewardRailAdapter):
     """Delivers a signed JSON payload to the tenant's configured webhook URL."""
 
@@ -381,7 +387,9 @@ class TenantWebhookAdapter(RewardRailAdapter):
 
             # allow_private=True in local/test keeps loopback reachable.
             validate_webhook_url(url, allow_private=is_local)
-        except Exception as exc:  # SSRFBlockedError and any resolution failure → block
+        except Exception as exc:  # SSRFBlockedError and anything unexpected → block
+            if isinstance(exc.__cause__, DestinationResolutionError):
+                return f"{UNRESOLVED_DESTINATION}: {exc}"
             return f"SSRF-blocked destination: {exc}"
 
         return None
@@ -397,11 +405,14 @@ class TenantWebhookAdapter(RewardRailAdapter):
         is_local = env in ("local", "test")
 
         # ── SSRF / transport validation BEFORE any network I/O ────────────
-        reason = self._validate_destination(webhook_url, is_local=is_local)
+        reason = await asyncio.to_thread(self._validate_destination, webhook_url, is_local=is_local)
         if reason is not None:
             metrics.increment(
                 "rewards_actions_failed_total",
-                labels={"rail": self.rail_name, "reason": "ssrf_blocked"},
+                labels={
+                    "rail": self.rail_name,
+                    "reason": "unresolved" if reason.startswith(UNRESOLVED_DESTINATION) else "ssrf_blocked",
+                },
             )
             host = urlparse(webhook_url).hostname if isinstance(webhook_url, str) else None
             logger.warning("tenant_webhook delivery blocked host=%s reason=%s", host, reason)
@@ -459,6 +470,12 @@ class TenantWebhookAdapter(RewardRailAdapter):
                     response_code=resp.status_code,
                     latency_ms=latency_ms,
                 )
+        except DestinationResolutionError as exc:
+            metrics.increment(
+                "rewards_actions_failed_total",
+                labels={"rail": self.rail_name, "reason": "unresolved"},
+            )
+            return DeliveryResult(success=False, status="failed", error=f"{UNRESOLVED_DESTINATION}: {exc}")
         except UnsafeDestinationError as exc:
             metrics.increment(
                 "rewards_actions_failed_total",

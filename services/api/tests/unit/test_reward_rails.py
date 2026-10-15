@@ -601,6 +601,34 @@ def test_webhook_refuses_destination_rebound_to_non_public_address(monkeypatch):
     send.assert_not_called()
 
 
+@pytest.mark.parametrize("failing_lookup", [1, 2])
+def test_webhook_destination_that_does_not_resolve_is_retried(monkeypatch, failing_lookup):
+    """A resolver failure (before or at send time) is retryable, not an SSRF block."""
+    import socket
+
+    from value.rewards import webhook_secret
+    from value.rewards.delivery_outbox import RewardWebhookSender
+
+    monkeypatch.setenv("AETHER_ENV", "production")
+    monkeypatch.setattr(webhook_secret, "resolve_signing_secret", AsyncMock(return_value="s3cr3t"))
+    lookups = iter(range(1, 10))
+
+    def resolver(*_args, **_kwargs):
+        if next(lookups) == failing_lookup:
+            raise socket.gaierror(socket.EAI_AGAIN, "temporary failure")
+        return [(2, 1, 6, "", ("93.184.216.34", 443))]
+
+    send = AsyncMock(side_effect=AssertionError("connection attempted"))
+    job = {"tenant_id": "t1", "provider_config": {"webhook_url": "https://example.com/hook"},
+           "payload": _WEBHOOK_ACTION["payload"]}
+    with patch("socket.getaddrinfo", side_effect=resolver), patch.object(httpx.AsyncClient, "send", send):
+        result = _run(RewardWebhookSender().send(job))
+
+    assert result.outcome == "retryable"
+    assert "SSRF" not in (result.error or "")
+    send.assert_not_called()
+
+
 def test_webhook_validate_config_rejects_malformed_url():
     adapter = TenantWebhookAdapter()
     errors = adapter.validate_config({"webhook_url": "http://", "signing_secret": "s"})

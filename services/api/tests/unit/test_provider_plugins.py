@@ -427,6 +427,36 @@ async def test_woocommerce_rejects_non_public_destination(ip):
 
 
 @pytest.mark.asyncio
+async def test_woocommerce_retries_site_that_does_not_resolve():
+    import contextlib
+    import socket
+    from unittest.mock import AsyncMock, patch
+
+    import httpx
+
+    from connectors.providers.woocommerce.auth import WooCommerceAuthAdapter
+    from connectors.providers.woocommerce.pull import WooCommercePullAdapter
+    from shared.integration_contracts.results import AdapterStatus
+
+    send = AsyncMock(side_effect=AssertionError("connection attempted"))
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(
+            patch("socket.getaddrinfo", side_effect=socket.gaierror(socket.EAI_AGAIN, "temporary failure"))
+        )
+        stack.enter_context(patch.object(httpx.AsyncClient, "send", send))
+        probe = await WooCommerceAuthAdapter().test(_context(config=_WOO_CONFIG, credential=_WOO_CRED))
+        pulled = await WooCommercePullAdapter(provider_identity="woocommerce.admin.orders_read").fetch(
+            _pull_context(config=_WOO_CONFIG, credential=_WOO_CRED), cursor=None
+        )
+    for result in (probe, pulled):
+        assert result.success is False
+        assert result.status == AdapterStatus.RETRYABLE_ERROR
+        assert result.retryable is True
+        assert result.error_code == "site_url_unresolved"
+    send.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_woocommerce_connects_to_validated_address():
     import httpx
 

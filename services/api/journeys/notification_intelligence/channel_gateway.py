@@ -20,12 +20,17 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from shared.logger.logger import get_logger, metrics
-from shared.security.ssrf import UnsafeDestinationError, resolve_public_addresses, send_public_request
+from shared.security.ssrf import DestinationResolutionError, UnsafeDestinationError, send_public_request
 
 logger = get_logger("aether.notification.channel_gateway")
 
 def _validate_webhook_url(url: str, *, require_hostname: str | None = None) -> None:
-    """Raise ValueError unless url is HTTPS and every address it resolves to is public."""
+    """Raise ValueError unless url is HTTPS (and on *require_hostname*, when given).
+
+    Whether the host resolves only to public addresses is checked by
+    ``send_public_request`` on every attempt, so a resolver failure stays
+    retryable and the event loop never blocks on DNS here.
+    """
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme != "https":
         raise ValueError(f"Webhook URL must use HTTPS (got scheme {parsed.scheme!r})")
@@ -36,7 +41,6 @@ def _validate_webhook_url(url: str, *, require_hostname: str | None = None) -> N
         raise ValueError(
             f"Webhook hostname must be {require_hostname!r} (got {hostname!r})"
         )
-    resolve_public_addresses(url)
 
 
 try:
@@ -164,9 +168,9 @@ class ChannelGateway(ABC):
                     raise RuntimeError(f"HTTP {resp.status_code}")
                 # 4xx (except 429) — no retry
                 return resp.status_code, {}
-            except UnsafeDestinationError:
-                raise
             except Exception as exc:
+                if isinstance(exc, UnsafeDestinationError) and not isinstance(exc, DestinationResolutionError):
+                    raise
                 self._circuit.record_failure()
                 if attempt == MAX_RETRIES - 1:
                     raise

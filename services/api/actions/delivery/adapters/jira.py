@@ -11,7 +11,7 @@ import json
 from typing import Any, Optional
 
 from shared.logger.logger import get_logger
-from shared.security.ssrf import UnsafeDestinationError, send_public_request
+from shared.security.ssrf import DestinationResolutionError, UnsafeDestinationError, send_public_request
 
 from actions.delivery.adapters.base import (
     AdapterReceipt,
@@ -110,6 +110,8 @@ class JiraAdapter(ProviderAdapter):
             resp = await send_public_request(
                 "POST", api_url, headers=headers, content=json.dumps(issue_data), timeout=20.0
             )
+        except DestinationResolutionError as exc:
+            raise RetryableProviderError(str(exc)) from exc
         except UnsafeDestinationError as exc:
             raise SSRFBlockedError(str(exc)) from exc
 
