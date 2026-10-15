@@ -154,7 +154,6 @@ def world(monkeypatch):
         settings.delivery,
         jira_webhook_secret=GLOBAL_SECRET,
         linear_webhook_secret=GLOBAL_SECRET,
-        webhook_signing_secret=GLOBAL_SECRET,
         inbound_jira_webhook_enabled=True,
     ))
     app = FastAPI()

@@ -1440,9 +1440,6 @@ class DeliveryConfig:
     batch_size: int = _env_int("DELIVERY_WORKER_BATCH_SIZE", 10)
     poll_interval_seconds: float = float(_env("DELIVERY_WORKER_POLL_INTERVAL_S", "5"))
 
-    # Webhook signing secret (for outbound X-Aether-Signature)
-    webhook_signing_secret: str = _env("DELIVERY_WEBHOOK_SIGNING_SECRET", "")
-
     # Inbound Linear webhook HMAC secret (system-level default; the inbox
     # processor resolves per-row secrets first, then falls back to this).
     linear_webhook_secret: str = _env("DELIVERY_LINEAR_WEBHOOK_SECRET", "")
