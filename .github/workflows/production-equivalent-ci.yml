@@ -118,8 +118,10 @@ jobs:
           }, indent=2) + "\n")
           PY
       - uses: actions/upload-artifact@v4
+        continue-on-error: true  # diagnostic upload; must not decide the verdict
         if: always()
         with:
+          retention-days: 7
           name: production-equivalent-selection
           path: release-evidence/*.json
           if-no-files-found: error

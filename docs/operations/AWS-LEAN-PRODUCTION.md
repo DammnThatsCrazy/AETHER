@@ -26,7 +26,7 @@ reviewed_source_commits:
   - commit: "609a3ad37"
     reason: "Reviewed the linked root main.tf change; it updates the Auth0 section comment only. The dedicated Native CLI client change does not alter lean AWS topology, deployment lane, or runtime settings described here."
 source_hashes:
-  ".github/workflows/infrastructure.yml": "sha256:0b75f5f3df587ea210008ef2bd79babf74c832dd6746a5a218411dae3a90d5ad"
+  ".github/workflows/infrastructure.yml": "sha256:e0ec1b2746f4f3d2d3fd28819cf288bec019a93ee3fd7f4ea74e75efe36899dc"
   ".github/workflows/terraform-promote.yml": "sha256:804e3b437274475d5125b4dbf6c3988ff9387909af73a5aeb5690713cf310adf"
   "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
   "config/runtime_deployment.yaml": "sha256:cd65f4902ed9062c2526bd9b83b99e2c0ecc58f012a3fa1c90ba9660b874a332"

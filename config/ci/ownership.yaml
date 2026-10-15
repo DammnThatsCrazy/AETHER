@@ -1,0 +1,57 @@
+# CI V2 selection rules. Suite ids, paths and runner commands come from
+# config/test_suites.yaml; this file only adds what the registry cannot say.
+# A changed path selects every registered suite whose `paths` contain it, plus
+# the matches below. Anything unmatched fails closed to every PR-lane suite.
+version: 2
+fallback: broad-safe
+
+# Always selected when any non-text-only file changes. Owners cannot opt out.
+critical:
+  - backend-identity
+  - compliance
+  - root-unit-security
+
+# Text-only paths: selected suite is `docs` (static consistency) and nothing else.
+text_only:
+  - "**/*.md"
+  - "docs/**"
+  - "LICENSE"
+  - "reports/**"
+
+# Fan-out: root/toolchain config, lockfiles, shared packages, CI itself.
+# A change here selects every PR-lane suite.
+fanout:
+  - "package.json"
+  - "package-lock.json"
+  - "pnpm-lock.yaml"
+  - "pnpm-workspace.yaml"
+  - "pyproject.toml"
+  - "tsconfig.json"
+  - "eslint.config.mjs"
+  - "vitest.config.*"
+  - "Makefile"
+  - "config/test_suites.yaml"
+  - "config/ci/**"
+  - "scripts/**"
+  - ".github/workflows/**"
+  - "packages/shared/**"
+  - "packages/config/**"
+  - "packages/ui/**"
+
+# Extra path -> suite mappings for source the registry `paths` do not cover.
+# services/api is one tightly coupled runtime (shared graph/identity/tenancy
+# code is imported everywhere), so any change under it selects the whole
+# backend group. Parity replay against the legacy impact graph showed narrower
+# per-subdirectory rules missed suites (agent-layer, contracts, journey-service).
+extra:
+  - include: ["services/api/**"]
+    suites: [backend-identity, backend-ingestion, backend-campaigns, backend-profile360,
+             backend-agent, backend-computation, backend-value, backend-observability,
+             agent-layer, contracts, journey-service, root-unit-control,
+             root-unit-identity-profile, root-unit-ingestion, root-unit-graph,
+             root-unit-commerce-value, root-unit-security, root-unit-operations,
+             root-unit-platform, root-unit-frontend-sdk]
+  - include: ["packages/sdk/**"]
+    suites: [backend-ingestion, root-unit-ingestion, functionality-proof-ts]
+  - include: ["infra/**", "amplify.yml", "docker-compose.yml"]
+    suites: [root-unit-operations]
