@@ -53,8 +53,8 @@ export function normalizeInteractionOutcome({
   code,
   data,
 }) {
-  if (!['query', 'observe', 'auth'].includes(operation)) {
-    throw new Error('Interaction operation must be query, observe, or auth.');
+  if (!['query', 'observe', 'auth', 'write'].includes(operation)) {
+    throw new Error('Interaction operation must be query, observe, auth, or write.');
   }
   if (typeof requestId !== 'string' || !requestId) {
     throw new Error('Interaction request ID is required.');

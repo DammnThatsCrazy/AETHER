@@ -13,6 +13,7 @@ import {
   invokeAccessOperation,
   listAccessOperations,
 } from '../src/access-operations.mjs';
+import { createContinuation, getContinuation } from '../src/continuation.mjs';
 
 const HELP = `Aether Access Kit — agent access inventory and canonical intake
 
@@ -27,6 +28,8 @@ Usage:
   aether access operations list [--json]
   aether access operations show OPERATION_ID [--json]
   aether access invoke OPERATION_ID [--input-json JSON] [--json]
+  aether continuations create --title TITLE --entity-id ENTITY_ID --idempotency-key KEY [--json]
+  aether continuations show CONTINUATION_ID [--json]
   aether account context [--json]
   aether usage summary [--json]
   aether auth context [--json]
@@ -38,8 +41,8 @@ Usage:
                            [--properties-json JSON] [--json]
 
 Authentication:
-  AETHER_API_KEY           Tenant-scoped API key with read permission, for agents,
-                           entity, account-context, and session-management calls
+  AETHER_API_KEY           Tenant-scoped API key for authorized reads and
+                           continuation writes (which require write permission)
   AETHER_SESSION_TOKEN     Existing revocable human session for the same calls;
                            sent through the server's X-Session-Token contract
   AETHER_AUTH0_DOMAIN      Auth0 HTTPS tenant domain for the auth login command
@@ -49,7 +52,7 @@ Authentication:
   AETHER_SITE_ID           Site ID bound to AETHER_PUBLISHABLE_KEY, for ingest only
   AETHER_API_URL           API origin (default: https://api.aether.io)
 
-Set exactly one read credential: AETHER_API_KEY or AETHER_SESSION_TOKEN. The CLI
+Set exactly one API credential: AETHER_API_KEY or AETHER_SESSION_TOKEN. The CLI
 uses a saved human session from the OS credential store when neither is supplied.
 The auth login command saves only an Aether revocable session; auth logout revokes it.
 Read and ingestion credentials are separate. Ingestion sends one generic track event to POST /v1/batch with X-Aether-Site. Aether
@@ -183,6 +186,7 @@ async function main() {
   const isLogout = area === 'auth' && command === 'logout';
   const needsTenantRead = area === 'account'
     || area === 'entities'
+    || area === 'continuations'
     || (area === 'access' && command === 'invoke')
     || (area === 'usage' && command === 'summary')
     || area === 'agents'
@@ -294,6 +298,43 @@ async function main() {
       process.stdout.write(`Request: ${terminalText(result.requestId)}\n`);
       process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
       if (result.responseRequestId) process.stdout.write(`API request: ${terminalText(result.responseRequestId)}\n`);
+    }
+    return;
+  }
+
+  if (area === 'continuations' && command === 'create') {
+    if (positionals.length !== 2
+        || Object.keys(options).some((key) => !['title', 'entity-id', 'idempotency-key'].includes(key))
+        || !options.title || !options['entity-id'] || !options['idempotency-key']) {
+      throw new Error(`Usage: aether continuations create --title TITLE --entity-id ENTITY_ID --idempotency-key KEY [--json]\n\n${HELP}`);
+    }
+    const result = await createContinuation({
+      title: options.title,
+      entityId: options['entity-id'],
+      idempotencyKey: options['idempotency-key'],
+    }, process.env, { sourceClient: 'desktop' });
+    const output = { ...result.data, ...writeRequestIds(result), ...writeInteraction(result) };
+    if (json) writeJson(output);
+    else {
+      process.stdout.write(`Continuation ${terminalText(result.data.continuation_id)} ${result.data.replayed ? 'replayed' : 'created'}.\n`);
+      process.stdout.write(`Title: ${terminalText(result.data.title)}\n`);
+      process.stdout.write(`Request: ${terminalText(result.requestId)}\n`);
+      process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
+    }
+    return;
+  }
+
+  if (area === 'continuations' && command === 'show') {
+    if (positionals.length !== 3 || Object.keys(options).length > 0) {
+      throw new Error(`Usage: aether continuations show CONTINUATION_ID [--json]\n\n${HELP}`);
+    }
+    const result = await getContinuation(subcommand);
+    const output = { ...result.data, ...writeRequestIds(result), ...writeInteraction(result) };
+    if (json) writeJson(output);
+    else {
+      process.stdout.write(`${terminalText(JSON.stringify(result.data, null, 2))}\n`);
+      process.stdout.write(`Request: ${terminalText(result.requestId)}\n`);
+      process.stdout.write(`Outcome: ${result.interaction.status_class}\n`);
     }
     return;
   }

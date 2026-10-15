@@ -4,9 +4,10 @@ import {
   invokeAccessOperation,
   listAccessOperations,
 } from './access-operations.mjs';
+import { createContinuation, getContinuation } from './continuation.mjs';
 
 /**
- * Create a customer read client. The API remains the tenant, permission,
+ * Create an Access Kit client. The API remains the tenant, permission,
  * billing, and data authority; this client never accepts a tenant override.
  */
 export function createAccessClient({ apiUrl, apiKey, sessionToken } = {}) {
@@ -49,6 +50,26 @@ export function createAccessClient({ apiUrl, apiKey, sessionToken } = {}) {
       get: (capabilityId) => invoke('agent_access.observed.get', { capability_id: capabilityId }),
     }),
     usage: Object.freeze({ summary: () => invoke('usage.summary') }),
+    continuations: Object.freeze({
+      create: async (input) => {
+        const result = await createContinuation(input, env, { sourceClient: 'agent' });
+        return {
+          data: result.data,
+          request_id: result.requestId,
+          ...(result.responseRequestId ? { api_request_id: result.responseRequestId } : {}),
+          interaction: result.interaction,
+        };
+      },
+      get: async (continuationId) => {
+        const result = await getContinuation(continuationId, env);
+        return {
+          data: result.data,
+          request_id: result.requestId,
+          ...(result.responseRequestId ? { api_request_id: result.responseRequestId } : {}),
+          interaction: result.interaction,
+        };
+      },
+    }),
   });
 }
 

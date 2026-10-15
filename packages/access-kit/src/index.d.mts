@@ -34,6 +34,26 @@ export interface AccessClientOptions {
   sessionToken?: string;
 }
 
+export interface ContinuationCreateInput {
+  title: string;
+  entityId: string;
+  idempotencyKey: string;
+}
+
+export interface ContinuationHandle {
+  continuation_id: string;
+  title: string;
+  title_truncated: boolean;
+  entity_ids: string[];
+  references_truncated: boolean;
+  state_revision: number;
+  updated_at: string | null;
+}
+
+export interface ContinuationCreateHandle extends ContinuationHandle {
+  replayed: boolean;
+}
+
 export interface AccessClient {
   operations: {
     list(): AccessOperation[];
@@ -52,8 +72,14 @@ export interface AccessClient {
     get(capabilityId: string): Promise<AccessResult>;
   };
   usage: { summary(): Promise<AccessResult> };
+  continuations: {
+    /** A governed resource write. The API requires write permission and an idempotency key. */
+    create(input: ContinuationCreateInput): Promise<AccessResult<ContinuationCreateHandle>>;
+    /** Read back a continuation owned by the authenticated principal. */
+    get(continuationId: string): Promise<AccessResult<ContinuationHandle>>;
+  };
 }
 
-export function createAccessClient(options: AccessClientOptions): AccessClient;
+export function createAccessClient(options?: AccessClientOptions): AccessClient;
 export function listAccessOperations(): AccessOperation[];
 export function getAccessOperation(id: string): AccessOperation | null;

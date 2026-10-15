@@ -13,6 +13,7 @@ import {
 import { registerEntityTools } from '../src/entity-tools.mjs';
 import { registerAccountContextTool } from '../src/account-context-tools.mjs';
 import { registerAccessOperationTools } from '../src/access-operation-tools.mjs';
+import { registerContinuationTools } from '../src/continuation-tools.mjs';
 import { invokeAccessOperation } from '../src/access-operations.mjs';
 import { interactionSchema } from '../src/interaction-schema.mjs';
 import { loadMcpStoredSession } from '../src/mcp-auth.mjs';
@@ -109,6 +110,10 @@ export function createAccessMcpServer(
     get: () => invokeAccessOperation('account.context', {}, accessEnv),
   });
   registerAccessOperationTools(server, accessEnv);
+  // The delegated MCP OAuth token carries a read-only scope. Do not even
+  // advertise continuation state tools to that caller; API key and human
+  // session callers still receive server-side read/write permission checks.
+  if (!accessEnv.AETHER_MCP_OAUTH_TOKEN) registerContinuationTools(server, accessEnv);
 
   server.registerTool(
     'agent_access_capabilities_list',

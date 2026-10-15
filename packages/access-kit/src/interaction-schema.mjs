@@ -2,7 +2,7 @@ import * as z from 'zod/v4';
 
 export const interactionSchema = z.object({
   version: z.literal('1'),
-  operation: z.enum(['query', 'observe', 'auth']),
+  operation: z.enum(['query', 'observe', 'auth', 'write']),
   status_class: z.enum(['successful', 'denied', 'blocked', 'degraded', 'failed']),
   request_id: z.string().min(1),
   api_request_id: z.string().min(1).optional(),

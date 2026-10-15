@@ -95,11 +95,11 @@ export function readPublishableConfig(env = process.env) {
   return { apiOrigin, publishableKey, siteId };
 }
 
-async function readRequest(
+export async function requestAether(
   path,
   query = undefined,
   env = process.env,
-  { method = 'GET', operation = 'query' } = {},
+  { method = 'GET', operation = 'query', body } = {},
 ) {
   const { apiOrigin, authHeaders, oauthToken } = readConfig(env);
   const url = new URL(path, `${apiOrigin}/`);
@@ -120,6 +120,7 @@ async function readRequest(
       redirect: 'error',
       headers: {
         accept: 'application/json',
+        ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
         ...authHeaders,
         'x-correlation-id': correlationId,
         ...(surface ? { 'x-aether-access-surface': surface } : {}),
@@ -127,6 +128,7 @@ async function readRequest(
           method, url, token: oauthToken, secret: env.AETHER_MCP_SERVICE_ASSERTION_KEY,
         }) : {}),
       },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (error) {
@@ -240,7 +242,7 @@ function safeAccountContext(profile) {
 }
 
 export async function getAccountContext(env = process.env) {
-  const result = await readRequest('/v1/me', undefined, env);
+  const result = await requestAether('/v1/me', undefined, env);
   return { ...result, data: safeAccountContext(result.data) };
 }
 
@@ -260,7 +262,7 @@ function safeUsageSummary(summary) {
 }
 
 export async function getUsageSummary(env = process.env) {
-  const result = await readRequest('/v1/billing/usage/summary', undefined, env);
+  const result = await requestAether('/v1/billing/usage/summary', undefined, env);
   return { ...result, data: safeUsageSummary(result.data) };
 }
 
@@ -288,7 +290,7 @@ export async function listSessions({ limit = 20, offset = 0 } = {}, env = proces
   if (!Number.isSafeInteger(offset) || offset < 0 || offset > MAX_SESSION_OFFSET) {
     throw new Error(`Session offset must be an integer from 0 through ${MAX_SESSION_OFFSET}.`);
   }
-  const result = await readRequest('/v1/me/sessions', { limit, offset }, env, { operation: 'auth' });
+  const result = await requestAether('/v1/me/sessions', { limit, offset }, env, { operation: 'auth' });
   const rows = Array.isArray(result.data?.sessions) ? result.data.sessions.slice(0, limit) : [];
   const sessions = rows.map(safeSession).filter(Boolean);
   return {
@@ -309,7 +311,7 @@ export async function revokeSession(sessionId, env = process.env) {
   if (typeof sessionId !== 'string' || !SESSION_ID_PATTERN.test(sessionId)) {
     throw new Error('Session IDs must contain 1 through 128 letters, digits, underscores, or hyphens.');
   }
-  const result = await readRequest(
+  const result = await requestAether(
     `/v1/me/sessions/${encodeURIComponent(sessionId)}`,
     undefined,
     env,
@@ -384,7 +386,7 @@ export async function listCapabilities(
   { provider, serverName, toolName, limit = 100, offset = 0 } = {},
   env = process.env,
 ) {
-  const result = await readRequest('/v1/capability-catalog', {
+  const result = await requestAether('/v1/capability-catalog', {
     provider,
     server_name: serverName,
     tool_name: toolName,
@@ -398,7 +400,7 @@ export async function listCapabilities(
 }
 
 export async function getCapabilityOverview(env = process.env) {
-  const result = await readRequest('/v1/capability-catalog/overview', undefined, env);
+  const result = await requestAether('/v1/capability-catalog/overview', undefined, env);
   return { ...result, data: projectObservedCapabilityOverview(result.data) };
 }
 
@@ -406,7 +408,7 @@ export async function getCapability(capabilityId, env = process.env) {
   if (!CAPABILITY_ID_PATTERN.test(capabilityId)) {
     throw new Error('Capability IDs must have the form cap_ followed by 24 lowercase hexadecimal characters.');
   }
-  const result = await readRequest(`/v1/capability-catalog/${encodeURIComponent(capabilityId)}`, undefined, env);
+  const result = await requestAether(`/v1/capability-catalog/${encodeURIComponent(capabilityId)}`, undefined, env);
   const capability = projectObservedCapability(result.data);
   if (!capability) {
     throw new AccessApiError('Aether API returned an unexpected capability response.', {
@@ -460,7 +462,7 @@ export async function listEntities({ entityType, limit = 25, offset } = {}, env 
   if (offset !== undefined && (!Number.isSafeInteger(offset) || offset < 0 || offset > 100_000)) {
     throw new Error('Entity offset must be an integer from 0 through 100000.');
   }
-  const result = await readRequest('/v1/entities', {
+  const result = await requestAether('/v1/entities', {
     entity_type: entityType?.trim(),
     limit,
     offset,
@@ -498,7 +500,7 @@ export async function getEntity(entityId, env = process.env) {
   if (typeof entityId !== 'string' || !entityId.trim() || entityId.length > 256) {
     throw new Error('Entity IDs must contain 1 through 256 characters.');
   }
-  const result = await readRequest(`/v1/entities/${encodeURIComponent(entityId.trim())}`, undefined, env);
+  const result = await requestAether(`/v1/entities/${encodeURIComponent(entityId.trim())}`, undefined, env);
   const entity = safeEntity(result.data);
   if (!entity) {
     throw new AccessApiError('Aether API returned an unexpected entity response.', {
@@ -533,7 +535,7 @@ export async function getEntityNeighborhood(entityId, { limit = 25 } = {}, env =
     throw new Error('Neighborhood limit must be an integer from 1 through 50.');
   }
   const anchor = entityId.trim();
-  const result = await readRequest(
+  const result = await requestAether(
     `/v1/entities/${encodeURIComponent(anchor)}/neighborhood`, { limit }, env,
   );
   const data = result.data;
