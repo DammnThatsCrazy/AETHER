@@ -35,6 +35,7 @@ working.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from dataclasses import dataclass
@@ -161,7 +162,7 @@ async def resolve_rpc(tenant_id: str, environment: str, chain: str) -> ResolvedR
             ) from exc
 
         try:
-            _validate_rpc_url(resolved.url)
+            await asyncio.to_thread(_validate_rpc_url, resolved.url)
         except RpcUnavailableError as exc:
             logger.error(
                 "rpc resolution blocked (SSRF) tenant=%s env=%s chain=%s: %s",
@@ -180,7 +181,7 @@ async def resolve_rpc(tenant_id: str, environment: str, chain: str) -> ResolvedR
     if _is_local_env():
         default = _platform_default(chain)
         if default is not None:
-            _validate_rpc_url(default.url)
+            await asyncio.to_thread(_validate_rpc_url, default.url)
             metrics.increment(
                 "x402_rpc_resolutions", labels={"source": "platform_default", "chain": chain}
             )

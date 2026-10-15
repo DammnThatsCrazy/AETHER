@@ -9,10 +9,11 @@ redirect hop is re-validated.
 
 from __future__ import annotations
 
+import asyncio
 import http.server
 import socket
 import threading
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 import pytest
@@ -21,9 +22,11 @@ from actions.delivery.adapters.base import SSRFBlockedError
 from actions.delivery.adapters.webhook import _check_ssrf
 from actions.delivery.security import validate_webhook_url
 from shared.security.ssrf import (
+    DestinationResolutionError,
     UnsafeDestinationError,
     is_public_address,
     resolve_public_addresses,
+    resolve_public_addresses_async,
     send_public_request,
 )
 from value.x402.rpc_resolver import RpcUnavailableError, _validate_rpc_url
@@ -351,3 +354,210 @@ async def test_rejection_message_omits_url_path_and_query(url):
             await send_public_request("GET", url, transport=httpx.MockTransport(rec))
     assert "SECRETTOKEN" not in str(excinfo.value)
     assert "SECRETKEY" not in str(excinfo.value)
+
+
+# ─── Resolution failure vs non-public destination ───────────────────────────
+
+
+@pytest.mark.parametrize(
+    "resolver",
+    [
+        _resolver({}),
+        lambda *a, **k: (_ for _ in ()).throw(socket.gaierror(socket.EAI_AGAIN, "temporary failure")),
+        lambda *a, **k: (_ for _ in ()).throw(TimeoutError("resolver timed out")),
+        lambda *a, **k: [],
+    ],
+)
+def test_resolution_failure_is_distinct_from_non_public(resolver):
+    with patch("socket.getaddrinfo", side_effect=resolver):
+        with pytest.raises(DestinationResolutionError):
+            resolve_public_addresses("https://flaky.example/")
+
+
+@pytest.mark.parametrize("url", ["https://internal.example/", "https://10.0.0.5/", "ftp://a.example/"])
+def test_non_public_destination_is_not_a_resolution_failure(url):
+    with patch("socket.getaddrinfo", side_effect=_resolver(DNS)):
+        with pytest.raises(UnsafeDestinationError) as excinfo:
+            resolve_public_addresses(url)
+    assert not isinstance(excinfo.value, DestinationResolutionError)
+
+
+@pytest.mark.asyncio
+async def test_async_resolution_uses_the_event_loop_resolver():
+    with patch("socket.getaddrinfo", side_effect=AssertionError("blocking resolver used")):
+        with patch.object(
+            asyncio.get_running_loop(), "getaddrinfo", AsyncMock(return_value=_addrinfo("93.184.216.34"))
+        ) as loop_resolver:
+            assert await resolve_public_addresses_async("https://a.example/") == ["93.184.216.34"]
+    loop_resolver.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_async_resolution_failure_is_distinct_from_non_public():
+    with patch("socket.getaddrinfo", side_effect=_resolver(DNS)):
+        with pytest.raises(DestinationResolutionError):
+            await resolve_public_addresses_async("https://missing.example/")
+        with pytest.raises(UnsafeDestinationError) as excinfo:
+            await resolve_public_addresses_async("https://internal.example/")
+    assert not isinstance(excinfo.value, DestinationResolutionError)
+
+
+@pytest.mark.asyncio
+async def test_send_resolves_without_blocking_the_event_loop():
+    rec = _Recorder([httpx.Response(200)])
+    with patch("socket.getaddrinfo", side_effect=AssertionError("blocking resolver used")):
+        with patch.object(
+            asyncio.get_running_loop(), "getaddrinfo", AsyncMock(return_value=_addrinfo("93.184.216.34"))
+        ):
+            resp = await send_public_request("GET", "https://a.example/", transport=httpx.MockTransport(rec))
+    assert resp.status_code == 200
+
+
+# ─── Address fallback ───────────────────────────────────────────────────────
+
+MULTI = {"multi.example": ["93.184.216.34", "8.8.8.8", "2001:4860:4860::8888"]}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [httpx.ConnectError("refused"), httpx.ConnectTimeout("timed out")])
+async def test_tries_next_validated_address_on_connect_failure(failure):
+    seen: list[str] = []
+
+    def handler(request):
+        seen.append(request.url.host)
+        if request.url.host == "93.184.216.34":
+            raise failure
+        return httpx.Response(200)
+
+    with patch("socket.getaddrinfo", side_effect=_resolver(MULTI)):
+        resp = await send_public_request(
+            "POST", "https://multi.example/", content=b"x", transport=httpx.MockTransport(handler)
+        )
+    assert resp.status_code == 200
+    assert seen == ["93.184.216.34", "8.8.8.8"]
+
+
+@pytest.mark.asyncio
+async def test_raises_last_connect_failure_when_every_address_fails():
+    seen: list[str] = []
+
+    def handler(request):
+        seen.append(request.url.host)
+        raise httpx.ConnectError(f"refused {request.url.host}")
+
+    with patch("socket.getaddrinfo", side_effect=_resolver(MULTI)):
+        with pytest.raises(httpx.ConnectError, match="2001:4860:4860::8888"):
+            await send_public_request("GET", "https://multi.example/", transport=httpx.MockTransport(handler))
+    assert seen == ["93.184.216.34", "8.8.8.8", "2001:4860:4860::8888"]
+
+
+@pytest.mark.asyncio
+async def test_does_not_resend_after_the_request_may_have_been_delivered():
+    seen: list[str] = []
+
+    def handler(request):
+        seen.append(request.url.host)
+        raise httpx.ReadTimeout("no response")
+
+    with patch("socket.getaddrinfo", side_effect=_resolver(MULTI)):
+        with pytest.raises(httpx.ReadTimeout):
+            await send_public_request("POST", "https://multi.example/", content=b"x", transport=httpx.MockTransport(handler))
+    assert seen == ["93.184.216.34"]
+
+
+@pytest.mark.asyncio
+async def test_never_falls_back_to_an_unvalidated_address():
+    seen: list[str] = []
+
+    def handler(request):
+        seen.append(request.url.host)
+        raise httpx.ConnectError("refused")
+
+    with patch("socket.getaddrinfo", side_effect=_resolver({"mixed.example": ["93.184.216.34", "10.0.0.5"]})):
+        with pytest.raises(UnsafeDestinationError):
+            await send_public_request("GET", "https://mixed.example/", transport=httpx.MockTransport(handler))
+    assert seen == []
+
+
+# ─── Credential stripping on scheme downgrade ───────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_drops_credentials_on_same_host_scheme_downgrade():
+    rec = _Recorder([
+        httpx.Response(307, headers={"location": "http://a.example/next"}),
+        httpx.Response(200),
+    ])
+    with patch("socket.getaddrinfo", side_effect=_resolver(DNS)):
+        await send_public_request(
+            "GET",
+            "https://a.example/start",
+            headers={"Authorization": "Bearer secret", "Proxy-Authorization": "p", "Cookie": "c=1", "X-Trace": "t"},
+            transport=httpx.MockTransport(rec),
+        )
+    second = rec.requests[1]
+    assert second.url.scheme == "http"
+    assert "authorization" not in second.headers
+    assert "proxy-authorization" not in second.headers
+    assert "cookie" not in second.headers
+    assert second.headers["x-trace"] == "t"
+
+
+# ─── Delivery adapters: retry a resolution failure, never a refusal ─────────
+
+
+async def _dispatch_webhook():
+    from actions.delivery.adapters.webhook import WebhookAdapter
+
+    await WebhookAdapter().dispatch({"a": 1}, {"url": "https://hooks.example/in"})
+
+
+async def _dispatch_jira():
+    from actions.delivery.adapters.jira import JiraAdapter
+
+    await JiraAdapter().dispatch(
+        {"title": "T"}, {"base_url": "https://site.example", "project_key": "P"}, credential="u@example.com:t"
+    )
+
+
+async def _dispatch_push():
+    from actions.delivery.adapters._notification_base import _public_transport
+
+    await _public_transport("POST", "https://push.example/send", {}, b"{}")
+
+
+async def _dispatch_discord():
+    from actions.delivery.adapters.discord import DiscordAdapter
+
+    await DiscordAdapter().dispatch({"title": "T"}, {"webhook_url": "https://discord.com/api/webhooks/1/x"})
+
+
+_DISPATCHERS = [_dispatch_webhook, _dispatch_jira, _dispatch_push, _dispatch_discord]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("dispatch", _DISPATCHERS)
+async def test_adapter_retries_destination_that_does_not_resolve(dispatch):
+    from actions.delivery.adapters.base import RetryableProviderError
+
+    send = AsyncMock(side_effect=AssertionError("connection attempted"))
+    with patch("socket.getaddrinfo", side_effect=socket.gaierror(socket.EAI_AGAIN, "temporary failure")), \
+         patch.object(httpx.AsyncClient, "send", send), \
+         patch("asyncio.sleep", AsyncMock()):
+        with pytest.raises(RetryableProviderError):
+            await dispatch()
+    send.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("dispatch", _DISPATCHERS)
+async def test_adapter_does_not_retry_non_public_destination(dispatch):
+    resolver = Mock(return_value=_addrinfo("10.0.0.5"))
+    send = AsyncMock(side_effect=AssertionError("connection attempted"))
+    with patch("socket.getaddrinfo", resolver), \
+         patch.object(httpx.AsyncClient, "send", send), \
+         patch("asyncio.sleep", AsyncMock()):
+        with pytest.raises(SSRFBlockedError):
+            await dispatch()
+    send.assert_not_called()
+    assert resolver.call_count == 1

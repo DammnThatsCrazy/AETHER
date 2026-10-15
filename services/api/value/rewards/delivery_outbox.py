@@ -25,6 +25,7 @@ Guarantees
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -32,7 +33,7 @@ from typing import Any, Optional
 from urllib.parse import urlparse
 
 from repositories.repos import BaseRepository
-from value.rewards.rails import TenantWebhookAdapter
+from value.rewards.rails import UNRESOLVED_DESTINATION, TenantWebhookAdapter
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger, metrics
 
@@ -363,11 +364,14 @@ class RewardDeliveryOutbox:
             inline_secret = config.get("signing_secret", "") or rail_config.get("signing_secret", "")
         timeout_ms = int(config.get("timeout_ms", rail_config.get("timeout_ms", 10000)))
 
-        # PR-1 SSRF / transport validation before persisting a durable job.
+        # PR-1 SSRF / transport validation before persisting a durable job. A
+        # host that does not resolve yet is kept: every send re-validates it.
         env = os.getenv("AETHER_ENV", "local").lower()
         is_local = env in ("local", "test")
-        reason = TenantWebhookAdapter()._validate_destination(webhook_url, is_local=is_local)
-        if reason is not None:
+        reason = await asyncio.to_thread(
+            TenantWebhookAdapter()._validate_destination, webhook_url, is_local=is_local
+        )
+        if reason is not None and not reason.startswith(UNRESOLVED_DESTINATION):
             metrics.increment("rewards_outbox_rejected", labels={"tenant_id": tenant_id, "reason": "ssrf_blocked"})
             raise ValueError(f"webhook destination rejected before enqueue: {reason}")
 
