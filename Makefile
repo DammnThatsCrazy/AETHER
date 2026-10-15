@@ -28,7 +28,7 @@
         lifecycle-seed \
         design-partner-demo-up design-partner-demo-seed design-partner-demo-check design-partner-demo-down \
         temporal-integrity temporal-contract-parity mutation-gateway-check exploration-readiness \
-        production-status release-gate ops-readiness help resolved-feature-flags \
+        production-status release-gate ops-readiness tenant-row-keys graph-platform-owners help resolved-feature-flags \
         validate-ci-control-toolchain validate-ci-performance-policy validate-ci-execution-contracts validate-execution-plan verification-execution-plan \
         validate-profile-config validate-profile-parity validate-cost-policy validate-cost-policy-terraform validate-delivery-topology \
         validate-route-registry validate-implementation-ledger validate-reference-packs \
@@ -795,8 +795,14 @@ financial-pilot-preflight: ## Compose: strict financial readiness gate + validat
 audit-prep: ## Smart contract pre-audit checklist (exit 1 if blockers found with --check)
 	python scripts/smart_contract_audit_prep.py
 
-ops-readiness: ## One-person ops readiness gate (flags, stores, bridge fail-closed, approval gating)
+ops-readiness: ## One-person ops readiness gate (flags, stores, bridge fail-closed, approval gating, production operator tenants)
 	python scripts/ops_readiness.py
+
+tenant-row-keys: ## Re-run the idempotent tenant row backfill and re-key steps of migration 20261015_tenant_owned_row_keys (needs DATABASE_URL)
+	PYTHONPATH=services/api $(GATE_PY) -m repositories.tenant_row_keys
+
+graph-platform-owners: ## Relabel Neptune chain and card catalog vertices to the platform owner (needs NEPTUNE_ENDPOINT; dry run unless APPLY=1)
+	PYTHONPATH=services/api $(GATE_PY) -m graph.platform_vertex_owners $(if $(filter 1,$(APPLY)),--apply,)
 
 release-gate: ## Full release gate: repo consistency (CI mode) + strict production status + ops readiness + founding-tenant control spine
 	$(GATE_PY) scripts/repo_doctor.py --ci
