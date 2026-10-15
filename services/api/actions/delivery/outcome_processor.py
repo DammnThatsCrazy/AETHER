@@ -727,7 +727,8 @@ def _linear_scope_matches(payload: dict, receipt: dict, job: dict) -> bool:
     team = issue.get("team") or {}
     stored_team = team.get("id") or (job.get("provider_config") or {}).get("team_id")
     stored_org = (team.get("organization") or {}).get("id")
-    if stored_team and (payload.get("data") or {}).get("teamId") != stored_team:
+    data = payload.get("data") or {}
+    if stored_team and (data.get("teamId") or (data.get("team") or {}).get("id")) != stored_team:
         return False
     if stored_org and payload.get("organizationId") != stored_org:
         return False
