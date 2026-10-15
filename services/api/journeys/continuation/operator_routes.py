@@ -93,7 +93,7 @@ async def _require_owned(operator_id: str, continuation_id: str) -> dict:
 @operator_router.post("")
 async def create_operator_continuation(
     payload: ContinuationInput,
-    idempotency_key: Optional[str] = Query(default=None),
+    idempotency_key: Optional[str] = Query(default=None, min_length=1, max_length=128),
     context: KyberAccessContext = Depends(require_kyber_access(SELF_CAPABILITY)),
 ) -> APIResponse:
     _require_enabled()
@@ -116,6 +116,7 @@ async def create_operator_continuation(
         resource_kind="continuation",
         resource_id=result.get("id"),
         revision=str(result.get("state_revision", 0)),
+        source_event_id=f"continuation:create:{result['id']}",
     )
     return APIResponse(data=result)
 

@@ -27,13 +27,14 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import hashlib
 import json
 import uuid
 from datetime import datetime
 from typing import Any, Optional
 
 from repositories.repos import get_pool
-from shared.common.common import ConflictError, utc_now
+from shared.common.common import BadRequestError, ConflictError, utc_now
 from shared.logger.logger import get_logger
 from shared.temporal.instant import ensure_aware_utc, to_iso_utc, try_parse_instant
 
@@ -97,6 +98,8 @@ CONTINUATION_INDEXES = [
 _MEM_CONTINUATIONS: dict[str, dict] = {}
 _MEM_SELECTIONS: dict[str, dict] = {}
 
+_CREATE_FINGERPRINT_FIELD = "_create_request_fingerprint"
+
 _MEM_LOCK: Optional[asyncio.Lock] = None
 _MEM_LOCK_LOOP: Optional[asyncio.AbstractEventLoop] = None
 
@@ -148,11 +151,60 @@ def _json_load(value: Any) -> Any:
 def _continuation_row(record: dict) -> dict:
     """Return the stored context payload with authoritative columns overlaid."""
     data = dict(_json_load(record.get("data")) or {})
+    data.pop(_CREATE_FINGERPRINT_FIELD, None)
     data["state_revision"] = record["state_revision"]
     data["updated_at"] = _iso(record.get("updated_at"))
     if record.get("expires_at") is not None:
         data["expires_at"] = _iso(record.get("expires_at"))
     return data
+
+
+def _scoped_idempotency_key(principal_id: str, key: Optional[str]) -> Optional[str]:
+    if key is None:
+        return None
+    if not isinstance(key, str) or not 1 <= len(key) <= 128:
+        raise BadRequestError("idempotency_key must contain 1 through 128 characters")
+    digest = hashlib.sha256(
+        json.dumps([principal_id, key], separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return f"v2_{digest}"
+
+
+def _create_payload(context: dict) -> dict:
+    """Extract the caller's creation intent, omitting server-minted state."""
+    payload = copy.deepcopy(context or {})
+    for field in ("id", "state_revision", "updated_at", _CREATE_FINGERPRINT_FIELD):
+        payload.pop(field, None)
+    return payload
+
+
+def _create_fingerprint(context: dict, requested_id: Optional[str]) -> str:
+    canonical = {"requested_id": requested_id, "payload": _create_payload(context)}
+    encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _replayed_row(
+    record: dict, *, principal_id: str, context: dict,
+    fingerprint: str, requested_id: Optional[str],
+) -> dict:
+    """Never expose another principal's row or reuse a key for changed intent."""
+    if record.get("principal_id") != principal_id:
+        raise ConflictError("continuation idempotency key belongs to another principal")
+    stored = dict(_json_load(record.get("data")) or {})
+    original_fingerprint = stored.get(_CREATE_FINGERPRINT_FIELD)
+    if original_fingerprint is not None:
+        same_request = original_fingerprint == fingerprint
+    else:
+        # Rows from before principal-scoped keys have no immutable fingerprint.
+        # Their current payload is the only available evidence; after an update
+        # a replay fails closed rather than returning a possibly changed row.
+        same_request = _create_payload(stored) == _create_payload(context)
+        if requested_id is not None:
+            same_request = same_request and stored.get("id") == requested_id
+    if not same_request:
+        raise ConflictError("continuation idempotency key was used with different content")
+    return {**_continuation_row(record), "replayed": True}
 
 
 def _selection_row(record: dict) -> dict:
@@ -208,26 +260,43 @@ class ContinuationRepository:
         context: dict,
         idempotency_key: Optional[str] = None,
         expires_at: Any = None,
+        requested_id: Optional[str] = None,
     ) -> dict:
         """Insert a continuation at state_revision 0.
 
-        Idempotency contract for (tenant_scope, idempotency_key): an existing row
-        is returned with ``replayed=True`` and no new row is written.
+        Idempotency is scoped to the authenticated principal within the tenant.
+        A replay with changed creation content conflicts rather than returning
+        another row. The original request fingerprint survives later updates.
         """
         now = utc_now()
         expires_dt = _to_dt(expires_at)
+        storage_key = _scoped_idempotency_key(principal_id, idempotency_key)
+        fingerprint = _create_fingerprint(context, requested_id)
         payload = copy.deepcopy(context or {})
         payload["state_revision"] = 0
         payload["updated_at"] = to_iso_utc(now)
         payload["expires_at"] = _iso(expires_dt)
+        if storage_key is not None:
+            payload[_CREATE_FINGERPRINT_FIELD] = fingerprint
         pool = await self._backend()
 
         if pool is None:
             async with _mem_lock():
                 if idempotency_key:
                     for rec in _MEM_CONTINUATIONS.values():
-                        if rec["tenant_scope"] == tenant_scope and rec.get("idempotency_key") == idempotency_key:
-                            return {**_continuation_row(rec), "replayed": True}
+                        if rec["tenant_scope"] != tenant_scope:
+                            continue
+                        if rec.get("idempotency_key") == storage_key:
+                            return _replayed_row(
+                                rec, principal_id=principal_id, context=context,
+                                fingerprint=fingerprint, requested_id=requested_id,
+                            )
+                        if (rec.get("idempotency_key") == idempotency_key
+                                and rec.get("principal_id") == principal_id):
+                            return _replayed_row(
+                                rec, principal_id=principal_id, context=context,
+                                fingerprint=fingerprint, requested_id=requested_id,
+                            )
                 record = {
                     "id": continuation_id,
                     "tenant_scope": tenant_scope,
@@ -238,7 +307,7 @@ class ContinuationRepository:
                     "sensitivity": sensitivity,
                     "freshness": freshness,
                     "state_revision": 0,
-                    "idempotency_key": idempotency_key,
+                    "idempotency_key": storage_key,
                     "data": payload,
                     "expires_at": _iso(expires_dt),
                     "created_at": to_iso_utc(now),
@@ -246,6 +315,20 @@ class ContinuationRepository:
                 }
                 _MEM_CONTINUATIONS[continuation_id] = record
                 return {**_continuation_row(record), "replayed": False}
+
+        # A pre-upgrade row may retain the raw key. It is safe to replay only
+        # for the same principal and same original intent; other principals
+        # get independently scoped v2 keys without seeing that row.
+        if idempotency_key is not None:
+            legacy = await pool.fetchrow(
+                "SELECT * FROM continuations WHERE tenant_scope = $1 AND idempotency_key = $2",
+                tenant_scope, idempotency_key,
+            )
+            if legacy is not None and legacy["principal_id"] == principal_id:
+                return _replayed_row(
+                    dict(legacy), principal_id=principal_id, context=context,
+                    fingerprint=fingerprint, requested_id=requested_id,
+                )
 
         inserted = await pool.fetchrow(
             """
@@ -259,16 +342,21 @@ class ContinuationRepository:
             RETURNING *
             """,
             continuation_id, tenant_scope, principal_id, app_kind, source_client,
-            surface, sensitivity, freshness, idempotency_key,
+            surface, sensitivity, freshness, storage_key,
             json.dumps(payload, default=str), expires_dt, now,
         )
         if inserted is not None:
             return {**_continuation_row(dict(inserted)), "replayed": False}
         existing = await pool.fetchrow(
             "SELECT * FROM continuations WHERE tenant_scope = $1 AND idempotency_key = $2",
-            tenant_scope, idempotency_key,
+            tenant_scope, storage_key,
         )
-        return {**_continuation_row(dict(existing)), "replayed": True}
+        if existing is None:
+            raise ConflictError("continuation create could not resolve idempotent result")
+        return _replayed_row(
+            dict(existing), principal_id=principal_id, context=context,
+            fingerprint=fingerprint, requested_id=requested_id,
+        )
 
     # ── Continuations: compare-and-swap update ───────────────────────────
 
@@ -302,6 +390,9 @@ class ContinuationRepository:
                         f"expected {expected_revision}"
                     )
                 payload = copy.deepcopy(context or {})
+                original = dict(_json_load(rec.get("data")) or {})
+                if _CREATE_FINGERPRINT_FIELD in original:
+                    payload[_CREATE_FINGERPRINT_FIELD] = original[_CREATE_FINGERPRINT_FIELD]
                 payload["state_revision"] = new_rev
                 payload["updated_at"] = to_iso_utc(now)
                 if expires_at != "__unset__":
@@ -319,7 +410,7 @@ class ContinuationRepository:
                 return _continuation_row(rec)
 
         current = await pool.fetchrow(
-            "SELECT state_revision, expires_at FROM continuations WHERE id = $1 AND tenant_scope = $2",
+            "SELECT state_revision, expires_at, data FROM continuations WHERE id = $1 AND tenant_scope = $2",
             continuation_id, tenant_scope,
         )
         if current is None:
@@ -330,6 +421,9 @@ class ContinuationRepository:
                 f"expected {expected_revision}"
             )
         payload = copy.deepcopy(context or {})
+        original = dict(_json_load(current["data"]) or {})
+        if _CREATE_FINGERPRINT_FIELD in original:
+            payload[_CREATE_FINGERPRINT_FIELD] = original[_CREATE_FINGERPRINT_FIELD]
         payload["state_revision"] = new_rev
         payload["updated_at"] = to_iso_utc(now)
         new_expiry = _to_dt(expires_at) if expires_at != "__unset__" else current["expires_at"]
