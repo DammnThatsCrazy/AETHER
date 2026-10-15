@@ -115,7 +115,7 @@ release authority.
 
 ## Release workflow (design-partner demo)
 
-The first external SDK publication target is `1.0.0-alpha.0`. That target is
+The first external SDK publication target is `0.1.0-alpha.0`. That target is
 separate from the mobile application train: the SDK workflow may publish the
 shared, Web, and conditionally React Native libraries, while both mobile apps
 remain development/design-partner artifacts. Mobile application feature flags

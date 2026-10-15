@@ -44,3 +44,12 @@ This document defines canonical product language across Aether, Kyber, Noesis, m
 Deprecated terms may only appear in:
 
 `docs/archive/`
+
+## Enforcement
+
+`scripts/check_deprecated_language.py` runs in `make repo-doctor` and
+`make docs-check`. It fails when a deprecated term appears in any tracked text
+file outside `docs/archive/` and the two documents that define the terms
+(this file and `docs/product/language-system/deprecated-language.md`).
+`Segments` is checked only under `docs/` and `apps/`. Internal identifiers such
+as `economic360` are contract IDs and are not display language.
