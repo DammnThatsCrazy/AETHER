@@ -25,16 +25,16 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:2bae09df3369e8d9c89051a9abf2c148a70c43e51d68007b3fa3d0a65f03afbe"
+  "services/api/actions/": "sha256:609af3d197977ffc03c6ded7902a475904f2cb204d204e43123a86eb2a3b0844"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:0740c89ed3bf089b8ded5f9a319b7670a0afb18bda8f58a69a11a03c2a0a5d75"
-  "services/api/connectors/": "sha256:74f79bcb2b389af578e365217ec1db6271c03e0b8a10bd0e3d67f0e6117d3ace"
+  "services/api/connectors/": "sha256:06b4abc320d568cc4bc5304da0af23cbd149a27f5c8dd28293f9b2aee6fcc0d3"
   "services/api/governance/": "sha256:4d1d5ebfff79f8e4e2aba0d960a87ae1d0aa19b5bb6b0878f93f33b0006086b7"
   "services/api/graph/": "sha256:2e5bb882df912a56ddf8bb116cf6887b2da46722ab9b07b08bb245c530cfa4e1"
   "services/api/identity/": "sha256:9d5a4ac51012e6a7d11856665e95cae3b82a4ce63e80673aada051fab60f7d4b"
   "services/api/ingestion/": "sha256:bd5b01dbb8f0ad98a2cd83aeb682c0b01badea4f481ee74b15f430043e004599"
   "services/api/intelligence/": "sha256:3dcb322380fba0232f313fa5e38b0d8cda7ab2009ffe38151bdc9e563a852657"
-  "services/api/journeys/": "sha256:9a1935e1a9753e430a16063f2d50770b9692095d72cd2416df9f90dd664c7289"
+  "services/api/journeys/": "sha256:f25ccdc7b80f1ccc77726719c3f0c36e8d35b6f44bec25ad20d6692fc1db56d9"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:228120a11b8e6c3fec9405ed272e61de894b658274a33da129facc9c074a8224"
   "services/api/value/": "sha256:13540be4242a207a64a48be123e6ebf509039faa27da35d7cf5ad9482f96e8ec"
@@ -3124,7 +3124,7 @@ Redacted tenant-safe feed — no internal scoring or suppression metadata expose
 | DELETE | `/v1/notifications/channels/{id}` | Remove channel |
 | POST | `/v1/notifications/channels/{id}/test` | Send test message; sets `verified_at` on success |
 | GET | `/v1/notifications/channels/slack/connect` | Initiate Slack OAuth (returns redirect URL) |
-| GET | `/v1/notifications/channels/slack/callback` | Slack OAuth callback |
+| GET | `/v1/notifications/channels/slack/callback` | Slack OAuth callback; only the tenant and user session that started the flow can complete it, and a Slack workspace already actively connected to another tenant is rejected |
 
 ### Webhook Endpoint Configuration
 
@@ -3151,8 +3151,8 @@ identifiers, or response content.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/v1/notifications/slack/callback` | Slack Block Kit action handler (HMAC-verified) |
-| POST | `/v1/notifications/telegram/callback` | Telegram inline keyboard handler |
+| POST | `/v1/notifications/slack/callback` | Slack Block Kit action handler (HMAC-verified); acts in the notification's tenant only when the clicking Slack team is an active Slack channel of that tenant — the tenant segment of the action id is ignored |
+| POST | `/v1/notifications/telegram/callback` | Telegram inline keyboard handler; acts only on notifications owned by the authenticated caller's tenant; `404` when `INBOUND_TELEGRAM_CALLBACK_ENABLED` is off |
 
 ### Required Permissions
 
@@ -3431,21 +3431,46 @@ These endpoints are gated by feature flags (`FEATURE_FRAUD_NETWORKS`, `FEATURE_F
 | POST | `/v1/delivery/jobs/{id}/replay` | `kyber:operator` | Re-queue dead-letter job (Kyber only) |
 | GET | `/v1/delivery/links` | `delivery:read` | List ExternalResourceLink records for tenant |
 
-### Inbound Webhooks (`/v1/webhooks/*`)
+### Inbound Webhooks (`/v1/notifications/webhooks/*`)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/v1/webhooks/slack/interactive` | Slack signing secret | Slack interactive action callback; written to WebhookInbox before processing |
-| POST | `/v1/webhooks/linear/events` | Linear-Signature HMAC | Linear issue/event webhook; persisted to WebhookInbox and processed async |
-| POST | `/v1/webhooks/jira/events` | X-Hub-Signature-256 HMAC | Jira issue webhook; persisted to WebhookInbox and processed async |
-| POST | `/v1/webhooks/aether/callback` | X-Aether-Signature HMAC | Generic signed outcome callback from webhook delivery targets |
+| POST | `/v1/notifications/slack/callback` | Slack signing secret | Slack interactive action callback; written to WebhookInbox before processing |
+| POST | `/v1/notifications/webhooks/linear/events` | Linear-Signature HMAC (`DELIVERY_LINEAR_WEBHOOK_SECRET`) | Linear issue/event webhook; persisted to WebhookInbox and processed async |
+| POST | `/v1/notifications/webhooks/jira/events` | X-Hub-Signature-256 HMAC (`DELIVERY_JIRA_WEBHOOK_SECRET`) | Jira issue webhook; persisted to WebhookInbox and processed async; `404` when `INBOUND_JIRA_WEBHOOK_ENABLED` is off |
+| POST | `/v1/notifications/webhooks/aether/callback` | X-Aether-Signature HMAC (bound delivery channel secret) | Generic signed outcome callback from webhook delivery targets |
 
-An inbound outcome only changes the objects named by the `ExternalResourceLink`
-resolved within the webhook's tenant: the linked suggestion (through the
-tenant-checked `SuggestionRepository.patch`) and the linked notification, which
-is skipped when it belongs to another tenant. Ids carried in the provider
-payload are never used. Likewise, a confirmed delivery receipt marks the source
-suggestion `delivered` only within the delivery job's tenant.
+The receiving tenant of an inbound outcome is never read from the request: the
+routes ignore `X-Aether-Tenant-ID` and `?tenant_id=`, and the inbox processor
+derives the tenant from the stored `ExternalResourceLink` the delivery resolves
+to, together with that link's receipt and delivery job:
+
+- Linear — the link on `data.id`; where the bound delivery stored a team or
+  organisation, the event's team (`data.teamId`) and `organizationId` must match. `webhookTimestamp`
+  is required and must be within 60 seconds of receipt.
+- Jira — the link on the issue key, accepted only when the `issue.self` host is
+  the Jira site the bound job created the issue on (issue keys repeat across
+  sites). The route answers `404` when `INBOUND_JIRA_WEBHOOK_ENABLED` is off.
+- Aether callback — the link on the body's `delivery_id`; the signature is
+  verified with that delivery channel's own secret (a platform-wide secret never
+  verifies), and `X-Aether-Timestamp` (unix seconds) is required within 300
+  seconds of receipt.
+
+A callback that matches no stored delivery, or deliveries in more than one
+tenant, is dead-lettered as `unbound_delivery` and never routed. An inbound
+outcome then only changes the objects named by that link: the linked suggestion
+(through the tenant-checked `SuggestionRepository.patch`) and the linked
+notification, which is skipped when it belongs to another tenant. Ids carried in
+the provider payload are never used. Likewise, a confirmed delivery receipt
+marks the source suggestion `delivered` only within the delivery job's tenant.
+
+The legacy public connector route `POST /v1/integrations/webhooks/{connector}`
+resolves a Shopify delivery's tenant from the signed body's shop domain, which
+must match exactly one enabled Shopify connector binding; other non-comms
+connectors scope the secret lookup by `X-Aether-Tenant-ID` and must verify with
+that tenant's own stored secret. Every denial past connector lookup returns the
+same generic `400 webhook rejected`, so the response does not reveal whether a
+tenant, connector, or secret exists.
 
 Comms provider webhooks (`/v1/integrations/webhooks/comms/*`, ADR-C11) use
 server-controlled durable endpoint ids; tenant ownership is resolved from the
@@ -3662,7 +3687,11 @@ Tenant connection lifecycle (`/v1/provider-connections/*`, API key + tenant requ
   and persists only non-secret account evidence. A domain-only account is not
   sufficient for v2 source-object mapping.
 - `POST /v1/provider-connections/{connection_id}/accounts/select` — select an
-  account to scope ingestion.
+  account to scope ingestion. A Shopify shop is selectable in every orders mode
+  only after discovery recorded its live shop identity (the stored credential is
+  used for discovery whenever one exists), and is rejected while another tenant
+  holds the same shop selected on a connection that is not revoked, disabled,
+  or failed.
 - `POST /v1/provider-connections/{connection_id}/sync` — trigger a sync run
   (optional `since` for backfill and optional `stream_ids` to select at most 32
   unique, nonblank stream identifiers). An omitted or empty list runs all

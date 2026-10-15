@@ -50,14 +50,14 @@ Store the `team_id` in the delivery channel config (`provider_config.team_id`).
 ### 3. Configure Webhooks (for outcome loop)
 
 1. Go to **Settings** → **API** → **Webhooks** → **New webhook**
-2. URL: `https://{your-aether-domain}/v1/webhooks/linear/events`
+2. URL: `https://{your-aether-domain}/v1/notifications/webhooks/linear/events`
 3. Enable: **Issues** (created, updated, removed)
-4. Copy the **webhook signing key** → store as `LINEAR_WEBHOOK_SECRET`
+4. Copy the **webhook signing key** → store as `DELIVERY_LINEAR_WEBHOOK_SECRET`
 
 ### 4. Set Env Vars
 
 ```bash
-LINEAR_WEBHOOK_SECRET=<signing-key-from-linear-settings>
+DELIVERY_LINEAR_WEBHOOK_SECRET=<signing-key-from-linear-settings>
 LINEAR_OAUTH_CLIENT_ID=<optional-for-oauth-flow>
 LINEAR_OAUTH_CLIENT_SECRET=<optional-for-oauth-flow>
 ```
@@ -94,7 +94,16 @@ In the channel `provider_config`:
 
 ## Webhook Signature Verification
 
-Aether verifies `Linear-Signature` using `HMAC-SHA256(LINEAR_WEBHOOK_SECRET, raw_body)` and `hmac.compare_digest`. Requests without a valid signature are stored in `WebhookInbox` with `signature_verified=False` and are not processed.
+Aether verifies `Linear-Signature` using `HMAC-SHA256(DELIVERY_LINEAR_WEBHOOK_SECRET, raw_body)` and `hmac.compare_digest`. Requests without a valid signature are stored in `WebhookInbox` with `signature_verified=False` and are not processed. The signed body's `webhookTimestamp` is required and must be within 60 seconds of when Aether received the request; older or missing timestamps are rejected as replays.
+
+## Outcome Routing
+
+The webhook never names its tenant: an `X-Aether-Tenant-ID` header is ignored.
+Aether routes an event only to the tenant whose stored delivery created the issue
+(`data.id` must match a stored issue link). When Aether created the issue it
+stored the issue's team and organisation; the event's `data.teamId` and
+`organizationId` must match them. Events matching no stored issue are
+dead-lettered and never applied.
 
 ## Troubleshooting
 

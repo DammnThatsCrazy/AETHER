@@ -38,6 +38,15 @@ resolved**, and an HTTP 200 is not proof of anything.
 | Delivery (intent → job → adapter → receipt) | `services/api/actions/delivery/` (leased worker, backoff, dead-letter) |
 | Channel gateways (Slack/Discord/Telegram/webhook) | `services/api/journeys/notification_intelligence/channel_gateway.py` |
 | Operator notification center (desktop) | `apps/kyber-web/src/features/notifications/` |
+| Inbound callbacks (Slack/Telegram actions, Jira/Linear/Aether outcomes) | `services/api/journeys/notification_intelligence/routes.py` → `services/api/actions/delivery/outcome_processor.py` |
+
+Inbound callbacks never take their tenant from the request: outcomes route to the
+tenant of the stored delivery they resolve to, Slack actions to the notification's
+tenant when the Slack team is bound there, and Telegram actions only for the
+authenticated caller's own notifications. Two routes without a per-connection
+provider secret are gated: the Jira inbound webhook by
+`INBOUND_JIRA_WEBHOOK_ENABLED` and the Telegram callback by
+`INBOUND_TELEGRAM_CALLBACK_ENABLED` (both default on; off answers `404`).
 
 Desktop and mobile read the **same** `notification_inbox` records — a
 notification opened on mobile is opened on desktop. Client-specific copies are not
