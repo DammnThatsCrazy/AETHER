@@ -53,11 +53,11 @@ source_hashes:
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
-  "services/api/repositories/repos.py": "sha256:4f13803cb0e92160ac3c4769b18d9853b453dd04a231421a3fe1f90977572439"
-  "services/api/shared/graph/": "sha256:63d08e25b8fd1fce177de2fda5aae18d7a89c4b1a8ed4f0785df63fa194d0717"
+  "services/api/repositories/repos.py": "sha256:f3878d58876bd0c84bedffd8a44734bf60b16b2149e2cde21e133f6140971327"
+  "services/api/shared/graph/": "sha256:52f50f34691c34e9243aa02275c3d0e78fdd2340960453195566b1f98d1d6fd1"
   "services/api/value/x402/economic_mutations.py": "sha256:bdd180a936e048840636f221fdee3b142c0babab5d8e2bcc59b4a51983198f51"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
-  "services/api/workers/profile360_workers/workers.py": "sha256:0c79f5ee2cc03eb0ae92d8690a8622b8ebaea245dc047c7643107fe909d7170a"
+  "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
 ---
 # Unified On-Chain Intelligence Graph v0.1.0-alpha.0
 
@@ -79,6 +79,20 @@ Tenant-scoped erasure is a first-class graph operation. The cleanup path uses
 tenant-tagged edges (including edges touching a shared endpoint) and fails
 closed when the configured graph backend cannot complete the operation; system
 vertices and unscoped edges are never selected.
+
+Vertex writes keep their owner. Every backend (in-memory, Postgres
+`ON CONFLICT ... WHERE`, Neptune owner-filtered `upsert_vertex`) and
+`GraphMutationGateway.apply` (before any ledger write, in every mode) compare
+the stored vertex's tenant with the incoming one: they must be equal, a vertex
+with no tenant can only be rewritten by a write naming none, and a vertex whose
+`tenantId` and `tenant_id` disagree is rejected. A refused write raises
+`VertexOwnershipError` (a `ConflictError`). `platform` and `public` vertices
+(asset registry `chain:` / `asset:` vertices, card catalog vertices, interop
+topology) can only be created or changed by a write made for that scope; a
+tenant writer only adds edges to them. Interop topology links a gateway to a
+`chain:` vertex only when the asset registry has seeded it (otherwise the edge
+is skipped and counted as `interop_chain_link_skipped`). Ledger replay rebuilds state without the
+check, since it replays writes that were already accepted.
 
 The same normalization is enforced on graph reads. Traversal entry points
 validate the requested anchor before searching, reject an anchor with missing

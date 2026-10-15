@@ -18,7 +18,7 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
-  "services/api/repositories/repos.py": "sha256:4f13803cb0e92160ac3c4769b18d9853b453dd04a231421a3fe1f90977572439"
+  "services/api/repositories/repos.py": "sha256:f3878d58876bd0c84bedffd8a44734bf60b16b2149e2cde21e133f6140971327"
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -114,7 +114,7 @@ table and caches it. Writes and filters are then bound to the migrated types:
 | `investigations` | `InvestigationRepository` | Investigation service |
 | `governance_decisions` | `GovernanceRepository` | Governance service |
 | `event_replay_jobs` | `EventReplayRepository` | Events replay worker |
-| `event_envelopes` | `EventEnvelopeRepository` | Events service |
+| `event_envelopes` | `EventEnvelopeRepository` (rows keyed `{tenant}:{envelope id}`) | Events service |
 | `providers` | `ProvidersRepository` | BYOK vault — encrypted channel credentials |
 | `notification_intelligence_events` | `NotificationIntelligenceRepository` | Notification intelligence pipeline |
 | `tenant_notification_configs` | `TenantNotificationConfigRepository` | Per-tenant notification routing config |
@@ -227,13 +227,35 @@ does not claim that either has been applied.
   unscoped. Adapters without it (the externalized Bronze adapter, which is bound
   to one tenant when it is built) keep `delete_by_entity`.
 
+- **Row ownership on write:** `BaseRepository.insert` and `update` read the
+  record's tenant from `tenant_id` or `tenantId` and only replace a row whose
+  `COALESCE(tenant_id, '')` column equals it (the predicate is part of the
+  `ON CONFLICT ... DO UPDATE` / `UPDATE` statement, and the in-memory store
+  applies the same rule). A write that would replace another tenant's row, or
+  a row with no tenant when the record names one, changes nothing and raises
+  `ConflictError` without naming the owner, so a client-chosen id belongs to
+  the first tenant that writes it. Repositories whose rows are not tenant-owned
+  set `_tenant_guard = False`: `users` (an SSO re-invite moves a user to
+  another tenant), `tenants`, `first_admin_bootstrap` and the Dune feed tables.
+  Records whose natural id is unique only within a tenant use
+  `tenant_record_id(tenant_id, natural_id)` (`{tenant}:{id}`) as the row id:
+  `behavior_profiles` and `journey_chains` (`find_for_entity(tenant_id,
+  entity_id)`), `event_envelopes` (the envelope id stays in `envelope_id`) and
+  the x402 commerce collections. Migration `20261015_tenant_owned_row_keys`
+  backfills empty tenant columns from the row JSON, re-keys existing rows of
+  those tables, deletes `behavior_profiles` / `journey_chains` rows whose JSON
+  tenant differs from the column (the profile workers recompute them), and
+  marks seeded Web3 registry rows with no tenant as `system`. Other rows with
+  no tenant are left in place and stay unreadable to tenant-scoped reads.
+
 - **Tenant-owned repositories:** `TenantOwnedRepository` (a `BaseRepository`
   subclass) is for registries whose ids come from the caller, such as the Web3
   and cross-domain registries, and for rows that routes read back by an id the
   caller supplies: expectation and behavioral signals and the RWA asset,
   policy, cashflow, exposure and holder stores. `upsert(record_id, data, tenant_id)` stamps the
   row with the tenant, merges into that tenant's own row (keeping `created_at`),
-  and raises `ConflictError` rather than overwrite a row another tenant owns.
+  and raises `ConflictError` rather than overwrite a row another tenant owns
+  or adopt a row that has no tenant.
   Reads only work on a view bound with `for_tenant(tenant_id)`; an unbound
   instance raises. A repository may list `_shared_tenants` (the platform `system`
   tenant for seeded reference data such as chains and protocols), whose rows

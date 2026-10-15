@@ -19,16 +19,16 @@ source_hashes:
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/identity/profile/agent.py": "sha256:ef4434e8cf518e4a04073a6e3356be9119708e156ecdab018692ed4a6350853a"
+  "services/api/identity/profile/agent.py": "sha256:f7aa0168d674cfe5241d169f6516478ef24c882e848dc097af98706f0aee576c"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
-  "services/api/repositories/repos.py": "sha256:4f13803cb0e92160ac3c4769b18d9853b453dd04a231421a3fe1f90977572439"
+  "services/api/repositories/repos.py": "sha256:f3878d58876bd0c84bedffd8a44734bf60b16b2149e2cde21e133f6140971327"
   "services/api/value/commerce/": "sha256:8bb6ed7d7e8bf28230d28c3dd741c4de1604d6b05c42f992e966f58cdb64c330"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
   "services/api/value/economic/operation_linkage.py": "sha256:29544d6511463065fed4bba6acb212b9a1c57bb12800733bf6de00a56cf046fa"
-  "services/api/value/x402/": "sha256:eb7566549524c97f9bc380fba57bfbecf3bc8c539844b7f3f1ba3e4d766dfb22"
-  "services/api/workers/profile360_workers/workers.py": "sha256:0c79f5ee2cc03eb0ae92d8690a8622b8ebaea245dc047c7643107fe909d7170a"
+  "services/api/value/x402/": "sha256:4cc69069d9859072ca317424c81fa754503f94546fa78f4359e440607ace6b58"
+  "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
 ---
 # Aether Agentic Commerce — Day-1 Build Specification
 
@@ -270,7 +270,7 @@ certify the whole graph.
 - `auth.py` — ADD scopes: `commerce:challenge`, `commerce:verify`, `commerce:settle`, `commerce:approve`, `commerce:admin`, `commerce:review`, `commerce:policy`, `approvals:read`, `approvals:write`, `entitlements:read`, `entitlements:write`, `resources:admin`. Add Kyber roles: `viewer`, `operator`, `approver`, `admin`.
 
 **`repositories/` (extend)**
-- `challenges_repo.py`, `approvals_repo.py`, `entitlements_repo.py`, `settlements_repo.py`, `resources_repo.py`, `policies_repo.py`, `facilitators_repo.py`. All Postgres-backed with tenant isolation.
+- `challenges_repo.py`, `approvals_repo.py`, `entitlements_repo.py`, `settlements_repo.py`, `resources_repo.py`, `policies_repo.py`, `facilitators_repo.py`. All Postgres-backed with tenant isolation. Outside local, `CommerceStore` stores each object under the row id `{tenant}:{object id}` (the model keeps its own id field), so seeded ids such as `fac_circle_v2` and client-chosen resource ids exist once per tenant; a row keyed by the bare id is still read when it belongs to the tenant.
 
 **`config/` (extend)**
 - `settings.py` — ADD: `commerce_base_rpc`, `commerce_solana_rpc`. (`commerce_approval_required_all`, `commerce_default_facilitator`, `commerce_enable_v2` and `commerce_feature_flag` were specified here but no code ever read them; they are retired. Mandatory approval is the `DEFAULT_APPROVAL_REQUIRED_ALL` constant in `services/api/value/x402/policies.py`.)
@@ -334,11 +334,11 @@ All additions live in `shared/graph/graph.py` (enum extensions) and are document
 | `SETTLEMENT` | settlement | prefixed | FSM transition | required | retain | settlement FSM |
 | `ENTITLEMENT` | entitlements | prefixed | mint/reuse | required | pseudonymize | entitlements.mint |
 | `ACCESS_GRANT` | control_plane | prefixed | grant step | required | pseudonymize | control_plane.grant_access |
-| `FACILITATOR` | facilitators | global + tenant allow | admin registration | required | N/A | facilitators registry |
+| `FACILITATOR` | facilitators | per-tenant copy (seeded ids such as `fac_circle_v2`) | seed + admin registration | required | N/A | facilitators registry |
 | `PRICE_POLICY` | pricing | per-tenant | admin/policy UI | required | N/A | policies repo |
 | `BUDGET_POLICY` | policies | per-tenant | admin/policy UI | required | N/A | policies repo |
 | `TREASURY` | commerce | per-tenant | treasury config | required | N/A | treasury repo |
-| `STABLECOIN_ASSET` | facilitators | global | seed + admin | required | N/A | asset registry |
+| `STABLECOIN_ASSET` | facilitators | per-tenant copy (seeded) | seed + admin | required | N/A | asset registry |
 | `SERVICE_PLAN` | commerce | per-tenant | admin | required | N/A | plans repo |
 | `PAYMENT_ROUTE` | facilitators | per-tenant | routing decision | required | N/A | route selection |
 | `FULFILLMENT` | control_plane | prefixed | fulfillment record | required | pseudonymize | control_plane.record_fulfillment |

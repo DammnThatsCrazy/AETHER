@@ -21,7 +21,7 @@ source_hashes:
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
-  "services/api/value/x402/": "sha256:eb7566549524c97f9bc380fba57bfbecf3bc8c539844b7f3f1ba3e4d766dfb22"
+  "services/api/value/x402/": "sha256:4cc69069d9859072ca317424c81fa754503f94546fa78f4359e440607ace6b58"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
 ---
 # Commerce Operator Runbook

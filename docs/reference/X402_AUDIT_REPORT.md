@@ -27,8 +27,8 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
-  "services/api/repositories/repos.py": "sha256:4f13803cb0e92160ac3c4769b18d9853b453dd04a231421a3fe1f90977572439"
-  "services/api/value/x402/": "sha256:eb7566549524c97f9bc380fba57bfbecf3bc8c539844b7f3f1ba3e4d766dfb22"
+  "services/api/repositories/repos.py": "sha256:f3878d58876bd0c84bedffd8a44734bf60b16b2149e2cde21e133f6140971327"
+  "services/api/value/x402/": "sha256:4cc69069d9859072ca317424c81fa754503f94546fa78f4359e440607ace6b58"
 ---
 # x402 Protocol Support Audit — Aether Repository
 
@@ -308,6 +308,14 @@ establish causality, or prove settlement finality. Same-ID lifecycle writes
 cannot overwrite another tenant's record, and a delayed lower-state event
 cannot roll back a later settlement. See the Agent Marketplace Lineage
 source-of-truth page for the implementation boundaries.
+
+Commerce objects are stored per tenant outside local: `CommerceStore` keys each
+row `{tenant}:{object id}`, so the seeded facilitators and assets
+(`fac_circle_v2`, `fac_local_aether`, `ast_usdc_*`) and client-chosen resource
+ids exist once per tenant, and one tenant registering an id another tenant
+uses never replaces that tenant's resource or paywall definition. Migration
+`20261015_tenant_owned_row_keys` re-keys existing rows to the tenant their JSON
+names.
 
 The run authority path separately resolves delegation references to exact
 tenant-owned records. External deployment and delegated-target identities

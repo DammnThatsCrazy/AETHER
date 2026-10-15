@@ -48,10 +48,10 @@ source_hashes:
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
   "services/api/main.py": "sha256:52e672c1c82e17907041ba173b1fb7cee68bfb03b158eb370fd4f25b584cc726"
-  "services/api/repositories/repos.py": "sha256:4f13803cb0e92160ac3c4769b18d9853b453dd04a231421a3fe1f90977572439"
+  "services/api/repositories/repos.py": "sha256:f3878d58876bd0c84bedffd8a44734bf60b16b2149e2cde21e133f6140971327"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
-  "services/api/workers/profile360_workers/workers.py": "sha256:0c79f5ee2cc03eb0ae92d8690a8622b8ebaea245dc047c7643107fe909d7170a"
-  "services/api/workers/runtime/roles.py": "sha256:061fee9712dee6e5354ba7bc8162eeb06a909e526e6ed45d1dee9a4afe9c63b2"
+  "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
+  "services/api/workers/runtime/roles.py": "sha256:24f2e24879828f8f340e91086f57c0e99940e9db96791edc6a1d24d590ba26b1"
   "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
 # Operations Runbook v0.1.0-alpha.0
@@ -404,6 +404,22 @@ All data access goes through `BaseRepository` (asyncpg PostgreSQL) which provide
 | ML Serving Proxy | `httpx.AsyncClient` | Connection pooling with `_client_lock` |
 
 All stores support horizontal scaling natively through their backend implementations.
+
+A repository write replaces an existing row only when the row's `tenant_id`
+column matches the writing tenant, and graph vertex writes never change a
+vertex's owner; both raise a `409 Conflict` instead. Rolling out that rule
+needs migration `20261015_tenant_owned_row_keys` (idempotent) run twice:
+before the API and workers roll to the new code, and again once the rollout
+has finished. The first run backfills empty tenant columns and re-keys
+per-tenant rows; the second picks up rows that old pods wrote during the
+rollout. While old pods are still serving, they cannot read re-keyed x402
+objects by id (lists still work) and they write behavior snapshots, journey
+chains and replay envelopes under the old ids. New pods still read an x402 row
+stored under its bare id when it belongs to the tenant. A burst of `409`s on
+updates after a deploy usually means the migration was skipped: rows whose
+tenant lives only in their JSON cannot be updated until it runs. The
+migration's run time grows with the number of rows that have an empty tenant
+column; it does not touch a Neptune graph.
 
 ---
 

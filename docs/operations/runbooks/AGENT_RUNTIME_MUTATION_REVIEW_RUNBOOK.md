@@ -11,7 +11,7 @@ source_files:
   - services/api/actions/agent/mutation_commit.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/api/actions/agent/mutation_commit.py": "sha256:a899bf664b7b25e37a45487472e8c512eed2ccfb4fe209ec9260166d4d612a33"
+  "services/api/actions/agent/mutation_commit.py": "sha256:a21c56718996d2637fe0978c5d5a4d11de491be2c9ea1594d1595afaf864087c"
   "services/api/actions/agent/runtime_repository.py": "sha256:58209dbc9455991f64bb67462ef8bfbcd7d7167077c11a5fdcf44feda642914b"
 ---
 
@@ -56,7 +56,10 @@ review disabled, `commit_approved_mutations`/`rollback_mutation` refuse
 ## Rollback
 
 `rollback_mutation` attempts the inverse (vertex/edge drop), then READS THE
-GRAPH BACK to verify absence. If the inverse errors or the artifact is still
+GRAPH BACK to verify absence. A committed vertex always carries the committing
+tenant's `tenant_id`, and the vertex drop only matches a vertex that tenant
+owns (`tenantId` or `tenant_id`), so a rollback never removes another tenant's
+vertex; a vertex it could not drop stays present and opens a repair task. If the inverse errors or the artifact is still
 present, the mutation is marked `rollback_repair_required` and a durable repair
 task is opened — a rollback that could not fully restore state is never reported
 as a clean undo. Successful rollbacks are idempotent.
