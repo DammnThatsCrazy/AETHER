@@ -1,4 +1,4 @@
-"""Release readiness requires pinned platform operator tenants on production-lean."""
+"""Release readiness requires pinned platform operator tenants on production."""
 
 from __future__ import annotations
 
@@ -17,10 +17,10 @@ def test_operator_tenants_are_read_from_tfvars():
     assert read('# platform_operator_tenant_ids = ["x"]\nplatform_operator_tenant_ids = [ ]') == []
     assert read('platform_operator_tenant_ids = ["", " "]') == []
     assert read('platform_operator_tenant_ids = [\n  "ops-1",\n  "ops-2",\n]\n') == ["ops-1", "ops-2"]
-    assert read('deployment_profile = "production-lean"\n') == []
+    assert read('deployment_profile = "production"\n') == []
 
 
-def test_production_lean_check_reports_the_pinned_state():
+def test_production_check_reports_the_pinned_state():
     checks: list[dict] = []
     ops_readiness.check_platform_operator_tenants(checks, 'platform_operator_tenant_ids = []')
     ops_readiness.check_platform_operator_tenants(checks, 'platform_operator_tenant_ids = ["ops-1"]')
@@ -28,4 +28,4 @@ def test_production_lean_check_reports_the_pinned_state():
         ("platform_operator_tenants_pinned", False),
         ("platform_operator_tenants_pinned", True),
     ]
-    assert "production-lean.tfvars" in checks[0]["detail"]
+    assert "production.tfvars" in checks[0]["detail"]

@@ -4,7 +4,7 @@
 Machine-readable checks that the one-person-ops surfaces are wired and safe:
 flags exist and default OFF, runtime stores are reachable, the worker bridge
 fails closed outside local mode, the mutation-commit pipeline never bypasses
-approval, the release-train source-of-truth docs exist, and production-lean
+approval, the release-train source-of-truth docs exist, and production
 pins the platform operator tenants that admin and diagnostics routes admit.
 
 Exit 0 = ready (all checks pass), exit 1 = not ready. ``--json`` for CI.
@@ -51,7 +51,7 @@ OPS_MODULES = [
 ]
 
 
-PRODUCTION_TFVARS = "infra/aws/terraform/profiles/production-lean.tfvars"
+PRODUCTION_TFVARS = "infra/aws/terraform/profiles/production.tfvars"
 
 
 def _check(checks: list, name: str, passed: bool, detail: str = "") -> None:
