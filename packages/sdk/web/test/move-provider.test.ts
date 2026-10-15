@@ -99,4 +99,19 @@ describe('MoveProvider — connect/disconnect', () => {
     p.disconnect();
     expect(cbs.onWalletEvent).toHaveBeenCalledWith('disconnect', expect.objectContaining({ vm: 'movevm' }));
   });
+
+  it('reports a transaction observation without querying a Sui JSON-RPC endpoint', () => {
+    vi.stubGlobal('window', {});
+    const cbs = makeCallbacks();
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    const p = new MoveProvider(cbs);
+
+    p.transaction('sui-digest', { observed: true });
+
+    expect(cbs.onTransaction).toHaveBeenCalledWith('sui-digest', expect.objectContaining({
+      txHash: 'sui-digest', chainId: 'sui:mainnet', vm: 'movevm', status: 'pending',
+    }));
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 });

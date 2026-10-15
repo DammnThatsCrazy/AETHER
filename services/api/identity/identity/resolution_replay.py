@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from typing import Any, Optional
 
 from shared.logger.logger import get_logger
@@ -23,22 +24,25 @@ from shared.logger.logger import get_logger
 from governance.security.repositories import _ScopedRepo
 
 from .models import IdentitySignalType
+from .hashing import hash_value
 
 logger = get_logger("aether.identity.resolution_replay")
 
 
-# identifier_type → verified-ownership signal type. Only email is wired for now;
-# wallet / phone can be added here later without touching the replay flow.
+# identifier_type → verified-ownership signal type. Wallet proof additionally
+# requires a chain namespace and an exact consented anonymous subject.
 _IDENTIFIER_SIGNAL_TYPES: dict[str, IdentitySignalType] = {
     "email": IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED,
     "email_hash": IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED,
     "email_ownership_verified": IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED,
+    "wallet": IdentitySignalType.WALLET_SIGNATURE_VERIFIED,
 }
 
 # The observed alias type that shares the same hash as each verified signal type,
 # so component discovery can find entities carrying only the observed identifier.
 _OBSERVED_ALIAS_TYPES: dict[IdentitySignalType, IdentitySignalType] = {
     IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED: IdentitySignalType.EMAIL_HASH,
+    IdentitySignalType.WALLET_SIGNATURE_VERIFIED: IdentitySignalType.WALLET_ADDRESS,
 }
 
 
@@ -74,6 +78,8 @@ class ResolutionReplayService:
         trigger_id: str,
         policy_version: str = "1.0.0",
         consent_snapshot: Optional[dict] = None,
+        chain_namespace: Optional[str] = None,
+        subject_hint_id: Optional[str] = None,
     ) -> dict:
         """Idempotently replay resolution for a verified identifier.
 
@@ -85,12 +91,23 @@ class ResolutionReplayService:
         # Bind a completed idempotency key to the immutable evidence input. A
         # reused trigger id with a different value or consent snapshot is a
         # caller error, not permission to silently skip new evidence.
+        normalized_chain_namespace = str(chain_namespace or "").strip().lower()
+        subject_hint_hash = hash_value(
+            str(subject_hint_id or "").strip(),
+            scope=f"wallet-proof-subject:{tenant_id}",
+        )
+        fingerprint_payload = {
+            "identifier_type": normalized_identifier_type,
+            "identifier_hash": identifier_hash,
+            "consent_snapshot": consent_snapshot,
+        }
+        if normalized_identifier_type == "wallet":
+            fingerprint_payload.update({
+                "chain_namespace": normalized_chain_namespace,
+                "subject_hint_hash": subject_hint_hash,
+            })
         evidence_fingerprint = hashlib.sha256(json.dumps(
-            {
-                "identifier_type": normalized_identifier_type,
-                "identifier_hash": identifier_hash,
-                "consent_snapshot": consent_snapshot,
-            },
+            fingerprint_payload,
             sort_keys=True,
             separators=(",", ":"),
             default=str,
@@ -125,6 +142,25 @@ class ResolutionReplayService:
                 return {
                     "status": "error",
                     "error": f"unsupported identifier_type: {identifier_type!r}",
+                    "key": key,
+                    "idempotent": False,
+                }
+
+            if sig_type == IdentitySignalType.WALLET_SIGNATURE_VERIFIED and (
+                not subject_hint_id
+                or not re.fullmatch(
+                    r"(?:eip155:[1-9][0-9]*|solana:[a-z0-9][a-z0-9._-]{0,63})",
+                    normalized_chain_namespace,
+                )
+            ):
+                await self._mark(
+                    key, tenant_id, trigger_type, trigger_id, policy_version,
+                    "failed", error="wallet replay requires subject and chain scope",
+                    evidence_fingerprint=evidence_fingerprint,
+                )
+                return {
+                    "status": "error",
+                    "error": "wallet replay requires subject and chain scope",
                     "key": key,
                     "idempotent": False,
                 }
@@ -164,17 +200,27 @@ class ResolutionReplayService:
                 )
 
             # ── Build ONE synthetic verified event and run the resolver ───
+            # Wallet control proof is tied to the exact consented anonymous
+            # subject that initiated the challenge. Do not turn a successful
+            # proof into a wallet-only global replay.
+            pre_hashed_signals = [
+                {
+                    "type": sig_type.value,
+                    "hash": identifier_hash,
+                    "display": "[REDACTED:verified_identifier]",
+                }
+            ]
+            if sig_type == IdentitySignalType.WALLET_SIGNATURE_VERIFIED:
+                pre_hashed_signals.append({
+                    "type": IdentitySignalType.ANONYMOUS_ID.value,
+                    "hash": str(subject_hint_id).strip(),
+                    "display": "[REDACTED:anonymous_id]",
+                })
             synthetic = {
                 "event_id": f"verify:{trigger_id}",
                 "tenant_id": tenant_id,
                 "context": {"consent": consent_snapshot},
-                "_pre_hashed_signals": [
-                    {
-                        "type": sig_type.value,
-                        "hash": identifier_hash,
-                        "display": "[REDACTED:email_hash]",
-                    }
-                ],
+                "_pre_hashed_signals": pre_hashed_signals,
                 "source": "resolution_replay",
             }
             decision = await self._resolver.resolve_event(

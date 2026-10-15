@@ -19,6 +19,21 @@ from shared.providers.categories import ProviderCategory
 
 logger = get_logger("aether.service.onchain.rpc")
 
+# Sui Foundation JSON-RPC was disabled on Mainnet in July 2026 and is being
+# decommissioned. Keep Sui verification on the GraphQL read API instead of
+# adding legacy ``sui_*`` JSON-RPC calls to the shared allowlist.
+SUI_TRANSACTION_QUERY = """query AetherTransactionVerification($digest: String!) {
+  chainIdentifier
+  transaction(digest: $digest) {
+    digest
+    sender { address }
+    effects {
+      status
+      checkpoint { sequenceNumber }
+    }
+  }
+}"""
+
 ALLOWED_RPC_METHODS = {
     # EVM read methods
     "eth_getBalance", "eth_getTransactionCount", "eth_getCode", "eth_getStorageAt",
@@ -165,6 +180,68 @@ class RPCGateway:
         metrics.increment("rpc_requests", labels={"chain_id": chain_id, "method": method})
         logger.debug(f"RPC {method} on {chain_id} ({vm_type})")
         return result
+
+    async def execute_sui_transaction(
+        self, *, tenant_id: str, chain_id: str, digest: str
+    ) -> dict[str, Any]:
+        """Read one Sui transaction from a configured Sui GraphQL endpoint.
+
+        This fixed query is read-only and deliberately bypasses the generic
+        JSON-RPC method path. Sui endpoints must be configured through the
+        existing tenant-scoped RPC endpoint/key pair.
+        """
+        if not tenant_id or not chain_id or not digest:
+            raise ValueError("tenant_id, chain_id, and digest are required")
+        if not chain_id.lower().startswith("sui:"):
+            raise ValueError("Sui transaction lookup requires a sui:<network> chain id")
+
+        if not self._endpoint:
+            raise RuntimeError("Sui GraphQL endpoint is not configured for this tenant")
+
+        await self._rate_limit()
+        self._request_count += 1
+        self._request_times.append(time.time())
+        result = await self._execute_sui_graphql(
+            chain_id=chain_id, digest=digest,
+        )
+        metrics.increment("rpc_requests", labels={
+            "chain_id": chain_id, "method": "sui_graphql_transaction",
+        })
+        logger.debug(f"Sui GraphQL transaction lookup on {chain_id}")
+        return result
+
+    async def _execute_sui_graphql(self, *, chain_id: str, digest: str) -> dict[str, Any]:
+        headers = {"content-type": "application/json", "accept": "application/json"}
+        if self._api_key:
+            headers["x-api-key"] = self._api_key
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                self._endpoint,
+                json={"query": SUI_TRANSACTION_QUERY, "variables": {"digest": digest}},
+                headers=headers,
+            )
+            response.raise_for_status()
+            payload = response.json()
+
+        if not isinstance(payload, dict):
+            raise RuntimeError("Sui GraphQL returned a non-object response")
+        errors = payload.get("errors")
+        if errors:
+            raise RuntimeError("Sui GraphQL transaction lookup failed")
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            raise RuntimeError("Sui GraphQL response is missing data")
+        transaction = data.get("transaction")
+        if transaction is not None and not isinstance(transaction, dict):
+            raise RuntimeError("Sui GraphQL returned an invalid transaction")
+        return {
+            "chain_identifier": data.get("chainIdentifier"),
+            "transaction": transaction,
+            "chain_id": chain_id,
+            "vm_type": "movevm",
+            "method": "sui_graphql_transaction",
+        }
 
 
     async def _execute_via_http(

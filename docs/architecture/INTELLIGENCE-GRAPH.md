@@ -49,7 +49,7 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/graph/web3/classifier.py": "sha256:4ced74981c964a8e2442071071289d7d28dbd6bf4042200ce05934cdbd781a0e"
-  "services/api/graph/web3/routes.py": "sha256:99f06d0b04993a9e61061bfb036da76e571d3084106db18f4c3e7696c1421d37"
+  "services/api/graph/web3/routes.py": "sha256:c2c28dc79b3fe70ca030a2cfa74456b7ccdafd9b86941cc02a5954d82d24f95d"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
@@ -569,7 +569,7 @@ All in-memory stores are tenant-scoped:
 ### Input Validation
 
 - **x402 headers:** 8KB size limit, amount validation (non-negative numeric), malformed non-JSON rejection
-- **RPC gateway:** Method allowlist restricts execution to curated EVM/Solana read methods
+- **RPC gateway:** JSON-RPC method allowlists restrict reads to curated EVM/Solana methods. Sui transaction verification uses a fixed read-only GraphQL query against the tenant-configured endpoint, validates the registered network identifier, digest, sender and execution result, and does not mark settlement.
 - **Gremlin queries:** Escape regex expanded to include `"`, `` ` ``, and `;` to prevent injection
 - **Middleware:** `Content-Length` parsing handles malformed values gracefully
 

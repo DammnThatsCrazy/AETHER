@@ -23,9 +23,9 @@ source_hashes:
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
   "services/api/shared/store.py": "sha256:ff4198cf285ac4c250481ef0ae476037c26b1f4d1fa00751964638ff1f91fa8c"
-  "services/api/value/commerce/order_payment_reconciliation.py": "sha256:84b3f00bfa6e0c1b4df5405636163a2650edf8651b3b36823a7f2ba26ca7b77e"
+  "services/api/value/commerce/order_payment_reconciliation.py": "sha256:126cace2aa97f2887dddc457199aae454b9a6fab53b395a7c8cbc7480b82f866"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
-  "services/api/value/economic/operation_linkage.py": "sha256:29544d6511463065fed4bba6acb212b9a1c57bb12800733bf6de00a56cf046fa"
+  "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
   "services/api/value/x402/": "sha256:5d041fbb1a1fb7494c5a547b4aac97804e0dcf478261170546663918a509377f"
   "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
@@ -37,7 +37,7 @@ source_hashes:
 > unless a future explicit product scope, legal review, compliance review, and feature flag
 > enable it. For now, all `execution_by_aether` fields must be `false`.
 
-## Current-state addendum (2026-10-10)
+## Current-state addendum (2026-10-15)
 
 PR #771 closes the external-agent execution-lineage and graph-recovery gaps
 within its defined scope. The SDK contract, backend validation, Silver
@@ -94,7 +94,7 @@ source-of-truth documents.
 | `services/api/value/x402/interceptor.py` | Header parsing only. Observational. |
 | `services/api/value/x402/economic_graph.py` | Graph mutations for lifecycle stages. Observational. |
 | `services/api/actions/agent/economic.py`, `services/api/identity/profile/agent.py` | Agent economic views and Agent 360 expose evidence-only links from tenant-scoped payment intents to exact-match authorization, execution and settlement-event records. Authorization also requires an exact tenant/challenge/agent match to its authoritative PaymentRequirement. Source lifecycle status remains authoritative. |
-| `services/api/value/economic/operation_linkage.py`, `services/api/value/commerce/order_payment_reconciliation.py` | Commerce and agent lifecycle links carry source-owned references only. Exact Stripe order/payment evidence can carry a distinct succeeded refund with an explicit `reverses` relation; neither the link nor refund event executes a transfer or changes the original payment's source status. |
+| `services/api/value/economic/operation_linkage.py`, `services/api/value/commerce/order_payment_reconciliation.py` | Commerce and agent lifecycle links carry source-owned references only. Exact Stripe order/payment evidence can carry a distinct succeeded refund with an explicit `reverses` relation. The commerce ledger can also preserve an authoritative settled outcome and link it with `settled_by` only to explicit provider/payment IDs, including knowledge-time visibility; no current processor adapter emits this evidence. Neither link carries amounts, infers settlement from payment completion, executes a transfer, or changes the original payment's source status. |
 | `services/api/ingestion/ingestion/lifecycle_worker.py` | Only closed-registry server-authoritative x402 topics project agent PaymentIntent/SettlementEvent records to existing graph vertices and registered edges; SDK terminal claims remain excluded. |
 | `services/api/actions/agent/lifecycle_mapper.py` | Routes agent events to repositories and graph. Observational. |
 | `services/api/actions/agent/worker_bridge.py` (2026-07-10) | Publishes internal objective-step envelopes to AETHER's own Agent Layer Celery broker by task name. Internal work dispatch only — no external execution, no payments, no trades. Hosted modes fail closed when the broker is unreachable. |

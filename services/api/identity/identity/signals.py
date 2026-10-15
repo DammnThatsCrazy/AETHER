@@ -302,19 +302,12 @@ def extract_signals(
     if wallet_address:
         chain_ns = extract_chain_namespace(props)
         normalized_addr = normalize_wallet_address(wallet_address, chain_ns)
-        is_verified = bool(
-            props.get("wallet_signature_verified")
-            or props.get("walletSignatureVerified")
-        )
-        sig_type = (
-            IdentitySignalType.WALLET_SIGNATURE_VERIFIED
-            if is_verified
-            else IdentitySignalType.WALLET_ADDRESS
-        )
-        confidence_hint = 0.95 if is_verified else 0.6
+        # SDK properties are caller-controlled. A client boolean cannot prove
+        # address control or authorize identity merging; wallet challenges
+        # must be verified and recorded by a server-owned proof flow first.
         signals.append(_sig(
-            sig_type, normalized_addr,
-            confidence_hint=confidence_hint,
+            IdentitySignalType.WALLET_ADDRESS, normalized_addr,
+            confidence_hint=0.6,
             chain_namespace=chain_ns,
         ))
 
@@ -328,16 +321,9 @@ def extract_signals(
             continue
         chain_ns = extract_chain_namespace(w)
         normalized_addr = normalize_wallet_address(addr, chain_ns)
-        is_verified = bool(w.get("verified") or w.get("signature_verified"))
-        sig_type = (
-            IdentitySignalType.WALLET_SIGNATURE_VERIFIED
-            if is_verified
-            else IdentitySignalType.WALLET_ADDRESS
-        )
-        confidence_hint = 0.95 if is_verified else 0.6
         signals.append(_sig(
-            sig_type, normalized_addr,
-            confidence_hint=confidence_hint,
+            IdentitySignalType.WALLET_ADDRESS, normalized_addr,
+            confidence_hint=0.6,
             chain_namespace=chain_ns,
         ))
 

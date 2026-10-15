@@ -89,6 +89,7 @@ class EvidenceService:
         issuer_subject_hash: Optional[str] = None,
         challenge_id: Optional[str] = None,
         source_event_id: Optional[str] = None,
+        subject_hint_id: Optional[str] = None,
         proof_reference: Optional[str] = None,
         proof_digest: Optional[str] = None,
         assurance_level: str = "verified",
@@ -133,6 +134,8 @@ class EvidenceService:
             trigger_id=evidence.id,
             policy_version=policy_version,
             consent_snapshot=consent_snapshot,
+            chain_namespace=(metadata or {}).get("chain_namespace"),
+            subject_hint_id=subject_hint_id,
         )
         return evidence
 
@@ -194,6 +197,8 @@ class EvidenceService:
         trigger_id: str,
         policy_version: str,
         consent_snapshot: Optional[dict],
+        chain_namespace: Optional[str] = None,
+        subject_hint_id: Optional[str] = None,
     ) -> None:
         """Best-effort resolution replay fan-out.
 
@@ -231,6 +236,8 @@ class EvidenceService:
                 trigger_id=trigger_id,
                 policy_version=policy_version,
                 consent_snapshot=consent_snapshot,
+                chain_namespace=chain_namespace,
+                subject_hint_id=subject_hint_id,
             )
             self._metrics.record_resolution_replay("requested")
         except Exception as exc:  # noqa: BLE001 - replay must never break evidence

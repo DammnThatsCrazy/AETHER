@@ -24,9 +24,9 @@ source_hashes:
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
   "services/api/repositories/repos.py": "sha256:4763340370ea7ef9e43d91b1156def3188a83114efa832e0a289f267957206e6"
-  "services/api/value/commerce/": "sha256:50e5a942d3debd0a6c5aef8fbdab3c56fb95f024dd1e129d457beda76d67b9a8"
+  "services/api/value/commerce/": "sha256:a6e9cc6ca2eb0e96b6ed2a1fe6b73960fb13ccca9dad287dfa3cd2dc5e28833a"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
-  "services/api/value/economic/operation_linkage.py": "sha256:29544d6511463065fed4bba6acb212b9a1c57bb12800733bf6de00a56cf046fa"
+  "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
   "services/api/value/x402/": "sha256:5d041fbb1a1fb7494c5a547b4aac97804e0dcf478261170546663918a509377f"
   "services/api/workers/profile360_workers/workers.py": "sha256:0c79f5ee2cc03eb0ae92d8690a8622b8ebaea245dc047c7643107fe909d7170a"
 ---
@@ -38,14 +38,16 @@ source_hashes:
 **Day-1 GA anchor:** All Aether-native protected resource classes, mandatory approval on all spend classes, USDC on Base + Solana.
 **External providers:** Designed-in, shipped second-wave.
 
-**Current implementation boundary (October 10, 2026):** The repository now
+**Current implementation boundary (October 15, 2026):** The repository now
 has a versioned, evidence-only `EconomicOperationLink` for exact-reference
-commerce order/payment evidence and tenant-scoped agent intent, authorization,
-execution, and settlement records. Commerce evidence is knowledge-time
-reconstructable and can flow into Journey/Economic360 only when a persisted
-journey step contains the source-shared order reference. This link does not
-execute payments, assert payout settlement, attach an order to a person, or
-replace the provider-owned lifecycle. Signed Stripe refunds now appear as
+commerce order, payment, refund and settlement evidence plus tenant-scoped
+agent intent, authorization, execution and settlement records. Commerce
+evidence is knowledge-time reconstructable and can flow into Journey/Economic360
+only when a persisted journey step contains the source-shared order reference.
+The link never executes payments, infers payout settlement, attaches an order to
+a person, or replaces the provider-owned lifecycle. A source-authoritative
+settlement can be stored and linked only to explicit provider/payment IDs; no
+current processor adapter emits that evidence. Signed Stripe refunds remain
 separate facts only when the webhook supplies exact order/payment/refund IDs;
 other provider correction feeds and live provider certification remain open.
 
@@ -145,8 +147,11 @@ surfaces partial, unresolved and conflicting matches. The source ledger retains
 distinct order revisions with source-valid and first-observed timestamps;
 stale revisions remain visible without replacing the current source view.
 Agent reversal relations are included only from an explicit source
-`reverses_settlement_event_id`. The operation link carries no amount or
-independent payment status and does not claim payout settlement.
+`reverses_settlement_event_id`. Source-authoritative processor settlement
+outcomes can also be recorded with exact payment references and are linked by
+`settled_by`; the projection carries no amount or independent payment status.
+It never infers payout settlement from a completed payment, and no current
+processor adapter supplies this settlement evidence.
 
 This linkage is an Aether projection for navigating evidence across domains.
 The existing agent economics read also links `PaymentIntent` records to
@@ -164,11 +169,13 @@ the registered SettlementEvent → Execution edge would assert a causal relation
 that the current source records do not prove. The graph and these projections do not
 become the source of truth for intent, authorization, execution or settlement;
 those remain with their existing control-plane and source-specific authorities.
-Journey and Value propagation, correction/reversal continuity, temporal
-reconstruction and production journey evidence remain open. Linked source
-references retain source event time, validity/revision time where available,
-and first-persisted time where available so later as-of reconstruction can be
-built without conflating source time with ingestion time.
+Exact commerce references now propagate into Journey and Economic360 evidence,
+and the commerce ledger reconstructs order, payment, refund and settlement
+knowledge at an `as_of` cutoff. Agent-intent historical reconstruction,
+provider correction feeds beyond the signed Stripe refund path, and production
+journey evidence remain open. Linked source references retain source event
+time, validity/revision time where available, and first-persisted time where
+available without conflating source time with ingestion time.
 
 External-agent run evidence accepts optional caller-reported payment-intent
 and settlement-event IDs. The resolver requires an exact same-tenant match to
