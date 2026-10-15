@@ -396,3 +396,47 @@ async def test_position_links_only_own_account_to_registered_market(monkeypatch,
     # Another tenant naming that account gets no edge from it.
     assert _position(_build_app(OTHER_TENANT), account_id, "p-other").status_code == 201
     assert len(_edges(graph, EdgeType.HOLDS_POSITION)) == 1
+
+
+@pytest.fixture
+def registry(monkeypatch):
+    """Empty in-memory venue and market registry tables for one test."""
+    from repositories import typed_repo
+
+    for table in ("derivatives_trading_venues", "derivatives_markets"):
+        monkeypatch.setitem(typed_repo._TYPED_IN_MEMORY_STORES, table, [])  # noqa: SLF001
+
+
+async def test_registered_venue_and_market_are_projected_as_platform(monkeypatch, graph, registry):
+    from config.settings import settings
+    from repositories.derivatives_repos import MarketRepo, VenueRepo
+    from shared.graph.graph import EdgeType
+    from value.derivatives.registry_graph import project_registry
+
+    monkeypatch.setattr(settings, "derivatives", _FLAGS_ON)
+    await VenueRepo().insert({
+        "venue_id": "venue:simulated", "venue_type": "simulated", "display_name": "Simulator",
+        "created_at": "2026-07-08T00:00:00Z",
+    })
+    await MarketRepo().insert({
+        "canonical_market_id": "sim:btc-perp", "venue_id": "venue:simulated",
+        "instrument_type": "perpetual", "status": "active",
+    })
+
+    assert await project_registry(graph) == {"venues": 1, "markets": 1}
+    venue = await graph.get_vertex("market_venue:venue:simulated")
+    market = await graph.get_vertex("derivative_market:sim:btc-perp")
+    assert venue.properties["tenant_id"] == market.properties["tenant_id"] == "platform"
+    assert market.properties["venue_id"] == "venue:simulated"
+
+    client = _build_app(TENANT)
+    account_id = _link(client).json()["trading_account_id"]
+    assert _position(client, account_id).status_code == 201
+    [authenticates] = _edges(graph, EdgeType.AUTHENTICATES)
+    assert authenticates.to_vertex_id == "market_venue:venue:simulated"
+    [holds] = _edges(graph, EdgeType.HOLDS_POSITION)
+    assert holds.to_vertex_id == "derivative_market:sim:btc-perp"
+
+    # Re-running rewrites nothing, and the tenant flow left the vertices as registered.
+    assert await project_registry(graph) == {"venues": 0, "markets": 0}
+    assert (await graph.get_vertex("market_venue:venue:simulated")).properties == venue.properties

@@ -15,6 +15,28 @@ _PROVENANCE = "derivatives_intelligence"
 PLATFORM_REFERENCE_PREFIXES = ("market_venue:", "derivative_market:")
 
 
+def _platform_vertex(vertex_id: str, vertex_type: str, row: dict, fields: tuple[str, ...]) -> Vertex:
+    properties = {f: row[f] for f in fields if row.get(f) is not None}
+    return Vertex(vertex_id=vertex_id, vertex_type=vertex_type,
+                  properties={"tenant_id": "platform", **properties})
+
+
+def build_venue_vertex(venue: dict) -> Vertex:
+    """Platform-owned MARKET_VENUE vertex for a venue registry row."""
+    return _platform_vertex(
+        f"market_venue:{venue['venue_id']}", VertexType.MARKET_VENUE, venue,
+        ("venue_id", "venue_type", "display_name"),
+    )
+
+
+def build_market_vertex(market: dict) -> Vertex:
+    """Platform-owned MARKET vertex for a market registry row."""
+    return _platform_vertex(
+        f"derivative_market:{market['canonical_market_id']}", VertexType.MARKET, market,
+        ("canonical_market_id", "venue_id", "instrument_type", "contract_type", "status"),
+    )
+
+
 def build_account_mutations(account: dict) -> tuple[list[Vertex], list[Edge]]:
     """TRADING_ACCOUNT vertex + AUTHENTICATES edge to the platform venue, plus
     DELEGATES_TRADING_TO (H2A) when the account is agent-directed with a

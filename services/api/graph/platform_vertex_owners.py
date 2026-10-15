@@ -1,8 +1,8 @@
-"""Mark Neptune chain and card catalog vertices as ``platform`` owned.
+"""Mark Neptune chain, card catalog and derivatives registry vertices as ``platform`` owned.
 
 Graph writes never change a vertex's owner and tenant writers may not write
 ``platform`` vertices, so the platform writers of these reference vertices
-(asset registry seeds, card catalog) fail with ``VertexOwnershipError`` while a
+(asset registry seeds, card catalog, derivatives registry projection) fail with ``VertexOwnershipError`` while a
 vertex still carries an older owner. ``repositories.tenant_row_keys`` fixes the
 PostgreSQL graph backend; this module does the same for Neptune.
 
@@ -22,7 +22,7 @@ from typing import Any, Iterable
 
 from repositories.tenant_row_keys import PLATFORM_VERTEX_PREFIXES
 
-LABELS = ("Chain", "CardProgram", "CardIssuer", "PaymentNetwork")
+LABELS = ("Chain", "CardProgram", "CardIssuer", "PaymentNetwork", "MarketVenue", "Market")
 PLATFORM = "platform"
 _TENANT_KEYS = ("tenantId", "tenant_id")
 

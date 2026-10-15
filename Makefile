@@ -28,7 +28,7 @@
         lifecycle-seed \
         design-partner-demo-up design-partner-demo-seed design-partner-demo-check design-partner-demo-down \
         temporal-integrity temporal-contract-parity mutation-gateway-check exploration-readiness \
-        production-status release-gate ops-readiness tenant-row-keys graph-platform-owners help resolved-feature-flags \
+        production-status release-gate ops-readiness tenant-row-keys graph-platform-owners derivatives-registry-graph help resolved-feature-flags \
         validate-ci-control-toolchain validate-ci-performance-policy validate-ci-execution-contracts validate-execution-plan verification-execution-plan \
         validate-profile-config validate-profile-parity validate-cost-policy validate-cost-policy-terraform validate-delivery-topology \
         validate-route-registry validate-implementation-ledger validate-reference-packs \
@@ -801,8 +801,11 @@ ops-readiness: ## One-person ops readiness gate (flags, stores, bridge fail-clos
 tenant-row-keys: ## Re-run the idempotent tenant row backfill and re-key steps of migration 20261015_tenant_owned_row_keys (needs DATABASE_URL)
 	PYTHONPATH=services/api $(GATE_PY) -m repositories.tenant_row_keys
 
-graph-platform-owners: ## Relabel Neptune chain and card catalog vertices to the platform owner (needs NEPTUNE_ENDPOINT; dry run unless APPLY=1)
+graph-platform-owners: ## Relabel Neptune chain, card catalog and derivatives registry vertices to the platform owner (needs NEPTUNE_ENDPOINT; dry run unless APPLY=1)
 	PYTHONPATH=services/api $(GATE_PY) -m graph.platform_vertex_owners $(if $(filter 1,$(APPLY)),--apply,)
+
+derivatives-registry-graph: ## Project derivatives venue and market registry rows into the graph as platform vertices (idempotent; needs DATABASE_URL and the graph backend env)
+	PYTHONPATH=services/api $(GATE_PY) -m value.derivatives.registry_graph
 
 release-gate: ## Full release gate: repo consistency (CI mode) + strict production status + ops readiness + founding-tenant control spine
 	$(GATE_PY) scripts/repo_doctor.py --ci
