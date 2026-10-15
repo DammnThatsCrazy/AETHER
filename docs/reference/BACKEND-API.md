@@ -29,7 +29,7 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:0740c89ed3bf089b8ded5f9a319b7670a0afb18bda8f58a69a11a03c2a0a5d75"
   "services/api/connectors/": "sha256:01f3d11694ce153f102de85133e514fe4548877376c05668c2ee6fe63e1ad633"
-  "services/api/governance/": "sha256:4da82f83bbd3ec9961512ff0aab45e638e5f243b5812376c8e3c408529b924d8"
+  "services/api/governance/": "sha256:7babd09f496c3d1339dd2853f89d4fa3174b29fbeea1dc2e680130d6d7986540"
   "services/api/graph/": "sha256:bd963613166312ac99a29e07d2250a7cc45d55618204a62c969d0b801d8e2231"
   "services/api/identity/": "sha256:3899aca8a5fe95b1f975945913ebbd0cef920109649676c9b48b49fd6fcd2a1f"
   "services/api/ingestion/": "sha256:201513b270e7c49a9636eb99cbd9d8ca92247a0e1a7363fee7a9315dc895bf46"
@@ -156,8 +156,9 @@ public paths (the Stripe webhook), `/kyber` routes (which keep the narrower
 Kyber operator gate), and the tenant's own SDK routes `POST
 /v1/diagnostics/sdk/heartbeat`, `GET /v1/diagnostics/sdk/health`, `GET
 /v1/diagnostics/sdk/health/{sdk_id}` and `GET /v1/diagnostics/sdk/silent`. Only
-a tenant in `PLATFORM_OPERATOR_TENANT_IDS` (plus, in staging, the first-admin
-bootstrap tenant) or a Kyber operator passes; anyone else gets `403
+an admin of a tenant in `PLATFORM_OPERATOR_TENANT_IDS` (plus, in staging, the
+first-admin bootstrap tenant) or a Kyber operator passes; members and viewers of
+an operator tenant, like everyone else, get `403
 ROUTE_POLICY_PLATFORM_OPERATOR_REQUIRED` when the registry is enforced.
 
 Handlers that act on another tenant or on process-global state also check for a
