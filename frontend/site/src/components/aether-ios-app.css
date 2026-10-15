@@ -1,0 +1,6 @@
+/* Generated from design/designs/Aether iOS App.dc.html: helmet styles. */
+.ax-scroll { scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.ax-scroll::-webkit-scrollbar { display: none; }
+.ax-scroll > * { flex-shrink: 0; }
+.ax-app button:focus-visible { outline: 2px solid #6ea0ff; outline-offset: -2px; }
+@media (prefers-reduced-motion: reduce) { .ax-app * { transition-duration: 0.01ms !important; } }

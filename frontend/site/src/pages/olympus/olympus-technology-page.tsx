@@ -74,7 +74,7 @@ export function OlympusTechnologyPage() {
             </div>
           </div>
         </section>
-        <section id="views" data-theme="dark" style={css("background: #111114; color: #e8e6e1;")}>
+        <section id="views" data-theme="dark" style={css("background: radial-gradient(60% 50% at 85% 18%, rgba(58,104,150,0.42), transparent 70%), radial-gradient(50% 45% at 8% 92%, rgba(107,154,124,0.24), transparent 70%), radial-gradient(45% 40% at 92% 92%, rgba(201,151,90,0.26), transparent 70%), #111114; color: #e8e6e1;")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(64px, 9vw, 112px) 24px; display: flex; flex-direction: column; gap: 32px;")}>
             <div style={css("display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 24px; align-items: end;")}>
               <div style={css("display: flex; flex-direction: column; gap: 12px;")}>
@@ -96,7 +96,7 @@ export function OlympusTechnologyPage() {
               </div>
             </div>
             <div style={css("display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch;")}>
-              <div style={css("flex: 2 1 520px; border: 1px solid #2a2a2f; border-radius: 12px; background: #1a1a1e; padding: 20px; min-width: 0;")}>
+              <div style={css("flex: 2 1 520px; border-radius: 26px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14); padding: 20px; min-width: 0;")}>
                 <AetherScene dark={true} story="customer" stage={viewStage} controls={false} />
               </div>
               <div style={css("flex: 1 1 280px; display: flex; flex-direction: column; gap: 12px;")}>
@@ -247,7 +247,7 @@ export function OlympusTechnologyPage() {
             </div>
           </div>
         </section>
-        <section style={css("background: #eceae5;")}>
+        <section style={css("background: radial-gradient(40% 50% at 80% 25%, rgba(58,104,150,0.28), transparent 72%), radial-gradient(40% 50% at 50% 85%, rgba(107,154,124,0.3), transparent 72%), linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%);")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(64px, 9vw, 112px) 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 32px; align-items: center;")}>
             <div style={css("display: flex; flex-direction: column; gap: 16px;")}>
               <span style={css("display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;")}>

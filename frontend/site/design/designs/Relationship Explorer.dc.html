@@ -8,8 +8,8 @@
 <body>
 <x-dc>
 <helmet>
-  <link rel="stylesheet" href="../_ds/colors_and_type.css">
-  <script src="../_ds/_ds_bundle.js"></script>
+  <link rel="stylesheet" href="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/colors_and_type.css">
+  <script src="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/_ds_bundle.js"></script>
 </helmet>
 <div style="display: flex; flex-direction: column; gap: 12px; font-family: var(--font-sans); color: #1a1a1e;">
   <div role="tablist" aria-label="Relationship types" style="display: flex; flex-wrap: wrap; gap: 12px;">
@@ -56,11 +56,11 @@ class Component extends DCLogic {
     const C = { sage: ['#6b9a7c', '#4f7a5e', 'rgba(107,154,124,0.16)'], cobalt: ['#3a6896', '#2d5373', 'rgba(58,104,150,0.14)'], ochre: ['#c9975a', '#8a6433', 'rgba(201,151,90,0.18)'], ember: ['#b5564a', '#a3473c', 'rgba(181,86,74,0.14)'] };
     const H = (label, sub) => ({ g: '●', label, sub, agent: false }), A = (label, sub) => ({ g: '⬡', label, sub, agent: true });
     const T = [
-      { id: 'h2h', code: 'H → H', name: 'Human to human', short: 'working together', c: C.sage, from: H('Jane Doe', 'account owner'), to: H('Percival', 'risk analyst'), verb: 'approves together with', strength: '0.74',
-        means: 'People working together and sharing decisions across teams and companies.', example: 'Jane and Percival both approve large payment batches — 14 shared approvals in 90 days, seen across Slack and the CRM.', value: 'Shows who really makes decisions, and who each one depends on.',
+      { id: 'h2h', code: 'H → H', name: 'Human to human', short: 'working together', c: C.sage, from: H('Sofia Marchetti', 'account owner'), to: H('Percival', 'risk analyst'), verb: 'approves together with', strength: '0.74',
+        means: 'People working together and sharing decisions across teams and companies.', example: 'Sofia and Percival both approve large payment batches — 14 shared approvals in 90 days, seen across Slack and the CRM.', value: 'Shows who really makes decisions, and who each one depends on.',
         evidence: ['approval_recorded ×14', 'slack · shared thread', 'crm · same account'], layers: ['events', 'entities', 'graph', 'governance'] },
-      { id: 'h2a', code: 'H → A', name: 'Human to agent', short: 'handing off a task', c: C.cobalt, from: H('Jane Doe', 'usr_4f21a9'), to: A('Ptolemy', 'agt_2f18e'), verb: 'hands a task to', strength: '0.90',
-        means: 'A person gives a task to an AI agent and stays responsible for it.', example: 'Jane asked Ptolemy to score applications. It takes 42 actions a day, and each one traces back to what she allowed.', value: 'Every agent action stays tied to the person who allowed it.',
+      { id: 'h2a', code: 'H → A', name: 'Human to agent', short: 'handing off a task', c: C.cobalt, from: H('Sofia Marchetti', 'usr_4f21a9'), to: A('Ptolemy', 'agt_2f18e'), verb: 'hands a task to', strength: '0.90',
+        means: 'A person gives a task to an AI agent and stays responsible for it.', example: 'Sofia asked Ptolemy to score applications. It takes 42 actions a day, and each one traces back to what she allowed.', value: 'Every agent action stays tied to the person who allowed it.',
         evidence: ['delegation_granted', 'agent_tool_called ×42/day', 'scope: scoring.read'], layers: ['events', 'entities', 'graph', 'intelligence', 'governance'] },
       { id: 'a2a', code: 'A → A', name: 'Agent to agent', short: 'coordinating', c: C.ochre, from: A('Mordred', 'agt_88ce1'), to: A('Settlement agent', 'external'), verb: 'messages', strength: '0.68',
         means: 'AI agents coordinating with, relying on, and handing work to other agents.', example: 'Mordred started an unusual pattern of messages with an outside payments agent linked to a flagged group. Aether is 88% sure.', value: 'Shows patterns between machines that no one would spot in a single log.',

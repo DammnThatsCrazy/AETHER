@@ -51,7 +51,7 @@ export function AetherTrustPage() {
     <div data-page="aether-trust" style={css("min-height: 100vh; background: #f5f4f1; color: #1a1a1e; font-family: var(--font-sans);")}>
       <SiteHeader brand="aether" active="" />
       <main id="main" tabIndex={-1}>
-        <section style={css("border-bottom: 1px solid #d8d6d0;")}>
+        <section style={css("background: radial-gradient(40% 50% at 80% 25%, rgba(58,104,150,0.28), transparent 72%), radial-gradient(40% 50% at 50% 85%, rgba(107,154,124,0.3), transparent 72%), linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%); border-bottom: 1px solid #d8d6d0;")}>
           <div style={css("max-width: 960px; margin: 0 auto; padding: clamp(96px, 14vw, 176px) 24px clamp(64px, 9vw, 112px); display: flex; flex-direction: column; align-items: center; text-align: center; gap: 24px;")}>
             <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;")}>
               {"Trust"}
@@ -67,7 +67,7 @@ export function AetherTrustPage() {
             </span>
           </div>
         </section>
-        <section id="boundaries" data-theme="dark" style={css("background: #111114; color: #e8e6e1;")}>
+        <section id="boundaries" data-theme="dark" style={css("background: radial-gradient(60% 50% at 85% 18%, rgba(58,104,150,0.42), transparent 70%), radial-gradient(50% 45% at 8% 92%, rgba(107,154,124,0.24), transparent 70%), radial-gradient(45% 40% at 92% 92%, rgba(201,151,90,0.26), transparent 70%), #111114; color: #e8e6e1;")}>
           <div style={css("max-width: 1100px; margin: 0 auto; padding: clamp(80px, 11vw, 136px) 24px; display: flex; flex-direction: column; align-items: center; gap: clamp(40px, 6vw, 64px);")}>
             <h2 style={css("font-size: clamp(32px, 4.4vw, 56px); font-weight: 500; letter-spacing: -0.035em; line-height: 1.02; margin: 0; color: #e8e6e1; text-align: center; text-wrap: balance;")}>
               {"Three lines Aether never crosses."}
@@ -176,7 +176,7 @@ export function AetherTrustPage() {
             </div>
           </div>
         </section>
-        <section id="evaluate" style={css("border-bottom: 1px solid #d8d6d0;")}>
+        <section id="evaluate" style={css("background: radial-gradient(40% 50% at 80% 25%, rgba(58,104,150,0.28), transparent 72%), radial-gradient(40% 50% at 50% 85%, rgba(107,154,124,0.3), transparent 72%), linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%); border-bottom: 1px solid #d8d6d0;")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(56px, 8vw, 96px) 24px; display: flex; flex-direction: column; gap: 24px;")}>
             <div style={css("display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 24px; align-items: end;")}>
               <div style={css("display: flex; flex-direction: column; gap: 12px;")}>
@@ -197,7 +197,7 @@ export function AetherTrustPage() {
             <div style={css("display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 8px;")}>
               {(links).map((l: any, lIndex: number) => (
                 <Fragment key={lIndex}>
-                  <a href={link(l.href)} style={css("display: flex; flex-direction: column; gap: 6px; padding: 18px; border-radius: 10px; background: #fbfaf8; border: 1px solid #d8d6d0; text-decoration: none; color: #1a1a1e; transition: border-color 120ms cubic-bezier(0.22,1,0.36,1);")} className="hv-6268baea">
+                  <a href={link(l.href)} style={css("display: flex; flex-direction: column; gap: 6px; padding: 18px; border-radius: 10px; background: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.85); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 8px 24px rgba(40,34,70,0.08); text-decoration: none; color: #1a1a1e; transition: border-color 120ms cubic-bezier(0.22,1,0.36,1);")} className="hv-6268baea">
                     <span style={css("display: flex; justify-content: space-between;")}>
                       <span style={css(l.gStyle)}>
                         {l.g}
@@ -218,7 +218,7 @@ export function AetherTrustPage() {
             </div>
           </div>
         </section>
-        <section id="deployment" style={css("background: #eceae5; border-bottom: 1px solid #d8d6d0;")}>
+        <section id="deployment" style={css("background: radial-gradient(40% 50% at 80% 25%, rgba(58,104,150,0.28), transparent 72%), radial-gradient(40% 50% at 50% 85%, rgba(107,154,124,0.3), transparent 72%), linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%); border-bottom: 1px solid #d8d6d0;")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(56px, 8vw, 96px) 24px; display: flex; flex-direction: column; gap: 24px;")}>
             <div style={css("display: flex; flex-direction: column; gap: 12px; max-width: 720px;")}>
               <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #8a6433;")}>

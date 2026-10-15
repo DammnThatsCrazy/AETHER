@@ -8,13 +8,13 @@
 <body>
 <x-dc>
 <helmet>
-  <link rel="stylesheet" href="../_ds/colors_and_type.css">
-  <script src="../_ds/_ds_bundle.js"></script>
+  <link rel="stylesheet" href="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/colors_and_type.css">
+  <script src="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/_ds_bundle.js"></script>
   <title>Aether — See how everything connects</title>
   <meta property="og:type" content="website">
   <meta property="og:title" content="Aether — See how everything connects">
   <meta property="og:description" content="Aether connects people, agents, activity, relationships, and value into one continuously updated understanding.">
-  <meta property="og:image" content="../assets/og/aether-home.png">
+  <meta property="og:image" content="assets/og/aether-home.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="description" content="Aether connects people, agents, activity, relationships, and value into one continuously updated understanding.">
   <style>
@@ -23,6 +23,8 @@
     a:hover { color: #2d5373; }
     [data-om-starter="ios-frame"] * { scrollbar-width: none; }
     [data-om-starter="ios-frame"] *::-webkit-scrollbar { display: none; }
+    @keyframes axFloat { 0%, 100% { translate: 0 0; } 50% { translate: 0 -3px; } }
+    @keyframes axFlow { to { stroke-dashoffset: -24; } }
     @media (prefers-reduced-motion: reduce) { * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; } }
   </style>
 </helmet>
@@ -32,7 +34,7 @@
     <section style="border-bottom: 1px solid #d8d6d0;">
       <div style="max-width: 1200px; margin: 0 auto; padding: clamp(48px, 7vw, 96px) 24px clamp(48px, 7vw, 80px); display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: clamp(32px, 5vw, 64px); align-items: center;">
         <div style="display: flex; flex-direction: column; gap: 24px; min-width: 0;">
-          <span style="display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;"><img src="../assets/logo-aether-layers.svg" alt="" style="width: 16px; height: 16px;">Aether by Olympus Labs</span>
+          <span style="display: inline-flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;"><img src="assets/logo-aether-layers.svg" alt="" style="width: 16px; height: 16px;">Aether by Olympus Labs</span>
           <h1 style="font-size: clamp(48px, 7vw, 88px); font-weight: 500; line-height: 0.96; letter-spacing: -0.045em; margin: 0; color: #1a1a1e; text-wrap: balance;">See how everything connects.</h1>
           <p style="font-size: 18px; line-height: 1.55; color: #4a4945; margin: 0; max-width: 500px; text-wrap: pretty;">Aether brings together activity from all your tools — customers, AI agents, payments, messages — into one live picture you can actually follow.</p>
           <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
@@ -41,16 +43,17 @@
             <a href="Aether How It Works.dc.html" style="display: inline-flex; gap: 6px; font-size: 14px; font-weight: 500; color: #1a1a1e; text-decoration: none; padding: 0 8px;" style-hover="color: #3a6896;">See how Aether works<span style="font-family: var(--font-mono);">→</span></a>
           </div>
         </div>
-        <div style="min-width: 0; background: #eceae5; border: 1px solid #d8d6d0; border-radius: 12px; padding: 20px;">
+        <div style="min-width: 0;">
           <dc-import name="Aether Scene" autoplay="{{ true }}" rotate="{{ true }}" controls="{{ true }}" story="customer" hint-size="100%,520px"></dc-import>
         </div>
       </div>
       <div style="border-top: 1px solid #d8d6d0;"><div style="max-width: 1200px; margin: 0 auto; padding: 0 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));">
         <div style="display: flex; align-items: baseline; gap: 10px; padding: 22px 0;"><span style="font-size: 32px; font-weight: 500; letter-spacing: -0.04em; color: #2d5373;">4</span><span style="font-size: 13px; color: #6b6a65;">steps · connect, understand, explore, act</span></div>
         <div style="display: flex; align-items: baseline; gap: 10px; padding: 22px 0 22px 24px; border-left: 1px solid #d8d6d0;"><span style="font-size: 32px; font-weight: 500; letter-spacing: -0.04em; color: #4f7a5e;">1</span><span style="font-size: 13px; color: #6b6a65;">picture across all your tools</span></div>
-        <div style="display: flex; align-items: baseline; gap: 10px; padding: 22px 0 22px 24px; border-left: 1px solid #d8d6d0;"><span style="font-size: 32px; font-weight: 500; letter-spacing: -0.04em; color: #8a6433;">21</span><span style="font-size: 13px; color: #6b6a65;">ready-made integrations</span></div>
+        <div style="display: flex; align-items: baseline; gap: 10px; padding: 22px 0 22px 24px; border-left: 1px solid #d8d6d0;"><span style="font-size: 32px; font-weight: 500; letter-spacing: -0.04em; color: #8a6433;">13</span><span style="font-size: 13px; color: #6b6a65;">ready-made integrations</span></div>
         <div style="display: flex; align-items: baseline; gap: 10px; padding: 22px 0 22px 24px; border-left: 1px solid #d8d6d0;"><span style="font-size: 32px; font-weight: 500; letter-spacing: -0.04em; color: #7d6538;">4</span><span style="font-size: 13px; color: #6b6a65;">SDKs for web and mobile</span></div>
       </div></div>
+      <div style="border-top: 1px solid #d8d6d0;"><div style="max-width: 1200px; margin: 0 auto; padding: 18px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px;"><span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;">Works with</span><span style="display: flex; flex-wrap: wrap; gap: 8px;"><span style="width: 36px; height: 36px; border-radius: 11px; background: #fff; border: 1px solid #e2e0da; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;"><img src="assets/brand/stripe.svg" alt="" style="width: 20px; height: 20px; object-fit: contain;"></span><span style="width: 36px; height: 36px; border-radius: 11px; background: #fff; border: 1px solid #e2e0da; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;"><img src="assets/brand/shopify.svg" alt="" style="width: 20px; height: 20px; object-fit: contain;"></span><span style="width: 36px; height: 36px; border-radius: 11px; background: #fff; border: 1px solid #e2e0da; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;"><img src="assets/brand/hubspot.svg" alt="" style="width: 20px; height: 20px; object-fit: contain;"></span><span style="width: 36px; height: 36px; border-radius: 11px; background: #fff; border: 1px solid #e2e0da; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;"><img src="assets/brand/salesforce.svg" alt="" style="width: 20px; height: 20px; object-fit: contain;"></span><span style="width: 36px; height: 36px; border-radius: 11px; background: #fff; border: 1px solid #e2e0da; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;"><img src="assets/brand/klaviyo.svg" alt="" style="width: 20px; height: 20px; object-fit: contain;"></span><span style="width: 36px; height: 36px; border-radius: 11px; background: #fff; border: 1px solid #e2e0da; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;"><img src="assets/brand/segment.svg" alt="" style="width: 20px; height: 20px; object-fit: contain;"></span><span style="width: 36px; height: 36px; border-radius: 11px; background: #fff; border: 1px solid #e2e0da; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;"><img src="assets/brand/zendesk.svg" alt="" style="width: 20px; height: 20px; object-fit: contain;"></span><span style="width: 36px; height: 36px; border-radius: 11px; background: #fff; border: 1px solid #e2e0da; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;"><img src="assets/brand/intercom.svg" alt="" style="width: 20px; height: 20px; object-fit: contain;"></span><span style="width: 36px; height: 36px; border-radius: 11px; background: #fff; border: 1px solid #e2e0da; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;"><img src="assets/brand/slack.svg" alt="" style="width: 20px; height: 20px; object-fit: contain;"></span><span style="width: 36px; height: 36px; border-radius: 11px; background: #fff; border: 1px solid #e2e0da; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;"><img src="assets/brand/posthog.svg" alt="" style="width: 20px; height: 20px; object-fit: contain;"></span><span style="width: 36px; height: 36px; border-radius: 11px; background: #fff; border: 1px solid #e2e0da; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;"><img src="assets/brand/googleanalytics.svg" alt="" style="width: 20px; height: 20px; object-fit: contain;"></span><span style="width: 36px; height: 36px; border-radius: 11px; background: #fff; border: 1px solid #e2e0da; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;"><img src="assets/brand/meta.svg" alt="" style="width: 20px; height: 20px; object-fit: contain;"></span></span><a href="Aether Connect.dc.html" style="display: inline-flex; gap: 6px; font-size: 13px; font-weight: 500; color: #1a1a1e; text-decoration: none; margin-left: auto;" style-hover="color: #3a6896;">All connectors<span style="font-family: var(--font-mono);">→</span></a></div></div>
     </section>
 
     <section id="story" data-theme="dark" style="background: #111114; color: #e8e6e1;">
@@ -85,7 +88,7 @@
     </section>
 
     <section id="model" style="border-bottom: 1px solid #d8d6d0;">
-      <div style="max-width: 1100px; margin: 0 auto; padding: clamp(80px, 11vw, 144px) 24px; display: flex; flex-direction: column; align-items: center; gap: clamp(40px, 6vw, 72px);">
+      <div style="max-width: 1100px; margin: 0 auto; padding: clamp(80px, 11vw, 144px) 24px; display: flex; flex-direction: column; align-items: center; gap: clamp(40px, 6vw, 72px);" data-comment-anchor="e8c4ef85fb-div">
         <div style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px;">
           <h2 style="font-size: clamp(32px, 4.6vw, 60px); font-weight: 500; letter-spacing: -0.035em; line-height: 1.02; margin: 0; text-wrap: balance;">Connect. Understand. Explore. Act.</h2>
           <p style="font-size: 16px; line-height: 1.6; color: #6b6a65; margin: 0; max-width: 480px;">Aether does four things. Everything in the product fits into one of them.</p>
@@ -142,11 +145,13 @@
 
     <section id="product" style="border-bottom: 1px solid #d8d6d0; background: #eceae5;">
       <div style="max-width: 1200px; margin: 0 auto; padding: clamp(64px, 9vw, 112px) 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: clamp(32px, 5vw, 64px); align-items: center;">
-        <div style="min-width: 0; display: flex; justify-content: center; align-items: flex-start;">
-          <div style="zoom: 0.8; flex-shrink: 0; width: 402px; height: 874px;">
-            <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ true }}" style="display: block; width: 402px; height: 874px;" hint-size="402px,874px">
-              <div style="padding-top: 54px; background: #000; min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column;"><dc-import name="Profile 360" ios="{{ true }}" style="flex: 1; display: flex; flex-direction: column;" hint-size="100%,700px"></dc-import></div>
-            </x-import>
+        <div style="position: relative; overflow: hidden; min-width: 0; min-height: 760px; border-radius: 28px; border: 1px solid #d8d6d0; background: linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%); display: flex; justify-content: center; align-items: center;">
+          <div style="position: relative; width: 320px; height: 694px; flex-shrink: 0; transform: perspective(2200px) rotateX(7deg) rotateY(-16deg) rotateZ(-5deg); filter: drop-shadow(0 40px 50px rgba(40,34,70,0.28));">
+            <div style="transform: scale(0.796); transform-origin: 0 0; width: 402px; height: 874px;">
+              <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ true }}" style="display: block; width: 402px; height: 874px;" hint-size="402px,874px">
+                <div style="background: #0b0b0e; height: 874px;"><dc-import name="Aether iOS App" hint-size="402px,874px"></dc-import></div>
+              </x-import>
+            </div>
           </div>
         </div>
         <div style="display: flex; flex-direction: column; gap: 16px;">
@@ -161,27 +166,27 @@
       </div>
     </section>
 
-    <section id="applications" data-theme="dark" style="background: #1a1a1e; color: #e8e6e1;">
+    <section id="applications" data-theme="dark" style="background: radial-gradient(60% 50% at 88% 28%, rgba(58,104,150,0.38), transparent 70%), radial-gradient(50% 45% at 72% 92%, rgba(201,151,90,0.22), transparent 70%), radial-gradient(45% 40% at 8% 60%, rgba(107,154,124,0.18), transparent 70%), #141418; color: #e8e6e1;">
       <div style="max-width: 1200px; margin: 0 auto; padding: clamp(64px, 9vw, 112px) 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: clamp(32px, 5vw, 72px); align-items: start;">
         <div style="display: flex; flex-direction: column; gap: 16px;">
           <span style="font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;">Applications of Aether</span>
           <h2 style="font-size: clamp(30px, 3.8vw, 48px); font-weight: 500; letter-spacing: -0.03em; line-height: 1.04; margin: 0; color: #e8e6e1; text-wrap: balance;">Endless applications.</h2>
           <p style="font-size: 15px; line-height: 1.6; color: #a09f99; margin: 0; max-width: 440px;">Not separate products — the same Aether, pointed at different questions.</p>
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 0; margin-top: 16px; padding: 24px; border: 1px solid #2a2a2f; border-radius: 12px; background: #111114; font-family: var(--font-mono); font-size: 13px; max-width: 360px; box-sizing: border-box;">
-            <span style="display: flex; gap: 8px;"><span style="padding: 6px 10px; border: 1px solid #2a2a2f; border-radius: 6px; color: #9fbad6;">● people</span><span style="padding: 6px 10px; border: 1px solid #2a2a2f; border-radius: 6px; color: #dcb683;">⬡ agents</span><span style="padding: 6px 10px; border: 1px solid #2a2a2f; border-radius: 6px; color: #8fb0cc;">○ systems</span></span>
-            <span style="color: #6b6a65; padding: 6px 0;">↓</span>
-            <span style="padding: 6px 10px; border: 1px solid #3a3a40; border-radius: 6px; color: #e8e6e1;">↔ relationships</span>
-            <span style="color: #6b6a65; padding: 6px 0;">↓</span>
-            <span style="padding: 6px 10px; border: 1px solid #2a2a2f; border-radius: 6px; color: #a09f99;">◉ activity</span>
-            <span style="color: #6b6a65; padding: 6px 0;">↓</span>
-            <span style="padding: 6px 10px; border: 1px solid #2a2a2f; border-radius: 6px; color: #9cc4a9;">↑ value</span>
-            <span style="color: #6b6a65; padding: 6px 0;">↓</span>
-            <span style="padding: 6px 12px; border-radius: 6px; background: #e8e6e1; color: #1a1a1e;">✓ outcomes</span>
+          <div style="position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; margin-top: 16px; padding: 28px 24px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.1); background: radial-gradient(70% 50% at 20% 0%, rgba(58,104,150,0.5), transparent 70%), radial-gradient(60% 45% at 90% 55%, rgba(201,151,90,0.3), transparent 70%), radial-gradient(70% 40% at 30% 100%, rgba(107,154,124,0.32), transparent 70%), #0d0d10; font-family: var(--font-mono); font-size: 13px; max-width: 380px; box-sizing: border-box;">
+            <span style="width: 100%; display: flex; justify-content: space-between; gap: 8px;"><span style="padding: 8px 14px; border-radius: 14px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 8px 20px rgba(0,0,0,0.28); color: #bcd2ea; animation: axFloat 5s ease-in-out 0s infinite; ">● people</span><span style="padding: 8px 14px; border-radius: 14px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 8px 20px rgba(0,0,0,0.28); color: #f0cc99; animation: axFloat 6s ease-in-out -1.3s infinite; ">⬡ agents</span><span style="padding: 8px 14px; border-radius: 14px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 8px 20px rgba(0,0,0,0.28); color: #a9c8e0; animation: axFloat 7s ease-in-out -2.6s infinite; ">○ systems</span></span>
+            <svg width="100%" height="44" viewBox="0 0 300 44" preserveAspectRatio="none" aria-hidden="true" style="display: block;"><g fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.25" stroke-dasharray="3 5" stroke-linecap="round"><path d="M52 2C52 26 150 18 150 42" style="animation: axFlow 3.6s linear infinite;"></path><path d="M150 2C146 22 154 22 150 42" style="animation: axFlow 4.2s linear infinite;"></path><path d="M248 2C248 26 150 18 150 42" style="animation: axFlow 3.9s linear infinite;"></path></g></svg>
+            <span style="padding: 8px 14px; border-radius: 14px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 8px 20px rgba(0,0,0,0.28); color: #f4f2ee; animation: axFloat 5s ease-in-out -3.9000000000000004s infinite; background: rgba(255,255,255,0.16); border-color: rgba(255,255,255,0.32);">↔ relationships</span>
+            <svg width="60" height="40" viewBox="0 0 60 40" aria-hidden="true" style="display: block;"><path d="M30 2C12 14 48 26 30 38" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.25" stroke-dasharray="3 5" stroke-linecap="round" style="animation: axFlow 4s linear infinite;"></path></svg>
+            <span style="padding: 8px 14px; border-radius: 14px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 8px 20px rgba(0,0,0,0.28); color: #d1d0ca; animation: axFloat 6s ease-in-out -5.2s infinite; ">◉ activity</span>
+            <svg width="60" height="40" viewBox="0 0 60 40" aria-hidden="true" style="display: block;"><path d="M30 2C48 14 12 26 30 38" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.25" stroke-dasharray="3 5" stroke-linecap="round" style="animation: axFlow 4s linear infinite;"></path></svg>
+            <span style="padding: 8px 14px; border-radius: 14px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 8px 20px rgba(0,0,0,0.28); color: #b3dcc0; animation: axFloat 7s ease-in-out -6.5s infinite; ">↑ value</span>
+            <svg width="60" height="40" viewBox="0 0 60 40" aria-hidden="true" style="display: block;"><path d="M30 2C12 14 48 26 30 38" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.25" stroke-dasharray="3 5" stroke-linecap="round" style="animation: axFlow 4s linear infinite;"></path></svg>
+            <span style="padding: 8px 16px; border-radius: 14px; background: rgba(255,255,255,0.92); color: #1a1a1e; box-shadow: 0 8px 24px rgba(0,0,0,0.35); animation: axFloat 6s ease-in-out -2s infinite;">✓ outcomes</span>
           </div>
         </div>
-        <div style="display: flex; flex-direction: column; border-top: 1px solid #2a2a2f;">
+        <div style="display: flex; flex-direction: column; gap: 10px;">
           <sc-for list="{{ apps }}" as="a" hint-placeholder-count="6">
-            <a href="{{ a.href }}" style="display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 14px; align-items: baseline; padding: 20px 4px; border-bottom: 1px solid #2a2a2f; text-decoration: none; color: #e8e6e1; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1);" style-hover="background: #1f1f24; color: #e8e6e1;">
+            <a href="{{ a.href }}" style="display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 14px; align-items: baseline; padding: 18px 20px; border-radius: 18px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12); text-decoration: none; color: #e8e6e1; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1), border-color 120ms cubic-bezier(0.22,1,0.36,1);" style-hover="background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.26); color: #e8e6e1;">
               <span style="{{ a.gStyle }}">{{ a.g }}</span>
               <span style="display: flex; flex-direction: column; gap: 4px;"><span style="font-size: 18px; font-weight: 500; letter-spacing: -0.2px;">{{ a.title }}</span><span style="font-size: 13px; color: #a09f99; line-height: 1.5;">{{ a.body }}</span></span>
               <span style="font-family: var(--font-mono); color: #6b6a65;">→</span>

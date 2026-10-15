@@ -2,7 +2,8 @@
  * Built from design/designs/Aether Applications.dc.html (copy, layout and styles verbatim).
  */
 import { Fragment } from 'react';
-import { css, portalLabel, useLink } from '@site/design/runtime';
+import { asset, css, portalLabel, useLink } from '@site/design/runtime';
+import { markSrc } from '@site/components/brand-mark';
 import { usePageMeta } from '@site/design/page-meta';
 import { SiteFooter } from '@site/components/site-footer';
 import { SiteHeader } from '@site/components/site-header';
@@ -18,14 +19,18 @@ const APPS: App[] = [
   ['operations', '◉', 'Operations', '#7d6538', 'What is happening now — and how it compares to before.', 'Operational activity is spread across systems, agents, and teams with no shared timeline.', ['Activity arrives', 'Entities recognized', 'Compared to history', 'Change surfaced', 'Investigated'], 'One temporal model of activity across people, agents, and systems — so change is visible as it happens.', ['Signals', 'Timeline', 'Temporal lens'], 'Aether Platform.dc.html#explore', 'Explore the timeline'],
 ];
 
+// Tools each application draws on (AE = the Aether mark).
+const TOOLS: Record<string, string[]> = { customer: ['hubspot', 'googleads', 'klaviyo', 'stripe', 'zendesk'], revenue: ['meta', 'klaviyo', 'shopify', 'stripe'], agents: ['AE', 'slack', 'jira', 'linear'], communications: ['klaviyo', 'intercom', 'zendesk', 'slack'], risk: ['stripe', 'shopify', 'phantom'], operations: ['posthog', 'segment', 'googleanalytics', 'slack'] };
+
 export function AetherApplicationsPage() {
   const link = useLink();
   usePageMeta('aether-applications');
   const apps = APPS.map(([id, g, title, col, headline, problem, flow, outcome, surfaces, href, cta], i) => ({
+    tools: (TOOLS[id] ?? []).map((k) => ({ logo: k === 'AE' ? markSrc('aether') : asset('assets/brand/' + k + '.svg') })),
     id, g, title, headline, problem, outcome, surfaces, href, cta, n: '0' + (i + 1), jump: '#' + id,
     gStyle: 'font-family: var(--font-mono); color: ' + col + ';',
     kStyle: 'font-family: var(--font-mono); font-size: 12px; color: ' + col + ';',
-    bg: 'border-bottom: 1px solid #d8d6d0; background: ' + (i % 2 ? '#eceae5' : '#f5f4f1') + ';',
+    bg: 'border-bottom: 1px solid #d8d6d0;',
     flow: flow.map((l, j) => {
       const last = j === flow.length - 1;
       return { l, dot: 'width: 7px; height: 7px; margin-left: -4px; border-radius: 999px; flex-shrink: 0; ' + (last ? 'background: ' + col + ';' : 'background: #f5f4f1; border: 1px solid #9c9b95; box-sizing: border-box;'), tStyle: 'font-size: 15px; ' + (last ? 'font-weight: 500; color: #1a1a1e;' : 'color: #4a4945;') };
@@ -75,6 +80,13 @@ export function AetherApplicationsPage() {
                   <p style={css("font-size: 15px; line-height: 1.6; color: #6b6a65; margin: 0;")}>
                     {a.outcome}
                   </p>
+                  <div style={css("display: flex; flex-wrap: wrap; gap: 6px;")}>
+                    {(a.tools).map((t: any, tIndex: number) => (
+                      <span key={tIndex} style={css("width: 34px; height: 34px; border-radius: 10px; background: #fff; border: 1px solid #e2e0da; display: inline-flex; align-items: center; justify-content: center;")}>
+                        <img src={t.logo} alt="" style={css("width: 20px; height: 20px; object-fit: contain;")} />
+                      </span>
+                    ))}
+                  </div>
                   <a href={link(a.href)} style={css("display: inline-flex; gap: 6px; font-size: 14px; font-weight: 500; color: #1a1a1e; text-decoration: none; margin-top: 4px;")} className="hv-cc8e330e">
                     {a.cta}
                     <span style={css("font-family: var(--font-mono);")}>
