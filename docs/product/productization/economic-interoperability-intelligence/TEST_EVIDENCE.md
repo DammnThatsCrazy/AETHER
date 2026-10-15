@@ -9,7 +9,7 @@ since_version: 0.1.0
 source_files: [tests/unit/stablecoin/, tests/unit/derivatives/, tests/unit/interop/, tests/unit/test_economic_noesis_ooda_wiring.py]
 canonical_owner: platform@aether
 source_hashes:
-  "tests/unit/derivatives/": "sha256:1b5001c65b78f4d564845c5c1ee87391b3c1839005f5e220a7d489e4b95bad90"
+  "tests/unit/derivatives/": "sha256:2192a378ea7f1e63b826413702af90b9a5d139444afc821e73c3e1176e0146e0"
   "tests/unit/interop/": "sha256:bcd2fb4f4ef848a76e7ddb843a7f423167469b93f598468df28586e99a38e86e"
   "tests/unit/stablecoin/": "sha256:22b6ec6271545c603ccdc2950387ed959afc6b04433787a7f4148d9b7718eac6"
   "tests/unit/test_economic_noesis_ooda_wiring.py": "sha256:fcf7ac56e7e4fb008fae05e265d60703dea60bce1581f005a91972eb67b8839d"
@@ -36,7 +36,9 @@ source_hashes:
   conformance; stream gap detect/recover/bounded-buffer (a real recovery
   bug was found and fixed by these tests); reconciliation; Decimal
   38,18 round-trips + no-float model introspection; typed-repo
-  idempotency; route perms/tenant isolation/flag-off 404. Real read-only
+  idempotency; route perms/tenant isolation/flag-off 404; graph projection
+  that links accounts and positions only to registered platform venue and
+  market vertices and never to another tenant's account. Real read-only
   venue adapters (Hyperliquid/dYdX REST+WebSocket, GMX/Drift read path) on
   the conformance-tested interface: mock-server REST backfill/pagination,
   WS reconnect + gap recovery, cursor resume, read-only-scope rejection.
