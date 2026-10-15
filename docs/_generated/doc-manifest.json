@@ -2388,6 +2388,19 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/architecture/target/source-authority.md",
+      "title": "Source Relationship and Source Authority",
+      "slug": "source-relationship-authority",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/architecture/target/source-intake-and-access-kit-work-orders.md",
       "title": "Source Intake and Access Kit Convergence Work Orders",
       "slug": "source-intake-access-kit-convergence",
