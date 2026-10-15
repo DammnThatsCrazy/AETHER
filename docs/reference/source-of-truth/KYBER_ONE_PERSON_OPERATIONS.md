@@ -115,7 +115,9 @@ Redis/durable backing is missing (`shared/store.py` invariant).
 - `make ops-readiness` (`scripts/ops_readiness.py`): flags present +
   default-OFF, ops modules importable, runtime stores reachable, worker
   bridge fails closed in hosted mode, mutation commit approval-gated,
-  all six source-of-truth docs present. Wired into `make release-gate`
+  all six source-of-truth docs present, and
+  `infra/aws/terraform/profiles/production-lean.tfvars` pins at least one
+  `platform_operator_tenant_ids` entry. Wired into `make release-gate`
   after repo consistency and strict production status.
 - Backend suites: `BE/tests/one_person_ops/` (dispatch idempotency,
   lifecycle-state dispatch blocks, kill switch, fail-closed bridge, worker

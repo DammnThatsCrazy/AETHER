@@ -89,7 +89,8 @@ must pin the exact digests from an approved release manifest.
 task. Production has no first-admin bootstrap tenant, so while the list is empty
 no Aether tenant reaches the operator-only `/v1/admin/**` and
 `/v1/diagnostics/**` routes; set the reviewed operator tenant ids before
-relying on operator tooling there.
+relying on operator tooling there. `make ops-readiness`, part of
+`make release-gate`, fails while the list is empty.
 
 `profiles.tf` derives every resource toggle from `var.deployment_profile`, and
 `main.tf` wires those locals into module `count` and module inputs. The

@@ -22,7 +22,7 @@ source_hashes:
   "services/api/ingestion/imports/service.py": "sha256:6d9c346282442e8af10b462367ebb187ca0d574521fe5f13b2f68152aeeacd98"
   "services/api/repositories/graph_mutation_ledger.py": "sha256:b347022c798f92360a89fb13cae1a2086792510cd37cb9b92c3ddc9988640f31"
   "services/api/repositories/imports_repo.py": "sha256:6bdc0f6089e66d63b93456e5cf99b79653b896a338e3548f19551c48ae3c4f0e"
-  "services/api/shared/graph/graph.py": "sha256:53ffd8b9993a0bea144f1eee87454dbfc6ba9bd7a01107200c5f925a4c51b149"
+  "services/api/shared/graph/graph.py": "sha256:cf8d68c1c10b1432ee9febf3d5368b88087ffc2255c4e80d8c73382bc8fafb24"
   "services/api/shared/graph/mutation_gateway.py": "sha256:f67610c8c7f70fb131c7d1cc531dd0477050d0e2969bdc91d392f5bac56820dc"
 ---
 
@@ -145,7 +145,7 @@ being projected again. Do not delete graph rows or edit ledger rows manually.
 If the referenced ledger row is missing or has no durable `rdec_*` reference,
 the retry fails closed; escalate the durable ledger/rights evidence for review.
 
-If the commit fails with `graph vertex id is unavailable in this tenant`
+If the commit fails with a `Conflict` raised by a graph vertex write
 (`VertexOwnershipError`), a mapped vertex id already exists in the graph under
 another tenant, under no tenant, or with `tenantId` and `tenant_id` naming
 different tenants. Graph writes never change a vertex's owner, so a requeue

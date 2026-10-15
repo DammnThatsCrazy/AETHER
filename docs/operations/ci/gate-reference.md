@@ -90,7 +90,7 @@ gates — not that every target runs on every PR.
 | `make secret-scan` | Fail-closed secret scan of tracked files. | Part of `make security-release-check`, invoked from `make release-gate`. | Release-only. |
 | `make supply-chain-check` | Fail-closed supply-chain gate: npm production CRITICAL vulns + required SBOM generation. | Part of `make release-gate`. | Release-only. |
 | `make security-release-check` | Fail-closed security gate: secrets + security-control regressions. | Part of `make release-gate`. | Release-only. |
-| `make ops-readiness` | One-person ops readiness gate (flags, stores, bridge fail-closed, approval gating). | Part of `make release-gate`. | Release-only. |
+| `make ops-readiness` | One-person ops readiness gate (flags, stores, bridge fail-closed, approval gating, production-lean `platform_operator_tenant_ids` pinned). | Part of `make release-gate`. | Release-only. |
 | `make production-status` | Readiness scorecard + blockers. | Ad hoc; strict mode (`production_status.py --strict`) runs inside `make release-gate`. | Advisory standalone; blocking (strict) inside `release-gate`. |
 | `python scripts/staging_preflight.py --dry-run` | Staging preflight logic self-test. | `repo-health.yml` → `staging-preflight-dry-run` (nightly/dispatch); also the last step of `repo-consistency.yml`'s `release-gate` job. | Blocking within those specific jobs, not a PR gate. |
 | `make integration-durable` | Production-shaped durable integration suite (requires Docker). | `repo-health.yml` → `main-integration`, push to `main` only. | Blocking for that job, post-merge only. |

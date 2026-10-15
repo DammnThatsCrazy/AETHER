@@ -12,7 +12,7 @@ source_hashes:
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
-  "services/api/actions/agent/": "sha256:759f73c94d3a7d46adfe970c1f733afa3992fcc37bd606e2f7822c81c12f1d54"
+  "services/api/actions/agent/": "sha256:603a9fc81bddafd08a7ef63c9f45bfd093f66e0ae5e38bb7ca8447de0ae7a8de"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"

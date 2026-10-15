@@ -24,6 +24,8 @@ source_files:
   - services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py
   - services/api/alembic/versions/20261011_agent_delegated_to_namespace.py
   - services/api/repositories/repos.py
+  - services/api/repositories/tenant_row_keys.py
+  - services/api/graph/platform_vertex_owners.py
   - services/api/value/x402/provenance.py
   - services/api/workers/profile360_workers/workers.py
   - services/api/workers/runtime/roles.py
@@ -48,11 +50,13 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/config/settings.py": "sha256:df9bdf848c96816ea19e07f07026fbdfb1a29d75b6c09cbe253191b9cbe72b36"
   "services/api/connectors/provider_runtime/": "sha256:96d47e6fee2e0fff4c6b3b3a9bb28c89414a7af87ed137bb489845519434f5d9"
+  "services/api/graph/platform_vertex_owners.py": "sha256:255e25e0037e1a90409c72190933458aa2bf8b225cf46cae27ccad313ba2f66a"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
   "services/api/main.py": "sha256:52e672c1c82e17907041ba173b1fb7cee68bfb03b158eb370fd4f25b584cc726"
-  "services/api/repositories/repos.py": "sha256:f3878d58876bd0c84bedffd8a44734bf60b16b2149e2cde21e133f6140971327"
+  "services/api/repositories/repos.py": "sha256:2d5aa0082287de033384f3ad7861b780d23b861a14c04c6af86ab89716a2776b"
+  "services/api/repositories/tenant_row_keys.py": "sha256:de2ab5ce63ef807b9d75b84c700362f89ad15925c692f7bc7bf4884cbd8b3912"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
   "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
   "services/api/workers/runtime/roles.py": "sha256:24f2e24879828f8f340e91086f57c0e99940e9db96791edc6a1d24d590ba26b1"
@@ -411,19 +415,45 @@ All stores support horizontal scaling natively through their backend implementat
 
 A repository write replaces an existing row only when the row's `tenant_id`
 column matches the writing tenant, and graph vertex writes never change a
-vertex's owner; both raise a `409 Conflict` instead. Rolling out that rule
-needs migration `20261015_tenant_owned_row_keys` (idempotent) run twice:
-before the API and workers roll to the new code, and again once the rollout
-has finished. The first run backfills empty tenant columns and re-keys
-per-tenant rows; the second picks up rows that old pods wrote during the
-rollout. While old pods are still serving, they cannot read re-keyed x402
-objects by id (lists still work) and they write behavior snapshots, journey
-chains and replay envelopes under the old ids. New pods still read an x402 row
-stored under its bare id when it belongs to the tenant. A burst of `409`s on
-updates after a deploy usually means the migration was skipped: rows whose
-tenant lives only in their JSON cannot be updated until it runs. The
-migration's run time grows with the number of rows that have an empty tenant
-column; it does not touch a Neptune graph.
+vertex's owner; both raise a `409 Conflict` with the generic `Conflict` text
+instead. Rolling out that rule runs the idempotent steps in
+`services/api/repositories/tenant_row_keys.py` twice: once through migration
+`20261015_tenant_owned_row_keys` before the API and workers roll to the new
+code, and once more after the rollout has finished, to pick up rows old pods
+wrote meanwhile. Alembic never re-runs an applied revision, so the second run
+uses the module directly:
+
+```bash
+# Before the rollout: the usual migration (RUN_MIGRATIONS=1 one-off task)
+alembic upgrade head
+
+# After the rollout, from a host that can reach the database:
+DATABASE_URL=postgresql://... make tenant-row-keys
+# or as a one-off task of the API image (the entrypoint builds DATABASE_URL):
+python -m repositories.tenant_row_keys
+```
+
+The steps backfill empty tenant columns and re-key per-tenant rows
+(`behavior_profiles`, `journey_chains`, `profiles`, `behavioral_signals`,
+`event_envelopes`, x402 objects), and mark `chain:` and card catalog vertices
+in the Postgres graph backend `platform` owned. While old pods are still
+serving, they cannot read re-keyed x402 objects, profiles or signals by id
+(lists still work) and they write behavior snapshots, journey chains, profiles
+and replay envelopes under the old ids. New pods still read an x402 row stored
+under its bare id when it belongs to the tenant. A burst of `409`s on updates
+after a deploy usually means the migration was skipped: rows whose tenant lives
+only in their JSON cannot be updated until it runs. The run time grows with the
+number of rows that have an empty tenant column.
+
+The steps do not touch a Neptune graph. On a Neptune lane, relabel the existing
+`chain:` and card catalog vertices once, after the migration, or the platform
+writers of those vertices keep failing with `409 Conflict`:
+
+```bash
+NEPTUNE_ENDPOINT=... make graph-platform-owners           # dry run: lists the vertices
+NEPTUNE_ENDPOINT=... make graph-platform-owners APPLY=1   # writes the platform owner
+# or in the API image: python -m graph.platform_vertex_owners [--apply]
+```
 
 ---
 

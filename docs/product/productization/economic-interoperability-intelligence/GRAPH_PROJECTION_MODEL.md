@@ -22,8 +22,8 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
-  "services/api/repositories/repos.py": "sha256:f3878d58876bd0c84bedffd8a44734bf60b16b2149e2cde21e133f6140971327"
-  "services/api/shared/graph/graph.py": "sha256:53ffd8b9993a0bea144f1eee87454dbfc6ba9bd7a01107200c5f925a4c51b149"
+  "services/api/repositories/repos.py": "sha256:2d5aa0082287de033384f3ad7861b780d23b861a14c04c6af86ab89716a2776b"
+  "services/api/shared/graph/graph.py": "sha256:cf8d68c1c10b1432ee9febf3d5368b88087ffc2255c4e80d8c73382bc8fafb24"
   "services/api/shared/graph/relationship_layers.py": "sha256:0d36b34a5c4496e15afa03da596d019d70492fb607184a87e737bd9f949cb2b0"
   "services/api/value/x402/economic_mutations.py": "sha256:bdd180a936e048840636f221fdee3b142c0babab5d8e2bcc59b4a51983198f51"
   "services/api/value/x402/lifecycle_mapper.py": "sha256:77066a174bdf8e3feed32e1a7b81feb321983975b5cd9e6116a4fa5a588c473e"
@@ -84,6 +84,10 @@ and counts `interop_chain_link_skipped`, so no edge points at a missing vertex.
 The card catalog
 (`card_program:`, `card_issuer:`, `payment_network:`) is written as `platform`
 by `build_catalog_mutations`, with `build_flow_mutations` linking a flow to it.
+Vertices written before these owners existed are relabelled to `platform` by
+`make tenant-row-keys` (Postgres backend) or `make graph-platform-owners`
+(Neptune; a dry run unless `APPLY=1`). The refusal carries the generic
+`Conflict` text, which does not say the vertex exists in another tenant.
 
 ## Tenant scoping on reads
 
