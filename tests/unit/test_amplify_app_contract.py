@@ -46,6 +46,7 @@ def _client(
     production_auto_build: bool = False,
     production_extra_environment: dict[str, str] | None = None,
     production_app_environment: dict[str, str] | None = None,
+    production_app_auto_build: bool = False,
 ):
     """``consolidated`` is the one-app layout (AETHER-staging-web serves every
     host); otherwise the pre-apply layout: the site app (old name) serves
@@ -71,6 +72,7 @@ def _client(
                 if name == "AETHER-production-web" and production_app_environment
                 else {}
             ),
+            **({"enableBranchAutoBuild": production_app_auto_build} if name == "AETHER-production-web" else {}),
         }
         for name, app_id in APP_IDS.items()
         if name in present
@@ -382,3 +384,8 @@ def test_production_contract_rejects_a_build_time_site_override():
         client=_client(production_app_environment={"VITE_SITE": "aether"}),
     )
     assert "Amplify app AETHER-production-web sets VITE_SITE; the site must come from the hostname" in errors
+    # The app-level switch auto-builds every branch, so it must be off too.
+    errors = checker.contract_errors(
+        mode="production-status", expected_commit=COMMIT, client=_client(production_app_auto_build=True)
+    )
+    assert "Amplify app AETHER-production-web must not auto-build branches; the workflow releases main" in errors

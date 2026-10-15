@@ -85,9 +85,13 @@ jobs:
       contents: read
       id-token: write
     steps:
+      # Only the control scripts (the contract checker) come from this
+      # checkout; Amplify builds the release from the repository. Use the
+      # workflow's own revision so a dispatch of an older SHA still runs the
+      # current checker.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.expected_commit_sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -369,6 +373,7 @@ jobs:
           APP_ID: ${{ steps.inputs.outputs.app_id }}
           EXPECTED_COMMIT_SHA: ${{ steps.inputs.outputs.expected_commit_sha }}
           BOUND_AT: ${{ steps.bind.outputs.bound_at }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           # Repository-bound Amplify apps can auto-start a release for the push
@@ -410,6 +415,15 @@ jobs:
                 continue
               fi
 
+              # A RELEASE job builds the branch's latest commit. Start one only
+              # while main is still the gated commit: if main moved on, the
+              # newer commit's own run releases it, and an older SHA (a
+              # rollback) cannot be released this way.
+              main_head="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"
+              if [ "$main_head" != "$EXPECTED_COMMIT_SHA" ]; then
+                echo "::error::main is at ${main_head}, not ${EXPECTED_COMMIT_SHA}; a RELEASE job would build ${main_head}, so this run will not start one" >&2
+                return 1
+              fi
               start_output="$(mktemp)"
               if aws amplify start-job \
                 --app-id "$APP_ID" \

@@ -459,6 +459,10 @@ def _production_branch_errors(app: Mapping[str, Any], app_id: str, client: AwsCa
     site override: VITE_SITE would outrank the hostname and render one site on
     every host. Builds inherit the app's environment too, so check both."""
     errors: list[str] = []
+    if app.get("enableBranchAutoBuild") is not False:
+        errors.append(
+            f"Amplify app {PRODUCTION_WEB_APP} must not auto-build branches; the workflow releases main"
+        )
     if "VITE_SITE" in _mapping(app.get("environmentVariables")):
         errors.append(f"Amplify app {PRODUCTION_WEB_APP} sets VITE_SITE; the site must come from the hostname")
     try:

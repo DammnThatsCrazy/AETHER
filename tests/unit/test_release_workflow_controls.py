@@ -405,6 +405,11 @@ def test_production_releases_one_main_branch_for_every_host():
     assert "--no-enable-auto-build" in workflow
     assert "--no-enable-branch-auto-build" in workflow
     assert "            --enable-auto-build" not in workflow
+    # A RELEASE job builds main's head, so it starts only while main is the gated SHA,
+    # and the control scripts come from the workflow's own revision.
+    assert 'main_head="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"' in workflow
+    assert 'if [ "$main_head" != "$EXPECTED_COMMIT_SHA" ]; then' in workflow
+    assert "ref: ${{ github.sha }}" in workflow
     assert "--branch-name main" in workflow
     assert 'main_job_id="$(release_branch main)"' in workflow
     assert 'wait_for main "$MAIN_JOB_ID"' in workflow
