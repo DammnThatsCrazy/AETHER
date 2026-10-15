@@ -178,12 +178,10 @@ class ProvenanceTracker:
             self._store[rec.entity_id] = rec
 
     async def get(self, entity_id: str, tenant_id: str) -> Optional[ProvenanceRecord]:
-        if self._is_local():
+        pool = None if self._is_local() else await self._get_pool()
+        if pool is None:
             rec = self._store.get(entity_id)
             return rec if (rec and rec.tenant_id == tenant_id) else None
-        pool = await self._get_pool()
-        if pool is None:
-            return self._store.get(entity_id)
         try:
             row = await pool.fetchrow(
                 "SELECT * FROM cis_provenance_records WHERE entity_id=$1 AND tenant_id=$2",
