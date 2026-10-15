@@ -45,6 +45,7 @@ from repositories.interop_repos import (
 )
 from graph.interop.correlation import CorrelationEngine
 from graph.interop.foundation import (
+    PUBLIC_TENANT,
     GraphProjectionResult,
     deterministic_id,
     deterministic_idempotency_key,
@@ -299,10 +300,11 @@ class InteropGraphProjector:
             return GraphProjectionResult(graph_mutations_built=0)
 
         gateways, paths = _extract_topology(observations, provider)
-        mutations: list[Any] = []
+        # The topology is public reference data, written as ``public`` whatever
+        # tenant is scanned; a tenant's messages only add that tenant's edges.
         vertices, edges = build_topology_mutations(provider, gateways, paths)
-        mutations.extend(vertices)
-        mutations.extend(edges)
+        public: list[Any] = [*vertices, *edges]
+        scoped: list[Any] = []
 
         seen: set[str] = set()
         for result in correlation_results:
@@ -317,33 +319,74 @@ class InteropGraphProjector:
             if not message:
                 continue
             vertices, edges = build_message_mutations(message)
-            mutations.extend(vertices)
-            mutations.extend(edges)
+            (public if tenant_id == PUBLIC_TENANT else scoped).extend([*vertices, *edges])
 
-        mutations = await _registry_chain_links_only(mutations)
-        return await persist_mutations(mutations, tenant_id=tenant_id, trace_id=trace_id)
+        result = await persist_mutations(
+            await _registered_links_only(public, PUBLIC_TENANT),
+            tenant_id=PUBLIC_TENANT, trace_id=trace_id,
+        )
+        if not scoped:
+            return result
+        tenant_result = await persist_mutations(
+            await _registered_links_only(scoped, tenant_id),
+            tenant_id=tenant_id, trace_id=trace_id,
+        )
+        return _combined(result, tenant_result)
 
 
-async def _registry_chain_links_only(mutations: list[Any]) -> list[Any]:
-    """Drop ``CONNECTS_CHAIN`` edges whose chain the asset registry has not seeded.
+def _reference_owner(vertex_id: str) -> Optional[str]:
+    """Owner of a shared reference vertex id, ``None`` for any other id."""
+    if vertex_id.startswith("chain:"):
+        return PLATFORM_TENANT
+    if vertex_id.startswith("interop_"):
+        return PUBLIC_TENANT
+    return None
 
-    ``chain:`` vertices are platform-owned registry vertices that interop never
-    writes, so an edge to a missing one would dangle (and fail on Neptune).
+
+async def _registered_links_only(mutations: list[Any], tenant_id: str) -> list[Any]:
+    """Drop edges to reference vertices another scope owns that are not in the graph.
+
+    ``chain:`` vertices are the platform asset registry's and interop topology
+    is ``public``; a write for another scope never creates them, so an edge to
+    a missing one would dangle (and fail on Neptune).
     """
     from dependencies.providers import get_graph
 
     graph = get_graph()
     kept: list[Any] = []
     for mutation in mutations:
-        if isinstance(mutation, Edge) and mutation.edge_type == EdgeType.CONNECTS_CHAIN:
-            chain = await graph.get_vertex(mutation.to_vertex_id)
-            if chain is None or tenant_of(chain.properties) != PLATFORM_TENANT:
-                logger.info("interop chain link skipped: %s not in the asset registry",
-                            mutation.to_vertex_id)
-                metrics.increment("interop_chain_link_skipped")
-                continue
+        if isinstance(mutation, Edge) and not await _references_registered(graph, mutation, tenant_id):
+            continue
         kept.append(mutation)
     return kept
+
+
+async def _references_registered(graph: Any, edge: Edge, tenant_id: str) -> bool:
+    for vertex_id in (edge.from_vertex_id, edge.to_vertex_id):
+        owner = _reference_owner(vertex_id)
+        if owner is None or owner == tenant_id:
+            continue
+        vertex = await graph.get_vertex(vertex_id)
+        if vertex is None or tenant_of(vertex.properties) != owner:
+            logger.info("interop link skipped: %s is not registered", vertex_id)
+            kind = "chain" if owner == PLATFORM_TENANT else "reference"
+            metrics.increment(f"interop_{kind}_link_skipped")
+            return False
+    return True
+
+
+def _combined(first: GraphProjectionResult, second: GraphProjectionResult) -> GraphProjectionResult:
+    statuses = {first.graph_projection_status, second.graph_projection_status} - {"not_applicable"}
+    if len(statuses) <= 1:
+        status = next(iter(statuses), "not_applicable")
+    else:
+        status = "failed" if "failed" in statuses else "partial"
+    return GraphProjectionResult(
+        graph_mutations_built=first.graph_mutations_built + second.graph_mutations_built,
+        graph_mutations_persisted=first.graph_mutations_persisted + second.graph_mutations_persisted,
+        graph_projection_status=status,
+        graph_projection_errors=[*first.graph_projection_errors, *second.graph_projection_errors],
+    )
 
 
 class ScanWorker:

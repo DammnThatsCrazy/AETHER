@@ -73,7 +73,9 @@ def build_topology_mutations(
 def build_message_mutations(message: dict) -> tuple[list[Vertex], list[Edge]]:
     """Material message links: SENT_VIA_PATH from the originating application
     (or wallet) to the path; SECURED_BY_POLICY when a snapshot is attached.
-    Tenant-scoped for tenant messages, public for public-scope rows."""
+    Tenant-scoped for tenant messages, public for public-scope rows. Only a
+    public-scope row writes the public path/application vertices; a tenant
+    message only links to them."""
     tenant_id = message["tenant_id"]
     path_vid = f"interop_path:{message['path_id']}"
     source = message.get("source") or {}
@@ -82,12 +84,14 @@ def build_message_mutations(message: dict) -> tuple[list[Vertex], list[Edge]]:
         f"interop_application:{origin_application}"
         if origin_application else f"wallet:{source.get('transaction_hash', 'unknown')}"
     )
-    vertices = [Vertex(
-        vertex_id=path_vid,
-        vertex_type=VertexType.INTEROP_PATH,
-        properties={"tenant_id": PUBLIC_TENANT},
-    )]
-    if origin_application:
+    vertices: list[Vertex] = []
+    if tenant_id == PUBLIC_TENANT:
+        vertices.append(Vertex(
+            vertex_id=path_vid,
+            vertex_type=VertexType.INTEROP_PATH,
+            properties={"tenant_id": PUBLIC_TENANT},
+        ))
+    if origin_application and tenant_id == PUBLIC_TENANT:
         vertices.append(Vertex(
             vertex_id=origin_vid,
             vertex_type=VertexType.INTEROP_APPLICATION,
