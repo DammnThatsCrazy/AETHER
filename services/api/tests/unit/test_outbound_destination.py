@@ -332,3 +332,22 @@ def test_webhook_destination_policies_reject_non_public_address(ip):
 
     assert _ip_is_unsafe(ipaddress.ip_address(ip)) is True
     assert _is_blocked(ip) is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://10.0.0.5/hooks/SECRETTOKEN?key=SECRETKEY",
+        "https://internal.example/hooks/SECRETTOKEN?key=SECRETKEY",
+        "ftp://ok.example/SECRETTOKEN?key=SECRETKEY",
+        "https://a.example/redirect/SECRETTOKEN?key=SECRETKEY",
+    ],
+)
+async def test_rejection_message_omits_url_path_and_query(url):
+    rec = _Recorder([httpx.Response(302, headers={"location": "/again/SECRETTOKEN?key=SECRETKEY"}) for _ in range(4)])
+    with patch("socket.getaddrinfo", side_effect=_resolver(DNS)):
+        with pytest.raises(UnsafeDestinationError) as excinfo:
+            await send_public_request("GET", url, transport=httpx.MockTransport(rec))
+    assert "SECRETTOKEN" not in str(excinfo.value)
+    assert "SECRETKEY" not in str(excinfo.value)

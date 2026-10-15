@@ -186,3 +186,14 @@ def test_competitor_tracker_fetches_validated_address():
     assert [r.url.host for r in seen] == ["93.184.216.34"]
     assert seen[0].headers["host"] == "a.example"
     assert result.data["snapshots"][0]["url"] == "https://a.example/"
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["https://10.0.0.5/hooks/SECRETTOKEN?key=SECRETKEY", "ftp://a.example/SECRETTOKEN?key=SECRETKEY"],
+)
+def test_rejection_message_omits_url_path_and_query(url):
+    with pytest.raises(UnsafeDestinationError) as excinfo:
+        resolve_public_addresses(url)
+    assert "SECRETTOKEN" not in str(excinfo.value)
+    assert "SECRETKEY" not in str(excinfo.value)
