@@ -50,13 +50,13 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/config/settings.py": "sha256:fa13e6b2be65d168901c46997befdde3d050d9ca6265091b69a21d1ac51d5878"
   "services/api/connectors/provider_runtime/": "sha256:96d47e6fee2e0fff4c6b3b3a9bb28c89414a7af87ed137bb489845519434f5d9"
-  "services/api/graph/platform_vertex_owners.py": "sha256:255e25e0037e1a90409c72190933458aa2bf8b225cf46cae27ccad313ba2f66a"
+  "services/api/graph/platform_vertex_owners.py": "sha256:838aad5b76eb7470349ad42fafa95a01e840491736dba059cc3e0c2eef1b68b1"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
   "services/api/main.py": "sha256:52e672c1c82e17907041ba173b1fb7cee68bfb03b158eb370fd4f25b584cc726"
   "services/api/repositories/repos.py": "sha256:2d5aa0082287de033384f3ad7861b780d23b861a14c04c6af86ab89716a2776b"
-  "services/api/repositories/tenant_row_keys.py": "sha256:de2ab5ce63ef807b9d75b84c700362f89ad15925c692f7bc7bf4884cbd8b3912"
+  "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
   "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
   "services/api/workers/runtime/roles.py": "sha256:24f2e24879828f8f340e91086f57c0e99940e9db96791edc6a1d24d590ba26b1"
@@ -435,8 +435,11 @@ python -m repositories.tenant_row_keys
 
 The steps backfill empty tenant columns and re-key per-tenant rows
 (`behavior_profiles`, `journey_chains`, `profiles`, `behavioral_signals`,
-`event_envelopes`, x402 objects), and mark `chain:` and card catalog vertices
-in the Postgres graph backend `platform` owned. While old pods are still
+`event_envelopes`, x402 objects), and mark `chain:`, card catalog and
+derivatives venue/market vertices in the Postgres graph backend `platform`
+owned. Shared recommendation evidence vertices (`policy:`, `profile360:`,
+`graph:`) are not relabelled; new writes use `{tenant}:`-prefixed ids and the
+old vertices are left in place. While old pods are still
 serving, they cannot read re-keyed x402 objects, profiles or signals by id
 (lists still work) and they write behavior snapshots, journey chains, profiles
 and replay envelopes under the old ids. New pods still read an x402 row stored
@@ -446,13 +449,24 @@ only in their JSON cannot be updated until it runs. The run time grows with the
 number of rows that have an empty tenant column.
 
 The steps do not touch a Neptune graph. On a Neptune lane, relabel the existing
-`chain:` and card catalog vertices once, after the migration, or the platform
-writers of those vertices keep failing with `409 Conflict`:
+`chain:`, card catalog and derivatives venue/market vertices once, after the
+migration, or the platform writers of those vertices keep failing with
+`409 Conflict`:
 
 ```bash
 NEPTUNE_ENDPOINT=... make graph-platform-owners           # dry run: lists the vertices
 NEPTUNE_ENDPOINT=... make graph-platform-owners APPLY=1   # writes the platform owner
 # or in the API image: python -m graph.platform_vertex_owners [--apply]
+```
+
+Derivatives venue and market vertices are written only from the registry
+tables. Nothing in the application creates registry rows, so after rows are
+added (or after the relabel above), project them; tenant account and position
+edges to a venue or market appear only once its vertex exists:
+
+```bash
+DATABASE_URL=postgresql://... make derivatives-registry-graph
+# or in the API image: python -m value.derivatives.registry_graph
 ```
 
 ---

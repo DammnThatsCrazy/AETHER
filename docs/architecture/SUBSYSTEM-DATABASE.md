@@ -19,7 +19,7 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
   "services/api/repositories/repos.py": "sha256:2d5aa0082287de033384f3ad7861b780d23b861a14c04c6af86ab89716a2776b"
-  "services/api/repositories/tenant_row_keys.py": "sha256:de2ab5ce63ef807b9d75b84c700362f89ad15925c692f7bc7bf4884cbd8b3912"
+  "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -251,8 +251,9 @@ does not claim that either has been applied.
   `repositories/tenant_row_keys.py`: it backfills empty tenant columns from the
   row JSON, re-keys existing rows of those tables, deletes `behavior_profiles` /
   `journey_chains` rows whose JSON tenant differs from the column (the profile
-  workers recompute them), and marks seeded Web3 registry rows with no tenant
-  as `system`. `make tenant-row-keys` (or `python -m repositories.tenant_row_keys`
+  workers recompute them), marks seeded Web3 registry rows with no tenant
+  as `system`, and marks `chain:`, card catalog and derivatives venue/market
+  graph vertices `platform` owned. `make tenant-row-keys` (or `python -m repositories.tenant_row_keys`
   in the API image) runs the same steps again after a rollout. Other rows with
   no tenant are left in place and stay unreadable to tenant-scoped reads.
 
