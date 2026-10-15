@@ -228,8 +228,8 @@ that), and memory-backed cache and event bus are forbidden in anything deployed.
 `scripts/validate_infra.py` carries the two local backend shapes it needs
 (`local`, `local-full`) itself rather than reading them from the matrix.
 
-Work is promoted `Development` → `staging` → `main`. A change is exercised on a
-developer machine, merged to `Development` (which deploys the development web
+Work is promoted `development` → `staging` → `main`. A change is exercised on a
+developer machine, merged to `development` (which deploys the development web
 build), promoted to `staging` (which rehearses the release), and only then to
 `main` (production), when the owner decides.
 

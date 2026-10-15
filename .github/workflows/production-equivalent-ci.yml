@@ -22,7 +22,6 @@ on:
     types: [ready_for_review]
   push:
     branches:
-      - Development
       - development
       - staging
       - main

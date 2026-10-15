@@ -6,7 +6,7 @@ and config/test_suites.yaml. Fails closed: an unmatched path, a rule naming an
 unknown suite, or any error selects every PR-lane suite (broad-safe) or exits
 non-zero; it never silently selects nothing for executable changes.
 
-    python scripts/ci_select.py --base origin/Development            # diff mode
+    python scripts/ci_select.py --base origin/development            # diff mode
     python scripts/ci_select.py --files a.py b.md                    # explicit files
 """
 from __future__ import annotations
