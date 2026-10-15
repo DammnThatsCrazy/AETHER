@@ -35,12 +35,16 @@ def _client(
     production_repository: str = checker.REPOSITORY,
     production_commit: str | None = COMMIT,
     domain_branch: str = "main",
-    www_branch: str = checker.PRODUCTION_OLYMPUS_BRANCH,
+    www_branch: str = "main",
     domain_verified: bool = True,
     domain_dns_record: str | None = None,
     consolidated: bool = True,
     extra_apps: tuple[str, ...] = (),
     web_hosts: tuple[str, ...] = ALL_HOSTS,
+    production_branches: tuple[str, ...] = ("main",),
+    production_auto_build: bool = False,
+    production_extra_environment: dict[str, str] | None = None,
+    production_app_environment: dict[str, str] | None = None,
 ):
     """``consolidated`` is the one-app layout (AETHER-staging-web serves every
     host); otherwise the pre-apply layout: the site app (old name) serves
@@ -61,10 +65,17 @@ def _client(
             "appId": app_id,
             "repository": production_repository if name == "AETHER-production-web" else checker.REPOSITORY,
             "platform": "WEB",
+            **(
+                {"environmentVariables": production_app_environment}
+                if name == "AETHER-production-web" and production_app_environment
+                else {}
+            ),
         }
         for name, app_id in APP_IDS.items()
         if name in present
     ]
+
+    production_environment = {**checker.PRODUCTION_WEB_ENVIRONMENT, **(production_extra_environment or {})}
 
     def call(args: list[str]) -> dict[str, Any]:
         if args[:2] == ["amplify", "list-apps"]:
@@ -73,23 +84,25 @@ def _client(
             app_id = args[args.index("--app-id") + 1]
             branch_name = args[args.index("--branch-name") + 1]
             production = app_id == "d-production-status"
-            olympus = production and branch_name == checker.PRODUCTION_OLYMPUS_BRANCH
-            if branch_name != "main" and not olympus:
+            if branch_name != "main":
                 raise RuntimeError("AWS Amplify metadata request failed for amplify")
             return {
                 "branch": {
                     "appId": app_id,
                     "branchName": branch_name,
                     "stage": "PRODUCTION" if production else "DEVELOPMENT",
-                    "enableAutoBuild": not olympus,
-                    "environmentVariables": (
-                        checker.PRODUCTION_OLYMPUS_ENVIRONMENT
-                        if olympus
-                        else checker.PRODUCTION_WEB_ENVIRONMENT
-                        if production
-                        else {}
-                    ),
+                    "enableAutoBuild": production_auto_build if production else True,
+                    "environmentVariables": production_environment if production else {},
                 }
+            }
+        if args[:2] == ["amplify", "list-branches"]:
+            app_id = args[args.index("--app-id") + 1]
+            assert app_id == "d-production-status"
+            return {
+                "branches": [
+                    {"branchName": name, "environmentVariables": production_environment if name == "main" else {}}
+                    for name in production_branches
+                ]
             }
         if args[:2] == ["amplify", "list-jobs"]:
             app_id = args[args.index("--app-id") + 1]
@@ -321,52 +334,48 @@ def test_rejects_invalid_expected_commit_before_aws_calls():
     assert called is False
 
 
-def test_production_serves_www_from_the_olympus_site_branch():
-    """www is the Olympus Labs build (production-olympus); the other hosts are main."""
-    assert checker.PRODUCTION_HOST_BRANCHES == {
-        "www": "production-olympus",
-        "aether": "main",
-        "docs": "main",
-        "status": "main",
-        "app": "main",
-    }
-    assert checker.PRODUCTION_OLYMPUS_ENVIRONMENT["VITE_SITE"] == "olympus"
+def test_production_serves_every_host_from_the_single_main_branch():
+    """One app, one branch: www is built from main like every other host, and
+    the site picks Olympus Labs or Aether from the hostname at runtime."""
+    assert checker.PRODUCTION_BRANCH == "main"
+    assert "VITE_SITE" not in checker.PRODUCTION_WEB_ENVIRONMENT
+    assert checker.contract_errors(mode="production-status", expected_commit=COMMIT, client=_client()) == []
     errors = checker.contract_errors(
         mode="production-status",
         expected_commit=COMMIT,
-        client=_client(www_branch="main"),
+        client=_client(www_branch="production-olympus"),
     )
     assert errors == [
-        "Amplify app AETHER-production-web production domain lacks an AVAILABLE www subdomain on production-olympus with a live DNS target"
+        "Amplify app AETHER-production-web production domain lacks an AVAILABLE www subdomain on main with a live DNS target"
     ]
 
 
-def test_production_olympus_branch_must_build_the_olympus_site_from_the_reviewed_commit():
-    base = _client()
-
-    def drifted(args: list[str]) -> dict[str, Any]:
-        payload = base(args)
-        if args[:2] == ["amplify", "get-branch"] and args[args.index("--branch-name") + 1] == "production-olympus":
-            payload["branch"]["environmentVariables"] = checker.PRODUCTION_WEB_ENVIRONMENT
-            payload["branch"]["enableAutoBuild"] = True
-        if args[:2] == ["amplify", "list-jobs"] and args[args.index("--branch-name") + 1] == "production-olympus":
-            payload["jobSummaries"][0]["commitId"] = "b" * 40
-        return payload
-
-    errors = checker.contract_errors(mode="production-status", expected_commit=COMMIT, client=drifted)
-    assert any("production-olympus branch has VITE_SITE=None" in e for e in errors)
-    assert any("production-olympus branch must not auto-build" in e for e in errors)
-    assert any("latest production-olympus job is not for the reviewed commit" in e for e in errors)
-    assert not any(" main " in e for e in errors)
+def test_production_contract_requires_a_single_gated_main_branch():
+    # The retired Olympus branch, or any other, fails the single-branch contract.
+    errors = checker.contract_errors(
+        mode="production-status", expected_commit=COMMIT, client=_client(production_branches=("main", "production-olympus"))
+    )
+    assert errors == [
+        "Amplify app AETHER-production-web must have only the main branch; found main, production-olympus"
+    ]
+    # main is released by the workflow after the integration authority, never by an auto-build on push.
+    errors = checker.contract_errors(
+        mode="production-status", expected_commit=COMMIT, client=_client(production_auto_build=True)
+    )
+    assert any("must not auto-build" in error for error in errors)
 
 
-def test_production_requires_the_olympus_site_branch():
-    base = _client()
-
-    def missing(args: list[str]) -> dict[str, Any]:
-        if args[:2] == ["amplify", "get-branch"] and args[args.index("--branch-name") + 1] == "production-olympus":
-            raise RuntimeError("AWS Amplify metadata request failed for amplify")
-        return base(args)
-
-    errors = checker.contract_errors(mode="production-status", expected_commit=COMMIT, client=missing)
-    assert "Amplify app AETHER-production-web has no production-olympus branch" in errors
+def test_production_contract_rejects_a_build_time_site_override():
+    errors = checker.contract_errors(
+        mode="production-status",
+        expected_commit=COMMIT,
+        client=_client(production_extra_environment={"VITE_SITE": "olympus"}),
+    )
+    assert "Amplify app AETHER-production-web main branch sets VITE_SITE; the site must come from the hostname" in errors
+    # An app-level override is inherited by every branch build, so it fails too.
+    errors = checker.contract_errors(
+        mode="production-status",
+        expected_commit=COMMIT,
+        client=_client(production_app_environment={"VITE_SITE": "aether"}),
+    )
+    assert "Amplify app AETHER-production-web sets VITE_SITE; the site must come from the hostname" in errors
