@@ -14,7 +14,7 @@ toc_depth: 3
 source_hashes:
   "services/api/intelligence/intelligence/action_targets/base.py": "sha256:455280d204f34cf4b774550f1d46024b320ae8e0f2f77eed44b3db8b6b7c2672"
   "services/api/intelligence/intelligence/action_targets/registry.py": "sha256:06edc4a24ff4a7e14927a05414e5ce40b8da8d187af3895b0e893b21cb98d56c"
-  "services/api/intelligence/intelligence/routes.py": "sha256:355eb639eb8cf03f9a79903ae67b1665b688e2fc095536e8d8bd44b2c06fcc18"
+  "services/api/intelligence/intelligence/routes.py": "sha256:6f8183f99e28149006abab4dd56e8d006430b1fcc69a4307632f686e9a7c8f6d"
 ---
 
 # Governed Action Dispatch
@@ -71,7 +71,7 @@ and [ADR-001](adr-001-canonical-delivery-pipeline.md).
 
 ## Secret handling
 
-Integration secrets such as `auth_secret`, `secret`, `api_key`, and `webhook_secret` are converted to internal secret references and omitted from API responses. Responses only expose `has_secret` so tenants can verify a credential is configured without leaking a stable credential fingerprint. Credentials are resolved from the vault at job-lease time — never stored in job payloads, Kafka events, or logs.
+Integration secrets such as `auth_secret`, `secret`, `api_key`, and `webhook_secret` are written to the tenant credential store under a server-built reference (`action_integration:{tenant_id}:{config_id}`) and omitted from API responses. A `secret_ref` supplied in the request body, at the top level or inside `config`, is discarded; the only reference an integration config or delivery job carries is the server-built one, and the delivery worker resolves it only within the job's tenant. Responses only expose `has_secret` so tenants can verify a credential is configured without leaking a stable credential fingerprint. Credentials are resolved at job-lease time — never stored in job payloads, Kafka events, or logs.
 
 ## Governance
 

@@ -25,16 +25,16 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:9808e2f84d02d427b0cb9171a8a054c5bdb64a501f05c61d63226c3e6d082bcf"
+  "services/api/actions/": "sha256:7c851ff577675a519372e3fa3646b6bd9702f70e6dc10a15b8631fb2f23f0d13"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:0740c89ed3bf089b8ded5f9a319b7670a0afb18bda8f58a69a11a03c2a0a5d75"
-  "services/api/connectors/": "sha256:01f3d11694ce153f102de85133e514fe4548877376c05668c2ee6fe63e1ad633"
+  "services/api/connectors/": "sha256:25aea32c107687a0c3d95bf61df98f69623c46d1e68b68dd076de2972242707b"
   "services/api/governance/": "sha256:7babd09f496c3d1339dd2853f89d4fa3174b29fbeea1dc2e680130d6d7986540"
   "services/api/graph/": "sha256:bd963613166312ac99a29e07d2250a7cc45d55618204a62c969d0b801d8e2231"
   "services/api/identity/": "sha256:3899aca8a5fe95b1f975945913ebbd0cef920109649676c9b48b49fd6fcd2a1f"
   "services/api/ingestion/": "sha256:201513b270e7c49a9636eb99cbd9d8ca92247a0e1a7363fee7a9315dc895bf46"
-  "services/api/intelligence/": "sha256:963f6b087bfa86e49a680408faca800a0d872ea5b8d65bd0332e66875130b5dd"
-  "services/api/journeys/": "sha256:1b39920846d458dde3378049c8d25a6a6eda06826de370862102305373c85cf8"
+  "services/api/intelligence/": "sha256:5a1440114bcdbf9bb1645f6d223a55c89615068c42e8bec283a18d5ea8835796"
+  "services/api/journeys/": "sha256:ce869bbb77d4e2a526e2313077adb3e087e1d34b3c823eb46cb736b5e3caccbe"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:228120a11b8e6c3fec9405ed272e61de894b658274a33da129facc9c074a8224"
   "services/api/value/": "sha256:a1b747c3317fa53f2516f1d18d9852a0187b56567b0ab2c9434ffa37c874d9e5"
@@ -3044,12 +3044,14 @@ Manage automated Dune query polling schedules per tenant. All endpoints require 
 
 **Domains:** `onchain`, `governance`, `market`, `social`, `identity`, `tradfi`
 
+Run results report `ok`, `skipped` (local mode, or `credential unavailable`), or `error`; an error detail carries only the exception class and, for HTTP failures, the status code.
+
 **Required env var:**
 
 | Env var | Description | Values |
 |---------|-------------|--------|
 | `DUNE_BACKEND` | Activates the Dune polling scheduler. When unset or empty the worker runs in no-op mode (logs intent, no external API calls). Set in staging/prod. | `s3` \| `postgres` \| `clickhouse` |
-| `DUNE_API_KEY` | Dune Analytics API key. Required for live pulls. | string |
+| `DUNE_API_KEY` | Platform Dune Analytics API key, used only for platform-owned schedules. Tenant schedules resolve `api_key_ref` from the tenant's credential store and never fall back to this key. | string |
 
 ---
 
