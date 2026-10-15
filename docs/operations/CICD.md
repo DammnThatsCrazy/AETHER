@@ -312,8 +312,9 @@ roll-forward.
 PR head SHA and merge-queue SHA, selects suites with `scripts/ci_select.py`
 and `config/ci/ownership.yaml`, shards suite workers by the registry's expected
 runtime, runs path-selected non-suite `checks` (aether-web typecheck, kyber-web
-Playwright e2e), uploads no artifacts, and is **not** a required status. `verification / disposition` stays the merge authority until the parity
-report clears the cutover. Diagnostic artifact uploads in workflows that never
+Playwright e2e), uploads no artifacts, and is **not** a required status.
+`verification / disposition` stays the merge authority until the parity report
+clears the cutover. Diagnostic artifact uploads in workflows that never
 download artifacts are `continue-on-error` with seven-day retention so a storage
 quota failure cannot fail a run whose tests passed. See
 `docs/engineering/ci-v2/architecture.md`.
