@@ -111,10 +111,11 @@ Until step 3 is done, the workflow skips with a notice and deploys nothing.
 
 ## Phase 2: full-stack previews
 
-The `preview` deployment profile (`profiles/preview.tfvars`,
-`scripts/release/ephemeral_env.py`, `ephemeral-ttl-guard.yml`) already
-describes a cost-capped, TTL-leased environment with no NAT. It is one shared
-environment today. Making it per pull request needs:
+The dedicated `preview` and `demo` deployment profiles were retired when the
+profile matrix was consolidated to `staging` and `production`; a full-stack
+preview would be a per-PR wake of the staging shape (cost-capped, TTL-leased
+through `staging-ttl-guard.yml`, no NAT), not a third profile. Making that
+per pull request needs:
 
 - a per-PR name, so each PR's backend service, database clone and secrets are
   separate;

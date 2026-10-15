@@ -4,20 +4,20 @@
 One authoritative profile matrix exists — ``config/deployment_profiles.yaml`` —
 and every other surface that states a profile count or a profile name must agree
 with it. This validator is the CI tripwire for the "docs say ten, config has
-eight" class of drift: it fails when any declared surface drifts, in EITHER
+two" class of drift: it fails when any declared surface drifts, in EITHER
 direction (a ninth profile added to the YAML fails until every surface is
 updated; a surface claiming a profile the YAML removed fails immediately).
 
 Surfaces cross-checked:
 
-  1. DOCS — every registered doc that states a profile count ("eight deployment
-     profiles", "the eight-profile matrix") must state the canonical count
-     computed from the matrix. A ninth profile changes the count word and every
+  1. DOCS — every registered doc that states a profile count ("two deployment
+     profiles", "the two-profile matrix") must state the canonical count
+     computed from the matrix. A third profile changes the count word and every
      registered doc fails until reviewed and updated.
-  2. CLOUD SUBSET — the cloud-class profiles (class in {staging, production,
-     enterprise}) must be exactly EXPECTED_CLOUD.
-  3. SELECTABLE SET — the Terraform-selectable set is exactly cloud-class ∪
-     ephemeral-class (class in {demo, preview}). ``check_cost_policy_terraform.py
+  2. CLOUD SUBSET — the cloud-class profiles (class in {staging, production})
+     must be exactly EXPECTED_CLOUD.
+  3. SELECTABLE SET — the Terraform-selectable set is exactly the cloud-class
+     profiles. ``check_cost_policy_terraform.py
      ::VALID_PROFILES``, the ``profiles/*.tfvars`` filenames, and the
      ``deployment_profile`` variable validation in ``variables.tf`` must all
      equal that selectable set.
@@ -45,7 +45,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import Reporter, load_yaml, main_guard, repo_root  # noqa: E402
 
 CANONICAL_YAML = "config/deployment_profiles.yaml"
-CLOUD_CLASSES = {"staging", "production", "enterprise"}
+CLOUD_CLASSES = {"staging", "production"}
 
 # Docs that declare a profile count, with the phrase that must carry the
 # canonical count word. Each pattern is matched as a REGEX so prose markdown
@@ -56,7 +56,6 @@ CLOUD_CLASSES = {"staging", "production", "enterprise"}
 DOCS_COUNT_PHRASES = {
     "docs/architecture/DEPLOYMENT-PROFILES.md": [
         r"{word} deployment profiles",
-        r"four of the \*{{0,2}}{word}\*{{0,2}}",
     ],
     "docs/operations/STAGING-WAKE-SLEEP.md": [r"{word}-profile matrix"],
     "docs/operations/COST-OPTIMIZATION.md": [r"{word}-profile matrix"],
@@ -70,17 +69,14 @@ _NUM_WORDS = {
     15: "fifteen", 16: "sixteen", 17: "seventeen", 18: "eighteen",
 }
 
-# The four cloud-class profiles. Cross-checked, not assumed.
-EXPECTED_CLOUD = ["staging", "production-lean", "production-scale", "enterprise-isolated"]
+# The two cloud-class profiles. Cross-checked, not assumed.
+EXPECTED_CLOUD = ["staging", "production"]
 
-# Ephemeral-class profiles are Terraform-selectable too (class in this set).
-# They provision no NAT egress and are cost-capped/TTL-cleanup-required, but
-# they are NOT part of the four cloud profiles the docs count as "four of the
-# eight".
-EPHEMERAL_CLASSES = {"demo", "preview"}
+# There are no ephemeral-class profiles: demo and preview were retired.
+EPHEMERAL_CLASSES: set[str] = set()
 
-# The full Terraform-selectable set: cloud ∪ ephemeral.
-EXPECTED_SELECTABLE = EXPECTED_CLOUD + ["demo", "preview"]
+# The full Terraform-selectable set.
+EXPECTED_SELECTABLE = EXPECTED_CLOUD
 
 CHECK_COST_POLICY_TERRAFORM = "scripts/release/check_cost_policy_terraform.py"
 TF_DIR = "infra/aws/terraform"

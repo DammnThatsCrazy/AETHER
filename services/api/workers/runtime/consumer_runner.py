@@ -55,8 +55,8 @@ Either way the guarantees that matter hold:
   onto a queue this process consumes from — doing so deletes the event, because
   nothing subscribes ``Topic.DEAD_LETTER`` and an unhandled message is acked.
 
-In a dedicated deployment the selection collapses to exactly one runner, so
-``production-scale`` / ``enterprise-isolated`` behaviour is unchanged.
+In a dedicated deployment (one task per role) the selection collapses to
+exactly one runner, so that topology behaves exactly as it did before.
 """
 
 from __future__ import annotations

@@ -11,8 +11,8 @@ estimated_read_minutes: 7
 toc_depth: 2
 source_files: [scripts/staging_preflight.py, scripts/lib/preflight_env.py, scripts/lib/preflight_dynamodb.py, scripts/lib/preflight_redis.py, scripts/lib/preflight_results.py, services/api/ingestion/gateway/readiness.py]
 source_hashes:
-  "scripts/lib/preflight_dynamodb.py": "sha256:412fa322a11832da710b26c2834a9d7f57a02e0b5451ea4336e7a599de1e41f9"
-  "scripts/lib/preflight_env.py": "sha256:ab12af8dd5db0bbb24f4b568b534e794b39c97b0fc9d6317b14f0b6ba182f96f"
+  "scripts/lib/preflight_dynamodb.py": "sha256:fb2c96646af2b24fc6add4b9463ce3ed19a8ae7ff77161be41eb464cb61ffa15"
+  "scripts/lib/preflight_env.py": "sha256:bb3694db01643e3490dd3263725e39639ddbac697d43c32c190e69184bc79cc6"
   "scripts/lib/preflight_redis.py": "sha256:418ac3a2e776cfb96572e3b78864a65e96c34c70cfdd838fb3a90b2bf18ee117"
   "scripts/lib/preflight_results.py": "sha256:ce8f40edac30f24e6be3a9840d43c906436059055525cb2fba8df44c5165da86"
   "scripts/staging_preflight.py": "sha256:d18e7929deaedc6ad3ecf261d6cde3d3e59136f49515642dfc87b8e8f7026e28"

@@ -19,7 +19,7 @@ scope:
   excluded:
     - cross-region replication
   deferred: []
-  release_profile_applicability: [local, staging, production-lean]
+  release_profile_applicability: [local, staging, production]
 
 repository_ceiling:
   type: INFRASTRUCTURE_TURNKEY
@@ -75,7 +75,7 @@ activation:
       required_action: Apply the event-backend Terraform for the target profile.
       source_code_change_expected: false
       affected_environments: [staging, production, scale]
-      affected_release_profiles: [staging, pilot, production-lean, production-scale]
+      affected_release_profiles: [staging, pilot, production, production-scale]
       evidence_required: applied topic/queue ARNs + a credentialed publish/consume run
 
 dependencies:
@@ -140,7 +140,7 @@ release_profiles:
     productionization_required: true
     environment_gate: pilot
     business_gate: false
-  production-lean:
+  production:
     participation: required
     implementation_floor: TURNKEY
     productionization_required: true

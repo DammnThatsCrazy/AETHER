@@ -268,7 +268,7 @@ def run_env_checks(
         ))
 
     # 5. The selected durable cache backend must have its own anchor. Staging
-    # and production-lean use DynamoDB; profiles that select Redis still use
+    # and production use DynamoDB; profiles that select Redis still use
     # the Redis endpoint. Do not require or probe a forbidden alternate backend.
     name = f"{prefix}:cache-config"
     cache_backend = env.get(CACHE_BACKEND_VAR, "").strip().lower()

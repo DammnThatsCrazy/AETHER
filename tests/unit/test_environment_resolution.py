@@ -31,9 +31,9 @@ def test_staging_degrades_explicitly_when_aurora_is_unavailable():
 
 
 def test_production_does_not_silently_degrade():
-    result = resolve("production-lean", _full(aurora="UNAVAILABLE"))
+    result = resolve("production", _full(aurora="UNAVAILABLE"))
     assert result["disposition"] == "BLOCKED_EXTERNAL"
-    assert result["resolved_profile"] == "production-lean"
+    assert result["resolved_profile"] == "production"
     assert result["production_equivalent"] is False
     assert any(item.startswith("aurora:") for item in result["blockers"])
     assert any(item.startswith("postgres_graph:") for item in result["blockers"])
@@ -59,4 +59,4 @@ def test_resolution_matches_contract_schema():
 
 def test_requirements_are_self_consistent():
     requirements = load_requirements()
-    assert set(requirements["profiles"]) == {"local", "local-full", "demo", "preview", "staging", "production-lean", "production-scale", "enterprise-isolated"}
+    assert set(requirements["profiles"]) == {"staging", "production"}

@@ -15,7 +15,7 @@ SCRIPT = ROOT / "scripts/release/release_manifest.py"
 def manifest() -> dict:
     artifact = {"digest": "sha256:" + "a" * 64}
     return {"schema_version": 1, "commit_sha": "1" * 40, "workflow_run_id": "42",
-            "profile": "production-lean", "artifacts": {name: artifact for name in
+            "profile": "production", "artifacts": {name: artifact for name in
             ("backend_image", "aether_spa", "kyber_spa", "migration_package", "configuration")}}
 
 

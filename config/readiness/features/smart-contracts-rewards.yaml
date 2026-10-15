@@ -144,7 +144,7 @@ release_profiles:
     productionization_required: true
     environment_gate: pilot
     business_gate: false
-  production-lean:
+  production:
     participation: not_in_release
     note: Excluded from the founding-tenant release scope (see config/founding_tenant_release.yaml).
   production-scale:

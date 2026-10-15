@@ -1,7 +1,7 @@
 """graph postgres backend: graph_vertices / graph_edges tables
 
 Creates the durable store for ``shared.graph.graph._PostgresGraphBackend`` — the
-graph backend the staging and production-lean deployment profiles declare
+graph backend the staging and production deployment profiles declare
 (``graph: postgres``) but which had no schema and no implementation until now, so
 ``GraphClient.connect`` fail-closed in exactly those profiles.
 

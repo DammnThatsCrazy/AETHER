@@ -112,7 +112,7 @@ Access MCP inputs are plan-only and an apply dispatch cannot reshape that plan.
 Use only `production-scale` and keep all steps in the same AWS account,
 region, and Terraform state. The ECR repository name is global within an
 account and region, so `production-scale` is its canonical persistent state
-owner. `production-lean`, `enterprise-isolated`, staging, and expiring `demo`
+owner. `production`, `enterprise-isolated`, staging, and expiring `demo`
 and `preview` profiles cannot create this repository or service. The selected protected GitHub environment, OIDC roles,
 Terraform backend, API domain, HTTPS listener/certificate, and required
 application inputs must already be configured. The production GitHub

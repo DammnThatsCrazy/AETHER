@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       aws_region:
-        description: AWS region containing the production-scale Access MCP repository
+        description: AWS region containing the production Access MCP repository
         type: string
         required: true
         default: us-east-1

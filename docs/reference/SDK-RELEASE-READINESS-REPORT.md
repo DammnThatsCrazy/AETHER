@@ -58,7 +58,7 @@ its typecheck, conformance evidence, and hosted native compile gates must pass
 before it is included in the release announcement. The Aether and Kyber mobile
 applications themselves are not part of this release; they remain in
 design-partner/development posture and are explicitly disabled in the staging
-and production-lean feature-flag manifests.
+and production feature-flag manifests.
 
 The publish workflow publishes SDK libraries and artifacts only. It does not
 submit either mobile application to TestFlight, the Play internal track, or a

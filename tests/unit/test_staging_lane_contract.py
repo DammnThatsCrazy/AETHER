@@ -97,7 +97,7 @@ def _complete_bootstrap() -> str:
 def test_full_lane_preserves_the_canonical_staging_profile():
     contract = _load()
     assert contract.validate(profile="staging", deployment_lane="full") == []
-    assert contract.validate(profile="production-lean", deployment_lane="full") == [
+    assert contract.validate(profile="production", deployment_lane="full") == [
         "deployment_lane=full is valid only with deployment_profile=staging"
     ]
 
@@ -133,7 +133,7 @@ def test_pilot_runtime_wiring_contract_passes_only_when_all_mounts_and_env_exist
 
 def test_pilot_is_staging_only():
     contract = _load()
-    errors = contract.validate(profile="production-lean", deployment_lane="pilot")
+    errors = contract.validate(profile="production", deployment_lane="pilot")
     assert errors == ["deployment_lane=pilot is valid only with deployment_profile=staging"]
 
 

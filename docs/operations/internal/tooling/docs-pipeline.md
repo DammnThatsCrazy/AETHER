@@ -24,7 +24,7 @@ toc_depth: 3
 source_hashes:
   ".github/workflows/repo-health.yml": "sha256:5ee5ceb622f995d8e3797226ab7b185a1f2bed6b7e49a22b18ec88a8a3ea9ad3"
   ".pre-commit-config.yaml": "sha256:a632647a19dc64181aa9c9dfc2a9c1b3f4180c88b45094a4b461bc53f6c30191"
-  "Makefile": "sha256:0aeb8a8809ed9afc536662468d334282f9945150085bcb9a242c73e1e2fb00cb"
+  "Makefile": "sha256:e3626597e10f801f292d5dafece6e2e25172f88300dd6a04d43564b3a2edbee4"
   "scripts/docs_drift.py": "sha256:6ff727e23ae244f41c014307b4a3361ebe521508bd74a7161a745394db12022c"
   "scripts/docs_extract/run_all.py": "sha256:404445eba05d12de88af585f79839b7496a1658411a110e606c46d5ed7e8c338"
   "scripts/docs_idempotency.py": "sha256:fe8628ef3a9b9d824645a5db062857754d2984b0f3f4d866b571df6232302f17"
@@ -155,7 +155,7 @@ make test-terraform-profiles
 make deploy-staging CANDIDATE=<json> PROFILE=staging OUTPUT=<json> STATE=<checkpoint.json> ENVIRONMENT_RESOLUTION=<json>
 
 # Deployment-profile enforcement (profile class, parity, cost policy, doctor)
-make resolved-feature-flags       # explicit staging and production-lean flag resolutions
+make resolved-feature-flags       # explicit staging and production flag resolutions
 make validate-profile-config    # deployment-profile matrix + founding-tenant posture
 make validate-profile-parity    # cross-source profile parity (docs count, cloud subset, terraform, contracts, env templates)
 make validate-profile-doctor    # per-profile readiness doctor (§27) + deployment certificate (§28); no cloud profile below credential_waiting

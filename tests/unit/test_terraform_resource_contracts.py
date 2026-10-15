@@ -6,10 +6,9 @@ config/deployment_profiles.yaml and the Terraform addresses that realise it.
 matcher for, so a key with no matcher is an unenforced policy and a matcher for
 a key nobody declares is dead weight that will rot.
 
-These tests prove completeness in BOTH directions, for all four cloud profiles
-— `staging`, `production-lean`, `production-scale` and `enterprise-isolated`
-all carry `cost_policy` blocks now, and the contracts file is written from
-production-lean's point of view, so the other three are exactly where a missing
+These tests prove completeness in BOTH directions, for both cloud profiles —
+`staging` and `production` carry `cost_policy` blocks, and the contracts file is
+written from production's point of view, so staging is exactly where a missing
 matcher would hide.
 
 The runtime gate in check_terraform_plan_policy.py fails closed on the same
@@ -33,14 +32,11 @@ CONTRACTS = yaml.safe_load(CONTRACTS_PATH.read_text())
 PROFILES = yaml.safe_load(PROFILES_PATH.read_text())
 
 # Every profile whose plan this gate is ever asked to validate.
-CLOUD_PROFILES = ("staging", "production-lean", "production-scale",
-                  "enterprise-isolated")
+CLOUD_PROFILES = ("staging", "production")
 
-# Cloud ∪ ephemeral-class, the parity restatement: expected_by_profile
-# expectations may name any Terraform-selectable profile. demo/preview appear
-# in nat_gateway_unless_explicit at zero (cost-capped), which is exactly the
-# kind of entry this constant exists to admit.
-SELECTABLE_PROFILES = CLOUD_PROFILES + ("demo", "preview")
+# The parity restatement: expected_by_profile expectations may name any
+# Terraform-selectable profile, which is exactly the cloud profiles.
+SELECTABLE_PROFILES = CLOUD_PROFILES
 
 CARDINALITY = re.compile(r"^(zero|at_least_one|exactly:\d+)$")
 TF_TYPE = re.compile(r"^[a-z][a-z0-9]*(_[a-z0-9]+)+$")
@@ -73,7 +69,7 @@ def _declared_keys(kind: str) -> set[str]:
 # Preconditions
 # ---------------------------------------------------------------------------
 
-def test_all_four_cloud_profiles_declare_a_cost_policy():
+def test_all_cloud_profiles_declare_a_cost_policy():
     """Without this, the direction tests below would silently check nothing."""
     for profile in CLOUD_PROFILES:
         policy = PROFILES["profiles"][profile].get("cost_policy")
@@ -118,20 +114,20 @@ def test_every_forbidden_key_in_every_cloud_profile_has_a_matcher():
     )
 
 
-def test_the_non_lean_profiles_add_no_key_the_contracts_file_lacks():
-    """The contracts file is written for production-lean; prove that suffices."""
-    lean = set(_policy("production-lean")["required_resources"]) | set(
-        _policy("production-lean")["forbidden_resources"])
+def test_staging_adds_no_key_the_contracts_file_lacks():
+    """The contracts file is written for production; prove that suffices."""
+    lean = set(_policy("production")["required_resources"]) | set(
+        _policy("production")["forbidden_resources"])
     for profile in CLOUD_PROFILES:
-        if profile == "production-lean":
+        if profile == "production":
             continue
         keys = set(_policy(profile)["required_resources"]) | set(
             _policy(profile)["forbidden_resources"])
         extra = keys - lean
         assert not extra, (
             f"{profile} declares canonical key(s) {sorted(extra)} that "
-            f"production-lean does not, so {CONTRACTS_PATH.name} — which is "
-            f"written from production-lean's point of view — cannot cover them"
+            f"production does not, so {CONTRACTS_PATH.name} — which is "
+            f"written from production's point of view — cannot cover them"
         )
 
 
@@ -242,7 +238,7 @@ def test_cardinality_zero_matchers_carry_a_terraform_gate_or_a_reason():
 # ---------------------------------------------------------------------------
 
 def test_nat_rule_declares_an_expectation_for_every_cloud_profile():
-    """Network egress posture differs per profile; all four must be stated."""
+    """Network egress posture must be stated for every cloud profile."""
     rule = CONTRACTS["forbidden_resources"]["nat_gateway_unless_explicit"]
     expected = rule.get("expected_by_profile") or {}
     missing = [p for p in CLOUD_PROFILES if p not in expected]
@@ -389,11 +385,11 @@ def test_permitted_in_never_contradicts_a_profile_that_forbids_the_key():
 # per-profile from deployment_profiles.yaml, would never actually check it.
 #
 # EMPTY IS THE CORRECT STATE, and it is empty. It previously held
-# `frontend_ecs_services` for production-scale and enterprise-isolated: the
-# contracts file barred ECS-hosted frontends there with `permitted_in: []`, but
-# neither profile listed the key, so a scale or enterprise plan was never
-# checked for it. That is now fixed at the source — both profiles list
-# `frontend_ecs_services` — so the allowance was deleted rather than left
+# `frontend_ecs_services` for the since-retired production-scale and
+# enterprise-isolated profiles: the contracts file barred ECS-hosted frontends
+# there with `permitted_in: []`, but neither profile listed the key, so such a
+# plan was never checked for it. That was fixed at the source and the profiles
+# have since been retired, so the allowance was deleted rather than left
 # standing. `test_also_applies_to_agrees_with_the_declared_policy` therefore now
 # enforces the invariant unconditionally.
 #
@@ -435,8 +431,8 @@ def test_a_per_profile_expectation_names_the_type_it_counts():
 
     `cardinality` sums every type a rule lists; `expected_by_profile` answers a
     different question — how much egress a profile buys — and answering it in
-    gateways plus their EIPs would read the correct scale and enterprise plans
-    as 2 and 6 against expectations of 1 and 3. The declaration and
+    gateways plus their EIPs would read a correct NAT plan as 2 gateways' worth
+    of resources against an expectation of 1. The declaration and
     check_terraform_plan_policy.py::check_network_egress previously agreed only
     because both happened to mean aws_nat_gateway.
     """

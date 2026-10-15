@@ -476,8 +476,8 @@
       "warnings": []
     },
     {
-      "profile": "production-lean",
-      "title": "Production (lean)",
+      "profile": "production",
+      "title": "Production",
       "disposition": "BLOCKED_BY_CODE",
       "required_features": [
         "backend-api",
@@ -602,7 +602,7 @@
     },
     {
       "profile": "production-scale",
-      "title": "Production (scale)",
+      "title": "Production (at scale)",
       "disposition": "BLOCKED_BY_CODE",
       "required_features": [
         "backend-api",

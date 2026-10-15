@@ -1,6 +1,6 @@
 """Contract parity: ``_PostgresGraphBackend`` vs ``_InMemoryGraphBackend`` (#4).
 
-The staging / production-lean profiles declare ``graph: postgres`` but ran no
+The staging / production profiles declare ``graph: postgres`` but ran no
 implementation until ``_PostgresGraphBackend`` landed. These tests pin its
 observable behaviour to the in-memory backend — the parity reference — by
 running the SAME assertions against BOTH backends. The postgres parametrisation

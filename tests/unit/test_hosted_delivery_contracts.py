@@ -97,7 +97,7 @@ def test_hosted_adapter_binds_candidate_profile_to_request():
         "profile": "staging",
         "read_only": True,
         "credential": {"provider": "aws", "source": "github_oidc", "scopes": []},
-        "candidate_identity": identity("production-lean"),
+        "candidate_identity": identity("production"),
     }
     with pytest.raises(HostedAdapterError, match="candidate_identity.profile must match request profile"):
         from scripts.release.hosted_delivery_adapters import HostedAdapterRequest
@@ -196,21 +196,21 @@ def test_artifact_evidence_requires_complete_provenance_fields(tmp_path: Path):
     assert any("provenance has unknown fields" in error for error in validate_closure_evidence(extra_field))
 
 
-def test_profile_operations_require_ttl_and_exact_promotion_identity():
-    with pytest.raises(ValueError, match="ttl_hours"):
+def test_profile_operations_require_exact_promotion_identity():
+    with pytest.raises(ValueError, match="unknown deployment profile"):
         request(profile="preview", operation="deploy")
     staging = identity("staging")
     with pytest.raises(ValueError, match="staging_evidence"):
         DeliveryRequest.from_mapping({
-            "operation_id": "op-promote", "operation": "promote", "profile": "production-lean",
-            "candidate_identity": {**staging, "profile": "production-lean"},
+            "operation_id": "op-promote", "operation": "promote", "profile": "production",
+            "candidate_identity": {**staging, "profile": "production"},
             "requested_at": "2026-09-09T00:00:00Z", "dry_run": True,
         })
 
 
 def test_dry_run_result_cannot_claim_promotion_and_telemetry_is_registry_shape():
-    req = request(profile="production-lean", operation="promote", staging_evidence=identity("production-lean"))
-    errors = validate_result(req, {"status": "PROMOTED", "candidate_identity": identity("production-lean")})
+    req = request(profile="production", operation="promote", staging_evidence=identity("production"))
+    errors = validate_result(req, {"status": "PROMOTED", "candidate_identity": identity("production")})
     assert "dry-run cannot report a mutating result" in errors
     payload = operation_telemetry(req, {"status": "DRY_RUN"})
     registry = json.loads((ROOT / "config/telemetry_contracts.json").read_text())

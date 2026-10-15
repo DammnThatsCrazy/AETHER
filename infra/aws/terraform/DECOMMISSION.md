@@ -32,7 +32,7 @@ event**, not a diff to skim.
 ### How the rule is enforced
 
 The rule above used to be prose only — `prevent_destroy` appeared nowhere in
-this tree — so flipping `deployment_profile` to `production-lean` really did
+this tree — so flipping `deployment_profile` to `production` really did
 plan a destroy of `module.elasticache[0]`, `module.msk[0]` and
 `module.neptune[0]`, the last of them with `skip_final_snapshot = false` and
 its own KMS key. It is now enforced. Every profile-gated stateful resource, and
@@ -184,7 +184,7 @@ services reach steady state on the new placement before deleting the gateway.
 
 #### Unaffected
 
-A workspace that has **never** had NAT (a fresh `staging` or `production-lean`)
+A workspace that has **never** had NAT (a fresh `staging` or `production`)
 is unaffected by either remedy: it has no inline route to collide with and none
 to leave behind.
 
@@ -387,7 +387,7 @@ Close the ticket only after this number is recorded.
 
 ### Shared `environment` across the three production-class profiles
 
-`profiles/production-lean.tfvars`, `profiles/production-scale.tfvars` and
+`profiles/production.tfvars`, `profiles/production-scale.tfvars` and
 `profiles/enterprise-isolated.tfvars` do not set `environment`, so all three
 inherit the root default `"production"`. Only `profiles/staging.tfvars` sets it
 explicitly.

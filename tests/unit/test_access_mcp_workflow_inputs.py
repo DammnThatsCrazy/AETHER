@@ -15,7 +15,7 @@ import validate_access_mcp_inputs as validator  # noqa: E402
 
 def _validate(**overrides: object) -> None:
     values: dict[str, object] = {
-        "profile": "production-scale",
+        "profile": "production",
         "enable_repository": "true",
         "enable_service": "true",
         "image_digest": "sha256:" + "a" * 64,
@@ -93,9 +93,9 @@ def test_accepts_canonical_production_scale_deployment() -> None:
     )
 
 
-@pytest.mark.parametrize("profile", ["production-lean", "enterprise-isolated", "staging", "preview"])
+@pytest.mark.parametrize("profile", ["staging", "production-scale", "preview"])
 def test_rejects_noncanonical_repository_owner(profile: str) -> None:
-    with pytest.raises(ValueError, match="production-scale"):
+    with pytest.raises(ValueError, match="production state owner"):
         _validate(profile=profile, enable_service="false", image_digest="")
 
 

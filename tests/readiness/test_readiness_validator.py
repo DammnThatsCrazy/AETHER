@@ -137,7 +137,7 @@ def test_missing_denominator_fails():
 
 def test_production_required_without_ownership_fails():
     d = _base()
-    d["release_profiles"]["production-lean"] = {
+    d["release_profiles"]["production"] = {
         "participation": "required",
         "implementation_floor": "TURNKEY",
         "productionization_required": True,

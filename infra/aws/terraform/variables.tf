@@ -5,14 +5,14 @@
 variable "deployment_profile" {
   type        = string
   description = "Aether deployment profile driving cost/resource toggles (see config/deployment_profiles.yaml)."
-  default     = "production-lean"
+  default     = "production"
 
   validation {
     condition = contains(
-      ["staging", "production-lean", "production-scale", "enterprise-isolated", "demo", "preview"],
+      ["staging", "production"],
       var.deployment_profile,
     )
-    error_message = "Invalid Aether deployment profile."
+    error_message = "deployment_profile must be staging or production."
   }
 }
 
@@ -30,8 +30,8 @@ variable "deployment_lane" {
 }
 
 # Backend releases are always pinned to an immutable digest. The optional ML
-# digest is profile-gated below because staging and production-lean run ML
-# inline and do not provision a dedicated ML image.
+# digest is unused today because staging and production run ML inline and do
+# not provision a dedicated ML image.
 variable "backend_image_digest" {
   type        = string
   description = "Immutable backend image digest selected by the release manifest"
@@ -43,14 +43,11 @@ variable "backend_image_digest" {
 
 variable "ml_image_digest" {
   type        = string
-  description = "Immutable ML serving digest; optional when the selected profile runs ML inline"
+  description = "Immutable ML serving digest; empty while both profiles run ML inline"
   default     = ""
   validation {
-    condition = var.ml_image_digest != "" ? can(regex("^sha256:[0-9a-f]{64}$", var.ml_image_digest)) : contains(
-      ["staging", "production-lean", "demo", "preview"],
-      var.deployment_profile,
-    )
-    error_message = "ml_image_digest is required for production-scale and enterprise-isolated profiles and must be an immutable sha256 digest when provided."
+    condition     = var.ml_image_digest == "" || can(regex("^sha256:[0-9a-f]{64}$", var.ml_image_digest))
+    error_message = "ml_image_digest must be empty or an immutable sha256 digest."
   }
 }
 
@@ -60,10 +57,10 @@ variable "enable_access_mcp_repository" {
   default     = false
   validation {
     condition = !var.enable_access_mcp_repository || (
-      var.deployment_profile == "production-scale" &&
+      var.deployment_profile == "production" &&
       var.environment == "production"
     )
-    error_message = "The globally named aether-access-mcp ECR repository has one persistent owner: deployment_profile=production-scale and environment=production."
+    error_message = "The globally named aether-access-mcp ECR repository has one persistent owner: deployment_profile=production and environment=production."
   }
 }
 
@@ -74,11 +71,11 @@ variable "enable_access_mcp" {
   validation {
     condition = !var.enable_access_mcp || (
       var.enable_access_mcp_repository &&
-      var.deployment_profile == "production-scale" &&
+      var.deployment_profile == "production" &&
       var.environment == "production" &&
       can(regex("^sha256:[0-9a-f]{64}$", var.access_mcp_image_digest))
     )
-    error_message = "enable_access_mcp requires enable_access_mcp_repository=true, deployment_profile=production-scale, environment=production, and an immutable access_mcp_image_digest."
+    error_message = "enable_access_mcp requires enable_access_mcp_repository=true, deployment_profile=production, environment=production, and an immutable access_mcp_image_digest."
   }
 }
 
@@ -171,15 +168,15 @@ variable "access_mcp_allowed_origins" {
 
 variable "environment" {
   type        = string
-  description = "Deployment environment (production, staging, dev, demo, preview)"
+  description = "Deployment environment (production or staging)"
   default     = "production"
 
   validation {
     condition = contains(
-      ["production", "staging", "dev", "demo", "preview"],
+      ["production", "staging"],
       var.environment,
     )
-    error_message = "environment must be one of: production, staging, dev, demo, preview."
+    error_message = "environment must be one of: production, staging."
   }
 }
 
@@ -281,9 +278,8 @@ variable "network_egress_mode" {
   type        = string
   description = <<-EOT
     Outbound egress topology for ECS tasks. null = use the deployment profile
-    default (staging and production-lean: public_ip; production-scale:
-    single_nat; enterprise-isolated: ha_nat). Setting this to a NAT mode on a
-    cost-capped profile is the explicit opt-in that the
+    default (staging and production: public_ip). Setting this to a NAT mode is
+    the explicit opt-in that the
     `nat_gateway_unless_explicit` policy in config/deployment_profiles.yaml
     requires. vpc_endpoints and none both provision zero NAT Gateways.
   EOT
@@ -446,8 +442,8 @@ variable "msk_broker_volume_size" {
 # ecs_backend_memory / ecs_backend_min_capacity / ecs_backend_max_capacity
 # variables were a second, silently divergent source of truth for the same four
 # numbers: their defaults (1024/2048/1/10) disagreed with the matrix's
-# production-scale api (2048/4096/3/12) and no tfvars file set them, so a scale
-# apply quietly ran the reviewed capacity of a lean one. Only the ML serving
+# old larger api sizing and no tfvars file set them, so an apply quietly ran a
+# different capacity than the one reviewed. Only the ML serving
 # task, which the matrix does not describe, is still sized by variable.
 
 variable "ecs_ml_cpu" {

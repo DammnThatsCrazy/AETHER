@@ -10,7 +10,7 @@ function caps(
   return {
     tenant_id: 't',
     release: {
-      deployment_profile: 'production-lean',
+      deployment_profile: 'production',
       environment: 'production',
       release_class: 'production',
       enforcement: {

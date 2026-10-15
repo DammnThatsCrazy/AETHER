@@ -1,92 +1,87 @@
 # ============================================================================
 # AETHER — Deployment Profile Locals
 #
-# Derives resource/cost toggles from `var.deployment_profile`. The canonical
-# policy DATA lives in config/deployment_profiles.yaml; production-lean's
-# cost_policy.required_resources / .forbidden_resources are the source of
-# truth. These locals encode that policy at the Terraform layer AND are wired
-# into module `count` and module inputs by main.tf, so a production-lean plan
-# structurally cannot contain a forbidden resource — it is no longer merely
-# documented as excluded.
+# Derives resource/cost toggles from `var.deployment_profile`, which is one of
+# two values: `staging` or `production`. The canonical policy DATA lives in
+# config/deployment_profiles.yaml; production's cost_policy.required_resources
+# and .forbidden_resources are the source of truth. These locals encode that
+# policy at the Terraform layer AND are wired into module `count` and module
+# inputs by main.tf, so a production plan structurally cannot contain a
+# forbidden resource — it is not merely documented as excluded.
 #
 # config/terraform_resource_contracts.yaml maps each canonical policy key to
 # the module address and expected cardinality these locals produce, so a plan
 # JSON can be checked against the policy without re-deriving it here.
 #
-# Cost invariant: for production-lean, EVERY forbidden-resource toggle below is
-# false. Each one is a closed boolean expression over lean/scale/enterprise/
-# staging (or the literal `false`) so that
-# scripts/release/check_cost_policy_terraform.py can statically evaluate it.
+# HOW PRODUCTION GROWS. Production is sized by capacity inputs, not by a profile
+# switch: ECS task counts and sizes in config/runtime_deployment.yaml and the
+# Aurora capacity range in profiles/production.tfvars. A heavy backend (Redis,
+# Kafka, Neptune, ClickHouse, a dedicated ML service, a NAT gateway) is added
+# only when a measured bottleneck justifies it, as a reviewed change that flips
+# its toggle below together with the matching cost policy and budget. The
+# modules under modules/ stay in the repository for that day.
+#
+# Cost invariant: for production, EVERY forbidden-resource toggle below is false.
+# Each is the literal `false` (or a closed boolean expression over the profile
+# locals) so scripts/release/check_cost_policy_terraform.py can statically
+# evaluate it.
 # ============================================================================
 
 locals {
-  lean       = var.deployment_profile == "production-lean"
-  scale      = var.deployment_profile == "production-scale"
-  enterprise = var.deployment_profile == "enterprise-isolated"
+  production = var.deployment_profile == "production"
   staging    = var.deployment_profile == "staging"
-  demo       = var.deployment_profile == "demo"
-  preview    = var.deployment_profile == "preview"
-
-  # Ephemeral-class profiles (demo/preview) share the same resource posture as
-  # staging: cost-capped, no heavy managed backends, and a default egress mode
-  # that provisions no NAT Gateway.
-  ephemeral = local.demo || local.preview
 
   # --------------------------------------------------------------------------
-  # Forbidden-for-lean toggles (config/deployment_profiles.yaml →
-  # production-lean.cost_policy.forbidden_resources)
+  # Forbidden toggles (config/deployment_profiles.yaml → production
+  # .cost_policy.forbidden_resources)
   # --------------------------------------------------------------------------
 
-  # Heavy managed backends. Only the two uncapped profiles list these under
-  # `may_enable`, so only they may provision them.
-  enable_elasticache = local.scale || local.enterprise
-  enable_msk         = local.scale || local.enterprise
-  enable_neptune     = local.scale || local.enterprise
+  # Heavy managed backends. Neither profile provisions them.
+  enable_elasticache = false
+  enable_msk         = false
+  enable_neptune     = false
 
-  # ClickHouse is a selector today: production-scale / enterprise-isolated
-  # declare `analytics: clickhouse`, but this root provisions no ClickHouse
-  # resource yet. The toggle drives local.analytics_backend only.
-  enable_clickhouse = local.scale || local.enterprise
+  # ClickHouse is a selector today: this root provisions no ClickHouse
+  # resource. The toggle drives local.analytics_backend only.
+  enable_clickhouse = false
 
   # Dedicated ML serving. Mirrors config/runtime_deployment.yaml `remote_ml`,
-  # which is true for exactly production-scale and enterprise-isolated.
-  enable_dedicated_ml = local.scale || local.enterprise
+  # which is false for both profiles: the semantic classifier runs inline.
+  enable_dedicated_ml = false
 
-  # NAT is "forbidden unless explicit" for lean. This toggle is the PROFILE
-  # DEFAULT posture and is false for the cost-capped profiles; an operator opts
-  # in explicitly through var.network_egress_mode, which is precisely what
-  # "unless explicit" means. The effective topology is local.nat_mode below.
-  enable_nat_gateway = local.scale || local.enterprise
+  # NAT is "forbidden unless explicit". This toggle is the PROFILE DEFAULT
+  # posture and is false; an operator opts in explicitly through
+  # var.network_egress_mode, which is precisely what "unless explicit" means.
+  # The effective topology is local.nat_mode below.
+  enable_nat_gateway = false
 
   # Frontends are immutable S3 origins fronted by a CDN in every profile —
-  # this root runs no ECS-hosted frontend service at any profile, so the exact
-  # derivation is `false`, not `scale || enterprise`.
+  # this root runs no ECS-hosted frontend service, so the exact derivation is
+  # `false`.
   enable_frontend_ecs = false
 
   # Observability is CloudWatch-native in every profile. Aether runs no
-  # self-managed Prometheus/Grafana servers at any tier.
+  # self-managed Prometheus/Grafana servers.
   enable_prometheus_grafana = false
 
-  # Legacy RDS Postgres. Aurora Serverless v2 is the database of record in all
-  # four profiles; RDS is retained in code only as an importable rollback
-  # target and is never provisioned by a fresh plan. See DECOMMISSION.md.
+  # Legacy RDS Postgres. Aurora Serverless v2 is the database of record in both
+  # profiles; RDS is retained in code only as an importable rollback target and
+  # is never provisioned by a fresh plan. See DECOMMISSION.md.
   enable_legacy_rds = false
 
   # --------------------------------------------------------------------------
-  # Required-for-lean toggles (…cost_policy.required_resources)
+  # Required toggles (…cost_policy.required_resources)
   # --------------------------------------------------------------------------
 
   # Aurora Serverless v2 is the database of record for every deployable
-  # profile — all four declare `database: aurora_postgres`.  skip_aurora
-  # lets a free-tier account bypass Aurora provisioning (the API parameter
-  # WithExpressConfiguration forces Internet Access Gateway, incompatible
-  # with the VPC topology) while still validating the rest of the stack.
+  # profile.  skip_aurora lets a free-tier account bypass Aurora provisioning
+  # (the API parameter WithExpressConfiguration forces Internet Access Gateway,
+  # incompatible with the VPC topology) while still validating the rest of the
+  # stack.
   enable_aurora = !var.skip_aurora
 
-  # Pay-per-use substrate. Held on for every profile: SQS/SNS and the DynamoDB
-  # cache table cost effectively nothing at rest, they are the lean required
-  # backends, and keeping them provisioned at scale makes a rollback off
-  # Kafka/Redis a selector flip rather than a re-provision.
+  # Pay-per-use substrate. SQS/SNS and the DynamoDB cache table cost
+  # effectively nothing at rest and are the required backends.
   enable_sqs_sns        = true
   enable_dynamodb_cache = true
 
@@ -96,7 +91,7 @@ locals {
   # Provider-credential CMK creation is driven by the root
   # `enable_credential_kms` variable (default true), not a local — the tftest
   # apply run passes false so its throwaway apply can tear down cleanly while
-  # the six plan runs keep asserting the key is present.
+  # the plan runs keep asserting the key is present.
 
   # Static SPA origins, read from the canonical runtime matrix rather than
   # re-derived, so a profile that drops static frontends fails the plan test.
@@ -117,21 +112,12 @@ locals {
   #
   # The profile default is the reviewed posture; var.network_egress_mode is the
   # explicit override that the `nat_gateway_unless_explicit` policy requires an
-  # operator to set before a cost-capped profile may run a NAT Gateway.
-  # profiles/*.tfvars pin the default explicitly so a plan is self-describing.
+  # operator to set before a profile may run a NAT Gateway. profiles/*.tfvars
+  # pin the default explicitly so a plan is self-describing.
   # --------------------------------------------------------------------------
 
-  # Ephemeral-class profiles default to public_ip like staging/production-lean:
-  # all four are cost-capped and must not provision a NAT Gateway. The explicit
-  # ephemeral arm is deliberate — a future ephemeral egress change must not be
-  # able to silently add NAT to a cost-capped profile.
-  default_network_egress_mode = (
-    local.enterprise ? "ha_nat" :
-    local.scale ? "single_nat" :
-    local.ephemeral ? "public_ip" :
-    "public_ip" # staging + production-lean
-  )
-  network_egress_mode = coalesce(var.network_egress_mode, local.default_network_egress_mode)
+  default_network_egress_mode = "public_ip" # staging + production
+  network_egress_mode         = coalesce(var.network_egress_mode, local.default_network_egress_mode)
 
   # modules/vpc speaks nat_mode; only the two NAT modes create a gateway.
   nat_mode = (
@@ -234,7 +220,7 @@ locals {
   }
 
   # The API service's own baseline, from the same matrix rather than a
-  # separate variable, so `production-lean: 1` is expressed in exactly one
+  # separate variable, so `production: 1` is expressed in exactly one
   # place and staging_state drives the API to zero along with the workers.
   api_service       = local.runtime_profile.services["api"]
   api_desired_count = local.api_service.desired_count * local.staging_state_multiplier

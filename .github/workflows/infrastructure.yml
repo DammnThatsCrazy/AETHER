@@ -91,7 +91,7 @@ jobs:
             || { echo '::error::expected_commit_sha input must be a 40-character lowercase commit SHA'; exit 1; }
           missing=()
           # TF_ML_IMAGE_DIGEST is profile-specific: staging and
-          # production-lean run inline ML and do not require a serving image.
+          # production run inline ML and do not require a serving image.
           # Dedicated ML profiles validate it in their matrix job below.
           for name in \
             AWS_INFRA_ROLE_ARN \
@@ -143,11 +143,7 @@ jobs:
       matrix:
         profile:
           - staging
-          - production-lean
-          - production-scale
-          - enterprise-isolated
-          - demo
-          - preview
+          - production
     defaults:
       run:
         working-directory: infra/aws/terraform
@@ -233,13 +229,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # demo/preview are ephemeral-class and deliberately excluded from
-        # remote-plan.
         profile:
           - staging
-          - production-lean
-          - production-scale
-          - enterprise-isolated
+          - production
     defaults:
       run:
         working-directory: infra/aws/terraform
@@ -432,12 +424,6 @@ jobs:
               *) echo "::error::deployment_lane must be pilot or full, got $DEPLOYMENT_LANE"; exit 1 ;;
             esac
             plan_args+=("-var=deployment_lane=${DEPLOYMENT_LANE}")
-          fi
-          if [[ "$PROFILE" == production-scale || "$PROFILE" == enterprise-isolated ]]; then
-            test -n "${TF_VAR_ml_image_digest:-}" \
-              || { echo "::error::${PROFILE} requires TF_ML_IMAGE_DIGEST because remote_ml is enabled"; exit 1; }
-            printf '%s' "$TF_VAR_ml_image_digest" | grep -Eq '^sha256:[0-9a-f]{64}$' \
-              || { echo "::error::${PROFILE} requires an immutable sha256 ML image digest"; exit 1; }
           fi
           terraform plan "${plan_args[@]}" -out="tfplan-${PROFILE}"
           # The human-readable rendering redacts sensitive values itself and

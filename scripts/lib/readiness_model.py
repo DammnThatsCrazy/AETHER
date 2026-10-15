@@ -788,7 +788,7 @@ def _terminal_eligibility(
         if scale and scale.state == "VERIFIED":
             return "SCALE_VERIFIED"
         return "PRODUCTION_ELIGIBLE"
-    if spec.id == "production-lean":
+    if spec.id == "production":
         prod = feature.environment_evidence.get("production")
         if prod and prod.state == "VERIFIED":
             return "LIVE_VERIFIED"

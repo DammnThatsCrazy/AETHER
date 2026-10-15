@@ -25,7 +25,7 @@ source_files:
   - services/api/config/settings.py
   - packages/shared/managed-integrations.ts
 source_hashes:
-  "config/route_registry.yaml": "sha256:2430634b1aa14eb8f0f574c52ad1bc4bf07428b32ab286c63ad3b341d244f551"
+  "config/route_registry.yaml": "sha256:0bcf541b56a982ada9a204d091d8125fa9aa6f1675d982918ea683de2b23d76a"
   "packages/shared/managed-integrations.ts": "sha256:1277aae12c27f222f7358c793d71bfa0a8e34c07354de88bb48dff5126a55b25"
   "scripts/validate_sdk_control_plane_seam.py": "sha256:321dbeec981f9542054e4be9c70f804414b027befeeb11d5eef4342f6c25f3af"
   "services/api/alembic/versions/20260906_rcp_admission.py": "sha256:ac836b9f4fc08cb325444f9447689efc05031157e0b52d7dc2402d04b7514a1e"

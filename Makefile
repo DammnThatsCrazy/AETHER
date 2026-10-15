@@ -34,8 +34,8 @@
         validate-route-registry validate-implementation-ledger validate-reference-packs \
         validate-storage-policies audit-readiness-check founding-tenant-release-gate validate-founding-tenant-surface runtime-readiness-gate integration-durable integration-faults \
         validate-terraform-profile-policy validate-cost-model test-terraform-profiles test-runtime-topology \
-        test-workflow-controls test-cost-model test-staging-lifecycle test-ephemeral-lifecycle test-plan-policy \
-        deployment-readiness-score collect-deployment-evidence deployment-profile-gate validate-staging-budget validate-ephemeral-budget
+        test-workflow-controls test-cost-model test-staging-lifecycle test-ttl-guard test-plan-policy \
+        deployment-readiness-score collect-deployment-evidence deployment-profile-gate validate-staging-budget
 
 # Centralized subsystem paths — single place to rename if directories move.
 BACKEND_DIR := services/api
@@ -872,10 +872,10 @@ validate-profile-config: ## Validate deployment-profile matrix + founding-tenant
 validate-profile-parity: ## Cross-source profile parity (docs count, cloud subset, terraform, contracts, env templates)
 	$(GATE_PY) scripts/release/check_profile_parity.py
 
-validate-cost-policy: ## Validate production-lean cost policy (forbidden/required resources)
+validate-cost-policy: ## Validate production cost policy (forbidden/required resources)
 	$(GATE_PY) scripts/release/check_cost_policy.py
 
-validate-cost-policy-terraform: ## Validate Terraform locals/profiles honor the production-lean cost policy
+validate-cost-policy-terraform: ## Validate Terraform locals/profiles honor the production cost policy
 	$(GATE_PY) scripts/release/check_cost_policy_terraform.py
 
 validate-profile-doctor: ## Per-profile readiness doctor (§27) + deployment certificate (§28); no cloud profile may fall below credential_waiting
@@ -894,8 +894,8 @@ validate-profile-doctor: ## Per-profile readiness doctor (§27) + deployment cer
 
 # PLAN_JSON defaults to the committed lean fixture so the gate is runnable with
 # no AWS credentials. CI overrides it with a credentialed `terraform show -json`.
-PLAN_PROFILE ?= production-lean
-PLAN_JSON    ?= tests/fixtures/terraform_plans/production-lean-valid.json
+PLAN_PROFILE ?= production
+PLAN_JSON    ?= tests/fixtures/terraform_plans/production-valid.json
 
 validate-terraform-profile-policy: ## Prove a Terraform plan matches its profile's required/forbidden resources
 	$(GATE_PY) scripts/release/check_terraform_plan_policy.py \
@@ -909,7 +909,7 @@ validate-cost-model: ## Price a plan inventory against the profile's numeric bud
 
 # Staging has its own budget (target 25 / hard 50 against a 40h awake month) and
 # its own usage scenario. It was previously exercised only by unit tests, because
-# every gate ran PLAN_PROFILE=production-lean and the only caller of the staging
+# every gate ran PLAN_PROFILE=production and the only caller of the staging
 # path needed AWS credentials — so a staging budget regression could not surface
 # offline. Both wake states are gated here: asleep is where "no always-on staging
 # compute" is actually provable.
@@ -926,25 +926,6 @@ validate-staging-budget: ## Plan-policy + cost gate for staging, awake and aslee
 	$(GATE_PY) scripts/release/check_cost_model.py --profile staging \
 		--inventory .artifacts/staging-asleep/profile-resource-inventory.json \
 		--out-dir docs/reference/reports/cost/staging-asleep
-
-# demo and preview are the ephemeral-class profiles. They share staging's
-# consolidated footprint (so the fixtures clone staging-awake) but are
-# cost-capped against their OWN FIXED budgets, not staging's awake-hours budget
-# or production-lean's. This target prices both so a budget regression in the
-# ephemeral class surfaces offline, with no AWS credentials.
-validate-ephemeral-budget: ## Plan-policy + cost gate for demo and preview, off their committed fixtures
-	$(GATE_PY) scripts/release/check_terraform_plan_policy.py --profile demo \
-		--plan-json tests/fixtures/terraform_plans/demo-valid.json \
-		--out-dir .artifacts/demo
-	$(GATE_PY) scripts/release/check_cost_model.py --profile demo \
-		--inventory .artifacts/demo/profile-resource-inventory.json \
-		--out-dir docs/reference/reports/cost/demo
-	$(GATE_PY) scripts/release/check_terraform_plan_policy.py --profile preview \
-		--plan-json tests/fixtures/terraform_plans/preview-valid.json \
-		--out-dir .artifacts/preview
-	$(GATE_PY) scripts/release/check_cost_model.py --profile preview \
-		--inventory .artifacts/preview/profile-resource-inventory.json \
-		--out-dir docs/reference/reports/cost/preview
 
 test-terraform-profiles: ## Provider-mocked plan tests asserting per-profile module cardinality
 	cd "$(TF_DIR)" && \
@@ -966,7 +947,7 @@ test-cost-model: ## Cost-model unit tests (ceilings, fail-closed pricing, except
 test-staging-lifecycle: ## Staging wake/sleep + TTL guard structural controls
 	$(GATE_PY) -m pytest tests/unit/test_staging_lifecycle_controls.py -q
 
-test-ephemeral-lifecycle: ## Ephemeral TTL guard + provision/teardown ops unit tests
+test-ttl-guard: ## TTL lease guard unit tests (the lease logic staging wake/sleep uses)
 	$(GATE_PY) -m pytest tests/unit/test_ephemeral_ttl_guard.py -q
 
 test-plan-policy: ## Plan-policy validator against the pass/fail plan fixtures
@@ -996,7 +977,7 @@ deployment-profile-gate: ## Every deployment-profile gate that runs without AWS 
 	$(MAKE) deployment-readiness-score
 	$(MAKE) validate-profile-doctor
 
-resolved-feature-flags: ## Validate explicit staging and production-lean feature-flag resolutions
+resolved-feature-flags: ## Validate explicit staging and production feature-flag resolutions
 	$(VENV_PY) scripts/release/check_resolved_feature_flags.py --all
 
 validate-delivery-topology: ## Validate immutable delivery and profile-to-role topology

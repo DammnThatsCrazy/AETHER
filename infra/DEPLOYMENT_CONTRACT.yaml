@@ -36,7 +36,7 @@ turnkey_definition: >
 # ---------------------------------------------------------------------------
 infrastructure_provisioning:
   kafka_topics:
-    selector: "event_broker == kafka (production-scale / enterprise-isolated)"
+    selector: "event_broker == kafka (not enabled by any committed profile; a reviewed opt-in)"
     module: "infra/aws/terraform/modules/kafka_topic_provisioner"
     registry_source: "shared/events/events.py Topic enum -> infra/kafka/topics.json (regeneration drift-tested)"
     mechanism: >
@@ -52,7 +52,7 @@ infrastructure_provisioning:
     deployment_blockers: []    # none code-side; depends only on MSK being reachable
 
   clickhouse:
-    selector: "analytics_backend == clickhouse (production-scale / enterprise-isolated)"
+    selector: "analytics_backend == clickhouse (not enabled by any committed profile; a reviewed opt-in)"
     module: "infra/aws/terraform/modules/clickhouse (self-managed EC2 + EBS)"
     endpoints:
       native: "CLICKHOUSE_HOST:9000 (TCP, runtime protocol)"
@@ -69,7 +69,7 @@ infrastructure_provisioning:
       - "appliance and disk carry lifecycle.prevent_destroy; retiring analytics state is a documented release-from-state procedure"
 
   dns_tls_and_webhooks:
-    selector: "every cloud profile (staging/production-scale/enterprise-isolated)"
+    selector: "every cloud profile (staging/production)"
     required_terraform_root_variables:   # no defaults; plan fails until supplied
       - acm_certificate_arn
       - domain_name

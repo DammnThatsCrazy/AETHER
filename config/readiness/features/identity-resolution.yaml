@@ -20,7 +20,7 @@ scope:
   excluded:
     - cross-tenant graph federation
   deferred: []
-  release_profile_applicability: [local, staging, production-lean]
+  release_profile_applicability: [local, staging, production]
 
 repository_ceiling:
   type: VERIFIED
@@ -134,7 +134,7 @@ release_profiles:
     productionization_required: true
     environment_gate: pilot
     business_gate: false
-  production-lean:
+  production:
     participation: required
     implementation_floor: TURNKEY
     productionization_required: true

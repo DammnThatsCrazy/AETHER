@@ -6,9 +6,11 @@ consolidation must never break:
 
   * every role in ``roles.py::WORKER_ROLES`` is hosted by EXACTLY ONE service in
     EVERY profile — never orphaned, never claimed twice;
-  * the packing itself: lean/staging collapse to two tasks, scale/enterprise
-    keep one task per role, and staging can be driven to zero desired tasks
-    without changing which service owns what.
+  * the packing itself: production and staging collapse to two tasks, and
+    staging can be driven to zero desired tasks without changing which service
+    owns what. The `dedicated` shape (one task per role) is no longer a committed
+    profile but stays supported by the validator, so it is covered here with a
+    synthetic profile built from the committed one.
 
 The negative cases build malformed profiles inline and assert the validator
 rejects them *for the specific reason* — a test that passes because everything
@@ -34,8 +36,8 @@ import check_delivery_topology as topo  # noqa: E402
 
 CONFIG = ROOT / "config" / "runtime_deployment.yaml"
 WORKER_ROLE_COUNT = 8
-CONSOLIDATED = ("staging", "production-lean", "demo", "preview")
-DEDICATED = ("production-scale", "enterprise-isolated")
+CONSOLIDATED = ("staging", "production")
+DEDICATED_EXAMPLE = "dedicated-example"
 
 
 def _matrix() -> dict:
@@ -54,20 +56,45 @@ def _lean_worker_service(profile: dict) -> dict:
     return profile["services"]["lean-worker"]
 
 
+def _dedicated_profile() -> dict:
+    """A synthetic dedicated topology: api plus one service per worker role.
+
+    No committed profile is dedicated; this is the shape the validator must keep
+    accepting for the day a role is split out. Interruptible roles surge onto
+    Spot, the protected ones (api, outbox-relay) never do.
+    """
+    profile = _profile("production")
+    lean = profile["services"].pop("lean-worker")
+    profile["execution_mode"] = "dedicated"
+    for role in _consts()["WORKER_ROLES"]:
+        service = copy.deepcopy(lean)
+        service["roles"] = [role]
+        surge = "FARGATE" if role in topo.SPOT_FORBIDDEN_ROLES else "FARGATE_SPOT"
+        service["capacity_provider"] = {"base": "FARGATE", "base_count": 1, "surge": surge}
+        profile["services"][role] = service
+    return profile
+
+
+@pytest.fixture
+def dedicated_mode(monkeypatch):
+    monkeypatch.setitem(topo.PROFILE_MODES, DEDICATED_EXAMPLE, "dedicated")
+    return DEDICATED_EXAMPLE
+
+
 # ── the committed matrix ─────────────────────────────────────────────────────
 def test_schema_is_version_two():
     assert _matrix()["schema_version"] == 2
 
 
 def test_production_lean_deploys_exactly_two_services():
-    services = _profile("production-lean")["services"]
+    services = _profile("production")["services"]
     assert sorted(services) == ["api", "lean-worker"]
     assert sum(s["desired_count"] for s in services.values()) == 2
 
 
 def test_production_lean_worker_hosts_every_worker_role():
     consts = _consts()
-    hosted = set(_lean_worker_service(_profile("production-lean"))["roles"])
+    hosted = set(_lean_worker_service(_profile("production"))["roles"])
     assert hosted == set(consts["WORKER_ROLES"])
     assert len(hosted) == WORKER_ROLE_COUNT
 
@@ -84,23 +111,12 @@ def test_lean_worker_key_is_a_real_execution_group_token():
 def test_lean_worker_is_sized_above_a_single_role_task():
     # One task now hosts eight roles; it must not inherit the 512/1024 that a
     # single dedicated worker had.
-    lean = _lean_worker_service(_profile("production-lean"))
+    lean = _lean_worker_service(_profile("production"))
     assert lean["cpu"] >= 2048
     assert lean["memory"] >= 4096
 
 
-@pytest.mark.parametrize("name", DEDICATED)
-def test_scale_and_enterprise_keep_eight_dedicated_workers_plus_api(name):
-    services = _profile(name)["services"]
-    assert _profile(name)["execution_mode"] == "dedicated"
-    workers = {svc: cfg for svc, cfg in services.items() if svc != "api"}
-    assert len(workers) == WORKER_ROLE_COUNT
-    assert "api" in services
-    # Dedicated means 1:1 — each service hosts only the role it is named for.
-    assert all(cfg["roles"] == [svc] for svc, cfg in workers.items())
-
-
-@pytest.mark.parametrize("name", CONSOLIDATED + DEDICATED)
+@pytest.mark.parametrize("name", CONSOLIDATED)
 def test_every_worker_role_is_owned_exactly_once_per_profile(name):
     consts = _consts()
     owners: dict[str, list[str]] = {}
@@ -113,9 +129,41 @@ def test_every_worker_role_is_owned_exactly_once_per_profile(name):
     assert "all" not in owners
 
 
-@pytest.mark.parametrize("name", CONSOLIDATED + DEDICATED)
+@pytest.mark.parametrize("name", CONSOLIDATED)
 def test_committed_profile_has_no_topology_errors(name):
     assert topo.topology_errors(name, _profile(name), _consts()) == []
+
+
+def test_every_committed_profile_has_a_pinned_execution_mode():
+    assert sorted(_matrix()["profiles"]) == sorted(topo.PROFILE_MODES)
+    assert set(topo.PROFILE_MODES.values()) == {"consolidated"}
+
+
+# ── the dedicated shape stays supported (synthetic profile) ──────────────────
+def test_a_dedicated_profile_keeps_one_service_per_worker_role_plus_api(dedicated_mode):
+    profile = _dedicated_profile()
+    workers = {svc: cfg for svc, cfg in profile["services"].items() if svc != "api"}
+    assert len(workers) == WORKER_ROLE_COUNT
+    assert all(cfg["roles"] == [svc] for svc, cfg in workers.items())
+    assert topo.topology_errors(dedicated_mode, profile, _consts()) == []
+
+
+def test_double_owned_role_names_both_owning_services(dedicated_mode):
+    profile = _dedicated_profile()
+    profile["services"]["materializer"]["roles"].append("maintenance")
+    errors = topo.role_ownership_errors(dedicated_mode, profile["services"], _consts())
+    assert errors == [f"ROLE_DOUBLE_OWNED:{dedicated_mode}:maintenance:maintenance+materializer"]
+
+
+def test_dedicated_profile_rejects_a_consolidated_service(dedicated_mode):
+    profile = _dedicated_profile()
+    consts = _consts()
+    for role in consts["WORKER_ROLES"]:
+        profile["services"].pop(role)
+    profile["services"]["lean-worker"] = {"roles": sorted(consts["WORKER_ROLES"])}
+    errors = topo.execution_shape_errors(dedicated_mode, profile, consts)
+    assert f"DEDICATED_SERVICE_IS_A_GROUP:{dedicated_mode}:lean-worker" in errors
+    assert any(e.startswith(f"DEDICATED_SERVICE_MISSING:{dedicated_mode}:") for e in errors)
 
 
 # ── staging lifecycle ────────────────────────────────────────────────────────
@@ -169,8 +217,8 @@ def test_unknown_lifecycle_state_raises_instead_of_defaulting_to_awake():
 
 
 def test_production_lean_declares_no_lifecycle_states():
-    # Only staging may be slept; production-lean's counts stand as written.
-    profile = _profile("production-lean")
+    # Only staging may be slept; production's counts stand as written.
+    profile = _profile("production")
     assert "staging_state" not in profile
     assert topo.resolve_services(profile)["api"]["desired_count"] == 1
 
@@ -189,158 +237,139 @@ def test_staging_lifecycle_default_must_be_the_running_state():
 
 # ── negative cases: each must fail for its own specific reason ───────────────
 def test_orphaned_role_is_reported_by_name():
-    profile = _profile("production-lean")
+    profile = _profile("production")
     _lean_worker_service(profile)["roles"].remove("semantic-worker")
-    errors = topo.role_ownership_errors("production-lean", profile["services"], _consts())
-    assert errors == ["ROLE_ORPHANED:production-lean:semantic-worker"]
-
-
-def test_double_owned_role_names_both_owning_services():
-    profile = _profile("production-scale")
-    profile["services"]["materializer"]["roles"].append("maintenance")
-    errors = topo.role_ownership_errors("production-scale", profile["services"], _consts())
-    assert errors == ["ROLE_DOUBLE_OWNED:production-scale:maintenance:maintenance+materializer"]
+    errors = topo.role_ownership_errors("production", profile["services"], _consts())
+    assert errors == ["ROLE_ORPHANED:production:semantic-worker"]
 
 
 def test_local_only_all_role_is_never_deployable():
-    profile = _profile("production-lean")
+    profile = _profile("production")
     _lean_worker_service(profile)["roles"].append("all")
-    errors = topo.role_ownership_errors("production-lean", profile["services"], _consts())
-    assert errors == ["ROLE_ALL_DEPLOYED:production-lean:lean-worker"]
+    errors = topo.role_ownership_errors("production", profile["services"], _consts())
+    assert errors == ["ROLE_ALL_DEPLOYED:production:lean-worker"]
 
 
 def test_service_may_not_host_a_group_token_instead_of_member_roles():
-    profile = _profile("production-lean")
+    profile = _profile("production")
     _lean_worker_service(profile)["roles"] = ["lean-worker"]
-    errors = topo.role_ownership_errors("production-lean", profile["services"], _consts())
-    assert "ROLE_IS_EXECUTION_GROUP:production-lean:lean-worker:lean-worker" in errors
+    errors = topo.role_ownership_errors("production", profile["services"], _consts())
+    assert "ROLE_IS_EXECUTION_GROUP:production:lean-worker:lean-worker" in errors
     # …and the eight roles it should have hosted are now orphaned, by name.
     assert sum(e.startswith("ROLE_ORPHANED:") for e in errors) == WORKER_ROLE_COUNT
 
 
 def test_unknown_role_name_is_rejected():
-    profile = _profile("production-lean")
+    profile = _profile("production")
     _lean_worker_service(profile)["roles"].append("quantum-worker")
-    errors = topo.role_ownership_errors("production-lean", profile["services"], _consts())
-    assert errors == ["ROLE_UNKNOWN:production-lean:lean-worker:quantum-worker"]
+    errors = topo.role_ownership_errors("production", profile["services"], _consts())
+    assert errors == ["ROLE_UNKNOWN:production:lean-worker:quantum-worker"]
 
 
 def test_api_service_may_not_host_a_worker_role():
-    profile = _profile("production-lean")
+    profile = _profile("production")
     profile["services"]["api"]["roles"] = ["api", "stream-worker"]
-    errors = topo.api_ownership_errors("production-lean", profile["services"], _consts())
-    assert "API_HOSTS_WORKER_ROLES:production-lean:stream-worker" in errors
+    errors = topo.api_ownership_errors("production", profile["services"], _consts())
+    assert "API_HOSTS_WORKER_ROLES:production:stream-worker" in errors
     # stream-worker is consumer-attached, so the consumer rule fires too.
-    assert "API_HOSTS_CONSUMERS:production-lean:stream-worker" in errors
+    assert "API_HOSTS_CONSUMERS:production:stream-worker" in errors
 
 
 def test_api_must_stay_explicitly_public():
-    profile = _profile("production-lean")
+    profile = _profile("production")
     profile["services"]["api"]["public"] = False
     assert topo.api_ownership_errors(
-        "production-lean", profile["services"], _consts()) == ["API_NOT_PUBLIC:production-lean"]
+        "production", profile["services"], _consts()) == ["API_NOT_PUBLIC:production"]
 
 
 def test_execution_group_service_must_host_the_whole_group():
-    profile = _profile("production-lean")
+    profile = _profile("production")
     _lean_worker_service(profile)["roles"] = ["outbox-relay", "maintenance"]
-    errors = topo.execution_shape_errors("production-lean", profile, _consts())
+    errors = topo.execution_shape_errors("production", profile, _consts())
     assert errors == [
-        "GROUP_MEMBERSHIP_DRIFT:production-lean:lean-worker:"
+        "GROUP_MEMBERSHIP_DRIFT:production:lean-worker:"
         "missing=graph-writer,identity-worker,materializer,measurement-worker,"
         "semantic-worker,stream-worker:extra=-"
     ]
 
 
 def test_consolidated_profile_rejects_a_loose_dedicated_service():
-    profile = _profile("production-lean")
+    profile = _profile("production")
     _lean_worker_service(profile)["roles"].remove("maintenance")
     profile["services"]["maintenance"] = {"roles": ["maintenance"], "desired_count": 1}
-    errors = topo.execution_shape_errors("production-lean", profile, _consts())
-    assert "CONSOLIDATED_SERVICE_NOT_A_GROUP:production-lean:maintenance" in errors
+    errors = topo.execution_shape_errors("production", profile, _consts())
+    assert "CONSOLIDATED_SERVICE_NOT_A_GROUP:production:maintenance" in errors
     assert any(e.startswith("GROUP_MEMBERSHIP_DRIFT:") for e in errors)
 
 
-def test_dedicated_profile_rejects_a_consolidated_service():
-    profile = _profile("production-scale")
-    consts = _consts()
-    for role in consts["WORKER_ROLES"]:
-        profile["services"].pop(role)
-    profile["services"]["lean-worker"] = {"roles": sorted(consts["WORKER_ROLES"])}
-    errors = topo.execution_shape_errors("production-scale", profile, consts)
-    assert "DEDICATED_SERVICE_IS_A_GROUP:production-scale:lean-worker" in errors
-    assert any(e.startswith("DEDICATED_SERVICE_MISSING:production-scale:") for e in errors)
-
-
 def test_declared_execution_mode_must_match_the_profile_contract():
-    profile = _profile("production-lean")
+    profile = _profile("production")
     profile["execution_mode"] = "dedicated"
-    errors = topo.execution_shape_errors("production-lean", profile, _consts())
-    assert "EXECUTION_MODE:production-lean:expected=consolidated:actual=dedicated" in errors
+    errors = topo.execution_shape_errors("production", profile, _consts())
+    assert "EXECUTION_MODE:production:expected=consolidated:actual=dedicated" in errors
 
 
 def test_service_key_must_be_a_bootable_role_token():
-    profile = _profile("production-lean")
+    profile = _profile("production")
     profile["services"]["workers"] = profile["services"].pop("lean-worker")
-    errors = topo.execution_shape_errors("production-lean", profile, _consts())
-    assert "SERVICE_TOKEN_UNKNOWN:production-lean:workers" in errors
+    errors = topo.execution_shape_errors("production", profile, _consts())
+    assert "SERVICE_TOKEN_UNKNOWN:production:workers" in errors
 
 
 # ── capacity policy ──────────────────────────────────────────────────────────
 def test_spot_is_rejected_on_the_outbox_delivery_path():
-    profile = _profile("production-scale")
+    profile = _dedicated_profile()
     profile["services"]["outbox-relay"]["capacity_provider"]["surge"] = "FARGATE_SPOT"
-    errors = topo.capacity_errors("production-scale", profile["services"])
-    assert errors == ["SPOT_ON_PROTECTED_ROLE:production-scale:outbox-relay:outbox-relay"]
+    errors = topo.capacity_errors(DEDICATED_EXAMPLE, profile["services"])
+    assert errors == [f"SPOT_ON_PROTECTED_ROLE:{DEDICATED_EXAMPLE}:outbox-relay:outbox-relay"]
 
 
 def test_spot_is_rejected_on_the_public_api():
-    profile = _profile("production-scale")
+    profile = _dedicated_profile()
     profile["services"]["api"]["capacity_provider"]["surge"] = "FARGATE_SPOT"
-    assert topo.capacity_errors("production-scale", profile["services"]) == [
-        "SPOT_ON_PROTECTED_ROLE:production-scale:api:api"]
+    assert topo.capacity_errors(DEDICATED_EXAMPLE, profile["services"]) == [
+        f"SPOT_ON_PROTECTED_ROLE:{DEDICATED_EXAMPLE}:api:api"]
 
 
 def test_spot_is_rejected_as_the_guaranteed_baseline():
-    profile = _profile("production-scale")
+    profile = _dedicated_profile()
     profile["services"]["stream-worker"]["capacity_provider"]["base"] = "FARGATE_SPOT"
-    assert "SPOT_BASELINE:production-scale:stream-worker" in topo.capacity_errors(
-        "production-scale", profile["services"])
+    assert f"SPOT_BASELINE:{DEDICATED_EXAMPLE}:stream-worker" in topo.capacity_errors(
+        DEDICATED_EXAMPLE, profile["services"])
 
 
-def test_production_scale_surges_interruptible_workers_onto_spot():
-    services = _profile("production-scale")["services"]
-    assert services["stream-worker"]["capacity_provider"]["surge"] == "FARGATE_SPOT"
-    assert services["api"]["capacity_provider"]["surge"] == "FARGATE"
-    assert services["outbox-relay"]["capacity_provider"]["surge"] == "FARGATE"
-
-
-def test_enterprise_isolated_never_uses_spot():
-    services = _profile("enterprise-isolated")["services"]
-    providers = {v for cfg in services.values() for v in cfg["capacity_provider"].values()}
+@pytest.mark.parametrize("name", CONSOLIDATED)
+def test_committed_profiles_never_use_spot(name):
+    # The consolidated worker hosts outbox-relay, so no capacity of it may be
+    # interruptible; the api is public.
+    providers = {
+        value
+        for cfg in _profile(name)["services"].values()
+        for value in cfg["capacity_provider"].values()
+    }
     assert "FARGATE_SPOT" not in providers
 
 
 def test_autoscaling_metric_must_declare_its_threshold():
-    profile = _profile("production-lean")
+    profile = _profile("production")
     _lean_worker_service(profile)["autoscaling"].pop("queue_depth_target")
-    assert topo.capacity_errors("production-lean", profile["services"]) == [
-        "AUTOSCALING_THRESHOLD_MISSING:production-lean:lean-worker:queue_depth_target"]
+    assert topo.capacity_errors("production", profile["services"]) == [
+        "AUTOSCALING_THRESHOLD_MISSING:production:lean-worker:queue_depth_target"]
 
 
 def test_desired_count_must_sit_inside_the_autoscaling_envelope():
-    profile = _profile("production-lean")
+    profile = _profile("production")
     _lean_worker_service(profile)["autoscaling"]["max_capacity"] = 0
-    assert "AUTOSCALING_RANGE:production-lean:lean-worker:min=1:desired=1:max=0" in (
-        topo.capacity_errors("production-lean", profile["services"]))
+    assert "AUTOSCALING_RANGE:production:lean-worker:min=1:desired=1:max=0" in (
+        topo.capacity_errors("production", profile["services"]))
 
 
 def test_missing_capacity_declaration_names_the_missing_field():
-    profile = _profile("production-lean")
+    profile = _profile("production")
     _lean_worker_service(profile).pop("capacity_provider")
-    errors = topo.capacity_errors("production-lean", profile["services"])
-    assert "SERVICE_FIELD_MISSING:production-lean:lean-worker:capacity_provider" in errors
-    assert "CAPACITY_FIELD_MISSING:production-lean:lean-worker:surge" in errors
+    errors = topo.capacity_errors("production", profile["services"])
+    assert "SERVICE_FIELD_MISSING:production:lean-worker:capacity_provider" in errors
+    assert "CAPACITY_FIELD_MISSING:production:lean-worker:surge" in errors
 
 
 # ── roles.py extraction (AST only, never imported) ───────────────────────────

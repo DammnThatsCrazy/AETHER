@@ -106,7 +106,7 @@ batch path accepts the event but does not schedule canonical identify resolution
 when the overall resolver, SDK late binding, or connector backfill resolution is
 disabled; the batch path has no safe connector-candidate review context yet. The legacy
 `/sdk/alias` route reports `aliased: false` when anonymous-to-known binding is
-disabled. Staging enables the proof controls; the production-lean profile keeps
+disabled. Staging enables the proof controls; the production profile keeps
 them off.
 
 Identity runtime rollout is controlled by `IDENTITY_RESOLUTION_ENABLED`,
@@ -118,7 +118,7 @@ batch path accepts the event but does not schedule canonical identify resolution
 when the overall resolver, SDK late binding, or connector backfill resolution is
 disabled; the batch path has no safe connector-candidate review context yet. The legacy
 `/sdk/alias` route reports `aliased: false` when anonymous-to-known binding is
-disabled. Staging enables the proof controls; the production-lean profile keeps
+disabled. Staging enables the proof controls; the production profile keeps
 them off.
 
 **Emission API.** Official helpers emit **canonical top-level event types** via

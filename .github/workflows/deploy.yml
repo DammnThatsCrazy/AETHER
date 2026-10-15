@@ -863,7 +863,7 @@ jobs:
           TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
         run: |
           set -euo pipefail
-          PROFILE=$([ "$TARGET_ENV" = production ] && echo production-lean || echo staging)
+          PROFILE=$([ "$TARGET_ENV" = production ] && echo production || echo staging)
           CLUSTER="AETHER-${TARGET_ENV}"
           IMAGE=$(python -c "import json; print(json.load(open('release.json'))['artifacts']['backend_image']['uri'])")
           # Roll out SERVICES, not logical roles. Since runtime_deployment.yaml

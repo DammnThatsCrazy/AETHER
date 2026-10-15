@@ -74,11 +74,11 @@ workflows. The canonical boundary is recorded in
 
 ### Which services exist
 
-The deployable unit is a **service**, not a role. On `production-lean` and
+The deployable unit is a **service**, not a role. On `production` and
 `staging` (`execution_mode: consolidated`) there are two services: `api` and
-`lean-worker`, the latter hosting all eight worker roles in one task. On
-`production-scale` and `enterprise-isolated` (`dedicated`) there are nine, one
-per role.
+`lean-worker`, the latter hosting all eight worker roles in one task. The
+`dedicated` mode (nine services, one per role) is reserved for dedicated
+customer deployments; no checked-in profile selects it.
 
 Each service key is passed straight through as the container's `AETHER_ROLE`
 token, and maps to `AETHER-<env>-<key>` — with one exception: `api` is served by
@@ -88,7 +88,7 @@ to exist.
 ## Deploy infrastructure
 
 `.github/workflows/infrastructure.yml` is **plan-and-validate only**. It never
-applies. The `apply-production-lean` job that once auto-applied on every push to
+applies. The `apply-production` job that once auto-applied on every push to
 `main` has been deleted.
 
 Before the first staging plan after an IAM-manifest change, or whenever the
@@ -110,8 +110,8 @@ succeeds.
    `reviewed.tfplan.txt`, `reviewed.policy.txt` and `reviewed.cost.txt`.
 3. Dispatch the same workflow with `action=apply`, the plan's run ID and the
    plan checksum, and approve the per-profile environment
-   (`staging-terraform`, `production-lean-terraform`,
-   `production-scale-terraform`, `enterprise-terraform`).
+   (`staging-terraform` or `production-lean-terraform`; production's
+   environment name predates the consolidation and cannot be renamed).
 4. Apply downloads that exact plan, re-verifies profile, state key, commit,
    Terraform version, lockfile digest and the 24-hour expiry, checks out the
    plan's **own recorded commit**, re-runs the policy and cost validators at

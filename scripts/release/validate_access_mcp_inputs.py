@@ -70,10 +70,10 @@ def validate_inputs(
     service_enabled = _boolean(enable_service, "enable_access_mcp")
     oauth_enabled = _boolean(enable_oauth, "enable_access_mcp_oauth")
 
-    if (repository_enabled or service_enabled) and profile != "production-scale":
+    if (repository_enabled or service_enabled) and profile != "production":
         raise ValueError(
             "Access MCP repository and service are supported only by the canonical "
-            "production-scale state owner"
+            "production state owner"
         )
     if service_enabled and not repository_enabled:
         raise ValueError("enable_access_mcp requires enable_access_mcp_repository=true")

@@ -10,7 +10,7 @@ on:
     inputs:
       profile:
         type: choice
-        options: [staging, production-lean, production-scale, enterprise-isolated, demo, preview]
+        options: [staging, production]
         default: staging
         required: true
       deployment_lane:
@@ -38,7 +38,7 @@ on:
         default: false
         required: false
       enable_access_mcp:
-        description: Plan-only opt-in for the customer-facing MCP Fargate service and ALB route; production-scale only
+        description: Plan-only opt-in for the customer-facing MCP Fargate service and ALB route; production only
         type: boolean
         default: false
         required: false
@@ -74,9 +74,8 @@ on:
       staging_state:
         description: >-
           Staging wake/sleep shape for the plan. `asleep` drives every ECS
-          desired count and autoscaling floor to zero. Ignored by the three
-          production-class profiles and the demo/preview ephemeral profiles,
-          which have no staging_state block in config/runtime_deployment.yaml.
+          desired count and autoscaling floor to zero. Ignored by production,
+          which has no staging_state block in config/runtime_deployment.yaml.
           Plan-time only — an apply consumes the stored plan and cannot
           reshape it.
         type: choice
@@ -107,11 +106,11 @@ on:
 permissions:
   contents: read
 concurrency:
-  # Staging, demo, and preview share an account and globally named ECR
-  # repositories. Serialize those profiles with reconciliation to make the
-  # ownership check and import decision atomic; production profiles retain
-  # independent concurrency.
-  group: ${{ (inputs.profile == 'staging' || inputs.profile == 'demo' || inputs.profile == 'preview') && 'terraform-nonprod-shared' || format('terraform-{0}', inputs.profile) }}
+  # Staging shares an account and globally named ECR repositories with the
+  # reconciliation workflows. Serialize it with them to make the ownership
+  # check and import decision atomic; production retains independent
+  # concurrency.
+  group: ${{ inputs.profile == 'staging' && 'terraform-nonprod-shared' || format('terraform-{0}', inputs.profile) }}
   cancel-in-progress: false
 env:
   AWS_REGION: us-east-1
@@ -511,10 +510,8 @@ jobs:
           set -euo pipefail
           test -n "$BACKEND_IMAGE_DIGEST" || { echo '::error::backend_image_digest is required for plan'; exit 1; }
           case "${PROFILE}" in
-            production-scale|enterprise-isolated)
-              test -n "$ML_IMAGE_DIGEST" || { echo '::error::ml_image_digest is required for dedicated-ML profiles'; exit 1; } ;;
-            staging|production-lean|demo|preview)
-              # These profiles run ML inline; an empty ML digest is intentional.
+            staging|production)
+              # Both profiles run ML inline; an empty ML digest is intentional.
               : ;;
             *)
               echo "::error::unsupported profile ${PROFILE}"; exit 1 ;;
@@ -822,16 +819,15 @@ jobs:
     timeout-minutes: 120
     # Per-profile environments: each profile carries its own reviewers and
     # protection rules. staging cannot borrow production's approvals, and
-    # production cannot be applied behind staging's.
+    # production cannot be applied behind staging's. Production's environment
+    # keeps the name `production-lean-terraform` from before the profiles were
+    # consolidated: GitHub environments cannot be renamed, and renaming would
+    # detach the reviewers and secrets configured on it.
     environment:
       name: >-
         ${{ inputs.profile == 'staging' && 'staging-terraform'
-        || inputs.profile == 'production-lean' && 'production-lean-terraform'
-        || inputs.profile == 'production-scale' && 'production-scale-terraform'
-        || inputs.profile == 'enterprise-isolated' && 'enterprise-terraform'
-        || inputs.profile == 'demo' && 'demo-terraform'
-        || inputs.profile == 'preview' && 'preview-terraform'
-        || 'enterprise-terraform' }}
+        || inputs.profile == 'production' && 'production-lean-terraform'
+        || 'production-lean-terraform' }}
     permissions: {contents: read, actions: read, id-token: write}
     steps:
       - name: Require explicit reviewed plan identity
@@ -845,7 +841,7 @@ jobs:
           test -n "$PLAN_RUN_ID" || { echo '::error::plan_run_id required'; exit 1; }
           test -n "$PLAN_CHECKSUM" || { echo '::error::plan_checksum required'; exit 1; }
           case "$PROFILE" in
-            staging|production-lean|production-scale|enterprise-isolated|demo|preview) ;;
+            staging|production) ;;
             *) echo "::error::unknown profile ${PROFILE}"; exit 1 ;;
           esac
           case "$DEPLOYMENT_LANE" in
@@ -1464,7 +1460,7 @@ jobs:
               --out-dir ".artifacts/cost-${PROFILE}"
           fi
       - name: Check ECR collisions before account-level role bootstrap
-        if: inputs.profile == 'staging' || inputs.profile == 'demo' || inputs.profile == 'preview'
+        if: inputs.profile == 'staging'
         working-directory: infra/aws/terraform
         env:
           PROFILE: ${{ inputs.profile }}

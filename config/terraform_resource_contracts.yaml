@@ -2,7 +2,7 @@
 # Aether — Terraform Resource Contracts
 #
 # Maps every canonical cost-policy key in config/deployment_profiles.yaml
-# (profiles.production-lean.cost_policy.required_resources — 11 keys — and
+# (profiles.production.cost_policy.required_resources — 11 keys — and
 # .forbidden_resources — 10 keys) onto the Terraform addresses and resource
 # types that realise it, plus the cardinality a conforming plan must show.
 #
@@ -42,13 +42,13 @@ canonical_source: config/deployment_profiles.yaml
 
 # The profile whose cost_policy this file encodes. Other profiles are described
 # by `also_applies_to` on individual rules.
-profile: production-lean
+profile: production
 
 # Root module of the plan these contracts are written against.
 terraform_root: infra/aws/terraform
 
 # ----------------------------------------------------------------------------
-# required_resources — production-lean MUST provision each of these.
+# required_resources — production MUST provision each of these.
 # ----------------------------------------------------------------------------
 required_resources:
 
@@ -100,10 +100,9 @@ required_resources:
       One ECS service per SERVICE declared in config/runtime_deployment.yaml,
       plus the aether-backend service that serves the api role. Since schema v2
       the deployable unit is a service, not a role: a `dedicated` profile
-      (production-scale, enterprise-isolated) runs eight single-role worker
-      services, while a `consolidated` profile (production-lean, staging) runs
-      ONE `lean-worker` service whose task hosts all eight roles. Both shapes
-      satisfy this key. What is never permitted is an IMPLICIT worker: the
+      runs eight single-role worker services, while a `consolidated` profile
+      (production and staging, today) runs ONE `lean-worker` service whose
+      task hosts all eight roles. Both shapes satisfy this key. What is never permitted is an IMPLICIT worker: the
       invariant is that every role in roles.py::WORKER_ROLES is hosted by
       exactly one declared service in every profile — never orphaned, never
       claimed twice — which scripts/release/check_delivery_topology.py enforces
@@ -215,7 +214,7 @@ required_resources:
     cardinality: exactly:2
     evidence: aws_kms_key.this
     terraform_gate: local.enable_credential_kms
-    also_applies_to: [staging, production-scale, enterprise-isolated]
+    also_applies_to: [staging]
 
   cloudwatch_alarms:
     description: >-
@@ -280,7 +279,7 @@ required_resources:
     paired_with: forbidden_resources.neptune
 
 # ----------------------------------------------------------------------------
-# forbidden_resources — production-lean MUST NOT provision any of these.
+# forbidden_resources — production MUST NOT provision any of these.
 # Every rule below is `zero`.
 # ----------------------------------------------------------------------------
 forbidden_resources:
@@ -301,7 +300,7 @@ forbidden_resources:
     evidence: aws_msk_cluster.this
     terraform_gate: local.enable_msk
     also_applies_to: [staging]
-    permitted_in: [production-scale, enterprise-isolated]
+    permitted_in: []
 
   elasticache:
     description: >-
@@ -320,7 +319,7 @@ forbidden_resources:
     evidence: aws_elasticache_replication_group.this
     terraform_gate: local.enable_elasticache
     also_applies_to: [staging]
-    permitted_in: [production-scale, enterprise-isolated]
+    permitted_in: []
 
   neptune:
     description: Neptune graph cluster and its instances.
@@ -333,7 +332,7 @@ forbidden_resources:
     evidence: aws_neptune_cluster.this
     terraform_gate: local.enable_neptune
     also_applies_to: [staging]
-    permitted_in: [production-scale, enterprise-isolated]
+    permitted_in: []
 
   clickhouse:
     description: >-
@@ -357,7 +356,7 @@ forbidden_resources:
     evidence: null
     terraform_gate: local.enable_clickhouse
     also_applies_to: [staging]
-    permitted_in: [production-scale, enterprise-isolated]
+    permitted_in: []
     currently_unimplemented: true
 
   dedicated_ml_service:
@@ -385,7 +384,7 @@ forbidden_resources:
     evidence: aws_ecs_service.ml
     terraform_gate: local.enable_dedicated_ml
     also_applies_to: [staging]
-    permitted_in: [production-scale, enterprise-isolated]
+    permitted_in: []
     plan_outputs:
       - module.ecs.dedicated_ml_service_arns
       - module.ecs.dedicated_ml_target_group_arns
@@ -418,7 +417,7 @@ forbidden_resources:
     cardinality: zero
     evidence: null
     terraform_gate: local.enable_frontend_ecs
-    also_applies_to: [staging, production-scale, enterprise-isolated]
+    also_applies_to: [staging]
     permitted_in: []
 
   legacy_rds:
@@ -435,7 +434,7 @@ forbidden_resources:
     cardinality: zero
     evidence: aws_db_instance.this
     terraform_gate: local.enable_legacy_rds
-    also_applies_to: [staging, production-scale, enterprise-isolated]
+    also_applies_to: [staging]
     permitted_in: []
 
   nat_gateway_unless_explicit:
@@ -454,12 +453,12 @@ forbidden_resources:
     explicit_override: var.network_egress_mode
     override_values: [single_nat, ha_nat]
     also_applies_to: [staging]
-    permitted_in: [production-scale, enterprise-isolated]
+    permitted_in: []
     plan_outputs:
       - module.vpc.nat_gateway_ids
       - module.vpc.nat_eip_ids
       - module.vpc.nat_mode
-    # `cardinality: zero` above applies to BOTH types: production-lean and
+    # `cardinality: zero` above applies to BOTH types: production and
     # staging provision neither a gateway nor an EIP, so summing them per the
     # algorithm at the top of this file gives the right answer.
     #
@@ -478,11 +477,7 @@ forbidden_resources:
     expected_by_profile_resource_type: aws_nat_gateway
     expected_by_profile:
       staging: zero
-      demo: zero
-      preview: zero
-      production-lean: zero
-      production-scale: exactly:1
-      enterprise-isolated: exactly:3
+      production: zero
     # Interface VPC endpoints are the OTHER paid egress topology behind the same
     # explicit override: `vpc_endpoints` is one of var.network_egress_mode's
     # values, and an interface endpoint bills per AZ per hour plus data — it is
@@ -501,8 +496,8 @@ forbidden_resources:
   always_on_staging_compute:
     description: >-
       Staging compute that never sleeps. This is a lifecycle property of the
-      staging workspace, not a resource type in a production-lean plan, so
-      there is nothing to count here — a production-lean plan provisions no
+      staging workspace, not a resource type in a production plan, so
+      there is nothing to count here — a production plan provisions no
       staging-environment resources at all. Enforcement lives in the staging
       wake/sleep automation and in check_cost_policy.py.
     module_address: null
@@ -533,5 +528,5 @@ forbidden_resources:
     cardinality: zero
     evidence: null
     terraform_gate: local.enable_prometheus_grafana
-    also_applies_to: [staging, production-scale, enterprise-isolated]
+    also_applies_to: [staging]
     permitted_in: []

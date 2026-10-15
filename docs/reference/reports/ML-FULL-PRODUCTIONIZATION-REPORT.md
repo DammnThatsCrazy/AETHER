@@ -203,10 +203,10 @@ review evidence.
 The `workers` / `full` profiles are a separate concern and do not host
 `ml-serving`. Note for anyone tracing inference paths: `semantic-worker` there
 runs semantic classification **in-process**, never over HTTP to `ml-serving`.
-That matches the deployed cloud shape, where `production-lean` and `staging`
+That matches the deployed cloud shape, where `production` and `staging`
 set `remote_ml: false` and run inference inside the task rather than as a
 dedicated ML service — so `ml-serving` as a standalone container is a
-`production-scale` / `enterprise-isolated` topology and a local integration
+dedicated-mode topology (no current profile) and a local integration
 convenience, not the founding-tenant path.
 
 **Dockerfile port fix:** EXPOSE corrected from 8000 → 8080 to match

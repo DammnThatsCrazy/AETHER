@@ -57,9 +57,8 @@ authorities:
       - pytest
   - id: ephemeral_cleanup
     owner: platform@aether
-    purpose: expire_preview_demo_and_staging_leases
+    purpose: expire_staging_leases
     workflows:
-      - .github/workflows/ephemeral-ttl-guard.yml
       - .github/workflows/staging-ttl-guard.yml
     required_commands:
       - aws ecs update-service

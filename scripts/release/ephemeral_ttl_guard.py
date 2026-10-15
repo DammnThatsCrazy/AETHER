@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
-"""Fail-closed TTL lifecycle guard for the demo/preview ephemeral profiles.
+"""Fail-closed TTL lease guard for environments that must not run forever.
 
-demo and preview are integration-class profiles that must never run forever
-(``config/deployment_profiles.yaml`` marks both ``ttl_cleanup_required: true``;
-preview additionally ``forbids`` ``run-forever``). Safety comes from a single
-SSM lease, an absolute UTC ``expires-at`` timestamp written by
-``scripts/release/ephemeral_env.py provision`` at
-``/aether/{profile}/{env}/lifecycle/expires-at``.
+Staging is the one such environment now (it is woken for validation and must
+sleep again; see ``.github/workflows/staging-ttl-guard.yml`` and
+``scripts/staging_state_machine.py``, which uses this module's ``evaluate`` and
+``lease_path``). The demo and preview profiles that once shared this guard have
+been retired. Safety comes from a single SSM lease: an absolute UTC
+``expires-at`` timestamp at ``/aether/{profile}/{env}/lifecycle/expires-at``.
 
 This module is dual-purpose:
 
-  1. Static analysis (no AWS credentials required). ``check()`` verifies the
-     repo-structural invariants of the lifecycle: the fail-closed cron
-     ``.github/workflows/ephemeral-ttl-guard.yml`` exists, its matrix covers
-     both demo and preview, and ``lease_path`` produces the canonical SSM
-     parameter name. Run as ``python scripts/release/ephemeral_ttl_guard.py``.
+  1. Static analysis (no AWS credentials required). ``check()`` verifies that
+     ``lease_path`` still produces the canonical SSM parameter name. Run as
+     ``python scripts/release/ephemeral_ttl_guard.py``.
 
   2. Live lease decision logic. ``evaluate()`` is the single fail-closed
      decision: a missing lease, an unreadable lease, a malformed lease and an
@@ -24,10 +22,10 @@ This module is dual-purpose:
      AWS.
 
 Usage:
-  python scripts/release/ephemeral_ttl_guard.py            # repo-structural check
+  python scripts/release/ephemeral_ttl_guard.py            # lease-path format check
   python scripts/release/ephemeral_ttl_guard.py --check    # same, explicit
-  python scripts/release/ephemeral_ttl_guard.py --profile demo --env demo --check
-  python scripts/release/ephemeral_ttl_guard.py --profile demo --env demo --dry-run
+  python scripts/release/ephemeral_ttl_guard.py --profile staging --env staging --check
+  python scripts/release/ephemeral_ttl_guard.py --profile staging --env staging --dry-run
 """
 
 from __future__ import annotations
@@ -39,35 +37,29 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
-import yaml
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import Reporter, main_guard, repo_root  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # SSM lease path — the single source of truth for the parameter name. Mirrors
 # .github/workflows/staging-ttl-guard.yml's /aether/staging/lifecycle/awake-until
-# naming, with the profile and env kept as separate segments so a future
-# per-PR preview env (env != profile) stays on the same format.
+# naming, with the profile and env kept as separate segments so an environment
+# whose name differs from its profile stays on the same format.
 # ---------------------------------------------------------------------------
 LEASE_PATH_TEMPLATE = "/aether/{profile}/{env}/lifecycle/expires-at"
 LEASE_PATH_PATTERN = re.compile(r"^/aether/[^/]+/[^/]+/lifecycle/expires-at$")
 
-# Canonical names the structural check pins to, so a future change to the
+# Canonical name the structural check pins to, so a future change to the
 # template cannot silently drift the format both the cron and operators rely on.
-EXPECTED_DEMO_LEASE = "/aether/demo/demo/lifecycle/expires-at"
-EXPECTED_PREVIEW_LEASE = "/aether/preview/preview/lifecycle/expires-at"
+EXPECTED_STAGING_LEASE = "/aether/staging/staging/lifecycle/expires-at"
 
 # The fail-closed enforcement action returned by evaluate() for an expired env.
 ACTION_NONE = "none"
 ACTION_ENFORCE = "scale-to-zero + floor-zeroing"
 
-WORKFLOW_REL = ".github/workflows/ephemeral-ttl-guard.yml"
-REQUIRED_PROFILES = ("demo", "preview")
-
 
 def lease_path(profile: str, env: str) -> str:
-    """Build the SSM parameter name for an ephemeral env's expiry lease."""
+    """Build the SSM parameter name for an environment's expiry lease."""
     return LEASE_PATH_TEMPLATE.format(profile=profile, env=env)
 
 
@@ -95,7 +87,7 @@ def is_expired(expires_at: datetime | None, now: datetime) -> bool:
 
 
 def evaluate(profile: str, env: str, read_lease, now: datetime) -> dict:
-    """Fail-closed TTL decision for one ephemeral environment.
+    """Fail-closed TTL decision for one environment.
 
     A missing lease, an unreadable lease, a malformed lease and an expired
     lease ALL mean "expired" — an environment nobody can account for must never
@@ -156,68 +148,16 @@ def read_lease_aws(profile: str, env: str) -> str | None:
 # ---------------------------------------------------------------------------
 # Repo-structural check (no AWS credentials required)
 # ---------------------------------------------------------------------------
-def _matrix_pairs(data) -> list[tuple[str, str]]:
-    """Extract (profile, env) pairs from the ephemeral-ttl-guard matrix."""
-    pairs: list[tuple[str, str]] = []
-    if not isinstance(data, dict):
-        return pairs
-    jobs = data.get("jobs") or {}
-    guard = jobs.get("guard") or {}
-    matrix = (guard.get("strategy") or {}).get("matrix") or {}
-    if not isinstance(matrix, dict):
-        return pairs
-    for item in matrix.get("include") or []:
-        if isinstance(item, dict) and item.get("profile") and item.get("env"):
-            pairs.append((str(item["profile"]), str(item["env"])))
-    plist = matrix.get("profile") or []
-    elist = matrix.get("env") or []
-    if isinstance(plist, list) and isinstance(elist, list):
-        pairs.extend((str(p), str(e)) for p, e in zip(plist, elist))
-    return list(dict.fromkeys(pairs))
-
-
 def check() -> int:
-    r = Reporter("EPHEMERAL TTL GUARD — demo/preview leases must auto-expire")
+    r = Reporter("TTL LEASE GUARD — lease path format")
 
-    root = repo_root()
-
-    # 1. The fail-closed cron exists ------------------------------------------
-    workflow = root / WORKFLOW_REL
-    if not workflow.exists():
-        r.fail(f"{WORKFLOW_REL} is missing — the hourly cron is the TTL tripwire")
-        return r.finish()
-    r.ok(f"{WORKFLOW_REL} exists")
-
-    # 2. Its matrix covers both demo and preview ------------------------------
-    try:
-        with workflow.open(encoding="utf-8") as fh:
-            data = yaml.safe_load(fh)
-    except (OSError, yaml.YAMLError) as exc:
-        r.fail(f"{WORKFLOW_REL} is not readable YAML: {exc}")
-        return r.finish()
-
-    covered = {p for p, _ in _matrix_pairs(data)}
-    for prof in REQUIRED_PROFILES:
-        r.require(
-            prof in covered,
-            f"ephemeral TTL cron matrix covers {prof}",
-            f"ephemeral TTL cron matrix is missing {prof}",
-        )
-
-    # 3. The lease-path format is correct -------------------------------------
     r.require(
-        lease_path("demo", "demo") == EXPECTED_DEMO_LEASE,
-        f"demo lease path is {EXPECTED_DEMO_LEASE}",
-        f"demo lease path changed: {lease_path('demo', 'demo')}",
+        lease_path("staging", "staging") == EXPECTED_STAGING_LEASE,
+        f"staging lease path is {EXPECTED_STAGING_LEASE}",
+        f"staging lease path changed: {lease_path('staging', 'staging')}",
     )
     r.require(
-        lease_path("preview", "preview") == EXPECTED_PREVIEW_LEASE,
-        f"preview lease path is {EXPECTED_PREVIEW_LEASE}",
-        f"preview lease path changed: {lease_path('preview', 'preview')}",
-    )
-    r.require(
-        bool(LEASE_PATH_PATTERN.match(lease_path("demo", "demo")))
-        and bool(LEASE_PATH_PATTERN.match(lease_path("preview", "preview"))),
+        bool(LEASE_PATH_PATTERN.match(lease_path("staging", "staging"))),
         "lease path matches /aether/{profile}/{env}/lifecycle/expires-at",
         f"lease path no longer matches the canonical format: {LEASE_PATH_TEMPLATE}",
     )
@@ -229,7 +169,7 @@ def check() -> int:
 # CLI
 # ---------------------------------------------------------------------------
 def _print_decision(d: dict) -> None:
-    print(f"ephemeral TTL decision for {d['profile']}/{d['env']}")
+    print(f"TTL lease decision for {d['profile']}/{d['env']}")
     print(f"  lease path: {d['lease_path']}")
     print(f"  expired: {str(d['expired']).lower()}")
     print(f"  action: {d['action']}")
@@ -255,10 +195,10 @@ def _cli_read_lease(args):
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         prog="ephemeral_ttl_guard",
-        description="Fail-closed TTL guard for the demo/preview ephemeral profiles.",
+        description="Fail-closed TTL lease guard (staging).",
     )
-    parser.add_argument("--profile", help="deployment profile (demo|preview)")
-    parser.add_argument("--env", help="environment name (e.g. demo, preview)")
+    parser.add_argument("--profile", help="deployment profile (staging)")
+    parser.add_argument("--env", help="environment name (e.g. staging)")
     parser.add_argument("--check", action="store_true",
                         help="exit non-zero on an expired/absent lease (or on a structural failure)")
     parser.add_argument("--dry-run", action="store_true",
@@ -276,7 +216,7 @@ def main(argv=None) -> int:
             return 1
         return 0
 
-    # Repo-structural check — the parity-style gate, no AWS credentials needed.
+    # Lease-path format check — no AWS credentials needed.
     return check()
 
 

@@ -47,16 +47,16 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:bd527b2194600610b7a3ebd602b4abbaa03b67e43bf295f0d368b5e0575d956e"
-  ".github/workflows/deploy.yml": "sha256:90ede91aef6c9edf8095b64ecfa974983a390bd81e44336d4bfe2330b09cb7b5"
+  ".github/workflows/deploy.yml": "sha256:e9555bd68e7a994e984fd012fa290540c89e078775e4f6da8c3f5b82ed539238"
   ".github/workflows/pilot-staging.yml": "sha256:62ec13ff1a6f2869aa42a8b2e87c3d49412a33010c5fe8a875baee42cb29cef5"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-business-hours.yml": "sha256:88f5054abd8530877c3406c752f48ebab4b272143534984c7025977bc220f00b"
   ".github/workflows/staging-lifecycle.yml": "sha256:ab0d86125cd2be277ba7e0a40a4dbc9fdd5db1480ff1c7cb816adf4874a55ae9"
   ".github/workflows/staging-smoke.yml": "sha256:c9cd095386a95ef344a52bb4261a5e042fb1ca371060caa416d81f3fb884ac0e"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
-  ".github/workflows/terraform-promote.yml": "sha256:dc7242423f1931ba0d93019d701beed0a669458e4124db8baba46d074becd0ad"
-  "config/deployment_profiles.yaml": "sha256:77d37f2c71472b5d644da32636bb68948263250739b62b621502cdfb09797475"
-  "config/runtime_deployment.yaml": "sha256:ba7bd71d79e605a88076b6ea745582dce9c4bff38442ebd5d327cfee9bbf7284"
+  ".github/workflows/terraform-promote.yml": "sha256:804e3b437274475d5125b4dbf6c3988ff9387909af73a5aeb5690713cf310adf"
+  "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
+  "config/runtime_deployment.yaml": "sha256:cd65f4902ed9062c2526bd9b83b99e2c0ecc58f012a3fa1c90ba9660b874a332"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
   "config/staging_plan_iam_policy.yaml": "sha256:4339039d8d5a8e7d7b44f5679f27491129c54171cd9298a869ac91aa9402df71"
   "config/staging_plan_reconcile_iam_policy.json": "sha256:8cd18e4c0f1f2f1f0583c3705f6352e990a399cab3f08315f393ed9106cea12d"
@@ -65,9 +65,9 @@ source_hashes:
   "config/staging_secret_preflight_trust_policy.json": "sha256:38c81fbb5674275998114973bd151fccb23e510d999560e14f6c3dbf591e2fc5"
   "config/terraform_plan_state_access_policy.yaml": "sha256:3ef6bc24c567f84eb9a44c8a180d0f6f14e6c4a9fabb76138cb3543e4cf150e0"
   "infra/aws/terraform/modules/ecs/main.tf": "sha256:b639e5e6742dd68587e00123e3ed7cc2d2c8679a6bedc23d3967891a9d0db1a5"
-  "infra/aws/terraform/profiles.tf": "sha256:c197af7ebf1556be22a70dbf05c4ba85f5f93a2dd322dc39a42442f27226a89d"
-  "infra/aws/terraform/profiles/staging.tfvars": "sha256:13bfa71ca795f6920b6e41eb844bfd6cecb6c6d34c326d69af2a0209eb52003f"
-  "infra/aws/terraform/variables.tf": "sha256:4f28b3822f6207da22bfc5f0df4405aa5f3e9127e60da208e4a1611e012643d7"
+  "infra/aws/terraform/profiles.tf": "sha256:da63e1f50e4030924713679445e3c365883a23821ac78df83bebe14436c67f60"
+  "infra/aws/terraform/profiles/staging.tfvars": "sha256:34b4d565d79a786e532b9cda5295cc745e1840b7f241abf1f0608772f2a18181"
+  "infra/aws/terraform/variables.tf": "sha256:5eed310106c5621fc91dc3961c3e2194a03c6d0181fa494df5ad376112638cdb"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:fdf5d317787370ad80fcd5653fe3497f1cf0fef4f91ff2abfdcabdc63722d23b"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
@@ -144,7 +144,7 @@ rejects `base_count > desired_count`.
 The consequence that matters operationally: **an asleep environment owns exactly
 the same services, the same roles and the same queues as an awake one.** Waking
 is flipping one input, not planning a differently-shaped topology. Staging runs
-the same consolidated 2-service shape as `production-lean` — `api` plus
+the same consolidated 2-service shape as `production` — `api` plus
 `lean-worker` hosting all eight worker roles — so the packing itself is
 rehearsed before production sees it, sized one step down at 1 vCPU / 4 GiB for
 the worker.
@@ -195,7 +195,7 @@ takes exactly six values.
 | `full-rehearsal` | all of the above plus `rehearse` | The complete cycle. |
 
 The ML digest is profile-dependent. Staging, demo, preview, and
-`production-lean` run inline ML (`remote_ml: false`) and must leave this input
+`production` run inline ML (`remote_ml: false`) and must leave this input
 empty. Only profiles with a dedicated remote ML service require the immutable
 serving-image digest.
 
@@ -382,13 +382,13 @@ and other non-compute charges continue; open database connections also prevent
 automatic pausing.
 
 This is intentional and is the single largest reason staging's budget is USD 25
-rather than production-lean's USD 150: paused Aurora instances incur no compute
+rather than production's USD 150: paused Aurora instances incur no compute
 capacity charge while idle. Storage and other non-compute charges still accrue.
 The operational consequence is a **cold start on the first database
 connection after a wake**. Nothing in the workflow explicitly resumes the
 cluster; the first query does it. Expect the first `/v1/ready` probe and the
 migration task to absorb that latency, and do not treat a slow first response
-as a regression. `production-lean` deliberately does not share this behaviour —
+as a regression. `production` deliberately does not share this behaviour —
 see the rejected lever in [Cost Optimization](COST-OPTIMIZATION.md#rejected-lever-1--drop-the-aurora-floor-to-0-acu).
 
 ### The awake lease
@@ -943,5 +943,5 @@ Specifically externally blocked:
 
 - [Cost Optimization](COST-OPTIMIZATION.md) — the awake-hours budget model
 - [AWS Lean Production](AWS-LEAN-PRODUCTION.md) — the topology staging rehearses
-- [Deployment Profiles](../architecture/DEPLOYMENT-PROFILES.md) — the eight-profile matrix
+- [Deployment Profiles](../architecture/DEPLOYMENT-PROFILES.md) — the two-profile matrix
 - [Deployment Runbook](DEPLOYMENT-RUNBOOK.md) — application promotion

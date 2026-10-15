@@ -32,13 +32,13 @@ source_hashes:
   "services/api/governance/": "sha256:88d555a3245092c8b9359f48213c260d0e370b82d615858a14c11ac744bd48a6"
   "services/api/graph/": "sha256:7372bf88ff18200edd21b53649b25098a9b1e1ec474a79ee36cd28a480093706"
   "services/api/identity/": "sha256:26c2dea5633e0513a214a27c0c9839b5bab0648aff22454c3e67f69b7e4f66e6"
-  "services/api/ingestion/": "sha256:f8792fdb52aa80d312f4e9dc4a8e29e6102fc65737d2783cef54fdc4d6bdc569"
-  "services/api/intelligence/": "sha256:50d2fba35ca8b62431283aa909ae746d789f59dcf201dfb15ad297fd522f1a13"
+  "services/api/ingestion/": "sha256:89757f37b1e77f0bf3f55a5cb6e7a7df86ed5cfe5478010497e4e86d51333145"
+  "services/api/intelligence/": "sha256:21066dbfa991f01ee3070734c364087d7e5e538c4fda48efc8993fdb7b4ce56a"
   "services/api/journeys/": "sha256:fcd9a0fe60b841344f6391b3265abc58a847d31e892977362515667781c43eba"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b8b5c4e0956e300494f051e9b82958da6caf3ca375b8c79f00d5b76dd061fc63"
   "services/api/value/": "sha256:b90c235210f77460e626c395c3011149dd7cbd4d5da0f58e797abfe7e9d24328"
-  "services/api/workers/": "sha256:2ba7219cc4a6bb8a77040d5871b16f764631ca87da8f36de0ba2140b59a015e6"
+  "services/api/workers/": "sha256:bebf5c0765768bd9b025b1847bb728c5296491d5d8cb511e4ae4a15121e09aef"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -2734,7 +2734,7 @@ Graph traversal, overlay, and analytics over the unified profile-selected intell
 | GET | `/v1/graph/contracts` | List active smart-contract vertices in the graph |
 
 **Permissions:** `read`. Uses the profile-selected durable graph backend (PostgreSQL for
-staging/production-lean; Neptune only where a heavier profile selects it); local uses the
+staging/production; Neptune only where a deployment enables it); local uses the
 local graph backend.
 
 ---

@@ -12,7 +12,7 @@ Usage:
 
 Profile-aware: which infra vars are REQUIRED is derived from the active
 deployment profile's canonical backends (config/deployment_profiles.yaml), so a
-staging or production-lean deploy — whose canonical profiles forbid msk,
+staging or production deploy — whose canonical profiles forbid msk,
 elasticache, neptune and clickhouse — is NOT required to set Kafka, Redis or
 Neptune connection vars. Only the connection vars for the backends the profile
 actually declares are required.
@@ -83,13 +83,38 @@ BACKEND_REQUIRED_VARS = {
     },
 }
 
+# Backends for local development. Local development is not a deployment profile
+# (config/deployment_profiles.yaml declares only staging and production), so its
+# two shapes live here: `local` is a single Postgres-backed backend with
+# in-memory cache/events, and `local-full` adds every local dependency.
+LOCAL_BACKENDS: dict[str, dict[str, str]] = {
+    "local": {
+        "database": "postgres",
+        "cache": "memory",
+        "event": "memory",
+        "graph": "postgres",
+        "analytics": "postgres",
+        "object": "memory",
+        "ml": "inline",
+    },
+    "local-full": {
+        "database": "postgres",
+        "cache": "redis",
+        "event": "localstack",
+        "graph": "postgres",
+        "analytics": "clickhouse",
+        "object": "localstack-s3",
+        "ml": "inline",
+    },
+}
+
 # AETHER_ENV -> default profile when DEPLOYMENT_PROFILE is not set.
 ENV_DEFAULT_PROFILE = {
     "local": "local",
     "dev": "local-full",
     "integration": "local-full",
     "staging": "staging",
-    "production": "production-lean",
+    "production": "production",
 }
 
 
@@ -102,6 +127,8 @@ def _profile() -> str:
 
 def _canonical_backends() -> dict[str, str] | None:
     """Backends for the active profile, or None if the profile is unknown."""
+    if _profile() in LOCAL_BACKENDS:
+        return LOCAL_BACKENDS[_profile()]
     try:
         import yaml
 

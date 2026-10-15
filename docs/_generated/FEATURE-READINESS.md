@@ -50,7 +50,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** wire the x402 and agent lifecycle mappers to an event consumer
 - **Confidence:** MODERATE — gap: not yet exercised in credentialed staging/production
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=NOT_ATTEMPTED, production=NOT_APPLICABLE
-- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production-lean=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
+- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
 
 ## Backend API (`backend-api`)
 
@@ -62,7 +62,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: not yet exercised in credentialed staging/production
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=NOT_ATTEMPTED, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production-lean=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
 
 ## Campaign Intelligence (`campaign-intelligence`)
 
@@ -74,7 +74,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** HIGH — gap: not yet exercised in credentialed staging/production
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=NOT_ATTEMPTED, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=READY_TO_VALIDATE, production-lean=READY_TO_VALIDATE, production-scale=READY_TO_VALIDATE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=READY_TO_VALIDATE, production=READY_TO_VALIDATE, production-scale=READY_TO_VALIDATE
 
 ## Card-Linked Payment Rails (`card-linked-payments`)
 
@@ -86,7 +86,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** complete runtime integration; complete repository-controlled verification
 - **Confidence:** LOW — gap: credentialed environment execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=NOT_ATTEMPTED, staging=BLOCKED_EXTERNAL, production=NOT_APPLICABLE
-- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production-lean=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
+- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
 
 ## CI & Test Gates (`ci-tests`)
 
@@ -98,7 +98,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: not yet exercised in credentialed staging/production
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=NOT_ATTEMPTED, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production-lean=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
 
 ## BYOK Connectors (`connectors-byok`)
 
@@ -110,7 +110,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: credentialed environment execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=BLOCKED_EXTERNAL, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production-lean=READY_TO_ACTIVATE, production-scale=READY_TO_ACTIVATE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production=READY_TO_ACTIVATE, production-scale=READY_TO_ACTIVATE
 
 ## Customer Frontend (`customer-frontend`)
 
@@ -122,7 +122,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** HIGH — gap: not yet exercised in credentialed staging/production
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=NOT_ATTEMPTED, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=READY_TO_VALIDATE, production-lean=READY_TO_VALIDATE, production-scale=READY_TO_VALIDATE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=READY_TO_VALIDATE, production=READY_TO_VALIDATE, production-scale=READY_TO_VALIDATE
 
 ## Data-Lake Feeders (`data-lake-feeders`)
 
@@ -134,7 +134,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: credentialed environment execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=BLOCKED_EXTERNAL, production=NOT_APPLICABLE
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production-lean=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
 
 ## Deployment Terraform Profiles (`deployment-terraform-profiles`)
 
@@ -146,7 +146,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: never applied against a real account
 - **Environment evidence:** local=NOT_APPLICABLE, ci=VERIFIED, staging=BLOCKED_EXTERNAL, production=BLOCKED_EXTERNAL, scale=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=DISABLED_INTENTIONALLY, staging=READY_TO_ACTIVATE, pilot=NOT_IN_PROFILE, production-lean=READY_TO_ACTIVATE, production-scale=READY_TO_ACTIVATE
+- **Release-profile dispositions:** local=DISABLED_INTENTIONALLY, staging=READY_TO_ACTIVATE, pilot=NOT_IN_PROFILE, production=READY_TO_ACTIVATE, production-scale=READY_TO_ACTIVATE
 
 ## Derivatives Intelligence (`derivatives-intelligence`)
 
@@ -158,7 +158,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** complete repository-controlled verification + hardening
 - **Confidence:** LOW — gap: credentialed environment execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=NOT_ATTEMPTED, staging=BLOCKED_EXTERNAL, production=NOT_APPLICABLE
-- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production-lean=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
+- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
 
 ## Documentation Pipeline (`documentation-pipeline`)
 
@@ -170,7 +170,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: not yet exercised in credentialed staging/production
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=NOT_ATTEMPTED, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production-lean=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
 
 ## Event Transport (Outbox + SNS/SQS) (`event-transport`)
 
@@ -182,7 +182,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: cloud event backend not yet provisioned; no credentialed run
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=BLOCKED_EXTERNAL, production=NOT_ATTEMPTED, scale=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production-lean=READY_TO_ACTIVATE, production-scale=READY_TO_ACTIVATE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production=READY_TO_ACTIVATE, production-scale=READY_TO_ACTIVATE
 
 ## Financial Observability (`financial-observability`)
 
@@ -194,7 +194,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** HIGH — gap: credentialed staging execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=BLOCKED_EXTERNAL, pilot=NOT_ATTEMPTED, production=NOT_APPLICABLE
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production-lean=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
 
 ## Graph Health & Drift Detection (`graph-health-drift`)
 
@@ -206,7 +206,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: not yet exercised in credentialed staging/production
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=NOT_ATTEMPTED, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production-lean=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
 
 ## Graph Mutation Safety (`graph-mutation-safety`)
 
@@ -218,7 +218,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: credentialed environment execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=BLOCKED_EXTERNAL, production=NOT_APPLICABLE
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production-lean=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
 
 ## Graph Relationships (`graph-relationships`)
 
@@ -230,7 +230,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: not yet exercised in credentialed staging/production
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=NOT_ATTEMPTED, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production-lean=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
 
 ## Identity Resolution (`identity-resolution`)
 
@@ -242,7 +242,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: not yet exercised in credentialed staging or production
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=NOT_ATTEMPTED, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=READY_TO_VALIDATE, production-lean=READY_TO_VALIDATE, production-scale=READY_TO_VALIDATE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=READY_TO_VALIDATE, production=READY_TO_VALIDATE, production-scale=READY_TO_VALIDATE
 
 ## Interoperability Intelligence (`interoperability-intelligence`)
 
@@ -254,7 +254,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** complete repository-controlled verification + hardening
 - **Confidence:** LOW — gap: credentialed environment execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=NOT_ATTEMPTED, staging=BLOCKED_EXTERNAL, production=NOT_APPLICABLE
-- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production-lean=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
+- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
 
 ## Kyber Operator Console (`kyber-operator-console`)
 
@@ -266,7 +266,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: not yet exercised in credentialed staging/production
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=NOT_ATTEMPTED, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production-lean=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
 
 ## Measurement & Attribution (`measurement-attribution`)
 
@@ -278,7 +278,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: not yet exercised in credentialed staging/production
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=NOT_ATTEMPTED, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production-lean=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
 
 ## Measurement Integrity Plane (`measurement-integrity`)
 
@@ -290,7 +290,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: not yet exercised in credentialed staging/production
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=NOT_ATTEMPTED, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production-lean=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
 
 ## Action Notifications (`notification-intelligence`)
 
@@ -302,7 +302,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: credentialed environment execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=BLOCKED_EXTERNAL, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production-lean=READY_TO_ACTIVATE, production-scale=READY_TO_ACTIVATE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production=READY_TO_ACTIVATE, production-scale=READY_TO_ACTIVATE
 
 ## Payment Rail Observability (`payment-rail-observability`)
 
@@ -314,7 +314,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** complete repository-controlled verification + hardening
 - **Confidence:** LOW — gap: credentialed environment execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=NOT_ATTEMPTED, staging=BLOCKED_EXTERNAL, production=NOT_APPLICABLE
-- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production-lean=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
+- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
 
 ## Profile 360 (`profile-360`)
 
@@ -326,7 +326,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** HIGH — gap: not yet exercised in credentialed staging/production
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=NOT_ATTEMPTED, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=READY_TO_VALIDATE, production-lean=READY_TO_VALIDATE, production-scale=READY_TO_VALIDATE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=READY_TO_VALIDATE, production=READY_TO_VALIDATE, production-scale=READY_TO_VALIDATE
 
 ## Provider Certification Plane (`provider-certification-plane`)
 
@@ -338,7 +338,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: credentialed environment execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=BLOCKED_EXTERNAL, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production-lean=READY_TO_ACTIVATE, production-scale=READY_TO_ACTIVATE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production=READY_TO_ACTIVATE, production-scale=READY_TO_ACTIVATE
 
 ## Push Notification Delivery (`push-notification-delivery`)
 
@@ -350,7 +350,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: no live provider rehearsal yet (accounts required)
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=BLOCKED_EXTERNAL, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production-lean=READY_TO_ACTIVATE, production-scale=READY_TO_ACTIVATE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production=READY_TO_ACTIVATE, production-scale=READY_TO_ACTIVATE
 
 ## Scale Readiness (`scale-readiness`)
 
@@ -362,7 +362,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** complete repository-controlled verification + hardening
 - **Confidence:** LOW — gap: credentialed environment execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=NOT_ATTEMPTED, staging=BLOCKED_EXTERNAL, production=NOT_ATTEMPTED, scale=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production-lean=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
+- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
 
 ## Client SDKs (`sdks`)
 
@@ -374,7 +374,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: not yet exercised in credentialed staging/production
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=NOT_ATTEMPTED, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production-lean=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
 
 ## Security & Compliance (`security-compliance`)
 
@@ -386,7 +386,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: not yet exercised in credentialed staging/production
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=NOT_ATTEMPTED, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production-lean=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
 
 ## Semantic Intelligence (`semantic-intelligence`)
 
@@ -398,7 +398,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** complete runtime integration; complete repository-controlled verification
 - **Confidence:** LOW — gap: credentialed environment execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=NOT_ATTEMPTED, staging=BLOCKED_EXTERNAL, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production-lean=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
+- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
 
 ## Smart Contracts & Rewards (`smart-contracts-rewards`)
 
@@ -410,7 +410,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: credentialed environment execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=BLOCKED_EXTERNAL, production=NOT_APPLICABLE
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production-lean=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=READY_TO_ACTIVATE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
 
 ## Stablecoin Intelligence (`stablecoin-intelligence`)
 
@@ -422,7 +422,7 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** complete repository-controlled verification + hardening
 - **Confidence:** LOW — gap: credentialed environment execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=NOT_ATTEMPTED, staging=BLOCKED_EXTERNAL, production=NOT_APPLICABLE
-- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production-lean=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
+- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production=NOT_IN_PROFILE, production-scale=NOT_IN_PROFILE
 
 ## Tenant Import Engine (`tenant-import-engine`)
 
@@ -434,5 +434,5 @@ Each feature is measured across independent dimensions. Implementation completio
 - **Remaining repository work:** None
 - **Confidence:** MODERATE — gap: not yet exercised in credentialed staging/production
 - **Environment evidence:** local=VERIFIED, ci=VERIFIED, staging=NOT_ATTEMPTED, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production-lean=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_VALIDATE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
 

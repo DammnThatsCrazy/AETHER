@@ -22,7 +22,7 @@ source_hashes:
   "services/api/config/settings.py": "sha256:4d2921c8c3a93e5cf0e3ab4eab9172770642684dd20858221481608af2ef69d5"
   "services/api/main.py": "sha256:f76824db10962390701e0356564ecb69e7fc5c81f25fff6e51c685da359aeb75"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
-  "services/api/workers/runtime/roles.py": "sha256:24f2e24879828f8f340e91086f57c0e99940e9db96791edc6a1d24d590ba26b1"
+  "services/api/workers/runtime/roles.py": "sha256:061fee9712dee6e5354ba7bc8162eeb06a909e526e6ed45d1dee9a4afe9c63b2"
   "services/api/workers/runtime/run_role.py": "sha256:787c2388526da3d9bf77aa4d138e35fddf15afeb4aafef0d06f2501834785354"
   "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---

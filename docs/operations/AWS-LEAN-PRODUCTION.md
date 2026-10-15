@@ -11,7 +11,7 @@ source_files:
   - infra/aws/terraform/main.tf
   - infra/aws/terraform/variables.tf
   - infra/aws/terraform/moved.tf
-  - infra/aws/terraform/profiles/production-lean.tfvars
+  - infra/aws/terraform/profiles/production.tfvars
   - infra/aws/terraform/tests/profile_plan.tftest.hcl
   - infra/aws/terraform/DECOMMISSION.md
   - config/runtime_deployment.yaml
@@ -26,23 +26,23 @@ reviewed_source_commits:
   - commit: "609a3ad37"
     reason: "Reviewed the linked root main.tf change; it updates the Auth0 section comment only. The dedicated Native CLI client change does not alter lean AWS topology, deployment lane, or runtime settings described here."
 source_hashes:
-  ".github/workflows/infrastructure.yml": "sha256:5c1138601e7f849d2a1b6649957c32607fc1aacd25667bf910de280a4db4db0c"
-  ".github/workflows/terraform-promote.yml": "sha256:dc7242423f1931ba0d93019d701beed0a669458e4124db8baba46d074becd0ad"
-  "config/deployment_profiles.yaml": "sha256:77d37f2c71472b5d644da32636bb68948263250739b62b621502cdfb09797475"
-  "config/runtime_deployment.yaml": "sha256:ba7bd71d79e605a88076b6ea745582dce9c4bff38442ebd5d327cfee9bbf7284"
-  "config/terraform_resource_contracts.yaml": "sha256:1f08c04dae8931f845c7918328504f748a9f643bc806670a32b644eb8231baca"
-  "infra/aws/terraform/DECOMMISSION.md": "sha256:d6b05d282e02fcd6840078a75312165ca7a808f5344cc9e05f2eb234dcef7238"
-  "infra/aws/terraform/main.tf": "sha256:e922b6a0fe0e1bb6e3343929fe9c5e5b3874f517189965610dde4f18c86be827"
-  "infra/aws/terraform/moved.tf": "sha256:aec15de07e356364018e3bdf09fdb6196d252bdb4e0451212f5b6a27a7b26816"
-  "infra/aws/terraform/profiles.tf": "sha256:c197af7ebf1556be22a70dbf05c4ba85f5f93a2dd322dc39a42442f27226a89d"
-  "infra/aws/terraform/profiles/production-lean.tfvars": "sha256:ba173dfc337349057b0d4f02d8be3e3c6d8d2ef92408e76b29166a881a5c13d2"
-  "infra/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:e2bfb6ee65dbe6a38894b76518c2ef8c1edd728a481bfd5559692a020b591d74"
-  "infra/aws/terraform/variables.tf": "sha256:4f28b3822f6207da22bfc5f0df4405aa5f3e9127e60da208e4a1611e012643d7"
+  ".github/workflows/infrastructure.yml": "sha256:0b75f5f3df587ea210008ef2bd79babf74c832dd6746a5a218411dae3a90d5ad"
+  ".github/workflows/terraform-promote.yml": "sha256:804e3b437274475d5125b4dbf6c3988ff9387909af73a5aeb5690713cf310adf"
+  "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
+  "config/runtime_deployment.yaml": "sha256:cd65f4902ed9062c2526bd9b83b99e2c0ecc58f012a3fa1c90ba9660b874a332"
+  "config/terraform_resource_contracts.yaml": "sha256:b1414be3c53b0309d484b8029aadf336618bd88d94d31de72ed0f54865493d59"
+  "infra/aws/terraform/DECOMMISSION.md": "sha256:7d1aa3e9fd042bbb27d8173ea690f41747eee0ea91c5ddcab6c85a5edd688ea6"
+  "infra/aws/terraform/main.tf": "sha256:11831622e9a0aa866f14cfb7b4de0e4744b12f15804141d956f96a0a2ac82b8f"
+  "infra/aws/terraform/moved.tf": "sha256:3a816e2a5b402a98a89d949b1801bd6c3cd99242a26cc17039c6d140faa3a342"
+  "infra/aws/terraform/profiles.tf": "sha256:da63e1f50e4030924713679445e3c365883a23821ac78df83bebe14436c67f60"
+  "infra/aws/terraform/profiles/production.tfvars": "sha256:8e0db028aacace222470b10506e75e3f7689ba2ce02f0106566243981917c7a7"
+  "infra/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:65c25850344e2b70121207e64f5883d48677feaab93d3a39d6f7aa474908d8d8"
+  "infra/aws/terraform/variables.tf": "sha256:5eed310106c5621fc91dc3961c3e2194a03c6d0181fa494df5ad376112638cdb"
 ---
 
 # AWS Lean Production
 
-`production-lean` is Aether's founding-tenant production profile: the smallest
+`production` is Aether's founding-tenant production profile: the smallest
 AWS footprint that runs the whole platform for a first paying customer without
 regressing delivery, isolation or observability.
 
@@ -52,7 +52,7 @@ into and out of it.
 
 > **Nothing on this page has been applied.** No credentialed
 > `terraform plan` or `terraform apply` for this profile has run. The
-> `production-lean` scorecard in `config/deployment_readiness.yaml` reads
+> `production` scorecard in `config/deployment_readiness.yaml` reads
 > **45/100 code-complete, 0/100 externally-verified** against a gate of 92,
 > and `deployment_ready: false`. See [What is proven](#what-is-proven).
 
@@ -60,14 +60,14 @@ into and out of it.
 
 ```bash
 cd "infra/aws/terraform"
-terraform plan -var-file=profiles/production-lean.tfvars -out=tfplan
+terraform plan -var-file=profiles/production.tfvars -out=tfplan
 ```
 
-`profiles/production-lean.tfvars` pins the lean runtime and the production web
+`profiles/production.tfvars` pins the lean runtime and the production web
 cutover controls:
 
 ```hcl
-deployment_profile  = "production-lean"
+deployment_profile  = "production"
 network_egress_mode = "public_ip"   # zero NAT Gateways
 aurora_min_acu      = 0.5           # always warm at a small floor
 aurora_max_acu      = 4
@@ -86,7 +86,7 @@ must pin the exact digests from an approved release manifest.
 
 `profiles.tf` derives every resource toggle from `var.deployment_profile`, and
 `main.tf` wires those locals into module `count` and module inputs. The
-selection is therefore structural, not documentary: a `production-lean` plan
+selection is therefore structural, not documentary: a `production` plan
 *cannot* contain a forbidden resource.
 
 ## Topology
@@ -142,7 +142,7 @@ control and target are supplied.
 | `lean-worker` | `AETHER-production-lean-worker` | all eight worker roles | 1 | 2048 / 8192 | 1 → 4 on SQS queue depth, target 500/task, 300 s cooldown | `FARGATE` base 1, `FARGATE` surge |
 
 **Two always-on tasks, down from ten.** The eight dedicated worker services
-that `production-scale` still runs are collapsed into one consolidated task.
+that a dedicated-mode deployment would run are collapsed into one consolidated task.
 
 The `api` service is served by the Terraform-provisioned
 `<project>-<env>-backend` ECS service (`aws_ecs_service.backend` in
@@ -248,7 +248,7 @@ listener's default action and is served by the backend.
 
 ### Alarms
 
-`production-lean` provisions 9 CloudWatch objects: the dashboard plus
+`production` provisions 9 CloudWatch objects: the dashboard plus
 `alb_5xx`, `aurora_max_acu`, `ml_drift`, `dynamodb_cache_throttled`,
 `sqs_queue_depth`, `sqs_oldest_message_age`, `sqs_dlq_depth`, and the alert SNS
 topic.
@@ -263,20 +263,20 @@ dimensions would point at a resource the profile does not provision are
 
 ## Resources explicitly absent
 
-Every one of these is asserted at zero in a `production-lean` plan by
+Every one of these is asserted at zero in a `production` plan by
 `scripts/release/check_terraform_plan_policy.py`, and by
 `length(module.<x>) == 0` assertions in `tests/profile_plan.tftest.hcl`.
 
 | Absent | Terraform gate | Permitted in |
 |---|---|---|
-| MSK Kafka cluster, configuration, KMS key, broker logs | `enable_msk` | `production-scale`, `enterprise-isolated` |
-| ElastiCache Redis replication group, subnet/parameter groups, AUTH secret | `enable_elasticache` | `production-scale`, `enterprise-isolated` |
-| Neptune cluster, instances, subnet group | `enable_neptune` | `production-scale`, `enterprise-isolated` |
+| MSK Kafka cluster, configuration, KMS key, broker logs | `enable_msk` | **nowhere** today — enabling needs a reviewed production variable change |
+| ElastiCache Redis replication group, subnet/parameter groups, AUTH secret | `enable_elasticache` | **nowhere** today — enabling needs a reviewed production variable change |
+| Neptune cluster, instances, subnet group | `enable_neptune` | **nowhere** today — enabling needs a reviewed production variable change |
 | ClickHouse | `enable_clickhouse` | selector only — **no module exists at any profile** |
-| Dedicated ML ECS service + ALB target group and listener rule | `enable_dedicated_ml` | `production-scale`, `enterprise-isolated` |
+| Dedicated ML ECS service + ALB target group and listener rule | `enable_dedicated_ml` | **nowhere** today — enabling needs a reviewed production variable change |
 | **Frontend ECS services** | `enable_frontend_ecs` (literal `false`) | **nowhere** |
 | **Legacy RDS instance, parameter group, subnet group** | `enable_legacy_rds` (literal `false`) | **nowhere** |
-| **NAT Gateways and Elastic IPs** | `enable_nat_gateway` / `network_egress_mode` | `production-scale` (1), `enterprise-isolated` (3) |
+| **NAT Gateways and Elastic IPs** | `enable_nat_gateway` / `network_egress_mode` | **nowhere** today (`public_ip` egress) |
 | **Self-managed Prometheus/Grafana compute** | `enable_prometheus_grafana` (literal `false`) | **nowhere** |
 | Always-on staging compute | not plan-checkable | — |
 
@@ -285,7 +285,7 @@ decisions: SPAs are immutable S3 origins at every tier, Aurora is the database
 of record at every tier, and observability is CloudWatch native at every tier.
 The contracts file records this as `permitted_in: []`.
 
-`always_on_staging_compute` has nothing to count in a `production-lean` plan —
+`always_on_staging_compute` has nothing to count in a `production` plan —
 a production plan provisions no staging resources at all. It is a lifecycle
 property enforced by the staging wake/sleep automation and by
 `scripts/release/check_cost_policy.py`.
@@ -305,11 +305,11 @@ The optional customer Access Kit MCP service adds approximately USD 18.02 per
 month for two continuously running 0.25-vCPU / 0.5-GiB Fargate tasks, plus
 about USD 0.50/month for 5 GiB of ECR storage. At roughly USD 207.45/month
 before variable ALB and CloudWatch charges, that option exceeds the fixed USD
-200 hard ceiling. The existing Terraform cost gate rejects the production-lean
+200 hard ceiling. The existing Terraform cost gate rejects the production
 plan unless an active, time-bounded cost exception authorizes the overage.
-Access Kit MCP is currently constrained to the canonical `production-scale`
+Access Kit MCP is currently constrained to the canonical `production`
 state because that state owns the globally named ECR repository; this
-production-lean figure is a cost comparison, not an allowed deployment
+production figure is a cost comparison, not an allowed deployment
 profile. Optional delegated OAuth adds a Secrets Manager secret and its
 associated variable charges beyond this base estimate. See the
 [Access Kit MCP AWS deployment runbook](../../infra/aws/terraform/ACCESS_KIT_MCP_DEPLOYMENT.md).
@@ -331,7 +331,7 @@ Lean buys its cost profile with specific, named risks. None of them is hidden.
 | Choice | What you give up | What covers it |
 |---|---|---|
 | **1 API task** | No warm second task for instant failover; a task replacement is a brief capacity dip | ALB health check + ECS deployment circuit breaker + autoscaling to 4 on sustained request count. A permanently warm second task paid full price for a failover autoscaling already provides. |
-| **8 roles in 1 task** | One OOM, crash-loop or bad deploy takes all eight roles down together. No per-role blast-radius isolation. | 8 GiB of memory headroom; per-role queues, DLQs and retry policies survive the process boundary; autoscaling to 4 tasks on queue depth. Promote to `production-scale` for real isolation. |
+| **8 roles in 1 task** | One OOM, crash-loop or bad deploy takes all eight roles down together. No per-role blast-radius isolation. | 8 GiB of memory headroom; per-role queues, DLQs and retry policies survive the process boundary; autoscaling to 4 tasks on queue depth. Growing production beyond this shape (dedicated mode) is the answer to real isolation. |
 | **No Spot anywhere** | Forgoes the Spot discount on surge capacity | Deliberate. `api` is public traffic and `lean-worker` hosts `outbox-relay`. |
 | **`public_ip` egress** | Tasks hold public IPv4 addresses; no private-subnet posture | Task SG accepts ALB traffic only. Promote to `single_nat`/`ha_nat` when a compliance or customer requirement demands private subnets. |
 | **Aurora 0.5–4 ACU** | Ceiling is 4 ACU; sustained saturation is a real limit | `aurora_max_acu` alarm fires after >10 min at ceiling. Raise the ceiling first; sustained saturation after that is a scale signal. |
@@ -346,8 +346,8 @@ Lean buys its cost profile with specific, named risks. None of them is hidden.
 Terraform. It is `workflow_dispatch`-only: no push, tag, schedule or path
 trigger can reach an apply.
 
-The job that used to auto-apply `production-lean` on every push to `main`
-(`apply-production-lean` in `infrastructure.yml`) has been **deleted**.
+The job that used to auto-apply `production` on every push to `main`
+(`apply-production` in `infrastructure.yml`) has been **deleted**.
 `infrastructure.yml` is now plan-and-validate only, and says so at the top of
 the file.
 It runs its path-scoped provider-mocked plan on PR finalization
@@ -358,7 +358,7 @@ draft PR pushes do not start the workflow.
 
 ```bash
 gh workflow run terraform-promote.yml \
-  -f profile=production-lean \
+  -f profile=production \
   -f action=plan \
   -f backend_image_digest=sha256:<64hex> \
   -f ml_image_digest=sha256:<64hex>
@@ -368,9 +368,8 @@ The plan job fails closed on an incomplete remote-plan credential set. That
 shared set includes `TF_AMPLIFY_GITHUB_ACCESS_TOKEN` because AWS Amplify
 requires a repository access token for public and private GitHub repositories.
 `TF_ML_IMAGE_DIGEST` is not part of the shared set: staging and
-`production-lean` run inline ML. The dedicated `production-scale` and
-`enterprise-isolated` matrix plans require that secret and an immutable digest
-at their own profile-specific plan step.
+`production` run inline ML. A dedicated-ML deployment would require that
+secret and an immutable digest at its own plan step.
 The historical placeholder value `-` and values containing whitespace are
 rejected before AWS credentials are assumed. The job then produces an
 **immutable reviewed plan** consisting of 16 artifacts:
@@ -402,9 +401,9 @@ the Kyber application origin. This keeps the operator browser surface and the
 backend identity exchange on their intended trust boundaries.
 
 The shared Terraform root also contains a pilot-only staging first-admin
-overlay. It is not part of `production-lean`: outside the `pilot` deployment
+overlay. It is not part of `production`: outside the `pilot` deployment
 lane the bootstrap route is explicitly disabled and its approved email is
-empty, so production-lean receives no staging bootstrap behavior.
+empty, so production receives no staging bootstrap behavior.
 
 Pilot wake/sleep keeps each ECS capacity-provider strategy stable (FARGATE
 base 0, weight 100) and changes desired task counts plus both autoscaling
@@ -420,7 +419,7 @@ spend is estimated from desired tasks, not the provider placement base.
 
 ```bash
 gh workflow run terraform-promote.yml \
-  -f profile=production-lean \
+  -f profile=production \
   -f action=apply \
   -f plan_run_id=<plan run id> \
   -f plan_checksum=<reviewed.tfplan sha256>
@@ -437,9 +436,7 @@ constituting a production-ready path:
 | Profile | Environment |
 |---|---|
 | `staging` | `staging-terraform` |
-| `production-lean` | `production-lean-terraform` |
-| `production-scale` | `production-scale-terraform` |
-| `enterprise-isolated` | `enterprise-terraform` |
+| `production` | `production-lean-terraform` |
 
 Before any non-staging promotion, create and protect the named environment,
 populate its profile-specific OIDC role and Terraform inputs, and prove the
@@ -507,7 +504,7 @@ tags are never rollback inputs. See
 There is no "undo apply". Roll back by producing and applying a **new reviewed
 plan** from the previous commit:
 
-1. `gh workflow run terraform-promote.yml -f profile=production-lean -f action=plan ...`
+1. `gh workflow run terraform-promote.yml -f profile=production -f action=plan ...`
    from the last-known-good commit, with the digests that commit's release
    manifest approved.
 2. Review the plan. **Read the destroy list.** A rollback plan can destroy
@@ -561,7 +558,7 @@ expressible.
 addressable resource, so there is nothing to move *from*.
 
 On the first apply against a workspace that already carries NAT
-(`production-scale`, `enterprise-isolated`), Terraform performs two separate
+(none today; any future deployment that adds one), Terraform performs two separate
 operations on the live egress path with no guaranteed ordering: an in-place
 update of the route table to drop the inline route, and a create of the new
 `aws_route`. Treat it as a **maintenance window**:
@@ -570,7 +567,7 @@ update of the route table to drop the inline route, and a create of the new
 2. Expect a brief window where private-subnet egress may be unavailable.
 3. Afterwards verify each private route table has exactly one `0.0.0.0/0` route
    to the intended NAT Gateway — in `ha` mode, the NAT in the **same AZ**.
-4. `nat_mode = "none"` workspaces (`staging`, `production-lean`) are
+4. `nat_mode = "none"` workspaces (`staging`, `production`) are
    unaffected: there is no NAT and no private default route to migrate.
 
 The mirror-image hazard — adding `count` to a module changing its state address
@@ -593,30 +590,21 @@ separate AWS accounts.**
 | tfvars | `deployment_profile` | effective `environment` |
 |---|---|---|
 | `staging.tfvars` | `staging` | `staging` (explicit) |
-| `production-lean.tfvars` | `production-lean` | **`production`** |
-| `production-scale.tfvars` | `production-scale` | **`production`** |
-| `enterprise-isolated.tfvars` | `enterprise-isolated` | **`production`** |
+| `production.tfvars` | `production` | **`production`** |
 
 Resource names are built as `${var.project}-${var.environment}` —
-`AETHER-production-*` for all three. The ECS cluster, ALB, log groups, IAM
-roles, SQS queues and S3 buckets are therefore **identically named** across
-`production-lean`, `production-scale` and `enterprise-isolated`.
+`AETHER-production-*` for production and `AETHER-staging-*` for staging, so the
+two profiles never collide on names even in one account. Separate Terraform
+state keys (`profiles/<profile>/terraform.tfstate`) keep the *state* apart.
 
-Separate Terraform state keys (`profiles/<profile>/terraform.tfstate`) keep the
-*state* apart. They do nothing about the *names*. Two of these profiles cannot
-be applied into the same account and region simultaneously; the second apply
-collides on live resources.
-
-**They require separate AWS accounts.** There is no in-band fix: the
-`environment` validation permits only three values, and a naming-scheme change
-would rename essentially every resource in the root — a destroy-and-recreate of
-production that must itself go through `DECOMMISSION.md` with `moved` blocks
-for every affected address. This is recorded as a known, unfixed constraint in
-`DECOMMISSION.md`.
+A dedicated customer deployment (the old `enterprise-isolated` idea) would
+reuse the production names and therefore needs its own AWS account; see
+"Dedicated customer deployments" in
+[Deployment Profiles](../architecture/DEPLOYMENT-PROFILES.md).
 
 ## Scale-up criteria
 
-Promote to `production-scale` on observed, sustained conditions — not projected
+Grow production (by variables, not a new profile) on observed, sustained conditions — not projected
 ones. The full trigger table is in
 [Cost Optimization](COST-OPTIMIZATION.md#scale-promotion-triggers). In short:
 
@@ -631,7 +619,7 @@ ones. The full trigger table is in
 - Graph or analytics workload dominating database load (Neptune / ClickHouse).
 - A compliance or customer requirement for private task subnets.
 
-What `production-scale` buys: one dedicated ECS service per role (9 services,
+What growing production buys: one dedicated ECS service per role (9 services,
 `execution_mode: dedicated`), `FARGATE_SPOT` on surge capacity for the
 interruption-tolerant consumers, ElastiCache, MSK, Neptune, dedicated ML
 serving, `single_nat` egress with private task subnets, and no cost ceiling.
@@ -644,9 +632,9 @@ and `frontend_ecs_services` stay forbidden at every tier.
 Verified in this repository, reproducibly:
 
 - `terraform validate` **passes** for the root module.
-- `terraform test -filter=tests/profile_plan.tftest.hcl` **passes** — 5 run
-  blocks: `staging`, `staging_asleep`, `production_lean`, `production_scale`,
-  `enterprise_isolated`. Assertions read the **planned module graph**
+- `terraform test -filter=tests/profile_plan.tftest.hcl` **passes** — the
+  run blocks for `staging`, `staging_asleep` and `production_profile_plan`
+  (plus the applied-state and egress-rejection blocks). Assertions read the **planned module graph**
   (`length(module.msk) == 0` and friends), not the locals that produced it, so
   a local that stops being wired into `count` is caught rather than passed. The
   assertions were mutation-checked by hand during development — forcing
@@ -656,7 +644,7 @@ Verified in this repository, reproducibly:
   standing gate.
 - `scripts/release/check_cost_policy_terraform.py` statically evaluates the
   `profiles.tf` locals and proves each forbidden toggle resolves to `false` for
-  `production-lean`.
+  `production`.
 - `scripts/release/check_terraform_plan_policy.py` scores a real plan inventory
   against the contracts and passes.
 - `scripts/release/check_cost_model.py` prices that inventory at
@@ -690,7 +678,7 @@ recorded as blocked rather than counted as done:
 - Not applied. Not deployed. Not billed. Not load-tested.
 - No multi-region, active-active or DR-region posture.
 - No compliance certification, external attestation or audit coverage.
-- The `100/100` figure in the `production-lean` scorecard is the
+- The `100/100` figure in the `production` scorecard is the
   **code-complete** column and must never be quoted as "the score". The
   externally-verified column is `0/100` against a gate of `92`, and
   `deployment_ready` is `false`.

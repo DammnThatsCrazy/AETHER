@@ -51,7 +51,7 @@ source_hashes:
   "services/api/repositories/repos.py": "sha256:4763340370ea7ef9e43d91b1156def3188a83114efa832e0a289f267957206e6"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
   "services/api/workers/profile360_workers/workers.py": "sha256:0c79f5ee2cc03eb0ae92d8690a8622b8ebaea245dc047c7643107fe909d7170a"
-  "services/api/workers/runtime/roles.py": "sha256:24f2e24879828f8f340e91086f57c0e99940e9db96791edc6a1d24d590ba26b1"
+  "services/api/workers/runtime/roles.py": "sha256:061fee9712dee6e5354ba7bc8162eeb06a909e526e6ed45d1dee9a4afe9c63b2"
   "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
 # Operations Runbook v0.1.0-alpha.0

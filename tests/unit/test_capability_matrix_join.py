@@ -28,7 +28,7 @@ FACETS = {
     "roles": {"api", "graph-writer", "lean-worker"},
     "flags": {"ROUTE_REGISTRY_ENFORCED", "ingestion_v2"},
     "readiness_ids": {"LEAN-RUNTIME-TOPOLOGY", "STG-SMOKE"},
-    "known_profiles": {"local", "staging", "production-lean"},
+    "known_profiles": {"local", "staging", "production"},
 }
 
 DEPLOY_CAPABILITIES = {"api": "present", "graph": "present", "traces": "gap"}
@@ -45,7 +45,7 @@ def _entry(cid: str, **overrides) -> dict:
         "states": {
             "local": "required_enabled",
             "staging": "required_enabled",
-            "production-lean": "required_enabled",
+            "production": "required_enabled",
         },
     }
     base.update(overrides)
@@ -56,7 +56,7 @@ def _doc(entries: list[dict]) -> dict:
     return {
         "schema_version": 1,
         "canonical_source": "config/capability_matrix.yaml",
-        "profiles": ["local", "staging", "production-lean"],
+        "profiles": ["local", "staging", "production"],
         "capabilities": entries,
     }
 
@@ -89,7 +89,7 @@ def _valid_entries() -> list[dict]:
             states={
                 "local": "not_in_release",
                 "staging": "not_in_release",
-                "production-lean": "not_in_release",
+                "production": "not_in_release",
             },
         ),
     ]
@@ -170,7 +170,7 @@ def test_off_enum_state_fails() -> None:
 
 def test_gap_capability_cannot_claim_enabled_state() -> None:
     entries = _valid_entries()
-    entries[2]["states"]["production-lean"] = "required_enabled"
+    entries[2]["states"]["production"] = "required_enabled"
     entries[2]["control_evidence"] = "STG-SMOKE"
     errors = _errors(_doc(entries))
     assert any("status is 'gap'" in e for e in errors), errors

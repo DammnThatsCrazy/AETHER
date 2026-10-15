@@ -55,7 +55,7 @@ def _provenance(**over) -> dict:
         "terraform_version": "1.9.8",
         "captured_at": "2026-07-25T13:00:00+00:00",
         "commit_sha": "a1b2c3d4e5f6",
-        "source": "s3://aether-terraform-state/production-lean/plan.json",
+        "source": "s3://aether-terraform-state/production/plan.json",
     }
     base.update(over)
     return base
@@ -159,7 +159,7 @@ def _config(controls: list[dict], exceptions: list | None = None,
         "scorecards": {
             "overall": {"title": "overall", "total": 100, "gate": 90,
                         "gate_basis": "externally_verified"},
-            "production-lean": {"title": "lean", "total": 100, "gate": 92,
+            "production": {"title": "lean", "total": 100, "gate": 92,
                                 "gate_basis": "externally_verified"},
             "staging": {"title": "staging", "total": 100, "gate": 95,
                         "gate_basis": "externally_verified"},
@@ -205,13 +205,13 @@ def _satisfy_all_external(root: Path, attested: bool = False) -> None:
         "release-evidence/lifecycle/deployed-artifacts.json": {
             "manifest_sha256": "a" * 64, "deployed_digests": {}},
         "release-evidence/terraform/lean-plan-provenance.json": {
-            "profile": "production-lean", "plan_sha256": "b" * 64,
-            "state_key": "profiles/production-lean/terraform.tfstate"},
+            "profile": "production", "plan_sha256": "b" * 64,
+            "state_key": "profiles/production/terraform.tfstate"},
         "release-evidence/terraform/promotion-provenance.json": {
             "reviewed_plan_sha256": "b" * 64, "applied_plan_sha256": "b" * 64,
             "lock_sha256": "c" * 64, "state_key": "k"},
         "release-evidence/cost/observed-cost.json": {
-            "profile": "production-lean", "days": 9, "daily_usd": [3.1] * 9},
+            "profile": "production", "days": 9, "daily_usd": [3.1] * 9},
         "release-evidence/cost/reconciliation.json": {
             "projected_usd": 97.67, "observed_usd": 104.2, "variance_percent": 6.7},
         "release-evidence/load/load-result.json": {
@@ -269,7 +269,7 @@ def test_control_with_no_evidence_file_scores_zero(tmp_path):
 
 def test_control_whose_evidence_exists_but_fails_validation_scores_zero(tmp_path):
     """Present is not passing. The file is there and the validator rejects it."""
-    _write(tmp_path / ".artifacts/result.json", {"profile": "production-lean"})
+    _write(tmp_path / ".artifacts/result.json", {"profile": "production"})
     config = _config(_one_per_profile([
         {"id": "e", "kind": "json_artifact", "path": ".artifacts/result.json",
          "require_keys": ["profile", "passed"], "external": False},
@@ -295,7 +295,7 @@ def test_control_whose_validator_script_exits_nonzero_scores_zero(tmp_path):
 
 def test_require_true_rejects_a_falsy_pass_flag(tmp_path):
     _write(tmp_path / "docs/reference/reports/cost/cost-report.json",
-           {"profile": "production-lean", "passed": False})
+           {"profile": "production", "passed": False})
     config = _config(_one_per_profile([
         {"id": "e", "kind": "json_artifact", "path": "docs/reference/reports/cost/cost-report.json",
          "require_keys": ["profile"], "require_true": ["passed"], "external": False},
@@ -344,7 +344,7 @@ def test_credentialed_evidence_without_provenance_scores_zero(tmp_path):
     """A plausible artifact with no provenance earns nothing."""
     _write(tmp_path / "docs/D.md", "documented")
     _write(tmp_path / "release-evidence/cost/observed-cost.json",
-           {"profile": "production-lean", "days": 7, "daily_usd": [1] * 7})
+           {"profile": "production", "days": 7, "daily_usd": [1] * 7})
     config = _config(_one_per_profile([
         {"id": "doc", "kind": "repo_file", "path": "docs/D.md", "external": False},
         {"id": "cost", "kind": "credentialed_artifact",
@@ -507,7 +507,7 @@ def test_release_gates_are_enforced_at_90_92_and_95(tmp_path, attestation_verifi
 def test_gate_thresholds_in_the_repo_config_are_90_92_and_95():
     config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
     gates = {p: card["gate"] for p, card in config["scorecards"].items()}
-    assert gates == {"overall": 90, "production-lean": 92, "staging": 95}
+    assert gates == {"overall": 90, "production": 92, "staging": 95}
     for card in config["scorecards"].values():
         assert card["gate_basis"] == "externally_verified"
 
@@ -1087,16 +1087,16 @@ def test_an_artifact_derived_from_a_fixture_earns_nothing(tmp_path):
     readiness numbers.
     """
     _write(tmp_path / ".artifacts/profile-policy-result.json", {
-        "profile": "production-lean", "passed": True, "violations": [],
+        "profile": "production", "passed": True, "violations": [],
         "checks_total": 59,
-        "plan_json": "/repo/tests/fixtures/terraform_plans/production-lean-valid.json",
+        "plan_json": "/repo/tests/fixtures/terraform_plans/production-valid.json",
         "synthetic_input": "tests/fixtures"})
     _write(tmp_path / "docs/reference/reports/cost/cost-report.json", {
-        "profile": "production-lean", "gated_amount": 187.13,
+        "profile": "production", "gated_amount": 187.13,
         "effective_ceiling": 200.0, "passed": True,
         "inventory_path": ".artifacts/profile-resource-inventory.json",
         "inventory_source": {
-            "generated_from": "tests/fixtures/terraform_plans/production-lean-valid.json",
+            "generated_from": "tests/fixtures/terraform_plans/production-valid.json",
             "synthetic_input": "tests/fixtures"}})
     config = _config(_one_per_profile([
         {"id": "plan", "kind": "json_artifact",
@@ -1117,7 +1117,7 @@ def test_an_artifact_derived_from_a_fixture_earns_nothing(tmp_path):
 def test_an_artifact_from_a_real_plan_still_earns_its_point(tmp_path):
     """The rejection must be about provenance, not about the artifact's shape."""
     _write(tmp_path / ".artifacts/profile-policy-result.json", {
-        "profile": "production-lean", "passed": True, "violations": [],
+        "profile": "production", "passed": True, "violations": [],
         "checks_total": 59, "plan_json": ".artifacts/reviewed.tfplan.json",
         "synthetic_input": None})
     config = _config(_one_per_profile([
@@ -1150,7 +1150,7 @@ def test_the_six_reported_numbers_are_the_ones_this_repo_earns():
     }
     assert measured == {
         "overall": (60, 0),
-        "production-lean": (45, 0),
+        "production": (45, 0),
         # The guarded first-admin bootstrap is code-complete, but it does not
         # create external rehearsal evidence; the real staging score remains
         # 75/100 until a credentialed wake produces that evidence.

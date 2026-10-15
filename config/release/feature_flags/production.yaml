@@ -1,6 +1,6 @@
 schema_version: 1
-environment: production-lean
-profile: production-lean
+environment: production
+profile: production
 release:
   platform_version: 0.1.0-alpha.0
   sdk_release_target: 1.0.0-alpha.0

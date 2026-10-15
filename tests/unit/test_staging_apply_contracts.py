@@ -66,7 +66,7 @@ def test_staging_target_group_replacement_is_name_safe() -> None:
     migration = STATE_MIGRATION.read_text(encoding="utf-8")
     assert "legacy='module.alb.aws_lb_target_group.backend'" in migration
     assert "staging) target='module.alb.aws_lb_target_group.backend[0]'" in migration
-    assert "production-lean|production-scale|enterprise-isolated|demo|preview)" in migration
+    assert "  production)" in migration
     assert "backend_replacement[0]" in migration
     assert 'terraform state mv -lock-timeout=5m "$legacy" "$target"' in migration
     migration_workflow = STATE_MIGRATION_WORKFLOW.read_text(encoding="utf-8")
@@ -996,7 +996,7 @@ def test_ecr_collision_lookup_precedes_any_apply_mutation() -> None:
     assert 'split("[")[1]' in block
     assert 'rtrimstr("]")' in block
     assert text.index("describe-repositories", start) < text.index("terraform apply", start)
-    assert "inputs.profile == 'staging' || inputs.profile == 'demo' || inputs.profile == 'preview'" in text
+    assert "if: inputs.profile == 'staging'" in text
     assert 'key=profiles/${PROFILE}/terraform.tfstate' in text
 
 

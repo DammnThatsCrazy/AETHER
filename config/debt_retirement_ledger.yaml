@@ -720,7 +720,7 @@ entries:
       OpenSearch endpoint and port), Jira credentials, a duplicate stablecoin
       Profile360 flag, and five tuning thresholds the code hardcodes. Their lines are removed from
       config/environments/.env.example, config/environments/.env.local.example, config/environments/.env.staging.example,
-      config/environments/.env.production.example and the production-lean and staging release flag
+      config/environments/.env.production.example and the production and staging release flag
       lists, and the capability overlays no longer bind them.
     consumers: []
     compatibility: >-

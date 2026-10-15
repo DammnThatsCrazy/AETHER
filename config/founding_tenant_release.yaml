@@ -1,5 +1,5 @@
 schema_version: 1
-profile: production-lean
+profile: production
 environment: production
 release_surface:
   enabled_route_prefixes:
