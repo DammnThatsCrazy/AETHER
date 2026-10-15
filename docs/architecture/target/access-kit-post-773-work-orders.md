@@ -66,6 +66,20 @@ Repository implementation and live proof have different dispositions. The PR des
 | 4. Governed actions | A bounded continuation create/readback uses the existing principal-scoped continuation authority, `write`/`read` permissions, idempotency, durable revision, and an opt-in API flag. It is a resource write and is excluded from delegated MCP OAuth. | External actions with policy/rights approval, pending/completed receipts, and compensation remain outside this slice until an owner supplies those contracts. Live continuation replay and denial proof remain. |
 | 5. Customer installation and mobile evidence | Package exports/types, cloud CLI image path, hosted MCP infrastructure, and customer setup guidance exist in the repository. | Public npm/ECR publication, real remote-host conformance, installed mobile lifecycle, and provider-to-graph/customer-tenant evidence require the separate release and environment gates. No staging wake or deployment is part of this PR. |
 
+### Action owner disposition
+
+The existing staged graph-mutation route is not exposed as an Access Kit action.
+It has separate `agent:manage` and `agent:approve` gates, durable status, and
+rollback, but its commit path does not resolve or carry a Rights Authority
+decision into `MutationIntent`; objective idempotency does not reject changed
+content for a reused key; and the commit caller must honor an unapplied or
+blocked `GraphMutationGateway` outcome before recording success. Its rollback
+path also uses raw graph drops. These are owner-side contracts, not adapter
+work, so Access Kit does not map those routes into CLI or MCP tools. Delivery
+has durable receipts and status reads, but no customer action-create route with
+the required policy, rights, and approval lifecycle. Continuation create remains
+a resource write, not an external-action dispatcher.
+
 `enable_access_mcp_oauth` and `enable_access_continuations` default off. The
 continuation option sets `AETHER_CONTINUATION_ENABLED` on the API task only;
 it does not enable the client-sync feed or create a tenant grant. Enabling
