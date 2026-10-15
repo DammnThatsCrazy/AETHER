@@ -2464,6 +2464,18 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/engineering/ci-v2/test-retirement-ledger.md",
+      "title": "CI V2 Retirement Ledger",
+      "slug": "engineering/ci-v2-retirement-ledger",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/operations/AUDIT-EXPORTS.md",
       "title": "Audit Exports",
       "slug": "enterprise/audit-exports",
