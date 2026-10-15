@@ -14,6 +14,11 @@ ROOT = Path(__file__).resolve().parent.parent
 NORMAL_PR_AUTHORITY = ".github/workflows/repo-consistency.yml"
 NORMAL_PR_STATUS = "verification / disposition"
 NORMAL_PR_FINALIZATION_EVENT = "ready_for_review"
+# CI V2 shadow workflow: runs on every new PR head SHA so it can replace the
+# finalization-only authority. Exactly this file and these types are exempt;
+# the exemption is removed when the V2 cutover retires the old authority.
+CI_V2_WORKFLOW = ".github/workflows/ci.yml"
+CI_V2_PR_TYPES = ["opened", "synchronize", "reopened", "ready_for_review"]
 
 
 def _triggers(document: dict) -> dict:
@@ -62,6 +67,11 @@ def validate_workflow_cadence(root: Path = ROOT) -> list[str]:
             errors.append(
                 f"{relative}: pull_request must declare types: [{finalization_event}]"
             )
+        elif path == root / CI_V2_WORKFLOW:
+            if trigger.get("types") != CI_V2_PR_TYPES:
+                errors.append(
+                    f"{relative}: pull_request.types must be exactly {CI_V2_PR_TYPES}"
+                )
         elif trigger.get("types") != [finalization_event]:
             errors.append(
                 f"{relative}: pull_request.types must be exactly [{finalization_event}]"

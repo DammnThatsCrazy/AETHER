@@ -64,6 +64,7 @@ jobs:
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
+        continue-on-error: true  # diagnostic upload; must not decide the verdict
         with:
           name: aether-coverage
           path: apps/aether-web/coverage/

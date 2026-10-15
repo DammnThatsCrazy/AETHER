@@ -29,7 +29,7 @@ reviewed_source_commits:
   - commit: "c71ebc5cb"
     reason: "Reviewed Access Kit container workflow cadence: pull requests build on ready_for_review, with explicit dispatch and Development/main push lanes for targeted or post-landing builds; no staging wake or deployment is added."
 source_hashes:
-  ".github/workflows/": "sha256:12267c48224e5ca7fc743228a873ad2f9194b3267bbb393cc9d745b97efaeb86"
+  ".github/workflows/": "sha256:b0e3eb7e99d661c7805902a1cb73097dd32d0fe0d2e11c171182f4c21758d12f"
   "config/delivery_workflow_authority.yaml": "sha256:f9f6f8d8892aefe2b04ef6f2adbc95e5d514efbca7d8a833cf141a1ed17e7038"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
@@ -305,12 +305,26 @@ revision, rollback evidence is recorded as `not_applicable` because there is no
 prior revision; subsequent rehearsals must execute and verify rollback and
 roll-forward.
 
+## CI V2 shadow verdict
+
+`.github/workflows/ci.yml` (check `ci / verdict`) is the replacement for the
+`verification / disposition` DAG. During the shadow phase it runs on every new
+PR head SHA and merge-queue SHA, selects suites with `scripts/ci_select.py`
+and `config/ci/ownership.yaml`, uploads no artifacts, and is **not** a required
+status. `verification / disposition` stays the merge authority until the parity
+report clears the cutover. Diagnostic artifact uploads in workflows that never
+download artifacts are `continue-on-error` with seven-day retention so a storage
+quota failure cannot fail a run whose tests passed. See
+`docs/engineering/ci-v2/architecture.md`.
+
 ## Scope — two different things
 
 `infra/cicd/aether-cicd/` is a **Python demo runner**, not the pipeline. `main.py`
 prints a CI → CD → SDK-release model from constants in
-`config/pipeline_config.py`; it does not drive GitHub Actions, and
-`.github/workflows/ci.yml` does not exist. The branch strategy, six-account
+`config/pipeline_config.py`; it does not drive GitHub Actions. The CI V2
+shadow workflow `.github/workflows/ci.yml` is real and is described under
+[CI V2 shadow verdict](#ci-v2-shadow-verdict); it is separate from that demo
+runner. The branch strategy, six-account
 table and eight-stage CI/CD model below come from that reference model and are
 labelled as such.
 

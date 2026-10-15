@@ -23,7 +23,7 @@ reviewed_source_commits:
   - commit: "609a3ad37"
     reason: "Reviewed the optional session_required guard on the SSO callback. This page now explains its CLI-only fail-closed behavior while preserving browser sign-in and first-admin bootstrap behavior."
 source_hashes:
-  ".github/workflows/infrastructure.yml": "sha256:0b75f5f3df587ea210008ef2bd79babf74c832dd6746a5a218411dae3a90d5ad"
+  ".github/workflows/infrastructure.yml": "sha256:e0ec1b2746f4f3d2d3fd28819cf288bec019a93ee3fd7f4ea74e75efe36899dc"
   ".github/workflows/staging-lifecycle.yml": "sha256:ab0d86125cd2be277ba7e0a40a4dbc9fdd5db1480ff1c7cb816adf4874a55ae9"
   ".github/workflows/terraform-promote.yml": "sha256:804e3b437274475d5125b4dbf6c3988ff9387909af73a5aeb5690713cf310adf"
   "infra/aws/terraform/modules/ecs/main.tf": "sha256:33e716f33e0529919d24377a50ddb6a3d54f4ce51a403ffbe65aa9ebcd0aaa29"
