@@ -29,15 +29,15 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:0740c89ed3bf089b8ded5f9a319b7670a0afb18bda8f58a69a11a03c2a0a5d75"
   "services/api/connectors/": "sha256:01f3d11694ce153f102de85133e514fe4548877376c05668c2ee6fe63e1ad633"
-  "services/api/governance/": "sha256:2622bb5774fd4abc879cda3dff332aa64d6c5b5a14b99099e72266460f1efc8d"
-  "services/api/graph/": "sha256:4c1c2d5e1ddc4f87f67f84d8cd4bd5d5f863b1f7a4003be64137a6cd5690435f"
+  "services/api/governance/": "sha256:4da82f83bbd3ec9961512ff0aab45e638e5f243b5812376c8e3c408529b924d8"
+  "services/api/graph/": "sha256:bd963613166312ac99a29e07d2250a7cc45d55618204a62c969d0b801d8e2231"
   "services/api/identity/": "sha256:3899aca8a5fe95b1f975945913ebbd0cef920109649676c9b48b49fd6fcd2a1f"
   "services/api/ingestion/": "sha256:201513b270e7c49a9636eb99cbd9d8ca92247a0e1a7363fee7a9315dc895bf46"
   "services/api/intelligence/": "sha256:963f6b087bfa86e49a680408faca800a0d872ea5b8d65bd0332e66875130b5dd"
   "services/api/journeys/": "sha256:1b39920846d458dde3378049c8d25a6a6eda06826de370862102305373c85cf8"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:228120a11b8e6c3fec9405ed272e61de894b658274a33da129facc9c074a8224"
-  "services/api/value/": "sha256:a999ff77ca6c45839fef1abdd7d4f418c90585fed9f4f240b7b439775dbfe087"
+  "services/api/value/": "sha256:a1b747c3317fa53f2516f1d18d9852a0187b56567b0ab2c9434ffa37c874d9e5"
   "services/api/workers/": "sha256:2ba7219cc4a6bb8a77040d5871b16f764631ca87da8f36de0ba2140b59a015e6"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -166,7 +166,11 @@ observes: tenant create/read/update, admin API-key mint/list/revoke, tenant
 deactivation and deletion, the cross-tenant delivery job list, the overage
 cycle, `PUT /v1/fraud/config`, `POST /v1/web3/seed`, `GET
 /v1/lake/quality/{domain}`, `POST /v1/onchain/listener/configure`, `POST
-/v1/x402/graph/snapshot` and `GET /v1/cis/health/global`. Admin billing routes,
+/v1/x402/graph/snapshot`, `GET /v1/cis/health/global`, the global asset-registry
+writers (`POST /v1/assets/*` except `canonicalize`, `POST /v1/admin/assets/*`
+apply and register), `POST /v1/valuation/observe`, and the process-wide
+diagnostics (errors, report, health, circuit breakers, error resolve/suppress,
+observability metrics). Admin billing routes,
 SDK drift analysis, the SDK fleet read and CIS tenant governance accept another
 tenant's id only from a platform operator. A tenant manages its own account
 through `/v1/me/*`, `/v1/account/*` and `/v1/billing/*`.
@@ -4115,9 +4119,11 @@ never guessed.
 route fail-closes on that flag. Registration, seed, and canonicalize
 additionally require `settings.assets.ingestion_enabled`
 (`AETHER_ASSETS_INGESTION_ENABLED`). GET routes require the base `READ`
-permission; POST register/seed/canonicalize routes require `ADMIN`. Runtime
-seeding is not enabled by default — the canonical seed ships as an ADMIN action
-(`POST /v1/assets/seed`), it is not run at startup.
+permission; POST register/seed/canonicalize routes require `ADMIN`, and the
+register and seed routes, which write the global registry every tenant reads,
+also require a platform operator. Runtime seeding is not enabled by default —
+the canonical seed ships as an operator action (`POST /v1/assets/seed`), it is
+not run at startup.
 
 ### Reference & observational reads (GET, `READ`)
 
@@ -4140,13 +4146,13 @@ seeding is not enabled by default — the canonical seed ships as an ADMIN actio
 | Method | Path | Permission | Purpose |
 |---|---|---|---|
 | POST | `/v1/assets/canonicalize` | admin | Canonicalize one native payload (`{ "native": {...} }`) into a resolution report under the resolver priority (chain+contract → namespaced id → legacy alias → symbol). Native preserved verbatim; unresolvable refs recorded unresolved on the tenant's observational table. Returns 200. |
-| POST | `/v1/assets/assets` | admin | Register a canonical asset (idempotent upsert on canonical id). Returns 201. |
-| POST | `/v1/assets/chains` | admin | Register a chain reference. Returns 201. |
-| POST | `/v1/assets/fiat` | admin | Register an ISO 4217 fiat currency **and** its `fiat:<ISO>` canonical asset. Returns 201. |
-| POST | `/v1/assets/deployments` | admin | Register a deployment; EVM contract is lowercased and the id recomputed as `deploy:<asset_id>@<chain>:<contract>`. Returns 201. |
-| POST | `/v1/assets/aliases` | admin | Register an alias row → canonical target (alias stored lowercase). Returns 201. |
-| POST | `/v1/assets/capabilities` | admin | Register an asset support capability. Returns 201. |
-| POST | `/v1/assets/seed` | admin | Run the full canonical seed: fiat → chains (+ native crypto) → x402-verified stablecoins → legacy aliases. Idempotent; rewrites the deterministic `registry_version` meta row from the digest. Returns 201. |
+| POST | `/v1/assets/assets` | admin + platform operator | Register a canonical asset (idempotent upsert on canonical id). Returns 201. |
+| POST | `/v1/assets/chains` | admin + platform operator | Register a chain reference. Returns 201. |
+| POST | `/v1/assets/fiat` | admin + platform operator | Register an ISO 4217 fiat currency **and** its `fiat:<ISO>` canonical asset. Returns 201. |
+| POST | `/v1/assets/deployments` | admin + platform operator | Register a deployment; EVM contract is lowercased and the id recomputed as `deploy:<asset_id>@<chain>:<contract>`. Returns 201. |
+| POST | `/v1/assets/aliases` | admin + platform operator | Register an alias row → canonical target (alias stored lowercase). Returns 201. |
+| POST | `/v1/assets/capabilities` | admin + platform operator | Register an asset support capability. Returns 201. |
+| POST | `/v1/assets/seed` | admin + platform operator | Run the full canonical seed: fiat → chains (+ native crypto) → x402-verified stablecoins → legacy aliases. Idempotent; rewrites the deterministic `registry_version` meta row from the digest. Returns 201. |
 
 ### Operator console — `/v1/admin/assets` (W5, default OFF)
 
@@ -4159,9 +4165,10 @@ a transfer, and `execution_by_aether` stays False.
 **Feature gating (default OFF, fail-closed).** The router mounts only when
 `settings.assets.admin_enabled` (`AETHER_ASSETS_ADMIN_ENABLED`) is true —
 otherwise the surface is absent (an ADMIN principal gets 404). Every route is
-global-ADMIN gated; the write/apply routes (`POST …/discovery/apply` and the
-register routes) additionally require the apply capability `admin_mode`
-(`AETHER_ASSETS_ADMIN_MODE`). No new migration — the console reads/writes the
+global-ADMIN gated and, as an `/v1/admin` route, platform-operator only; the
+write/apply routes (`POST …/discovery/apply` and the register routes)
+additionally require the apply capability `admin_mode`
+(`AETHER_ASSETS_ADMIN_MODE`) and check for a platform operator in the handler. No new migration — the console reads/writes the
 existing registry tables (plus the typed in-memory repos under
 `AETHER_ENV=local`).
 
@@ -4237,7 +4244,7 @@ rather than inventing one.
 
 | Method | Path | Permission | Purpose |
 |---|---|---|---|
-| POST | `/v1/valuation/observe` | admin | Record one price observation (idempotent single append path; a replay returns the existing observation). Returns 201. |
+| POST | `/v1/valuation/observe` | admin + platform operator | Record one price observation (idempotent single append path; a replay returns the existing observation). Returns 201. |
 | POST | `/v1/valuation/value` | admin | Canonicalize → value → persist one tenant snapshot at `effective_at`. Body: `{ "native", "effective_at", "reporting_asset_id"?, "deployment_id"?, "valuation_basis"?, "economic_role"?, "supersedes_snapshot_id"? }`. A `supersedes_snapshot_id` correction APPENDS a new superseding snapshot; replay of identical inputs is a no-op returning the persisted row. Returns 201. |
 | PUT | `/v1/valuation/policy` | admin | Create/update the tenant's current value policy (one row per tenant; `policy_version` advances monotonically, a re-PUT of the current policy is a no-op). Returns 200. |
 
