@@ -72,7 +72,7 @@ In the delivery channel `provider_config`:
 
 ```bash
 DELIVERY_JIRA_WEBHOOK_SECRET=<your-webhook-signing-secret>
-INBOUND_JIRA_WEBHOOK_ENABLED=true  # default; false makes the inbound route answer 404
+INBOUND_JIRA_WEBHOOK_ENABLED=true  # off by default; while off the inbound route answers 404
 ```
 
 ### 6. Test Connection
@@ -111,8 +111,9 @@ event's `issue.self` host must be the Jira site (`base_url`) that delivery used,
 because issue keys repeat across sites. Events matching no stored issue, or issues
 in more than one tenant, are dead-lettered and never applied.
 
-The inbound route is gated by `INBOUND_JIRA_WEBHOOK_ENABLED` (default on); when it
-is off the route answers `404` and stores nothing.
+The inbound route is gated by `INBOUND_JIRA_WEBHOOK_ENABLED`, which is off by
+default until per-connection webhook secrets exist; while it is off the route
+answers `404` and stores nothing, so set it to `true` to receive Jira events.
 
 ## Troubleshooting
 

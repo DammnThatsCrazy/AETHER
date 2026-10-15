@@ -224,6 +224,15 @@ def test_telegram_route_is_404_when_disabled(env, monkeypatch):
     assert env.advanced == []
 
 
+def test_telegram_route_is_404_by_default(env, monkeypatch):
+    from config.settings import settings
+
+    monkeypatch.setattr(settings, "delivery", type(settings.delivery)())
+    env.who.update(t="tenant-B")
+    assert _telegram(env, f"approve:{NOTIF}:tenant-B") == 404
+    assert env.advanced == []
+
+
 # ── Slack OAuth ───────────────────────────────────────────────────────────────
 
 

@@ -1447,10 +1447,11 @@ class DeliveryConfig:
     # Inbound Jira webhook HMAC secret (same resolution order as Linear).
     jira_webhook_secret: str = _env("DELIVERY_JIRA_WEBHOOK_SECRET", "")
 
-    # Public inbound routes without a per-connection provider secret yet; when
-    # off, the route answers 404 and persists nothing.
-    inbound_jira_webhook_enabled: bool = _env_bool("INBOUND_JIRA_WEBHOOK_ENABLED", True)
-    inbound_telegram_callback_enabled: bool = _env_bool("INBOUND_TELEGRAM_CALLBACK_ENABLED", True)
+    # Public inbound routes without a per-connection provider secret yet, so
+    # off unless explicitly enabled; when off, the route answers 404 and
+    # persists nothing.
+    inbound_jira_webhook_enabled: bool = _env_bool("INBOUND_JIRA_WEBHOOK_ENABLED", False)
+    inbound_telegram_callback_enabled: bool = _env_bool("INBOUND_TELEGRAM_CALLBACK_ENABLED", False)
 
 
 # ---------------------------------------------------------------------------
