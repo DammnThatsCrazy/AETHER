@@ -8,6 +8,7 @@ passive TS mirror is ``packages/shared/observation-envelope.ts``.
 from shared.observation.envelope import (
     CREDENTIAL_CLASSES,
     IDENTIFIER_TYPES,
+    SOURCE_RELATIONSHIPS,
     SOURCE_TYPES,
     TRUST_CLASSES,
     CorrelationBlock,
@@ -26,6 +27,7 @@ from shared.observation.envelope import (
 __all__ = [
     "CREDENTIAL_CLASSES",
     "IDENTIFIER_TYPES",
+    "SOURCE_RELATIONSHIPS",
     "SOURCE_TYPES",
     "TRUST_CLASSES",
     "CorrelationBlock",

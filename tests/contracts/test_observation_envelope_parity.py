@@ -223,8 +223,23 @@ def test_model_classes_imported_from_barrel() -> None:
     for name in ("UniversalObservationEnvelope", "ObservationBlock", "TenancyBlock", "SourceBlock",
                  "SubjectRef", "TemporalBlock", "CorrelationBlock", "PrivacyBlock", "ProvenanceBlock",
                  "QualityBlock", "LineageBlock", "SOURCE_TYPES", "IDENTIFIER_TYPES", "CREDENTIAL_CLASSES",
-                 "TRUST_CLASSES"):
+                 "TRUST_CLASSES", "SOURCE_RELATIONSHIPS"):
         assert name in init_text, f"{name} not re-exported from shared/observation/__init__.py"
+
+
+SOURCE_RELATIONSHIP_PY_PATH = (
+    REPO_ROOT / "services/api/shared/integration_contracts/source_relationship.py"
+)
+
+
+def test_source_relationship_vocabulary_matches_across_surfaces() -> None:
+    registry = _load_registry()
+    canonical = list(registry["vocabularies"]["source_relationships"])
+    assert canonical == _ts_const_array("SOURCE_RELATIONSHIPS")
+    assert canonical == _py_tuple(
+        "SOURCE_RELATIONSHIPS",
+        text=SOURCE_RELATIONSHIP_PY_PATH.read_text(encoding="utf-8"),
+    )
 
 
 # ── Barrel + passive contract guard ──────────────────────────────────────────

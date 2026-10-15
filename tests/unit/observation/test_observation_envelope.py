@@ -16,6 +16,7 @@ import pytest
 from pydantic import ValidationError
 
 from shared.observation.envelope import (
+    SOURCE_RELATIONSHIPS,
     CorrelationBlock,
     ObservationBlock,
     ProvenanceBlock,
@@ -255,3 +256,19 @@ def test_settings_flag_exists_and_defaults_off() -> None:
     assert cfg.enabled is False
     # The dataclass field is wired to the documented env var (default OFF).
     assert "AETHER_OBSERVATION_ENVELOPE_ENABLED" in inspect.getsource(settings_module.ObservationEnvelopeConfig)
+
+
+@pytest.mark.parametrize("relationship", SOURCE_RELATIONSHIPS)
+def test_every_source_relationship_accepted(relationship):
+    assert SourceBlock(source_type="sdk", source_relationship=relationship).source_relationship == relationship
+
+
+def test_unknown_source_relationship_rejected():
+    with pytest.raises(ValidationError):
+        SourceBlock(source_type="sdk", source_relationship="tenant_admin")
+
+
+def test_source_relationship_is_optional_during_migration():
+    block = SourceBlock(source_type="connector")
+    assert block.source_relationship is None
+    assert "source_relationship" not in block.model_dump(exclude_none=True)

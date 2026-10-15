@@ -31,6 +31,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from shared.integration_contracts.source_relationship import SOURCE_RELATIONSHIPS
+
 # --- Curated vocabularies (mirrors of observation-envelope-registry.json) -----
 
 SOURCE_TYPES: tuple[str, ...] = (
@@ -119,11 +121,16 @@ class TenancyBlock(BaseModel):
 
 
 class SourceBlock(BaseModel):
-    """Ingress source provenance (Invariant #7)."""
+    """Ingress source provenance (Invariant #7).
+
+    ``source_relationship`` is server-stamped by the adapter from validated
+    context and is never copied from a source payload.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     source_type: str
+    source_relationship: Optional[str] = None
     source_provider: Optional[str] = None
     source_instance: Optional[str] = None
     source_native_id: Optional[str] = None
@@ -133,6 +140,13 @@ class SourceBlock(BaseModel):
     @classmethod
     def _source_type_known(cls, v: str) -> str:
         return _require_member(v, SOURCE_TYPES, "source_type")
+
+    @field_validator("source_relationship")
+    @classmethod
+    def _source_relationship_known(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        return _require_member(v, SOURCE_RELATIONSHIPS, "source_relationship")
 
 
 class SubjectRef(BaseModel):
