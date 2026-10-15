@@ -25,10 +25,8 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import ipaddress
 import json
 import os
-import socket
 import time
 import uuid
 from abc import ABC, abstractmethod
@@ -41,6 +39,7 @@ from pydantic import BaseModel
 
 from value.rewards.policy_engine import PolicyDecision, _amount_to_decimal
 from shared.logger.logger import get_logger, metrics
+from shared.security.ssrf import UnsafeDestinationError, send_public_request
 
 logger = get_logger("aether.service.rewards.rails")
 
@@ -365,11 +364,9 @@ class TenantWebhookAdapter(RewardRailAdapter):
 
         Never raises. Fail-closed: any unexpected error is treated as a block.
 
-        Reuses ``actions.delivery.security.validate_webhook_url`` for the shared
-        DNS-resolving RFC-1918/loopback/link-local/ULA blocklist, then adds
-        HTTPS enforcement plus multicast/reserved/non-global checks (which the
-        shared list does not cover) and a second DNS resolution to blunt DNS
-        rebinding between validation and connect.
+        Reuses ``actions.delivery.security.validate_webhook_url``: every address
+        the host resolves to must be public. Delivery then connects only to a
+        validated address, so a later DNS answer cannot redirect it.
         """
         if not url or not isinstance(url, str):
             return "webhook_url missing or not a string"
@@ -387,34 +384,6 @@ class TenantWebhookAdapter(RewardRailAdapter):
         except Exception as exc:  # SSRFBlockedError and any resolution failure → block
             return f"SSRF-blocked destination: {exc}"
 
-        if is_local:
-            return None
-
-        # Supplementary ranges not covered by the shared blocklist. Re-resolving
-        # here (post initial validation) also narrows the DNS-rebinding window.
-        try:
-            infos = socket.getaddrinfo(parsed.hostname, None)
-        except OSError as exc:
-            return f"DNS resolution failed for {parsed.hostname!r}: {exc}"
-        for info in infos:
-            addr_str = info[4][0]
-            try:
-                addr = ipaddress.ip_address(addr_str)
-            except ValueError:
-                continue
-            if (
-                addr.is_multicast
-                or addr.is_reserved
-                or addr.is_loopback
-                or addr.is_link_local
-                or addr.is_private
-                or addr.is_unspecified
-                or not addr.is_global
-            ):
-                return (
-                    f"webhook_url {url!r} resolves to non-public address "
-                    f"{addr_str!r}; SSRF protection active"
-                )
         return None
 
     async def deliver(self, action: dict, rail_config: dict) -> DeliveryResult:
@@ -438,11 +407,6 @@ class TenantWebhookAdapter(RewardRailAdapter):
             logger.warning("tenant_webhook delivery blocked host=%s reason=%s", host, reason)
             return DeliveryResult(success=False, status="failed", error=reason)
 
-        try:
-            import httpx
-        except ImportError:
-            return DeliveryResult(success=False, status="failed", error="httpx not available")
-
         payload_json = json.dumps(payload, sort_keys=True)
         timestamp = int(time.time())
         signature = self._sign_payload(signing_secret, timestamp, payload_json)
@@ -458,12 +422,16 @@ class TenantWebhookAdapter(RewardRailAdapter):
         host = urlparse(webhook_url).hostname
         start = time.monotonic()
         try:
-            # follow_redirects=False so a 3xx to an internal host is never chased.
-            async with httpx.AsyncClient(
+            # max_redirects=0: a 3xx is reported, never chased.
+            resp = await send_public_request(
+                "POST",
+                webhook_url,
+                headers=headers,
+                content=payload_json,
                 timeout=timeout_ms / 1000.0,
-                follow_redirects=False,
-            ) as client:
-                resp = await client.post(webhook_url, content=payload_json, headers=headers)
+                max_redirects=0,
+                allow_local=is_local,
+            )
             latency_ms = (time.monotonic() - start) * 1000
             success = 200 <= resp.status_code < 300
             metrics.increment(
@@ -491,6 +459,12 @@ class TenantWebhookAdapter(RewardRailAdapter):
                     response_code=resp.status_code,
                     latency_ms=latency_ms,
                 )
+        except UnsafeDestinationError as exc:
+            metrics.increment(
+                "rewards_actions_failed_total",
+                labels={"rail": self.rail_name, "reason": "ssrf_blocked"},
+            )
+            return DeliveryResult(success=False, status="failed", error=f"SSRF-blocked destination: {exc}")
         except Exception as exc:
             latency_ms = (time.monotonic() - start) * 1000
             metrics.increment("rewards_actions_failed_total", labels={"rail": self.rail_name, "reason": "exception"})
