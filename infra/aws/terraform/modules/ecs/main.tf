@@ -579,6 +579,7 @@ resource "aws_ecs_task_definition" "backend" {
           { name = "AUTH0_DOMAIN", value = var.auth0_domain },
           { name = "AUTH0_API_AUDIENCE", value = var.auth0_api_audience },
           { name = "AUTH0_MCP_AUDIENCE", value = var.auth0_mcp_audience },
+          { name = "AETHER_CONTINUATION_ENABLED", value = tostring(var.enable_access_continuations) },
           { name = "APP_URL", value = var.aether_app_url },
           { name = "DATABASE_HOST", value = var.database_host },
           { name = "DATABASE_PORT", value = tostring(var.database_port) },

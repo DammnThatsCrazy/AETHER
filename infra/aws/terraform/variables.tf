@@ -92,6 +92,12 @@ variable "enable_access_mcp_oauth" {
   }
 }
 
+variable "enable_access_continuations" {
+  type        = bool
+  description = "Opt in to the existing tenant continuation authority on the API task for bounded Access Kit create/get calls. Defaults off."
+  default     = false
+}
+
 variable "access_mcp_image_digest" {
   type        = string
   description = "Immutable sha256 digest of the image in the aether-access-mcp ECR repository; required only when enable_access_mcp is true."

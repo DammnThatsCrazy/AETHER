@@ -47,6 +47,11 @@ on:
         type: boolean
         default: false
         required: false
+      enable_access_continuations:
+        description: Plan-only opt-in for the existing tenant continuation API used by Access Kit create/get; default off
+        type: boolean
+        default: false
+        required: false
       access_mcp_image_digest:
         description: Plan-only immutable sha256 digest already published in aether-access-mcp; required when enabling the service
         type: string
@@ -231,6 +236,7 @@ jobs:
       TF_VAR_enable_access_mcp_repository: ${{ inputs.enable_access_mcp_repository }}
       TF_VAR_enable_access_mcp: ${{ inputs.enable_access_mcp }}
       TF_VAR_enable_access_mcp_oauth: ${{ inputs.enable_access_mcp_oauth }}
+      TF_VAR_enable_access_continuations: ${{ inputs.enable_access_continuations }}
       TF_VAR_access_mcp_image_digest: ${{ inputs.access_mcp_image_digest }}
       TF_VAR_access_mcp_desired_count: ${{ inputs.access_mcp_desired_count }}
       TF_VAR_access_mcp_allowed_origins: ${{ inputs.access_mcp_allowed_origins || '[]' }}

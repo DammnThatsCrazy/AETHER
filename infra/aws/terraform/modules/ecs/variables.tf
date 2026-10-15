@@ -237,6 +237,12 @@ variable "auth0_mcp_audience" {
   default     = ""
 }
 
+variable "enable_access_continuations" {
+  type        = bool
+  description = "Enable the existing continuation routes on the public API task; default off."
+  default     = false
+}
+
 variable "mcp_service_assertion_secret_arn" {
   type        = string
   description = "Secrets Manager version ARN of the private MCP-to-API HMAC key; mounted only into the API task."

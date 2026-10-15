@@ -487,6 +487,7 @@ module "ecs" {
   auth0_domain                     = var.auth0_domain
   auth0_api_audience               = var.auth0_api_audience
   auth0_mcp_audience               = var.enable_access_mcp_oauth ? "https://${var.domain_name}${var.access_mcp_path}" : ""
+  enable_access_continuations      = var.enable_access_continuations
   mcp_service_assertion_secret_arn = var.enable_access_mcp_oauth ? aws_secretsmanager_secret_version.access_mcp_service_assertion[0].arn : ""
   aether_app_url                   = local.aether_app_base_url
   # The pilot lane is staging-only and keeps the one-time first-admin route

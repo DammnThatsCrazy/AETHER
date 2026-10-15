@@ -61,6 +61,8 @@ _ACCESS_KIT_CAPABILITIES = {
     ("GET", "/v1/capability-catalog/overview"): "agent_access.capabilities.overview",
     ("GET", "/v1/capability-catalog/{capability_id}"): "agent_access.capabilities.get",
     ("GET", "/v1/billing/usage/summary"): "billing.usage.summary.read",
+    ("POST", "/v1/continuations"): "continuations.create",
+    ("GET", "/v1/continuations/{continuation_id}"): "continuations.get",
 }
 _ACCESS_KIT_SURFACES = frozenset({"cli", "mcp_stdio", "mcp_http", "access_sdk"})
 # A delegated MCP token is accepted only for these named read routes. The
@@ -69,7 +71,7 @@ _ACCESS_KIT_SURFACES = frozenset({"cli", "mcp_stdio", "mcp_http", "access_sdk"})
 # scope, user, membership, and tenant status.
 _MCP_OAUTH_READ_ROUTES = frozenset(
     path for (method, path), capability in _ACCESS_KIT_CAPABILITIES.items()
-    if method == "GET" and capability != "auth.sessions.list"
+    if method == "GET" and capability not in {"auth.sessions.list", "continuations.get"}
 )
 
 
@@ -92,7 +94,7 @@ def _token_declares_mcp_audience(token: str) -> bool:
 
 
 async def _record_access_interaction(request: Request, response: Response) -> dict[str, str]:
-    """Best-effort audit, non-billable metering, and event publication for Access Kit reads."""
+    """Best-effort audit, non-billable metering, and event publication for Access Kit calls."""
     surface = request.headers.get("x-aether-access-surface", "")
     route_template = getattr(request.state, "access_route_template", None)
     capability_id = _ACCESS_KIT_CAPABILITIES.get((request.method.upper(), route_template))
@@ -115,7 +117,10 @@ async def _record_access_interaction(request: Request, response: Response) -> di
         "blocked": "access.interaction.blocked",
         "failed": "access.interaction.failed",
     }[outcome]
-    operation = "revoke" if request.method.upper() == "DELETE" else "read"
+    operation = {
+        "DELETE": "revoke",
+        "POST": "write",
+    }.get(request.method.upper(), "read")
     metadata = {
         "surface": surface,
         "capability_id": capability_id,
@@ -143,7 +148,7 @@ async def _record_access_interaction(request: Request, response: Response) -> di
             metadata=metadata,
         )
         references["X-Aether-Audit-Event-ID"] = str(audit_event.audit_event_id)
-    except Exception as exc:  # telemetry must not change an authorized read result
+    except Exception as exc:  # telemetry must not change an authorized result
         logger.warning("access interaction audit write failed (%s)", type(exc).__name__)
 
     try:
@@ -161,7 +166,7 @@ async def _record_access_interaction(request: Request, response: Response) -> di
         saved_event = await MeteringService().record_event(metering_event)
         if saved_event and saved_event.get("metering_event_id"):
             references["X-Aether-Usage-Event-ID"] = str(saved_event["metering_event_id"])
-    except Exception as exc:  # telemetry must not change an authorized read result
+    except Exception as exc:  # telemetry must not change an authorized result
         logger.warning("access interaction metering write failed (%s)", type(exc).__name__)
 
     try:
