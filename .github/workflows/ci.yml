@@ -13,7 +13,7 @@ on:
       base:
         description: Base ref/sha to diff against (parity replays)
         required: false
-        default: origin/Development
+        default: origin/development
 
 permissions:
   contents: read
