@@ -209,6 +209,7 @@ jobs:
 
       - name: Upload immutable configuration-plan evidence
         uses: actions/upload-artifact@v4
+        continue-on-error: true  # diagnostic upload; must not decide the verdict
         with:
           name: terraform-configuration-plan-${{ matrix.profile }}-${{ inputs.expected_commit_sha || github.sha }}
           path: |
@@ -485,6 +486,7 @@ jobs:
 
       - name: Upload immutable remote-plan evidence
         uses: actions/upload-artifact@v4
+        continue-on-error: true  # diagnostic upload; must not decide the verdict
         with:
           name: terraform-remote-plan-${{ matrix.profile }}-${{ inputs.expected_commit_sha || github.sha }}
           path: |

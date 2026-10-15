@@ -496,6 +496,7 @@ jobs:
       - name: Upload Gate 7 proof artifact
         if: always()
         uses: actions/upload-artifact@v4
+        continue-on-error: true  # diagnostic upload; must not decide the verdict
         with:
           name: identity-continuity-proof-${{ github.run_id }}
           path: .artifacts/identity-continuity-proof/

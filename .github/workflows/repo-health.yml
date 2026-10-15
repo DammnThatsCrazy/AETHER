@@ -227,8 +227,10 @@ jobs:
             > release-evidence/main-integration.json
 
       - uses: actions/upload-artifact@v4
+        continue-on-error: true  # diagnostic upload; must not decide the verdict
         if: always()
         with:
+          retention-days: 7
           name: main-integration-evidence
           path: release-evidence/
           if-no-files-found: error
@@ -601,6 +603,8 @@ jobs:
           printf '{"sha":"%s","job":"validate"}\n' "$GITHUB_SHA" > release-evidence/repo-health-validate.json
 
       - uses: actions/upload-artifact@v4
+        continue-on-error: true  # diagnostic upload; must not decide the verdict
         with:
+          retention-days: 7
           name: repo-health-validate-evidence
           path: release-evidence/repo-health-validate.json

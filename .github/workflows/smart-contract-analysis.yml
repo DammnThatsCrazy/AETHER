@@ -120,7 +120,9 @@ jobs:
           printf '{"sha":"%s","job":"slither"}\n' "$GITHUB_SHA" > ../release-evidence/smart-contract-analysis.json
 
       - uses: actions/upload-artifact@v4
+        continue-on-error: true  # diagnostic upload; must not decide the verdict
         with:
+          retention-days: 7
           name: smart-contract-analysis-evidence
           path: release-evidence/smart-contract-analysis.json
 
@@ -163,6 +165,8 @@ jobs:
           printf '{"sha":"%s","job":"contract-tests"}\n' "$GITHUB_SHA" > ../release-evidence/contract-tests.json
 
       - uses: actions/upload-artifact@v4
+        continue-on-error: true  # diagnostic upload; must not decide the verdict
         with:
+          retention-days: 7
           name: contract-tests-evidence
           path: release-evidence/contract-tests.json
