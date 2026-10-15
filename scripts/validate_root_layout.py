@@ -57,9 +57,15 @@ def find_violations(paths: list[str], version_file: str | None, canonical_versio
 
 
 def _canonical_version() -> str | None:
+    in_project = False
     for line in (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8").splitlines():
-        if line.startswith("version"):
-            return line.split("=", 1)[1].strip().strip('"')
+        stripped = line.strip()
+        if stripped.startswith("["):
+            in_project = stripped == "[project]"
+        elif in_project and stripped.startswith("version") and "=" in stripped:
+            key, value = stripped.split("=", 1)
+            if key.strip() == "version":
+                return value.strip().strip('"')
     return None
 
 
@@ -69,7 +75,11 @@ def main() -> int:
     ).stdout.splitlines()
     version_path = REPO_ROOT / "VERSION"
     version = version_path.read_text(encoding="utf-8").strip() if version_path.exists() else None
-    errors = find_violations(paths, version, _canonical_version())
+    canonical = _canonical_version()
+    if canonical is None:
+        print("Root layout validation FAILED: could not read [project] version from pyproject.toml")
+        return 1
+    errors = find_violations(paths, version, canonical)
     if errors:
         print("Root layout validation FAILED:")
         for e in errors:

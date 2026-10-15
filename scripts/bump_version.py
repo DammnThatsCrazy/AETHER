@@ -241,6 +241,12 @@ def check_version_alignment() -> int:
     warnings: list[str] = []
 
     print(f"Current version: {canonical}")
+    version_file = ROOT / "VERSION"
+    if not version_file.exists():
+        errors.append("VERSION: root version file is missing")
+    elif version_file.read_text(encoding="utf-8").strip() != canonical:
+        errors.append(f"VERSION: {version_file.read_text(encoding='utf-8').strip()} != {canonical}")
+
     print("Checking package.json versions against pyproject.toml...")
     for package_json in PACKAGE_JSONS:
         if not package_json.exists():
@@ -367,6 +373,9 @@ def main() -> None:
     # 1. Root pyproject.toml
     print("1. pyproject.toml:")
     update_pyproject(new_version)
+
+    (ROOT / "VERSION").write_text(f"{new_version}\n", encoding="utf-8")
+    print("  updated VERSION")
 
     # 2. package.json files
     print("\n2. package.json files:")
