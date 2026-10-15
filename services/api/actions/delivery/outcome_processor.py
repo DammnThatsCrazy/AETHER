@@ -109,15 +109,19 @@ class OutcomeRouter:
     async def _route_to_suggestion(
         self, outcome: ExternalOutcomeEvent, *, link: dict, outcome_state: str
     ) -> None:
-        """Update suggestion outcome_state if suggestion_repo is available."""
+        """Update the linked suggestion's outcome_state.
+
+        The target is only ever the link's own resource: the link was resolved
+        within the webhook's tenant, and ``patch`` re-checks that tenant. Ids
+        carried in the provider payload are never trusted.
+        """
         if self._suggestion_repo is None:
             return
-        raw = outcome.raw_payload or {}
-        suggestion_id = raw.get("suggestion_id") or link.get("resource_id")
+        suggestion_id = link.get("resource_id")
         if not suggestion_id:
             return
         try:
-            await self._suggestion_repo.update(suggestion_id, {
+            await self._suggestion_repo.patch(suggestion_id, outcome.tenant_id, {
                 "outcome_state": outcome_state,
                 "last_outcome_event_id": outcome.id,
             })
