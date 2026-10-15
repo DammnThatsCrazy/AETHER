@@ -14,7 +14,7 @@ import time
 import uuid
 from typing import Any, Optional
 
-from shared.logger.logger import get_logger
+from shared.logger.logger import get_logger, metrics
 from shared.security.ssrf import UnsafeDestinationError, resolve_public_addresses, send_public_request
 
 from actions.delivery.adapters.base import (
@@ -79,6 +79,11 @@ class WebhookAdapter(ProviderAdapter):
         if credential:
             sig = _sign_payload(credential, body_bytes, timestamp)
             headers["X-Aether-Signature"] = f"sha256={sig}"
+        else:
+            # Callbacks for an unsigned delivery can never verify and are
+            # dead-lettered; the channel needs a provider_config.secret_ref.
+            logger.warning(f"webhook_unsigned delivery_id={delivery_id!r}: no signing secret")
+            metrics.increment("delivery_webhook_unsigned_total")
 
         # Allow caller to inject extra headers
         extra_headers = provider_config.get("headers") or {}

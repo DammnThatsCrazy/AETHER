@@ -10,6 +10,8 @@ source_files:
   - services/api/main.py
   - services/api/config/settings.py
   - services/api/actions/agent/deployment_routes.py
+  - services/api/actions/delivery/adapters/webhook.py
+  - services/api/actions/delivery/outcome_processor.py
   - services/api/actions/agent_marketplace/catalog.py
   - services/api/actions/agent_marketplace/lineage.py
   - services/api/actions/agent_marketplace/projection.py
@@ -565,6 +567,51 @@ stripe events resend <evt_xxxxxxxx> --webhook-endpoint=<we_xxxxxxxx>
 ### Escalation
 
 If an event type is consistently failing after 3 Stripe retry cycles (Stripe retries over 72 hours with exponential backoff), investigate the specific handler (`_handle_<event_type>` in `services/api/governance/admin/webhook_routes.py`) and consider adding the event to a dead-letter queue for manual reprocessing.
+
+---
+
+## Outbound Webhook Signing and Callback Dead Letters
+
+The outbound webhook adapter signs a delivery only with the secret named by the
+job's `provider_config.secret_ref` (copied from the channel's `credentials_ref`).
+A job without one is sent unsigned: the adapter logs `webhook_unsigned` and
+increments `delivery_webhook_unsigned_total`. An outcome callback for such a
+delivery can never verify, so the inbox processor dead-letters it with
+`signature_unverified`. A callback that matches no stored delivery (or
+deliveries in more than one tenant) is dead-lettered with `unbound_delivery`.
+Both increment `delivery_inbox_dead_lettered_total{provider,reason}`; the
+callback route still answers 200.
+
+### Before deploying
+
+List webhook jobs still to be sent and active webhook channels that carry no
+secret reference, and give each channel a signing secret first:
+
+```sql
+-- Webhook jobs that would be sent unsigned
+SELECT id, tenant_id, data->>'state' AS state
+FROM delivery_jobs
+WHERE data->>'provider_adapter' = 'webhook'
+  AND data->>'state' IN ('queued', 'leased', 'failed')
+  AND COALESCE(data->'provider_config'->>'secret_ref', '') = '';
+
+-- Active webhook channels whose new jobs would carry no secret_ref
+SELECT id, tenant_id, channel_name
+FROM user_notification_channels
+WHERE channel_type = 'webhook'
+  AND active IS NOT FALSE
+  AND COALESCE(credentials_ref, '') = '';
+```
+
+### After deploying
+
+A rising `delivery_webhook_unsigned_total`, or
+`delivery_inbox_dead_lettered_total{reason="signature_unverified"}` for
+`provider="webhook"`, means a channel is still unsigned: rerun the queries
+above. A rising `reason="unbound_delivery"` points to callbacks for deliveries
+Aether does not hold (wrong endpoint, deleted delivery, or a shared id).
+Inbox rows written before `received_at` was recorded are judged against their
+`created_at`, so a pre-deploy backlog drains instead of being rejected as stale.
 
 ---
 
