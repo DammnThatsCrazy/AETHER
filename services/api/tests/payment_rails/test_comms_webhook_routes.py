@@ -215,6 +215,53 @@ async def test_legacy_route_failures_are_indistinguishable(client):
     assert results[0][0] == 400
 
 
+# Shopify's own order webhooks carry the shop only in X-Shopify-Shop-Domain.
+_NATIVE_ORDER = {"id": 820982911946154508, "email": "buyer@example.test", "total_price": "10.00"}
+
+
+@pytest.mark.asyncio
+async def test_shopify_native_order_routes_by_shop_domain_header(client):
+    await _bind_shop("tenantA", "https://A-Shop.myshopify.com/", "shpss_a")
+    await _bind_shop("tenantB", "b-shop.myshopify.com", "shpss_b")
+    raw, headers = _shopify_signed("shpss_a", _NATIVE_ORDER)
+
+    ingest = AsyncMock(return_value={"accepted": True})
+    with patch.object(connector_service, "ingest_webhook", new=ingest):
+        resp = client.post(
+            "/v1/integrations/webhooks/shopify", content=raw,
+            headers={
+                **headers,
+                "X-Shopify-Shop-Domain": "a-shop.myshopify.com",
+                "X-Shopify-Topic": "orders/create",
+                "X-Shopify-Webhook-Id": "delivery-1",
+            },
+        )
+    assert resp.status_code == 200, resp.text
+    assert ingest.await_args.args[1] == "tenantA"
+
+
+@pytest.mark.asyncio
+async def test_shopify_header_naming_another_shop_than_the_body_is_rejected(client):
+    await _bind_shop("tenantA", "a-shop.myshopify.com", "shpss_a")
+    await _bind_shop("tenantB", "b-shop.myshopify.com", "shpss_b")
+    raw, headers = _shopify_signed("shpss_b", _SHOP_BODY)
+    status, _ = await _denial(
+        client, raw, {**headers, "X-Shopify-Shop-Domain": "b-shop.myshopify.com"},
+    )
+    assert status == 400
+
+
+@pytest.mark.asyncio
+async def test_shopify_header_routing_still_needs_the_tenants_own_signature(client):
+    await _bind_shop("tenantA", "a-shop.myshopify.com", "shpss_a")
+    await _bind_shop("tenantB", "b-shop.myshopify.com", "shpss_b")
+    raw, headers = _shopify_signed("shpss_b", _NATIVE_ORDER)
+    status, _ = await _denial(
+        client, raw, {**headers, "X-Shopify-Shop-Domain": "a-shop.myshopify.com"},
+    )
+    assert status == 400
+
+
 # ── ADR-C11: /comms/{connector}/{endpoint_id} resolves tenant server-side ─────
 
 
