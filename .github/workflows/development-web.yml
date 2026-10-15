@@ -1,0 +1,160 @@
+name: Development web
+
+# The persistent development build of the Aether app: every push to the
+# Development branch that touches the app builds it and deploys it to branch
+# `development` of the AETHER-development-web Amplify app
+# (https://development.<app default domain>). Like the per-PR previews it calls
+# the staging API and signs in through staging Auth0, so staging must be awake
+# for more than the shell to work.
+#
+# Amplify runs no build here: this workflow builds on the runner and uploads
+# the result, so the app is not connected to the repository and needs no
+# GitHub token. The role (vars.FRONTEND_PREVIEW_ROLE_ARN) is the preview role,
+# scoped by config/staging_frontend_preview_iam_policy.yaml to this app's
+# pr-* and development branches. Until that variable is set, the job skips and
+# says so.
+
+on:
+  push:
+    branches: [Development]
+    paths:
+      - "apps/aether-web/**"
+      - "packages/shared/**"
+      - "packages/sdk/web/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/development-web.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: development-web
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: us-east-1
+  DEVELOPMENT_BRANCH: development
+
+jobs:
+  deploy:
+    name: Deploy the Development build
+    # The role trusts only Development and main; the build must be Development.
+    if: github.ref == 'refs/heads/Development'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check that the development app is configured
+        id: armed
+        env:
+          ROLE_ARN: ${{ vars.FRONTEND_PREVIEW_ROLE_ARN }}
+        run: |
+          if [ -n "$ROLE_ARN" ]; then
+            echo "armed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "armed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::The development web app is not configured (FRONTEND_PREVIEW_ROLE_ARN); nothing was deployed."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.armed.outputs.armed == 'true'
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        if: steps.armed.outputs.armed == 'true'
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Configure AWS credentials
+        if: steps.armed.outputs.armed == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.FRONTEND_PREVIEW_ROLE_ARN }}
+          role-session-name: development-web
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve the development and staging Amplify apps
+        if: steps.armed.outputs.armed == 'true'
+        env:
+          DEVELOPMENT_APP_ID: ${{ vars.FRONTEND_PREVIEW_APP_ID }}
+          STAGING_APP_ID: ${{ vars.STAGING_AETHER_APP_ID }}
+        run: |
+          set -euo pipefail
+          apps="$(aws amplify list-apps --max-items 100 --output json)"
+          development="${DEVELOPMENT_APP_ID:-$(jq -r '.apps[] | select(.name == "AETHER-development-web") | .appId' <<<"$apps")}"
+          staging="${STAGING_APP_ID:-$(jq -r '.apps[] | select(.name == "AETHER-staging-web") | .appId' <<<"$apps")}"
+          test -n "$development" || { echo "::error::no AETHER-development-web Amplify app"; exit 1; }
+          test -n "$staging" || { echo "::error::no AETHER-staging-web Amplify app to read build settings from"; exit 1; }
+          {
+            echo "DEVELOPMENT_APP_ID=$development"
+            echo "STAGING_APP_ID=$staging"
+          } >> "$GITHUB_ENV"
+
+      - name: Resolve the development URL and the staging build settings
+        if: steps.armed.outputs.armed == 'true'
+        id: config
+        run: |
+          set -euo pipefail
+          domain="$(aws amplify get-app --app-id "$DEVELOPMENT_APP_ID" --query 'app.defaultDomain' --output text)"
+          url="https://${DEVELOPMENT_BRANCH}.${domain}"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          # The staging app's VITE_* values are public build settings (API
+          # origin, Auth0 domain/client/audience). Only the redirect and logout
+          # URIs change: they must point at this development build.
+          aws amplify get-app --app-id "$STAGING_APP_ID" --query 'app.environmentVariables' --output json \
+            | jq -r 'to_entries[] | select(.key | test("^VITE_[A-Z0-9_]+$")) | "\(.key)=\(.value)"' \
+            | grep -v -E '^VITE_AUTH0_(REDIRECT|LOGOUT)_URI=' >> "$GITHUB_ENV"
+          {
+            echo "VITE_AUTH0_REDIRECT_URI=${url}/callback"
+            echo "VITE_AUTH0_LOGOUT_URI=${url}"
+          } >> "$GITHUB_ENV"
+
+      - name: Build the Aether app
+        if: steps.armed.outputs.armed == 'true'
+        run: |
+          set -euo pipefail
+          npm ci
+          # The app imports the @aether/shared and @aether/web workspaces
+          # through their built dist/ entries, which npm ci does not produce.
+          npm run build --workspace @aether/shared
+          npm run build --workspace @aether/web
+          test -f packages/sdk/web/dist/aether.esm.js
+          npm run build --workspace=apps/aether-web
+          test -f apps/aether-web/dist/index.html
+
+      - name: Deploy to the development branch
+        if: steps.armed.outputs.armed == 'true'
+        env:
+          URL: ${{ steps.config.outputs.url }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          aws amplify get-branch --app-id "$DEVELOPMENT_APP_ID" --branch-name "$DEVELOPMENT_BRANCH" >/dev/null 2>&1 \
+            || aws amplify create-branch --app-id "$DEVELOPMENT_APP_ID" --branch-name "$DEVELOPMENT_BRANCH" \
+                 --stage DEVELOPMENT --description "Development build of the Development branch" >/dev/null
+          (cd apps/aether-web/dist && zip -qr "$RUNNER_TEMP/development.zip" .)
+          deployment="$(aws amplify create-deployment --app-id "$DEVELOPMENT_APP_ID" --branch-name "$DEVELOPMENT_BRANCH" --output json)"
+          job_id="$(jq -r '.jobId' <<<"$deployment")"
+          curl -sSf -X PUT -H 'Content-Type: application/zip' \
+            --upload-file "$RUNNER_TEMP/development.zip" "$(jq -r '.zipUploadUrl' <<<"$deployment")"
+          aws amplify start-deployment --app-id "$DEVELOPMENT_APP_ID" --branch-name "$DEVELOPMENT_BRANCH" --job-id "$job_id" >/dev/null
+          for _ in $(seq 1 60); do
+            status="$(aws amplify get-job --app-id "$DEVELOPMENT_APP_ID" --branch-name "$DEVELOPMENT_BRANCH" \
+              --job-id "$job_id" --query 'job.summary.status' --output text)"
+            case "$status" in
+              SUCCEED)
+                echo "Development build deployed (job $job_id) from ${COMMIT:0:7}: $URL"
+                echo "Development build deployed from \`${COMMIT:0:7}\`: $URL" >> "$GITHUB_STEP_SUMMARY"
+                exit 0 ;;
+              FAILED|CANCELLED) echo "::error::development deployment $job_id ended $status"; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::development deployment $job_id did not finish within 10 minutes"
+          exit 1

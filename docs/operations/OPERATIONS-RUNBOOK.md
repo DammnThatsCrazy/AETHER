@@ -42,7 +42,7 @@ source_hashes:
   "services/api/actions/agent_marketplace/projection.py": "sha256:92a5f5e457beebde9d161bf26f40ccb39fc5b76bc8ae4abfccc3e572b3c29de0"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/config/settings.py": "sha256:d83b26ee0f0d2d22c312a83838198ed9fcde9fb388005c5b6cfb1912bbd02916"
+  "services/api/config/settings.py": "sha256:4d2921c8c3a93e5cf0e3ab4eab9172770642684dd20858221481608af2ef69d5"
   "services/api/connectors/provider_runtime/": "sha256:5769171596f5a3c50af0a39ed9ec1b6fcddd4f67ee352d05d85ddc708cd84302"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
@@ -507,6 +507,16 @@ If the backend fails to start with `ORACLE_SIGNER_KEY not set` or `Default Hardh
 `REWARD_REQUIRE_DURABLE_STORE=true` causes startup failure in non-local environments if database is unreachable. All reward state (campaigns, rules, decisions, proofs, payloads, audit log) requires PostgreSQL — there is no in-memory fallback in production.
 
 ---
+
+## Stripe Key Mode Mismatch (startup failure)
+
+Staging must use the Stripe sandbox (test-mode keys) and production the live
+account (live-mode keys). The API refuses to start when `STRIPE_SECRET_KEY` is a
+live key under `AETHER_ENV=staging`, or a test key under `AETHER_ENV=production`,
+and the error names the environment but never prints the key. Fix it by putting
+the right key in that environment's own secret (staging: `aether/stripe-secret-key`;
+production: its own namespace, never the staging one), then redeploy. Price IDs
+and the webhook secret must come from the same Stripe mode as the key.
 
 ## Stripe Webhook Retry / Stuck Event
 

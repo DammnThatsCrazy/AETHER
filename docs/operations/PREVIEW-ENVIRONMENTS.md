@@ -51,6 +51,15 @@ only when marked ready for review.
 4. Every push to `main` (each merge) and an hourly sweep delete the preview of
    every pull request that is closed or merged.
 
+## The Development build
+
+The same app also holds one persistent branch, `development`, deployed by
+`development-web.yml` on every push to `Development` that touches the Aether
+app or its shared packages (`https://development.<preview domain>`). It is built
+the same way as a preview and shares the preview role, which is scoped to the
+`pr-*` branches and the one `development` branch. The hourly sweep ignores it:
+it only removes branches named `pr-<N>`.
+
 A preview is only the frontend. It calls the staging API and signs in through
 staging Auth0, so staging must be awake for a preview to do more than render.
 The staging API allows exactly `https://pr-<N>.<preview domain>` origins

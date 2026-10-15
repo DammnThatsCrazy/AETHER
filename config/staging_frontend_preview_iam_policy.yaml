@@ -1,7 +1,8 @@
-# Least-privilege role for per-PR frontend previews
-# (.github/workflows/frontend-preview.yml). The role can only manage pr-*
-# branches of the staging preview Amplify app, plus read the staging web
-# app's public VITE_* build settings. It cannot touch the staging or
+# Least-privilege role for the development web app (AETHER-development-web):
+# per-PR previews (.github/workflows/frontend-preview.yml) and the persistent
+# Development build (.github/workflows/development-web.yml). The role can only
+# manage the pr-* branches and the one `development` branch of that app, plus
+# read the staging web app's public VITE_* build settings. It cannot touch the staging or
 # production apps, the backend, data, or Terraform state.
 #
 # Placeholders: ${account_id}; ${frontend_preview_app_id} is the Terraform
@@ -24,6 +25,7 @@ trust:
   subjects:
     - repo:DammnThatsCrazy/AETHER:pull_request
     - repo:DammnThatsCrazy/AETHER:ref:refs/heads/main
+    - repo:DammnThatsCrazy/AETHER:ref:refs/heads/Development
 statements:
   - sid: DiscoverPreviewAndStagingApps
     actions:
@@ -51,10 +53,14 @@ statements:
       - amplify:DeleteBranch
       - amplify:CreateDeployment
       - amplify:StartDeployment
-    resource: arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}/branches/pr-*
+    resource:
+      - arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}/branches/pr-*
+      - arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}/branches/development
     scope: frontend-preview-branches
   - sid: ReadPreviewDeploymentJobs
     actions:
       - amplify:GetJob
-    resource: arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}/branches/pr-*/jobs/*
+    resource:
+      - arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}/branches/pr-*/jobs/*
+      - arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}/branches/development/jobs/*
     scope: frontend-preview-jobs

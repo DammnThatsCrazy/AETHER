@@ -93,12 +93,13 @@ def test_every_amplify_call_is_granted_on_the_preview_app_only():
                     "arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}/branches/*"
                 ), resource
             elif statement["actions"] != ["amplify:GetApp"]:
-                assert resource.startswith(
-                    "arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}/branches/pr-*"
-                ), resource
+                # Only the PR previews (pr-*) and the one persistent
+                # `development` branch (development-web.yml) are manageable.
+                prefix = "arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}/branches/"
+                assert resource.startswith(prefix + "pr-*") or resource.startswith(prefix + "development"), resource
 
 
-def test_role_trusts_only_this_repositorys_pull_requests_and_main():
+def test_role_trusts_only_this_repositorys_pull_requests_main_and_development():
     trust = _manifest()["trust"]
     assert trust == {
         "provider": "token.actions.githubusercontent.com",
@@ -106,6 +107,7 @@ def test_role_trusts_only_this_repositorys_pull_requests_and_main():
         "subjects": [
             "repo:DammnThatsCrazy/AETHER:pull_request",
             "repo:DammnThatsCrazy/AETHER:ref:refs/heads/main",
+            "repo:DammnThatsCrazy/AETHER:ref:refs/heads/Development",
         ],
     }
 
