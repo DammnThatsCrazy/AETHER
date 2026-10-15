@@ -143,6 +143,21 @@ jobs:
           printf 'app_id=%s\n' "${app_ids[0]}" >> "$GITHUB_OUTPUT"
           printf 'expected_commit_sha=%s\n' "$EXPECTED_COMMIT_SHA" >> "$GITHUB_OUTPUT"
 
+      - name: Verify the release commit is on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_COMMIT_SHA: ${{ steps.inputs.outputs.expected_commit_sha }}
+        run: |
+          set -euo pipefail
+          # A dispatched SHA can carry a successful integration check from
+          # before main was rewritten; only a commit still on main may ship.
+          # The compare endpoint needs only contents: read.
+          comparison="$(gh api "repos/$GITHUB_REPOSITORY/compare/$EXPECTED_COMMIT_SHA...main" --jq .status)"
+          case "$comparison" in
+            identical|ahead) echo "$EXPECTED_COMMIT_SHA is on main." ;;
+            *) echo "::error::$EXPECTED_COMMIT_SHA is not on main (compare status: ${comparison:-unknown})"; exit 1 ;;
+          esac
+
       - name: Assess status app state before repository binding
         id: state
         env:
