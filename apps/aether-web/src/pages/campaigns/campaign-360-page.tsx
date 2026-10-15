@@ -820,7 +820,7 @@ const TABS = [
   { value: 'targeting', label: 'Targeting Intelligence' },
   { value: 'card-linked', label: 'Card-linked Outcomes' },
   { value: 'outcome360', label: 'Outcome 360' },
-  { value: 'economic360', label: 'Economic 360' },
+  { value: 'economic360', label: 'Value 360' },
 ];
 
 export function Campaign360Page() {

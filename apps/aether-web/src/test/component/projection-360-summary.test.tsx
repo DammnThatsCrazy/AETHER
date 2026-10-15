@@ -103,7 +103,7 @@ describe('ProjectionSurfaceSummary (server-computed 360 state)', () => {
       />,
     );
 
-    expect(screen.getByText('Economic 360 — unavailable')).toBeInTheDocument();
+    expect(screen.getByText('Value 360 — unavailable')).toBeInTheDocument();
     expect(screen.getByText('provider_unavailable')).toBeInTheDocument();
     // No fabricated sections are offered.
     expect(screen.queryByRole('list')).not.toBeInTheDocument();

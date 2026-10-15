@@ -39,7 +39,7 @@ reviewed_source_commits:
   - commit: "40af67902"
     reason: "Reviewed the optional server-returned consent, usage, and audit references for accepted batch observations. The contracts preserve the existing intake and authority boundaries."
 source_hashes:
-  "packages/shared/": "sha256:7cdc8a10e1cd74e5f6fcef8c3970e1eadb45fe6999a64b7c1748f72614d11208"
+  "packages/shared/": "sha256:308bd71c2bf94a8453c20db858d545f2a8d3054f011732c1c828245163f4b682"
   "scripts/generate_feature_surface_manifest.py": "sha256:9ab5609184818157683093d5cd2ab5472e5df3f2b0134dc692b2bbce96465ca9"
   "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
@@ -99,7 +99,7 @@ entries, and operational instructions must use the canonical active paths in
 
 ```
 Providers (24)  →  /v1/lake/ingest  →  Bronze (raw, immutable)
-SDKs            →  /v1/ingest/*     →       ↓
+SDKs            →  /v1/batch        →       ↓
                                        Silver (validated, normalized)
                                             ↓
                                        Gold (features, metrics)

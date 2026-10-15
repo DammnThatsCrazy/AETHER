@@ -21,7 +21,7 @@ source_hashes:
   "Makefile": "sha256:fddce509fd710303082f6c218dc99cdf4af96b1229824967084e4b1359c99c6d"
   "config/unread_settings_flags.yaml": "sha256:3587b913f93df944cd4d53287db9f5b656042ae645aa50eb040adb1700f7583a"
   "docs/reference/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:a30d10876d2e5201438620787212007075ca64b61db807b6b500776090016c7e"
-  "scripts/repo_doctor.py": "sha256:7e9d905cf0ebc5645496dc99ed1116c98e891f45ddce02d62604e98eed52abc2"
+  "scripts/repo_doctor.py": "sha256:2190f4b36d7cef901fb8a224381210616164288539aadbc84a5fef4b1be983fb"
   "scripts/validate_settings_flags.py": "sha256:d5ec3062bec02a6b4eacf8c0ada966c4e7dc2630fafdb807eee84816c9bde695"
 ---
 
@@ -64,6 +64,9 @@ finalization evidence but do not independently block normal PR merges.
 `make docs-check` is intentionally documentation-scoped. Its adaptive worker
 provisions the backend/dev import surface required by source-backed generators,
 without running the full application, ML, or security toolchain preflight.
+It also enforces the canonical root layout (`scripts/validate_root_layout.py`) and
+keeps deprecated product language out of everything but `docs/archive/`
+(`scripts/check_deprecated_language.py`).
 
 Repository-doctor Python subprocesses inherit the interpreter running
 `scripts/repo_doctor.py` (normally `.venv/bin/python` through the Makefile), so
