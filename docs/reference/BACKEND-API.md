@@ -25,19 +25,19 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:9b0e71fa5dd4ce6cd071e09d3796e8ebe37cf5a5f3fad3e51e606dd85f04973c"
+  "services/api/actions/": "sha256:5957395ab9ed34f2d80d4c30f1da81442cf68e6f3c33b8238fa46e97c4edb8fd"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:0740c89ed3bf089b8ded5f9a319b7670a0afb18bda8f58a69a11a03c2a0a5d75"
   "services/api/connectors/": "sha256:be5c00bffaa216ecd12b669cb41ee011c177800fbc7d70c5e9bd4c1b4c3f6e76"
-  "services/api/governance/": "sha256:4d1d5ebfff79f8e4e2aba0d960a87ae1d0aa19b5bb6b0878f93f33b0006086b7"
-  "services/api/graph/": "sha256:2e5bb882df912a56ddf8bb116cf6887b2da46722ab9b07b08bb245c530cfa4e1"
+  "services/api/governance/": "sha256:f0fb64d3cc3dccc64070ee90276d01de955a457ea04fd3cc8d538a19c64c2fdc"
+  "services/api/graph/": "sha256:062270cc86c871bad7258419788892a2d99352d7e6c2ca7cdae403bce08afb76"
   "services/api/identity/": "sha256:9d5a4ac51012e6a7d11856665e95cae3b82a4ce63e80673aada051fab60f7d4b"
   "services/api/ingestion/": "sha256:bd5b01dbb8f0ad98a2cd83aeb682c0b01badea4f481ee74b15f430043e004599"
-  "services/api/intelligence/": "sha256:3dcb322380fba0232f313fa5e38b0d8cda7ab2009ffe38151bdc9e563a852657"
+  "services/api/intelligence/": "sha256:2c1ea68dd5f0a4a929a53c7eb9294d3b9dfa3e6f141dab6afde36c91539cb885"
   "services/api/journeys/": "sha256:09a9b39bb3c334f1e2772313154233d98116f96c36f446ce8c0b619c8b746df4"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:228120a11b8e6c3fec9405ed272e61de894b658274a33da129facc9c074a8224"
-  "services/api/value/": "sha256:9beb411857ba47b92c1a44416ebdbb0a2e2bd0811be9dafc28b9b77f3c29a5e9"
+  "services/api/value/": "sha256:e769d110300d62b15d9891a296c373933bb603935ff37cafa668bbbb3ce3d394"
   "services/api/workers/": "sha256:00cdccad21cee863998d1bc30656ac8c6402b0bf594d2f91630909e204c32b11"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -1745,7 +1745,7 @@ Holistic user/entity omniview — composes data from all Aether subsystems into 
 | GET | `/v1/profile/{user_id}/campaigns` | Campaign attribution derived from analytics event stream |
 | GET | `/v1/profile/{user_id}/tier` | Entity tier (Whale/Shark/Dolphin/Fish/Shrimp) + percentile rank |
 | GET | `/v1/profile/{user_id}/asset-composition` | On-chain portfolio composition by asset category |
-| GET | `/v1/profile/{user_id}/pnl` | Realized + unrealized PNL, TVL delta. 404 unless the entity row or a wallet linked to it belongs to the caller's tenant; realized PNL reads only the addresses that tenant linked to the entity |
+| GET | `/v1/profile/{user_id}/pnl` | Realized + unrealized PNL, TVL delta. 404 unless the entity row or a wallet linked to it belongs to the caller's tenant; realized PNL reads only the addresses that tenant linked to the entity, and is `null` with `data_confidence: "unavailable"` when the tenant linked no wallet to it |
 | GET | `/v1/profile/{user_id}/trading-profile` | On-chain trading behavior (pairs, protocol loyalty, gas) |
 | GET | `/v1/profile/{user_id}/location-history` | City-level location history with classification |
 | GET | `/v1/profile/{user_id}/temporal-heatmap` | 24×7 activity density matrix + streaks |

@@ -6,7 +6,7 @@ visibility: P
 audience: [dev-senior, architect, ops]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/repositories/repos.py, services/api/repositories/lake.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py]
+source_files: [services/api/repositories/repos.py, services/api/repositories/tenant_row_keys.py, services/api/repositories/lake.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py]
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
@@ -18,7 +18,8 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
-  "services/api/repositories/repos.py": "sha256:f3878d58876bd0c84bedffd8a44734bf60b16b2149e2cde21e133f6140971327"
+  "services/api/repositories/repos.py": "sha256:2d5aa0082287de033384f3ad7861b780d23b861a14c04c6af86ab89716a2776b"
+  "services/api/repositories/tenant_row_keys.py": "sha256:de2ab5ce63ef807b9d75b84c700362f89ad15925c692f7bc7bf4884cbd8b3912"
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -233,19 +234,26 @@ does not claim that either has been applied.
   `ON CONFLICT ... DO UPDATE` / `UPDATE` statement, and the in-memory store
   applies the same rule). A write that would replace another tenant's row, or
   a row with no tenant when the record names one, changes nothing and raises
-  `ConflictError` without naming the owner, so a client-chosen id belongs to
-  the first tenant that writes it. Repositories whose rows are not tenant-owned
+  `ConflictError` with the generic `Conflict` text, which neither names the
+  owner nor says the id exists elsewhere, so a client-chosen id (such as a
+  flows `wallet_id`) belongs to the first tenant that writes it. Repositories whose rows are not tenant-owned
   set `_tenant_guard = False`: `users` (an SSO re-invite moves a user to
   another tenant), `tenants`, `first_admin_bootstrap` and the Dune feed tables.
   Records whose natural id is unique only within a tenant use
   `tenant_record_id(tenant_id, natural_id)` (`{tenant}:{id}`) as the row id:
   `behavior_profiles` and `journey_chains` (`find_for_entity(tenant_id,
-  entity_id)`), `event_envelopes` (the envelope id stays in `envelope_id`) and
-  the x402 commerce collections. Migration `20261015_tenant_owned_row_keys`
-  backfills empty tenant columns from the row JSON, re-keys existing rows of
-  those tables, deletes `behavior_profiles` / `journey_chains` rows whose JSON
-  tenant differs from the column (the profile workers recompute them), and
-  marks seeded Web3 registry rows with no tenant as `system`. Other rows with
+  entity_id)`), `profiles` (`IdentityRepository`, keyed by the SDK user id,
+  which also stays in `user_id`), `behavioral_signals` written by
+  `SignalRepository` (the signal id stays in `signal_id`; `get_signal(tenant_id,
+  signal_id)` reads one), `event_envelopes` (the envelope id stays in
+  `envelope_id`) and the x402 commerce collections. Migration
+  `20261015_tenant_owned_row_keys` runs the idempotent steps in
+  `repositories/tenant_row_keys.py`: it backfills empty tenant columns from the
+  row JSON, re-keys existing rows of those tables, deletes `behavior_profiles` /
+  `journey_chains` rows whose JSON tenant differs from the column (the profile
+  workers recompute them), and marks seeded Web3 registry rows with no tenant
+  as `system`. `make tenant-row-keys` (or `python -m repositories.tenant_row_keys`
+  in the API image) runs the same steps again after a rollout. Other rows with
   no tenant are left in place and stay unreadable to tenant-scoped reads.
 
 - **Tenant-owned repositories:** `TenantOwnedRepository` (a `BaseRepository`

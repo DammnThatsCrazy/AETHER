@@ -27,7 +27,7 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
-  "services/api/repositories/repos.py": "sha256:f3878d58876bd0c84bedffd8a44734bf60b16b2149e2cde21e133f6140971327"
+  "services/api/repositories/repos.py": "sha256:2d5aa0082287de033384f3ad7861b780d23b861a14c04c6af86ab89716a2776b"
   "services/api/value/x402/": "sha256:49f3660ba1468f6481b067fcd46ad230199aee60d7e7316ba57b7c69c368c4a9"
 ---
 # x402 Protocol Support Audit — Aether Repository
@@ -315,7 +315,7 @@ row `{tenant}:{object id}`, so the seeded facilitators and assets
 ids exist once per tenant, and one tenant registering an id another tenant
 uses never replaces that tenant's resource or paywall definition. Migration
 `20261015_tenant_owned_row_keys` re-keys existing rows to the tenant their JSON
-names.
+names; `make tenant-row-keys` re-runs that step after a rollout.
 
 The run authority path separately resolves delegation references to exact
 tenant-owned records. External deployment and delegated-target identities
