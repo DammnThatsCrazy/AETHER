@@ -1,4 +1,3 @@
-import { appHref } from "@aether-app/lib/app-path";
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth0 } from "@auth0/auth0-react";
@@ -21,6 +20,12 @@ const SSO_PROVIDERS: Array<{ provider: SocialProvider; label: string }> = [
   { provider: "microsoft", label: "Continue with Microsoft" },
 ];
 
+/** provider → Auth0 connection name, from "google=aether-staging-google,...". */
+function socialConnections(): Map<string, string> {
+  const pairs = (env.VITE_AUTH0_SOCIAL_CONNECTIONS ?? "").split(",").map((pair) => pair.split("=").map((s) => s.trim()));
+  return new Map(pairs.filter((p): p is [string, string] => p.length === 2 && Boolean(p[0] && p[1])));
+}
+
 export function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -42,6 +47,15 @@ export function LoginPage() {
   // Auth0 settings (AetherAuth0Provider mounts Auth0Provider only then).
   const auth0 = useAuth0();
   const auth0Configured = Boolean(env.VITE_AUTH0_DOMAIN && env.VITE_AUTH0_CLIENT_ID);
+  // Social buttons open one Auth0 connection directly; only those enabled for
+  // this tenant are listed (none on the pilot lane).
+  const connections = socialConnections();
+  const socialProviders = auth0Configured
+    ? SSO_PROVIDERS.flatMap((p) => {
+        const connection = connections.get(p.provider);
+        return connection ? [{ ...p, connection }] : [];
+      })
+    : [];
 
   // Marketing→signup continuity: when the visitor reached /login carrying a
   // genuine post-auth redirect (RequireAuth round-trip of a connect deep link),
@@ -94,9 +108,15 @@ export function LoginPage() {
     }
   }
 
-  function handleSso(provider: SocialProvider) {
+  function startAuth0Login(connection?: string) {
     setSsoLoading("loading");
-    window.location.href = `/v1/auth/sso/${provider}?redirect_uri=${encodeURIComponent(window.location.origin + appHref("/callback"))}`;
+    rememberPostAuthDestination(redirectTo);
+    void auth0
+      .loginWithRedirect(connection ? { authorizationParams: { connection } } : undefined)
+      .catch(() => {
+        setSsoLoading("idle");
+        setError("Could not reach the sign-in service. Try again.");
+      });
   }
 
   return (
@@ -177,50 +197,45 @@ export function LoginPage() {
             </Button>
           )}
 
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-px bg-border-subtle" />
-            <span className="text-text-muted text-xs font-mono">or</span>
-            <div className="flex-1 h-px bg-border-subtle" />
-          </div>
+          {auth0Configured && (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-border-subtle" />
+                <span className="text-text-muted text-xs font-mono">or</span>
+                <div className="flex-1 h-px bg-border-subtle" />
+              </div>
 
-          <div className="space-y-2">
-            {auth0Configured && (
-              <Button
-                variant="primary"
-                size="sm"
-                className="w-full"
-                disabled={ssoLoading === "loading"}
-                onClick={() => {
-                  setSsoLoading("loading");
-                  rememberPostAuthDestination(resolvePostAuthRedirect(searchParams.get("redirect")));
-                  void auth0.loginWithRedirect().catch(() => {
-                    setSsoLoading("idle");
-                    setError("Could not reach the sign-in service. Try again.");
-                  });
-                }}
-              >
-                {ssoLoading === "loading" ? "[···]" : "Continue with Olympus sign-in"}
-              </Button>
-            )}
-            {SSO_PROVIDERS.map(({ provider, label }) => (
-              <Button
-                key={provider}
-                variant="secondary"
-                size="sm"
-                className="w-full flex items-center gap-2"
-                disabled={ssoLoading === "loading"}
-                onClick={() => handleSso(provider)}
-                aria-label={label}
-              >
-                {ssoLoading === "loading" ? (
-                  <span className="text-text-muted">[···]</span>
-                ) : (
-                  <SocialProviderIcon provider={provider} />
-                )}
-                <span>{label}</span>
-              </Button>
-            ))}
-          </div>
+              <div className="space-y-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="w-full"
+                  disabled={ssoLoading === "loading"}
+                  onClick={() => startAuth0Login()}
+                >
+                  {ssoLoading === "loading" ? "[···]" : "Continue with Olympus sign-in"}
+                </Button>
+                {socialProviders.map(({ provider, label, connection }) => (
+                  <Button
+                    key={provider}
+                    variant="secondary"
+                    size="sm"
+                    className="w-full flex items-center gap-2"
+                    disabled={ssoLoading === "loading"}
+                    onClick={() => startAuth0Login(connection)}
+                    aria-label={label}
+                  >
+                    {ssoLoading === "loading" ? (
+                      <span className="text-text-muted">[···]</span>
+                    ) : (
+                      <SocialProviderIcon provider={provider} />
+                    )}
+                    <span>{label}</span>
+                  </Button>
+                ))}
+              </div>
+            </>
+          )}
 
           <p className="text-center text-xs text-text-muted">
             No account?{" "}

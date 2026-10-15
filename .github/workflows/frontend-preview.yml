@@ -118,11 +118,11 @@ jobs:
           set -euo pipefail
           # Terraform names them; explicit repository variables win if set.
           apps="$(aws amplify list-apps --max-items 100 --output json)"
-          preview="${PREVIEW_APP_ID:-$(jq -r '.apps[] | select(.name == "AETHER-staging-aether-app-preview") | .appId' <<<"$apps")}"
+          preview="${PREVIEW_APP_ID:-$(jq -r '.apps[] | select(.name == "AETHER-development-web" or .name == "AETHER-staging-aether-app-preview") | .appId' <<<"$apps")}"
           # The one staging web app; before its first rollout, the product
           # app it replaces still holds the product's build settings.
           staging="${STAGING_APP_ID:-$(jq -r '[.apps[] | select(.name == "AETHER-staging-web")] + [.apps[] | select(.name == "AETHER-staging-aether-app")] | .[0].appId // empty' <<<"$apps")}"
-          test -n "$preview" || { echo "::error::no AETHER-staging-aether-app-preview Amplify app; apply staging Terraform with enable_frontend_previews"; exit 1; }
+          test -n "$preview" || { echo "::error::no AETHER-development-web Amplify app; apply staging Terraform with enable_frontend_previews"; exit 1; }
           {
             echo "PREVIEW_APP_ID=$preview"
             if [ -n "$staging" ]; then echo "STAGING_APP_ID=$staging"; fi
@@ -262,11 +262,11 @@ jobs:
           set -euo pipefail
           # Terraform names them; explicit repository variables win if set.
           apps="$(aws amplify list-apps --max-items 100 --output json)"
-          preview="${PREVIEW_APP_ID:-$(jq -r '.apps[] | select(.name == "AETHER-staging-aether-app-preview") | .appId' <<<"$apps")}"
+          preview="${PREVIEW_APP_ID:-$(jq -r '.apps[] | select(.name == "AETHER-development-web" or .name == "AETHER-staging-aether-app-preview") | .appId' <<<"$apps")}"
           # The one staging web app; before its first rollout, the product
           # app it replaces still holds the product's build settings.
           staging="${STAGING_APP_ID:-$(jq -r '[.apps[] | select(.name == "AETHER-staging-web")] + [.apps[] | select(.name == "AETHER-staging-aether-app")] | .[0].appId // empty' <<<"$apps")}"
-          test -n "$preview" || { echo "::error::no AETHER-staging-aether-app-preview Amplify app; apply staging Terraform with enable_frontend_previews"; exit 1; }
+          test -n "$preview" || { echo "::error::no AETHER-development-web Amplify app; apply staging Terraform with enable_frontend_previews"; exit 1; }
           {
             echo "PREVIEW_APP_ID=$preview"
           } >> "$GITHUB_ENV"

@@ -5,14 +5,12 @@ import { AetherLogo } from "@aether-app/components/aether-logo";
 import {
   Button,
   GlyphIcon,
-  SocialProviderIcon,
   Tabs,
   TabsList,
   TabsTrigger,
   TabsContent,
   useToast,
 } from "@aether/ui";
-import type { SocialProvider } from "@aether/ui";
 import { useAuth, resolveAuthGrant, describeAuthRateLimit, rateLimiter } from "@aether-app/features/auth";
 import { useAuth0 } from "@auth0/auth0-react";
 import {
@@ -30,13 +28,6 @@ import { api } from "@aether-app/lib/api/endpoints";
 import { OtpInput } from "@aether-app/components/otp-input";
 
 type Step = 1 | 2 | 3;
-
-const SSO_PROVIDERS: Array<{ provider: SocialProvider; label: string }> = [
-  { provider: "google", label: "Google" },
-  { provider: "apple", label: "Apple" },
-  { provider: "slack", label: "Slack" },
-  { provider: "microsoft", label: "Microsoft" },
-];
 
 const RESEND_COOLDOWN = 30;
 /** The limiter that locks code checks for an address for 15 minutes, longer than a code lives. */
@@ -160,7 +151,6 @@ export function EmailSignupPage() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [registerLoading, setRegisterLoading] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
-  const [ssoLoading, setSsoLoading] = useState(false);
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [keySaved, setKeySaved] = useState(false);
 
@@ -292,11 +282,6 @@ export function EmailSignupPage() {
       if (limited) setOtpError(limited);
       // Anything else stays silent — anti-enumeration.
     }
-  }
-
-  function handleSso(provider: SocialProvider) {
-    setSsoLoading(true);
-    window.location.href = `/v1/auth/sso/${provider}?redirect_uri=${encodeURIComponent(window.location.origin + appHref("/callback"))}`;
   }
 
   async function copyKey() {
@@ -451,31 +436,6 @@ export function EmailSignupPage() {
                   {registerLoading ? "[···]" : "Continue →"}
                 </Button>
               </form>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-px bg-border-subtle" />
-                <span className="text-text-muted text-xs font-mono">or</span>
-                <div className="flex-1 h-px bg-border-subtle" />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {SSO_PROVIDERS.map(({ provider, label }) => (
-                  <Button
-                    key={provider}
-                    variant="secondary"
-                    size="sm"
-                    className="flex items-center gap-1.5"
-                    disabled={ssoLoading}
-                    onClick={() => handleSso(provider)}
-                    aria-label={`Continue with ${label}`}
-                  >
-                    {ssoLoading ? (
-                      <span className="text-text-muted text-xs">[···]</span>
-                    ) : (
-                      <SocialProviderIcon provider={provider} />
-                    )}
-                    <span className="text-xs">{label}</span>
-                  </Button>
-                ))}
-              </div>
               <p className="text-center text-xs text-text-muted">
                 Already have an account?{" "}
                 <button

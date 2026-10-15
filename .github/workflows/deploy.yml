@@ -419,6 +419,8 @@ jobs:
           VITE_AUTH0_DOMAIN: ${{ vars.AUTH0_DOMAIN || secrets.TF_AUTH0_DOMAIN }}
           VITE_AUTH0_AUDIENCE: ${{ vars.AUTH0_AUDIENCE || 'https://api.aether.io' }}
           AETHER_AUTH0_CLIENT_ID: ${{ secrets.AETHER_AUTH0_CLIENT_ID }}
+          # Same app URL Terraform registers as an Auth0 callback/logout target.
+          TF_AETHER_APP_URL: ${{ secrets.TF_AETHER_APP_URL }}
           AETHER_API_BASE_URL: ${{ vars.AETHER_API_BASE_URL || format('https://{0}', secrets.TF_DOMAIN_NAME) }}
           TF_DOMAIN_NAME: ${{ secrets.TF_DOMAIN_NAME }}
           TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
@@ -464,9 +466,13 @@ jobs:
           test -f packages/sdk/web/dist/aether.cjs.js
           test -f packages/sdk/web/dist/health/index.js
           test -f packages/sdk/web/dist/react.js
+          # Fail here: a staging bundle without a redirect URI cannot start.
+          : "${TF_AETHER_APP_URL:?TF_AETHER_APP_URL is required for the Aether SPA build}"
           VITE_AETHER_ENV=staging \
             VITE_AETHER_ENDPOINT="$AETHER_API_BASE_URL" \
             VITE_AUTH0_CLIENT_ID="$AETHER_AUTH0_CLIENT_ID" \
+            VITE_AUTH0_REDIRECT_URI="${TF_AETHER_APP_URL%/}/callback" \
+            VITE_AUTH0_LOGOUT_URI="${TF_AETHER_APP_URL%/}/login" \
             VITE_API_BASE_URL="$AETHER_API_BASE_URL" \
             npm --workspace apps/aether-web run build
           if [ "$DEPLOYMENT_LANE" = full ]; then

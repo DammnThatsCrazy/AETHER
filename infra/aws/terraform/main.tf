@@ -743,7 +743,7 @@ module "auth0" {
   # var.aether_app_url, which on staging is the app host that now redirects
   # to it (kept while sessions and bookmarks move over).
   aether_callback_urls = concat(distinct(["${local.aether_app_base_url}/callback", "${var.aether_app_url}/callback"]), [for d in local.frontend_preview_domains : "https://*.${d}/callback"])
-  aether_logout_urls   = concat(distinct(["${local.aether_app_base_url}/login", local.aether_app_base_url, var.aether_app_url]), [for d in local.frontend_preview_domains : "https://*.${d}"])
+  aether_logout_urls   = concat(distinct(["${local.aether_app_base_url}/login", local.aether_app_base_url, "${var.aether_app_url}/login", var.aether_app_url]), [for d in local.frontend_preview_domains : "https://*.${d}"])
   aether_web_origins   = concat(distinct([local.aether_app_origin, var.aether_app_url]), [for d in local.frontend_preview_domains : "https://*.${d}"])
 
   kyber_callback_urls = ["${var.kyber_app_url}/callback"]
@@ -862,6 +862,11 @@ locals {
   # environments keep the prerendered aether-marketing build until the site
   # prerenders its own per-route metadata, sitemap and robots file.
   aether_host_serves_site = var.environment == "staging"
+  # provider=connection pairs for the product's social sign-in buttons. The key
+  # is absent when social connections are off, so the SPA renders no buttons.
+  aether_social_login_env = length(module.auth0.aether_social_connections) > 0 ? {
+    VITE_AUTH0_SOCIAL_CONNECTIONS = join(",", [for provider, connection in module.auth0.aether_social_connections : "${provider}=${connection}"])
+  } : {}
   # Unset keeps the backend's own default (invitation-only on staging, self
   # sign-up elsewhere), written explicitly into the task definitions.
   self_signup_enabled = var.self_signup_enabled != null ? var.self_signup_enabled : var.environment != "staging"
@@ -998,8 +1003,8 @@ locals {
 resource "aws_amplify_app" "frontend_preview" {
   count = local.enable_frontend_previews ? 1 : 0
 
-  name        = "${var.project}-${var.environment}-aether-app-preview"
-  description = "Per-PR previews of the Aether app (branches pr-<N>, managed by frontend-preview.yml)"
+  name        = "${var.project}-development-web"
+  description = "Development web app: per-PR previews of the Aether app (branches pr-<N>, managed by frontend-preview.yml)"
   platform    = "WEB"
 
   custom_rule {
@@ -1009,7 +1014,7 @@ resource "aws_amplify_app" "frontend_preview" {
   }
 
   tags = {
-    Name        = "${var.project}-${var.environment}-aether-app-preview"
+    Name        = "${var.project}-development-web"
     Purpose     = "Per-PR frontend previews"
     Environment = var.environment
   }
@@ -1055,7 +1060,7 @@ resource "aws_amplify_app" "frontend" {
         { pkg = "node", type = "nvm", version = "20" }
       ])
     },
-    each.key == "aether-app" ? {
+    each.key == "aether-app" ? merge(local.aether_social_login_env, {
       VITE_AETHER_ENV         = var.environment
       VITE_API_BASE_URL       = "https://${var.domain_name}"
       VITE_AETHER_ENDPOINT    = "https://${var.domain_name}"
@@ -1064,8 +1069,8 @@ resource "aws_amplify_app" "frontend" {
       VITE_AUTH0_AUDIENCE     = var.auth0_api_audience
       VITE_AUTH0_REDIRECT_URI = "${var.aether_app_url}/callback"
       VITE_AUTH0_LOGOUT_URI   = "${var.aether_app_url}/login"
-    } : {},
-    each.key == "aether-marketing" && local.aether_host_serves_site ? {
+    }) : {},
+    each.key == "aether-marketing" && local.aether_host_serves_site ? merge(local.aether_social_login_env, {
       # Public build settings for the unified site. Prices are published on
       # staging and production alike (owner decision).
       VITE_API_BASE_URL   = "https://${var.domain_name}"
@@ -1083,7 +1088,7 @@ resource "aws_amplify_app" "frontend" {
       VITE_AUTH0_AUDIENCE     = var.auth0_api_audience
       VITE_AUTH0_REDIRECT_URI = "${local.aether_app_base_url}/callback"
       VITE_AUTH0_LOGOUT_URI   = "${local.aether_app_base_url}/login"
-    } : {},
+    }) : {},
     each.key == "status" ? {
       VITE_STATUS_API_URL              = var.status_api_url
       VITE_STATUS_DOCS_URL             = "https://docs.${var.amplify_domain_name}"
@@ -1122,7 +1127,7 @@ resource "aws_amplify_branch" "main" {
     {
       AETHER_ENV = var.environment
     },
-    each.key == "aether-app" ? {
+    each.key == "aether-app" ? merge(local.aether_social_login_env, {
       VITE_AETHER_ENV         = var.environment
       VITE_API_BASE_URL       = "https://${var.domain_name}"
       VITE_AETHER_ENDPOINT    = "https://${var.domain_name}"
@@ -1131,8 +1136,8 @@ resource "aws_amplify_branch" "main" {
       VITE_AUTH0_AUDIENCE     = var.auth0_api_audience
       VITE_AUTH0_REDIRECT_URI = "${var.aether_app_url}/callback"
       VITE_AUTH0_LOGOUT_URI   = "${var.aether_app_url}/login"
-    } : {},
-    each.key == "aether-marketing" && local.aether_host_serves_site ? {
+    }) : {},
+    each.key == "aether-marketing" && local.aether_host_serves_site ? merge(local.aether_social_login_env, {
       # Public build settings for the unified site. Prices are published on
       # staging and production alike (owner decision).
       VITE_API_BASE_URL       = "https://${var.domain_name}"
@@ -1149,7 +1154,7 @@ resource "aws_amplify_branch" "main" {
       VITE_AUTH0_AUDIENCE     = var.auth0_api_audience
       VITE_AUTH0_REDIRECT_URI = "${local.aether_app_base_url}/callback"
       VITE_AUTH0_LOGOUT_URI   = "${local.aether_app_base_url}/login"
-    } : {},
+    }) : {},
     each.key == "status" ? {
       VITE_STATUS_API_URL = var.status_api_url
       VITE_STATUS_DOCS_URL = (
