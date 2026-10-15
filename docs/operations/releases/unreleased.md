@@ -19,8 +19,12 @@ Changes not yet assigned to a pre-release version.
 - SDK parity matrix
 - Connector lifecycle documentation
 - Architecture decision records
+- Root gateway documents (`ARCHITECTURE.md`, `RELEASES.md`, `DEVELOPMENT.md`)
+- Root-layout and deprecated-language validation gates
 
 ## Changed
 
 - Reorganized legacy root architecture folders
 - Normalized version to `0.1.0-alpha.0`
+- First external SDK release target is `0.1.0-alpha.0`
+- The `economic360` projection now displays as `Value 360`
