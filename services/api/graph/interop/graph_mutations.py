@@ -41,11 +41,8 @@ def build_topology_mutations(
                 "gateway_role": gateway.get("gateway_role", "unknown"),
             },
         ))
-        vertices.append(Vertex(
-            vertex_id=chain_vid,
-            vertex_type=VertexType.CHAIN,
-            properties={"tenant_id": PUBLIC_TENANT},
-        ))
+        # ``chain:`` vertices are the platform-owned asset registry's; the
+        # topology only links to them.
         edges.append(_edge(EdgeType.CONNECTS_CHAIN, gateway_vid, chain_vid,
                            PUBLIC_TENANT, gateway.get("gateway_id", "")))
 
