@@ -93,6 +93,7 @@ not a new service route or data authority.
 | MCP | `entities_neighborhood`, `access_operations_list`, `access_invoke_read` | Named graph read and closed adapter read declaration/dispatch | Read-only tools; API retains authorization |
 | MCP | `account_context` | `/v1/me` safe projection | Read-only tool, `read` |
 | Node ESM/TypeScript | `createAccessClient().operations.invoke(...)` and named entity/account/usage reads | Same closed REST adapters | Query, `read`; surface `access_sdk` |
+| CLI / MCP / Node | `continuations create/show`, `continuations_create/get`, `createAccessClient().continuations` | Existing `POST /v1/continuations` and `GET /v1/continuations/{id}` | Principal-scoped durable resource create (`write`) and bounded readback (`read`); API feature is opt-in |
 | CLI | `aether ingest EVENT_NAME ...` | `POST /v1/batch`, one `track` event | Ingestion, `ingest` + handler `write` |
 | MCP | `observe` | `POST /v1/batch`, one `track` event | Ingestion, `ingest` + handler `write` |
 
@@ -119,10 +120,21 @@ automatically. Repeating an event
 with the same caller-supplied event ID is the server-supported deduplication
 path.
 
-The public Node read client exports the same closed adapter operations and
-projects the same API-derived results. It accepts one API key or revocable
-session and sends `access_sdk` for canonical access-interaction audit and
-metering. It does not reuse the observation SDK's publishable key for reads.
+The public Node client exports the same closed read operations and projects the
+same API-derived results. It also exposes a narrow continuation create/get
+pair through the existing owner. It accepts one API key or revocable session
+and sends `access_sdk` for canonical access-interaction audit and metering. It
+does not reuse the observation SDK's publishable key for reads or writes.
+
+Continuation create stores one opaque entity reference and returns a durable
+continuation handle, revision, and replay marker. The owner binds the record to
+the authenticated principal, checks `write`, scopes the idempotency key to that
+principal and original request, and rejects changed-content replay. It does
+not verify the entity reference at create time; later resolution reauthorizes
+it. A deterministic client-sync source event lets retries repair a missed
+change-feed append without duplicating an already persisted event. The API
+feature gate defaults off; Terraform exposes a reviewed opt-in for the API
+task. Delegated MCP OAuth tokens never see the continuation tools.
 
 `aether ingest` and `observe` emit one generic `track` event with a custom event
 name, caller-supplied opaque event/session/anonymous IDs, caller-supplied
@@ -263,7 +275,11 @@ tenant API route; the API rechecks authorization and resolves tenant and actor.
 Delegated OAuth reads additionally require the dedicated audience, Auth0
 signature/issuer/expiry, `access_kit:read`, and an active durable Aether
 membership. These tokens are limited to named read routes and cannot expose
-the `observe` tool even when an intake key is supplied.
+the `observe` tool even when an intake key is supplied. The hosted service
+signs each downstream OAuth call with a short-lived assertion bound to the
+token hash and exact API request. The backend requires that assertion before
+it accepts the MCP audience, so a public REST caller cannot spoof the MCP
+surface header to widen a read token's API access.
 The service has no shared service-level customer key and accepts no caller
 tenant override.
 
@@ -324,6 +340,7 @@ tokens are read-only. The server-side REST permission check remains authoritativ
 | Policy decisions | `PolicyEngine` | Route checks through this engine; do not derive allow/deny from risk fields in the adapter. |
 | Readiness lifecycle | `CapabilityLifecycleAuthority` | Reads may be surfaced; promotion, suspension, and resume remain `admin`/operator-owned. |
 | Query/domain data | Owning domain APIs and repositories | Add only named, existing reads; no direct graph/database access from the CLI or bridge. |
+| Continuation state | Existing continuation service and repository | Expose only bounded create/readback; the server owns principal scope, idempotency, sync effects, and feature gate. |
 | Ingestion | Canonical ingestion authorities | Forward only through the canonical intake route. Do not build an adapter-local persistence or consent authority. |
 | Graph writes and external actions | Domain authority and `MutationIntent → GraphMutationGateway.apply` / action authority | No direct graph writes, provider calls, or action dispatch from a transport adapter. |
 | Billing, usage, audit, receipts | Existing middleware and billing/audit owners | Do not add local counters or invent plan behavior. Verify whether each newly exposed operation has authoritative accounting before adding it. |
@@ -352,7 +369,8 @@ tokens are read-only. The server-side REST permission check remains authoritativ
 - Auth0 remains the OAuth authorization server. The opt-in MCP resource server
   and protected-resource metadata are implemented; public DCR, client
   onboarding, MCP Apps, external capability execution, and graph-write/action
-  tools are not. CLI/MCP intake remains limited to generic site-bound `track`
+  tools are not. The continuation create/get pair is a resource write, not an
+  external action dispatcher. CLI/MCP intake remains limited to generic site-bound `track`
   path described above; batch collections, identity writes, and arbitrary
   direct route payloads are not exposed.
 - Host-specific registration and live delegated OAuth remain proof gates. Live AWS
@@ -386,11 +404,10 @@ The following evidence is required before the associated claim:
 | Hosted MCP service deployable | Build and publish an immutable Access Kit image to its dedicated ECR repository; plan the opt-in Fargate service and ALB route; verify the separate task role, host/path configuration, `/healthz`, `/readyz`, and caller bearer requirement. A Terraform plan and local HTTP exchange do not prove an applied AWS endpoint. |
 | MCP customer beta | Above plus actual host connection evidence, secure host secret injection, request correlation, error visibility, privacy/security review, and rollout support. A local bridge build alone is not beta evidence. |
 | Graph data available | A real tenant's observation-to-normalization-to-identity-to-projection proof and a separately authenticated read of that tenant's governed graph result. Catalog rows or a successful API response do not prove graph hydration. |
+| Continuation create/readback usable | Apply the reviewed API feature opt-in, then use a real tenant principal with read/write permission to create, replay with the same key and content, reject changed content, deny another principal's handle, and read the owner-produced revision. A stored entity reference alone does not prove entity authorization at resolution. |
+| Delegated MCP OAuth usable | Apply the exact Auth0 resource and client configuration, verify protected-resource metadata and scope recovery in a real host, and prove direct REST reuse of an MCP-audience token is denied without the private service assertion. |
 | PR readiness / production readiness | The single normal PR authority and applicable release scorecard; focused package evidence is not a substitute. |
 
-Focused local Node tests cover REST wrapper behavior, projection and response
-normalization, CLI output/error contracts, Auth0 device polling/expiry,
-human-session storage/revocation, human-session header use and session
 Focused local Node tests cover REST wrapper behavior, projection and response
 normalization, CLI output/error contracts, Auth0 device polling/expiry,
 human-session storage/revocation, human-session header use and session

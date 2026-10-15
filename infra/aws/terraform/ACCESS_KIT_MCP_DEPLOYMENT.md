@@ -10,10 +10,18 @@ listener, API hostname, VPC and ECS cluster. The ALB terminates TLS and routes
 the configured MCP path to a dedicated target group. No DNS record or ACM
 certificate is created for a separate MCP hostname.
 
+The continuation create/get tools call the existing `/v1/continuations`
+authority. Its API feature gate defaults off. A reviewed Terraform plan may set
+`enable_access_continuations=true` to inject `AETHER_CONTINUATION_ENABLED` into
+the backend API task; the option does not enable client-sync or authorize any
+caller by itself. The continuation routes still require the tenant's `read` or
+`write` permission. The promotion workflow exposes this as a plan-only input,
+and applying a saved plan is a separate release operation.
+
 ## Request and credential boundary
 
-The task has no Aether API key, user session, site key, or other application
-secret. Each protocol request carries the caller's Aether bearer credential;
+The task has no Aether API key, user session, or site key. Each protocol
+request carries the caller's Aether bearer credential;
 the MCP host validates it through the existing `/v1/me` authority and forwards
 the same request-scoped identity to tenant APIs. Optional `observe` requests
 must also carry the request-specific `X-Aether-Observe-Key` and
@@ -36,6 +44,16 @@ it never creates a tenant, session or API key and grants no graph mutation or
 action authority. Legacy request-scoped API keys and revocable sessions remain
 available when OAuth is disabled.
 
+When delegated OAuth is enabled, Terraform generates a 32-byte service
+assertion key in the protected state and stores it in the existing KMS-backed
+Secrets Manager. ECS injects it only into the API and hosted MCP tasks as
+`AETHER_MCP_SERVICE_ASSERTION_KEY`; task execution roles can read the secret,
+while task roles receive no AWS mutation permission. The MCP service signs
+each downstream OAuth read over the method, exact path and query, token hash,
+and timestamp. The API requires this short-lived assertion before accepting
+the MCP-audience token, so a surface header on public REST does not bypass the
+MCP boundary. Rotating the key requires coordinated API and MCP task restarts.
+
 Auth0 Dynamic Client Registration is **not** enabled by Terraform. Auth0's
 open DCR permits unauthenticated client creation, while its third-party clients
 need an explicit API grant. A host can instead use a reviewed preregistered
@@ -48,9 +66,10 @@ mechanism. This repository cannot claim host onboarding or delegated OAuth
 conformance until the Auth0 configuration and a real host are exercised.
 
 The ECS task role has no attached AWS permission policy. The separate task
-execution role can pull from only `aether-access-mcp` and write to only this
-service's CloudWatch log group, in addition to ECR's required authorization
-token call. The task security group accepts TCP 8080 only from the existing ALB
+execution role can pull from only `aether-access-mcp`, read the optional
+service assertion secret, and write to only this service's CloudWatch log
+group, in addition to ECR's required authorization token call. The task
+security group accepts TCP 8080 only from the existing ALB
 security group. It allows outbound TCP 443 for the Aether API and AWS runtime
 endpoints; this is destination-wide egress because the current public-IP/NAT
 profile does not provide stable endpoint IP ranges. The service has no public
@@ -77,6 +96,8 @@ task ingress, ECS Exec, autoscaling, or AWS mutation permission.
 
 `access_mcp_path` changes both the application mount and ALB path rule. The
 selected path must remain distinct from the internal `tfmcp` `/mcp*` reservation.
+It is limited to 91 characters including the leading slash so the
+path-specific OAuth metadata pattern stays within the ALB rule limit.
 Readiness confirms valid service configuration; it does not verify caller
 credentials or perform a downstream API health request.
 

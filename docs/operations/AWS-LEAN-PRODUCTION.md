@@ -27,7 +27,7 @@ reviewed_source_commits:
     reason: "Reviewed the linked root main.tf change; it updates the Auth0 section comment only. The dedicated Native CLI client change does not alter lean AWS topology, deployment lane, or runtime settings described here."
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:5c1138601e7f849d2a1b6649957c32607fc1aacd25667bf910de280a4db4db0c"
-  ".github/workflows/terraform-promote.yml": "sha256:4542ef7fd2d140d2cbcb2a02b232c22f1473bbfdcad250cbc81999c468bcb26c"
+  ".github/workflows/terraform-promote.yml": "sha256:dc7242423f1931ba0d93019d701beed0a669458e4124db8baba46d074becd0ad"
   "config/deployment_profiles.yaml": "sha256:77d37f2c71472b5d644da32636bb68948263250739b62b621502cdfb09797475"
   "config/runtime_deployment.yaml": "sha256:ba7bd71d79e605a88076b6ea745582dce9c4bff38442ebd5d327cfee9bbf7284"
   "config/terraform_resource_contracts.yaml": "sha256:1f08c04dae8931f845c7918328504f748a9f643bc806670a32b644eb8231baca"
@@ -310,7 +310,9 @@ plan unless an active, time-bounded cost exception authorizes the overage.
 Access Kit MCP is currently constrained to the canonical `production-scale`
 state because that state owns the globally named ECR repository; this
 production-lean figure is a cost comparison, not an allowed deployment
-profile. See the [Access Kit MCP AWS deployment runbook](../../infra/aws/terraform/ACCESS_KIT_MCP_DEPLOYMENT.md).
+profile. Optional delegated OAuth adds a Secrets Manager secret and its
+associated variable charges beyond this base estimate. See the
+[Access Kit MCP AWS deployment runbook](../../infra/aws/terraform/ACCESS_KIT_MCP_DEPLOYMENT.md).
 
 | Scenario | Fixed | Variable | Total |
 |---|---|---|---|

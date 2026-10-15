@@ -60,7 +60,7 @@ source_hashes:
   ".github/workflows/staging-lifecycle.yml": "sha256:ab0d86125cd2be277ba7e0a40a4dbc9fdd5db1480ff1c7cb816adf4874a55ae9"
   ".github/workflows/staging-state-reconcile.yml": "sha256:c08a7521eee7fbe505195ab1e49f27272b6ef144d4ba2e9b0153fe6e2f07f33d"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
-  ".github/workflows/terraform-promote.yml": "sha256:4542ef7fd2d140d2cbcb2a02b232c22f1473bbfdcad250cbc81999c468bcb26c"
+  ".github/workflows/terraform-promote.yml": "sha256:dc7242423f1931ba0d93019d701beed0a669458e4124db8baba46d074becd0ad"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
@@ -865,7 +865,13 @@ roles, security group, CloudWatch log group, target group, and HTTPS path rule.
 It is not `tfmcp`: the Access Kit task has no shared Aether credential and no
 workload AWS permissions, while `tfmcp` can operate Terraform with a privileged
 operator policy. The customer endpoint requires a request-scoped Aether API key
-or revocable session and forwards that same identity to tenant APIs.
+or revocable session and forwards that same identity to tenant APIs. Optional
+delegated OAuth uses a distinct Auth0 MCP audience and a KMS-backed Secrets
+Manager key injected into the MCP and API tasks. Each OAuth downstream call is
+signed so the MCP token cannot be used directly on the public REST API with a
+spoofed surface header. `enable_access_continuations` separately opens the
+existing tenant continuation route on the API task; the continuation tools
+still require the caller's read or write permission.
 
 The image is built from a clean reviewed commit by
 `infra/aws/terraform/scripts/publish_access_mcp_image.sh`; Terraform consumes

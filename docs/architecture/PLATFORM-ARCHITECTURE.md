@@ -50,12 +50,12 @@ source_hashes:
   "services/api/actions/agent_marketplace/projection.py": "sha256:92a5f5e457beebde9d161bf26f40ccb39fc5b76bc8ae4abfccc3e572b3c29de0"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/config/settings.py": "sha256:4d507b4ac3cab63aec2df92c69bcb20c42d6c6f9fb54441e06353ccd34619246"
+  "services/api/config/settings.py": "sha256:d83b26ee0f0d2d22c312a83838198ed9fcde9fb388005c5b6cfb1912bbd02916"
   "services/api/ingestion/ingestion/replay.py": "sha256:65f898480787b71d14c8f687351844fdf5585cd67664ff5c32699328594b24ce"
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/main.py": "sha256:f76824db10962390701e0356564ecb69e7fc5c81f25fff6e51c685da359aeb75"
-  "services/api/middleware/middleware.py": "sha256:4c59cee4a525830eebcaf5045e42f6f55e195614006d03fcb2ba9667a4bb5037"
+  "services/api/middleware/middleware.py": "sha256:067bfb010fed2bf10eaf63efe9647d4ef0c35c59a319cfabb02c3c04b242d432"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
   "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
@@ -111,16 +111,20 @@ SDKs            →  /v1/ingest/*     →       ↓
 ```
 
 SDK, CLI, and MCP observation requests use the canonical `POST /v1/batch`
-intake path. The Access Kit CLI and MCP adapters read through existing
-tenant-scoped APIs and use the same batch endpoint for site-bound observations;
-they do not create another graph writer, identity resolver, or action authority.
+intake path. The Access Kit CLI, MCP adapters, and Node client use the
+existing tenant-scoped APIs for named, bounded reads. The CLI and MCP adapters
+use the same batch endpoint for site-bound observations; none of these
+surfaces creates another graph writer, identity resolver, or action authority.
+The Access Kit can also create and read back a bounded continuation through
+the existing principal-scoped continuation API when that feature is enabled;
+this records context for later resolution, not a graph write or external action.
 Batch responses can return the real consent, usage, and audit references that
 their owning authorities persisted. SDK batch payloads share a minimum
 cross-platform wire vector, while the optional Envelope-B field remains behind
 the server's adoption flags.
 
-Authenticated Access Kit reads through the CLI, local MCP, and hosted MCP are
-attributed by an allowlisted surface label and recorded by the API middleware
+Authenticated Access Kit calls through the CLI, local MCP, hosted MCP, and Node
+client are attributed by an allowlisted surface label and recorded by the API middleware
 in the existing audit ledger plus a non-billable `access_interaction` usage
 dimension. Durable audit and usage event IDs are returned as response headers
 and preserved in the adapter interaction envelope. Subscribed tenant webhooks

@@ -31,10 +31,10 @@ source_hashes:
   "services/api/connectors/": "sha256:01f3d11694ce153f102de85133e514fe4548877376c05668c2ee6fe63e1ad633"
   "services/api/governance/": "sha256:88d555a3245092c8b9359f48213c260d0e370b82d615858a14c11ac744bd48a6"
   "services/api/graph/": "sha256:7372bf88ff18200edd21b53649b25098a9b1e1ec474a79ee36cd28a480093706"
-  "services/api/identity/": "sha256:3899aca8a5fe95b1f975945913ebbd0cef920109649676c9b48b49fd6fcd2a1f"
+  "services/api/identity/": "sha256:26c2dea5633e0513a214a27c0c9839b5bab0648aff22454c3e67f69b7e4f66e6"
   "services/api/ingestion/": "sha256:f8792fdb52aa80d312f4e9dc4a8e29e6102fc65737d2783cef54fdc4d6bdc569"
   "services/api/intelligence/": "sha256:50d2fba35ca8b62431283aa909ae746d789f59dcf201dfb15ad297fd522f1a13"
-  "services/api/journeys/": "sha256:1b39920846d458dde3378049c8d25a6a6eda06826de370862102305373c85cf8"
+  "services/api/journeys/": "sha256:fcd9a0fe60b841344f6391b3265abc58a847d31e892977362515667781c43eba"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b8b5c4e0956e300494f051e9b82958da6caf3ca375b8c79f00d5b76dd061fc63"
   "services/api/value/": "sha256:b90c235210f77460e626c395c3011149dd7cbd4d5da0f58e797abfe7e9d24328"
@@ -281,14 +281,16 @@ coordinates are server authority: client input, URL state, tenant-record
 metadata, and `AETHER_ENV` cannot override them. Multi-workspace selection is
 not exposed by this model.
 
-The Access Kit CLI and MCP adapters use this tenant API rather than owning a
-second authorization or graph path. Attributed reads of account context,
-sessions, entities, and the observed capability catalog are written to the
+The Access Kit CLI, MCP adapters, and Node client use this tenant API rather
+than owning a second authorization or graph path. Attributed reads of account
+context, sessions, entities, the observed capability catalog, and owned
+continuations, plus continuation creates, are written to the
 existing audit ledger and the non-billable `access_interaction` usage
 dimension. The API returns durable audit and usage IDs in
 `X-Aether-Audit-Event-ID` and `X-Aether-Usage-Event-ID`; the
-`X-Aether-Access-Surface` request label is limited to `cli`, `mcp_stdio`, and
-`mcp_http` and does not grant permission or choose a tenant.
+`X-Aether-Access-Surface` request label is limited to `cli`, `mcp_stdio`,
+`mcp_http`, and `access_sdk`; it does not grant permission or choose a tenant.
+The package's operation list describes adapter support, not a tenant grant.
 
 ### Contact & enterprise inquiries (`/v1/contact/*`)
 
@@ -2705,8 +2707,9 @@ Core entity management — create, resolve, and manage entity records and cluste
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/v1/entities` | Create a new entity record |
-| GET | `/v1/entities` | List entities with optional filters |
+| GET | `/v1/entities` | List tenant entities with optional filters; an explicit `offset` (0–100000) enables durable entity-ID ordering and `next_offset`, with `limit` 1–500 |
 | GET | `/v1/entities/{id}` | Get entity details |
+| GET | `/v1/entities/{id}/neighborhood` | Read a tenant-authorized one-hop graph projection (up to 50 neighbors and 100 edges); returns a bounded node/edge shape and truncation flags, with graph-family metering |
 | PATCH | `/v1/entities/{id}` | Update entity fields |
 | POST | `/v1/entities/{id}/identifiers` | Add identifiers (email, phone, wallet, device) to an entity |
 | DELETE | `/v1/entities/{id}/identifiers/{cluster_id}` | Remove an identifier from an entity |
@@ -3704,11 +3707,14 @@ request body: a client cannot forge `principal_id`, `tenant_id`, or `app_kind`.
 
 Scope is `t:{tenant_id}`; the principal is the authenticated user (or the tenant
 itself for API-key auth). GETs require `read`, writes `write`. Creating,
-updating, or deleting a continuation emits a `continuation_changed` sync event.
+updating, or deleting a continuation enqueues a `continuation_changed` sync
+event when client-sync is enabled; the feed append is best effort. Create
+retries use a stable source-event ID so they can repair a missed append without
+duplicating a persisted one.
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/v1/continuations` | Create a continuation (optional `idempotency_key` query param). Body: `source_client`, `surface`, `summary`, `canonical_context`, `resource_references`, `sensitivity` (default `standard`), `freshness`, `expires_at`. Returns the row with `state_revision` (0 on create). |
+| POST | `/v1/continuations` | Create a continuation (optional bounded `idempotency_key` query param). Body: `source_client`, `surface`, `summary`, `canonical_context`, `resource_references`, `sensitivity` (default `standard`), `freshness`, `expires_at`. Returns the row with `state_revision` (0 on create) and `replayed`; keys are principal scoped and changed-content replay returns 409. |
 | GET | `/v1/continuations/recent` | Recent continuations for the principal (`limit` 1–100, default 25). Response `{ "continuations": [...] }`. |
 | GET | `/v1/continuations/{id}` | One continuation. |
 | PATCH | `/v1/continuations/{id}` | Compare-and-swap update. Body is the continuation fields plus the required `expected_state_revision`; a `state_revision` mismatch returns HTTP 409. |

@@ -55,3 +55,19 @@ The npm package, hosted MCP image, and SDK packages need clean-install and real-
 5. After merge and separately authorized release setup, publish/install in a real host and retain cross-tenant, provider-to-graph, mobile-device, and action lifecycle evidence.
 
 Repository implementation and live proof have different dispositions. The PR description must list each work order as implemented, partial, or external-gated with the exact evidence. It must not claim OAuth client registration, broad action invocation, public npm availability, mobile beta, graph hydration, or production readiness solely from repository code.
+
+## Implementation disposition on this branch
+
+| Work order | Repository result | Remaining proof or owner work |
+|---|---|---|
+| 1. Declared operations | Closed read declaration, shared CLI/MCP dispatch, and public Node client are implemented. Server authorization remains per call. | Live tenant permission and host behavior require deployed evidence. |
+| 2. Remote delegated MCP reads | Distinct Auth0 resource audience, protected-resource metadata, exact route allowlist, durable membership resolution, and private per-request MCP service assertion are implemented behind an opt-in. A missing read scope receives a specific challenge. | Auth0 client onboarding, actual host sign-in, and direct REST denial with live credentials require deployment evidence. |
+| 3. Bounded graph reads | Explicit-offset tenant entity pages and one-hop neighborhood projection are implemented through identity/graph owners and exposed over CLI, MCP, and Node. | Real tenant data, two-tenant denial, and observation-to-graph proof remain live gates. |
+| 4. Governed actions | A bounded continuation create/readback uses the existing principal-scoped continuation authority, `write`/`read` permissions, idempotency, durable revision, and an opt-in API flag. It is a resource write and is excluded from delegated MCP OAuth. | External actions with policy/rights approval, pending/completed receipts, and compensation remain outside this slice until an owner supplies those contracts. Live continuation replay and denial proof remain. |
+| 5. Customer installation and mobile evidence | Package exports/types, cloud CLI image path, hosted MCP infrastructure, and customer setup guidance exist in the repository. | Public npm/ECR publication, real remote-host conformance, installed mobile lifecycle, and provider-to-graph/customer-tenant evidence require the separate release and environment gates. No staging wake or deployment is part of this PR. |
+
+`enable_access_mcp_oauth` and `enable_access_continuations` default off. The
+continuation option sets `AETHER_CONTINUATION_ENABLED` on the API task only;
+it does not enable the client-sync feed or create a tenant grant. Enabling
+either option requires a reviewed Terraform plan and its normal apply path.
+Merging this PR into `Development` does not wake staging.

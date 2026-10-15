@@ -439,6 +439,10 @@ publish an image, apply Terraform, or start an ECS task. The reviewed Terraform
 promotion then pins that digest in the customer Fargate task. This image is
 separate from the backend release image and the privileged `tfmcp` image;
 merging a PR into `Development` does not wake or deploy staging. The workflow
+also exposes plan-only switches for delegated MCP OAuth and the existing
+continuation API. OAuth plans add a KMS-backed service assertion secret for
+API/MCP tasks; continuation plans inject an API feature flag. Neither switch
+changes an apply dispatch after its saved binary plan is reviewed. The workflow
 also supports an explicit `workflow_dispatch` for a targeted rerun after a
 material fix, and runs on pushes to `Development` or `main` after landing.
 

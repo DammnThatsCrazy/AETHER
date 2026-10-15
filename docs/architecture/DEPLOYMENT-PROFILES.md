@@ -386,8 +386,14 @@ immutable `aether-access-mcp` ECR repository; after a reviewed image publish,
 shared tenant secret or workload AWS permissions. The service is allowed only
 on `production-scale`, the single persistent state that owns the globally
 named ECR repository; production-lean, enterprise-isolated, staging, demo, and
-preview are rejected. The service is
-disabled by default. For cost comparison only, the modeled two-task service
+preview are rejected. The service is disabled by default. A separate
+`enable_access_mcp_oauth` opt-in adds the Auth0 MCP audience and a KMS-backed
+service assertion secret shared only by the MCP and API tasks; MCP-audience
+tokens cannot be replayed directly to the public REST API.
+`enable_access_continuations` independently enables the existing continuation
+API on the backend task for named Access Kit create/readback, with caller
+`write`/`read` permissions still enforced. Both options default off and
+require a reviewed plan. For cost comparison only, the modeled two-task service
 plus ECR adds about USD 18.52/month to a USD 188.93 fixed baseline, or USD
 207.45/month before variable charges; this exceeds the USD 200 hard ceiling.
 See the
