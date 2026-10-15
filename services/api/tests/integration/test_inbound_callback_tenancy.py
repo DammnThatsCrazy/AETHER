@@ -364,3 +364,80 @@ async def test_callback_for_unknown_or_ambiguous_delivery_is_dropped(world):
 
     assert world.outcome_tenants() == []
     assert world.errors() == ["unbound_delivery", "unbound_delivery"]
+
+
+# ── Round trip: outbound adapter signature → inbound callback ─────────────────
+
+
+async def _adapter_request(monkeypatch, body: dict, secret: str, delivery_id: str) -> tuple[bytes, dict]:
+    """The exact bytes and headers the outbound WebhookAdapter sends."""
+    import types
+
+    import actions.delivery.adapters.webhook as webhook_mod
+
+    sent: dict = {}
+
+    async def _capture(method, url, *, headers, content, **kw):
+        sent.update(headers=dict(headers), content=content)
+        return types.SimpleNamespace(status_code=200, text="ok", headers={})
+
+    monkeypatch.setattr(webhook_mod, "send_public_request", _capture)
+    await webhook_mod.WebhookAdapter().dispatch(
+        payload=body, provider_config={"url": "https://receiver.example/hook"},
+        credential=secret, idempotency_key=delivery_id,
+    )
+    return sent["content"], sent["headers"]
+
+
+def _replay(world: _World, content: bytes, headers: dict) -> int:
+    keep = {k: v for k, v in headers.items() if k.startswith("X-Aether-")}
+    return world.client.post(
+        "/v1/notifications/webhooks/aether/callback", content=content, headers=keep,
+    ).status_code
+
+
+@pytest.mark.asyncio
+async def test_outbound_signed_callback_round_trips(world, monkeypatch):
+    sugg = await world.bind(tenant="tenant-B", provider="webhook", external_id="del-RT", secret="secret-B")
+    content, headers = await _adapter_request(
+        monkeypatch, {"event_type": "rejected", "delivery_id": "del-RT"}, "secret-B", "del-RT",
+    )
+    assert headers["X-Aether-Timestamp"].isdigit()
+    assert _replay(world, content, headers) == 200
+    await world.drain()
+
+    assert world.outcome_tenants() == ["tenant-B"]
+    assert world.state(sugg) == "rejected"
+
+
+@pytest.mark.asyncio
+async def test_outbound_signed_callback_tampered_is_rejected(world, monkeypatch):
+    sugg = await world.bind(tenant="tenant-B", provider="webhook", external_id="del-RT", secret="secret-B")
+    content, headers = await _adapter_request(
+        monkeypatch, {"event_type": "rejected", "delivery_id": "del-RT"}, "secret-B", "del-RT",
+    )
+    _replay(world, content.replace(b"rejected", b"resolved"), headers)
+    await world.drain()
+
+    assert world.outcome_tenants() == []
+    assert world.errors() == ["signature_unverified"]
+    assert world.state(sugg) == "pending"
+
+
+@pytest.mark.asyncio
+async def test_outbound_signed_callback_stale_is_rejected(world, monkeypatch):
+    import types
+
+    import actions.delivery.adapters.webhook as webhook_mod
+
+    sugg = await world.bind(tenant="tenant-B", provider="webhook", external_id="del-RT", secret="secret-B")
+    monkeypatch.setattr(webhook_mod, "time", types.SimpleNamespace(time=lambda: time.time() - 3600))
+    content, headers = await _adapter_request(
+        monkeypatch, {"event_type": "rejected", "delivery_id": "del-RT"}, "secret-B", "del-RT",
+    )
+    _replay(world, content, headers)
+    await world.drain()
+
+    assert world.outcome_tenants() == []
+    assert world.errors() == ["signature_unverified"]
+    assert world.state(sugg) == "pending"

@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import time
 import uuid
 from typing import Any, Optional
 
@@ -65,8 +66,9 @@ class WebhookAdapter(ProviderAdapter):
             )
 
         body_bytes = json.dumps(payload).encode("utf-8")
-        from datetime import datetime, timezone
-        timestamp = datetime.now(timezone.utc).isoformat()
+        # Unix seconds: the value signed here is the one the inbound callback
+        # route verifies and checks against its replay window.
+        timestamp = str(int(time.time()))
         delivery_id = idempotency_key or str(uuid.uuid4())
 
         headers: dict[str, str] = {
