@@ -10,10 +10,18 @@ listener, API hostname, VPC and ECS cluster. The ALB terminates TLS and routes
 the configured MCP path to a dedicated target group. No DNS record or ACM
 certificate is created for a separate MCP hostname.
 
+The continuation create/get tools call the existing `/v1/continuations`
+authority. Its API feature gate defaults off. A reviewed Terraform plan may set
+`enable_access_continuations=true` to inject `AETHER_CONTINUATION_ENABLED` into
+the backend API task; the option does not enable client-sync or authorize any
+caller by itself. The continuation routes still require the tenant's `read` or
+`write` permission. The promotion workflow exposes this as a plan-only input,
+and applying a saved plan is a separate release operation.
+
 ## Request and credential boundary
 
-The task has no Aether API key, user session, site key, or other application
-secret. Each protocol request carries the caller's Aether bearer credential;
+The task has no Aether API key, user session, or site key. Each protocol
+request carries the caller's Aether bearer credential;
 the MCP host validates it through the existing `/v1/me` authority and forwards
 the same request-scoped identity to tenant APIs. Optional `observe` requests
 must also carry the request-specific `X-Aether-Observe-Key` and
@@ -23,10 +31,45 @@ request and tenant-scoped read calls; it does not grant intake authority or
 select the intake tenant. The publishable key and site ID independently pass
 through the canonical site-binding check at `/v1/batch`.
 
+Delegated MCP OAuth is separately opt-in through `enable_access_mcp_oauth`.
+That flag creates a dedicated Auth0 resource server whose audience is the
+exact public MCP URL, with only `access_kit:read`. The MCP task serves
+`/.well-known/oauth-protected-resource` and the MCP-path-specific protected
+resource metadata path, advertising the configured Auth0 issuer. Missing or
+invalid credentials receive an OAuth bearer challenge. The backend validates
+the JWT signature, issuer, exact MCP audience, expiry and scope, then resolves
+the Auth0 subject against the current durable Aether user, membership, tenant,
+plan and read permission. MCP OAuth is confined to named Access Kit GET routes;
+it never creates a tenant, session or API key and grants no graph mutation or
+action authority. Legacy request-scoped API keys and revocable sessions remain
+available when OAuth is disabled.
+
+When delegated OAuth is enabled, Terraform generates a 32-byte service
+assertion key in the protected state and stores it in the existing KMS-backed
+Secrets Manager. ECS injects it only into the API and hosted MCP tasks as
+`AETHER_MCP_SERVICE_ASSERTION_KEY`; task execution roles can read the secret,
+while task roles receive no AWS mutation permission. The MCP service signs
+each downstream OAuth read over the method, exact path and query, token hash,
+and timestamp. The API requires this short-lived assertion before accepting
+the MCP-audience token, so a surface header on public REST does not bypass the
+MCP boundary. Rotating the key requires coordinated API and MCP task restarts.
+
+Auth0 Dynamic Client Registration is **not** enabled by Terraform. Auth0's
+open DCR permits unauthenticated client creation, while its third-party clients
+need an explicit API grant. A host can instead use a reviewed preregistered
+client. Before using DCR, the identity owner must approve Auth0 tenant settings,
+the exact third-party delegated read grant, application consent and connection
+policy, callback URI handling, rate limits, and client revocation. The MCP
+service does not proxy a registration endpoint or mint OAuth tokens. Current
+MCP guidance prefers Client ID Metadata Documents; DCR is a compatibility
+mechanism. This repository cannot claim host onboarding or delegated OAuth
+conformance until the Auth0 configuration and a real host are exercised.
+
 The ECS task role has no attached AWS permission policy. The separate task
-execution role can pull from only `aether-access-mcp` and write to only this
-service's CloudWatch log group, in addition to ECR's required authorization
-token call. The task security group accepts TCP 8080 only from the existing ALB
+execution role can pull from only `aether-access-mcp`, read the optional
+service assertion secret, and write to only this service's CloudWatch log
+group, in addition to ECR's required authorization token call. The task
+security group accepts TCP 8080 only from the existing ALB
 security group. It allows outbound TCP 443 for the Aether API and AWS runtime
 endpoints; this is destination-wide egress because the current public-IP/NAT
 profile does not provide stable endpoint IP ranges. The service has no public
@@ -48,12 +91,15 @@ task ingress, ECS Exec, autoscaling, or AWS mutation permission.
 | Liveness endpoint | `GET /healthz` |
 | TLS | Existing ALB HTTPS listener / ACM certificate |
 | Browser Origins | Optional exact HTTPS origin list; no wildcard |
+| Optional OAuth resource | Exact configured public MCP URL; no alternate audience |
+| Optional OAuth issuer | Auth0 HTTPS issuer; no local token validation fallback |
 
 `access_mcp_path` changes both the application mount and ALB path rule. The
 selected path must remain distinct from the internal `tfmcp` `/mcp*` reservation.
+It is limited to 91 characters including the leading slash so the
+path-specific OAuth metadata pattern stays within the ALB rule limit.
 Readiness confirms valid service configuration; it does not verify caller
-credentials or perform a downstream API health request. The service has no
-OAuth dynamic-client-registration flow.
+credentials or perform a downstream API health request.
 
 ## Staged publication and enablement
 
@@ -96,7 +142,9 @@ environments and credentials are not provisioned by this change.
    `enable_access_mcp_repository=true`, `enable_access_mcp=true`, and the
    published digest. Set `access_mcp_desired_count` from 1 to 4. Supply
    `access_mcp_allowed_origins` as a JSON array of exact HTTPS origins only
-   when browser clients need it. Review service count, cost, IAM, listener,
+   when browser clients need it. Enable `enable_access_mcp_oauth` only after
+   the Auth0 resource, consent and client onboarding configuration has been
+   reviewed; the default remains false. Review service count, cost, IAM, listener,
    and security-group changes before applying the exact plan artifact. The
    plan job independently confirms that the supplied digest exists in ECR and
    has a completed scan with zero HIGH/CRITICAL findings. Its OIDC plan role

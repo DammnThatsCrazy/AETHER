@@ -2409,11 +2409,37 @@ class EntityRepository(BaseRepository):
 
     async def list_by_tenant(
         self, tenant_id: str, entity_type: Optional[str] = None, limit: int = 100,
+        *, offset: int = 0, stable_order: bool = False,
     ) -> list[dict]:
         filters: dict[str, Any] = {"tenant_id": tenant_id}
         if entity_type:
             filters["entity_type"] = entity_type
-        return await self.find_many(filters=filters, limit=limit)
+        if not stable_order:
+            return await self.find_many(filters=filters, limit=limit)
+
+        # BaseRepository.find_many only allows timestamp sorts. An entity page
+        # needs a unique key so equal timestamps cannot skip or repeat rows.
+        pool = await self._ensure_pool()
+        if pool is None:
+            rows = [row for row in self._store.values() if _matches_filters(row, filters)]
+            rows.sort(key=lambda row: str(row.get("entity_id", "")))
+            return rows[offset: offset + limit]
+
+        await self._ensure_table()
+        if entity_type:
+            rows = await pool.fetch(
+                "SELECT data FROM entities WHERE tenant_id = $1 "
+                "AND data->>'entity_type' = $2 "
+                "ORDER BY id ASC LIMIT $3 OFFSET $4",
+                tenant_id, entity_type, limit, offset,
+            )
+        else:
+            rows = await pool.fetch(
+                "SELECT data FROM entities WHERE tenant_id = $1 "
+                "ORDER BY id ASC LIMIT $2 OFFSET $3",
+                tenant_id, limit, offset,
+            )
+        return [json.loads(row["data"]) for row in rows]
 
     async def count_by_tenant(self, tenant_id: str) -> int:
         """Count the complete tenant sampling frame."""

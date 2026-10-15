@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { normalizeInteractionOutcome } from './interaction.mjs';
+import { mcpServiceAssertionHeaders } from './mcp-service-assertion.mjs';
 
 const DEFAULT_API_URL = 'https://api.aether.io';
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -8,14 +9,15 @@ const SITE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const MAX_INGEST_BODY_BYTES = 64 * 1024;
 export const MAX_ENTITY_PAGE_SIZE = 50;
 export const MAX_OVERVIEW_BUCKETS = 50;
-const ACCESS_SURFACES = new Set(['cli', 'mcp_stdio', 'mcp_http']);
+const ACCESS_SURFACES = new Set(['cli', 'mcp_stdio', 'mcp_http', 'access_sdk']);
 
 export class AccessApiError extends Error {
-  constructor(message, { status, code, requestId, apiRequestId, interaction } = {}) {
+  constructor(message, { status, code, problemCode, requestId, apiRequestId, interaction } = {}) {
     super(message);
     this.name = 'AccessApiError';
     this.status = status;
     this.code = code;
+    this.problemCode = problemCode;
     this.requestId = requestId;
     this.apiRequestId = apiRequestId;
     this.interaction = interaction;
@@ -61,17 +63,20 @@ export function readConfig(env = process.env) {
   const sessionToken = typeof env.AETHER_SESSION_TOKEN === 'string' && env.AETHER_SESSION_TOKEN.trim()
     ? env.AETHER_SESSION_TOKEN
     : undefined;
-  if (apiKey && sessionToken) {
-    throw new Error('Set only one read credential: AETHER_API_KEY or AETHER_SESSION_TOKEN.');
+  const oauthToken = typeof env.AETHER_MCP_OAUTH_TOKEN === 'string' && env.AETHER_MCP_OAUTH_TOKEN.trim()
+    ? env.AETHER_MCP_OAUTH_TOKEN
+    : undefined;
+  if ([apiKey, sessionToken, oauthToken].filter(Boolean).length > 1) {
+    throw new Error('Set only one read credential: AETHER_API_KEY, AETHER_SESSION_TOKEN, or AETHER_MCP_OAUTH_TOKEN.');
   }
-  if (!apiKey && !sessionToken) {
-    throw new Error('Set AETHER_API_KEY or AETHER_SESSION_TOKEN for a tenant-scoped API request.');
+  if (!apiKey && !sessionToken && !oauthToken) {
+    throw new Error('Set AETHER_API_KEY, AETHER_SESSION_TOKEN, or AETHER_MCP_OAUTH_TOKEN for a tenant-scoped API request.');
   }
 
-  const authHeaders = apiKey
-    ? { authorization: `Bearer ${apiKey}` }
-    : { 'x-session-token': sessionToken };
-  return { apiOrigin, authHeaders };
+  const authHeaders = sessionToken
+    ? { 'x-session-token': sessionToken }
+    : { authorization: `Bearer ${apiKey || oauthToken}` };
+  return { apiOrigin, authHeaders, oauthToken };
 }
 
 export function readPublishableConfig(env = process.env) {
@@ -90,13 +95,13 @@ export function readPublishableConfig(env = process.env) {
   return { apiOrigin, publishableKey, siteId };
 }
 
-async function readRequest(
+export async function requestAether(
   path,
   query = undefined,
   env = process.env,
-  { method = 'GET', operation = 'query' } = {},
+  { method = 'GET', operation = 'query', body } = {},
 ) {
-  const { apiOrigin, authHeaders } = readConfig(env);
+  const { apiOrigin, authHeaders, oauthToken } = readConfig(env);
   const url = new URL(path, `${apiOrigin}/`);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
@@ -115,10 +120,15 @@ async function readRequest(
       redirect: 'error',
       headers: {
         accept: 'application/json',
+        ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
         ...authHeaders,
         'x-correlation-id': correlationId,
         ...(surface ? { 'x-aether-access-surface': surface } : {}),
+        ...(oauthToken ? mcpServiceAssertionHeaders({
+          method, url, token: oauthToken, secret: env.AETHER_MCP_SERVICE_ASSERTION_KEY,
+        }) : {}),
       },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (error) {
@@ -164,7 +174,9 @@ async function readRequest(
     throw new AccessApiError(
       `Aether API request failed (HTTP ${response.status}${errorCode ? `, ${errorCode}` : ''}).`,
       {
-        status: response.status, code: errorCode, requestId: headerRequestId, apiRequestId,
+        status: response.status, code: errorCode,
+        problemCode: typeof payload?.code === 'string' ? payload.code : undefined,
+        requestId: headerRequestId, apiRequestId,
         interaction: normalizeInteractionOutcome({
           operation, httpStatus: response.status, requestId: headerRequestId,
           apiRequestId, responseOk: false, code: errorCode, data: interactionData,
@@ -230,7 +242,7 @@ function safeAccountContext(profile) {
 }
 
 export async function getAccountContext(env = process.env) {
-  const result = await readRequest('/v1/me', undefined, env);
+  const result = await requestAether('/v1/me', undefined, env);
   return { ...result, data: safeAccountContext(result.data) };
 }
 
@@ -250,7 +262,7 @@ function safeUsageSummary(summary) {
 }
 
 export async function getUsageSummary(env = process.env) {
-  const result = await readRequest('/v1/billing/usage/summary', undefined, env);
+  const result = await requestAether('/v1/billing/usage/summary', undefined, env);
   return { ...result, data: safeUsageSummary(result.data) };
 }
 
@@ -278,7 +290,7 @@ export async function listSessions({ limit = 20, offset = 0 } = {}, env = proces
   if (!Number.isSafeInteger(offset) || offset < 0 || offset > MAX_SESSION_OFFSET) {
     throw new Error(`Session offset must be an integer from 0 through ${MAX_SESSION_OFFSET}.`);
   }
-  const result = await readRequest('/v1/me/sessions', { limit, offset }, env, { operation: 'auth' });
+  const result = await requestAether('/v1/me/sessions', { limit, offset }, env, { operation: 'auth' });
   const rows = Array.isArray(result.data?.sessions) ? result.data.sessions.slice(0, limit) : [];
   const sessions = rows.map(safeSession).filter(Boolean);
   return {
@@ -299,7 +311,7 @@ export async function revokeSession(sessionId, env = process.env) {
   if (typeof sessionId !== 'string' || !SESSION_ID_PATTERN.test(sessionId)) {
     throw new Error('Session IDs must contain 1 through 128 letters, digits, underscores, or hyphens.');
   }
-  const result = await readRequest(
+  const result = await requestAether(
     `/v1/me/sessions/${encodeURIComponent(sessionId)}`,
     undefined,
     env,
@@ -374,7 +386,7 @@ export async function listCapabilities(
   { provider, serverName, toolName, limit = 100, offset = 0 } = {},
   env = process.env,
 ) {
-  const result = await readRequest('/v1/capability-catalog', {
+  const result = await requestAether('/v1/capability-catalog', {
     provider,
     server_name: serverName,
     tool_name: toolName,
@@ -388,7 +400,7 @@ export async function listCapabilities(
 }
 
 export async function getCapabilityOverview(env = process.env) {
-  const result = await readRequest('/v1/capability-catalog/overview', undefined, env);
+  const result = await requestAether('/v1/capability-catalog/overview', undefined, env);
   return { ...result, data: projectObservedCapabilityOverview(result.data) };
 }
 
@@ -396,7 +408,7 @@ export async function getCapability(capabilityId, env = process.env) {
   if (!CAPABILITY_ID_PATTERN.test(capabilityId)) {
     throw new Error('Capability IDs must have the form cap_ followed by 24 lowercase hexadecimal characters.');
   }
-  const result = await readRequest(`/v1/capability-catalog/${encodeURIComponent(capabilityId)}`, undefined, env);
+  const result = await requestAether(`/v1/capability-catalog/${encodeURIComponent(capabilityId)}`, undefined, env);
   const capability = projectObservedCapability(result.data);
   if (!capability) {
     throw new AccessApiError('Aether API returned an unexpected capability response.', {
@@ -439,7 +451,7 @@ function safeEntity(row) {
   };
 }
 
-export async function listEntities({ entityType, limit = 25 } = {}, env = process.env) {
+export async function listEntities({ entityType, limit = 25, offset } = {}, env = process.env) {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_ENTITY_PAGE_SIZE) {
     throw new Error(`Entity page size must be an integer from 1 through ${MAX_ENTITY_PAGE_SIZE}.`);
   }
@@ -447,10 +459,25 @@ export async function listEntities({ entityType, limit = 25 } = {}, env = proces
       && (typeof entityType !== 'string' || !entityType.trim() || entityType.length > 64)) {
     throw new Error('Entity type filters must contain 1 through 64 characters.');
   }
-  const result = await readRequest('/v1/entities', {
+  if (offset !== undefined && (!Number.isSafeInteger(offset) || offset < 0 || offset > 100_000)) {
+    throw new Error('Entity offset must be an integer from 0 through 100000.');
+  }
+  const result = await requestAether('/v1/entities', {
     entity_type: entityType?.trim(),
     limit,
+    offset,
   }, env);
+  if (offset !== undefined && !Object.hasOwn(result.data, 'next_offset')) {
+    throw new AccessApiError('Aether API does not expose stable entity pagination.', {
+      requestId: result.requestId,
+      apiRequestId: result.responseRequestId,
+      interaction: normalizeInteractionOutcome({
+        operation: 'query', requestId: result.requestId,
+        httpStatus: result.interaction.http_status, responseOk: true, contractError: true,
+        apiRequestId: result.responseRequestId,
+      }),
+    });
+  }
   const rows = Array.isArray(result.data?.entities) ? result.data.entities.slice(0, limit) : [];
   const entities = rows.map(safeEntity).filter(Boolean);
   return {
@@ -458,6 +485,13 @@ export async function listEntities({ entityType, limit = 25 } = {}, env = proces
     data: {
       entities,
       count: entities.length,
+      ...(offset !== undefined ? {
+        next_offset: Number.isSafeInteger(result.data?.next_offset)
+          && result.data.next_offset > offset
+          && result.data.next_offset <= 100_000
+          ? result.data.next_offset
+          : null,
+      } : {}),
     },
   };
 }
@@ -466,7 +500,7 @@ export async function getEntity(entityId, env = process.env) {
   if (typeof entityId !== 'string' || !entityId.trim() || entityId.length > 256) {
     throw new Error('Entity IDs must contain 1 through 256 characters.');
   }
-  const result = await readRequest(`/v1/entities/${encodeURIComponent(entityId.trim())}`, undefined, env);
+  const result = await requestAether(`/v1/entities/${encodeURIComponent(entityId.trim())}`, undefined, env);
   const entity = safeEntity(result.data);
   if (!entity) {
     throw new AccessApiError('Aether API returned an unexpected entity response.', {
@@ -480,6 +514,67 @@ export async function getEntity(entityId, env = process.env) {
     });
   }
   return { ...result, data: entity };
+}
+
+function safeNeighborhoodNode(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+  const entityId = boundedText(row.entity_id, 256);
+  if (!entityId) return null;
+  return {
+    entity_id: entityId,
+    entity_type: boundedText(row.entity_type, 64) ?? 'unknown',
+    display_name: boundedText(row.display_name, 512) ?? '',
+  };
+}
+
+export async function getEntityNeighborhood(entityId, { limit = 25 } = {}, env = process.env) {
+  if (typeof entityId !== 'string' || !entityId.trim() || entityId.length > 256) {
+    throw new Error('Entity IDs must contain 1 through 256 characters.');
+  }
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
+    throw new Error('Neighborhood limit must be an integer from 1 through 50.');
+  }
+  const anchor = entityId.trim();
+  const result = await requestAether(
+    `/v1/entities/${encodeURIComponent(anchor)}/neighborhood`, { limit }, env,
+  );
+  const data = result.data;
+  if (data?.anchor_entity_id !== anchor || !Array.isArray(data.nodes)
+      || !Array.isArray(data.edges) || !Number.isSafeInteger(data.limit)
+      || typeof data.limit_reached !== 'boolean'
+      || typeof data.edges_truncated !== 'boolean') {
+    throw new AccessApiError('Aether API returned an unexpected neighborhood response.', {
+      requestId: result.requestId,
+      apiRequestId: result.responseRequestId,
+      interaction: normalizeInteractionOutcome({
+        operation: 'query', requestId: result.requestId,
+        httpStatus: result.interaction.http_status, responseOk: true, contractError: true,
+        apiRequestId: result.responseRequestId,
+      }),
+    });
+  }
+  const nodes = data.nodes.slice(0, limit + 1).map(safeNeighborhoodNode).filter(Boolean);
+  const visibleIds = new Set([anchor, ...nodes.map((node) => node.entity_id)]);
+  const edges = data.edges.slice(0, 100).filter((edge) => (
+    edge && typeof edge === 'object' && !Array.isArray(edge)
+    && visibleIds.has(edge.from_entity_id) && visibleIds.has(edge.to_entity_id)
+    && boundedText(edge.relationship_type, 128)
+  )).map((edge) => ({
+    from_entity_id: edge.from_entity_id,
+    to_entity_id: edge.to_entity_id,
+    relationship_type: edge.relationship_type,
+  }));
+  return {
+    ...result,
+    data: {
+      anchor_entity_id: anchor,
+      nodes,
+      edges,
+      limit: Math.min(data.limit, limit),
+      limit_reached: data.limit_reached || data.nodes.length > limit + 1,
+      edges_truncated: data.edges_truncated || data.edges.length > 100,
+    },
+  };
 }
 
 export function buildTrackBatch({

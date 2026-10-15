@@ -44,7 +44,7 @@ They have distinct owners and meanings:
 | `GET /v1/capability-installations` and detail | Agent Access Intelligence | Read tenant-scoped observed agent-to-server installation records. |
 | `GET/POST /v1/capability-authorizations` and revoke | `CapabilityAuthorizationService` over the existing delegation store | Read grants or perform grant/revoke writes. Writes require `write`; do not duplicate delegation storage or lifecycle. |
 | `POST /v1/capability-policy/evaluate`, `GET /v1/capability-policy/decisions` | `PolicyEngine` and Agent Access Intelligence | Evaluation records a sensitive policy decision and audit event; it does not invoke the external capability or mutate a tenant resource. Decisions are tenant-scoped reads. |
-| `GET /v1/entities` and `GET /v1/entities/{entity_id}` | `services/api/identity/entities/routes.py` | Existing tenant-scoped entity reads (`read`). Entity and graph mutations remain in their owner API and mutation gateway. There is no catch-all `/v1/graph` query route added by this work. |
+| `GET /v1/entities`, `GET /v1/entities/{entity_id}`, and `GET /v1/entities/{entity_id}/neighborhood` | Identity entity and entity-intelligence routes | Tenant-scoped reads (`read`). Explicit offset pages use durable entity-ID ordering. Neighborhood is a one-hop bounded graph projection with graph-family metering. Entity and graph mutations remain in their owner API and mutation gateway. |
 | `GET /v1/me` | `services/api/tenancy/me/routes.py:get_my_profile` | Existing tenant-scoped caller account profile, plan, billing summary, API key count, and admin flag. Middleware requires `read`; client projection omits tenant/graph IDs, contact email, and Stripe customer ID. |
 | `POST /v1/auth/login` | `services/api/tenancy/auth/routes.py:login` | Existing email/password authentication. When human sessions are enabled it creates a durable session; otherwise it follows the legacy reusable API-key response. It is not a delegated CLI grant. |
 | `POST /v1/auth/sso/callback` | `services/api/tenancy/auth/routes.py:sso_callback` | Exchanges an already-issued Auth0 access token for a server session or legacy key. `session_required: true` refuses before token validation or membership effects unless human sessions are enabled, so the CLI cannot receive a reusable API key. The CLI obtains the Auth0 token using Device Authorization. Membership resolution selects one existing tenant association/invitation and exposes no chooser. |
@@ -75,8 +75,10 @@ not a new service route or data authority.
 | CLI | `aether agents capabilities overview [--json]` | Catalog overview | Query, `read` |
 | CLI | `aether agents capabilities list [filters] [--json]` | Catalog list | Query, `read` |
 | CLI | `aether agents capabilities show CAPABILITY_ID [--json]` | Catalog detail | Query, `read` |
-| CLI | `aether entities list [--entity-type TYPE] [--limit N] [--json]` | Entity list, max 50 | Query, `read` |
+| CLI | `aether entities list [--entity-type TYPE] [--limit N] [--offset N] [--json]` | Entity list, max 50; stable explicit-offset paging | Query, `read` |
 | CLI | `aether entities show ENTITY_ID [--json]` | Entity detail | Query, `read` |
+| CLI | `aether entities neighborhood ENTITY_ID [--limit N] [--json]` | One-hop graph projection, max 50 neighbors and 100 edges | Query, `read` |
+| CLI | `aether access operations list/show` and `aether access invoke` | Closed adapter read declaration and delegated API call | Discovery is local; invoke is query, `read` |
 | CLI | `aether account context [--json]` | `/v1/me` safe projection | Query, `read` |
 | CLI | `aether auth context [--json]` | `/v1/me` safe projection | Query, `read` |
 | CLI | `aether auth login [--no-browser] [--json]` | Auth0 Device Authorization then `POST /v1/auth/sso/callback` with `session_required: true` | Human-session login; native OS credential store |
@@ -88,14 +90,19 @@ not a new service route or data authority.
 | MCP | `agent_access_capabilities_list` | Catalog list | Read-only tool, `read` |
 | MCP | `entities_list` | Entity list, max 50 | Read-only tool, `read` |
 | MCP | `entities_get` | Entity detail | Read-only tool, `read` |
+| MCP | `entities_neighborhood`, `access_operations_list`, `access_invoke_read` | Named graph read and closed adapter read declaration/dispatch | Read-only tools; API retains authorization |
 | MCP | `account_context` | `/v1/me` safe projection | Read-only tool, `read` |
+| Node ESM/TypeScript | `createAccessClient().operations.invoke(...)` and named entity/account/usage reads | Same closed REST adapters | Query, `read`; surface `access_sdk` |
+| CLI / MCP / Node | `continuations create/show`, `continuations_create/get`, `createAccessClient().continuations` | Existing `POST /v1/continuations` and `GET /v1/continuations/{id}` | Principal-scoped durable resource create (`write`) and bounded readback (`read`); API feature is opt-in |
 | CLI | `aether ingest EVENT_NAME ...` | `POST /v1/batch`, one `track` event | Ingestion, `ingest` + handler `write` |
 | MCP | `observe` | `POST /v1/batch`, one `track` event | Ingestion, `ingest` + handler `write` |
 
 The `agents capabilities` inventory is about observed third-party agent access.
 Those records neither grant nor expose Aether capabilities for invocation. The
-separate Access Kit invocation registry remains target-only until an owning
-runtime exists.
+Access Kit now has a package-local closed declaration and read dispatcher. It
+states adapter support, not server-side grants, tenant executability, or an
+external capability invocation registry. Every invocation still reaches its
+owning API route and its per-request checks.
 
 The CLI and MCP clients do not accept or send a tenant ID. Read calls resolve
 tenant scope from at most one explicit `AETHER_API_KEY` or
@@ -112,6 +119,22 @@ ID when present, and received time with the API request ID. They do not retry
 automatically. Repeating an event
 with the same caller-supplied event ID is the server-supported deduplication
 path.
+
+The public Node client exports the same closed read operations and projects the
+same API-derived results. It also exposes a narrow continuation create/get
+pair through the existing owner. It accepts one API key or revocable session
+and sends `access_sdk` for canonical access-interaction audit and metering. It
+does not reuse the observation SDK's publishable key for reads or writes.
+
+Continuation create stores one opaque entity reference and returns a durable
+continuation handle, revision, and replay marker. The owner binds the record to
+the authenticated principal, checks `write`, scopes the idempotency key to that
+principal and original request, and rejects changed-content replay. It does
+not verify the entity reference at create time; later resolution reauthorizes
+it. A deterministic client-sync source event lets retries repair a missed
+change-feed append without duplicating an already persisted event. The API
+feature gate defaults off; Terraform exposes a reviewed opt-in for the API
+task. Delegated MCP OAuth tokens never see the continuation tools.
 
 `aether ingest` and `observe` emit one generic `track` event with a custom event
 name, caller-supplied opaque event/session/anonymous IDs, caller-supplied
@@ -135,14 +158,15 @@ the client truncates a map. Tenant IDs and unrecognized catalog/overview fields
 are omitted.
 
 The entity query is deliberately narrow. `entities list` and `entities_list`
-request the first page only, with default limit 25 and hard client maximum 50;
-the existing endpoint has no cursor or offset. Detail calls use the existing
-tenant-checked entity route. The Access Kit REST client and its CLI/MCP output
+default to 25 and cap at 50. Supplying offset 0 begins stable entity-ID paging;
+the API returns `next_offset` until the page sequence ends. Detail calls use
+the existing tenant-checked entity route. The Access Kit REST client and its CLI/MCP output
 projections allow only `entity_id`, `entity_type`, `display_name`,
 `parent_entity_id`, `created_at`, and
 `updated_at`. They omit `tenant_id`, duplicate storage IDs, arbitrary
-`metadata`, and other response fields. No graph traversal or direct repository
-access is added. API status/code and request correlation are retained; CLI
+`metadata`, and other response fields. The named one-hop neighborhood returns
+only IDs, types, labels, and relationship types, with explicit node/edge bound
+flags; the adapter does not read graph storage. API status/code and request correlation are retained; CLI
 `--json` failures carry these fields in an `error` object, and MCP failures set
 `isError` with a JSON error object. Successful results may contain both the
 middleware request ID and response envelope request ID.
@@ -244,10 +268,18 @@ exact path. It accepts modern protocol revision `2026-07-28` and the SDK's
 required `MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name` routing headers.
 It supports one-request/one-response tool calls, without protocol session
 state or long-lived SSE streams. Every protocol request, including initialize
-and tools/list, requires the caller's existing Aether API key or revocable
-human-session bearer credential. The service validates it through
+and tools/list, requires a caller Aether API key, revocable human-session
+bearer, or an opt-in Auth0 token for the exact MCP resource. The service validates it through
 `GET /v1/me`, then forwards that request-scoped credential to the existing
 tenant API route; the API rechecks authorization and resolves tenant and actor.
+Delegated OAuth reads additionally require the dedicated audience, Auth0
+signature/issuer/expiry, `access_kit:read`, and an active durable Aether
+membership. These tokens are limited to named read routes and cannot expose
+the `observe` tool even when an intake key is supplied. The hosted service
+signs each downstream OAuth call with a short-lived assertion bound to the
+token hash and exact API request. The backend requires that assertion before
+it accepts the MCP audience, so a public REST caller cannot spoof the MCP
+surface header to widen a read token's API access.
 The service has no shared service-level customer key and accepts no caller
 tenant override.
 
@@ -285,15 +317,15 @@ That bearer authenticates the MCP request but does not authorize the observation
 write or choose its tenant; the publishable key and site pair independently
 carry the existing site-bound intake authority.
 
-This is a usable bearer-authenticated hosted MCP endpoint, not MCP OAuth. It
-does not implement OAuth protected-resource metadata, dynamic client
-registration, authorization-code login, refresh, or token exchange. A remote
-client must securely provision an Aether API key or human session and attach it
-to each request. OAuth/DCR, host-specific onboarding, live tenant isolation,
-and remote client conformance remain separate identity-owner and deployment
-gates. The capability inventory tools are read-only; `observe` is an ingestion
-write and must be shown accordingly. The server-side REST permission check
-remains authoritative.
+The hosted endpoint remains bearer-authenticated. Opt-in OAuth resource-server
+support publishes protected-resource metadata and challenges and configures a
+distinct Auth0 audience/read scope. Auth0 owns authorization-code/PKCE and
+client identity. Open dynamic client registration remains disabled; reviewed
+pre-registration or compatible Client ID Metadata Document onboarding, user
+consent, live tenant isolation, and remote host conformance remain separate
+identity-owner and deployment gates. API key and session callers may use
+`observe` with a separately valid site-bound intake pair; delegated OAuth
+tokens are read-only. The server-side REST permission check remains authoritative.
 
 ## Ownership for work beyond this slice
 
@@ -308,15 +340,16 @@ remains authoritative.
 | Policy decisions | `PolicyEngine` | Route checks through this engine; do not derive allow/deny from risk fields in the adapter. |
 | Readiness lifecycle | `CapabilityLifecycleAuthority` | Reads may be surfaced; promotion, suspension, and resume remain `admin`/operator-owned. |
 | Query/domain data | Owning domain APIs and repositories | Add only named, existing reads; no direct graph/database access from the CLI or bridge. |
+| Continuation state | Existing continuation service and repository | Expose only bounded create/readback; the server owns principal scope, idempotency, sync effects, and feature gate. |
 | Ingestion | Canonical ingestion authorities | Forward only through the canonical intake route. Do not build an adapter-local persistence or consent authority. |
 | Graph writes and external actions | Domain authority and `MutationIntent → GraphMutationGateway.apply` / action authority | No direct graph writes, provider calls, or action dispatch from a transport adapter. |
 | Billing, usage, audit, receipts | Existing middleware and billing/audit owners | Do not add local counters or invent plan behavior. Verify whether each newly exposed operation has authoritative accounting before adding it. |
 
 ## Remaining target-only work
 
-- A generic protocol-neutral invocation router does not exist. Add one only
-  when multiple surfaces need it and when it can dispatch through explicitly
-  registered owning authorities without bypassing their checks.
+- A package-local closed read dispatcher now covers named CLI/MCP reads through
+  existing APIs. A general server executable-capability registry, tenant grant
+  discovery, arbitrary invocation, and action router remain target-only.
 - CLI login/logout is implemented through Auth0 Device Authorization,
   `session_required` SSO exchange, native OS credential storage, and the
   existing tenant-scoped session DELETE route. Live Auth0 configuration,
@@ -328,22 +361,22 @@ remains authoritative.
   resolves one tenant from the user record; SSO membership resolution links or
   accepts an invitation but does not expose a tenant chooser. Tenant selection
   remains target-only until the auth/session owner provides that contract.
-- No graph search/traversal or broad `campaigns` or `agents` command/tool is
-  registered in the Access Kit. Entity reads are limited to the named list and
-  detail routes above; additional identity, graph, and domain queries need
+- A bounded one-hop entity neighborhood is registered. General graph search,
+  traversal language, or broad `campaigns` and `agents` commands remain outside
+  the Access Kit. Additional identity, graph, and domain queries need
   per-endpoint capability classification, scopes, pagination, output limits,
   and owner review before exposure.
-- There is no OAuth authorization server or dynamic client-registration flow
-  for remote MCP, MCP Apps surface, Aether invocation registry, arbitrary
-  external capability execution, or graph-write/action tool in this branch.
-  The hosted HTTP adapter accepts only existing request-scoped Aether bearer
-  credentials. CLI/MCP intake is limited to the generic site-bound `track`
+- Auth0 remains the OAuth authorization server. The opt-in MCP resource server
+  and protected-resource metadata are implemented; public DCR, client
+  onboarding, MCP Apps, external capability execution, and graph-write/action
+  tools are not. The continuation create/get pair is a resource write, not an
+  external action dispatcher. CLI/MCP intake remains limited to generic site-bound `track`
   path described above; batch collections, identity writes, and arbitrary
   direct route payloads are not exposed.
-- Host-specific registration and delegated OAuth remain target-only. Live AWS
+- Host-specific registration and live delegated OAuth remain proof gates. Live AWS
   apply, public-host setup, two-tenant denial evidence, customer remote-client
-  conformance, and OAuth resource metadata/token exchange are not established
-  by a deployable image or passing local protocol tests.
+  conformance, and Auth0 client/resource configuration are not established
+  by repository code or a deployable image.
 - The CLI package is configured for public npm distribution and has a manual
   release workflow that fails closed unless npm-production has a required
   reviewer, but no package version is published yet. That environment is not
@@ -371,11 +404,10 @@ The following evidence is required before the associated claim:
 | Hosted MCP service deployable | Build and publish an immutable Access Kit image to its dedicated ECR repository; plan the opt-in Fargate service and ALB route; verify the separate task role, host/path configuration, `/healthz`, `/readyz`, and caller bearer requirement. A Terraform plan and local HTTP exchange do not prove an applied AWS endpoint. |
 | MCP customer beta | Above plus actual host connection evidence, secure host secret injection, request correlation, error visibility, privacy/security review, and rollout support. A local bridge build alone is not beta evidence. |
 | Graph data available | A real tenant's observation-to-normalization-to-identity-to-projection proof and a separately authenticated read of that tenant's governed graph result. Catalog rows or a successful API response do not prove graph hydration. |
+| Continuation create/readback usable | Apply the reviewed API feature opt-in, then use a real tenant principal with read/write permission to create, replay with the same key and content, reject changed content, deny another principal's handle, and read the owner-produced revision. A stored entity reference alone does not prove entity authorization at resolution. |
+| Delegated MCP OAuth usable | Apply the exact Auth0 resource and client configuration, verify protected-resource metadata and scope recovery in a real host, and prove direct REST reuse of an MCP-audience token is denied without the private service assertion. |
 | PR readiness / production readiness | The single normal PR authority and applicable release scorecard; focused package evidence is not a substitute. |
 
-Focused local Node tests cover REST wrapper behavior, projection and response
-normalization, CLI output/error contracts, Auth0 device polling/expiry,
-human-session storage/revocation, human-session header use and session
 Focused local Node tests cover REST wrapper behavior, projection and response
 normalization, CLI output/error contracts, Auth0 device polling/expiry,
 human-session storage/revocation, human-session header use and session
@@ -384,10 +416,11 @@ list/revoke mapping, MCP tool schemas/handlers, the pinned-SDK stdio
 `tools/list` exchange with mocked API authority. These tests do not prove remote
 host conformance, live tenant isolation, deployed AWS topology, registry/image
 publication, publishable-key site binding against a live API, provider
-execution, graph hydration, OAuth, or customer beta readiness. The current
-deliverable remains an experimental inventory, account/entity reads, one-event
-intake adapter, local CLI authentication, and a deployable bearer-authenticated
-remote MCP service. Local tests do not prove live Auth0 setup, AWS apply,
+execution, graph hydration, live OAuth, or customer beta readiness. The current
+repository deliverable also includes closed read declarations/dispatch,
+stable entity pagination, a bounded graph projection, and opt-in MCP OAuth
+resource-server code. It remains experimental until the specific live gates
+above are satisfied. Local checks do not prove live Auth0 setup, AWS apply,
 supported OS keyring availability, or customer onboarding readiness.
 
 ## Protocol reference

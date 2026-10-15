@@ -290,7 +290,12 @@ resource "aws_lb_listener_rule" "access_mcp" {
 
   condition {
     path_pattern {
-      values = [var.access_mcp_path, "${var.access_mcp_path}/*"]
+      values = [
+        var.access_mcp_path,
+        "${var.access_mcp_path}/*",
+        "/.well-known/oauth-protected-resource",
+        "/.well-known/oauth-protected-resource${var.access_mcp_path}",
+      ]
     }
   }
 

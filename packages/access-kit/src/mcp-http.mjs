@@ -12,11 +12,14 @@ export const DEFAULT_REMOTE_MCP_PATH = '/v1/access/mcp';
 export const MCP_LIVENESS_PATH = '/healthz';
 export const MCP_READINESS_PATH = '/readyz';
 export const MAX_REMOTE_MCP_BODY_BYTES = 128 * 1024;
+export const MCP_RESOURCE_METADATA_PATH = '/.well-known/oauth-protected-resource';
+export const MCP_OAUTH_READ_SCOPE = 'access_kit:read';
 
 const API_KEY_PATTERN = /^ak_[A-Za-z0-9]{24}$/;
 const SESSION_TOKEN_PATTERN = /^sess_[a-f0-9]{48}$/;
 const PUBLISHABLE_KEY_PATTERN = /^pk_[a-f0-9]{24}$/;
 const SITE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const OAUTH_JWT_PATTERN = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 const MCP_ALLOWED_CORS_HEADERS = [
   'authorization',
   'content-type',
@@ -85,18 +88,48 @@ function parseAllowedOrigins(value) {
 
 function parseMcpPath(value) {
   const path = value || DEFAULT_REMOTE_MCP_PATH;
-  if (typeof path !== 'string' || !/^\/[A-Za-z0-9/_-]{1,127}$/.test(path)
+  if (typeof path !== 'string' || !/^\/[A-Za-z0-9/_-]{1,90}$/.test(path)
       || path.startsWith('//') || path.endsWith('/') || path.includes('//')) {
     throw new Error('AETHER_MCP_PATH must be a bounded absolute path without a trailing slash or repeated slash.');
   }
   return path;
 }
 
+function parseOAuthConfig(env, path, allowedHostnames) {
+  const resource = env.AETHER_MCP_OAUTH_RESOURCE;
+  const issuer = env.AETHER_MCP_OAUTH_ISSUER;
+  if (!resource && !issuer) return null;
+  if (!resource || !issuer) throw new Error('MCP OAuth requires both resource and issuer.');
+  let resourceUrl;
+  let issuerUrl;
+  try {
+    resourceUrl = new URL(resource);
+    issuerUrl = new URL(issuer);
+  } catch {
+    throw new Error('MCP OAuth resource and issuer must be absolute HTTPS URLs.');
+  }
+  if (resourceUrl.protocol !== 'https:' || resourceUrl.username || resourceUrl.password
+      || resourceUrl.search || resourceUrl.hash || resourceUrl.pathname !== path
+      || !allowedHostnames.includes(resourceUrl.hostname.toLowerCase())
+      || issuerUrl.protocol !== 'https:' || issuerUrl.username || issuerUrl.password
+      || issuerUrl.search || issuerUrl.hash || issuerUrl.pathname !== '/') {
+    throw new Error('MCP OAuth resource must match the allowed public MCP URL and issuer must be an HTTPS origin.');
+  }
+  return { resource: resourceUrl.href, issuer: issuerUrl.href };
+}
+
 export function readRemoteMcpConfig(env = process.env) {
+  const path = parseMcpPath(env.AETHER_MCP_PATH);
+  const allowedHostnames = parseAllowedHostnames(env.AETHER_MCP_ALLOWED_HOSTS);
+  const oauth = parseOAuthConfig(env, path, allowedHostnames);
+  if (oauth && !/^[a-f0-9]{64}$/.test(env.AETHER_MCP_SERVICE_ASSERTION_KEY || '')) {
+    throw new Error('Delegated MCP OAuth requires a 32-byte service assertion key.');
+  }
   return {
     apiOrigin: readApiOrigin(env),
-    path: parseMcpPath(env.AETHER_MCP_PATH),
-    allowedHostnames: parseAllowedHostnames(env.AETHER_MCP_ALLOWED_HOSTS),
+    path,
+    allowedHostnames,
+    oauth,
     ...parseAllowedOrigins(env.AETHER_MCP_ALLOWED_ORIGINS),
   };
 }
@@ -126,29 +159,51 @@ function successfulHealth(status, data) {
   });
 }
 
-function readBearer(request) {
+function readBearer(request, oauth) {
   const header = request.headers.get('authorization');
-  if (!header || header.length > 80) return null;
+  if (!header || header.length > (oauth ? 8199 : 80)) return null;
   const match = /^Bearer (.+)$/i.exec(header);
   if (!match) return null;
   const token = match[1];
   if (API_KEY_PATTERN.test(token)) return { kind: 'api_key', token };
   if (SESSION_TOKEN_PATTERN.test(token)) return { kind: 'session', token };
+  if (oauth && token.length <= 8192 && OAUTH_JWT_PATTERN.test(token)) {
+    return { kind: 'oauth', token };
+  }
   return null;
 }
 
-function buildTenantEnv(apiOrigin, credential, observe) {
+function buildTenantEnv(apiOrigin, credential, observe, serviceAssertionKey) {
   const env = {
     AETHER_API_URL: apiOrigin,
-    ...(credential.kind === 'api_key'
-      ? { AETHER_API_KEY: credential.token }
-      : { AETHER_SESSION_TOKEN: credential.token }),
+    AETHER_ACCESS_SURFACE: 'mcp_http',
+    ...(credential.kind === 'api_key' ? { AETHER_API_KEY: credential.token }
+      : credential.kind === 'session' ? { AETHER_SESSION_TOKEN: credential.token }
+        : { AETHER_MCP_OAUTH_TOKEN: credential.token }),
   };
+  if (credential.kind === 'oauth') env.AETHER_MCP_SERVICE_ASSERTION_KEY = serviceAssertionKey;
   if (observe) {
     env.AETHER_PUBLISHABLE_KEY = observe.key;
     env.AETHER_SITE_ID = observe.siteId;
   }
   return env;
+}
+
+function oauthChallenge(response, config, { insufficientScope = false } = {}) {
+  if (config.oauth && (response.status === 401 || (response.status === 403 && insufficientScope))) {
+    response.headers.set('www-authenticate',
+      `Bearer ${insufficientScope ? 'error="insufficient_scope", ' : ''}resource_metadata="${new URL(MCP_RESOURCE_METADATA_PATH + config.path, config.oauth.resource).href}", scope="${MCP_OAUTH_READ_SCOPE}"`);
+  }
+  return response;
+}
+
+function resourceMetadata(config) {
+  return successfulHealth(200, {
+    resource: config.oauth.resource,
+    authorization_servers: [config.oauth.issuer],
+    bearer_methods_supported: ['header'],
+    scopes_supported: [MCP_OAUTH_READ_SCOPE],
+  });
 }
 
 function readObserveHeaders(request) {
@@ -166,6 +221,9 @@ function readObserveHeaders(request) {
 function authFailure(error) {
   if (!(error instanceof AccessApiError)) return { status: 503, code: 'aether_api_unavailable' };
   if (error.status === 401) return { status: 401, code: 'aether_credential_rejected' };
+  if (error.status === 403 && error.problemCode === 'MCP_READ_SCOPE_DENIED') {
+    return { status: 403, code: 'mcp_oauth_insufficient_scope', insufficientScope: true };
+  }
   if (error.status === 403) return { status: 403, code: 'aether_permission_denied' };
   if (error.status === undefined || error.status >= 500) return { status: 503, code: 'aether_api_unavailable' };
   return { status: 502, code: 'aether_api_error' };
@@ -242,10 +300,18 @@ export function createRemoteMcpFetchHandler({ env = process.env } = {}) {
     } catch {
       return jsonResponse(503, 'configuration_not_ready');
     }
-    if (url.pathname !== config.path || url.search || url.hash) return jsonResponse(404, 'not_found');
+    const metadataPath = MCP_RESOURCE_METADATA_PATH + config.path;
+    const isMetadata = config.oauth && [MCP_RESOURCE_METADATA_PATH, metadataPath].includes(url.pathname);
+    if ((url.pathname !== config.path && !isMetadata) || url.search || url.hash) {
+      return jsonResponse(404, 'not_found');
+    }
 
     const access = checkHostAndOrigin(request, config);
     if (access.error) return jsonResponse(403, access.error);
+    if (isMetadata) {
+      if (request.method !== 'GET') return jsonResponse(405, 'method_not_allowed');
+      return corsResponse(resourceMetadata(config), access.origin);
+    }
     if (request.method === 'OPTIONS') return preflightResponse(request, access.origin);
     if (request.method !== 'POST') {
       const response = jsonResponse(405, 'method_not_allowed', { origin: access.origin });
@@ -256,25 +322,31 @@ export function createRemoteMcpFetchHandler({ env = process.env } = {}) {
       return jsonResponse(415, 'application_json_required', { origin: access.origin });
     }
 
-    const credential = readBearer(request);
-    if (!credential) return jsonResponse(401, 'aether_bearer_required', { origin: access.origin });
+    const credential = readBearer(request, config.oauth);
+    if (!credential) return oauthChallenge(
+      jsonResponse(401, 'aether_bearer_required', { origin: access.origin }), config,
+    );
 
-    const tenantEnv = buildTenantEnv(config.apiOrigin, credential, null);
+    const tenantEnv = buildTenantEnv(config.apiOrigin, credential, null, env.AETHER_MCP_SERVICE_ASSERTION_KEY);
     try {
       // Validate on every MCP protocol request. The API remains the source of
       // truth for credential validity, current tenant membership, and grants.
       await getAccountContext(tenantEnv);
     } catch (error) {
       const failure = authFailure(error);
-      return jsonResponse(failure.status, failure.code, {
+      return oauthChallenge(jsonResponse(failure.status, failure.code, {
         requestId: error?.requestId,
         origin: access.origin,
-      });
+      }), config, { insufficientScope: credential.kind === 'oauth' && failure.insufficientScope });
     }
 
     const observeInput = readObserveHeaders(request);
     if (observeInput.error) return jsonResponse(400, observeInput.error, { origin: access.origin });
-    const requestEnv = buildTenantEnv(config.apiOrigin, credential, observeInput.observe);
+    if (credential.kind === 'oauth' && observeInput.observe) {
+      return jsonResponse(403, 'oauth_read_scope_cannot_observe', { origin: access.origin });
+    }
+    const requestEnv = buildTenantEnv(config.apiOrigin, credential, observeInput.observe,
+      env.AETHER_MCP_SERVICE_ASSERTION_KEY);
 
     const handler = createMcpHandler(
       () => createAccessMcpServer(requestEnv, {

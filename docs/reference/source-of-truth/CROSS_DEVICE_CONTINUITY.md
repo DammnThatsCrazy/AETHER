@@ -65,8 +65,11 @@ paths land on the same subjects, re-authorized at resolve time.
 - Persistence is direct-SQL with a real migration (`continuations`,
   `continuation_selections`): the generic JSONB repository cannot express
   compare-and-swap. `PATCH` carries `expected_state_revision`; a mismatch is a
-  **409** (optimistic concurrency). Create is idempotent
-  (`ON CONFLICT (tenant_scope, idempotency_key) DO NOTHING`).
+  **409** (optimistic concurrency). Create stores a principal-scoped digest of
+  the idempotency key and the original request fingerprint. The same principal
+  and request replay the durable row; changed content conflicts, and another
+  principal cannot read it through the key. Older raw-key rows are checked
+  against the same principal and current content before replay.
 - `expires_at` TTL is swept by a supervised worker; both tables are erasable by
   `principal_id` for DSR.
 
@@ -99,8 +102,8 @@ The tenant (Aether) continuation router is mounted at `/v1/continuations`
 - `POST /v1/continuations/{id}/handoff` — mint the backend selection token.
 - `DELETE /v1/continuations/{id}`.
 
-The operator (Kyber) router `/v1/kyber/continuations` is deferred to the Kyber-mobile
-milestone, where it composes the Kyber access plane.
+The operator (Kyber) router `/v1/kyber/continuations` uses the same durable
+repository under operator scope and the Kyber access gate.
 
 The client-sync feed is mounted at `GET /v1/client-sync?cursor=`
 (`services/api/ingestion/client_sync/routes.py`), gated by `settings.client_sync.enabled`. It
@@ -109,13 +112,16 @@ per-scope change log since the cursor. Producers append via
 `services/api/ingestion/client_sync/emitter.py::enqueue_sync_change`; the continuation routes are
 the first wired producer (`continuation_changed`), with the remaining producers
 wired incrementally.
+Continuation create uses a deterministic source-event ID for the sync change,
+so an idempotent retry can repair a missed append without duplicating an
+already persisted feed event.
 
 ## Status
 
 Milestone C1 lands the **contract twins** (parity-green), the **dual-mode persistence
-engine**, the **tenant continuation routes**, and the **client-sync feed** (durable log
+engine**, the **tenant and operator continuation routes**, and the **client-sync feed** (durable log
 + gap-free cursor + `continuation_changed` as the first wired producer) — this page is
-the design of record. The operator router and the remaining sync producers follow within
-the same program (see `docs/reference/reports/mobile-productization/PROGRAM_STATE.yaml`). Flags default
+the design of record. Remaining sync producers follow within the same program
+(see `docs/reference/reports/mobile-productization/PROGRAM_STATE.yaml`). Flags default
 OFF (`continuation.enabled`, `client_sync.enabled`), so disabled surfaces answer 404 — no
 runtime behavior change until enabled.

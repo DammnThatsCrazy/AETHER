@@ -418,6 +418,7 @@ locals {
       (var.enable_elasticache || name != "redis-auth-token")
     ],
     [for arn in values(var.companion_secret_arns) : arn],
+    var.mcp_service_assertion_secret_arn == "" ? [] : [var.mcp_service_assertion_secret_arn],
   )
 
   # Secret injection is performed by the ECS execution role. The application
@@ -500,6 +501,11 @@ locals {
     valueFrom = arn
   }]
 
+  api_secrets_block = concat(local.backend_secrets_block,
+    var.mcp_service_assertion_secret_arn == "" ? [] : [
+      { name = "AETHER_MCP_SERVICE_ASSERTION_KEY", valueFrom = var.mcp_service_assertion_secret_arn },
+  ])
+
   ml_secrets_block = [
     {
       name      = "JWT_SECRET"
@@ -572,6 +578,8 @@ resource "aws_ecs_task_definition" "backend" {
           { name = "DEPLOYMENT_PROFILE", value = var.deployment_profile },
           { name = "AUTH0_DOMAIN", value = var.auth0_domain },
           { name = "AUTH0_API_AUDIENCE", value = var.auth0_api_audience },
+          { name = "AUTH0_MCP_AUDIENCE", value = var.auth0_mcp_audience },
+          { name = "AETHER_CONTINUATION_ENABLED", value = tostring(var.enable_access_continuations) },
           { name = "APP_URL", value = var.aether_app_url },
           { name = "DATABASE_HOST", value = var.database_host },
           { name = "DATABASE_PORT", value = tostring(var.database_port) },
@@ -641,7 +649,7 @@ resource "aws_ecs_task_definition" "backend" {
         ],
       )
 
-      secrets = local.backend_secrets_block
+      secrets = local.api_secrets_block
 
       logConfiguration = {
         logDriver = "awslogs"
@@ -806,6 +814,7 @@ resource "aws_ecs_task_definition" "runtime_service" {
         { name = "DEPLOYMENT_PROFILE", value = var.deployment_profile },
         { name = "AUTH0_DOMAIN", value = var.auth0_domain },
         { name = "AUTH0_API_AUDIENCE", value = var.auth0_api_audience },
+        { name = "AUTH0_MCP_AUDIENCE", value = var.auth0_mcp_audience },
         { name = "APP_URL", value = var.aether_app_url },
         { name = "DATABASE_HOST", value = var.database_host },
         { name = "DATABASE_PORT", value = tostring(var.database_port) },

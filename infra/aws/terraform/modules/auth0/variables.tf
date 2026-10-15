@@ -9,6 +9,16 @@ variable "api_audience" {
   default     = "https://api.aether.io"
 }
 
+variable "mcp_resource_uri" {
+  type        = string
+  description = "Exact public MCP resource URI, or empty when remote MCP OAuth is disabled."
+  default     = ""
+  validation {
+    condition     = var.mcp_resource_uri == "" || can(regex("^https://[^/?#]+/[A-Za-z0-9/_-]+$", var.mcp_resource_uri))
+    error_message = "mcp_resource_uri must be an exact HTTPS MCP resource URL without query or fragment."
+  }
+}
+
 # ── Aether SPA ────────────────────────────────────────────────────────────
 
 variable "aether_callback_urls" {

@@ -2259,6 +2259,20 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/architecture/target/access-kit-post-773-work-orders.md",
+      "title": "Access Kit Post-773 Work Orders",
+      "slug": "access-kit-post-773-work-orders",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/architecture/target/agent-lifecycle-full-blueprint.md",
       "title": "Agent Lifecycle Full Blueprint",
       "slug": "agent-lifecycle-full-blueprint",

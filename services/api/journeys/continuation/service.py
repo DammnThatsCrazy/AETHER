@@ -63,6 +63,7 @@ async def create(
         context=ctx.model_dump(mode="json"),
         idempotency_key=idempotency_key,
         expires_at=ctx.expires_at,
+        requested_id=body.id or None,
     )
 
 

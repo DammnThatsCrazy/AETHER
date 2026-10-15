@@ -82,6 +82,22 @@ variable "enable_access_mcp" {
   }
 }
 
+variable "enable_access_mcp_oauth" {
+  type        = bool
+  description = "Opt in to the dedicated Auth0 delegated-read resource and MCP OAuth discovery. Requires reviewed Auth0 client onboarding."
+  default     = false
+  validation {
+    condition     = !var.enable_access_mcp_oauth || (var.enable_access_mcp && var.auth0_domain != "")
+    error_message = "enable_access_mcp_oauth requires the customer MCP service and an Auth0 domain."
+  }
+}
+
+variable "enable_access_continuations" {
+  type        = bool
+  description = "Opt in to the existing tenant continuation authority on the API task for bounded Access Kit create/get calls. Defaults off."
+  default     = false
+}
+
 variable "access_mcp_image_digest" {
   type        = string
   description = "Immutable sha256 digest of the image in the aether-access-mcp ECR repository; required only when enable_access_mcp is true."
@@ -98,7 +114,7 @@ variable "access_mcp_path" {
   default     = "/v1/access/mcp"
   validation {
     condition = (
-      can(regex("^/[A-Za-z0-9/_-]{1,127}$", var.access_mcp_path)) &&
+      can(regex("^/[A-Za-z0-9/_-]{1,90}$", var.access_mcp_path)) &&
       !startswith(var.access_mcp_path, "//") &&
       !startswith(lower(var.access_mcp_path), "/mcp") &&
       !endswith(var.access_mcp_path, "/") &&

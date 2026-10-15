@@ -17,6 +17,7 @@ Public paths (health, docs) bypass everything from step 3 onward.
 from __future__ import annotations
 
 import hashlib
+import base64
 import json
 import threading
 import time
@@ -26,7 +27,7 @@ from typing import Callable, Optional
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
-from shared.common.common import AetherError, UnauthorizedError, problem_dict, problem_response
+from shared.common.common import AetherError, ForbiddenError, UnauthorizedError, problem_dict, problem_response
 from shared.context.request_context import (
     CORRELATION_HEADER,
     LEGACY_REQUEST_ID_HEADER,
@@ -55,15 +56,45 @@ _ACCESS_KIT_CAPABILITIES = {
     ("DELETE", "/v1/me/sessions/{session_id}"): "auth.sessions.revoke",
     ("GET", "/v1/entities"): "entities.list",
     ("GET", "/v1/entities/{entity_id}"): "entities.get",
+    ("GET", "/v1/entities/{entity_id}/neighborhood"): "entities.neighborhood.read",
     ("GET", "/v1/capability-catalog"): "agent_access.capabilities.list",
     ("GET", "/v1/capability-catalog/overview"): "agent_access.capabilities.overview",
     ("GET", "/v1/capability-catalog/{capability_id}"): "agent_access.capabilities.get",
+    ("GET", "/v1/billing/usage/summary"): "billing.usage.summary.read",
+    ("POST", "/v1/continuations"): "continuations.create",
+    ("GET", "/v1/continuations/{continuation_id}"): "continuations.get",
 }
-_ACCESS_KIT_SURFACES = frozenset({"cli", "mcp_stdio", "mcp_http"})
+_ACCESS_KIT_SURFACES = frozenset({"cli", "mcp_stdio", "mcp_http", "access_sdk"})
+# A delegated MCP token is accepted only for these named read routes. The
+# request header selects this path only when a per-request assertion from the
+# hosted MCP service is valid. The token is also checked for issuer, audience,
+# scope, user, membership, and tenant status.
+_MCP_OAUTH_READ_ROUTES = frozenset(
+    path for (method, path), capability in _ACCESS_KIT_CAPABILITIES.items()
+    if method == "GET" and capability not in {"auth.sessions.list", "continuations.get"}
+)
+
+
+class McpReadScopeDeniedError(ForbiddenError):
+    """Machine-readable missing-scope denial for the MCP OAuth challenge."""
+
+
+def _token_declares_mcp_audience(token: str) -> bool:
+    """Prevent MCP-audience tokens from falling through to legacy JWT auth."""
+    audience = settings.auth0.mcp_audience
+    if not audience or len(token) > 8192 or token.count(".") != 2:
+        return False
+    try:
+        payload = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+        declared = claims.get("aud")
+        return declared == audience or (isinstance(declared, list) and audience in declared)
+    except (ValueError, TypeError, AttributeError):
+        return False
 
 
 async def _record_access_interaction(request: Request, response: Response) -> dict[str, str]:
-    """Best-effort audit, non-billable metering, and event publication for Access Kit reads."""
+    """Best-effort audit, non-billable metering, and event publication for Access Kit calls."""
     surface = request.headers.get("x-aether-access-surface", "")
     route_template = getattr(request.state, "access_route_template", None)
     capability_id = _ACCESS_KIT_CAPABILITIES.get((request.method.upper(), route_template))
@@ -86,7 +117,10 @@ async def _record_access_interaction(request: Request, response: Response) -> di
         "blocked": "access.interaction.blocked",
         "failed": "access.interaction.failed",
     }[outcome]
-    operation = "revoke" if request.method.upper() == "DELETE" else "read"
+    operation = {
+        "DELETE": "revoke",
+        "POST": "write",
+    }.get(request.method.upper(), "read")
     metadata = {
         "surface": surface,
         "capability_id": capability_id,
@@ -114,7 +148,7 @@ async def _record_access_interaction(request: Request, response: Response) -> di
             metadata=metadata,
         )
         references["X-Aether-Audit-Event-ID"] = str(audit_event.audit_event_id)
-    except Exception as exc:  # telemetry must not change an authorized read result
+    except Exception as exc:  # telemetry must not change an authorized result
         logger.warning("access interaction audit write failed (%s)", type(exc).__name__)
 
     try:
@@ -132,7 +166,7 @@ async def _record_access_interaction(request: Request, response: Response) -> di
         saved_event = await MeteringService().record_event(metering_event)
         if saved_event and saved_event.get("metering_event_id"):
             references["X-Aether-Usage-Event-ID"] = str(saved_event["metering_event_id"])
-    except Exception as exc:  # telemetry must not change an authorized read result
+    except Exception as exc:  # telemetry must not change an authorized result
         logger.warning("access interaction metering write failed (%s)", type(exc).__name__)
 
     try:
@@ -1376,6 +1410,17 @@ async def _authenticate_async(
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
+        if request.headers.get("x-aether-access-surface") == "mcp_http" and token.count(".") == 2:
+            from shared.auth.mcp_service_assertion import verify_mcp_service_assertion
+
+            if not verify_mcp_service_assertion(request, token):
+                raise UnauthorizedError("MCP service assertion is invalid")
+            route = getattr(request.state, "access_route_template", request.url.path)
+            if request.method.upper() not in {"GET"} or route not in _MCP_OAUTH_READ_ROUTES:
+                raise UnauthorizedError("MCP OAuth token is not valid for this route")
+            return await _resolve_mcp_oauth_token(token)
+        if _token_declares_mcp_audience(token):
+            raise UnauthorizedError("MCP OAuth token requires the hosted MCP service")
         # Try API key first (SDK pattern); fall back to JWT (SSO/user pattern)
         try:
             return await api_key_validator.validate_async(token)
@@ -1389,6 +1434,52 @@ async def _authenticate_async(
         return jwt_handler.extract_context(payload)
 
     raise UnauthorizedError("Missing API key or Bearer token")
+
+
+async def _resolve_mcp_oauth_token(token: str) -> TenantContext:
+    """Bind Auth0's delegated MCP token to durable Aether membership.
+
+    No tenant is created or selected from token claims. Revocation, role and
+    permission changes in Aether take effect on the next API request.
+    """
+    from shared.auth.auth0_validator import McpOAuthScopeError, validate_mcp_oauth_token
+    from repositories.repos import AdminRepository, UserRepository
+
+    try:
+        claims = await validate_mcp_oauth_token(token)
+        user = await UserRepository().find_by_auth0_sub(claims["sub"])
+        if not user or user.get("status") != "active" or user.get("membership_status") != "active":
+            raise UnauthorizedError("MCP OAuth principal is not an active member")
+        tenant_id = user.get("tenant_id")
+        tenant = await AdminRepository().find_by_id(tenant_id) if tenant_id else None
+        if not tenant or tenant.get("status") not in {"active", "active_limited"}:
+            raise UnauthorizedError("MCP OAuth tenant is not active")
+        permissions = user.get("permissions")
+        if not isinstance(permissions, list):
+            permissions = []
+        if "read" not in permissions and user.get("role") != "admin":
+            raise UnauthorizedError("MCP OAuth member has no read permission")
+        plan_tier = PlanTier(tenant.get("plan_tier") or tenant.get("plan"))
+    except McpOAuthScopeError as exc:
+        raise McpReadScopeDeniedError("MCP OAuth read scope is missing") from exc
+    except (UnauthorizedError, ForbiddenError):
+        raise
+    except Exception as exc:
+        logger.warning("MCP OAuth authority resolution failed (%s)", type(exc).__name__)
+        raise UnauthorizedError("MCP OAuth credential is invalid") from exc
+    return TenantContext(
+        tenant_id=tenant_id,
+        user_id=user.get("user_id") or user.get("id"),
+        role=Role.VIEWER,
+        plan_tier=plan_tier,
+        permissions=["read"],
+        credential_class="mcp_oauth",
+        credential_status="active",
+        tenant_status=str(tenant["status"]),
+        organization_id=user.get("organization_id") or tenant.get("organization_id"),
+        organization_status=str(user.get("organization_status", "active")),
+        membership_status="active",
+    )
 
 
 async def _resolve_trust_plane_context(request: Request) -> Optional[TenantContext]:

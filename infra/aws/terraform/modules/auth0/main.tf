@@ -64,6 +64,30 @@ resource "auth0_resource_server" "api" {
   token_dialect    = "access_token_authz"
 }
 
+# A delegated MCP token has its own exact resource audience and a single read
+# scope. No DCR or default third-party client grant is enabled here: opening
+# registration is a separate reviewed Auth0 tenant decision.
+resource "auth0_resource_server" "access_mcp" {
+  count       = var.mcp_resource_uri == "" ? 0 : 1
+  name        = "AETHER Access MCP (${var.environment})"
+  identifier  = var.mcp_resource_uri
+  signing_alg = "RS256"
+
+  token_lifetime                                  = 3600
+  token_lifetime_for_web                          = 3600
+  allow_offline_access                            = false
+  skip_consent_for_verifiable_first_party_clients = false
+  enforce_policies                                = true
+  token_dialect                                   = "access_token_authz"
+}
+
+resource "auth0_resource_server_scope" "access_mcp_read" {
+  count                      = var.mcp_resource_uri == "" ? 0 : 1
+  resource_server_identifier = auth0_resource_server.access_mcp[0].identifier
+  scope                      = "access_kit:read"
+  description                = "Read named Aether Access Kit resources through the MCP service"
+}
+
 # --------------------------------------------------------------------------
 # Database Connection (Username + Password)
 # --------------------------------------------------------------------------

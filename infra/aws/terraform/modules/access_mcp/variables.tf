@@ -79,6 +79,27 @@ variable "api_url" {
   }
 }
 
+variable "oauth_resource_uri" {
+  type        = string
+  description = "Exact public MCP resource URI registered as the Auth0 API audience."
+}
+
+variable "oauth_issuer" {
+  type        = string
+  description = "HTTPS Auth0 authorization-server issuer URL."
+}
+
+variable "service_assertion_secret_arn" {
+  type        = string
+  description = "Secrets Manager version ARN holding the MCP-to-API service assertion key; empty only when OAuth is disabled."
+  default     = ""
+}
+
+variable "service_assertion_kms_key_arn" {
+  type        = string
+  description = "Customer-managed KMS key used to encrypt the service assertion secret."
+}
+
 variable "allowed_host" {
   type        = string
   description = "Exact public API hostname allowed by the Access Kit MCP host guard."

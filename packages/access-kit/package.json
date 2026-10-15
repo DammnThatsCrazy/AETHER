@@ -12,6 +12,13 @@
     "url": "https://github.com/DammnThatsCrazy/AETHER/issues"
   },
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.mts",
+      "import": "./src/index.mjs"
+    }
+  },
+  "types": "./src/index.d.mts",
   "bin": {
     "aether": "./bin/aether.js",
     "aether-mcp": "./bin/aether-mcp.js",

@@ -5,11 +5,15 @@ stateless MCP HTTP service for bounded customer operations:
 
 - Read the observed third-party agent access inventory owned by Agent Access
   Intelligence.
-- Read a bounded tenant entity page or one tenant entity through the existing
-  identity API.
+- Read stable, bounded tenant entity pages, one entity, or a one-hop graph
+  neighborhood through the identity and graph authorities.
+- Discover the adapter's closed read-operation list and invoke a named read
+  through the owning API. This list does not report tenant authorization.
 - Read a minimal tenant account context through the existing `/v1/me` route.
 - Read the non-billable Access Kit interaction count through the existing
   billing usage authority.
+- Create and read back a bounded, durable continuation for one entity through
+  the existing continuation authority, when that API feature is enabled.
 - List and revoke durable human sessions through existing tenant account routes.
 - Sign in through Auth0 Device Authorization and keep the resulting revocable
   Aether session in the native OS credential store.
@@ -51,7 +55,10 @@ Supply only the credential required by the command being used:
 | Command | Environment |
 |---|---|
 | `aether agents capabilities ...` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, or a saved OS credential-store session, with `read` permission |
-| `aether entities ...` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, or a saved OS credential-store session, with `read` permission |
+| `aether entities ...`, `aether access invoke ...` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, or a saved OS credential-store session, with `read` permission |
+| `aether continuations create` | A tenant API key or saved/revocable session with `write` permission and an enabled continuation API |
+| `aether continuations show` | The same credential class with `read` permission and an enabled continuation API |
+| `aether access operations list/show` | No credential; these describe adapter support only |
 | `aether account context`, `aether auth context` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, or a saved OS credential-store session, with `read` permission |
 | `aether usage summary` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, or a saved OS credential-store session, through `/v1/billing/usage/summary` |
 | `aether auth login` | `AETHER_AUTH0_DOMAIN`, `AETHER_AUTH0_CLIENT_ID`, `AETHER_AUTH0_AUDIENCE` |
@@ -59,9 +66,10 @@ Supply only the credential required by the command being used:
 | `aether auth sessions list` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, or saved OS credential-store session, through the existing tenant session route |
 | `aether auth sessions revoke SESSION_ID` | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`, or saved OS credential-store session, through the existing tenant session route |
 | `aether ingest ...` | `AETHER_PUBLISHABLE_KEY` and its bound `AETHER_SITE_ID` |
-| MCP inventory, entity, and account read tools | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN` with `read` permission; otherwise a saved session from the OS credential store |
+| MCP inventory, entity, account, and continuation read tools | `AETHER_API_KEY` or `AETHER_SESSION_TOKEN` with `read` permission; otherwise a saved session from the OS credential store |
+| MCP `continuations_create` | API key or revocable session with `write` permission; the continuation API feature must be enabled |
 | MCP `observe` tool | `AETHER_PUBLISHABLE_KEY` and its bound `AETHER_SITE_ID` |
-| Hosted MCP tenant read tools | Per-request `Authorization: Bearer ak_...` or `Bearer sess_...` |
+| Hosted MCP tenant read tools | Per-request `Authorization: Bearer ak_...` or `Bearer sess_...`; a delegated Auth0 MCP OAuth token is accepted only after the opt-in identity and host configuration is applied |
 | Hosted MCP `observe` tool | Per-request `X-Aether-Observe-Key: pk_...` plus `X-Aether-Site-ID`, alongside the read bearer |
 
 Set at most one explicit tenant read credential: `AETHER_API_KEY` or
@@ -83,6 +91,43 @@ the required `X-Aether-Site` header against the key's binding. Do not set or
 send a tenant ID override. The Access Kit uses a publishable key only for
 `POST /v1/batch`, never for reads.
 
+## Programmatic Access Kit client
+
+The package also exports a small Node ESM/TypeScript client. Its named reads
+use the same closed operation declaration and REST projections as the CLI and
+MCP. Its continuation create/get methods call the existing continuation API.
+The caller supplies one tenant credential from its secret manager; the client
+does not accept tenant IDs or make graph/provider writes.
+
+```js
+import { createAccessClient } from '@aether/access-kit';
+
+const access = createAccessClient({
+  apiUrl: process.env.AETHER_API_URL,
+  apiKey: process.env.AETHER_API_KEY,
+});
+const page = await access.entities.list({ limit: 25, offset: 0 });
+const next = page.data.next_offset;
+const neighborhood = await access.entities.neighborhood('entity_123', { limit: 25 });
+const saved = await access.continuations.create({
+  title: 'Review this entity',
+  entityId: 'entity_123',
+  idempotencyKey: 'review-entity-123-v1',
+});
+const readback = await access.continuations.get(saved.data.continuation_id);
+```
+
+`page` and `neighborhood` include `data`, `request_id`, optional
+`api_request_id`, and the API-derived `interaction`. `operations.list()`
+describes adapter support; `operations.invoke(id, input)` calls the owning API,
+which decides permission and tenant scope per request. The public client sends
+`access_sdk` as its accounting surface. Continuation create requires `write`
+and an enabled server feature; the entity ID is an opaque reference at create
+time and is reauthorized when later resolved. The idempotency key is scoped to
+the authenticated principal and same request content. Observation intake
+continues to use the Web, Server, and mobile SDKs or the explicit CLI/MCP
+site-bound path.
+
 For hosted MCP, the bearer authenticates the MCP request and permits its
 tenant-scoped read surface; it does not grant observation-write authority or
 select the ingestion tenant. The separate `pk_` key and bound site ID are sent
@@ -97,7 +142,14 @@ aether agents capabilities overview
 aether agents capabilities list --provider example --limit 25 --json
 aether agents capabilities show cap_0123456789abcdef01234567 --json
 aether entities list --entity-type organization --limit 25 --json
+aether entities list --limit 25 --offset 25 --json
 aether entities show entity_123 --json
+aether entities neighborhood entity_123 --limit 25 --json
+aether continuations create --title 'Review this entity' --entity-id entity_123 --idempotency-key review-entity-123-v1 --json
+aether continuations show cont_0123456789abcdef0123456789abcdef --json
+aether access operations list --json
+aether access operations show entities.neighborhood --json
+aether access invoke entities.neighborhood --input-json '{"entity_id":"entity_123","limit":25}' --json
 aether account context --json
 aether usage summary --json
 aether auth context --json
@@ -118,12 +170,13 @@ projection truncates a map.
 
 ## Tenant entity reads
 
-`entities list` and `entities show` call the existing read-protected
-`GET /v1/entities` and `GET /v1/entities/{entity_id}` endpoints. Tenant scope
-comes from `AETHER_API_KEY` or `AETHER_SESSION_TOKEN`; there is no tenant override. List calls request a
-single first page with a default limit of 25 and a hard client maximum of 50.
-The existing route has no cursor or offset, so the CLI does not imply complete
-tenant enumeration when more rows exist.
+`entities list`, `entities show`, and `entities neighborhood` call the
+read-protected identity and graph APIs. Tenant scope comes from the credential;
+there is no tenant override. List calls default to 25 and cap at 50. Pass
+`--offset 0` for the first stable page and follow `next_offset` until it is
+null. The route orders explicit-offset pages by durable entity ID. `show` and
+`neighborhood` require an entity in the authenticated tenant; neighborhood
+traversal is one hop with at most 50 neighbors and 100 returned edges.
 
 Entity responses contain only `entity_id`, `entity_type`, `display_name`,
 `parent_entity_id`, `created_at`, and `updated_at`. The client omits
@@ -277,7 +330,9 @@ observation remains a server rejection.
 
 `usage_summary` returns the current-period non-billable Access Kit interaction
 count through `/v1/billing/usage/summary`. It is available on local stdio and
-hosted MCP and does not expose unrelated billing dimensions.
+hosted MCP and does not expose unrelated billing dimensions. Neighborhood
+results project only IDs, types, labels, and relationship types; the
+`limit_reached` and `edges_truncated` flags state when a result hit a bound.
 
 Entity tool errors set MCP `isError` and include a JSON `error` object with the
 API status/code and request IDs when available.
@@ -329,13 +384,23 @@ origin allowlist. No wildcard CORS is enabled.
 
 Every POST to the MCP path, including protocol discovery and `tools/list`,
 requires an `Authorization: Bearer` containing an existing Aether secret API
-key (`ak_` plus 24 alphanumeric characters) or revocable human session
-(`sess_` plus 48 lowercase hexadecimal characters). The handler validates the
+key (`ak_` plus 24 alphanumeric characters), revocable human session
+(`sess_` plus 48 lowercase hexadecimal characters), or an opt-in Auth0 token
+issued for the exact hosted MCP resource with `access_kit:read`. The handler validates the
 credential against the existing tenant-scoped `GET /v1/me` API for each HTTP
 request, then passes the same request-scoped credential to each tool's existing
 API route. Aether revalidates authorization and tenant scope on every API call.
-The tools are bounded to the existing entity reads, account context, and
-observed third-party agent inventory. No caller-supplied tenant ID is accepted.
+OAuth validation also checks the signing key, issuer, audience, expiry, scope,
+and durable active Aether membership. An OAuth token is accepted only on named
+read routes; it cannot invoke `observe`, revoke a session, or select a tenant.
+The hosted MCP service signs each downstream OAuth read using an ECS-injected
+`AETHER_MCP_SERVICE_ASSERTION_KEY`. The backend requires that short-lived
+assertion before validating an MCP-audience token. Setting an Access Kit
+surface header on public REST cannot make that token usable there. API keys
+and Aether sessions continue through their existing paths.
+The tools are bounded to the declared read operations, entity pages and
+neighborhood, account context, and observed third-party agent inventory.
+No caller-supplied tenant ID is accepted.
 
 `observe` appears in the remote tool list only when that MCP request also
 provides both `X-Aether-Observe-Key` and `X-Aether-Site-ID`. The first must be
@@ -349,13 +414,19 @@ required for every MCP protocol request, including an `observe` call.
 The transport is modern-only for MCP protocol revision `2026-07-28` and uses
 the SDK's required `MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name`
 validation. It is stateless and does not create an MCP session. It supports the
-JSON request/response tools in this package, not long-lived SSE streams. This
-endpoint uses caller-supplied Aether bearer credentials directly. It does not
-implement OAuth authorization-server metadata, dynamic client registration,
-OAuth login, or token exchange; remote MCP hosts must securely provision an
-Aether API key or human session and attach it to each request. Do not present
-this endpoint as MCP OAuth authorization until the Aether identity owner adds
-and operates that flow.
+JSON request/response tools in this package, not long-lived SSE streams.
+When OAuth is enabled, the service publishes RFC 9728 protected-resource
+metadata at `/.well-known/oauth-protected-resource/v1/access/mcp` (and the
+root well-known path) and advertises the configured Auth0 authorization server.
+Unauthorized responses include a bearer challenge with the metadata URL and
+read scope. A validated OAuth token missing `access_kit:read` receives an
+`insufficient_scope` challenge; unrelated permission denials do not claim a
+missing scope. Auth0 remains the authorization server; the Access Kit does not
+issue tokens. Public client registration, Client ID Metadata Document support
+by the configured Auth0 tenant, user consent, and actual host sign-in remain
+deployment and interoperability gates. Open Auth0 dynamic client registration
+is deliberately disabled. Without OAuth configuration, a host supplies an
+Aether API key or session on every request.
 
 Container health probes are independent of customer credentials:
 
@@ -455,13 +526,14 @@ interaction webhooks. Audit and usage receipts come from the existing API
 authorities; each surface is an adapter and cannot grant itself tenant access
 or write directly to the graph.
 
-V1 does not implement saved named profiles, tenant switching, token refresh,
-a general query language, generated capability APIs, arbitrary external tool
-execution, graph traversal, graph mutation, action dispatch, exports, or
-long-running task/result handles. Hosted MCP uses pre-provisioned Aether bearer
-credentials; OAuth discovery/dynamic client registration and delegated client
-onboarding remain future identity-owner work. Mobile SDK parity and desktop
-bridge integration are also outside this V1 slice.
+The post-773 slice adds a closed read-operation declaration, explicit read
+invocation, entity pagination, a bounded one-hop graph read, and opt-in
+delegated OAuth resource support. It does not implement saved named profiles,
+tenant switching, token refresh, a general graph query language, arbitrary
+external tool execution, graph mutation, action dispatch, exports, or
+long-running task/result handles. OAuth client onboarding and actual host
+conformance, mobile SDK device parity, and desktop bridge integration remain
+separate work and proof gates.
 
 The package is configured for public npm distribution but has not been
 published. Its release workflow validates and preserves the exact main-branch
