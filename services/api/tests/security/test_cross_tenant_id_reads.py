@@ -270,6 +270,24 @@ def test_pnl_reads_only_the_owning_tenants_wallets():
     assert tvl and all(p["tenant_id"] == OWN for p in tvl)
 
 
+def test_pnl_for_an_entity_without_wallets_is_unavailable():
+    from dependencies.providers import get_clickhouse, get_provider_gateway
+    from repositories.repos import EntityRepository
+    from value.pnl import routes
+
+    _run(EntityRepository().create_entity("entity-no-wallets", OWN, "human"))
+    c = _client(routes.router, overrides={
+        get_clickhouse: lambda: _RecordingClickHouse(),
+        get_provider_gateway: lambda: _NoProviders(),
+    })
+
+    resp = c.get("/v1/profile/entity-no-wallets/pnl?window=lifetime", headers=_as(OWN))
+    assert resp.status_code == 200
+    summary = resp.json()["data"]["summary"]
+    assert summary["realized_pnl_usd"] is None
+    assert summary["data_confidence"] == "unavailable"
+
+
 # ── wallet risk features ─────────────────────────────────────────────────────
 
 

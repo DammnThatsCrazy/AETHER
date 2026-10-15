@@ -81,6 +81,20 @@ class TestRealizedPnlUnavailableNotZero:
         with pytest.raises(PNLUnavailableError):
             await calc._compute_realized_pnl("e1", "t1", None, None)
 
+    async def test_entity_without_wallets_is_unavailable_not_zero(self):
+        class _NoWallets:
+            async def find_many(self, filters=None, **_kw):
+                return []
+
+        calc = PNLCalculator(
+            clickhouse_client=_EmptyCH(), coingecko_provider=object(),
+            moralis_provider=_EmptyMoralis(), wallet_repo=_NoWallets(),
+        )
+        assert await calc._compute_realized_pnl("e1", "t1", None, None) == (None, "unavailable")
+        result = await calc.compute("e1", "t1", window_days=None)
+        assert result.realized_pnl_usd is None
+        assert result.data_confidence == "unavailable"
+
     async def test_empty_tx_history_is_zero_with_exact_confidence(self):
         calc = _calculator(_EmptyCH())
         realized, confidence = await calc._compute_realized_pnl("e1", "t1", None, None)

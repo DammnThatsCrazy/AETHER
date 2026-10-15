@@ -99,7 +99,7 @@ async def get_pnl(
         "kind": "pnl",
         "window": window,
         "summary": {
-            "realized_pnl_usd": float(result.realized_pnl_usd),
+            "realized_pnl_usd": float(result.realized_pnl_usd) if result.realized_pnl_usd is not None else None,
             "unrealized_pnl_usd": float(result.unrealized_pnl_usd),
             "tvl_delta_usd": float(result.tvl_delta_usd),
             "tvl_delta_pct": result.tvl_delta_pct,
