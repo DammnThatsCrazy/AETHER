@@ -278,7 +278,7 @@ class DeliveryWorker:
 
         # Transition source suggestion to DELIVERED only after confirmed provider receipt
         if source_type == "suggestion" and source_id:
-            await self._advance_suggestion_delivered(source_id, receipt.id)
+            await self._advance_suggestion_delivered(source_id, receipt.id, tenant_id)
 
         # Check if all jobs for this intent are done
         await self._maybe_complete_intent(intent_id, tenant_id, DeliveryIntentStatus.DELIVERED)
@@ -428,12 +428,14 @@ class DeliveryWorker:
                 f"Transient vault failure resolving credential: {exc}"
             ) from exc
 
-    async def _advance_suggestion_delivered(self, suggestion_id: str, receipt_id: str) -> None:
-        """Transition a suggestion to DELIVERED status after confirmed provider receipt."""
+    async def _advance_suggestion_delivered(
+        self, suggestion_id: str, receipt_id: str, tenant_id: str,
+    ) -> None:
+        """Transition the job tenant's suggestion to DELIVERED after a confirmed receipt."""
         try:
             from intelligence.suggestions.repository import SuggestionRepository
             repo = SuggestionRepository()
-            await repo.update(suggestion_id, {
+            await repo.patch(suggestion_id, tenant_id, {
                 "status": "delivered",
                 "delivery_receipt_id": receipt_id,
                 "delivered_at": _now_iso(),
