@@ -53,8 +53,8 @@ source_hashes:
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
-  "services/api/repositories/repos.py": "sha256:64a081a8a32252aa73360bb861c2af4d738aa92831b8f4a93bcb4818f0aa3928"
-  "services/api/shared/graph/": "sha256:fde19e372f598d92ceb7e58bea28934d379495dfbd46aab44253efd7ec2119fd"
+  "services/api/repositories/repos.py": "sha256:4f13803cb0e92160ac3c4769b18d9853b453dd04a231421a3fe1f90977572439"
+  "services/api/shared/graph/": "sha256:63d08e25b8fd1fce177de2fda5aae18d7a89c4b1a8ed4f0785df63fa194d0717"
   "services/api/value/x402/economic_mutations.py": "sha256:bdd180a936e048840636f221fdee3b142c0babab5d8e2bcc59b4a51983198f51"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
   "services/api/workers/profile360_workers/workers.py": "sha256:0c79f5ee2cc03eb0ae92d8690a8622b8ebaea245dc047c7643107fe909d7170a"
@@ -370,8 +370,8 @@ New columns: `agent_task_frequency`, `avg_confidence_delta`, `hiring_depth`, `x4
 |--------|------|-------------|
 | `POST` | `/v1/commerce/payments` | Record a payment event between any two participants |
 | `POST` | `/v1/commerce/hires` | Record an agent hiring another agent for a task |
-| `GET` | `/v1/commerce/fees/report` | Aggregate fee analysis across agents for a time range |
-| `GET` | `/v1/commerce/agent/{id}/spend` | Total spend breakdown for a specific agent |
+| `GET` | `/v1/commerce/fees/report` | Aggregate fee analysis across the caller's tenant's payments for a time range |
+| `GET` | `/v1/commerce/agent/{id}/spend` | Total spend breakdown for a specific agent, from the caller's tenant's payments |
 
 ### On-Chain Service (L0)
 
@@ -399,6 +399,8 @@ Full graph traversal, path-finding, and overlay services via `GraphTraversalEngi
 | `POST` | `/v1/graph/traverse` | BFS traversal from a root vertex — depth, edge-type, and tenant-scope filters |
 | `POST` | `/v1/graph/path` | Shortest-path (Dijkstra) between two vertices |
 | `POST` | `/v1/graph/temporal` | Temporal BFS — traverse edges created within a time window |
+
+The start, `from`/`to` and anchor vertices of `traverse`, `path` and `temporal` are fetched with `get_vertex_for_tenant`: an id outside the request's tenant comes back as a bare placeholder node, never with the other tenant's properties.
 | `POST` | `/v1/graph/overlay` | Fetch all vertices matching type/tenant predicates (uses `get_all_vertices()`) |
 | `POST` | `/v1/graph/filter` | Filter vertices by risk level, relationship type, or property predicate |
 | `GET` | `/v1/graph/contracts` | List smart-contract vertices visible in the tenant's graph |
@@ -434,8 +436,8 @@ spur prefixes; equal-cost alternatives are ordered with a stable tie-breaker.
 | `POST` | `/v1/agent/tasks/{id}/lifecycle` | Update task state (`started`, `paused`, `completed`, `failed`) |
 | `POST` | `/v1/agent/tasks/{id}/decision` | Log an agent decision with reasoning and confidence |
 | `POST` | `/v1/agent/tasks/{id}/feedback` | Submit ground truth feedback and compute `confidence_delta` |
-| `GET` | `/v1/agent/{id}/graph` | Full subgraph for an agent (nodes, edges, action records) |
-| `GET` | `/v1/agent/{id}/trust` | Current trust score with component breakdown |
+| `GET` | `/v1/agent/{id}/graph` | Subgraph for an agent within the caller's tenant (404 unless the agent's vertex belongs to it; neighbours tagged with another tenant, or with none, are omitted) |
+| `GET` | `/v1/agent/{id}/trust` | Current trust score with component breakdown (404 unless the agent's vertex belongs to the caller's tenant) |
 | `POST` | `/v1/agent/{id}/a2h` | Record an agent-to-human interaction (notification, recommendation, delivery, escalation) |
 
 ## Configuration
