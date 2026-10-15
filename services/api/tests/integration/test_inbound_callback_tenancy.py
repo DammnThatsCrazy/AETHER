@@ -293,15 +293,54 @@ async def test_linear_missing_timestamp_is_rejected(world):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("override", [{"team": "team-X"}, {"org": "org-X"}])
-async def test_linear_team_or_organisation_mismatch_is_dropped(world, override):
+async def test_linear_organisation_mismatch_is_dropped(world):
     sugg = await _bind_linear(world, "tenant-B", "lin-uuid-B")
-    _post_linear(world, _linear_event("lin-uuid-B", **override))
+    _post_linear(world, _linear_event("lin-uuid-B", org="org-X"))
     await world.drain()
 
     assert world.outcome_tenants() == []
     assert world.errors() == ["unbound_delivery"]
     assert world.state(sugg) == "pending"
+
+
+@pytest.mark.asyncio
+async def test_linear_issue_moved_to_another_team_still_routes_in_its_organisation(world):
+    sugg = await _bind_linear(world, "tenant-B", "lin-uuid-B")
+    _post_linear(world, _linear_event("lin-uuid-B", team="team-X"))
+    await world.drain()
+
+    assert world.outcome_tenants() == ["tenant-B"]
+    assert world.state(sugg) == "rejected"
+
+
+@pytest.mark.asyncio
+async def test_linear_team_mismatch_is_dropped_without_a_stored_organisation(world):
+    sugg = await world.bind(
+        tenant="tenant-B", provider="linear", external_id="lin-uuid-B",
+        provider_config={"team_id": "team-B"},
+    )
+    _post_linear(world, _linear_event("lin-uuid-B", team="team-X"))
+    await world.drain()
+
+    assert world.outcome_tenants() == []
+    assert world.errors() == ["unbound_delivery"]
+    assert world.state(sugg) == "pending"
+
+
+@pytest.mark.asyncio
+async def test_inbox_row_without_received_at_uses_its_created_at(world):
+    """Rows written before ``received_at`` existed are judged by ``created_at``."""
+    from datetime import datetime, timezone
+
+    sugg = await _bind_linear(world, "tenant-B", "lin-uuid-B")
+    _post_linear(world, _linear_event("lin-uuid-B", age_s=86400))
+    (row,) = world.inbox._store.values()
+    del row["received_at"]
+    row["created_at"] = datetime.fromtimestamp(time.time() - 86400, timezone.utc).isoformat()
+    await world.drain()
+
+    assert world.outcome_tenants() == ["tenant-B"]
+    assert world.state(sugg) == "rejected"
 
 
 # ── Aether delivery callback ──────────────────────────────────────────────────
