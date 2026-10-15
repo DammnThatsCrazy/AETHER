@@ -159,9 +159,14 @@ class OutcomeRouter:
                 )
                 return
             raw = outcome.raw_payload or {}
+            # The notification table has no outcome columns; operator_context
+            # is its JSONB bag for this kind of annotation.
             await self._notification_repo.update(notification_id, {
-                "last_external_outcome": raw.get("event_type", "delivered"),
-                "last_outcome_at": outcome.ingested_at,
+                "operator_context": {
+                    **(row.get("operator_context") or {}),
+                    "last_external_outcome": raw.get("event_type", "delivered"),
+                    "last_outcome_at": outcome.ingested_at,
+                },
             })
         except Exception as exc:
             logger.warning("route_to_notification_failed id=%s: %s", notification_id, exc)
