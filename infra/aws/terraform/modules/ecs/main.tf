@@ -598,6 +598,7 @@ resource "aws_ecs_task_definition" "backend" {
           { name = "ANALYTICS_BACKEND", value = var.analytics_backend },
           { name = "ML_SERVING_URL", value = var.ml_serving_url },
           { name = "ML_SERVING_INLINE", value = var.ml_serving_inline ? "true" : "false" },
+          { name = "PLATFORM_OPERATOR_TENANT_IDS", value = join(",", [for t in var.platform_operator_tenant_ids : trimspace(t)]) },
         ],
         concat(
           local.kyber_runtime_environment,

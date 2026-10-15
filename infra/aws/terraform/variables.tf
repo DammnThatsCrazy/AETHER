@@ -597,6 +597,17 @@ variable "platform_operator_emails" {
   }
 }
 
+variable "platform_operator_tenant_ids" {
+  type        = list(string)
+  description = "Tenant ids that run the platform (PLATFORM_OPERATOR_TENANT_IDS). Admin and diagnostics routes admit only these tenants, the staging first-admin bootstrap tenant, or a Kyber operator; a customer owner's admin role is not enough. Set per lane; empty admits no configured operator tenant."
+  default     = []
+
+  validation {
+    condition     = alltrue([for t in var.platform_operator_tenant_ids : can(regex("^[A-Za-z0-9_.:-]+$", trimspace(t)))])
+    error_message = "platform_operator_tenant_ids must be plain tenant ids (no commas or spaces)."
+  }
+}
+
 variable "kyber_google_hosted_domain" {
   type        = string
   description = "Google Workspace domain accepted by the Kyber workforce OIDC flow"

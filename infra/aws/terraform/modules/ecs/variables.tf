@@ -266,6 +266,12 @@ variable "platform_operator_emails" {
   default     = []
 }
 
+variable "platform_operator_tenant_ids" {
+  type        = list(string)
+  description = "Tenant ids that run the platform; the only tenants admitted to admin and diagnostics routes besides Kyber operators."
+  default     = []
+}
+
 variable "deployment_lane" {
   type        = string
   description = "Deployment overlay selected by the reviewed staging plan."
