@@ -730,27 +730,30 @@ def _jira_site_matches(payload: dict, receipt: dict, job: dict) -> bool:
 
 
 def _linear_scope_matches(payload: dict, receipt: dict, job: dict) -> bool:
-    """Where the bound delivery stored a team / organisation, the event must
-    come from the same one."""
+    """The event must come from the bound delivery's organisation when one was
+    stored (an issue may since have moved to another team in it); otherwise
+    from its stored team."""
     issue = (
         ((receipt.get("raw_response") or {}).get("data") or {}).get("issueCreate") or {}
     ).get("issue") or {}
     team = issue.get("team") or {}
-    stored_team = team.get("id") or (job.get("provider_config") or {}).get("team_id")
     stored_org = (team.get("organization") or {}).get("id")
+    if stored_org:
+        return payload.get("organizationId") == stored_org
+    stored_team = team.get("id") or (job.get("provider_config") or {}).get("team_id")
     data = payload.get("data") or {}
     if stored_team and (data.get("teamId") or (data.get("team") or {}).get("id")) != stored_team:
-        return False
-    if stored_org and payload.get("organizationId") != stored_org:
         return False
     return True
 
 
 def _within_window(sent_at: float, inbox: dict, window_seconds: int) -> bool:
     """Compare the sender's timestamp with when the route received the
-    callback, so a processing backlog never rejects a fresh delivery."""
+    callback, so a processing backlog never rejects a fresh delivery. Rows
+    stored before ``received_at`` was recorded fall back to ``created_at``."""
     try:
-        received_at = datetime.fromisoformat(str(inbox["received_at"])).timestamp()
-    except (KeyError, ValueError):
+        stamp = inbox.get("received_at") or inbox["created_at"]
+        received_at = datetime.fromisoformat(str(stamp)).timestamp()
+    except (KeyError, TypeError, ValueError):
         received_at = time.time()
     return abs(received_at - sent_at) <= window_seconds
