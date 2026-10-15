@@ -26,6 +26,7 @@ from value.valuation.models import (
 )
 from value.valuation.price_providers import PROVIDERS
 from value.valuation.service import ValuationService
+from governance.security.request_context import require_platform_operator
 from value.stablecoin.foundation import (
     active_tenant_id as _tenant_id,
     require_flag,
@@ -161,6 +162,8 @@ async def observe_price(payload: MarketPriceObservation, request: Request):
     """Record one price observation (idempotent single append path)."""
     _gate_ingestion(request)
     _require_perm(request, Permissions.ADMIN)
+    # Price observations are global facts every tenant's valuation reads.
+    require_platform_operator(request)
     if payload.provider not in PROVIDERS:
         raise HTTPException(
             status_code=422,
