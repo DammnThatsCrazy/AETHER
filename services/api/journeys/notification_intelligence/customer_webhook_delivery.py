@@ -13,7 +13,6 @@ import asyncio
 import base64
 import hashlib
 import hmac
-import ipaddress
 import json
 import os
 import secrets
@@ -26,6 +25,7 @@ from typing import Any, Awaitable, Callable, Optional
 from urllib.parse import urlparse
 
 from shared.logger.logger import get_logger
+from shared.security.ssrf import is_public_address
 from repositories.delivery_repos import DeliveryAttemptRepository
 from repositories.repos import BaseRepository
 from shared.temporal import ensure_aware_utc
@@ -43,23 +43,6 @@ IN_FLIGHT_RECOVERY_SECONDS = TOTAL_TIMEOUT_SECONDS + 60.0
 _WEBHOOK_CLAIM_LOCK = asyncio.Lock()
 
 _LOCAL_HOSTS = frozenset({"localhost", "localhost.localdomain", "127.0.0.1", "::1"})
-_BLOCKED_NETWORKS = (
-    ipaddress.ip_network("0.0.0.0/8"),
-    ipaddress.ip_network("10.0.0.0/8"),
-    ipaddress.ip_network("100.64.0.0/10"),
-    ipaddress.ip_network("127.0.0.0/8"),
-    ipaddress.ip_network("169.254.0.0/16"),
-    ipaddress.ip_network("172.16.0.0/12"),
-    ipaddress.ip_network("192.0.0.0/24"),
-    ipaddress.ip_network("192.168.0.0/16"),
-    ipaddress.ip_network("198.18.0.0/15"),
-    ipaddress.ip_network("224.0.0.0/4"),
-    ipaddress.ip_network("240.0.0.0/4"),
-    ipaddress.ip_network("::/128"),
-    ipaddress.ip_network("::1/128"),
-    ipaddress.ip_network("fc00::/7"),
-    ipaddress.ip_network("fe80::/10"),
-)
 
 
 class WebhookPolicyError(ValueError):
@@ -99,8 +82,7 @@ def _is_local_development() -> bool:
 
 
 def _is_blocked(address: str) -> bool:
-    ip = ipaddress.ip_address(address)
-    return any(ip in network for network in _BLOCKED_NETWORKS) or ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_unspecified
+    return not is_public_address(address)
 
 
 def resolve_safe_destination(url: str) -> ResolvedDestination:

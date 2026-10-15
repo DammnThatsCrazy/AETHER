@@ -3,42 +3,31 @@
 from __future__ import annotations
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 from actions.delivery.adapters.base import ConfigurationError, ProviderError
 from actions.delivery.adapters.jira import JiraAdapter
 
 
-def _mock_resp(status: int, data: dict):
-    resp = MagicMock()
-    resp.status = status
-    resp.headers = {}
-    resp.json = AsyncMock(return_value=data)
-    return resp
-
-
-def _make_session(resp):
-    s = MagicMock()
-    s.__aenter__ = AsyncMock(return_value=s)
-    s.__aexit__ = AsyncMock(return_value=False)
-    cm = MagicMock()
-    cm.__aenter__ = AsyncMock(return_value=resp)
-    cm.__aexit__ = AsyncMock(return_value=False)
-    s.post = MagicMock(return_value=cm)
-    return s
+def _jira_responding(status: int, data: dict):
+    """Resolve the Jira host to a public address and answer with *data*."""
+    dns = patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 443))])
+    send = patch.object(httpx.AsyncClient, "send", AsyncMock(return_value=httpx.Response(status, json=data)))
+    return dns, send
 
 
 @pytest.mark.asyncio
 async def test_jira_success_returns_issue_key():
     issue_id = str(uuid.uuid4())
-    mock_resp = _mock_resp(201, {
+    dns, send = _jira_responding(201, {
         "id": issue_id,
         "key": "PROJ-42",
         "self": "https://mycompany.atlassian.net/rest/api/3/issue/" + issue_id,
     })
-    with patch("aiohttp.ClientSession", return_value=_make_session(mock_resp)):
+    with dns, send:
         adapter = JiraAdapter()
         receipt = await adapter.dispatch(
             {"title": "Fix the bug", "body": "Critical fix needed"},
@@ -54,8 +43,8 @@ async def test_jira_success_returns_issue_key():
 
 @pytest.mark.asyncio
 async def test_jira_raises_on_4xx():
-    mock_resp = _mock_resp(400, {"errorMessages": ["Invalid project key"], "errors": {}})
-    with patch("aiohttp.ClientSession", return_value=_make_session(mock_resp)):
+    dns, send = _jira_responding(400, {"errorMessages": ["Invalid project key"], "errors": {}})
+    with dns, send:
         adapter = JiraAdapter()
         with pytest.raises(ProviderError, match="client error"):
             await adapter.dispatch(

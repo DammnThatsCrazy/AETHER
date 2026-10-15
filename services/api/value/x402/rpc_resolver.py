@@ -26,25 +26,23 @@ this module returns — so an unvalidated credential is an SSRF primitive
 (loopback, cloud-metadata link-local, or an internal service reachable from
 the verifier's network). Every URL this module returns is validated by
 ``_validate_rpc_url`` before it is handed back: outside local/test it must be
-``https`` and resolve (DNS) to a public address, reusing
-``actions.delivery.security.validate_webhook_url`` — the same hardened
-DNS-resolving RFC1918/loopback/link-local/ULA blocklist the connector/webhook
-delivery path uses — plus a supplementary non-global-address check. In
-local/test, only URL shape (scheme + hostname) is checked, so the loopback
-platform-default RPC keeps working.
+``https`` and every address its host resolves to must be public, via
+``shared.security.ssrf.resolve_public_addresses`` — the shared check for
+tenant-configured outbound destinations. In local/test, only URL shape
+(scheme + hostname) is checked, so the loopback platform-default RPC keeps
+working.
 """
 
 from __future__ import annotations
 
-import ipaddress
 import json
 import os
-import socket
 from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import urlparse
 
 from shared.logger.logger import get_logger, metrics
+from shared.security.ssrf import UnsafeDestinationError, resolve_public_addresses
 
 from value.x402.credential_slots import rpc_provider_for_chain
 
@@ -90,12 +88,6 @@ def _validate_rpc_url(url: str) -> None:
     x402 verifier POSTs to it — so this is the SSRF choke point for that
     credential.
 
-    Reuses ``actions.delivery.security.validate_webhook_url`` — the same
-    DNS-resolving RFC1918/loopback/link-local/ULA blocklist already hardened
-    for the connector/webhook delivery path — then adds HTTPS enforcement
-    plus a supplementary multicast/reserved/non-global check and a second DNS
-    resolution, mirroring ``value.rewards.rails.PaymentRail._validate_destination``.
-
     In local/test, only URL shape (scheme + hostname present) is checked and
     private/loopback addresses are allowed, since the platform-default RPC
     used there may be loopback.
@@ -107,52 +99,14 @@ def _validate_rpc_url(url: str) -> None:
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise RpcUnavailableError(f"invalid RPC url (expected http(s)://host/...): {url!r}")
 
-    is_local = _is_local_env()
-    if not is_local and parsed.scheme != "https":
-        raise RpcUnavailableError("RPC url must use HTTPS outside local/test")
-
-    try:
-        from actions.delivery.security import validate_webhook_url
-
-        # allow_private=True in local/test keeps loopback reachable (the
-        # local platform-default RPC may be loopback).
-        validate_webhook_url(url, allow_private=is_local)
-    except RpcUnavailableError:
-        raise
-    except Exception as exc:  # SSRFBlockedError / DNS failure → fail closed
-        raise RpcUnavailableError(f"SSRF-blocked RPC url: {exc}") from exc
-
-    if is_local:
+    if _is_local_env():
         return
-
-    # Supplementary ranges not covered by the shared blocklist, and a second
-    # DNS resolution to narrow the DNS-rebinding window between validation
-    # and the verifier's later connect.
+    if parsed.scheme != "https":
+        raise RpcUnavailableError("RPC url must use HTTPS outside local/test")
     try:
-        infos = socket.getaddrinfo(parsed.hostname, None)
-    except OSError as exc:
-        raise RpcUnavailableError(
-            f"DNS resolution failed for {parsed.hostname!r}: {exc}"
-        ) from exc
-    for info in infos:
-        addr_str = info[4][0]
-        try:
-            addr = ipaddress.ip_address(addr_str)
-        except ValueError:
-            continue
-        if (
-            addr.is_multicast
-            or addr.is_reserved
-            or addr.is_loopback
-            or addr.is_link_local
-            or addr.is_private
-            or addr.is_unspecified
-            or not addr.is_global
-        ):
-            raise RpcUnavailableError(
-                f"RPC url {url!r} resolves to non-public address {addr_str!r}; "
-                f"SSRF protection active"
-            )
+        resolve_public_addresses(url)
+    except UnsafeDestinationError as exc:
+        raise RpcUnavailableError(f"SSRF-blocked RPC url: {exc}") from exc
 
 
 def _platform_default(chain: str) -> Optional[ResolvedRpc]:

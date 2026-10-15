@@ -34,14 +34,30 @@ returns a raw or unvalidated value.
    DNS-rebinding class is inherent to "any public host" mode. Empty-allowlist
    mode is only safe for untrusted input when paired with a resolver-level
    check (resolve → validate address → no-rebinding).
+
+The resolver-level check lives here too. :func:`resolve_public_addresses`
+resolves a URL's host and requires every resolved address to be globally
+routable (``ipaddress`` ``is_global``, not multicast), after unwrapping
+IPv4-mapped IPv6 (``::ffff:a.b.c.d``) and the NAT64 well-known prefix
+(``64:ff9b::/96``) to their embedded IPv4. That excludes loopback, link-local
+and cloud metadata, RFC 1918, ULA, carrier-grade NAT (``100.64.0.0/10``),
+documentation and reserved ranges. :func:`send_public_request` issues the
+request against the validated address (original ``Host`` header, TLS SNI and
+certificate check against the original hostname), so a second DNS answer can
+never redirect the connection, and follows at most three redirects by hand,
+re-validating every hop and dropping credentials when the host changes.
 """
 
 from __future__ import annotations
 
 import ipaddress
 import re
+import socket
 import unicodedata
 import urllib.parse
+from typing import Any
+
+import httpx
 
 # Well-formed hostname: two or more ASCII labels, [a-z0-9]+hyphen, no leading/
 # trailing hyphen, no empty label. ASCII-only — closes Unicode homographs
@@ -224,6 +240,137 @@ def validated_https_host(
     return host
 
 
+class UnsafeDestinationError(ValueError):
+    """The outbound destination is malformed or not a public internet address."""
+
+
+_NAT64_PREFIX = ipaddress.ip_network("64:ff9b::/96")
+
+
+def is_public_address(value: str) -> bool:
+    """True only for a globally routable unicast address.
+
+    IPv4-mapped and NAT64 (``64:ff9b::/96``) IPv6 addresses are judged by the
+    IPv4 address they embed. Unparseable input is not public.
+    """
+    try:
+        addr = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    if isinstance(addr, ipaddress.IPv6Address):
+        if addr.ipv4_mapped is not None:
+            addr = addr.ipv4_mapped
+        elif addr in _NAT64_PREFIX:
+            addr = ipaddress.IPv4Address(int(addr) & 0xFFFFFFFF)
+    return addr.is_global and not addr.is_multicast
+
+
+def resolve_public_addresses(url: str, *, allow_local: bool = False) -> list[str]:
+    """Resolve *url*'s host and return its addresses; raise unless all are public.
+
+    Only ``http``/``https`` URLs are accepted. An IP-literal host is checked
+    without touching the resolver. With *allow_local* (local development only)
+    the addresses are returned without the public-address check.
+    """
+    try:
+        parts = urllib.parse.urlsplit(url)
+        port = parts.port
+    except (TypeError, ValueError) as exc:
+        raise UnsafeDestinationError(f"Cannot parse URL {url!r}: {exc}") from exc
+    host = parts.hostname
+    if not host:
+        raise UnsafeDestinationError(f"Cannot parse hostname from URL: {url!r}")
+    if parts.scheme not in ("http", "https"):
+        raise UnsafeDestinationError(f"Unsupported URL scheme {parts.scheme!r}: {url!r}")
+
+    try:
+        ipaddress.ip_address(host)
+        addresses = [host]
+    except ValueError:
+        try:
+            infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+        except (OSError, UnicodeError) as exc:
+            raise UnsafeDestinationError(f"DNS resolution failed for {host!r}: {exc}") from exc
+        addresses = list(dict.fromkeys(str(info[4][0]) for info in infos))
+    if not addresses:
+        raise UnsafeDestinationError(f"No addresses resolved for {host!r}")
+    if not allow_local:
+        for address in addresses:
+            if not is_public_address(address):
+                raise UnsafeDestinationError(
+                    f"URL {url!r} resolves to non-public address {address!r}. SSRF protection active."
+                )
+    return addresses
+
+
+_REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
+_CREDENTIAL_HEADERS = frozenset({"authorization", "proxy-authorization", "cookie"})
+MAX_REDIRECTS = 3
+
+
+def _pinned_request(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    headers: dict[str, str],
+    body: dict[str, Any],
+    allow_local: bool,
+) -> httpx.Request:
+    address = resolve_public_addresses(url, allow_local=allow_local)[0].split("%")[0]
+    logical = httpx.URL(url)
+    headers = {k: v for k, v in headers.items() if k.lower() != "host"}
+    return client.build_request(
+        method,
+        logical.copy_with(host=address),
+        headers={**headers, "Host": logical.netloc.decode("ascii")},
+        extensions={"sni_hostname": logical.host},
+        **body,
+    )
+
+
+async def send_public_request(
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    content: bytes | str | None = None,
+    json: Any = None,
+    timeout: float = 20.0,
+    max_redirects: int = MAX_REDIRECTS,
+    allow_local: bool = False,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> httpx.Response:
+    """Send one request to a tenant-configured *url*, reaching only public addresses.
+
+    The connection goes to the validated address. Redirects are followed by
+    hand, at most *max_redirects* hops (``0`` returns the redirect response),
+    each hop re-validated; ``Authorization``/``Proxy-Authorization``/``Cookie``
+    are dropped when the host changes, and 301/302 on POST and every 303 turn
+    into a body-less GET. Raises :class:`UnsafeDestinationError` before any
+    connection to a non-public destination.
+    """
+    headers = dict(headers or {})
+    body: dict[str, Any] = {"content": content, "json": json}
+    async with httpx.AsyncClient(transport=transport, timeout=timeout, follow_redirects=False) as client:
+        for _ in range(max_redirects + 1):
+            response = await client.send(_pinned_request(client, method, url, headers, body, allow_local))
+            location = response.headers.get("location")
+            if response.status_code not in _REDIRECT_STATUSES or not location or max_redirects == 0:
+                return response
+            next_url = urllib.parse.urljoin(url, location)
+            if httpx.URL(next_url).netloc != httpx.URL(url).netloc:
+                headers = {k: v for k, v in headers.items() if k.lower() not in _CREDENTIAL_HEADERS}
+            if response.status_code == 303 or (response.status_code in (301, 302) and method.upper() == "POST"):
+                method, body = "GET", {}
+            url = next_url
+    raise UnsafeDestinationError(f"Too many redirects (more than {max_redirects}) ending at {url!r}")
+
+
 __all__ = [
+    "MAX_REDIRECTS",
+    "UnsafeDestinationError",
+    "is_public_address",
+    "resolve_public_addresses",
+    "send_public_request",
     "validated_https_host",
 ]
