@@ -337,7 +337,7 @@ function connectVals(k: string, choose: (id: string) => void, reduce: boolean, a
     { viewBox: '0 0 500 430', width: '100%', height: '100%', role: 'img', 'aria-label': 'Connection paths into Aether, ' + cur[3] + ' selected', style: { position: 'absolute', inset: 0, display: 'block', overflow: 'visible' } },
     spokes.map(({ o, x, y }, i) => {
       const on = o[0] === k;
-      // Spokes bow to alternating sides; dots ride an off-canvas copy of each curve toward the hub.
+      // Spokes bow to alternating sides; dots ride an off-canvas copy of each curve into the hub.
       const dx = cx - x;
       const dy = cy - y;
       const len = Math.hypot(dx, dy);
@@ -355,7 +355,7 @@ function connectVals(k: string, choose: (id: string) => void, reduce: boolean, a
           ? h(
               'circle',
               { key: 'p' + k + i, cx: -2000, cy: -2000, r: on ? 3.2 : 2.2, fill: on ? o[4] : '#cfe0f2', style: { opacity: 0 } },
-              h('animateMotion', { dur: on ? '4s' : '7s', begin: i * 0.8 + 's', repeatCount: 'indefinite', path: dS, calcMode: 'spline', keyTimes: '0;1', keyPoints: '1;0', keySplines: '0.22 1 0.36 1' }),
+              h('animateMotion', { dur: on ? '4s' : '7s', begin: i * 0.8 + 's', repeatCount: 'indefinite', path: dS, calcMode: 'spline', keyTimes: '0;1', keyPoints: '0;1', keySplines: '0.22 1 0.36 1' }),
               h('animate', { attributeName: 'opacity', values: '0;' + peak + ';' + peak + ';0', keyTimes: '0;0.2;0.8;1', dur: on ? '4s' : '7s', begin: i * 0.8 + 's', repeatCount: 'indefinite' }),
             )
           : null,

@@ -187,7 +187,12 @@ export function AetherScene(props: AetherSceneProps) {
     const time: [number, number] = q < 0 ? [300, 96] : [72 + q * 76, q % 2 ? 336 : 238];
     return { id, kind, sys, raw, label, conn, tag, t, hideFrag, frag, time };
   });
-  const pos = (n: SceneNode) => (stage === 0 ? n.frag : stage === 2 ? n.time : n.conn);
+  // Keep each tile inside the 600px stage: the history layout puts the last step at x=528, where the wider center tile would overhang.
+  const pos = (n: SceneNode): [number, number] => {
+    const p = stage === 0 ? n.frag : stage === 2 ? n.time : n.conn;
+    const half = (n.kind === 'center' ? 192 : 150) / 2 + 4;
+    return [Math.min(600 - half, Math.max(half, p[0])), p[1]];
+  };
   const byId: Record<string, SceneNode> = {};
   nodes.forEach((n) => {
     byId[n.id] = n;

@@ -55,7 +55,7 @@ const APPS: [g: string, title: string, body: string, c: string, href: string][] 
 ];
 
 // Logos in the works-with strip under the stats.
-const WORKS_WITH = ['stripe', 'shopify', 'hubspot', 'salesforce', 'klaviyo', 'segment', 'zendesk', 'intercom', 'slack', 'posthog', 'googleanalytics', 'meta'];
+const WORKS_WITH: [logo: string, name: string][] = [['stripe', 'Stripe'], ['shopify', 'Shopify'], ['hubspot', 'HubSpot'], ['salesforce', 'Salesforce'], ['klaviyo', 'Klaviyo'], ['segment', 'Segment'], ['zendesk', 'Zendesk'], ['intercom', 'Intercom'], ['slack', 'Slack'], ['posthog', 'PostHog'], ['googleanalytics', 'Google Analytics'], ['meta', 'Meta']];
 
 export function AetherHomePage() {
   const link = useLink();
@@ -201,9 +201,9 @@ export function AetherHomePage() {
                 {"Works with"}
               </span>
               <span style={css("display: flex; flex-wrap: wrap; gap: 8px;")}>
-                {WORKS_WITH.map((k) => (
+                {WORKS_WITH.map(([k, name]) => (
                   <span key={k} style={css("width: 36px; height: 36px; border-radius: 11px; background: #fff; border: 1px solid #e2e0da; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;")}>
-                    <img src={asset('assets/brand/' + k + '.svg')} alt="" style={css("width: 20px; height: 20px; object-fit: contain;")} />
+                    <img src={asset('assets/brand/' + k + '.svg')} alt={name} title={name} style={css("width: 20px; height: 20px; object-fit: contain;")} />
                   </span>
                 ))}
               </span>
