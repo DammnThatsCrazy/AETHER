@@ -35,10 +35,12 @@ ClusterMemberReader = Callable[[str, str], Awaitable[Optional[int]]]
 
 async def _default_member_reader(tenant_id: str, cluster_id: str) -> Optional[int]:
     try:
-        from shared.graph.graph import GraphClient
+        from shared.graph.graph import GraphClient, tenant_of
         graph = GraphClient()
         neighbors = await graph.get_neighbors(cluster_id)
-        return len(neighbors) if neighbors is not None else None
+        if neighbors is None:
+            return None
+        return sum(1 for v in neighbors if tenant_of(v.properties) == tenant_id)
     except Exception:  # pragma: no cover — graph optional in local/test
         return None
 
