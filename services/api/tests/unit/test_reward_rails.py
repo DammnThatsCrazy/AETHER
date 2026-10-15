@@ -14,8 +14,10 @@ import json
 import os
 import sys
 import time
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
@@ -213,17 +215,17 @@ def test_webhook_adapter_valid_config():
     assert errors == []
 
 
+@contextmanager
+def _public_http(status: int = 200, ip: str = "93.184.216.34"):
+    """DNS resolves every host to *ip*; every outbound request is answered with *status*."""
+    send = AsyncMock(return_value=httpx.Response(status))
+    with patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", (ip, 443))]), \
+         patch.object(httpx.AsyncClient, "send", send):
+        yield send
+
+
 def test_webhook_adapter_deliver_calls_http(monkeypatch):
     """Deliver should make an HTTPS POST with correct Aether headers."""
-    captured_headers = {}
-
-    async def fake_post(url, *, json=None, headers=None, timeout=None):
-        captured_headers.update(headers or {})
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.json.return_value = {"ok": True}
-        return resp
-
     adapter = TenantWebhookAdapter()
     action = {
         "id": "act_001",
@@ -238,20 +240,11 @@ def test_webhook_adapter_deliver_calls_http(monkeypatch):
         "config": {"timeout_ms": 5000, "max_retries": 1},
     }
 
-    with patch("httpx.AsyncClient") as mock_client:
-        mock_instance = AsyncMock()
-        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
-        mock_instance.__aexit__ = AsyncMock(return_value=None)
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_instance.post = AsyncMock(return_value=mock_response)
-        mock_client.return_value = mock_instance
+    with _public_http() as send:
+        _run(adapter.deliver(action, config))
 
-        result = _run(adapter.deliver(action, config))
-
-    assert mock_instance.post.called
-    _, call_kwargs = mock_instance.post.call_args
-    sent_headers = call_kwargs.get("headers", {})
+    assert send.called
+    sent_headers = send.call_args.args[0].headers
     assert "X-Aether-Signature" in sent_headers
     assert "X-Aether-Timestamp" in sent_headers
     assert "X-Aether-Idempotency-Key" in sent_headers
@@ -555,40 +548,57 @@ def test_webhook_allows_loopback_in_local(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     adapter = TenantWebhookAdapter()
 
-    with patch("httpx.AsyncClient") as mock_client:
-        mock_instance = AsyncMock()
-        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
-        mock_instance.__aexit__ = AsyncMock(return_value=None)
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_instance.post = AsyncMock(return_value=mock_response)
-        mock_client.return_value = mock_instance
-
+    with _public_http() as send:
         result = _run(adapter.deliver(_WEBHOOK_ACTION, _webhook_config("http://127.0.0.1/hook")))
 
-    assert mock_instance.post.called
+    assert send.called
     assert result.success is True
     assert result.status == "delivered"
 
 
-def test_webhook_follow_redirects_disabled_in_local(monkeypatch):
-    """The httpx client must be constructed with follow_redirects=False."""
-    monkeypatch.setenv("AETHER_ENV", "local")
+def test_webhook_redirect_is_not_followed(monkeypatch):
+    monkeypatch.setenv("AETHER_ENV", "production")
+    adapter = TenantWebhookAdapter()
+    redirect = httpx.Response(302, headers={"location": "https://other.example.com/"})
+
+    with _public_http() as send:
+        send.return_value = redirect
+        result = _run(adapter.deliver(_WEBHOOK_ACTION, _webhook_config("https://example.com/hook")))
+
+    assert send.call_count == 1
+    assert result.success is False
+
+
+def test_webhook_connects_to_validated_address(monkeypatch):
+    monkeypatch.setenv("AETHER_ENV", "production")
     adapter = TenantWebhookAdapter()
 
-    with patch("httpx.AsyncClient") as mock_client:
-        mock_instance = AsyncMock()
-        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
-        mock_instance.__aexit__ = AsyncMock(return_value=None)
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_instance.post = AsyncMock(return_value=mock_response)
-        mock_client.return_value = mock_instance
+    with _public_http() as send:
+        result = _run(adapter.deliver(_WEBHOOK_ACTION, _webhook_config("https://example.com/hook")))
 
-        _run(adapter.deliver(_WEBHOOK_ACTION, _webhook_config("https://example.com/hook")))
+    request = send.call_args.args[0]
+    assert result.success is True
+    assert request.url.host == "93.184.216.34"
+    assert request.headers["host"] == "example.com"
+    assert request.extensions["sni_hostname"] == "example.com"
 
-    _, ctor_kwargs = mock_client.call_args
-    assert ctor_kwargs.get("follow_redirects") is False
+
+def test_webhook_refuses_destination_rebound_to_non_public_address(monkeypatch):
+    """A second DNS answer pointing at a private address is refused, not connected to."""
+    monkeypatch.setenv("AETHER_ENV", "production")
+    adapter = TenantWebhookAdapter()
+    answers = iter([[(2, 1, 6, "", ("93.184.216.34", 443))]])
+
+    def rebinding(*_args, **_kwargs):
+        return next(answers, [(2, 1, 6, "", ("10.0.0.5", 443))])
+
+    send = AsyncMock(side_effect=AssertionError("connection attempted"))
+    with patch("socket.getaddrinfo", side_effect=rebinding), patch.object(httpx.AsyncClient, "send", send):
+        result = _run(adapter.deliver(_WEBHOOK_ACTION, _webhook_config("https://example.com/hook")))
+
+    assert result.success is False
+    assert "SSRF" in (result.error or "")
+    send.assert_not_called()
 
 
 def test_webhook_validate_config_rejects_malformed_url():
