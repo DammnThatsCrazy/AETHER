@@ -55,3 +55,22 @@ extra:
     suites: [backend-ingestion, root-unit-ingestion, functionality-proof-ts]
   - include: ["infra/**", "amplify.yml", "docker-compose.yml"]
     suites: [root-unit-operations]
+
+# Non-suite checks: commands that protect an invariant but are not registered
+# test suites (type checks, browser e2e). Selected when a changed path matches
+# `include`, or for every check on a broad-safe selection. Each mirrors the
+# command of the legacy workflow named in `replaces`; that workflow's PR trigger
+# is retired only after hosted parity (see docs/engineering/ci-v2/).
+checks:
+  - id: aether-web-typecheck
+    replaces: aether-test.yml
+    include: ["apps/aether-web/**"]
+    run: ["npm run typecheck --workspace=apps/aether-web"]
+  - id: kyber-web-e2e
+    replaces: kyber-e2e.yml
+    include: ["apps/kyber-web/**", "packages/sdk/web/**"]
+    setup: ["npm run build --workspace=packages/sdk/web",
+            "npx playwright install --with-deps chromium"]
+    run: ["npm run test:integration --workspace=apps/kyber-web",
+          "npm run test:e2e --workspace=apps/kyber-web"]
+    env: {CI: "true"}

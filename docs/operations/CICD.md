@@ -29,7 +29,7 @@ reviewed_source_commits:
   - commit: "c71ebc5cb"
     reason: "Reviewed Access Kit container workflow cadence: pull requests build on ready_for_review, with explicit dispatch and Development/main push lanes for targeted or post-landing builds; no staging wake or deployment is added."
 source_hashes:
-  ".github/workflows/": "sha256:668c0e6ab3bb3030a25030beec3b68c53966ce8bccffd3e163af64b0c9bf9df2"
+  ".github/workflows/": "sha256:6d3725b8261cdff63ed5ec6954a32de37f6e131192ff71e721c8cbb6c01901e5"
   "config/delivery_workflow_authority.yaml": "sha256:f9f6f8d8892aefe2b04ef6f2adbc95e5d514efbca7d8a833cf141a1ed17e7038"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
@@ -310,9 +310,11 @@ roll-forward.
 `.github/workflows/ci.yml` (check `ci / verdict`) is the replacement for the
 `verification / disposition` DAG. During the shadow phase it runs on every new
 PR head SHA and merge-queue SHA, selects suites with `scripts/ci_select.py`
-and `config/ci/ownership.yaml`, uploads no artifacts, and is **not** a required
-status. `verification / disposition` stays the merge authority until the parity
-report clears the cutover. Diagnostic artifact uploads in workflows that never
+and `config/ci/ownership.yaml`, shards suite workers by the registry's expected
+runtime, runs path-selected non-suite `checks` (aether-web typecheck, kyber-web
+Playwright e2e), uploads no artifacts, and is **not** a required status.
+`verification / disposition` stays the merge authority until the parity report
+clears the cutover. Diagnostic artifact uploads in workflows that never
 download artifacts are `continue-on-error` with seven-day retention so a storage
 quota failure cannot fail a run whose tests passed. See
 `docs/engineering/ci-v2/architecture.md`.

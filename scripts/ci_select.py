@@ -65,6 +65,9 @@ def _validate(rules: dict, suites: dict) -> None:
     named = set(rules.get("critical", []))
     for e in rules.get("extra", []):
         named.update(e["suites"])
+    for c in rules.get("checks", []):
+        if not (c.get("id") and c.get("include") and c.get("run")):
+            raise ValueError(f"ownership.yaml check needs id, include and run: {c}")
     unknown = sorted(named - set(suites))
     if unknown or DOCS_SUITE not in suites:
         raise ValueError(f"ownership.yaml names unknown suites: {unknown or [DOCS_SUITE]}")
@@ -82,7 +85,7 @@ def select(paths: list[str], rules: dict, suites: dict) -> dict:
             selected.setdefault(i, set()).add(why)
 
     if not paths:
-        return _result("empty", paths, {}, ["no changed files"], suites)
+        return _result("empty", paths, {}, ["no changed files"], suites, {}, rules)
 
     non_text = [p for p in paths if not _any(rules["text_only"], p)]
     for p in paths:
@@ -107,17 +110,31 @@ def select(paths: list[str], rules: dict, suites: dict) -> dict:
         if not hit:
             mode = "broad-safe"
             reasons.append(f"unclassified path: {p}")
+    checks: dict[str, str] = {}
+    for c in rules.get("checks", []):
+        if mode == "broad-safe":
+            checks[c["id"]] = "broad-safe fallback"
+        else:
+            hit = next((p for p in non_text if _any(c["include"], p)), None)
+            if hit:
+                checks[c["id"]] = f"path: {hit}"
     if mode == "broad-safe":
         add(pr, "broad-safe fallback")
     if non_text:
         add(rules.get("critical", []), "critical invariant")
     elif mode == "targeted":
         mode = "docs-only"
-    return _result(mode, paths, selected, reasons, suites)
+    return _result(mode, paths, selected, reasons, suites, checks, rules)
 
 
-def _result(mode, paths, selected, reasons, suites) -> dict:
+def _result(mode, paths, selected, reasons, suites, checks=None, rules=None) -> dict:
+    by_id = {c["id"]: c for c in (rules or {}).get("checks", [])}
     return {
+        "checks": [
+            {"id": i, "why": why, "setup": by_id[i].get("setup", []), "run": by_id[i]["run"],
+             "env": by_id[i].get("env", {})}
+            for i, why in sorted((checks or {}).items())
+        ],
         "schema_version": 1,
         "mode": mode,
         "changed_files": paths,
@@ -126,8 +143,28 @@ def _result(mode, paths, selected, reasons, suites) -> dict:
     }
 
 
-def workers(result: dict, suites: dict) -> list[dict]:
-    """Group selected suites by (dependency_profile, runtime_class) like suite_worker expects."""
+SHARD_TARGET_SECONDS = 300  # registry `expected_runtime_seconds` budget per worker
+
+
+def _shard(ids: list[str], suites: dict, target: int) -> list[list[str]]:
+    """Balance suites into the fewest bins under `target` expected seconds (LPT)."""
+    cost = {i: int(suites[i].get("expected_runtime_seconds") or 0) for i in ids}
+    k = max(1, -(-sum(cost.values()) // target))
+    bins: list[list[str]] = [[] for _ in range(k)]
+    load = [0] * k
+    for i in sorted(ids, key=lambda x: (-cost[x], x)):
+        j = load.index(min(load))
+        bins[j].append(i)
+        load[j] += cost[i]
+    return [sorted(b) for b in bins if b]
+
+
+def workers(result: dict, suites: dict, target: int = SHARD_TARGET_SECONDS) -> list[dict]:
+    """Group selected suites by (dependency_profile, runtime_class), sharded for parallelism.
+
+    suite_worker.py requires every suite in a worker to share its profile and
+    runtime class, so shards never mix them.
+    """
     sys.path.insert(0, str(ROOT))
     from scripts.lib.test_suites import load_dependency_profiles  # noqa: E402
 
@@ -139,11 +176,14 @@ def workers(result: dict, suites: dict) -> list[dict]:
     out = []
     for (profile, rc), ids in sorted(groups.items()):
         p = profiles[profile]
-        out.append({
-            "id": f"{profile}-{rc}", "suite_ids": ids, "dependency_profile": profile,
-            "runtime_class": rc, "node_required": bool(p.get("node")),
-            "python_extra": p.get("python_extra") if profile != "ci-control" else None,
-        })
+        shards = _shard(ids, suites, target)
+        for n, shard in enumerate(shards, 1):
+            out.append({
+                "id": f"{profile}-{rc}" + (f"-{n}" if len(shards) > 1 else ""),
+                "suite_ids": shard, "dependency_profile": profile, "runtime_class": rc,
+                "node_required": bool(p.get("node")),
+                "python_extra": p.get("python_extra") if profile != "ci-control" else None,
+            })
     return out
 
 
@@ -173,6 +213,8 @@ def main(argv=None) -> int:
             fh.write(f"mode={result['mode']}\n")
             fh.write(f"workers={json.dumps(result['workers'], separators=(',', ':'))}\n")
             fh.write(f"has_workers={'true' if result['workers'] else 'false'}\n")
+            fh.write(f"checks={json.dumps(result['checks'], separators=(',', ':'))}\n")
+            fh.write(f"has_checks={'true' if result['checks'] else 'false'}\n")
     return 0
 
 

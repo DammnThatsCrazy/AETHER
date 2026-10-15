@@ -31,10 +31,15 @@ until the parity report clears the cutover.
    - `fanout` paths (lockfiles, root config, `scripts/`, workflows, shared
      packages) and any **unclassified** path select every PR-lane suite;
    - a selector error fails the `classify` job, which fails the verdict.
-4. `suites` runs one matrix worker per (dependency profile, runtime class)
+4. `suites` runs workers grouped by (dependency profile, runtime class) and
+   sharded by the registry's `expected_runtime_seconds` (about 300 s per worker)
    through `scripts/suite_worker.py`. No artifacts are uploaded or downloaded.
+   `checks` runs path-selected non-suite commands declared under `checks:` in
+   `config/ci/ownership.yaml` (type checks, browser e2e); a broad-safe
+   selection runs all of them.
 5. `verdict` runs with `if: always()` and fails on a failed, cancelled or
-   unexpectedly skipped required job. The only valid no-op is an empty diff.
+   unexpectedly skipped required job (suites or checks). The only valid no-op
+   is an empty diff.
 
 ## Running it locally
 

@@ -103,3 +103,42 @@ def test_rename_and_delete_contribute_old_and_new_paths(tmp_path: Path, monkeypa
     _git(tmp_path, "commit", "-qm", "change")
     monkeypatch.setattr(ci_select, "ROOT", tmp_path)
     assert ci_select.changed_paths("main", "feat") == ["gone.py", "new.py", "old.py"]
+
+
+def test_workers_shard_long_groups_without_mixing_profiles() -> None:
+    r = sel("scripts/x.py")  # broad-safe: every PR-lane suite
+    ws = ci_select.workers(r, SUITES)
+    ids = [sid for w in ws for sid in w["suite_ids"]]
+    assert sorted(ids) == sorted(set(ids)) == sorted(r["suites"])  # no loss, no duplicates
+    assert len({w["id"] for w in ws}) == len(ws)
+    for w in ws:
+        assert {(SUITES[s]["dependency_profile"], SUITES[s]["runtime_class"]) for s in w["suite_ids"]} == {
+            (w["dependency_profile"], w["runtime_class"])
+        }
+    backend = [w for w in ws if w["dependency_profile"] == "python-backend"]
+    assert len(backend) > 1, "17 backend suites must not run serially in one worker"
+    for w in backend:
+        total = sum(SUITES[s]["expected_runtime_seconds"] for s in w["suite_ids"])
+        assert total <= ci_select.SHARD_TARGET_SECONDS + max(
+            SUITES[s]["expected_runtime_seconds"] for s in w["suite_ids"]
+        )
+
+
+def test_kyber_change_selects_e2e_check_but_not_aether_typecheck() -> None:
+    ids = [c["id"] for c in sel("apps/kyber-web/src/a.tsx")["checks"]]
+    assert ids == ["kyber-web-e2e"]
+
+
+def test_broad_safe_selects_every_check() -> None:
+    ids = {c["id"] for c in sel("scripts/x.py")["checks"]}
+    assert ids == {c["id"] for c in RULES["checks"]}
+
+
+def test_docs_only_selects_no_checks() -> None:
+    assert sel("README.md")["checks"] == []
+
+
+def test_malformed_check_rule_is_an_error() -> None:
+    bad = {**RULES, "checks": [{"id": "x", "include": ["a/**"]}]}  # no `run`
+    with pytest.raises(ValueError):
+        ci_select.select(["a/b.ts"], bad, SUITES)

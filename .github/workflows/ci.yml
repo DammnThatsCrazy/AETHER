@@ -31,6 +31,8 @@ jobs:
       mode: ${{ steps.select.outputs.mode }}
       workers: ${{ steps.select.outputs.workers }}
       has_workers: ${{ steps.select.outputs.has_workers }}
+      checks: ${{ steps.select.outputs.checks }}
+      has_checks: ${{ steps.select.outputs.has_checks }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -53,6 +55,8 @@ jobs:
           print(f"### Selection: `{d['mode']}` ({len(d['changed_files'])} files)")
           for sid, why in d["suites"].items():
               print(f"- `{sid}`: {why[0]}" + (f" (+{len(why)-1})" if len(why) > 1 else ""))
+          for c in d["checks"]:
+              print(f"- check `{c['id']}`: {c['why']}")
           for r in d["reasons"][:20]:
               print(f"- reason: {r}")
           PY
@@ -97,9 +101,42 @@ jobs:
             --runtime-class "${{ matrix.worker.runtime_class }}" \
             --output "$RUNNER_TEMP/suite-${{ matrix.worker.id }}.json"
 
+  checks:
+    name: check (${{ matrix.check.id }})
+    needs: classify
+    if: needs.classify.outputs.has_checks == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        check: ${{ fromJson(needs.classify.outputs.checks) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: |
+          npm ci --ignore-scripts
+          npm run build --workspace=packages/shared
+      - name: Run check
+        env:
+          CHECK: ${{ toJson(matrix.check) }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess, sys
+          c = json.loads(os.environ["CHECK"])
+          env = {**os.environ, **c.get("env", {})}
+          for cmd in c.get("setup", []) + c["run"]:
+              print("+", cmd, flush=True)
+              if subprocess.run(cmd, shell=True, env=env).returncode:
+                  sys.exit(1)
+          PY
+
   verdict:
     name: verdict
-    needs: [classify, suites]
+    needs: [classify, suites, checks]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -108,11 +145,18 @@ jobs:
         env:
           CLASSIFY: ${{ needs.classify.result }}
           SUITES: ${{ needs.suites.result }}
+          CHECKS: ${{ needs.checks.result }}
+          HAS_CHECKS: ${{ needs.classify.outputs.has_checks }}
           HAS_WORKERS: ${{ needs.classify.outputs.has_workers }}
           MODE: ${{ needs.classify.outputs.mode }}
         run: |
-          echo "classify=$CLASSIFY suites=$SUITES has_workers=$HAS_WORKERS mode=$MODE"
+          echo "classify=$CLASSIFY suites=$SUITES checks=$CHECKS has_workers=$HAS_WORKERS has_checks=$HAS_CHECKS mode=$MODE"
           [ "$CLASSIFY" = success ] || { echo "classification did not succeed"; exit 1; }
+          if [ "$HAS_CHECKS" = true ]; then
+            [ "$CHECKS" = success ] || { echo "selected checks: $CHECKS"; exit 1; }
+          else
+            [ "$CHECKS" = skipped ] || { echo "unexpected checks result: $CHECKS"; exit 1; }
+          fi
           if [ "$HAS_WORKERS" = true ]; then
             [ "$SUITES" = success ] || { echo "selected suites: $SUITES"; exit 1; }
           else
