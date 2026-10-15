@@ -209,7 +209,7 @@ async def test_jira_unknown_site_is_dead_lettered(world):
         tenant="tenant-B", provider="jira", external_id="OPS-7",
         provider_config={"base_url": "https://b-co.atlassian.net"},
     )
-    _post_jira(world, _jira_event("attacker.atlassian.net"), **{"X-Aether-Tenant-ID": "tenant-B"})
+    _post_jira(world, _jira_event("other-site.atlassian.net"), **{"X-Aether-Tenant-ID": "tenant-B"})
     await world.drain()
 
     assert world.outcome_tenants() == []
