@@ -162,5 +162,6 @@ async def test_jira_outcome_updates_delivered_notification_only_in_its_tenant():
     await _deliver("tenant-a", "notification", "notif-a")
     await _drain_jira_update(suggestions=_TenantSuggestions(), notifications=notifications)
 
-    assert (await notifications.find_by_id("notif-a"))["last_external_outcome"] == "status_changed"
-    assert "last_external_outcome" not in await notifications.find_by_id("notif-b")
+    own = await notifications.find_by_id("notif-a")
+    assert own["operator_context"]["last_external_outcome"] == "status_changed"
+    assert "operator_context" not in await notifications.find_by_id("notif-b")

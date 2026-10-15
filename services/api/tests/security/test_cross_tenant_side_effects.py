@@ -101,8 +101,9 @@ def test_outcome_updates_only_the_webhook_tenants_notification():
     _run(router._route_to_notification(outcome, link={"notification_id": "n-other"}))
     _run(router._route_to_notification(outcome, link={"notification_id": "n-own"}))
 
-    assert "last_external_outcome" not in _run(notifications.find_by_id("n-other"))
-    assert _run(notifications.find_by_id("n-own"))["last_external_outcome"] == "delivered"
+    assert "operator_context" not in _run(notifications.find_by_id("n-other"))
+    own = _run(notifications.find_by_id("n-own"))
+    assert own["operator_context"]["last_external_outcome"] == "delivered"
 
 
 # ── notification consumer: tenant-less events ────────────────────────────────
