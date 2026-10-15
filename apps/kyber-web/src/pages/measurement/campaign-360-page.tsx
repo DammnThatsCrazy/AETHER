@@ -26,7 +26,7 @@ const TABS = [
   { value: 'graph', label: 'Graph' },
   { value: 'quality', label: 'Quality' },
   { value: 'outcome360', label: 'Outcome 360' },
-  { value: 'economic360', label: 'Economic 360' },
+  { value: 'economic360', label: 'Value 360' },
 ];
 
 type AnyRecord = Record<string, unknown>;

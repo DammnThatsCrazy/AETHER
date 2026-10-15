@@ -475,7 +475,7 @@ export const intelligenceProjectionDefinitions: Record<
   },
   economic360: {
     id: 'economic360',
-    displayName: 'Economic 360',
+    displayName: 'Value 360',
     projectionKind: 'measurement_360',
     implementationState: 'implemented',
     implementationBlueprint: 'docs/architecture/blueprints/economic360.md',

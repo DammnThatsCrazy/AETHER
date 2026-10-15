@@ -79,3 +79,14 @@ Forbidden examples:
 Legacy material belongs in:
 
 `docs/archive/`
+
+## Enforcement
+
+`scripts/validate_root_layout.py` runs in `make repo-doctor` and `make docs-check`.
+It fails on any tracked root entry outside its allowlist, on the forbidden
+directories above (plus the retired root `contracts/` and `frontend/`), on a
+missing required entry point (`README.md`, `VERSION`, `CHANGELOG.md`,
+`RELEASES.md`, `ARCHITECTURE.md`, `CONTRIBUTING.md`, `DEVELOPMENT.md`,
+`SECURITY.md`, `LICENSE`, `Makefile`), and when `VERSION` differs from
+`pyproject.toml`. Adding a root entry means editing that allowlist and this
+document in the same change.

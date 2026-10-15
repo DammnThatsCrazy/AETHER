@@ -241,6 +241,12 @@ def check_version_alignment() -> int:
     warnings: list[str] = []
 
     print(f"Current version: {canonical}")
+    version_file = ROOT / "VERSION"
+    if not version_file.exists():
+        errors.append("VERSION: root version file is missing")
+    elif version_file.read_text(encoding="utf-8").strip() != canonical:
+        errors.append(f"VERSION: {version_file.read_text(encoding='utf-8').strip()} != {canonical}")
+
     print("Checking package.json versions against pyproject.toml...")
     for package_json in PACKAGE_JSONS:
         if not package_json.exists():
@@ -325,6 +331,19 @@ def check_version_alignment() -> int:
     return 0
 
 
+# SemVer 2.0.0 (no build metadata): numeric identifiers, including numeric
+# prerelease identifiers, must not carry leading zeroes.
+_SEMVER_RE = re.compile(
+    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+    r"(?:-(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)"
+    r"(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*)?$"
+)
+
+
+def is_valid_version(version: str) -> bool:
+    return _SEMVER_RE.match(version) is not None
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -342,8 +361,7 @@ def main() -> None:
 
     new_version = sys.argv[1].lstrip("v")
 
-    # Validate format
-    if not re.match(r"^\d+\.\d+\.\d+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?$", new_version):
+    if not is_valid_version(new_version):
         print(f"ERROR: Invalid version format: {new_version}")
         print("Expected: MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-pre.N (e.g., 0.1.0-alpha.0)")
         sys.exit(1)
@@ -355,6 +373,9 @@ def main() -> None:
     # 1. Root pyproject.toml
     print("1. pyproject.toml:")
     update_pyproject(new_version)
+
+    (ROOT / "VERSION").write_text(f"{new_version}\n", encoding="utf-8")
+    print("  updated VERSION")
 
     # 2. package.json files
     print("\n2. package.json files:")
