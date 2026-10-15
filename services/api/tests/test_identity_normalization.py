@@ -11,6 +11,8 @@ from identity.identity.normalization import (
     normalize_user_id,
     normalize_wallet_address,
 )
+from identity.identity.models import IdentitySignalType
+from identity.identity.signals import extract_signals
 
 
 # ── Email normalization ────────────────────────────────────────────────────────
@@ -79,6 +81,33 @@ def test_normalize_wallet_empty_returns_empty():
     assert normalize_wallet_address("", "eip155") == ""
 
 
+def test_client_wallet_verification_flags_remain_unverified_observations():
+    event = {
+        "event_id": "wallet-claim",
+        "properties": {
+            "wallet_address": "0xAbCd",
+            "wallet_signature_verified": True,
+            "wallets": [
+                {"address": "0xEf01", "vm": "evm", "verified": True},
+                {"address": "0x2345", "vm": "evm", "signature_verified": True},
+            ],
+        },
+    }
+
+    wallet_signals = [
+        signal for signal in extract_signals(event, "tenant-a")
+        if signal.type in {
+            IdentitySignalType.WALLET_ADDRESS,
+            IdentitySignalType.WALLET_SIGNATURE_VERIFIED,
+        }
+    ]
+
+    assert len(wallet_signals) == 3
+    assert {signal.type for signal in wallet_signals} == {
+        IdentitySignalType.WALLET_ADDRESS,
+    }
+
+
 # ── Campaign normalization ─────────────────────────────────────────────────────
 
 def test_normalize_campaign_extracts_utm():
@@ -109,7 +138,7 @@ def test_normalize_campaign_missing_keys_returns_empty_strings():
 
 def test_extract_chain_namespace_evm_chain_id():
     wallet = {"chainId": "eip155:1"}
-    assert extract_chain_namespace(wallet) == "eip155"
+    assert extract_chain_namespace(wallet) == "eip155:1"
 
 
 def test_extract_chain_namespace_explicit_solana():

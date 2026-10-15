@@ -496,6 +496,10 @@ class IdentityResolutionService:
                 is_suppressed = await self._repo.check_suppression(
                     tenant_id, IdentitySignalType.EMAIL_HASH.value, sig_hash
                 )
+            if not is_suppressed and sig_type == IdentitySignalType.WALLET_SIGNATURE_VERIFIED:
+                is_suppressed = await self._repo.check_suppression(
+                    tenant_id, IdentitySignalType.WALLET_ADDRESS.value, sig_hash
+                )
             if is_suppressed:
                 suppressed_types.append(sig_type)
                 self._metrics.record_blocked("suppression")
@@ -537,6 +541,10 @@ class IdentityResolutionService:
                 # tenant-scoped digest; include both persisted aliases when
                 # checking for a revoked identifier veto.
                 lookup_types.append(IdentitySignalType.EMAIL_HASH)
+            elif sig_type == IdentitySignalType.WALLET_SIGNATURE_VERIFIED:
+                # A suppression or revoked observed alias vetoes proof-based
+                # wallet linking for the same chain-scoped digest.
+                lookup_types.append(IdentitySignalType.WALLET_ADDRESS)
             for lookup_type in lookup_types:
                 historical_aliases = await self._repo.find_aliases_by_signal(
                     tenant_id, lookup_type, sig_hash, include_revoked=True
@@ -557,6 +565,11 @@ class IdentityResolutionService:
                 # must also discover entities that carry only the observed alias.
                 observed_ids = await self._repo.find_subjects_by_alias(
                     tenant_id, IdentitySignalType.EMAIL_HASH, sig_hash
+                )
+                entity_ids = list(dict.fromkeys([*entity_ids, *observed_ids]))
+            elif sig_type == IdentitySignalType.WALLET_SIGNATURE_VERIFIED:
+                observed_ids = await self._repo.find_subjects_by_alias(
+                    tenant_id, IdentitySignalType.WALLET_ADDRESS, sig_hash
                 )
                 entity_ids = list(dict.fromkeys([*entity_ids, *observed_ids]))
             if entity_ids:
@@ -611,6 +624,32 @@ class IdentityResolutionService:
                 source_entity_id = None
         else:
             source_entity_id = None
+
+        # A wallet proof can name the exact consented anonymous subject even
+        # when that subject has not previously emitted this wallet address.
+        # Treat the proof as deterministic evidence for candidates discovered
+        # through that same subject identifier; do not let an unbound wallet
+        # proof become a global identity match.
+        has_wallet_proof = any(
+            signal_type == IdentitySignalType.WALLET_SIGNATURE_VERIFIED
+            for signal_type, _, _ in hashed_signals
+        )
+        subject_bound_candidates = [
+            entity_id
+            for entity_id, signal_types in found_via.items()
+            if IdentitySignalType.ANONYMOUS_ID in signal_types
+        ]
+        if (
+            has_wallet_proof
+            and subject_bound_candidates
+            and _has_consent(consent_snapshot)
+        ):
+            if IdentitySignalType.WALLET_SIGNATURE_VERIFIED not in matching_types:
+                matching_types.append(IdentitySignalType.WALLET_SIGNATURE_VERIFIED)
+            for entity_id in subject_bound_candidates:
+                found_via.setdefault(entity_id, set()).add(
+                    IdentitySignalType.WALLET_SIGNATURE_VERIFIED
+                )
 
         # ── 6. Check for conflicting strong aliases ───────────────────────
         has_conflict = len(existing_entity_ids) > 1 and _has_strong_signal(matching_types)

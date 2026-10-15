@@ -327,7 +327,7 @@ own environment:
 
 | Gate | Branch | Web app | Backend |
 |------|--------|---------|---------|
-| Development | `Development` | Aether Development | shares the staging backend, data and wake/sleep |
+| Development | `Development` | Aether Development (`AETHER-development-web`) | `development-web.yml` uploads the built web app to the Amplify `development` branch; shares the staging backend, data and wake/sleep |
 | Staging | `staging` | Aether Staging (`AETHER-staging-web`) | `deploy.yml` / `staging-lifecycle.yml` deliver from `staging` |
 | Production | `main` | Aether Production (`AETHER-production-web`) | promoted explicitly (`deploy.yml` dispatch with an approved immutable build) |
 
@@ -340,6 +340,17 @@ backend delivery stays a deliberate, approved promotion. Push-time verification
 infrastructure plan and production-equivalent CI) runs on all three branches so
 each gate has its own evidence; `repo-health`, whose integration authority gates
 delivery, runs on `staging` and `main`.
+
+`development-web.yml` builds the persistent Aether web app on the GitHub runner
+for changes to the Development branch's web app, shared SDK, root package
+manifests, or that workflow, then
+uploads the artifact to the `development` branch of `AETHER-development-web`.
+It reuses the staging app's public API and Auth0 build settings while setting
+Development-specific redirect and logout URIs. The job skips when
+`FRONTEND_PREVIEW_ROLE_ARN` is not configured; when armed, the IAM role is
+scoped by `config/staging_frontend_preview_iam_policy.yaml`. The Development
+app shares staging API, data and wake/sleep, so it is a persistent frontend
+environment rather than an isolated backend deployment.
 
 Staging authority gates (`deploy.yml`, `staging-lifecycle.yml`,
 `pilot-staging.yml`, `staging-business-hours.yml`) require the source to be a

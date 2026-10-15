@@ -110,12 +110,21 @@ async def verify_sdk_transaction(request: Request, body: SDKTransactionVerificat
     if registered_chain is None:
         raise HTTPException(status_code=404, detail="Chain is not registered for this tenant")
     registered_vm = str(registered_chain.get("vm_family") or "").lower()
-    if registered_vm not in {"evm", "svm"}:
+    if registered_vm not in {"evm", "svm", "movevm"}:
         raise HTTPException(status_code=422, detail="Registered chain does not support transaction verification")
+    if registered_vm == "movevm" and (
+        not body.chain_id.lower().startswith("sui:")
+        or "sui" not in str(registered_chain.get("canonical_name") or "").lower()
+    ):
+        raise HTTPException(status_code=422, detail="MoveVM verification currently supports Sui network IDs only")
 
     result = await transaction_verifier.verify(
         tenant_id=tenant_id,
-        chain_id=str(registered_chain.get("chain_id") or body.chain_id),
+        chain_id=(
+            body.chain_id
+            if registered_vm == "movevm"
+            else str(registered_chain.get("chain_id") or body.chain_id)
+        ),
         transaction_hash=body.transaction_hash,
         vm_family=registered_vm,
         source_observation=source,

@@ -79,6 +79,8 @@ from .schemas import (
     IdentitySuppressRequest,
     IdentitySuppressResponse,
     IdentityUnsuppressResponse,
+    WalletVerificationChallengeRequest,
+    WalletVerificationSignatureRequest,
     ReviewQueueEntry,
 )
 
@@ -211,7 +213,6 @@ async def resolve_identity(
             "email": body.email,
             "phone": body.phone,
             "wallet_address": body.wallet_address,
-            "wallet_signature_verified": body.wallet_signature_verified,
             "external_id": body.external_id,
         },
         "source": "api",
@@ -2103,6 +2104,8 @@ async def revoke_siwx_session(session_id: str, request: Request) -> dict:
 #   GET  /v1/identity/verification/email/callback           (non-consuming)
 #   POST /v1/identity/verification/email/challenges/{challenge_id}/consume
 #   POST /v1/identity/verification/oidc
+#   POST /v1/identity/verification/wallet/challenges
+#   POST /v1/identity/verification/wallet/challenges/{challenge_id}/verify
 #   GET  /v1/identity/entities/{canonical_entity_id}/evidence   (redacted)
 #   POST /v1/identity/evidence/{evidence_id}/revoke
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2110,12 +2113,13 @@ async def revoke_siwx_session(session_id: str, request: Request) -> dict:
 from shared.common.common import BadRequestError  # noqa: E402
 
 from .evidence import EvidenceService  # noqa: E402
-from .verification import EmailVerificationService  # noqa: E402
+from .verification import EmailVerificationService, WalletVerificationService  # noqa: E402
 
 # ── Verification service singletons ────────────────────────────────────────
 
 _evidence_service: Optional[EvidenceService] = None
 _email_verification_service: Optional[EmailVerificationService] = None
+_wallet_verification_service: Optional[WalletVerificationService] = None
 
 
 def _get_evidence_service() -> EvidenceService:
@@ -2132,6 +2136,33 @@ def _get_email_verification_service() -> EmailVerificationService:
             evidence_service=_get_evidence_service()
         )
     return _email_verification_service
+
+
+def _get_wallet_verification_service() -> WalletVerificationService:
+    global _wallet_verification_service
+    if _wallet_verification_service is None:
+        _wallet_verification_service = WalletVerificationService(
+            evidence_service=_get_evidence_service()
+        )
+    return _wallet_verification_service
+
+
+async def _require_identity_link_consent(tenant_id: str, anonymous_id: str) -> dict:
+    from governance.consent.authority import evaluate_identity_link_consent
+
+    try:
+        allowed, reason, context = await evaluate_identity_link_consent(
+            tenant_id, anonymous_id
+        )
+    except Exception as exc:  # noqa: BLE001 - fail closed on authority outage
+        logger.warning(
+            "identity.wallet_proof.consent_lookup_failed",
+            extra={"tenant_id": tenant_id, "error_type": type(exc).__name__},
+        )
+        raise BadRequestError("Identity-link consent is unavailable") from exc
+    if not allowed or not context:
+        raise BadRequestError("Identity-link consent is required")
+    return context
 
 
 # ── Request models ─────────────────────────────────────────────────────────
@@ -2232,6 +2263,67 @@ async def consume_email_magic_link(
         tenant_id=tenant.tenant_id,
         challenge_id=challenge_id,
     )
+    return APIResponse(data=result).to_dict()
+
+
+@router.post("/verification/wallet/challenges")
+async def issue_wallet_verification_challenge(
+    body: WalletVerificationChallengeRequest,
+    request: Request,
+) -> dict:
+    """Issue an EVM or Solana wallet ownership message for the active subject."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    from config.settings import settings
+
+    if not settings.identity_continuity.resolution_enabled:
+        raise NotFoundError("Wallet identity verification is not enabled")
+    consent_context = await _require_identity_link_consent(
+        tenant.tenant_id, body.anonymous_id
+    )
+    try:
+        result = await _get_wallet_verification_service().issue_wallet_challenge(
+            tenant_id=tenant.tenant_id,
+            anonymous_id=body.anonymous_id,
+            wallet_address=body.wallet_address,
+            chain_namespace=body.chain_namespace,
+            consent_snapshot=consent_context,
+        )
+    except ValueError as exc:
+        raise BadRequestError("Wallet proof request is invalid or unsupported") from exc
+    return APIResponse(data=result).to_dict()
+
+
+@router.post("/verification/wallet/challenges/{challenge_id}/verify")
+async def verify_wallet_verification_challenge(
+    challenge_id: str,
+    body: WalletVerificationSignatureRequest,
+    request: Request,
+) -> dict:
+    """Verify and consume a server-issued wallet proof challenge."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    from config.settings import settings
+
+    if not settings.identity_continuity.resolution_enabled:
+        raise NotFoundError("Wallet identity verification is not enabled")
+    consent_context = await _require_identity_link_consent(
+        tenant.tenant_id, body.anonymous_id
+    )
+    if body.challenge_id != challenge_id:
+        raise BadRequestError("Wallet proof challenge does not match the request")
+    try:
+        result = await _get_wallet_verification_service().verify_wallet_signature(
+            tenant_id=tenant.tenant_id,
+            challenge_id=challenge_id,
+            anonymous_id=body.anonymous_id,
+            wallet_address=body.wallet_address,
+            chain_namespace=body.chain_namespace,
+            signature=body.signature,
+            consent_snapshot=consent_context,
+        )
+    except ValueError as exc:
+        raise BadRequestError("Wallet proof request is invalid or unsupported") from exc
     return APIResponse(data=result).to_dict()
 
 

@@ -240,6 +240,98 @@ class CommerceOrderPaymentLedger:
         await self._store.set(key, record)
         return record
 
+    async def record_settlement(
+        self,
+        tenant_id: str,
+        *,
+        commerce_order_ref: str,
+        provider: str,
+        settlement_id: str,
+        amount: str,
+        currency: str,
+        settled_payment_refs: list[dict[str, str]],
+        occurred_at: str,
+    ) -> dict[str, Any]:
+        """Persist a source-authoritative settled outcome.
+
+        Callers must verify the provider event before invoking this method.
+        The settlement is linked only to explicitly supplied provider/payment
+        IDs; it does not infer constituent payments from an amount or order.
+        """
+        ref = _required(commerce_order_ref, "commerce_order_ref")
+        settlement_provider = _required(provider, "provider").lower()
+        if not isinstance(settled_payment_refs, list) or len(settled_payment_refs) > 1000:
+            raise ValueError("settled_payment_refs must be a list of at most 1000 references")
+        normalized_refs: list[dict[str, str]] = []
+        seen_refs: set[tuple[str, str]] = set()
+        for item in settled_payment_refs:
+            if not isinstance(item, dict):
+                raise ValueError("each settled payment reference must be an object")
+            payment_provider = _required(item.get("provider"), "payment_ref.provider").lower()
+            payment_id = _required(
+                item.get("provider_payment_id"), "payment_ref.provider_payment_id"
+            )
+            pair = (payment_provider, payment_id)
+            if pair not in seen_refs:
+                seen_refs.add(pair)
+                normalized_refs.append({
+                    "provider": payment_provider,
+                    "providerPaymentId": payment_id,
+                })
+        normalized_refs.sort(key=lambda item: (item["provider"], item["providerPaymentId"]))
+        settlement = {
+            "provider": settlement_provider,
+            "providerSettlementId": _required(settlement_id, "settlement_id"),
+            "status": "settled",
+            "amount": _decimal_text(amount),
+            "currency": _currency(currency),
+            "settlesPaymentRefs": normalized_refs,
+            "occurredAt": _required(occurred_at, "occurred_at"),
+            "observedAt": utc_now().isoformat(),
+        }
+        if Decimal(settlement["amount"]) < 0:
+            raise ValueError("settlement amount must not be negative")
+
+        key = _key(tenant_id, ref)
+        record = await self._store.get(key) or {
+            "tenantId": tenant_id,
+            "commerceOrderRef": ref,
+            "payments": {},
+            "createdAt": occurred_at,
+        }
+        settlements = record.get("settlements")
+        if not isinstance(settlements, dict):
+            settlements = record["settlements"] = {}
+        observations = record.get("settlementObservations")
+        if not isinstance(observations, list):
+            observations = record["settlementObservations"] = []
+        if not observations:
+            observations.extend(
+                row.copy() for row in settlements.values() if isinstance(row, dict)
+            )
+        settlement_key = f"{settlement_provider}:{settlement['providerSettlementId']}"
+        prior = settlements.get(settlement_key)
+        compared_fields = (
+            "provider", "providerSettlementId", "status", "amount", "currency",
+            "settlesPaymentRefs", "occurredAt",
+        )
+        if prior is None:
+            settlements[settlement_key] = settlement
+            observations.append(settlement.copy())
+        elif any(prior.get(field) != settlement.get(field) for field in compared_fields):
+            record["state"] = "conflict"
+            record["conflictReason"] = "provider_settlement_id_reused_with_divergent_evidence"
+            if not any(
+                all(row.get(field) == settlement.get(field) for field in compared_fields)
+                for row in observations
+                if isinstance(row, dict)
+            ):
+                observations.append(settlement.copy())
+        record["updatedAt"] = max(str(record.get("updatedAt") or ""), occurred_at)
+        self._reconcile(record)
+        await self._store.set(key, record)
+        return record
+
     async def get(self, tenant_id: str, commerce_order_ref: str) -> dict[str, Any] | None:
         ref = _required(commerce_order_ref, "commerce_order_ref")
         return await self._store.get(_key(tenant_id, ref))
@@ -261,7 +353,10 @@ class CommerceOrderPaymentLedger:
 
         snapshot = {
             key: value for key, value in current.items()
-            if key not in {"order", "payments", "adjustments", "state", "conflictReason", "matchedPaymentIds", "matchedPayments"}
+            if key not in {
+                "order", "payments", "adjustments", "settlements", "state",
+                "conflictReason", "matchedPaymentIds", "matchedPayments",
+            }
         }
         revisions = current.get("orderRevisions")
         if not isinstance(revisions, list):
@@ -346,6 +441,20 @@ class CommerceOrderPaymentLedger:
             for row in known_adjustments
         }
 
+        settlement_observations = current.get("settlementObservations")
+        if not isinstance(settlement_observations, list):
+            settlement_observations = list((current.get("settlements") or {}).values())
+        known_settlements = [
+            row for row in settlement_observations
+            if isinstance(row, dict)
+            and _known_by(row.get("observedAt"), cutoff, current.get("createdAt"))
+        ]
+        snapshot["settlementObservations"] = known_settlements
+        snapshot["settlements"] = {
+            f"{row.get('provider')}:{row.get('providerSettlementId')}": row
+            for row in known_settlements
+        }
+
         # A conflict is knowable only if its conflicting observations had both
         # arrived by the cutoff. Reconciliation recomputes the visible state.
         if not snapshot.get("conflictReason"):
@@ -362,6 +471,17 @@ class CommerceOrderPaymentLedger:
                 for group in adjustment_groups.values()
             ):
                 snapshot["conflictReason"] = "provider_adjustment_id_reused_with_divergent_evidence"
+        if not snapshot.get("conflictReason"):
+            settlement_groups: dict[tuple[Any, Any], list[dict[str, Any]]] = {}
+            for row in known_settlements:
+                settlement_groups.setdefault(
+                    (row.get("provider"), row.get("providerSettlementId")), []
+                ).append(row)
+            if any(
+                len({_settlement_fingerprint(row) for row in group}) > 1
+                for group in settlement_groups.values()
+            ):
+                snapshot["conflictReason"] = "provider_settlement_id_reused_with_divergent_evidence"
         self._reconcile(snapshot)
         return snapshot
 
@@ -433,6 +553,24 @@ def _currency(value: str) -> str:
 def _time_key(value: Any) -> str:
     parsed = coerce_utc_lenient(value)
     return parsed.isoformat() if parsed is not None else ""
+
+
+def _settlement_fingerprint(row: dict[str, Any]) -> tuple[Any, ...]:
+    refs = row.get("settlesPaymentRefs") or []
+    normalized_refs = tuple(
+        sorted(
+            (
+                str(payment_ref.get("provider") or ""),
+                str(payment_ref.get("providerPaymentId") or ""),
+            )
+            for payment_ref in refs
+            if isinstance(payment_ref, dict)
+        )
+    )
+    return (
+        row.get("provider"), row.get("providerSettlementId"), row.get("status"),
+        row.get("amount"), row.get("currency"), normalized_refs, row.get("occurredAt"),
+    )
 
 
 def _known_by(observed_at: Any, cutoff: datetime, legacy_time: Any = None) -> bool:

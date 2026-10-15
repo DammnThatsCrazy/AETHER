@@ -41,7 +41,16 @@ class ChainRegistry(TenantOwnedRepository):
         return await self.upsert(record_id, data, self._owner(tenant_id))
 
     async def get_by_chain_id(self, chain_id: str) -> Optional[dict]:
-        return await self.find_by_id(chain_id)
+        record = await self.find_by_id(chain_id)
+        if record is not None:
+            return record
+        # Namespaced network IDs (for example, sui:mainnet) can be aliases of
+        # the canonical chain record used by protocol and asset registries.
+        records = await self.find_many(limit=1000)
+        return next(
+            (row for row in records if chain_id in (row.get("aliases") or [])),
+            None,
+        )
 
     async def get_by_evm_chain_id(self, evm_chain_id: int) -> Optional[dict]:
         results = await self.find_many(filters={"evm_chain_id": evm_chain_id}, limit=1)
