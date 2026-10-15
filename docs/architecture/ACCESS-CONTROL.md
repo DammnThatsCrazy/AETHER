@@ -78,8 +78,9 @@ when the registry is enforced, or is logged and counted as
 `route_policy_platform_operator_observed` when it only observes. Handlers that
 act on another tenant or on process-global state (tenant and admin API-key
 management, tenant deactivation and deletion, the cross-tenant delivery job
-list, the overage cycle, the fraud engine configuration, and platform registry
-seeding) call `require_platform_operator()`
+list, the overage cycle, the fraud engine configuration, platform registry
+seeding and asset-registry writes, global price observations, and process-wide
+diagnostics) call `require_platform_operator()`
 (`governance/security/request_context.py`) as well, so the rule holds in observe
 mode. Production has no bootstrap tenant: until a lane sets
 `PLATFORM_OPERATOR_TENANT_IDS` (Terraform `platform_operator_tenant_ids`), only
