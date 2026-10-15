@@ -424,6 +424,25 @@ class StripeBillingConfig:
         return bool(self.overage_price_id)
 
 
+def stripe_key_mode_error(env: "Environment", secret_key: str) -> str | None:
+    """Reject a Stripe key whose mode does not match the deployment environment.
+
+    Staging talks to the Stripe sandbox (test-mode keys) and production to the
+    live account (live-mode keys). The key itself is never included in the
+    message. Other environments and keys of unrecognised shape are not judged.
+    """
+    key = (secret_key or "").strip()
+    if not key:
+        return None
+    is_live = key.startswith(("sk_live_", "rk_live_"))
+    is_test = key.startswith(("sk_test_", "rk_test_"))
+    if env == Environment.STAGING and is_live:
+        return "STRIPE_SECRET_KEY is a live-mode key but AETHER_ENV=staging; staging must use the Stripe sandbox"
+    if env == Environment.PRODUCTION and is_test:
+        return "STRIPE_SECRET_KEY is a test-mode key but AETHER_ENV=production; production must use the live Stripe account"
+    return None
+
+
 # ---------------------------------------------------------------------------
 # ClickHouse (CIS cognitive telemetry warehouse)
 # ---------------------------------------------------------------------------
@@ -2462,6 +2481,11 @@ class Settings:
                     "Stripe Billing is enabled but required env vars are missing "
                     f"in non-local environment: {', '.join(missing)}"
                 )
+
+        # ── Stripe mode must match the environment (sandbox vs live) ──────────
+        _stripe_mode_error = stripe_key_mode_error(self.env, self.stripe_billing.secret_key)
+        if _stripe_mode_error:
+            raise RuntimeError(_stripe_mode_error)
 
         # ── Runtime role (PR 4) ───────────────────────────────────────────────
         # AETHER_ROLE must name a known role in every environment. In
