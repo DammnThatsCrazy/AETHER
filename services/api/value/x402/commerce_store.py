@@ -142,7 +142,7 @@ class _RepoCollection:
 
     async def put(self, tenant_id: str, obj: Any) -> Any:
         data = obj.model_dump(mode="json")
-        if "tenant_id" not in data or data["tenant_id"] is None:
+        if not data.get("tenant_id"):
             data["tenant_id"] = tenant_id
         obj_id = getattr(obj, self._id_field)
         row_id, _ = await self._find(data["tenant_id"], obj_id)
