@@ -157,7 +157,7 @@ class VerificationChallengeRepository(_ScopedRepo):
                         'state', 'consumed',
                         'attempt_count',
                         COALESCE(NULLIF(data->>'attempt_count', '')::integer, 0) + 1,
-                        'consumed_at', $1
+                        'consumed_at', $1::text
                     ), updated_at = NOW()
                     WHERE id = $2 AND tenant_id = $3
                       AND data->>'state' = 'issued'

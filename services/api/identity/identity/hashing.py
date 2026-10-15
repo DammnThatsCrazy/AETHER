@@ -10,6 +10,7 @@ Rules:
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import os
@@ -27,6 +28,7 @@ _DEFAULT_HMAC_KEY = b"aether-identity-hash-key-default"
 # identifier-hashing key so a proof secret's digest can never collide with an
 # identifier hash even under the same raw input (test/local only).
 _DEFAULT_VERIFICATION_KEY = b"aether-identity-verification-token-key-default"
+_WALLET_SUBJECT_BINDING_CIPHERTEXT_VERSION = "v2"
 
 
 def _hmac_key() -> bytes:
@@ -41,12 +43,17 @@ def _verification_hmac_key() -> bytes:
     return raw.encode() if raw else _DEFAULT_VERIFICATION_KEY
 
 
-def _wallet_subject_binding_key(tenant_id: str) -> bytes:
-    raw = os.getenv("IDENTITY_VERIFICATION_TOKEN_KEY", "")
-    environment = os.getenv("AETHER_ENV", "local").strip().lower()
-    if not raw and environment not in {"local", "test", "development"}:
-        raise RuntimeError("IDENTITY_VERIFICATION_TOKEN_KEY is required")
-    material = raw.encode() if raw else _DEFAULT_VERIFICATION_KEY
+def _verification_hmac_keys() -> list[bytes]:
+    keys = [_verification_hmac_key()]
+    previous = os.getenv("IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS", "")
+    if previous:
+        previous_key = previous.encode()
+        if previous_key not in keys:
+            keys.append(previous_key)
+    return keys
+
+
+def _derive_wallet_subject_binding_key(material: bytes, tenant_id: str) -> bytes:
     return hmac.new(
         material,
         f"wallet-proof-subject-binding:{tenant_id}".encode("utf-8"),
@@ -54,11 +61,38 @@ def _wallet_subject_binding_key(tenant_id: str) -> bytes:
     ).digest()
 
 
-def ensure_wallet_subject_binding_key(tenant_id: str) -> None:
-    """Fail early if production cannot safely persist replay bindings."""
+def _wallet_subject_binding_keyring(tenant_id: str) -> tuple[str, dict[str, bytes]]:
+    raw = os.getenv("IDENTITY_VERIFICATION_TOKEN_KEY", "")
+    environment = os.getenv("AETHER_ENV", "local").strip().lower()
+    if not raw and environment not in {"local", "test", "development"}:
+        raise RuntimeError("IDENTITY_VERIFICATION_TOKEN_KEY is required")
     if not tenant_id:
         raise ValueError("tenant id is required for wallet subject binding")
-    _wallet_subject_binding_key(tenant_id)
+
+    active_id = os.getenv("IDENTITY_VERIFICATION_TOKEN_KEY_ID", "current").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", active_id):
+        raise ValueError("invalid IDENTITY_VERIFICATION_TOKEN_KEY_ID")
+    active_material = raw.encode() if raw else _DEFAULT_VERIFICATION_KEY
+    keys = {active_id: _derive_wallet_subject_binding_key(active_material, tenant_id)}
+
+    previous_raw = os.getenv("IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS", "")
+    if previous_raw:
+        previous_id = os.getenv(
+            "IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS_ID", "previous"
+        ).strip()
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", previous_id):
+            raise ValueError("invalid IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS_ID")
+        if previous_id == active_id:
+            raise ValueError("active and previous wallet binding key IDs must differ")
+        keys[previous_id] = _derive_wallet_subject_binding_key(
+            previous_raw.encode(), tenant_id
+        )
+    return active_id, keys
+
+
+def ensure_wallet_subject_binding_key(tenant_id: str) -> None:
+    """Fail early if production cannot safely persist replay bindings."""
+    _wallet_subject_binding_keyring(tenant_id)
 
 
 def hash_value(value: str, scope: str = "") -> str:
@@ -87,7 +121,12 @@ def verify_token_digest(token: str, expected_digest: str, scope: str = "") -> bo
     """Constant-time comparison of a presented token against a stored digest."""
     if not token or not expected_digest:
         return False
-    return hmac.compare_digest(hash_verification_token(token, scope), expected_digest)
+    msg = f"{scope}:{token}" if scope else token
+    matched = False
+    for key in _verification_hmac_keys():
+        digest = hmac.new(key, msg.encode(), hashlib.sha256).hexdigest()
+        matched |= hmac.compare_digest(digest, expected_digest)
+    return matched
 
 
 def encrypt_wallet_subject_binding(subject_id: str, tenant_id: str) -> str:
@@ -99,12 +138,13 @@ def encrypt_wallet_subject_binding(subject_id: str, tenant_id: str) -> str:
     """
     if not subject_id or not tenant_id:
         return ""
-    key = _wallet_subject_binding_key(tenant_id)
+    active_id, keyring = _wallet_subject_binding_keyring(tenant_id)
     nonce = os.urandom(12)
-    encrypted = AESGCM(key).encrypt(
+    encrypted = AESGCM(keyring[active_id]).encrypt(
         nonce, subject_id.encode("utf-8"), tenant_id.encode("utf-8")
     )
-    return base64.urlsafe_b64encode(nonce + encrypted).decode("ascii")
+    payload = base64.urlsafe_b64encode(nonce + encrypted).decode("ascii")
+    return f"{_WALLET_SUBJECT_BINDING_CIPHERTEXT_VERSION}.{active_id}.{payload}"
 
 
 def decrypt_wallet_subject_binding(ciphertext: str, tenant_id: str) -> str:
@@ -112,15 +152,38 @@ def decrypt_wallet_subject_binding(ciphertext: str, tenant_id: str) -> str:
     if not ciphertext or not tenant_id:
         return ""
     try:
-        packed = base64.urlsafe_b64decode(ciphertext.encode("ascii"))
+        _, keyring = _wallet_subject_binding_keyring(tenant_id)
+        if ciphertext.startswith(f"{_WALLET_SUBJECT_BINDING_CIPHERTEXT_VERSION}."):
+            version, key_id, encoded_payload = ciphertext.split(".", 2)
+            if version != _WALLET_SUBJECT_BINDING_CIPHERTEXT_VERSION:
+                return ""
+            key = keyring.get(key_id)
+            if key is None:
+                return ""
+            packed = base64.b64decode(
+                encoded_payload.encode("ascii"), altchars=b"-_", validate=True
+            )
+            keys = [key]
+        else:
+            # Pre-v2 records were unversioned and used only the then-active
+            # key. Try the configured active and previous keys during a
+            # rotation window so existing persisted evidence remains usable.
+            packed = base64.b64decode(
+                ciphertext.encode("ascii"), altchars=b"-_", validate=True
+            )
+            keys = list(dict.fromkeys(keyring.values()))
         if len(packed) <= 12:
             return ""
-        key = _wallet_subject_binding_key(tenant_id)
-        return AESGCM(key).decrypt(
-            packed[:12], packed[12:], tenant_id.encode("utf-8")
-        ).decode("utf-8")
-    except (ValueError, UnicodeDecodeError, InvalidTag, RuntimeError):
+        for key in keys:
+            try:
+                return AESGCM(key).decrypt(
+                    packed[:12], packed[12:], tenant_id.encode("utf-8")
+                ).decode("utf-8")
+            except InvalidTag:
+                continue
+    except (ValueError, UnicodeDecodeError, binascii.Error, InvalidTag, RuntimeError):
         return ""
+    return ""
 
 
 def hash_email(email: str, tenant_id: str) -> str:

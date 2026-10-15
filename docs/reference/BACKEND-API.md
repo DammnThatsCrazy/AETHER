@@ -30,8 +30,8 @@ source_hashes:
   "services/api/billing/": "sha256:0740c89ed3bf089b8ded5f9a319b7670a0afb18bda8f58a69a11a03c2a0a5d75"
   "services/api/connectors/": "sha256:be5c00bffaa216ecd12b669cb41ee011c177800fbc7d70c5e9bd4c1b4c3f6e76"
   "services/api/governance/": "sha256:f0fb64d3cc3dccc64070ee90276d01de955a457ea04fd3cc8d538a19c64c2fdc"
-  "services/api/graph/": "sha256:fbd18a9ae81aa96b75957133797f8f2588ec76d7503237c3ed3d892c709baf23"
-  "services/api/identity/": "sha256:aa2812faa4243ba1d8a3306bb0d04a0bf6afdde00aa92b4a5bcc1b31ee9b65a3"
+  "services/api/graph/": "sha256:bda39e64fa30ae40f4acbf0fa85092aa50d7cb601037bdcd6870b241ea09fe13"
+  "services/api/identity/": "sha256:43125b283d76a8495e4096e962a0f45c25efa52616e1d6557e78b095bdbbcdba"
   "services/api/ingestion/": "sha256:1e13d282a2ef03b1673b631a9e564e27ed09690a695531674ed26967559eda0a"
   "services/api/intelligence/": "sha256:9b583b5a699e01018b213383848636ee011384fa9f6115d1cda00977dfdb3e58"
   "services/api/journeys/": "sha256:8db7d48b7f8247ab5adfde2fef24d3d7d4d6b2b4b7b721fd1129e836c9ad5301"
@@ -1682,6 +1682,11 @@ Core identity resolution and entity management endpoints.
 | GET | `/v1/identity/entities/{entity_id}/aliases` | List all aliases (wallets, emails, devices, sessions) for an entity |
 | GET | `/v1/identity/entities/{entity_id}/graph` | Entity subgraph (neighbors, edges, relationship types) |
 | GET | `/v1/identity/entities/{entity_id}/audit` | Full audit trail for this entity — merges, splits, signal additions |
+| POST | `/v1/identity/verification/wallet/challenges` | Issue a wallet proof challenge bound to current consent and tenant/site namespace (`write`) |
+| POST | `/v1/identity/verification/wallet/challenges/{challenge_id}/verify` | Verify and atomically consume the wallet proof challenge (`write`) |
+| GET | `/v1/identity/entities/{canonical_entity_id}/evidence` | List verification evidence bound to an entity; response is redacted (`read`) |
+| POST | `/v1/identity/evidence/{evidence_id}/replay` | Retry resolution from durable verification evidence; legacy wallet records may require a fresh proof (`write`) |
+| POST | `/v1/identity/evidence/{evidence_id}/revoke` | Revoke verification evidence and replay resolution when the proof subject is recoverable (`write`) |
 | GET | `/v1/identity/conflicts` | List entities with unresolved identity conflicts (`read`) |
 | POST | `/v1/identity/merge` | Merge two entities into a single canonical entity (`admin`) |
 | POST | `/v1/identity/split` | Split a merged entity back into its source components (`admin`) |
@@ -1699,12 +1704,20 @@ Core identity resolution and entity management endpoints.
 #### Wallet ownership proof
 
 Both wallet verification routes also require `identity_continuity.resolution_enabled`.
-The challenge request body is `{ "anonymous_id", "wallet_address",
-"chain_namespace" }`. The response data contains `{ "challenge_id",
-"wallet_address", "chain_namespace", "message", "expires_at" }`. To verify,
-send `{ "challenge_id", "anonymous_id", "wallet_address",
-"chain_namespace", "signature" }` to the matching challenge path. The server
-re-evaluates consent for that exact anonymous subject before verification.
+Create a challenge with `POST /v1/identity/verification/wallet/challenges` and
+`{ "anonymous_id", "wallet_address", "chain_namespace", "tenant_app_key?" }`.
+`tenant_app_key`, when supplied, is an SDK site ID selector. Tenant-wide secret
+credentials may select only an active site registered to that tenant; a
+site-bound credential may select only one of its bound sites. The resulting
+identity namespace matches ingestion (`site:<site_id>`); without an app
+selector, a tenant-wide credential uses `tenant:<tenant_id>`. The response data
+contains `{ "challenge_id", "wallet_address", "chain_namespace", "message",
+"expires_at" }`. Verify with
+`POST /v1/identity/verification/wallet/challenges/{challenge_id}/verify` and
+`{ "challenge_id", "anonymous_id", "wallet_address", "chain_namespace",
+"signature", "tenant_app_key?" }`. The selected app scope must match the
+challenge. The server re-evaluates consent for that exact anonymous subject
+before verification.
 
 Supported signatures are EVM `eip155:*` EIP-191 `personal_sign` and Solana
 Ed25519 over the exact UTF-8 message (standard Base64 signature). The consumed
@@ -1713,6 +1726,21 @@ consented anonymous subject. It proves key control for the challenge only; it
 does not authorize a transaction or establish exclusive custody. Sui
 transaction verification is a separate execution-evidence path, and Sui wallet
 signature formats are not accepted here.
+
+`GET /v1/identity/entities/{canonical_entity_id}/evidence` lists redacted
+evidence for an entity. `POST /v1/identity/evidence/{evidence_id}/replay`
+retries resolution using the durable evidence record and requires `write`.
+Its response includes `evidence_id`, `status`, `decision`,
+`canonical_entity_id`, and `error_code`; a canonical ID is returned only for
+accepted `create`, `link`, or `merge` decisions. Public errors use stable codes:
+`evidence_replay_failed` and `wallet_evidence_reverification_required`.
+Detailed resolver and repository exceptions remain in server logs. For legacy
+wallet evidence without an encrypted subject, a previously completed replay
+returns its cached outcome; if no completed result exists, the endpoint returns
+`reverification_required` and a fresh wallet proof is required. Revoking a
+legacy wallet record without a recoverable subject succeeds, but resolution
+replay is skipped and logged because the old subject cannot be reconstructed.
+`POST /v1/identity/evidence/{evidence_id}/revoke` revokes evidence.
 
 ---
 

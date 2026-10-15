@@ -11,7 +11,7 @@ source_files:
   - config/environments/.env.example
 canonical_owner: platform@aether
 source_hashes:
-  "config/environments/.env.example": "sha256:f8a419914ada928ec4a65f9d5eb7d86d97d3d8661d80ab95de80e3844b0a73ac"
+  "config/environments/.env.example": "sha256:763aa0ccd35c1796f6959868435e775b576d9683e31c62fad9ca475099a30085"
   "services/api/config/settings.py": "sha256:120775873521c402933065c3073b8f2d242589bca26b095f982952f6bb392f42"
 ---
 
@@ -36,3 +36,8 @@ Env blocks are documented in `config/environments/.env.example`
 `AETHER_AGENT_MARKETPLACE_CATALOG_*`,
 `KYBER_*_OPS_ENABLED`); `Settings.__post_init__` rejects incoherent
 combinations (LayerZero without adapters).
+
+When wallet identity verification is enabled, non-local deployments must set
+`IDENTITY_VERIFICATION_TOKEN_KEY`. Rotate it with the active/previous key and
+ID variables so stored wallet replay subjects remain decryptable; see the
+[secret rotation runbook](../../../operations/SECRET-ROTATION.md).

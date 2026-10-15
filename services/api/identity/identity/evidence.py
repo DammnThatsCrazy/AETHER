@@ -160,6 +160,13 @@ class EvidenceService:
         if row is None:
             return None
         self._metrics.record_evidence_revoked(row.get("evidence_type", ""))
+        subject_hint_id = self._recover_subject_hint(row, tenant_id)
+        if row.get("identifier_type") == "wallet" and not subject_hint_id:
+            logger.warning(
+                "wallet evidence revocation replay unavailable without recoverable subject",
+                extra={"tenant_id": tenant_id, "evidence_id": evidence_id},
+            )
+            return row
         replay_result = await self._trigger_replay(
             tenant_id=tenant_id,
             identifier_type=row.get("identifier_type", ""),
@@ -169,7 +176,7 @@ class EvidenceService:
             policy_version=row.get("policy_version", "1.0.0"),
             consent_snapshot=row.get("consent_snapshot"),
             chain_namespace=(row.get("metadata") or {}).get("chain_namespace"),
-            subject_hint_id=self._recover_subject_hint(row, tenant_id),
+            subject_hint_id=subject_hint_id,
             identity_namespace=row.get("identity_namespace"),
         )
         await self._bind_entity_if_resolved(evidence_id, tenant_id, replay_result)
@@ -188,6 +195,38 @@ class EvidenceService:
             return {"status": "not_found"}
         if row.get("status") != VerificationEvidenceStatus.ACTIVE.value:
             return {"status": "inactive_evidence"}
+        subject_hint_id = self._recover_subject_hint(row, tenant_id)
+        if row.get("identifier_type") == "wallet" and not subject_hint_id:
+            try:
+                replay = self._get_replay_service()
+                completed_result = getattr(replay, "completed_replay_result", None)
+                cached = (
+                    await completed_result(
+                        tenant_id,
+                        evidence_id,
+                        row.get("policy_version", "1.0.0"),
+                    )
+                    if callable(completed_result)
+                    else None
+                )
+            except Exception as exc:  # noqa: BLE001 - never expose replay internals
+                logger.warning(
+                    "legacy wallet replay cache lookup failed",
+                    extra={
+                        "tenant_id": tenant_id,
+                        "evidence_id": evidence_id,
+                        "error_type": type(exc).__name__,
+                    },
+                )
+                return {"status": "error"}
+            if cached is not None:
+                try:
+                    self._metrics.record_resolution_replay("requested")
+                except Exception:  # noqa: BLE001 - metrics are best-effort
+                    pass
+                await self._bind_entity_if_resolved(evidence_id, tenant_id, cached)
+                return cached
+            return {"status": "reverification_required"}
         result = await self._trigger_replay(
             tenant_id=tenant_id,
             identifier_type=row.get("identifier_type", ""),
@@ -197,7 +236,7 @@ class EvidenceService:
             policy_version=row.get("policy_version", "1.0.0"),
             consent_snapshot=row.get("consent_snapshot"),
             chain_namespace=(row.get("metadata") or {}).get("chain_namespace"),
-            subject_hint_id=self._recover_subject_hint(row, tenant_id),
+            subject_hint_id=subject_hint_id,
             identity_namespace=row.get("identity_namespace"),
         )
         await self._bind_entity_if_resolved(evidence_id, tenant_id, result)
@@ -214,6 +253,8 @@ class EvidenceService:
         self, evidence_id: str, tenant_id: str, result: Optional[dict]
     ) -> None:
         if not result or result.get("status") not in {"complete", "noop"}:
+            return
+        if str(result.get("decision") or "").lower() not in {"create", "link", "merge"}:
             return
         canonical_entity_id = result.get("canonical_entity_id")
         if not canonical_entity_id:
@@ -273,26 +314,7 @@ class EvidenceService:
         present. Any failure is swallowed — replay must never break evidence.
         """
         try:
-            replay = self._replay_service
-            if replay is None:
-                from .resolution_replay import ResolutionReplayService
-                from .repository import IdentityResolutionRepository
-                from .graph_writer import IdentityGraphWriter
-                from .audit import IdentityAuditWriter
-                from .conflicts import IdentityConflictManager
-                from .metrics import IdentityMetrics as _Metrics
-                from .resolver import IdentityResolutionService
-
-                repo = IdentityResolutionRepository()
-                metrics = _Metrics()
-                resolver = IdentityResolutionService(
-                    repo=repo,
-                    graph_writer=IdentityGraphWriter(repo, metrics),
-                    audit_writer=IdentityAuditWriter(repo),
-                    conflict_manager=IdentityConflictManager(repo),
-                    metrics=metrics,
-                )
-                replay = ResolutionReplayService(resolver=resolver, repo=repo)
+            replay = self._get_replay_service()
             result = await replay.request_replay(
                 tenant_id=tenant_id,
                 identifier_type=identifier_type,
@@ -314,6 +336,28 @@ class EvidenceService:
             except Exception:  # noqa: BLE001 - metrics are best-effort too
                 pass
             return None
+
+    def _get_replay_service(self) -> Any:
+        """Get the injected replay service or construct the production service."""
+        if self._replay_service is None:
+            from .resolution_replay import ResolutionReplayService
+            from .repository import IdentityResolutionRepository
+            from .graph_writer import IdentityGraphWriter
+            from .audit import IdentityAuditWriter
+            from .conflicts import IdentityConflictManager
+            from .resolver import IdentityResolutionService
+
+            repo = IdentityResolutionRepository()
+            metrics = IdentityMetrics()
+            resolver = IdentityResolutionService(
+                repo=repo,
+                graph_writer=IdentityGraphWriter(repo, metrics),
+                audit_writer=IdentityAuditWriter(repo),
+                conflict_manager=IdentityConflictManager(repo),
+                metrics=metrics,
+            )
+            self._replay_service = ResolutionReplayService(resolver=resolver, repo=repo)
+        return self._replay_service
 
 
 __all__ = ["EvidenceService"]

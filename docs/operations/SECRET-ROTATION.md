@@ -8,11 +8,13 @@ status: stable
 since_version: "0.1.0"
 source_files:
   - scripts/generate_secrets.py
+  - services/api/identity/identity/hashing.py
 canonical_owner: security@aether
 estimated_read_minutes: 2
 toc_depth: 3
 source_hashes:
   "scripts/generate_secrets.py": "sha256:f48ff16c09c5268f4522158e4db008fb45cbb5d9cb2ae77dc0e61604969f92d7"
+  "services/api/identity/identity/hashing.py": "sha256:9788056db426269a163e0983a15eca89e8c11d24027947a9ad6db7baf4901a14"
 ---
 # Secret Rotation Runbook
 
@@ -53,6 +55,7 @@ the real value comes from the Stripe Dashboard.
 | Oracle signer key | `ORACLE_SIGNER_PRIVATE_KEY` | Reward proof generation | Signer address changes |
 | Grafana admin | `GRAFANA_ADMIN_PASSWORD` | Grafana dashboard | Grafana logins invalidated |
 | Stripe webhook | `STRIPE_WEBHOOK_SECRET` | Stripe webhook verification | Pending webhooks fail signature |
+| Identity verification binding | `IDENTITY_VERIFICATION_TOKEN_KEY` | Verification token digests and encrypted wallet replay subjects | Keep the previous key available to decrypt existing evidence during rotation |
 
 ## JWT_SECRET Rotation
 
@@ -79,6 +82,29 @@ the real value comes from the Stripe Dashboard.
 5. Verify: `GET /v1/providers/keys` returns valid keys
 
 **Rollback:** Restore original key. No data loss since keys are stored encrypted.
+
+## IDENTITY_VERIFICATION_TOKEN_KEY Rotation
+
+**Impact:** This key protects verification token digests and encrypted wallet
+replay subjects. Existing ciphertext must remain decryptable so evidence replay
+and revocation continue to work. Active challenges also accept the previous key
+during the overlap window; newly issued challenge digests use the active key.
+
+**Procedure:**
+1. Generate a new high-entropy secret (at least 32 random bytes).
+2. Set `IDENTITY_VERIFICATION_TOKEN_KEY` to the new value and
+   `IDENTITY_VERIFICATION_TOKEN_KEY_ID` to a new stable ID.
+3. Set `IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS` to the old value and
+   `IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS_ID` to the old active ID.
+4. Deploy and verify new wallet evidence is written with the new key ID and
+   existing evidence still decrypts.
+5. Keep the previous key until evidence encrypted under it has been re-encrypted
+   or expired. Then remove both previous-key variables.
+
+During rotation, both versioned and legacy unversioned wallet-subject ciphertext
+can be decrypted with the active/previous key pair. If an old wallet evidence
+row has no encrypted subject, its subject cannot be recovered by key rotation;
+reuse a cached completed replay or collect a new wallet proof.
 
 ## WATERMARK_SECRET_KEY Rotation
 

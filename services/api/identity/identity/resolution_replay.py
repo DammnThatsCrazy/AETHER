@@ -68,6 +68,35 @@ class ResolutionReplayService:
         self._metrics = metrics
         self._jobs = jobs_repo or _ReplayJobsRepo()
 
+    async def completed_replay_result(
+        self, tenant_id: str, trigger_id: str, policy_version: str = "1.0.0"
+    ) -> Optional[dict]:
+        """Return a tenant-owned completed replay without recomputing inputs.
+
+        This supports evidence written before wallet subjects were durably
+        encrypted. Such rows cannot reproduce the original evidence
+        fingerprint, but an already completed job has a safe cached outcome.
+        """
+        key = f"{tenant_id}:{trigger_id}:{policy_version}"
+        existing = await self._jobs.find_by_id(key)
+        if (
+            not existing
+            or existing.get("tenant_id") != tenant_id
+            or existing.get("status") != "completed"
+            or existing.get("trigger_id", trigger_id) != trigger_id
+            or existing.get("policy_version", policy_version) != policy_version
+        ):
+            return None
+        summary = existing.get("summary") or {}
+        return {
+            "status": "noop",
+            "idempotent": True,
+            "key": key,
+            "policy_version": policy_version,
+            "decision": summary.get("decision"),
+            "canonical_entity_id": summary.get("canonical_entity_id"),
+        }
+
     async def request_replay(
         self,
         *,

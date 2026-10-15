@@ -27,7 +27,10 @@ from identity.identity.evidence import EvidenceService  # noqa: E402
 from identity.identity.graph_writer import IdentityGraphWriter  # noqa: E402
 from identity.identity.hashing import (  # noqa: E402
     decrypt_wallet_subject_binding,
+    encrypt_wallet_subject_binding,
     hash_wallet,
+    hash_verification_token,
+    verify_token_digest,
 )
 from identity.identity.metrics import IdentityMetrics  # noqa: E402
 from identity.identity.models import (  # noqa: E402
@@ -133,8 +136,17 @@ class MemoryEvidenceService:
 
 
 class MemoryVerificationEvidenceRepository:
+    def __init__(self) -> None:
+        self.bound: list[tuple[str, str, str]] = []
+
     async def create(self, evidence):
         return evidence.to_record()
+
+    async def bind_entity(
+        self, tenant_id: str, evidence_id: str, canonical_entity_id: str
+    ):
+        self.bound.append((tenant_id, evidence_id, canonical_entity_id))
+        return {"canonical_entity_id": canonical_entity_id}
 
 
 class ReplaySpy:
@@ -436,10 +448,90 @@ async def test_wallet_routes_recheck_server_consent_and_bind_verify_path(monkeyp
     assert issued["data"]["consent"] == consent_context
     assert verified["data"]["consent"] == consent_context
     assert [call["identity_namespace"] for call in Service.calls] == [
-        "app-a",
-        "app-a",
+        "site:app-a",
+        "site:app-a",
     ]
     assert calls == [("tenant-route", "anon-1"), ("tenant-route", "anon-1")]
+
+
+@pytest.mark.asyncio
+async def test_wallet_replay_api_redacts_internal_error_details(monkeypatch):
+    class EvidenceServiceWithFailure:
+        async def retry_evidence_replay(self, tenant_id: str, evidence_id: str):
+            return {"status": "error", "error": "database schema and internal state"}
+
+    monkeypatch.setattr(
+        identity_routes,
+        "_get_evidence_service",
+        lambda: EvidenceServiceWithFailure(),
+    )
+
+    response = await identity_routes.replay_verification_evidence(
+        "evidence-1", FakeRequest()
+    )
+
+    assert response["data"]["error_code"] == "evidence_replay_failed"
+    assert "error" not in response["data"]
+    assert "database schema" not in str(response)
+
+
+@pytest.mark.asyncio
+async def test_tenant_secret_can_select_only_an_active_registered_site(monkeypatch):
+    from ingestion.sdk_distribution import sites
+
+    async def get_site(_repository, tenant_id: str, site_id: str):
+        if tenant_id == "tenant-route" and site_id == "site-a":
+            return {"tenant_id": tenant_id, "site_id": site_id, "status": "active"}
+        if tenant_id == "tenant-route" and site_id == "site-revoked":
+            return {"tenant_id": tenant_id, "site_id": site_id, "status": "revoked"}
+        return None
+
+    monkeypatch.setattr(sites.SDKSiteRepository, "get", get_site)
+    tenant_wide = SimpleNamespace(tenant_id="tenant-route", site_ids=None)
+
+    assert await identity_routes._wallet_identity_namespace(
+        tenant_wide, "site-a"
+    ) == "site:site-a"
+    assert await identity_routes._wallet_identity_namespace(
+        tenant_wide, None
+    ) == "tenant:tenant-route"
+    with pytest.raises(identity_routes.BadRequestError):
+        await identity_routes._wallet_identity_namespace(tenant_wide, "site-revoked")
+    with pytest.raises(identity_routes.BadRequestError):
+        await identity_routes._wallet_identity_namespace(tenant_wide, "other-tenant-site")
+
+
+@pytest.mark.asyncio
+async def test_evidence_binds_only_accepted_resolution_decisions():
+    repo = MemoryVerificationEvidenceRepository()
+    replay = ReplaySpy({
+        "status": "complete",
+        "decision": "candidate",
+        "canonical_entity_id": "entity-conflict",
+    })
+    service = EvidenceService(repo=repo, replay_service=replay)
+
+    candidate = await service.issue_evidence(
+        tenant_id="tenant-a",
+        identifier_type="email",
+        identifier_hash="email-hash",
+        verification_method="email_otp",
+    )
+    assert repo.bound == []
+
+    replay.result = {
+        "status": "complete",
+        "decision": "link",
+        "canonical_entity_id": "entity-linked",
+    }
+    await service.issue_evidence(
+        tenant_id="tenant-a",
+        identifier_type="email",
+        identifier_hash="email-hash-2",
+        verification_method="email_otp",
+    )
+    assert repo.bound == [("tenant-a", replay.calls[-1]["trigger_id"], "entity-linked")]
+    assert candidate.id != replay.calls[-1]["trigger_id"]
 
 
 @pytest.mark.asyncio
@@ -461,7 +553,7 @@ async def test_wallet_evidence_retry_recovers_subject_and_binds_entity_after_rel
         verification_method="wallet_signature",
         evidence_type="wallet_ownership_verified",
         subject_hint_id=subject_id,
-        identity_namespace="app-a",
+        identity_namespace="site:app-a",
         consent_snapshot={"receipt_id": "receipt-1"},
         metadata={"chain_namespace": "eip155:1"},
     )
@@ -475,9 +567,11 @@ async def test_wallet_evidence_retry_recovers_subject_and_binds_entity_after_rel
         persisted["subject_hint_ciphertext"], "tenant-other"
     ) == ""
 
-    retry_replay = ReplaySpy(
-        {"status": "complete", "canonical_entity_id": "entity-wallet-recovered"}
-    )
+    retry_replay = ReplaySpy({
+        "status": "complete",
+        "decision": "create",
+        "canonical_entity_id": "entity-wallet-recovered",
+    })
     # A new service and repository instance model a process restart.
     restarted_service = EvidenceService(
         repo=VerificationEvidenceRepository(), replay_service=retry_replay
@@ -486,12 +580,122 @@ async def test_wallet_evidence_retry_recovers_subject_and_binds_entity_after_rel
 
     assert result["status"] == "complete"
     assert retry_replay.calls[0]["subject_hint_id"] == subject_id
-    assert retry_replay.calls[0]["identity_namespace"] == "app-a"
+    assert retry_replay.calls[0]["identity_namespace"] == "site:app-a"
     assert retry_replay.calls[0]["chain_namespace"] == "eip155:1"
     rebound = await VerificationEvidenceRepository().get_for_tenant(
         tenant_id, evidence.id
     )
     assert rebound["canonical_entity_id"] == "entity-wallet-recovered"
+
+
+@pytest.mark.asyncio
+async def test_legacy_wallet_evidence_uses_cached_success_or_requires_reverification():
+    reset_in_memory_stores()
+    tenant_id = "tenant-legacy-wallet"
+    evidence_id = "legacy-wallet-evidence"
+    evidence_repo = VerificationEvidenceRepository()
+    await evidence_repo.insert(evidence_id, {
+        "id": evidence_id,
+        "tenant_id": tenant_id,
+        "identifier_type": "wallet",
+        "identifier_hash": "legacy-wallet-hash",
+        "status": "active",
+        "policy_version": "1.0.0",
+        "metadata": {"chain_namespace": "eip155:1"},
+        # Older rows have no subject_hint_ciphertext or identity_namespace.
+    })
+    replay = ResolutionReplayService(resolver=object(), repo=object())
+    await replay._jobs.insert(
+        f"{tenant_id}:{evidence_id}:1.0.0",
+        {
+            "tenant_id": tenant_id,
+            "trigger_id": evidence_id,
+            "policy_version": "1.0.0",
+            "status": "completed",
+            "summary": {
+                "decision": "link",
+                "canonical_entity_id": "entity-legacy",
+            },
+            # Legacy successful jobs may not have a matching current fingerprint.
+        },
+    )
+    service = EvidenceService(repo=evidence_repo, replay_service=replay)
+
+    cached = await service.retry_evidence_replay(tenant_id, evidence_id)
+    assert cached["status"] == "noop"
+    assert cached["decision"] == "link"
+    row = await evidence_repo.get_for_tenant(tenant_id, evidence_id)
+    assert row["canonical_entity_id"] == "entity-legacy"
+
+    failed_id = "legacy-wallet-failed"
+    await evidence_repo.insert(failed_id, {
+        "id": failed_id,
+        "tenant_id": tenant_id,
+        "identifier_type": "wallet",
+        "identifier_hash": "legacy-wallet-hash-2",
+        "status": "active",
+        "policy_version": "1.0.0",
+        "metadata": {"chain_namespace": "eip155:1"},
+    })
+    retry = await service.retry_evidence_replay(tenant_id, failed_id)
+    assert retry == {"status": "reverification_required"}
+
+
+def test_wallet_subject_binding_decrypts_across_key_rotation(monkeypatch):
+    monkeypatch.setenv("IDENTITY_VERIFICATION_TOKEN_KEY", "wallet-old-key-material")
+    monkeypatch.setenv("IDENTITY_VERIFICATION_TOKEN_KEY_ID", "wallet-2026-01")
+    old_ciphertext = encrypt_wallet_subject_binding("anon-rotate", "tenant-rotate")
+    old_token_digest = hash_verification_token("valid-token", "purpose:tenant-rotate")
+    # Existing persisted records use the original unversioned payload format.
+    legacy_ciphertext = old_ciphertext.split(".", 2)[2]
+
+    monkeypatch.setenv("IDENTITY_VERIFICATION_TOKEN_KEY", "wallet-new-key-material")
+    monkeypatch.setenv("IDENTITY_VERIFICATION_TOKEN_KEY_ID", "wallet-2026-02")
+    monkeypatch.setenv(
+        "IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS", "wallet-old-key-material"
+    )
+    monkeypatch.setenv("IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS_ID", "wallet-2026-01")
+
+    assert decrypt_wallet_subject_binding(
+        old_ciphertext, "tenant-rotate"
+    ) == "anon-rotate"
+    assert decrypt_wallet_subject_binding(
+        legacy_ciphertext, "tenant-rotate"
+    ) == "anon-rotate"
+    assert verify_token_digest(
+        "valid-token", old_token_digest, "purpose:tenant-rotate"
+    )
+
+
+@pytest.mark.asyncio
+async def test_postgres_wallet_consume_casts_jsonb_timestamp_parameter(monkeypatch):
+    class FakePool:
+        query = ""
+        args: tuple = ()
+
+        async def fetchrow(self, query: str, *args):
+            self.query = query
+            self.args = args
+            return {"data": {"state": "consumed", "attempt_count": 1}}
+
+    pool = FakePool()
+    repository = VerificationChallengeRepository()
+
+    async def get_pool():
+        return pool
+
+    async def ensure_table():
+        return None
+
+    monkeypatch.setattr(repository, "_ensure_pool", get_pool)
+    monkeypatch.setattr(repository, "_ensure_table", ensure_table)
+
+    result = await repository.consume_wallet_atomic("tenant-sql", "challenge-sql")
+
+    assert "'consumed_at', $1::text" in pool.query
+    assert len(pool.args) == 3
+    assert pool.args[1:] == ("challenge-sql", "tenant-sql")
+    assert result == {"state": "consumed", "attempt_count": 1}
 
 
 @pytest.mark.asyncio

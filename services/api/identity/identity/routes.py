@@ -2166,16 +2166,28 @@ async def _require_identity_link_consent(tenant_id: str, anonymous_id: str) -> d
     return context
 
 
-def _wallet_identity_namespace(tenant: Any, requested_app: Optional[str]) -> str:
+async def _wallet_identity_namespace(
+    tenant: Any, requested_app: Optional[str]
+) -> str:
     """Resolve the SDK identity namespace from authenticated app bindings."""
     tenant_id = str(getattr(tenant, "tenant_id", "") or "").strip()
     site_ids = getattr(tenant, "site_ids", None)
     supplied = str(requested_app or "").strip()
     if site_ids is None:
-        # Tenant-wide API keys use the same default namespace as SDK batch
-        # ingestion. A caller cannot select a narrower app scope on this key.
+        # Tenant-wide secret keys may select a registered app, but the app ID
+        # is only a selector: tenant ownership and active lifecycle are checked
+        # against the server-owned site registry before it becomes identity
+        # scope. A missing selector retains the SDK's tenant-wide namespace.
         if supplied:
-            raise BadRequestError("Wallet proof app scope is not authorized")
+            from ingestion.sdk_distribution.sites import (
+                STATUS_ACTIVE,
+                SDKSiteRepository,
+            )
+
+            site = await SDKSiteRepository().get(tenant_id, supplied)
+            if not site or site.get("status") != STATUS_ACTIVE:
+                raise BadRequestError("Wallet proof app scope is not authorized")
+            return f"site:{supplied}"
         if not tenant_id:
             raise BadRequestError("Wallet proof app scope is unavailable")
         return f"tenant:{tenant_id}"
@@ -2184,9 +2196,9 @@ def _wallet_identity_namespace(tenant: Any, requested_app: Optional[str]) -> str
     if supplied:
         if supplied not in allowed:
             raise BadRequestError("Wallet proof app scope is not authorized")
-        return supplied
+        return f"site:{supplied}"
     if len(allowed) == 1:
-        return next(iter(allowed))
+        return f"site:{next(iter(allowed))}"
     raise BadRequestError("Wallet proof app scope is required")
 
 
@@ -2306,7 +2318,7 @@ async def issue_wallet_verification_challenge(
     consent_context = await _require_identity_link_consent(
         tenant.tenant_id, body.anonymous_id
     )
-    identity_namespace = _wallet_identity_namespace(
+    identity_namespace = await _wallet_identity_namespace(
         tenant, body.tenant_app_key
     )
     try:
@@ -2339,7 +2351,7 @@ async def verify_wallet_verification_challenge(
     consent_context = await _require_identity_link_consent(
         tenant.tenant_id, body.anonymous_id
     )
-    identity_namespace = _wallet_identity_namespace(
+    identity_namespace = await _wallet_identity_namespace(
         tenant, body.tenant_app_key
     )
     if body.challenge_id != challenge_id:
@@ -2410,12 +2422,23 @@ async def replay_verification_evidence(
     )
     if result.get("status") == "not_found":
         raise NotFoundError("VerificationEvidence")
+    status = result.get("status")
+    decision = str(result.get("decision") or "").lower()
+    accepted_decision = decision in {"create", "link", "merge"}
+    if status == "reverification_required":
+        error_code = "wallet_evidence_reverification_required"
+    elif status == "error":
+        error_code = "evidence_replay_failed"
+    else:
+        error_code = None
     return APIResponse(data={
         "evidence_id": evidence_id,
-        "status": result.get("status"),
-        "decision": result.get("decision"),
-        "canonical_entity_id": result.get("canonical_entity_id"),
-        "error": result.get("error"),
+        "status": status,
+        "decision": decision or None,
+        "canonical_entity_id": (
+            result.get("canonical_entity_id") if accepted_decision else None
+        ),
+        "error_code": error_code,
     }).to_dict()
 
 
