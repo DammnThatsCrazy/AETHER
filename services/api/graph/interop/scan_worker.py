@@ -58,7 +58,9 @@ from graph.interop.graph_mutations import (
 from graph.interop.providers import INTEROP_PROVIDERS, get_provider
 from graph.interop.reconcile import InteropReconciler
 from graph.interop.security import SecurityPolicyService
+from graph.assets.graph_projector import PLATFORM_TENANT
 from shared.events.events import Event, EventProducer, Topic
+from shared.graph.graph import Edge, EdgeType, tenant_of
 from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.interop.scan_worker")
@@ -318,7 +320,30 @@ class InteropGraphProjector:
             mutations.extend(vertices)
             mutations.extend(edges)
 
+        mutations = await _registry_chain_links_only(mutations)
         return await persist_mutations(mutations, tenant_id=tenant_id, trace_id=trace_id)
+
+
+async def _registry_chain_links_only(mutations: list[Any]) -> list[Any]:
+    """Drop ``CONNECTS_CHAIN`` edges whose chain the asset registry has not seeded.
+
+    ``chain:`` vertices are platform-owned registry vertices that interop never
+    writes, so an edge to a missing one would dangle (and fail on Neptune).
+    """
+    from dependencies.providers import get_graph
+
+    graph = get_graph()
+    kept: list[Any] = []
+    for mutation in mutations:
+        if isinstance(mutation, Edge) and mutation.edge_type == EdgeType.CONNECTS_CHAIN:
+            chain = await graph.get_vertex(mutation.to_vertex_id)
+            if chain is None or tenant_of(chain.properties) != PLATFORM_TENANT:
+                logger.info("interop chain link skipped: %s not in the asset registry",
+                            mutation.to_vertex_id)
+                metrics.increment("interop_chain_link_skipped")
+                continue
+        kept.append(mutation)
+    return kept
 
 
 class ScanWorker:
