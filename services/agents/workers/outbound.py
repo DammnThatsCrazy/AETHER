@@ -4,9 +4,10 @@ Crawl and scan targets come from task payloads, so they are untrusted. A
 fetch resolves the host, requires every resolved address to be globally
 routable (``ipaddress`` ``is_global``, not multicast) after unwrapping
 IPv4-mapped IPv6, NAT64 (``64:ff9b::/96``), 6to4 and Teredo, connects to
-the validated address with the original ``Host`` header and TLS SNI, and
-follows at most three redirects by hand, re-validating every hop and dropping
-credentials when the host changes.
+a validated address with the original ``Host`` header and TLS SNI (moving on
+to the next validated address only when a connection cannot be established),
+and follows at most three redirects by hand, re-validating every hop and
+dropping credentials when the host changes or ``https`` downgrades to ``http``.
 
 This mirrors the backend's ``shared.security.ssrf`` check; the Agent Layer is
 a separate deployable and cannot import backend modules.
@@ -77,6 +78,26 @@ def resolve_public_addresses(url: str, *, allow_local: bool = False) -> list[str
     return addresses
 
 
+def _send_pinned(client: httpx.Client, url: str, headers: dict[str, str], allow_local: bool) -> httpx.Response:
+    """GET each validated address in turn; only a failed connection moves on to the next."""
+    logical = httpx.URL(url)
+    requests = [
+        client.build_request(
+            "GET",
+            logical.copy_with(host=address.split("%")[0]),
+            headers={**headers, "Host": logical.netloc.decode("ascii")},
+            extensions={"sni_hostname": logical.host},
+        )
+        for address in resolve_public_addresses(url, allow_local=allow_local)
+    ]
+    for request in requests[:-1]:
+        try:
+            return client.send(request, follow_redirects=False)
+        except (httpx.ConnectError, httpx.ConnectTimeout):
+            continue
+    return client.send(requests[-1], follow_redirects=False)
+
+
 def fetch_public(
     client: httpx.Client,
     url: str,
@@ -93,20 +114,13 @@ def fetch_public(
     """
     headers = {k: v for k, v in (headers or {}).items() if k.lower() != "host"}
     for _ in range(max_redirects + 1):
-        address = resolve_public_addresses(url, allow_local=allow_local)[0].split("%")[0]
-        logical = httpx.URL(url)
-        request = client.build_request(
-            "GET",
-            logical.copy_with(host=address),
-            headers={**headers, "Host": logical.netloc.decode("ascii")},
-            extensions={"sni_hostname": logical.host},
-        )
-        response = client.send(request, follow_redirects=False)
+        response = _send_pinned(client, url, headers, allow_local)
         location = response.headers.get("location")
         if response.status_code not in _REDIRECT_STATUSES or not location:
             return response, url
         next_url = urllib.parse.urljoin(url, location)
-        if httpx.URL(next_url).netloc != logical.netloc:
+        here, there = httpx.URL(url), httpx.URL(next_url)
+        if there.netloc != here.netloc or (here.scheme == "https" and there.scheme != "https"):
             headers = {k: v for k, v in headers.items() if k.lower() not in _CREDENTIAL_HEADERS}
         url = next_url
     raise UnsafeDestinationError(f"Too many redirects (more than {max_redirects}) ending at host {httpx.URL(url).host!r}")
