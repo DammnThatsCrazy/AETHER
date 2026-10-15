@@ -76,7 +76,7 @@ source_hashes:
   "infra/aws/config/": "sha256:cfe8d46db890f7855fbc7f28ece5c3a9ce4a891e065478060a254c1f36bf0bf0"
   "infra/aws/lead-intake/template.yaml": "sha256:f076101dd476c103f32b717444598ea2cbea181b292c61230ca9b02de4feb9a1"
   "infra/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "infra/aws/terraform/": "sha256:16668cd04df72368a1a13306722cec960d82adc09d0d8f552d9c619c8d3cbd74"
+  "infra/aws/terraform/": "sha256:de7f171ef3ba8f41a7eae4f36ace34360d469dd551e329951da1ac3afa7ef69b"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:b8ce2e914ba4878098b41c3bdfcf1ec5f0163876578610af5a5362004bc7bdfa"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
@@ -87,7 +87,7 @@ source_hashes:
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:4108624b378be9fe306c7a24608fd6f747a7598cd175b120a524a31cd67f6e4c"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
-  "scripts/release/check_staging_task_definition_contract.py": "sha256:c50654e19fa30de91b78dc954f967301a28aa45c8cef2bbf449eeca5f96f11e9"
+  "scripts/release/check_staging_task_definition_contract.py": "sha256:9fdbde3d52bffc8ba703483eb86fe0c17d8353f62140f760eaf20439a36ade88"
   "scripts/release/check_terraform_state_access_policy.py": "sha256:1d2f02fa7bf000a1db46fbab1071f71606ab8f3d290277f8e1d21ead8bed9aa5"
   "scripts/release/reconcile_staging_plan_role.py": "sha256:57bba3c35673af5cac235028f22cb716829afab7a8c2d34b3f7281ba5d2fd8ae"
   "scripts/release/release_changed_amplify_apps.py": "sha256:e74d2aa68e37867d3b25e3305345d7053b7a0e9f1231e1420d1f830042c12ca7"
@@ -1253,6 +1253,12 @@ accounts when their names would otherwise collide.
    WebAuthn. Populate those values through the secure bootstrap, then let the
    reviewed state-reconciliation workflow import only their metadata. Do not
    put any secret value in Terraform variables, state, plans, or logs.
+   The same bootstrap creates `aether/identity-verification-token-key` and
+   `aether/identity-verification-token-key-previous`, initially with the same
+   generated key. ECS mounts them as `IDENTITY_VERIFICATION_TOKEN_KEY` and
+   `IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS`; during rotation, keep the
+   previous value until stored verification evidence no longer needs it (see
+   [Secret Rotation](SECRET-ROTATION.md)).
 3. **Push images.** Task definitions pin an immutable digest, so a new digest is
    a new task definition and deploys itself. The ML image is only needed on
    profiles that run the dedicated ML service.

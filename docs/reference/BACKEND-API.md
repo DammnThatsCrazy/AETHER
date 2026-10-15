@@ -31,7 +31,7 @@ source_hashes:
   "services/api/connectors/": "sha256:be5c00bffaa216ecd12b669cb41ee011c177800fbc7d70c5e9bd4c1b4c3f6e76"
   "services/api/governance/": "sha256:f0fb64d3cc3dccc64070ee90276d01de955a457ea04fd3cc8d538a19c64c2fdc"
   "services/api/graph/": "sha256:bda39e64fa30ae40f4acbf0fa85092aa50d7cb601037bdcd6870b241ea09fe13"
-  "services/api/identity/": "sha256:5dc3ba5b90f5889a2ce60f787ea62b3c108da85ea757655594e9785d3c8900c0"
+  "services/api/identity/": "sha256:2cb9c8748a5d296ffe5fee6b75e9f7a8b20cbd1bfc49fbbaf1065bf66302b870"
   "services/api/ingestion/": "sha256:1e13d282a2ef03b1673b631a9e564e27ed09690a695531674ed26967559eda0a"
   "services/api/intelligence/": "sha256:9b583b5a699e01018b213383848636ee011384fa9f6115d1cda00977dfdb3e58"
   "services/api/journeys/": "sha256:8db7d48b7f8247ab5adfde2fef24d3d7d4d6b2b4b7b721fd1129e836c9ad5301"
@@ -1685,8 +1685,8 @@ Core identity resolution and entity management endpoints.
 | POST | `/v1/identity/verification/wallet/challenges` | Issue a wallet proof challenge bound to current consent and tenant/site namespace (`write`) |
 | POST | `/v1/identity/verification/wallet/challenges/{challenge_id}/verify` | Verify and atomically consume the wallet proof challenge (`write`) |
 | GET | `/v1/identity/entities/{canonical_entity_id}/evidence` | List verification evidence bound to an entity; response is redacted (`read`) |
-| POST | `/v1/identity/evidence/{evidence_id}/replay` | Retry resolution from durable verification evidence; legacy wallet records may require a fresh proof (`write`) |
-| POST | `/v1/identity/evidence/{evidence_id}/revoke` | Revoke verification evidence and replay resolution when the proof subject is recoverable (`write`) |
+| POST | `/v1/identity/evidence/{evidence_id}/replay` | Retry resolution from active, unexpired durable evidence; internal resolver errors remain retryable and legacy wallet records may require a fresh proof (`write`) |
+| POST | `/v1/identity/evidence/{evidence_id}/revoke` | Revoke verification evidence and remove its proof-derived verified alias when no unexpired active proof remains (`write`) |
 | GET | `/v1/identity/conflicts` | List entities with unresolved identity conflicts (`read`) |
 | POST | `/v1/identity/merge` | Merge two entities into a single canonical entity (`admin`) |
 | POST | `/v1/identity/split` | Split a merged entity back into its source components (`admin`) |
@@ -1738,13 +1738,18 @@ accepted `create`, `link`, or `merge` decisions. Public errors use stable codes:
 `in_progress` without starting a second resolver run. The endpoint is
 unavailable while identity resolution is disabled, and expired or malformed
 evidence is marked expired without replay. Detailed resolver and repository
-exceptions remain in server logs. For legacy
+exceptions remain in server logs. Resolver `internal_error` outcomes mark the
+replay job failed so a later request can retry; previously completed jobs with
+that recorded reason can also be reclaimed. For legacy
 wallet evidence without an encrypted subject, a previously completed replay
 returns its cached outcome; if no completed result exists, the endpoint returns
-`reverification_required` and a fresh wallet proof is required. Revoking a
-legacy wallet record without a recoverable subject succeeds, but resolution
-replay is skipped and logged because the old subject cannot be reconstructed.
-`POST /v1/identity/evidence/{evidence_id}/revoke` revokes evidence.
+`reverification_required` and a fresh wallet proof is required. Revocation
+never sends revoked proof through the affirmative replay path. When no
+unexpired active proof remains for the identifier, its verified alias is
+revoked; another active proof preserves the alias. Revocation does not
+automatically reverse an earlier entity merge, which requires the explicit
+identity split workflow. If alias cleanup fails, the revoke request reports
+failure and can be retried after repository access recovers.
 
 ---
 

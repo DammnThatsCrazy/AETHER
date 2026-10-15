@@ -64,7 +64,7 @@ source_hashes:
   "config/staging_secret_preflight_iam_policy.yaml": "sha256:06ad4ef9c7777eff1190d01b02536542b902692051532f640635e128d5c1403d"
   "config/staging_secret_preflight_trust_policy.json": "sha256:38c81fbb5674275998114973bd151fccb23e510d999560e14f6c3dbf591e2fc5"
   "config/terraform_plan_state_access_policy.yaml": "sha256:3ef6bc24c567f84eb9a44c8a180d0f6f14e6c4a9fabb76138cb3543e4cf150e0"
-  "infra/aws/terraform/modules/ecs/main.tf": "sha256:33e716f33e0529919d24377a50ddb6a3d54f4ce51a403ffbe65aa9ebcd0aaa29"
+  "infra/aws/terraform/modules/ecs/main.tf": "sha256:b4f885f14cd5a6fcda8d3b0ccc4b150dfcb097b0be9de28a78ddb5eb520e55f5"
   "infra/aws/terraform/profiles.tf": "sha256:da63e1f50e4030924713679445e3c365883a23821ac78df83bebe14436c67f60"
   "infra/aws/terraform/profiles/staging.tfvars": "sha256:efa09f987f2178d6a4e336f99954258a63df80756d24970fa5597ac6b35a786c"
   "infra/aws/terraform/variables.tf": "sha256:46f64fe05369a15910f3702ed7161da5be3c539f52908643570b60b18fecb8e1"
@@ -77,7 +77,7 @@ source_hashes:
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:4108624b378be9fe306c7a24608fd6f747a7598cd175b120a524a31cd67f6e4c"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
-  "scripts/release/check_staging_task_definition_contract.py": "sha256:c50654e19fa30de91b78dc954f967301a28aa45c8cef2bbf449eeca5f96f11e9"
+  "scripts/release/check_staging_task_definition_contract.py": "sha256:9fdbde3d52bffc8ba703483eb86fe0c17d8353f62140f760eaf20439a36ade88"
   "scripts/release/ensure_staging_autoscaling_target_tags.py": "sha256:2f0733c66a6df555537336d88edf30dab740b1d8c30bbaf8140bab9463cb6b00"
   "scripts/release/reconcile_staging_plan_role.py": "sha256:57bba3c35673af5cac235028f22cb716829afab7a8c2d34b3f7281ba5d2fd8ae"
   "services/api/alembic/versions/20260702_delivery_infrastructure.py": "sha256:df8a6bf971bd9db9a907414a8b7e8f0695b6a7c01aa55719e40f869509510916"
@@ -165,7 +165,9 @@ GitHub environment, checks live ECR image-pull grants, and verifies the current
 ECS task-definition/secret-mount contract. Before wake planning it also verifies
 that both live services select the staging DynamoDB cache table, that the table
 is active, and that every live task role is allowed all required cache
-operations on that table. Pilot also proves that the configured GitHub
+operations on that table. The task-definition contract requires the active
+identity-verification key and checks the previous-key companion mount when it
+is configured. Pilot also proves that the configured GitHub
 credential can safely write and then remove a disposable repository secret—the
 same persistence path used only if the post-readiness admin bootstrap is needed.
 The preflight's `iam:SimulatePrincipalPolicy` call runs with the deploy-role

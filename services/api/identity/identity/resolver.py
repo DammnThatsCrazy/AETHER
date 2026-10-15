@@ -95,6 +95,11 @@ def _event_entity_ids(
 
 logger = get_logger("aether.identity.resolver")
 
+_VERIFIED_OBSERVED_ALIAS_TYPES = {
+    IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED: IdentitySignalType.EMAIL_HASH,
+    IdentitySignalType.WALLET_SIGNATURE_VERIFIED: IdentitySignalType.WALLET_ADDRESS,
+}
+
 _OPERATOR_MERGE_LOCKS: dict[str, "asyncio.Lock"] = {}
 _OPERATOR_MERGE_LOCKS_GUARD: Optional["asyncio.Lock"] = None
 _OPERATOR_MERGE_LOCKS_LOOP: Optional["asyncio.AbstractEventLoop"] = None
@@ -545,7 +550,15 @@ class IdentityResolutionService:
                 # A suppression or revoked observed alias vetoes proof-based
                 # wallet linking for the same chain-scoped digest.
                 lookup_types.append(IdentitySignalType.WALLET_ADDRESS)
+            observed_alias_type = _VERIFIED_OBSERVED_ALIAS_TYPES.get(sig_type)
             for lookup_type in lookup_types:
+                # Revoking a proof-derived verified alias removes the old
+                # assertion; it must not permanently veto a future fresh proof
+                # for that identifier. A revoked observed alias still vetoes
+                # the verified signal, as do revoked aliases on ordinary
+                # observed-signal lookups below.
+                if observed_alias_type is not None and lookup_type == sig_type:
+                    continue
                 historical_aliases = await self._repo.find_aliases_by_signal(
                     tenant_id, lookup_type, sig_hash, include_revoked=True
                 )

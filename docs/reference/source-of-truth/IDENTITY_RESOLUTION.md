@@ -10,19 +10,19 @@ source_files: [services/api/identity/identity/models.py, services/api/identity/i
 canonical_owner: identity@aether
 last_synced_commit: 4764707
 source_hashes:
-  "services/api/identity/identity/evidence.py": "sha256:9fce2dc54d6072c48d6f0dc70e75a97485755c1c684376bbe0173d93a8121559"
+  "services/api/identity/identity/evidence.py": "sha256:6eda2d11a057700067396c1e89f6f8c2a5fe7d34985bb358ab4ae03ca5a9f670"
   "services/api/identity/identity/hashing.py": "sha256:87d8eb92c18c811561e2e6202c34b0674a68d1db6cbee3df1bc04bb8adcd43c3"
   "services/api/identity/identity/ingestion_worker.py": "sha256:a861b2e6094cd0ddb271f058e3f6bb63a132afc9e72c7c0d37ff88fc6139664d"
   "services/api/identity/identity/models.py": "sha256:8d348fd95b8292492d6bde461e6215da52cd802252bfe7e473c839ec529783ee"
-  "services/api/identity/identity/repository.py": "sha256:910271250d75a2a602256915c625e91b19aa23e11b57d72cff5b3e56fdaaae88"
-  "services/api/identity/identity/resolution_replay.py": "sha256:416f87ef76c78c705741e39777290f80c44c7fb4a7ad51573078b3bf884f0b8b"
-  "services/api/identity/identity/resolver.py": "sha256:94f75e17e50fddfa2892e5737473f0a014fb4d868eb2e7441438389650656197"
+  "services/api/identity/identity/repository.py": "sha256:2910514ae55a950f4688fdfb370279780a7dcd6a459ed6601e63ff7e1a3164c0"
+  "services/api/identity/identity/resolution_replay.py": "sha256:4d156fdef25942e5e51973ea5cc7f32440cf12534f993eebbe36be80f377070e"
+  "services/api/identity/identity/resolver.py": "sha256:de0bda7de3013ddc65cb3451ef8dab8af231ba1a3970421171bcf24640c68d83"
   "services/api/identity/identity/routes.py": "sha256:6efdac3329d61025d290a590bb53107fa702f8fd2f794189e131d7dec96cdcb6"
   "services/api/identity/identity/schemas.py": "sha256:824ccc8a4798572e4bdc280dcc0b11cce3a151836e6252d03c3a9a86481e08c0"
   "services/api/identity/identity/signals.py": "sha256:58912180329dd296317cda10c493935b0a988a5db4137670b9fd0d785f5bfa52"
   "services/api/identity/identity/source_identity_registry.py": "sha256:c784a3d512611554e7f8c1fbf784c8ec953adbdd420d0ff24af22139d6ace03c"
   "services/api/identity/identity/verification.py": "sha256:59fa97e3e3d47b89b0ab4ba2416414fc1e41fc293f4d12c5bd02edc91067c278"
-  "services/api/identity/identity/verification_repository.py": "sha256:1a39acfcbe04ed2ec451e7cdbd717c36c0b03d39b9e91ef68b9a47bfdca1bc18"
+  "services/api/identity/identity/verification_repository.py": "sha256:b9ecd39d1502a0ba19954518a432a64997cc0c74ec4256f51816b38d88bb08eb"
   "services/api/identity/profile/aggregator.py": "sha256:228b48e5b06d6f4355c1d5fda2363ef5e3265570e750863bd7fd98941a41109f"
   "services/api/identity/profile/composer.py": "sha256:aae09f67a164f0e2b940676e52841ff325f36650ac4b1c022cc2a60a31505c20"
   "services/api/ingestion/ingestion/batch.py": "sha256:fbb659145f6cf52cff5af991099fb2cd78bd306729b6144a3ddb93bb8dbdda45"
@@ -412,8 +412,8 @@ All routes are under prefix `/v1/identity`.
 | `POST` | `/v1/identity/verification/wallet/challenges` | write | Issue a chain-scoped wallet ownership challenge bound to current consent and the authenticated tenant/site namespace. |
 | `POST` | `/v1/identity/verification/wallet/challenges/{challenge_id}/verify` | write | Verify and atomically consume a wallet challenge; issue encrypted, durable evidence and trigger scoped replay. |
 | `GET` | `/v1/identity/entities/{canonical_entity_id}/evidence` | read | List verification evidence for an entity (operator-facing, redacted). |
-| `POST` | `/v1/identity/evidence/{evidence_id}/replay` | write | Retry resolution from stored evidence; returns a cached completed result or requires reverification for unrecoverable legacy wallet evidence. |
-| `POST` | `/v1/identity/evidence/{evidence_id}/revoke` | write | Revoke verification evidence; triggers resolution replay when the wallet subject can be recovered. |
+| `POST` | `/v1/identity/evidence/{evidence_id}/replay` | write | Retry resolution from active, unexpired evidence; resolver internal errors remain retryable, while legacy wallet evidence returns a cached completed result or requires reverification. |
+| `POST` | `/v1/identity/evidence/{evidence_id}/revoke` | write | Revoke verification evidence and remove its proof-derived verified alias when no unexpired active proof remains. Revoked proof is never replayed as affirmative verification; cleanup failures return an error for retry, and prior entity merges require the explicit identity split workflow to reverse. |
 
 ### SIWX session binding
 

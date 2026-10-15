@@ -1,10 +1,10 @@
 """Verification evidence service (identity assurance layer, prompt §5x/§56).
 
 Wraps :class:`VerificationEvidenceRepository` to issue and revoke durable,
-tenant-scoped proof that an identifier's ownership was verified. Emitting or
-revoking evidence *best-effort* triggers a resolution replay so the resolver
-(Agent C) re-scores affected identities — but a replay failure must NEVER break
-evidence issuance, so the trigger is wrapped in a broad try/except.
+tenant-scoped proof that an identifier's ownership was verified. Issuing
+evidence best-effort triggers a resolution replay. Revocation removes the
+verified alias when no unexpired active proof remains; it never replays the
+revoked proof as an affirmative signal.
 
 This module is additive and mirrors ``decision_evidence.py``'s style. It never
 persists a raw OTP/token and never logs PII or secrets.
@@ -152,35 +152,92 @@ class EvidenceService:
     async def revoke_evidence(
         self, tenant_id: str, evidence_id: str, reason: str = ""
     ) -> Optional[dict]:
-        """Revoke an evidence row and best-effort trigger a replay.
+        """Revoke evidence and remove its verified alias when no active proof remains.
 
         Returns the updated row, or ``None`` if it did not exist for the tenant.
+        Raises when alias cleanup fails so callers do not report revocation as
+        complete while the proof-derived alias is still active.
         """
         row = await self._repo.revoke(tenant_id, evidence_id, reason=reason)
         if row is None:
             return None
         self._metrics.record_evidence_revoked(row.get("evidence_type", ""))
-        subject_hint_id = self._recover_subject_hint(row, tenant_id)
-        if row.get("identifier_type") == "wallet" and not subject_hint_id:
-            logger.warning(
-                "wallet evidence revocation replay unavailable without recoverable subject",
-                extra={"tenant_id": tenant_id, "evidence_id": evidence_id},
-            )
-            return row
-        replay_result = await self._trigger_replay(
-            tenant_id=tenant_id,
-            identifier_type=row.get("identifier_type", ""),
-            identifier_hash=row.get("identifier_hash", ""),
-            trigger_type="verification_evidence_revoked",
-            trigger_id=evidence_id,
-            policy_version=row.get("policy_version", "1.0.0"),
-            consent_snapshot=row.get("consent_snapshot"),
-            chain_namespace=(row.get("metadata") or {}).get("chain_namespace"),
-            subject_hint_id=subject_hint_id,
-            identity_namespace=row.get("identity_namespace"),
-        )
-        await self._bind_entity_if_resolved(evidence_id, tenant_id, replay_result)
+        await self._remove_verified_alias_if_unreferenced(tenant_id, row)
         return row
+
+    async def _remove_verified_alias_if_unreferenced(
+        self, tenant_id: str, revoked_evidence: dict
+    ) -> None:
+        """Revoke proof-derived aliases only after the last live proof is gone.
+
+        This is a removal path: revoked evidence is never sent through the
+        affirmative verified-signal replay service. Existing SAME_AS topology
+        is not reversed here; graph splits remain an explicit repair action.
+        """
+        identifier_type = str(revoked_evidence.get("identifier_type") or "").lower()
+        alias_type = {
+            "email": IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED,
+            "email_hash": IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED,
+            "wallet": IdentitySignalType.WALLET_SIGNATURE_VERIFIED,
+        }.get(identifier_type)
+        identifier_hash = str(revoked_evidence.get("identifier_hash") or "")
+        if alias_type is None or not identifier_hash:
+            return
+
+        try:
+            equivalent_types = (
+                ("email", "email_hash")
+                if identifier_type in {"email", "email_hash"}
+                else (identifier_type,)
+            )
+            has_live_proof = False
+            for equivalent_type in equivalent_types:
+                offset = 0
+                while True:
+                    remaining = await self._repo.get_active_for_identifier(
+                        tenant_id,
+                        equivalent_type,
+                        identifier_hash,
+                        limit=100,
+                        offset=offset,
+                    )
+                    for evidence in remaining:
+                        expires_at = evidence.get("expires_at")
+                        if not expires_at:
+                            has_live_proof = True
+                            break
+                        try:
+                            if utc_now() < parse_iso(str(expires_at)):
+                                has_live_proof = True
+                                break
+                        except Exception:  # noqa: BLE001 - malformed expiry fails closed
+                            continue
+                    if has_live_proof or len(remaining) < 100:
+                        break
+                    offset += 100
+                if has_live_proof:
+                    break
+            if has_live_proof:
+                return
+
+            from .repository import IdentityResolutionRepository
+
+            resolution_repo = IdentityResolutionRepository()
+            while aliases := await resolution_repo.find_aliases_by_signal(
+                tenant_id, alias_type, identifier_hash, limit=50
+            ):
+                for alias in aliases:
+                    await resolution_repo.revoke_alias(alias["id"])
+        except Exception as exc:  # noqa: BLE001 - evidence revocation is durable
+            logger.warning(
+                "verification evidence alias removal failed",
+                extra={
+                    "tenant_id": tenant_id,
+                    "evidence_id": revoked_evidence.get("id"),
+                    "error_type": type(exc).__name__,
+                },
+            )
+            raise RuntimeError("verification evidence alias removal failed") from exc
 
     async def retry_evidence_replay(
         self, tenant_id: str, evidence_id: str

@@ -59,9 +59,12 @@ class _ReplayJobsRepo(_ScopedRepo):
         """Atomically create a replay claim or reclaim a failed job.
 
         A competing request can only observe the existing row; it cannot
-        replace an ``in_progress`` or ``completed`` job. PostgreSQL enforces
-        that transition in the conflicting INSERT itself, so separate API
-        processes cannot both enter the resolver for the same evidence.
+        replace an ``in_progress`` or successful ``completed`` job. Failed
+        jobs, plus legacy completed jobs whose resolver summary records an
+        internal error, may be atomically reclaimed for retry. PostgreSQL
+        enforces that transition in the conflicting INSERT itself, so
+        separate API processes cannot both enter the resolver for the same
+        evidence.
         """
         now = utc_now().isoformat()
         claim = {
@@ -81,7 +84,12 @@ class _ReplayJobsRepo(_ScopedRepo):
                     and str(existing.get("tenant_id") or "") != tenant_id
                 ):
                     return False, None
-                if existing.get("status") != "failed":
+                retryable_internal_error = (
+                    existing.get("status") == "completed"
+                    and "internal_error"
+                    in (existing.get("summary") or {}).get("reason_codes", [])
+                )
+                if existing.get("status") != "failed" and not retryable_internal_error:
                     return False, existing
                 claim["created_at"] = existing.get("created_at", now)
             self._store[key] = claim
@@ -95,7 +103,16 @@ class _ReplayJobsRepo(_ScopedRepo):
                 ON CONFLICT (id) DO UPDATE
                     SET data = EXCLUDED.data, updated_at = NOW()
                     WHERE COALESCE({self.table_name}.tenant_id, '') = EXCLUDED.tenant_id
-                      AND {self.table_name}.data->>'status' = 'failed'
+                      AND (
+                        {self.table_name}.data->>'status' = 'failed'
+                        OR (
+                          {self.table_name}.data->>'status' = 'completed'
+                          AND COALESCE(
+                            {self.table_name}.data->'summary'->'reason_codes',
+                            '[]'::jsonb
+                          ) ? 'internal_error'
+                        )
+                      )
                 RETURNING data""",
             key,
             json.dumps(claim, default=str),
@@ -216,7 +233,16 @@ class ResolutionReplayService:
                 "idempotent": False,
                 "policy_version": policy_version,
             }
-        if existing and existing.get("status") == "completed":
+        existing_internal_error = (
+            existing
+            and "internal_error"
+            in (existing.get("summary") or {}).get("reason_codes", [])
+        )
+        if (
+            existing
+            and existing.get("status") == "completed"
+            and not existing_internal_error
+        ):
             if existing.get("evidence_fingerprint") != evidence_fingerprint:
                 return {
                     "status": "error",
@@ -389,6 +415,12 @@ class ResolutionReplayService:
             )
             if "unsupported_policy_version" in (decision.reason_codes or []):
                 raise ValueError(f"unsupported policy_version: {policy_version}")
+            if "internal_error" in (decision.reason_codes or []):
+                # Older replay jobs could incorrectly persist a resolver
+                # NOOP/internal_error as completed. Raise into the normal
+                # failure path so new jobs stay retryable and those legacy
+                # rows can be reclaimed by the atomic claim above.
+                raise RuntimeError("identity resolution replay failed")
 
             affected = sorted(set(ids_verified) | set(ids_observed))
             summary = {

@@ -24,8 +24,8 @@ source_hashes:
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
   "infra/aws/terraform/modules/ecr/main.tf": "sha256:f880cb8a6a4dfec313b115d89e6714906dcfcf3dc1cd4496945d7e86814d6407"
   "infra/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
-  "infra/aws/terraform/modules/secrets/main.tf": "sha256:f872d926ac84a0bf3c473a69b9362d7bb72d3e36d0fa91ea2febc1f5b63d66e1"
-  "infra/aws/terraform/modules/secrets/rotation.tf": "sha256:2e3b0bc6336ee324e3a3829f4f08c94b901501902981f87034933c875549fb00"
+  "infra/aws/terraform/modules/secrets/main.tf": "sha256:29607ea44951c132385a375626cb9dafd213a9f26fb87ce8d1694b6fd74524da"
+  "infra/aws/terraform/modules/secrets/rotation.tf": "sha256:c6c06da21c6ccd01468741102529c59a17ffc0e0b9c230df08d49869a3858589"
   "infra/aws/terraform/profiles.tf": "sha256:da63e1f50e4030924713679445e3c365883a23821ac78df83bebe14436c67f60"
   "infra/aws/terraform/variables.tf": "sha256:46f64fe05369a15910f3702ed7161da5be3c539f52908643570b60b18fecb8e1"
   "scripts/release/check_cost_model.py": "sha256:e406557fe672b5af7c7cc3dc3ce83220813f19c84ba70791b0facc89e5e40717"
@@ -207,8 +207,11 @@ durable GitHub `STAGING_ADMIN_API_KEY` are separate credentials: the pilot task
 arms the one-time route, and the lifecycle validates the returned `ak_...` key
 against `/v1/me` with admin scope before rehearsal mutation.
 The staging ECS API and consolidated worker mount the Google workforce client
-ID and secret from those reviewed secret records. Workforce enforcement,
-backend authorization, device trust, scope v2, and step-up are explicitly on;
+ID and secret from those reviewed secret records. They also mount the active
+`IDENTITY_VERIFICATION_TOKEN_KEY` and its previous-key companion from Secrets
+Manager; retain the previous value while persisted evidence needs it.
+Workforce enforcement, backend authorization, device trust, scope v2, and
+step-up are explicitly on;
 the legacy operator identity and bootstrap paths are explicitly off. The
 Google callback uses the staging API origin, while the Kyber application origin
 is reserved for WebAuthn relying-party validation.

@@ -279,10 +279,18 @@ class VerificationEvidenceRepository(_ScopedRepo):
         return json.loads(data) if isinstance(data, str) else dict(data)
 
     async def get_active_for_identifier(
-        self, tenant_id: str, identifier_type: str, identifier_hash: str
+        self,
+        tenant_id: str,
+        identifier_type: str,
+        identifier_hash: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
     ) -> list[dict]:
         rows = await self.list_for_tenant(
             tenant_id,
+            limit=limit,
+            offset=offset,
             extra={
                 "identifier_type": identifier_type,
                 "identifier_hash": identifier_hash,
