@@ -44,18 +44,18 @@ const TABS: [string, string, string, string][] = [['overview', '◈', 'Overview'
 const AG = { Ptolemy: '#3a6896', Kierkegaard: '#5a85a8', Mordred: '#c9975a' };
 const act = (g: string, c: string, x: string, t: string): Act => ({ g, x, t, gStyle: 'font-family: var(--font-mono); color: ' + c + ';' });
 const R: Rel[] = [
-  { key: 'ptolemy', g: '⬡', name: 'Ptolemy', id: 'agt_2f18e', role: 'delegated agent', kind: 'H→A', type: 'agents', c: AG.Ptolemy, risk: 28, desc: 'Scores incoming supplier applications for Jane and flags exceptions to Osiris.', facts: ['42 actions/day', 'strength 0.90', 'scope: scoring.read'],
+  { key: 'ptolemy', g: '⬡', name: 'Ptolemy', id: 'agt_2f18e', role: 'delegated agent', kind: 'H→A', type: 'agents', c: AG.Ptolemy, risk: 28, desc: 'Scores incoming supplier applications for Sofia and flags exceptions to Osiris.', facts: ['42 actions/day', 'strength 0.90', 'scope: scoring.read'],
     actions: [act('✓', '#6b9a7c', 'Scored application app_71c · 0.82', '1h'), act('→', '#9fbad6', 'Flagged exception to Osiris', '5h'), act('✓', '#6b9a7c', 'Onboarded supplier to SF syndicate', '2d')] },
   { key: 'kierkegaard', g: '⬡', name: 'Kierkegaard', id: 'agt_5c02f', role: 'delegated agent', kind: 'H→A', type: 'agents', c: AG.Kierkegaard, risk: 31, desc: 'Audits cross-border settlement records for irregularities.', facts: ['9 actions/day', '$1.8K value', 'strength 0.82'],
     actions: [act('◉', '#a88a5a', 'Audited Stripe payout po_9x2 · clean', '3h'), act('✓', '#6b9a7c', 'Reconciled 14 settlements', '1d')] },
   { key: 'mordred', g: '⬡', name: 'Mordred', id: 'agt_88ce1', role: 'flagged relationship', kind: 'A→A', type: 'agents', c: AG.Mordred, risk: 91, desc: 'Unusual messages with an outside payments agent in a flagged group. Passed to Percival.', facts: ['conf 0.88', '212 messages', 'strength 0.68'],
     actions: [act('↔', '#c9975a', 'Messaged external agent in syn_dxb4 ×212', '6h'), act('▲', '#b5564a', 'Escalated pattern to Percival', '6h'), act('■', '#b5564a', 'Percival paused the next payment batch · seen', 'now')] },
-  { key: 'percival', g: '●', name: 'Percival', id: 'usr_91b2c', role: 'risk analyst', kind: 'H→H', type: 'humans', c: '#6b9a7c', risk: 12, desc: 'Approves payment batches together with Jane. Receives Mordred’s alerts.', facts: ['14 shared approvals', 'slack · crm', 'strength 0.74'] },
+  { key: 'percival', g: '●', name: 'Percival', id: 'usr_91b2c', role: 'risk analyst', kind: 'H→H', type: 'humans', c: '#6b9a7c', risk: 12, desc: 'Approves payment batches together with Sofia. Receives Mordred’s alerts.', facts: ['14 shared approvals', 'slack · crm', 'strength 0.74'] },
   { key: 'osiris', g: '●', name: 'Osiris', id: 'usr_c33a0', role: 'compliance', kind: 'H→H', type: 'humans', c: '#6b9a7c', risk: 18, desc: 'Reviews rule exceptions raised by Ptolemy.', facts: ['6 reviews', 'strength 0.52'] },
-  { key: 'maya', g: '●', name: 'Maya Chen', id: 'usr_a81d3', role: 'referred by Jane', kind: 'H→H', type: 'humans', c: '#6b9a7c', risk: 9, desc: 'Joined through Jane’s referral link on X. Now a repeat buyer.', facts: ['referral', '$2.1K value', '3 orders'] },
+  { key: 'maya', g: '●', name: 'Maya Chen', id: 'usr_a81d3', role: 'referred by Sofia', kind: 'H→H', type: 'humans', c: '#6b9a7c', risk: 9, desc: 'Joined through Sofia’s referral link on X. Now a repeat buyer.', facts: ['referral', '$2.1K value', '3 orders'] },
   { key: 'supplier', g: '◈', name: 'SF supplier syndicate', id: 'syn_sf01', role: '5 humans · 2 agents', kind: 'cluster', type: 'syndicates', c: '#a88a5a', risk: 36, desc: 'Supplier network handled through Ptolemy. Most common path: sourced → contracted → active.', facts: ['$14.6K value', '11 journeys'],
-    members: [['●', 'Jane Doe', '#6b9a7c'], ['●', 'Osiris', '#6b9a7c'], ['●', '+3 suppliers', '#6b9a7c'], ['⬡', 'Ptolemy', AG.Ptolemy], ['⬡', 'Kierkegaard', AG.Kierkegaard]] },
-  { key: 'settlement', g: '◈', name: 'Settlement syndicate', id: 'syn_dxb4', role: '2 humans · 3 agents', kind: 'cluster', type: 'syndicates', c: '#b5564a', risk: 84, desc: 'Flagged group in Dubai. Mordred messages one of its agents.', facts: ['flagged', '2 hops from Jane'],
+    members: [['●', 'Sofia Marchetti', '#6b9a7c'], ['●', 'Osiris', '#6b9a7c'], ['●', '+3 suppliers', '#6b9a7c'], ['⬡', 'Ptolemy', AG.Ptolemy], ['⬡', 'Kierkegaard', AG.Kierkegaard]] },
+  { key: 'settlement', g: '◈', name: 'Settlement syndicate', id: 'syn_dxb4', role: '2 humans · 3 agents', kind: 'cluster', type: 'syndicates', c: '#b5564a', risk: 84, desc: 'Flagged group in Dubai. Mordred messages one of its agents.', facts: ['flagged', '2 hops from Sofia'],
     members: [['●', '2 unknown humans', '#a09f99'], ['⬡', 'agt_x41 (external)', '#b5564a'], ['⬡', '+2 agents', '#b5564a']] },
 ];
 const J: Record<'ig' | 'x', Journey> = {
@@ -128,11 +128,11 @@ export function Profile360(props: { ios?: boolean; style?: CSSProperties }) {
     hAct('↔', 'Open in graph', false, () => setState({ tab: 'rels' }), 'primary'),
     hAct(s.watch ? '●' : '○', s.watch ? 'Watching' : 'Watch', s.watch, () => {
       setState({ watch: !s.watch });
-      flash(s.watch ? '○ stopped watching Jane Doe' : '● watching Jane Doe · alerts on new risk evidence');
+      flash(s.watch ? '○ stopped watching Sofia Marchetti' : '● watching Sofia Marchetti · alerts on new risk evidence');
     }),
     hAct('⇩', 'Export', false, () => flash('⇩ export queued · profiles:usr_4f21a9.jsonl')),
   ];
-  const accounts = ([['stripe', 'Stripe', 'cus_Q8…4f', 'Billing customer'], ['hubspot', 'HubSpot', 'contact 9812', 'CRM contact'], ['x', 'X', '@janedoe', 'Social'], ['instagram', 'Instagram', '@jane.makes', 'Social'], ['phantom', 'Phantom', '7xKX…9fQm', 'Wallet'], ['shopify', 'Shopify', '3 orders', 'Commerce']] as const).map(([k, name, handle, title]) => ({ logo: B(k), name, handle, title, go: () => flash('↔ ' + name + ' · ' + handle + ' · ' + title.toLowerCase()) }));
+  const accounts = ([['stripe', 'Stripe', 'cus_Q8…4f', 'Billing customer'], ['hubspot', 'HubSpot', 'contact 9812', 'CRM contact'], ['x', 'X', '@sofia.marchetti', 'Social'], ['instagram', 'Instagram', '@sofia.makes', 'Social'], ['phantom', 'Phantom', '7xKX…9fQm', 'Wallet'], ['shopify', 'Shopify', '3 orders', 'Commerce']] as const).map(([k, name, handle, title]) => ({ logo: B(k), name, handle, title, go: () => flash('↔ ' + name + ' · ' + handle + ' · ' + title.toLowerCase()) }));
   const sources = ([['stripe', 'Stripe'], ['hubspot', 'HubSpot'], ['x', 'X'], ['instagram', 'Instagram'], ['shopify', 'Shopify']] as const).map(([k, name]) => ({ logo: B(k), name }));
   const stats = ([['$18.4K', 'value', '#6b9a7c', 'value'], ['8', 'relationships', '#9fbad6', 'rels'], ['3', 'agents', '#c9975a', 'rels'], ['2', 'journeys', '#a88a5a', 'journeys']] as const).map(([v, k, c, t]) => ({
     v, k, go: tab(t),
@@ -141,9 +141,9 @@ export function Profile360(props: { ios?: boolean; style?: CSSProperties }) {
   }));
   const tabs = TABS.map(([k, g, label, c]) => ({
     label, g, sel: s.tab === k, go: tab(k),
-    gStyle: ios ? 'font-family: var(--font-mono); font-size: 20px; line-height: 24px; color: ' + (s.tab === k ? '#0A84FF' : '#8e8e93') + ';' : 'font-family: var(--font-mono); color: ' + c + ';',
+    gStyle: ios ? 'font-family: var(--font-mono); font-size: 20px; line-height: 24px; color: ' + (s.tab === k ? '#111114' : '#d1d1d6') + ';' : 'font-family: var(--font-mono); color: ' + c + ';',
     style: ios
-      ? 'font-family: inherit; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; font-weight: 500; padding: 4px 0; border: 0; background: transparent; cursor: pointer; transition: color 120ms cubic-bezier(0.22,1,0.36,1); color: ' + (s.tab === k ? '#0A84FF' : '#8e8e93') + ';'
+      ? 'font-family: inherit; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; font-weight: 500; padding: 7px 0; border: 0; border-radius: 999px; cursor: pointer; transition: color 120ms cubic-bezier(0.22,1,0.36,1), background-color 120ms cubic-bezier(0.22,1,0.36,1); background: ' + (s.tab === k ? 'rgba(255,255,255,0.94)' : 'transparent') + '; color: ' + (s.tab === k ? '#111114' : '#d1d1d6') + ';'
       : 'font-family: inherit; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 12px; font-weight: 500; padding: 10px 10px; border: 0; background: transparent; cursor: pointer; border-bottom: 2px solid ' + (s.tab === k ? c : 'transparent') + '; color: ' + (s.tab === k ? '#e8e6e1' : '#a09f99') + ';',
   }));
   const tOverview = s.tab === 'overview';
@@ -209,7 +209,7 @@ export function Profile360(props: { ios?: boolean; style?: CSSProperties }) {
     <div data-page="profile-360" style={css("display: flex; flex-direction: column; min-width: 0; font-family: var(--font-sans);")} className={`${rootClass}`}>
       {(isIos) ? (
         <>
-          <div data-theme="dark" style={css("background: rgba(0,0,0,0.88); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); position: sticky; top: 0; z-index: 6; padding: 54px 16px 10px; margin-top: -54px; display: flex; flex-direction: column; gap: 6px;")}>
+          <div data-theme="dark" style={css("background: rgba(11,11,14,0.5); -webkit-backdrop-filter: blur(24px) saturate(1.5); backdrop-filter: blur(24px) saturate(1.5); position: sticky; top: 0; z-index: 6; padding: 54px 16px 10px; margin-top: -54px; display: flex; flex-direction: column; gap: 6px;")}>
             <div style={css("display: flex; align-items: center; justify-content: space-between;")}>
               <span style={css("display: inline-flex; align-items: center; gap: 2px; color: #0A84FF; font-size: 17px;")}>
                 <svg width="12" height="20" viewBox="0 0 12 20" fill="none">
@@ -217,13 +217,13 @@ export function Profile360(props: { ios?: boolean; style?: CSSProperties }) {
                 </svg>
                 {"Profiles"}
               </span>
-              <button type="button" onClick={openSearch} aria-label="Search this profile" style={css("width: 36px; height: 36px; border-radius: 999px; border: 0; background: rgba(120,120,128,0.24); color: #e8e6e1; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;")}>
+              <button type="button" onClick={openSearch} aria-label="Search this profile" style={css("width: 36px; height: 36px; border-radius: 999px; border: 0; background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.18); color: #e8e6e1; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;")}>
                 {"⌕"}
               </button>
             </div>
             <div style={css("display: flex; align-items: baseline; justify-content: space-between; gap: 8px;")}>
               <span style={css("font-size: 34px; font-weight: 700; letter-spacing: 0.4px; color: #fff;")}>
-                {"Jane Doe"}
+                {"Sofia Marchetti"}
               </span>
               <span title="Illustrative data — not a customer record" style={css("font-size: 11px; color: #8e8e93;")}>
                 {"synthetic"}
@@ -234,7 +234,7 @@ export function Profile360(props: { ios?: boolean; style?: CSSProperties }) {
       ) : null}
       {(notIos) ? (
         <>
-          <div data-theme="dark" style={css("display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #1a1a1e; border: 1px solid #2a2a2f; border-bottom: 0; border-radius: 8px 8px 0 0; color: #e8e6e1; font-size: 12px;")}>
+          <div data-theme="dark" style={css("display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); border-bottom: 0; border-radius: 24px 24px 0 0; -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); color: #e8e6e1; font-size: 12px;")}>
             <span style={css("display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap;")}>
               <img src={markSrc('aether')} alt="" style={css("width: 16px; height: 16px;")} />
               <span style={css("color: #a09f99;")}>
@@ -244,7 +244,7 @@ export function Profile360(props: { ios?: boolean; style?: CSSProperties }) {
                 {"/"}
               </span>
               <span style={css("font-weight: 500;")}>
-                {"Jane Doe"}
+                {"Sofia Marchetti"}
               </span>
             </span>
             <button type="button" onClick={openSearch} style={css("font-family: inherit; flex: 1; min-width: 0; max-width: 260px; margin-left: auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; padding: 0 8px; border-radius: 4px; border: 1px solid #2a2a2f; background: #111114; color: #a09f99; font-size: 12px; cursor: pointer; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1), border-color 120ms cubic-bezier(0.22,1,0.36,1), color 120ms cubic-bezier(0.22,1,0.36,1);")} className="hv-0fb9f849">
@@ -264,7 +264,7 @@ export function Profile360(props: { ios?: boolean; style?: CSSProperties }) {
           </div>
         </>
       ) : null}
-      <div data-theme="dark" style={css("background: #111114; border: 1px solid #2a2a2f; border-radius: 0 0 8px 8px; color: #e8e6e1; font-size: 13px; overflow: hidden;")} className="p360">
+      <div data-theme="dark" style={css("background: radial-gradient(60% 50% at 85% 18%, rgba(58,104,150,0.42), transparent 70%), radial-gradient(50% 45% at 8% 92%, rgba(107,154,124,0.24), transparent 70%), radial-gradient(45% 40% at 92% 92%, rgba(201,151,90,0.24), transparent 70%), #111114; border: 1px solid rgba(255,255,255,0.12); border-radius: 0 0 24px 24px; color: #e8e6e1; font-size: 13px; overflow: hidden;")} className="p360">
         {(searchOpen) ? (
           <>
             <div style={css("border-bottom: 1px solid #2a2a2f; background: #16161a; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px;")}>
@@ -288,14 +288,14 @@ export function Profile360(props: { ios?: boolean; style?: CSSProperties }) {
           <div style={css("display: flex; gap: 12px; align-items: center;")}>
             <span style={css("position: relative; width: 52px; height: 52px; flex-shrink: 0;")}>
               <span style={css("width: 52px; height: 52px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-weight: 500; font-size: 17px; background: #3a6896; color: #f5f4f1; box-shadow: 0 0 0 3px rgba(58,104,150,0.35);")}>
-                {"JD"}
+                {"SM"}
               </span>
               <span style={css("position: absolute; right: -2px; bottom: -2px; width: 14px; height: 14px; border-radius: 999px; background: #6b9a7c; border: 2px solid #111114;")} />
             </span>
             <span style={css("display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1;")}>
               <span style={css("display: flex; align-items: center; gap: 8px; flex-wrap: wrap;")}>
                 <span style={css("font-size: 17px; font-weight: 500;")}>
-                  {"Jane Doe"}
+                  {"Sofia Marchetti"}
                 </span>
                 <span style={css("font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 999px; background: rgba(107,154,124,0.2); color: #9cc4a9;")}>
                   {"VIP · Beta"}
@@ -625,7 +625,7 @@ export function Profile360(props: { ios?: boolean; style?: CSSProperties }) {
                             {(s.jane) ? (
                               <>
                                 <span style={css("font-family: var(--font-mono); font-size: 10px; color: #9fbad6;")}>
-                                  {"● Jane · "}{s.d}
+                                  {"● Sofia · "}{s.d}
                                 </span>
                               </>
                             ) : null}

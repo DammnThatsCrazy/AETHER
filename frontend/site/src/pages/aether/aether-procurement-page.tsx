@@ -42,7 +42,7 @@ export function AetherProcurementPage() {
     <div data-page="aether-procurement" style={css("min-height: 100vh; background: #f5f4f1; color: #1a1a1e; font-family: var(--font-sans);")}>
       <SiteHeader brand="aether" active="" />
       <main id="main">
-        <section>
+        <section style={css("background: radial-gradient(40% 50% at 80% 25%, rgba(58,104,150,0.28), transparent 72%), radial-gradient(40% 50% at 50% 85%, rgba(107,154,124,0.3), transparent 72%), linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%);")}>
           <div style={css("max-width: 960px; margin: 0 auto; padding: clamp(96px, 14vw, 176px) 24px clamp(56px, 8vw, 96px); display: flex; flex-direction: column; align-items: center; text-align: center; gap: 24px;")}>
             <span style={css("display: flex; gap: 8px; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;")}>
               <a href={link("Aether Trust.dc.html")} style={css("color: #6b6a65; text-decoration: none;")}>
@@ -63,7 +63,7 @@ export function AetherProcurementPage() {
             </p>
           </div>
         </section>
-        <section data-theme="dark" style={css("background: #111114; color: #e8e6e1;")}>
+        <section data-theme="dark" style={css("background: radial-gradient(60% 50% at 85% 18%, rgba(58,104,150,0.42), transparent 70%), radial-gradient(50% 45% at 8% 92%, rgba(107,154,124,0.24), transparent 70%), radial-gradient(45% 40% at 92% 92%, rgba(201,151,90,0.26), transparent 70%), #111114; color: #e8e6e1;")}>
           <div style={css("max-width: 880px; margin: 0 auto; padding: clamp(72px, 10vw, 128px) 24px; display: flex; flex-direction: column; align-items: center; gap: 36px;")}>
             <h2 style={css("font-size: clamp(28px, 3.6vw, 44px); font-weight: 500; letter-spacing: -0.03em; line-height: 1.06; margin: 0; color: #e8e6e1; text-align: center;")}>
               {"Five steps from first call to live."}
@@ -93,7 +93,7 @@ export function AetherProcurementPage() {
             </div>
           </div>
         </section>
-        <section style={css("border-bottom: 1px solid #d8d6d0;")}>
+        <section style={css("background: radial-gradient(40% 50% at 80% 25%, rgba(58,104,150,0.28), transparent 72%), radial-gradient(40% 50% at 50% 85%, rgba(107,154,124,0.3), transparent 72%), linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%); border-bottom: 1px solid #d8d6d0;")}>
           <div style={css("max-width: 880px; margin: 0 auto; padding: clamp(72px, 10vw, 128px) 24px; display: flex; flex-direction: column; align-items: center; gap: 36px;")}>
             <h2 style={css("font-size: clamp(28px, 3.6vw, 44px); font-weight: 500; letter-spacing: -0.03em; line-height: 1.06; margin: 0; text-align: center;")}>
               {"Pricing, billing, and pilots."}
@@ -114,7 +114,7 @@ export function AetherProcurementPage() {
             </dl>
           </div>
         </section>
-        <section>
+        <section style={css("background: radial-gradient(40% 50% at 80% 25%, rgba(58,104,150,0.28), transparent 72%), radial-gradient(40% 50% at 50% 85%, rgba(107,154,124,0.3), transparent 72%), linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%);")}>
           <div style={css("max-width: 960px; margin: 0 auto; padding: clamp(96px, 13vw, 160px) 24px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 20px;")}>
             <h2 style={css("font-size: clamp(32px, 4.8vw, 60px); font-weight: 500; letter-spacing: -0.035em; line-height: 1.02; margin: 0; text-wrap: balance;")}>
               {"Tell us what your process needs."}

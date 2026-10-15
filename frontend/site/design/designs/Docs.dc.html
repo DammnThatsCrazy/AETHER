@@ -8,15 +8,15 @@
 <body>
 <x-dc>
 <helmet>
-  <link rel="stylesheet" href="../_ds/colors_and_type.css">
-  <script src="../_ds/_ds_bundle.js"></script>
+  <link rel="stylesheet" href="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/colors_and_type.css">
+  <script src="_ds/olympus-aether-design-system-019e2cf9-5780-76be-8adc-67b23658c331/_ds_bundle.js"></script>
   <script src="docs-content.js"></script>
   <title>Aether docs</title>
   <meta property="og:type" content="website">
   <meta name="description" content="Guides, task walkthroughs, SDKs, and reference for understanding, connecting, and building with Aether.">
   <meta property="og:title" content="Aether docs">
   <meta property="og:description" content="Guides, task walkthroughs, SDKs, and reference for understanding, connecting, and building with Aether.">
-  <meta property="og:image" content="../assets/og/docs.png">
+  <meta property="og:image" content="assets/og/docs.png">
   <meta name="twitter:card" content="summary_large_image">
   <style>
     body { margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; background: #111114; color-scheme: dark; scrollbar-color: #2a2a2f #111114; }
@@ -31,7 +31,7 @@
   <header style="position: sticky; top: 0; z-index: 30; background: #111114; border-bottom: 1px solid #2a2a2f;">
     <div style="padding: 0 20px; height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px; max-width: 1440px; margin: 0 auto;">
       <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
-        <a href="Docs.dc.html" onClick="{{ goDocsHome }}" style="display: flex; align-items: center; gap: 8px; text-decoration: none; color: #e8e6e1;"><img src="../assets/logo-aether-layers.svg" alt="" style="width: 20px; height: 20px;"><span style="font-size: 15px; font-weight: 500;">Aether</span><span style="font-size: 15px; color: #a09f99;">Docs</span></a>
+        <a href="Docs.dc.html" onClick="{{ goDocsHome }}" style="display: flex; align-items: center; gap: 8px; text-decoration: none; color: #e8e6e1;"><img src="assets/logo-aether-layers.svg" alt="" style="width: 20px; height: 20px;"><span style="font-size: 15px; font-weight: 500;">Aether</span><span style="font-size: 15px; color: #a09f99;">Docs</span></a>
         <span style="font-family: var(--font-mono); font-size: 11px; padding: 2px 7px; border-radius: 999px; background: rgba(201,151,90,0.14); border: 1px solid rgba(201,151,90,0.4); color: #dcb683;">0.1.0-alpha.0</span>
       </div>
       <button type="button" onClick="{{ openSearch }}" aria-label="Search docs" style="{{ searchBtnStyle }}" style-hover="background: #2a2a2f; border-color: #2a2a2f3;">
@@ -290,7 +290,7 @@ class Component extends DCLogic {
     const segs = str => String(str || '').split(/(`[^`]+`)/g).filter(Boolean).map(t => t.startsWith('`') ? { t: t.slice(1, -1), code: true, plain: false } : { t, code: false, plain: true });
     const LOGOS = { HubSpot: 'hubspot', Salesforce: 'salesforce', Shopify: 'shopify', Stripe: 'stripe', Klaviyo: 'klaviyo', Segment: 'segment', PostHog: 'posthog', GA4: 'googleanalytics', 'Google Analytics': 'googleanalytics', Zendesk: 'zendesk', Intercom: 'intercom', Jira: 'jira', Linear: 'linear', Slack: 'slack' };
     const logoRe = new RegExp('(' + Object.keys(LOGOS).sort((a, b) => b.length - a.length).join('|') + ')', 'g');
-    const logoSegs = str => segs(str).flatMap(sg => sg.code ? [sg] : sg.t.split(logoRe).filter(Boolean).map(t => LOGOS[t] ? { t, hasLogo: true, logo: '../assets/brand/' + LOGOS[t] + '.svg', code: false, plain: false } : { t, hasLogo: false, code: false, plain: true }));
+    const logoSegs = str => segs(str).flatMap(sg => sg.code ? [sg] : sg.t.split(logoRe).filter(Boolean).map(t => LOGOS[t] ? { t, hasLogo: true, logo: 'assets/brand/' + LOGOS[t] + '.svg', code: false, plain: false } : { t, hasLogo: false, code: false, plain: true }));
     const wide = s.w >= 860, xwide = s.w >= 1180;
     const isHome = s.page === 'home' && s.st !== 'private';
     const secId = s.page.startsWith('sec:') ? s.page.slice(4) : null;

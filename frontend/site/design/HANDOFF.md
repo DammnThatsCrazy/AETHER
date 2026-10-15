@@ -395,3 +395,15 @@ Mostly static. Stateful pieces: header menu/open state; Scene (story, stage, hol
 - `assets/`: marks, brand logos, OG images.
 - `_ds/`: tokens CSS, fonts, DS bundle and README.
 - `github.md`: source repo mapping (`DammnThatsCrazy/AETHER`, `frontend/site/design/designs`) and screen map to target files such as `src/pages/aether/*`, `src/pages/olympus/*`, `src/site/navigation.ts`, `src/site/plans.ts`, `src/site/connectors.ts`.
+
+## Update: glass surfaces (October 2026)
+
+The second Claude Design handoff restyles the marketing surfaces. `designs/*.dc.html` now hold that version; the pages under `src/` implement it.
+
+- **Glass on surfaces that warrant it.** Content panels, cards, map tiles and plan cards are frosted glass over soft blue, gold and green glows. Light sections use a pastel gradient; dark sections keep Graphite with glows. The header, footer, menus, heroes' text and CTAs stay opaque.
+- **Maps.** The Aether Scene, the Agents lineage tree, the Lenses graph and the Connect hub draw glass tiles with brand logos on white chips (the Aether mark for Aether's own sources, a kind glyph where no reviewed logo exists, e.g. Okta). Connections curve; dots take 5.6–7s per trip; tiles move in 240ms, lines draw in 320ms and drift 3px. Reduced motion stops the dots, drift and line flow.
+- **iPhone.** Aether Home shows the native-feeling Aether iOS App (`src/components/aether-ios-app.tsx`) in a tilted device on a pastel panel: collapsing large title, grouped lists, segmented controls, push detail with edge-swipe back, action sheet, toasts and a floating glass tab bar.
+- **Names.** Sofia Marchetti replaces Jane Doe / Jane Smith in every profile and scenario.
+- **Logo rows.** Home ("Works with"), Applications, Connect detail pages and Customer intelligence show the integrations involved.
+
+Kept from the implementation rather than the design: Signal Blue primary CTAs, the 21-integration count and docs connector catalog (the bundle's `docs-content.js` is older than `src/content/docs.json`), and routing of the Aether mark through `markSrc()`. The Portal's phone lives in `apps/aether-web` and is not part of this site.

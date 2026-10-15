@@ -55,7 +55,7 @@ export function OlympusApplicationsPage() {
             </p>
           </div>
         </section>
-        <section data-theme="dark" style={css("background: #111114; color: #e8e6e1;")}>
+        <section data-theme="dark" style={css("background: radial-gradient(60% 50% at 85% 18%, rgba(58,104,150,0.42), transparent 70%), radial-gradient(50% 45% at 8% 92%, rgba(107,154,124,0.24), transparent 70%), radial-gradient(45% 40% at 92% 92%, rgba(201,151,90,0.26), transparent 70%), #111114; color: #e8e6e1;")}>
           <div style={css("max-width: 1000px; margin: 0 auto; padding: clamp(72px, 10vw, 128px) 24px; display: flex; flex-direction: column; align-items: center; gap: 40px;")}>
             <div role="tablist" aria-label="Application areas" style={css("display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; padding: 4px; border-radius: 10px; background: #1a1a1e; border: 1px solid #2a2a2f;")}>
               {(tabs).map((t: any, tIndex: number) => (

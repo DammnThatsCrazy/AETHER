@@ -16,3 +16,9 @@
 .hv-979e54bc:hover { background: #1d4ed8 !important; border-color: #1d4ed8 !important; color: #f5f4f1 !important; }
 .hv-cc8e330e:hover { color: #3a6896 !important; }
 .hv-dafa5f55:hover { background: #e2e0da !important; border-color: #c9c7c0 !important; color: #1a1a1e !important; }
+@keyframes axFloat { 0%, 100% { translate: 0 0; } 50% { translate: 0 -3px; } }
+@keyframes axFlow { to { stroke-dashoffset: -24; } }
+.ax-flow-36 { animation: axFlow 3.6s linear infinite; }
+.ax-flow-42 { animation: axFlow 4.2s linear infinite; }
+.ax-flow-39 { animation: axFlow 3.9s linear infinite; }
+.ax-flow-4 { animation: axFlow 4s linear infinite; }
