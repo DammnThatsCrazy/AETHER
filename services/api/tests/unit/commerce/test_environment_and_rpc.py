@@ -161,6 +161,32 @@ async def test_rpc_ssrf_private_address_rejected_outside_local(monkeypatch, bad_
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "dns, source",
+    [
+        ({"side_effect": OSError("temporary failure")}, "unresolved"),
+        ({"return_value": [(2, 1, 6, "", ("10.0.0.5", 443))]}, "ssrf_blocked"),
+    ],
+)
+async def test_rpc_resolution_failure_is_counted_apart_from_refusal(monkeypatch, dns, source):
+    from unittest.mock import MagicMock, patch
+
+    from value.x402 import rpc_resolver
+    from value.x402.rpc_resolver import RpcUnavailableError, resolve_rpc
+
+    _mock_active_secret(monkeypatch, "https://tenant-rpc.example.com")
+    monkeypatch.setenv("AETHER_ENV", "staging")
+    metrics = MagicMock()
+    monkeypatch.setattr(rpc_resolver, "metrics", metrics)
+
+    with patch("socket.getaddrinfo", **dns), pytest.raises(RpcUnavailableError):
+        await resolve_rpc(f"t-{uuid.uuid4().hex[:8]}", "live", "eip155:8453")
+    metrics.increment.assert_called_once_with(
+        "x402_rpc_resolutions", labels={"source": source, "chain": "eip155:8453"}
+    )
+
+
+@pytest.mark.asyncio
 async def test_rpc_ssrf_http_scheme_rejected_outside_local(monkeypatch):
     """Non-HTTPS tenant RPC urls are rejected outside local/test, regardless
     of what the hostname resolves to."""

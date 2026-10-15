@@ -43,7 +43,7 @@ from typing import Optional
 from urllib.parse import urlparse
 
 from shared.logger.logger import get_logger, metrics
-from shared.security.ssrf import UnsafeDestinationError, resolve_public_addresses
+from shared.security.ssrf import DestinationResolutionError, UnsafeDestinationError, resolve_public_addresses
 
 from value.x402.credential_slots import rpc_provider_for_chain
 
@@ -106,6 +106,8 @@ def _validate_rpc_url(url: str) -> None:
         raise RpcUnavailableError("RPC url must use HTTPS outside local/test")
     try:
         resolve_public_addresses(url)
+    except DestinationResolutionError as exc:
+        raise RpcUnavailableError(f"RPC url could not be resolved: {exc}") from exc
     except UnsafeDestinationError as exc:
         raise RpcUnavailableError(f"SSRF-blocked RPC url: {exc}") from exc
 
@@ -164,13 +166,19 @@ async def resolve_rpc(tenant_id: str, environment: str, chain: str) -> ResolvedR
         try:
             await asyncio.to_thread(_validate_rpc_url, resolved.url)
         except RpcUnavailableError as exc:
-            logger.error(
-                "rpc resolution blocked (SSRF) tenant=%s env=%s chain=%s: %s",
-                tenant_id, environment, chain, exc,
-            )
-            metrics.increment(
-                "x402_rpc_resolutions", labels={"source": "ssrf_blocked", "chain": chain}
-            )
+            if isinstance(exc.__cause__, DestinationResolutionError):
+                logger.warning(
+                    "rpc url unresolved tenant=%s env=%s chain=%s: %s",
+                    tenant_id, environment, chain, exc,
+                )
+                source = "unresolved"
+            else:
+                logger.error(
+                    "rpc resolution blocked (SSRF) tenant=%s env=%s chain=%s: %s",
+                    tenant_id, environment, chain, exc,
+                )
+                source = "ssrf_blocked"
+            metrics.increment("x402_rpc_resolutions", labels={"source": source, "chain": chain})
             raise
 
         metrics.increment(
