@@ -51,7 +51,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:d948e159bad106ba4cc2a6cdf0bd2892aefe4faede7040fe491fe9304112712e"
+  ".github/workflows/amplify-status-production.yml": "sha256:496ae282794b9ae49c7645584fb208030902daec7b561570b29d0ae17ffd77c0"
   ".github/workflows/deploy.yml": "sha256:f3158c30a23302bf38f5ad208b63e38dfd2b84ee3f58237d1fd642ba4b230788"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-lifecycle.yml": "sha256:91b3012ba7e1985bd5ea5731ee31d3f3ced51bb9b40807420d2b62f0a6077c8f"
@@ -75,7 +75,7 @@ source_hashes:
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
   "deploy/aws/terraform/": "sha256:67a99df2f5c50fd7dde37595acf3810b7052e2e2d4b963c44f61d3be89a1f8e3"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:ca5f93ed9cb1fac933d6bd2bb6193fd5a5ba3fa0fa5c622cf32ba1581cbea027"
+  "scripts/release/check_amplify_app_contract.py": "sha256:94e18a3c11c5be0b7538f5ea3ac6f5d52a29a24aae95f2a1ba7d3038e59fe6ca"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
@@ -686,8 +686,10 @@ branches or call `UpdateDomainAssociation`; they verify the AVAILABLE
 association and canonical `main` mapping before release. Amplify performs a
 dependent `iam:PassRole` authorization for domain mutations, so the status
 workflow intentionally does not make that API call from its OIDC deploy role.
-Because a repository-bound app can auto-start the branch build for a pushed
-commit, the workflow first reuses an active job for the exact reviewed SHA,
+The workflow binds `main` with auto-build off, so a push never goes live before
+the integration authority passes; only its commit-pinned release publishes.
+Because a job can still be active (started from the console, or by auto-build
+before this setting), the workflow first reuses an active job for the exact reviewed SHA,
 but only one that started after it applied the build settings: a job reads its
 environment variables when it starts, so an earlier auto-build would publish
 the previous settings. It waits for any other active branch job to clear, and

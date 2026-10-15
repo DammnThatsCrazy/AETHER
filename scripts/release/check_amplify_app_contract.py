@@ -451,6 +451,29 @@ def _staging_host_errors(
             first_errors = owner_errors
     return first_errors or [f"no Amplify app serves the staging {prefix} host"]
 
+def _production_branch_errors(app_id: str, client: AwsCall) -> list[str]:
+    """Production has exactly one branch, main, and main carries no build-time
+    site override: VITE_SITE would outrank the hostname and render one site on
+    every host."""
+    errors: list[str] = []
+    try:
+        listed = client(["amplify", "list-branches", "--app-id", app_id, "--max-results", "50"])
+    except RuntimeError as exc:
+        return [f"Amplify app {PRODUCTION_WEB_APP} branches could not be listed: {exc}"]
+    branches = [b for b in listed.get("branches", []) if isinstance(b, Mapping)]
+    names = sorted(str(b.get("branchName")) for b in branches)
+    if names != [PRODUCTION_BRANCH]:
+        errors.append(
+            f"Amplify app {PRODUCTION_WEB_APP} must have only the {PRODUCTION_BRANCH} branch; found {', '.join(names) or 'none'}"
+        )
+    for branch in branches:
+        if branch.get("branchName") == PRODUCTION_BRANCH and "VITE_SITE" in _mapping(branch.get("environmentVariables")):
+            errors.append(
+                f"Amplify app {PRODUCTION_WEB_APP} {PRODUCTION_BRANCH} branch sets VITE_SITE; the site must come from the hostname"
+            )
+    return errors
+
+
 def contract_errors(
     *,
     mode: str,
@@ -522,7 +545,9 @@ def contract_errors(
                 expected_commit=expected_commit,
                 subdomain_prefix="status",
                 branch_name=PRODUCTION_BRANCH,
-                auto_build=True,
+                # The workflow releases main only after the integration
+                # authority passes; an auto-build on push would go live first.
+                auto_build=False,
                 expected_branch_environment=PRODUCTION_WEB_ENVIRONMENT,
                 domain_name=PRODUCTION_DOMAIN,
                 wait_for_current_job=wait_for_current_job,
@@ -536,6 +561,7 @@ def contract_errors(
         )
         production_app_id = production_app.get("appId") if production_app is not None else None
         if isinstance(production_app_id, str) and production_app_id:
+            errors.extend(_production_branch_errors(production_app_id, client))
             for prefix in PRODUCTION_HOSTS:
                 if prefix == "status":
                     continue

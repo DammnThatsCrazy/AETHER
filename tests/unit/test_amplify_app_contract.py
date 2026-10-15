@@ -41,6 +41,9 @@ def _client(
     consolidated: bool = True,
     extra_apps: tuple[str, ...] = (),
     web_hosts: tuple[str, ...] = ALL_HOSTS,
+    production_branches: tuple[str, ...] = ("main",),
+    production_auto_build: bool = False,
+    production_extra_environment: dict[str, str] | None = None,
 ):
     """``consolidated`` is the one-app layout (AETHER-staging-web serves every
     host); otherwise the pre-apply layout: the site app (old name) serves
@@ -66,6 +69,8 @@ def _client(
         if name in present
     ]
 
+    production_environment = {**checker.PRODUCTION_WEB_ENVIRONMENT, **(production_extra_environment or {})}
+
     def call(args: list[str]) -> dict[str, Any]:
         if args[:2] == ["amplify", "list-apps"]:
             return {"apps": apps}
@@ -80,9 +85,18 @@ def _client(
                     "appId": app_id,
                     "branchName": branch_name,
                     "stage": "PRODUCTION" if production else "DEVELOPMENT",
-                    "enableAutoBuild": True,
-                    "environmentVariables": checker.PRODUCTION_WEB_ENVIRONMENT if production else {},
+                    "enableAutoBuild": production_auto_build if production else True,
+                    "environmentVariables": production_environment if production else {},
                 }
+            }
+        if args[:2] == ["amplify", "list-branches"]:
+            app_id = args[args.index("--app-id") + 1]
+            assert app_id == "d-production-status"
+            return {
+                "branches": [
+                    {"branchName": name, "environmentVariables": production_environment if name == "main" else {}}
+                    for name in production_branches
+                ]
             }
         if args[:2] == ["amplify", "list-jobs"]:
             app_id = args[args.index("--app-id") + 1]
@@ -328,3 +342,27 @@ def test_production_serves_every_host_from_the_single_main_branch():
     assert errors == [
         "Amplify app AETHER-production-web production domain lacks an AVAILABLE www subdomain on main with a live DNS target"
     ]
+
+
+def test_production_contract_requires_a_single_gated_main_branch():
+    # The retired Olympus branch, or any other, fails the single-branch contract.
+    errors = checker.contract_errors(
+        mode="production-status", expected_commit=COMMIT, client=_client(production_branches=("main", "production-olympus"))
+    )
+    assert errors == [
+        "Amplify app AETHER-production-web must have only the main branch; found main, production-olympus"
+    ]
+    # main is released by the workflow after the integration authority, never by an auto-build on push.
+    errors = checker.contract_errors(
+        mode="production-status", expected_commit=COMMIT, client=_client(production_auto_build=True)
+    )
+    assert any("must not auto-build" in error for error in errors)
+
+
+def test_production_contract_rejects_a_build_time_site_override():
+    errors = checker.contract_errors(
+        mode="production-status",
+        expected_commit=COMMIT,
+        client=_client(production_extra_environment={"VITE_SITE": "olympus"}),
+    )
+    assert "Amplify app AETHER-production-web main branch sets VITE_SITE; the site must come from the hostname" in errors
