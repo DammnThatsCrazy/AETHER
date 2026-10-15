@@ -76,19 +76,18 @@ mirrored in these filters silently stops the workflows.
 
 | Step | State |
 |---|---|
-| 1. Repo accepts both spellings | Prepared in the open PR #793, **not yet merged** |
+| 1. Repo accepts both spellings | **Done.** Merged in #793 (green on `verification / disposition` and `ci / verdict`) |
 | 2. AWS trust: add `refs/heads/development` | **Done.** `AetherStagingFrontendPreview` now trusts both `Development` and `development`; verified by re-reading the policy |
 | 3. Rename `Development` to `development` | **Done.** `origin` has only `development`; `Development` no longer exists |
 | 4. Retarget rulesets | Not verified from this session |
-| 5. Repo cleanup (drop capitalized spelling) | Pending, after step 1 merges |
-| 6. AWS cleanup (remove `refs/heads/Development`) | Pending, after step 5; nothing uses the old name once it merges |
+| 5. Repo cleanup (drop capitalized spelling) | Pending; safe now that step 1 is merged, once nothing else needs the old name |
+| 6. AWS cleanup (remove `refs/heads/Development`) | Pending, after step 5 |
 | 7. Amplify `development` app branch | Not verified from this session |
 
-**Out of order:** the rename (step 3) landed before step 1. Until #793 merges,
-workflow `branches:` filters and the `development-web.yml` deploy guard still
-name only `Development`, so push-triggered runs and the `development` web deploy
-do not fire for `development`. Merge #793 first; it is green on both
-`verification / disposition` and `ci / verdict`.
+**Ordering:** the rename (step 3) landed before step 1, so push-triggered runs and
+the `development` web deploy were not firing for `development` between the
+rename and the merge of #793. With #793 merged, both spellings are accepted
+everywhere, so the remaining steps are cleanup only.
 
 ## Rollback
 
