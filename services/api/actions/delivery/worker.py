@@ -401,7 +401,7 @@ class DeliveryWorker:
             logger.warning(f"Intent completion check failed for {intent_id!r}: {exc}")
 
     async def _resolve_credential(self, job: dict[str, Any]) -> Optional[str]:
-        """Look up credential from vault via secret_ref in provider_config.
+        """Look up the job tenant's credential via secret_ref in provider_config.
 
         Raises RetryableProviderError on transient vault failures so the job
         is retried rather than dead-lettered.
@@ -409,12 +409,16 @@ class DeliveryWorker:
         from actions.delivery.adapters.base import RetryableProviderError
         provider_config = job.get("provider_config") or {}
         secret_ref = provider_config.get("secret_ref")
-        if not secret_ref:
+        tenant_id = job.get("tenant_id") or ""
+        if not secret_ref or not tenant_id:
             return None
         try:
+            from shared.credentials.service import credential_service
+            secret = await credential_service.reveal(tenant_id, secret_ref)
+            if secret:
+                return secret
             from repositories.repos import ProvidersRepository
-            repo = ProvidersRepository()
-            record = await repo.find_by_id(secret_ref)
+            record = await ProvidersRepository().find_for_tenant(tenant_id, secret_ref)
             if record:
                 return record.get("api_key") or record.get("token")
             return None

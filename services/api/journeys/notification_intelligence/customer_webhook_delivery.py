@@ -589,8 +589,8 @@ class CustomerWebhookSecretStore:
         }
 
     async def resolve(self, tenant_id: str, secret_ref: str) -> str:
-        record = await self._provider_repository.find_by_id(secret_ref)
-        if not record or record.get("tenant_id") != tenant_id:
+        record = await self._provider_repository.find_for_tenant(tenant_id, secret_ref)
+        if not record:
             raise ProviderUnavailableError("webhook signing secret unavailable")
         encrypted = record.get("encrypted_api_key")
         if encrypted:

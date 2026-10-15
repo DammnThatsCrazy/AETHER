@@ -103,13 +103,8 @@ class SlackNotificationService:
 
     async def _resolve_bot_token(self, tenant_id: str) -> Optional[str]:
         try:
-            from repositories.repos import BaseRepository
-            repo = BaseRepository("slack_channel_configs")
-            record = await repo.find_by_id(tenant_id)
-            if record and record.get("bot_token_ref"):
-                vault = self._providers_repo()
-                cred = await vault.find_by_id(record["bot_token_ref"])
-                return cred.get("api_key") if cred else None
+            cred = await self._providers_repo().find_for_tenant(tenant_id, f"slack_bot_token:{tenant_id}")
+            return cred.get("api_key") if cred else None
         except Exception as exc:
             logger.warning(f"Slack token resolution failed for {tenant_id}: {exc}")
         return None

@@ -615,7 +615,6 @@ slack_notify_router = APIRouter(
 
 class SlackChannelConfigBody(BaseModel):
     default_channel: str
-    bot_token_ref: Optional[str] = None
     channel_map: Optional[dict[str, str]] = None
     templates: Optional[dict[str, str]] = None
     enabled: Optional[bool] = True
@@ -623,7 +622,10 @@ class SlackChannelConfigBody(BaseModel):
 
 @slack_notify_router.put("")
 async def configure_slack_notify(body: SlackChannelConfigBody, request: Request):
-    """Configure per-tenant Slack outbound channel mapping and templates."""
+    """Configure per-tenant Slack outbound channel mapping and templates.
+
+    The bot token is the one saved through the tenant's notification config.
+    """
     tenant_id = _tenant_id(request, "write")
     from repositories.repos import BaseRepository
     repo = BaseRepository("slack_channel_configs")
@@ -634,8 +636,6 @@ async def configure_slack_notify(body: SlackChannelConfigBody, request: Request)
         "templates": body.templates or {},
         "enabled": body.enabled if body.enabled is not None else True,
     }
-    if body.bot_token_ref:
-        record["bot_token_ref"] = body.bot_token_ref
     stored = await repo.insert(tenant_id, record)
     return APIResponse(data=_strip_secrets_shallow(stored)).to_dict()
 
