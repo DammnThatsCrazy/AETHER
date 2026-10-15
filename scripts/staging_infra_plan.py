@@ -35,7 +35,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-TF_ROOT = ROOT / "deploy" / "aws" / "terraform"
+TF_ROOT = ROOT / "infra" / "aws" / "terraform"
 TF_MODULES = TF_ROOT / "modules"
 STALE_MNT = ROOT / "docs" / "archive" / "legacy-architecture" / "aws-deployment" / "mnt"
 

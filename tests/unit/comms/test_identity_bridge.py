@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -26,7 +26,7 @@ def _clean():
 
 @pytest.mark.asyncio
 async def test_personal_email_records_provisional_with_alias():
-    from services.comms.identity_bridge import ProviderIdentityBridge
+    from journeys.comms.identity_bridge import ProviderIdentityBridge
 
     bridge = ProviderIdentityBridge()
     ident = await bridge.record_observation(
@@ -42,7 +42,7 @@ async def test_personal_email_records_provisional_with_alias():
 
 @pytest.mark.asyncio
 async def test_shared_mailbox_never_auto_resolves_to_human(monkeypatch):
-    from services.comms.identity_bridge import ProviderIdentityBridge
+    from journeys.comms.identity_bridge import ProviderIdentityBridge
 
     # Even if an entity exists for the alias, a shared mailbox must not collapse.
     async def fake_resolve(self, tenant_id, alias_hash):
@@ -61,7 +61,7 @@ async def test_shared_mailbox_never_auto_resolves_to_human(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_resolves_when_alias_maps_to_entity(monkeypatch):
-    from services.comms.identity_bridge import ProviderIdentityBridge
+    from journeys.comms.identity_bridge import ProviderIdentityBridge
 
     async def fake_resolve(self, tenant_id, alias_hash):
         return "entity-42"
@@ -80,7 +80,7 @@ async def test_resolves_when_alias_maps_to_entity(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_observation_is_idempotent_and_preserves_first_seen():
-    from services.comms.identity_bridge import ProviderIdentityBridge, ProviderIdentityRepository
+    from journeys.comms.identity_bridge import ProviderIdentityBridge, ProviderIdentityRepository
 
     bridge = ProviderIdentityBridge()
     first = await bridge.record_observation(
@@ -98,7 +98,7 @@ async def test_observation_is_idempotent_and_preserves_first_seen():
 
 @pytest.mark.asyncio
 async def test_record_identity_from_profile_event():
-    from services.comms.identity_bridge import record_identity_from_event, ProviderIdentityRepository
+    from journeys.comms.identity_bridge import record_identity_from_event, ProviderIdentityRepository
 
     ident = await record_identity_from_event("t1", {
         "event_type": "klaviyo.profile",
@@ -115,7 +115,7 @@ async def test_record_identity_from_profile_event():
 
 @pytest.mark.asyncio
 async def test_merge_repoints_mappings():
-    from services.comms.identity_bridge import ProviderIdentityBridge, ProviderIdentityRepository
+    from journeys.comms.identity_bridge import ProviderIdentityBridge, ProviderIdentityRepository
 
     bridge = ProviderIdentityBridge()
     row = await bridge.record_observation(

@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -35,12 +35,12 @@ def _ts():
 
 
 def _make_explorer():
-    from services.measurement.repositories.touchpoint_repo import TouchpointRepository
-    from services.measurement.repositories.conversion_repo import ConversionRepository
-    from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
-    from services.measurement.repositories.journey_repo import JourneyRepository
-    from services.measurement.repositories.spend_repo import SpendRepository
-    from services.campaign.exploration import CampaignPopulationExplorer
+    from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
+    from journeys.measurement.repositories.conversion_repo import ConversionRepository
+    from journeys.measurement.repositories.attribution_run_repo import AttributionRunRepository
+    from journeys.measurement.repositories.journey_repo import JourneyRepository
+    from journeys.measurement.repositories.spend_repo import SpendRepository
+    from journeys.campaign.exploration import CampaignPopulationExplorer
     return CampaignPopulationExplorer(
         touchpoint_repo=TouchpointRepository(),
         conversion_repo=ConversionRepository(),
@@ -55,7 +55,7 @@ def _make_explorer():
 class TestPopulationClassification:
     @pytest.fixture(autouse=True)
     def clear(self):
-        from services.measurement.repositories.touchpoint_repo import _local_store
+        from journeys.measurement.repositories.touchpoint_repo import _local_store
         _local_store.clear()
         yield
         _local_store.clear()
@@ -63,7 +63,7 @@ class TestPopulationClassification:
     @pytest.mark.asyncio
     async def test_population_observed_counts_all_touchpoints(self):
         """Observed = all unique entities that had any touchpoint."""
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
         repo = TouchpointRepository()
         for i in range(3):
             await repo.upsert({
@@ -79,7 +79,7 @@ class TestPopulationClassification:
     @pytest.mark.asyncio
     async def test_population_resolved_requires_profile_or_cluster(self):
         """Resolved = entities with profile_id or cluster_id (not just anonymous_id)."""
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
         repo = TouchpointRepository()
         # Anonymous (not resolved)
         await repo.upsert({
@@ -100,7 +100,7 @@ class TestPopulationClassification:
     @pytest.mark.asyncio
     async def test_population_engaged_excludes_passive_types(self):
         """Engaged excludes passive touchpoint types (impression, email_delivery, etc.)."""
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
         repo = TouchpointRepository()
         # Passive — should NOT count as engaged
         for tp_type in ("impression", "viewable_impression", "ad_exposure",
@@ -127,9 +127,9 @@ class TestPopulationClassification:
 class TestReconciliationInvariants:
     @pytest.fixture(autouse=True)
     def clear_all(self):
-        from services.measurement.repositories.touchpoint_repo import _local_store as tp
-        from services.measurement.repositories.conversion_repo import _local_store as cv
-        from services.measurement.repositories.attribution_run_repo import _local_credits as cr
+        from journeys.measurement.repositories.touchpoint_repo import _local_store as tp
+        from journeys.measurement.repositories.conversion_repo import _local_store as cv
+        from journeys.measurement.repositories.attribution_run_repo import _local_credits as cr
         tp.clear()
         cv.clear()
         cr.clear()
@@ -141,8 +141,8 @@ class TestReconciliationInvariants:
     @pytest.mark.asyncio
     async def test_attributed_lte_converted(self):
         """Overview: attributed_count must always ≤ converted_count."""
-        from services.measurement.repositories.conversion_repo import ConversionRepository
-        from services.measurement.repositories.attribution_run_repo import _local_credits
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository
+        from journeys.measurement.repositories.attribution_run_repo import _local_credits
         repo = ConversionRepository()
 
         # Write 2 conversions
@@ -169,7 +169,7 @@ class TestReconciliationInvariants:
     @pytest.mark.asyncio
     async def test_resolved_lte_observed(self):
         """Overview: resolved_count must always ≤ observed_count (clamped not raised)."""
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
         repo = TouchpointRepository()
 
         # resolved (profile_id set)
@@ -194,7 +194,7 @@ class TestReconciliationInvariants:
     @pytest.mark.asyncio
     async def test_attribution_credit_sum_tolerance(self):
         """Credit weights per conversion must sum to 1.0 ± 0.001."""
-        from services.measurement.repositories.attribution_run_repo import (
+        from journeys.measurement.repositories.attribution_run_repo import (
             AttributionRunRepository, _local_credits,
         )
         conversion_id = str(uuid4())
@@ -237,7 +237,7 @@ class TestGraphBudgetEnforcement:
     @pytest.mark.asyncio
     async def test_depth_equal_to_3_is_accepted(self):
         """Depth of exactly 3 should not raise a budget error."""
-        from services.measurement.repositories.touchpoint_repo import _local_store
+        from journeys.measurement.repositories.touchpoint_repo import _local_store
         _local_store.clear()
         explorer = _make_explorer()
         try:
@@ -261,7 +261,7 @@ class TestGraphBudgetEnforcement:
     @pytest.mark.asyncio
     async def test_budget_is_not_bypassable_at_default_limits(self):
         """Verify that default graph call respects limits (depth=2, nodes≤500, edges≤1500)."""
-        from services.measurement.repositories.touchpoint_repo import _local_store
+        from journeys.measurement.repositories.touchpoint_repo import _local_store
         _local_store.clear()
         explorer = _make_explorer()
         result = await explorer.get_graph_anchor(TENANT, CAMPAIGN, request={})
@@ -275,8 +275,8 @@ class TestGraphBudgetEnforcement:
 class TestTenantIdPropagation:
     @pytest.fixture(autouse=True)
     def clear_all(self):
-        from services.measurement.repositories.touchpoint_repo import _local_store as tp
-        from services.measurement.repositories.conversion_repo import _local_store as cv
+        from journeys.measurement.repositories.touchpoint_repo import _local_store as tp
+        from journeys.measurement.repositories.conversion_repo import _local_store as cv
         tp.clear()
         cv.clear()
         yield
@@ -286,7 +286,7 @@ class TestTenantIdPropagation:
     @pytest.mark.asyncio
     async def test_get_overview_isolates_by_tenant(self):
         """get_overview must not include data from a different tenant."""
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
         tp_repo = TouchpointRepository()
         other_tenant = f"other-tenant-{uuid4()}"
 
@@ -315,7 +315,7 @@ class TestTenantIdPropagation:
     @pytest.mark.asyncio
     async def test_get_population_only_returns_requesting_tenant_rows(self):
         """get_population must scope results to the requesting tenant only."""
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
         tp_repo = TouchpointRepository()
         other_tenant = f"other-pop-{uuid4()}"
 

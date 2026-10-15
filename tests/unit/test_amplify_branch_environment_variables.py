@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-TERRAFORM_MAIN = REPO_ROOT / "deploy/aws/terraform/main.tf"
+TERRAFORM_MAIN = REPO_ROOT / "infra/aws/terraform/main.tf"
 
 
 def _branch_environment_variable_maps() -> tuple[str, str, str, str]:
@@ -33,7 +33,7 @@ def _branch_environment_variable_maps() -> tuple[str, str, str, str]:
         re.MULTILINE | re.DOTALL,
     )
     aether_app = re.search(
-        r'^    each\.key == "aether-app" \? \{\n(?P<body>.*?)^    \} : \{\},$',
+        r'^    each\.key == "aether-app" \? merge\(local\.aether_social_login_env, \{\n(?P<body>.*?)^    \}\) : \{\},$',
         expression,
         re.MULTILINE | re.DOTALL,
     )
@@ -104,7 +104,7 @@ def test_unified_site_branch_receives_only_public_site_settings() -> None:
     Auth0 redirect and logout URIs sit under /app."""
     expression, _, _, _ = _branch_environment_variable_maps()
     site = re.search(
-        r'^    each\.key == "aether-marketing" && local\.aether_host_serves_site \? \{\n(?P<body>.*?)^    \} : \{\},$',
+        r'^    each\.key == "aether-marketing" && local\.aether_host_serves_site \? merge\(local\.aether_social_login_env, \{\n(?P<body>.*?)^    \}\) : \{\},$',
         expression,
         re.MULTILINE | re.DOTALL,
     )
@@ -129,3 +129,17 @@ def test_unified_site_branch_receives_only_public_site_settings() -> None:
     assert _value(body, "VITE_AUTH0_LOGOUT_URI") == '"${local.aether_app_base_url}/login"'
     assert _value(body, "VITE_PUBLISH_PRICES") == '"true"'
     assert _value(body, "VITE_API_BASE_URL") == '"https://${var.domain_name}"'
+
+
+def test_product_social_sign_in_connections_are_omitted_when_disabled() -> None:
+    """Both product builds get the social connection list from the Auth0
+    module, and the key is absent (never blank) when social is off."""
+    source = TERRAFORM_MAIN.read_text(encoding="utf-8")
+    local = re.search(
+        r"^  aether_social_login_env = length\(module\.auth0\.aether_social_connections\) > 0 \? \{\n(?P<body>.*?)^  \} : \{\}$",
+        source,
+        re.MULTILINE | re.DOTALL,
+    )
+    assert local is not None, "the social connection map must be empty when social connections are off"
+    assert _keys(local.group("body")) == {"VITE_AUTH0_SOCIAL_CONNECTIONS"}
+    assert "module.auth0.aether_social_connections" in _value(local.group("body"), "VITE_AUTH0_SOCIAL_CONNECTIONS")

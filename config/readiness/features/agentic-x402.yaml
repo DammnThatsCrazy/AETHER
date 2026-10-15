@@ -99,7 +99,7 @@ operational_ownership:
   technical_owner: agent-platform
   operational_owner: platform-ops
   escalation: pagerduty:agent-platform
-  runbook: docs/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md
+  runbook: docs/operations/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md
   dashboards:
   - grafana:agent-platform
   alerts:
@@ -134,7 +134,7 @@ release_profiles:
     productionization_required: true
     environment_gate: pilot
     business_gate: false
-  production-lean:
+  production:
     participation: not_in_release
     note: Excluded from the founding-tenant release scope (see config/founding_tenant_release.yaml).
   production-scale:

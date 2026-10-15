@@ -1,0 +1,74 @@
+---
+title: Test Evidence — Unified Canonical Journey
+slug: productization/unified-canonical-journey/test-evidence
+section: operations
+visibility: I
+audience: [architect, ops, buyer]
+status: stable
+since_version: 0.1.0
+source_files: [tests/unit/test_canonical_activity.py, tests/unit/test_journey_compiler_v2.py, tests/unit/test_journey_step_repo.py, tests/unit/test_silver_adapters.py, tests/integration/test_unified_journey_e2e.py, tests/security/test_journey_tenant_isolation.py, services/api/tests/unit/test_commerce_reconciliation_as_of.py]
+source_hashes:
+  "services/api/tests/unit/test_commerce_reconciliation_as_of.py": "sha256:c4c68e31a8c2cf25210078bbedb454994b133ed8c47d5212b77ef7a4e966300c"
+  "tests/integration/test_unified_journey_e2e.py": "sha256:62aaddd11e18835842b0dca68228f4fca4357a487e8c303a43b371d829d0c221"
+  "tests/security/test_journey_tenant_isolation.py": "sha256:d6dc20b7b16cfd586cee8114ea4baaf18a7e80b412e8fa0a0114432bd5edb902"
+  "tests/unit/test_canonical_activity.py": "sha256:10e6ad2a87181ef2fd944924016b6b020d114be530a28681e1aa12252fbf9360"
+  "tests/unit/test_journey_compiler_v2.py": "sha256:b7595457cfff4feaf3388d15f0aff45d240297138c4a39f497d2a9016791523f"
+  "tests/unit/test_journey_step_repo.py": "sha256:898f0ea4a696cff851766b359e279a26669aefd560227e23ad78f50e63f7620e"
+  "tests/unit/test_silver_adapters.py": "sha256:be537aeb2071937a5b6792c819e87313fd98b6126016d190b06a216dbc6fa63f"
+---
+
+# Test Evidence — Unified Canonical Journey
+
+## Summary
+
+| Test file | Tests | Coverage |
+|---|---|---|
+| `test_canonical_activity.py` | 8 | Upsert idempotency, status lifecycle, tenant isolation, tombstone exclusion |
+| `test_journey_compiler_v2.py` | 16 | Cross-rail ordering, deterministic sort, transitions, reorg, consent, typed-identity collisions, empty profile |
+| `test_journey_step_repo.py` | 10 | Bulk insert, cursor pagination, family/wallet/session filters, adjacent steps, source-evidence persistence contract |
+| `test_silver_adapters.py` | 14 | All 11 silver table adapters + idempotency stability + unknown table |
+| `test_commerce_reconciliation_as_of.py` | 6 | Commerce knowledge-time reconstruction, tenant isolation, exact Stripe refund reversal, and explicit settlement-link evidence |
+| `test_unified_journey_e2e.py` | 5 | Scenarios A (campaign→web2→web3→conversion), B (anonymous), F (reorg), G (multi-tenant wallet), H (late event replay) |
+| `test_journey_tenant_isolation.py` | 4 | Tenant A cannot read tenant B activity, steps, or profile journeys |
+| **Total** | **64** | |
+
+## Key Test Scenarios
+
+### Scenario A — Campaign → Web2 → Web3 → Conversion
+Verifies the core cross-rail interleaving: a profile receives a paid ad touchpoint, browses the site, connects a wallet and makes a Web3 transaction, then converts. The compiled journey must include all four steps in chronological order with correct family labels and transition types.
+
+### Scenario F — Blockchain Reorg
+A confirmed Web3 transaction is later replaced by a reorg. `rebuild_affected_by_web3_status_change()` must update the `canonical_activity` status to `reorged` and recompile the profile's journey, producing a new version with the corrected step status.
+
+### Scenario G — Multi-tenant Wallet Collision
+The same wallet address appears in two different tenants. Confirms no data leakage: each tenant's activity, steps, and journey are completely isolated at the `tenant_id` predicate level.
+
+### Scenario H — Late Event Deterministic Replay
+A late-arriving Web2 event with an earlier `occurred_at` is inserted after the journey was already compiled. Recompilation must place the step at the correct chronological position, producing the same deterministic ordering as if the event had arrived on time.
+
+### Typed identity collision and atomic publication
+
+Profile, cluster, and anonymous identities that share the same raw identifier
+remain separate journey lineages. Repository tests also verify the schema-v2
+source-classification step parameters, while compiler/repository behavior keeps
+version activation and step insertion in one transaction so a failed step write
+cannot expose a hollow current version.
+
+## Running Tests
+
+```bash
+# Unit tests (no DB required)
+python -m pytest tests/unit/test_canonical_activity.py \
+                 tests/unit/test_journey_compiler_v2.py \
+                 tests/unit/test_journey_step_repo.py \
+                 tests/unit/test_silver_adapters.py \
+                 --override-ini="addopts=" -v
+
+# Integration + security
+python -m pytest tests/integration/test_unified_journey_e2e.py \
+                 tests/security/test_journey_tenant_isolation.py \
+                 --override-ini="addopts=" -v
+
+# Commerce evidence contract (backend test tree)
+python -m pytest services/api/tests/unit/test_commerce_reconciliation_as_of.py -v
+```

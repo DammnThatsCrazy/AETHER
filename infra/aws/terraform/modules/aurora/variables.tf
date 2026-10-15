@@ -1,0 +1,79 @@
+variable "environment" {
+  type        = string
+  description = "Deployment environment"
+}
+
+variable "project" {
+  type        = string
+  description = "Project name"
+}
+
+variable "vpc_id" {
+  type        = string
+  description = "VPC ID"
+}
+
+variable "subnet_ids" {
+  type        = list(string)
+  description = "Isolated subnet IDs for the DB subnet group"
+}
+
+variable "aurora_sg_id" {
+  type        = string
+  description = "Security group ID to attach to the Aurora cluster"
+}
+
+variable "db_name" {
+  type        = string
+  description = "Initial database name"
+  default     = "aether"
+}
+
+variable "min_acu" {
+  type        = number
+  description = "Aurora Serverless v2 minimum capacity units (0 = auto-pause; prod callers should pass 0.5)"
+  default     = 0
+}
+
+variable "max_acu" {
+  type        = number
+  description = "Aurora Serverless v2 maximum capacity units"
+  default     = 4
+}
+
+variable "auto_pause_seconds" {
+  type        = number
+  description = "Idle seconds before Aurora Serverless v2 auto-pauses; null disables auto-pause for warm profiles."
+  default     = null
+
+  validation {
+    # A conditional, not `==  null || ...`: Terraform evaluates both operands of
+    # `||`, so comparing a null value fails the plan for every warm profile.
+    condition     = var.auto_pause_seconds == null ? true : (var.auto_pause_seconds >= 300 && var.auto_pause_seconds <= 86400)
+    error_message = "auto_pause_seconds must be null or between 300 and 86400 seconds."
+  }
+}
+
+variable "manage_legacy_staging_cluster" {
+  type        = bool
+  description = "Adopt the pre-existing aether-staging Aurora cluster so reviewed staging plans keep its data and enforce auto-pause."
+  default     = false
+}
+
+variable "backup_retention_days" {
+  type        = number
+  description = "Automated backup retention in days"
+  default     = 7
+}
+
+variable "deletion_protection" {
+  type        = bool
+  description = "Enable deletion protection"
+  default     = false
+}
+
+variable "express_mode" {
+  type        = bool
+  description = "Use AWS-managed encryption instead of a customer-managed KMS key. Required for AWS Free-tier accounts where the full VPC/KMS Aurora topology is not supported."
+  default     = false
+}

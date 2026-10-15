@@ -9,7 +9,7 @@ from pathlib import Path
 
 MIGRATION = (
     Path(__file__).resolve().parents[2]
-    / "services" / "backend"
+    / "services" / "api"
     / "alembic"
     / "versions"
     / "20260725_ai_referral_attribution.py"

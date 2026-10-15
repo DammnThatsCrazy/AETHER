@@ -27,7 +27,7 @@ except ImportError as exc:  # pragma: no cover - environment diagnostic
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SETTINGS = ROOT / "services/backend/config/settings.py"
+SETTINGS = ROOT / "services/api/config/settings.py"
 DEPLOYMENT_PROFILES = ROOT / "config/deployment_profiles.yaml"
 PYPROJECT = ROOT / "pyproject.toml"
 
@@ -136,8 +136,8 @@ def validate(path: Path) -> list[str]:
 
     _require(data, "schema_version", 1, label)
     environment = data.get("environment")
-    if environment not in {"staging", "production-lean"}:
-        errors.append(f"{label}: environment must be staging or production-lean")
+    if environment not in {"staging", "production"}:
+        errors.append(f"{label}: environment must be staging or production")
     release = data.get("release")
     if not isinstance(release, dict):
         errors.append(f"{label}: release must be a mapping")
@@ -163,10 +163,10 @@ def validate(path: Path) -> list[str]:
     if not isinstance(env, dict):
         errors.append(f"{label}: runtime.env must be a mapping")
     else:
-        # Terraform uses environment=production for the production-lean
+        # Terraform uses environment=production for the production
         # deployment profile. The profile name is release-policy metadata, not
         # a value accepted by the runtime settings environment selector.
-        runtime_environment = "production" if environment == "production-lean" else environment
+        runtime_environment = "production" if environment == "production" else environment
         if env.get("AETHER_ENV") != runtime_environment:
             errors.append(
                 f"{label}: runtime.env.AETHER_ENV must equal {runtime_environment!r} "
@@ -248,7 +248,7 @@ def validate(path: Path) -> list[str]:
             if hosting.get("staging_custom_domain") != "enabled":
                 errors.append(f"{label}: staging custom domains must be explicitly enabled for the verified staging lane")
         elif hosting.get("production_custom_domain") != "enabled":
-            errors.append(f"{label}: production-lean custom domains must be explicitly enabled")
+            errors.append(f"{label}: production custom domains must be explicitly enabled")
 
     access = data.get("access_boundary")
     if not isinstance(access, dict):
@@ -271,7 +271,7 @@ def validate(path: Path) -> list[str]:
             errors.append(f"{label}: cost guardrail must require seven observed days")
         if cost.get("evidence_mode") != "observed_only":
             errors.append(f"{label}: cost evidence mode must be observed_only")
-        profile_name = "staging" if environment == "staging" else "production-lean"
+        profile_name = "staging" if environment == "staging" else "production"
         profiles = _load(DEPLOYMENT_PROFILES).get("profiles", {})
         profile = profiles.get(profile_name, {}) if isinstance(profiles, dict) else {}
         budget = profile.get("budget", {}) if isinstance(profile, dict) else {}

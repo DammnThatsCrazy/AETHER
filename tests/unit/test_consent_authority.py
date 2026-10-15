@@ -25,13 +25,13 @@ from pathlib import Path
 import pytest  # noqa: F401  (imported for parity / future markers)
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 # Ensure backend modules are importable when this file runs in isolation.
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-_BACKEND_PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
+_BACKEND_PREFIXES = ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories")
 
 
 def _evict_backend() -> None:
@@ -48,7 +48,7 @@ def _run(coro):
 def consent_env(**flag_overrides):
     """Force a fresh, consistent backend and override consent-authority flags.
 
-    Yields the freshly-imported ``services.consent.authority`` module so tests
+    Yields the freshly-imported ``governance.consent.authority`` module so tests
     seed receipts / profiles through the same generation the decision functions
     read from.
     """
@@ -56,7 +56,7 @@ def consent_env(**flag_overrides):
     settings_mod = importlib.import_module("config.settings")
     repos = importlib.import_module("repositories.repos")
     repos.reset_in_memory_stores()
-    authority = importlib.import_module("services.consent.authority")
+    authority = importlib.import_module("governance.consent.authority")
     settings = settings_mod.settings
     original = settings.consent_authority
     if flag_overrides:
@@ -77,8 +77,11 @@ class FakeCache:
         return None
 
 
-def _make_event(batch, *, event_type="track", user_id="u1", anonymous_id="a1", consent=None):
-    ctx = batch.EventContext(consent=consent) if consent is not None else batch.EventContext()
+def _make_event(
+    batch, *, event_type="track", user_id="u1", anonymous_id="a1",
+    consent=None, privacy=None,
+):
+    ctx = batch.EventContext(consent=consent, privacy=privacy)
     return batch.BaseEvent(
         id=f"evt-{user_id}-{event_type}",
         type=event_type,
@@ -120,6 +123,25 @@ class TestEvaluateConsent:
                 "r1", "t1", "analytics", "granted", subject_id="u1"))
             allowed, reason = _run(authority.evaluate_consent("t1", "u1", "a1", "analytics"))
             assert (allowed, reason) == (True, None)
+
+    def test_receipt_evidence_returns_only_the_actual_allowed_receipt_id(self):
+        with consent_env() as authority:
+            _run(authority.ConsentReceiptRepository().record(
+                "actual-receipt-1", "t1", "analytics", "granted", subject_id="u1"))
+            allowed = _run(authority.evaluate_consent_with_receipt(
+                "t1", "u1", "a1", "analytics"))
+            assert (allowed.allowed, allowed.reason_code, allowed.receipt_id) == (
+                True, None, "actual-receipt-1"
+            )
+
+            _run(authority.ConsentReceiptRepository().record(
+                "actual-receipt-2", "t1", "analytics", "revoked",
+                subject_id="u2", revoked_at="2026-01-01T00:00:00Z"))
+            denied = _run(authority.evaluate_consent_with_receipt(
+                "t1", "u2", "a2", "analytics"))
+            assert denied.allowed is False
+            assert denied.reason_code == authority.CONSENT_REVOKED
+            assert denied.receipt_id is None
 
     def test_denied_receipt_rejects(self):
         with consent_env() as authority:
@@ -254,10 +276,71 @@ class TestEvaluateDataPolicy:
 
 class TestIngestionEnforcement:
 
+    def test_authoritative_receipt_is_stamped_into_envelope_not_sdk_privacy_claim(self):
+        with consent_env(authoritative_consent_enforcement_enabled=True) as authority:
+            batch = importlib.import_module("ingestion.ingestion.batch")
+            validation = importlib.import_module("ingestion.ingestion.validation")
+            envelope_adapter = importlib.import_module(
+                "ingestion.ingestion.observation_envelope"
+            )
+            _run(authority.ConsentReceiptRepository().record(
+                "server-receipt-1", "t1", "analytics", "granted", subject_id="u1"))
+            event = _make_event(
+                batch,
+                consent={"analytics": True},
+                privacy={"consent_snapshot": "client-forged", "purposes": ["marketing"]},
+            )
+
+            result = _run(validation.validate_event(
+                sdk_event=event,
+                tenant_id="t1",
+                batch_id="batch-1",
+                received_at="2026-07-12T00:00:00Z",
+            ))
+
+            assert result.allowed is True
+            assert result.normalized_event["privacy"] == {
+                "consent_snapshot": "server-receipt-1",
+                "purposes": ["analytics"],
+                "GPC": False,
+                "DNT": False,
+            }
+            envelope = envelope_adapter.build_sdk_observation_envelope(
+                result.normalized_event
+            )
+            assert envelope.privacy.consent_snapshot == "server-receipt-1"
+            assert envelope.privacy.purposes == ["analytics"]
+
+    def test_sdk_privacy_receipt_claim_is_not_promoted_without_authoritative_lookup(self):
+        with consent_env(authoritative_consent_enforcement_enabled=False):
+            batch = importlib.import_module("ingestion.ingestion.batch")
+            validation = importlib.import_module("ingestion.ingestion.validation")
+            envelope_adapter = importlib.import_module(
+                "ingestion.ingestion.observation_envelope"
+            )
+            event = _make_event(
+                batch,
+                consent={"analytics": True},
+                privacy={"consent_snapshot": "client-forged", "purposes": ["analytics"]},
+            )
+            result = _run(validation.validate_event(
+                sdk_event=event,
+                tenant_id="t1",
+                batch_id="batch-1",
+                received_at="2026-07-12T00:00:00Z",
+            ))
+
+            assert result.allowed is True
+            assert "privacy" not in result.normalized_event
+            envelope = envelope_adapter.build_sdk_observation_envelope(
+                result.normalized_event
+            )
+            assert envelope.privacy is None
+
     def test_granted_sdk_snapshot_but_no_server_receipt_is_rejected(self):
         # The SDK claims consent; the server has no receipt. Server wins.
         with consent_env(authoritative_consent_enforcement_enabled=True):
-            batch = importlib.import_module("services.ingestion.batch")
+            batch = importlib.import_module("ingestion.ingestion.batch")
             event = _make_event(batch, consent={"analytics": True})
             result = _process(batch, event)
             assert result.status == "rejected"
@@ -265,7 +348,7 @@ class TestIngestionEnforcement:
 
     def test_server_granted_receipt_is_accepted(self):
         with consent_env(authoritative_consent_enforcement_enabled=True) as authority:
-            batch = importlib.import_module("services.ingestion.batch")
+            batch = importlib.import_module("ingestion.ingestion.batch")
             _run(authority.ConsentReceiptRepository().record(
                 "r1", "t1", "analytics", "granted", subject_id="u1"))
             event = _make_event(batch, consent={"analytics": True})
@@ -274,7 +357,7 @@ class TestIngestionEnforcement:
 
     def test_server_revoked_receipt_is_rejected_despite_sdk_grant(self):
         with consent_env(authoritative_consent_enforcement_enabled=True) as authority:
-            batch = importlib.import_module("services.ingestion.batch")
+            batch = importlib.import_module("ingestion.ingestion.batch")
             _run(authority.ConsentReceiptRepository().record(
                 "r1", "t1", "analytics", "revoked", subject_id="u1",
                 revoked_at="2026-01-01T00:00:00Z"))
@@ -286,7 +369,7 @@ class TestIngestionEnforcement:
     def test_flag_off_preserves_legacy_sdk_snapshot_behavior(self):
         # Flag OFF: no server receipt required; the SDK snapshot governs.
         with consent_env(authoritative_consent_enforcement_enabled=False):
-            batch = importlib.import_module("services.ingestion.batch")
+            batch = importlib.import_module("ingestion.ingestion.batch")
             # SDK grants analytics, no server receipt → accepted (legacy).
             event = _make_event(batch, consent={"analytics": True})
             assert _process(batch, event).status == "accepted"
@@ -295,7 +378,7 @@ class TestIngestionEnforcement:
         # Flag OFF: the legacy per-event snapshot gate (4a) still blocks an
         # explicit SDK denial.
         with consent_env(authoritative_consent_enforcement_enabled=False):
-            batch = importlib.import_module("services.ingestion.batch")
+            batch = importlib.import_module("ingestion.ingestion.batch")
             event = _make_event(batch, consent={"analytics": False})
             result = _process(batch, event)
             assert result.status == "rejected"

@@ -11,7 +11,7 @@ from typing import Any
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-SCHEMA = ROOT / "contracts/delivery/release-evidence-bundle.schema.json"
+SCHEMA = ROOT / "packages/contracts/delivery/release-evidence-bundle.schema.json"
 JOURNEYS = ROOT / "config/golden_journeys.yaml"
 BLOCKING = {"BLOCKED", "FAILED"}
 REQUIRED_JOURNEYS = {"tenant_activation", "first_graph", "first_insight", "investigation", "recovery"}

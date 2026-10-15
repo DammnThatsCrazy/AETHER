@@ -27,10 +27,10 @@ def test_registry_present_and_entries_well_formed() -> None:
 
 def test_canonical_units_registered() -> None:
     paths = {entry["path"] for entry in _load_registry()}
-    assert "services/backend" in paths
+    assert "services/api" in paths
     assert "packages" in paths
     by_path = {entry["path"]: entry for entry in _load_registry()}
-    assert by_path["services/backend"]["role"] == "canonical"
+    assert by_path["services/api"]["role"] == "canonical"
     assert by_path["packages"]["role"] == "canonical"
 
 
@@ -85,9 +85,9 @@ def test_backend_orphan_unit_mapping_from_synthetic_files() -> None:
         "docs/archive/legacy-architecture/backend/services/delegation/middleware.py",
         "docs/archive/legacy-architecture/backend/services/journey-service/main.py",
         "docs/archive/legacy-architecture/backend/services/web3/web3_service.py",
-        "services/backend/services/ingestion/batch.py",
+        "services/api/ingestion/ingestion/batch.py",
         "docs/archive/legacy-architecture/backend/README.md",
-        "packages/web/src/index.ts",
+        "packages/sdk/web/src/index.ts",
     }
     units = gate._backend_orphan_units(files)
     assert units == {
@@ -101,7 +101,7 @@ def test_backend_orphan_unit_mapping_from_synthetic_files() -> None:
 
 
 def test_present_detects_registered_missing() -> None:
-    files = {"packages/web/src/index.ts", "docs/README.md"}
+    files = {"packages/sdk/web/src/index.ts", "docs/README.md"}
     assert gate._present("packages", files)
     assert gate._present("docs", files)
     assert not gate._present("scripts", files)

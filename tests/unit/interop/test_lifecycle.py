@@ -6,7 +6,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from services.interop.lifecycle import (
+from graph.interop.lifecycle import (
     LEGAL_TRANSITIONS,
     TERMINAL_STATES,
     LifecycleEngine,

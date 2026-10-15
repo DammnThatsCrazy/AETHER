@@ -98,7 +98,7 @@ operational_ownership:
   technical_owner: platform
   operational_owner: platform-ops
   escalation: pagerduty:platform
-  runbook: docs/runbooks/STAGING_PREFLIGHT.md
+  runbook: docs/operations/runbooks/STAGING_PREFLIGHT.md
   dashboards:
   - grafana:platform
   alerts:
@@ -133,7 +133,7 @@ release_profiles:
     productionization_required: true
     environment_gate: pilot
     business_gate: false
-  production-lean:
+  production:
     participation: required
     implementation_floor: TURNKEY
     productionization_required: true

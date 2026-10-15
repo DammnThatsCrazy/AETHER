@@ -20,13 +20,13 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).parents[2]
-BACKEND_ROOT = REPO_ROOT / "services" / "backend"
+BACKEND_ROOT = REPO_ROOT / "services" / "api"
 
 
 @contextmanager
 def backend_path():
     original = list(sys.path)
-    for prefix in ("shared", "services", "config"):
+    for prefix in ("shared", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "config"):
         for name in list(sys.modules):
             if name == prefix or name.startswith(f"{prefix}."):
                 sys.modules.pop(name, None)
@@ -51,7 +51,7 @@ def backend_path():
 def geo_surface():
     """backend_path() plus the surface module + models imported once."""
     with backend_path():
-        from services.geo.location_edges import (  # noqa: WPS433
+        from graph.geo.location_edges import (  # noqa: WPS433
             LocationFactValidationError,
             build_location_edge_intents,
             validate_location_fact,

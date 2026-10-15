@@ -1,6 +1,6 @@
 """Consolidated ``lean-worker`` execution group — behavioural guarantees.
 
-``production-lean`` packs all eight logical worker roles into one task instead
+``production`` packs all eight logical worker roles into one task instead
 of eight. These tests exist to prove that packing changed the *process
 boundary* and nothing else: every logical role must keep its own queue,
 consumer group, backpressure envelope, DLQ, retry policy, metrics label and
@@ -26,13 +26,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-BACKEND = str(Path(__file__).parents[2] / "services" / "backend")
+BACKEND = str(Path(__file__).parents[2] / "services" / "api")
 if BACKEND not in sys.path:
     sys.path.insert(0, BACKEND)
 
 from config.settings import Environment  # noqa: E402
-from services.runtime import run_role  # noqa: E402
-from services.runtime.consumer_runner import (  # noqa: E402
+from workers.runtime import run_role  # noqa: E402
+from workers.runtime.consumer_runner import (  # noqa: E402
     ConsumerLoopExited,
     ConsumerRunner,
     build_consumer_runners,
@@ -44,13 +44,13 @@ from services.runtime.consumer_runner import (  # noqa: E402
     role_queue_urls,
     start_consumer_runners,
 )
-from services.runtime.consumer_specs import (  # noqa: E402
+from workers.runtime.consumer_specs import (  # noqa: E402
     CONSUMER_SPECS,
     ConsumerSpec,
     attach_consumer_specs,
     consumer_specs_for_role,
 )
-from services.runtime.roles import (  # noqa: E402
+from workers.runtime.roles import (  # noqa: E402
     ALL_ROLES,
     EXECUTION_GROUPS,
     ROLE_TO_SPEC_NAMES,
@@ -64,7 +64,7 @@ from services.runtime.roles import (  # noqa: E402
     should_start_workers,
     specs_for_role,
 )
-from services.runtime.supervisor import WorkerSpec, WorkerSupervisor  # noqa: E402
+from workers.runtime.supervisor import WorkerSpec, WorkerSupervisor  # noqa: E402
 from shared.events.events import (  # noqa: E402
     ConsumerClientTornDown,
     DLQPublishError,
@@ -72,7 +72,7 @@ from shared.events.events import (  # noqa: E402
     EventConsumer,
     Topic,
 )
-import services.runtime.supervisor as supervisor_mod  # noqa: E402
+import workers.runtime.supervisor as supervisor_mod  # noqa: E402
 import shared.events.events as events_mod  # noqa: E402
 
 
@@ -128,7 +128,7 @@ class _MetricsRecorder:
         return [labels for metric, labels in self.calls if metric == name]
 
 
-# The per-role queue map production-lean actually supplies.
+# The per-role queue map production actually supplies.
 #
 # This used to carry five entries with a comment claiming it mirrored
 # modules/sqs/main.tf. It did not. Terraform's var.consumer_role_queues default
@@ -162,7 +162,7 @@ _DLQ_MAP = {role: f"{url}-dlq" for role, url in _QUEUE_MAP.items()}
 
 _TERRAFORM_SQS_VARIABLES = (
     Path(__file__).parents[2]
-    / "deploy" / "aws" / "terraform" / "modules" / "sqs" / "variables.tf"
+    / "infra" / "aws" / "terraform" / "modules" / "sqs" / "variables.tf"
 )
 
 
@@ -602,7 +602,7 @@ def test_semantic_worker_group_no_longer_falls_back_to_the_default_group():
 
 
 def test_dedicated_role_still_produces_exactly_one_runner(monkeypatch):
-    """production-scale / enterprise-isolated behaviour must be unchanged."""
+    """A dedicated (one task per role) topology must behave as before."""
     monkeypatch.setenv("SQS_QUEUE_URL", "https://sqs.test/only")
     for role in ("stream-worker", "identity-worker", "graph-writer",
                  "measurement-worker", "semantic-worker"):
@@ -2067,7 +2067,7 @@ async def test_shutdown_signals_release_the_wait():
 async def test_run_workers_drains_and_shuts_down_on_sigterm(monkeypatch):
     """End-to-end: the signal really does drive ``_shutdown`` to completion."""
     import dependencies.providers as providers_mod
-    import services.runtime as runtime_pkg
+    import workers.runtime as runtime_pkg
 
     class _FakeRuntimeRegistry:
         def __init__(self) -> None:

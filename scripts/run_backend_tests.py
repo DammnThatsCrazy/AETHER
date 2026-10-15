@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-BACKEND_TESTS = Path("services/backend/tests")
+BACKEND_TESTS = Path("services/api/tests")
 PERFORMANCE_TESTS = BACKEND_TESTS / "performance"
 
 
@@ -44,7 +44,7 @@ def _run_pytest(*paths: str, serial: bool = False) -> int:
     # .factories import ...``), so the test root is deliberately NOT put on
     # PYTHONPATH: that would make the canonical run resolve bare suite imports
     # (``from ai_economics.factories``) that fail in every direct pytest run
-    # (guarded by ``services/backend/tests/test_suite_import_paths.py``).
+    # (guarded by ``services/api/tests/test_suite_import_paths.py``).
     return subprocess.run(command, cwd=ROOT).returncode
 
 

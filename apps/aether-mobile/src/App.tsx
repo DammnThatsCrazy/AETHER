@@ -27,7 +27,7 @@ export default function App(): React.JSX.Element {
   const selectTab = (next: AppTab): void => {
     setTab(next);
     // Keep the typed navigator in sync — root tabs are pushed routes, so deep-link
-    // / goBack semantics stay coherent with the registry in `packages/mobile-ui`.
+    // / goBack semantics stay coherent with the registry in `packages/ui/mobile`.
     navigate(next);
   };
 

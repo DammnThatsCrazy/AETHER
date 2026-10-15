@@ -1,8 +1,7 @@
-"""Tests for the ephemeral TTL lease lifecycle (demo/preview fail-closed guard).
+"""Tests for the TTL lease lifecycle (the fail-closed lease guard staging uses).
 
-Guards the class of drift where an ephemeral environment could be left running
-forever — the historical failure mode the ``ttl_cleanup_required`` declaration
-exists to prevent. The lease is an absolute UTC ``expires-at`` SSM parameter at
+Guards the class of drift where an environment could be left running forever —
+the failure mode staging wake/sleep exists to prevent. The lease is an absolute UTC ``expires-at`` SSM parameter at
 ``/aether/{profile}/{env}/lifecycle/expires-at``; the guard fails closed so a
 missing, unreadable, malformed or expired lease all mean "expired".
 
@@ -95,7 +94,7 @@ def test_is_expired_not_expired():
 # evaluate — fail-closed decision with an injectable read_lease
 # ---------------------------------------------------------------------------
 def _evaluate(mod, read_lease, now=None):
-    return mod.evaluate("demo", "demo", read_lease, now or _now())
+    return mod.evaluate("staging", "staging", read_lease, now or _now())
 
 
 def test_evaluate_missing_lease_is_expired():
@@ -104,7 +103,7 @@ def test_evaluate_missing_lease_is_expired():
     d = _evaluate(mod, lambda p, e: None)
     assert d["expired"] is True
     assert d["action"] == "scale-to-zero + floor-zeroing"
-    assert d["lease_path"] == "/aether/demo/demo/lifecycle/expires-at"
+    assert d["lease_path"] == "/aether/staging/staging/lifecycle/expires-at"
 
 
 def test_evaluate_unreadable_lease_is_expired():
@@ -151,30 +150,12 @@ def test_evaluate_future_lease_is_live():
 # Repo-structural mutation tests
 # ---------------------------------------------------------------------------
 def _make_tree(tmp_path: Path) -> dict:
-    """A minimal live repo tree carrying the fail-closed cron workflow."""
-    wf_dir = tmp_path / ".github" / "workflows"
-    wf_dir.mkdir(parents=True)
-    (wf_dir / "ephemeral-ttl-guard.yml").write_text(
-        "name: Ephemeral TTL guard\n"
-        "on:\n"
-        "  schedule:\n"
-        "    - cron: '17 * * * *'\n"
-        "jobs:\n"
-        "  guard:\n"
-        "    runs-on: ubuntu-latest\n"
-        "    strategy:\n"
-        "      matrix:\n"
-        "        include:\n"
-        "          - profile: demo\n"
-        "            env: demo\n"
-        "          - profile: preview\n"
-        "            env: preview\n"
-    )
+    """A minimal repo root; the lease-path check reads no files from it."""
     return {"root": tmp_path}
 
 
 def test_check_passes_on_current_tree():
-    """The real tree satisfies every ephemeral TTL structural invariant."""
+    """The real tree satisfies the lease-path invariants."""
     mod = _load("ephemeral_ttl_guard")
     assert mod.check() == 0
 
@@ -189,26 +170,6 @@ def test_guard_validator_passes_on_current_tree():
     assert rc.returncode == 0, rc.stderr.decode()
 
 
-def test_check_fails_when_workflow_missing(monkeypatch, tmp_path):
-    """Removing the fail-closed cron workflow trips the structural guard."""
-    mod = _load("ephemeral_ttl_guard")
-    tree = _make_tree(tmp_path)
-    wf = tree["root"] / ".github" / "workflows" / "ephemeral-ttl-guard.yml"
-    wf.unlink()
-    monkeypatch.setattr(mod, "repo_root", lambda: tree["root"])
-    assert mod.check() != 0
-
-
-def test_check_fails_when_demo_removed_from_matrix(monkeypatch, tmp_path):
-    """Removing demo from the workflow matrix trips the structural guard."""
-    mod = _load("ephemeral_ttl_guard")
-    tree = _make_tree(tmp_path)
-    wf = tree["root"] / ".github" / "workflows" / "ephemeral-ttl-guard.yml"
-    wf.write_text(wf.read_text().replace("- profile: demo\n", ""))
-    monkeypatch.setattr(mod, "repo_root", lambda: tree["root"])
-    assert mod.check() != 0
-
-
 def test_check_fails_when_lease_path_format_drifts(monkeypatch, tmp_path):
     """Changing the lease path template away from expires-at trips the guard."""
     mod = _load("ephemeral_ttl_guard")
@@ -221,5 +182,5 @@ def test_check_fails_when_lease_path_format_drifts(monkeypatch, tmp_path):
 def test_parse_lease_and_evaluate_share_one_lease_path():
     """lease_path is the single source of truth for the SSM parameter name."""
     mod = _load("ephemeral_ttl_guard")
-    assert mod.lease_path("demo", "demo") == "/aether/demo/demo/lifecycle/expires-at"
-    assert mod.lease_path("preview", "preview") == "/aether/preview/preview/lifecycle/expires-at"
+    assert mod.lease_path("staging", "staging") == "/aether/staging/staging/lifecycle/expires-at"
+    assert mod.lease_path("production", "production") == "/aether/production/production/lifecycle/expires-at"

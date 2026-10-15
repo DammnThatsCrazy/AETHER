@@ -38,7 +38,7 @@ class PreprocessingPipeline:
         )
         X_train = pipe.fit_transform(df_train)
         X_test  = pipe.transform(df_test)
-        pipe.save("artifacts/preprocessor.joblib")
+        pipe.save(".artifacts/preprocessor.joblib")
 
     Parameters
     ----------

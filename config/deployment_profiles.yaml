@@ -8,10 +8,10 @@
 #   - scripts/release/check_cost_policy.py            (forbidden-resource policy)
 #   - scripts/release/check_cost_policy_terraform.py  (Terraform encodes the policy)
 #   - scripts/release/check_cost_model.py             (numeric budget enforcement)
-#   - docs/DEPLOYMENT-PROFILES.md                     (authored narrative)
+#   - docs/architecture/DEPLOYMENT-PROFILES.md                     (authored narrative)
 #
 # It is DATA, not infrastructure. The Terraform work that makes the profile
-# selectable and asserts a `production-lean` plan actually excludes the
+# selectable and asserts a `production` plan actually excludes the
 # forbidden resources is tracked as config/implementation_ledger.yaml →
 # FT-9-TERRAFORM-PROFILES. This file fixes the canonical policy and the numeric
 # ceilings so every downstream gate scores against one stable target.
@@ -28,192 +28,34 @@
 schema_version: 1
 canonical_source: config/deployment_profiles.yaml
 
-# Profiles the platform architecture must remain viable through. `max_profile`
-# bounds the supported ceiling — Aether targets founding-tenant production and
-# enterprise-GA-compatible architecture, and does NOT claim anything beyond it.
-max_supported_profile: enterprise-isolated
+# The supported ceiling. Aether has two deployment profiles: `staging` and
+# `production`. Production is one profile whose size is set by capacity inputs
+# (config/runtime_deployment.yaml task counts and sizes, and the Aurora capacity
+# in infra/aws/terraform/profiles/production.tfvars), not by switching profile.
+# Heavy backends (Redis, Kafka, Neptune, ClickHouse, a dedicated ML service, a
+# NAT gateway) are not part of either profile; adding one is a reviewed change
+# made when a measured bottleneck justifies it, together with its cost policy.
+# Dedicated customer infrastructure (a separate AWS account) is a provisioning
+# pattern described in docs/architecture/DEPLOYMENT-PROFILES.md, not a profile.
+max_supported_profile: production
 
 # Canonical environment interface over the profiles below. Profiles describe
 # environments (runtime shape, cost and isolation policy); capability flags
-# describe capabilities (config/capability_overlays.yaml). No Terraform state key
-# or profile name is renamed by this mapping, and each facet that enforces a
-# different invariant stays its own profile. `pilot-prod` has no profile or state
-# namespace yet: the staging `pilot` lane is customer-pilot STAGING and must not be
-# renamed into production. Defining pilot-prod needs `approvals` and
-# `rollback_source` first (enforced by scripts/release/check_profile_config.py).
+# describe capabilities (config/capability_overlays.yaml). There is no local
+# profile: local development needs no deployment profile. The staging `pilot`
+# lane is customer-pilot STAGING and must not be renamed into production.
 canonical_environments:
-  local:
-    profiles: [local, local-full]
-  preview:
-    profiles: [preview]
   staging:
     profiles: [staging]
     lanes: [full, pilot]
     runtime_states: [awake, asleep]
-  pilot-prod:
-    profiles: []
-    status: undefined
   production:
-    profiles: [production-lean, production-scale, enterprise-isolated]
-    postures:
-      lean: production-lean
-      scale: production-scale
-      isolated: enterprise-isolated
+    profiles: [production]
 
 # Profiles that are deliberately not part of the canonical environment interface.
-# `demo` is a separate seeded temporary environment; its product purpose is
-# decided separately and it must not be merged into preview by spelling alone.
-unmapped_profiles: [demo]
+unmapped_profiles: []
 
 profiles:
-
-  local:
-    purpose: Normal live backend development. Frontends never simulate the API.
-    class: local
-    cost_capped: false
-    backends:
-      database: postgres
-      cache: memory
-      event: memory
-      graph: postgres
-      analytics: postgres
-      object: memory
-      ml: inline
-    runs: [postgres, single-backend, inline-ml, local-frontends]
-    optional: [localstack, clickhouse, redis-legacy, observability]
-
-  local-full:
-    purpose: Full local integration.
-    class: local
-    cost_capped: false
-    backends:
-      database: postgres
-      cache: redis
-      event: localstack
-      graph: postgres
-      analytics: clickhouse
-      object: localstack-s3
-      ml: inline
-    runs: [all-local-dependencies]
-
-  demo:
-    purpose: Temporary live demo with an explicitly seeded backend tenant.
-    class: demo
-    cost_capped: true
-    ttl_cleanup_required: true
-    backends:
-      database: shared-nonprod-postgres
-      cache: dynamodb
-      event: sns_sqs
-      graph: postgres
-      analytics: postgres
-      object: s3
-      ml: inline
-    runs: [shared-nonproduction-backend, explicit-backend-seed, synthetic-tenant, ttl-cleanup]
-    cost_policy:
-      # The demo runs the shared foundation footprint: shared-foundation
-      # ALB/frontend, Aurora Serverless v2, SQS/SNS, DynamoDB, S3 object lake,
-      # secrets+credential KMS, CloudWatch alarms, inline ML and Postgres graph.
-      # It must not provision the heavy dedicated services production-scale buys.
-      required_resources:
-        - cloudfront_s3_frontends
-        - alb
-        - aurora_serverless_v2
-        - sqs_sns
-        - dynamodb
-        - s3_object_lake
-        - secrets_kms
-        - credential_kms
-        - cloudwatch_alarms
-        - inline_ml
-        - postgres_graph
-      forbidden_resources:
-        - msk
-        - elasticache
-        - neptune
-        - clickhouse
-        - dedicated_ml_service
-        - frontend_ecs_services
-        - legacy_rds
-        - nat_gateway_unless_explicit
-        - prometheus_grafana_servers
-    budget:
-      currency: USD
-      region: us-east-1
-      # FIXED ceilings for the ephemeral demo footprint, validated by
-      # `validate-ephemeral-budget` against the committed demo-valid fixture:
-      # the fixture prices a fixed baseline of ~USD 145.60/mo, inside target
-      # and well under the hard ceiling. target is the design goal, not a
-      # forecast; the fixture drives the floor of what target must allow.
-      target_fixed_monthly: 150
-      hard_fixed_monthly: 220
-      # Reference month length used to convert hourly prices to monthly ones.
-      pricing_hours_per_month: 730
-      # Usage-driven cost is not bounded by the ceilings above; it must still be
-      # modelled and reported as low/expected/high scenarios.
-      variable_cost_model_required: true
-
-  preview:
-    purpose: PR-specific live environment, only when explicitly requested.
-    class: preview
-    cost_capped: true
-    ttl_cleanup_required: true
-    backends:
-      database: shared-foundation-postgres
-      cache: dynamodb
-      event: sns_sqs
-      graph: postgres
-      analytics: postgres
-      object: s3
-      ml: inline
-    must: [shared-foundation, temporary-tenant-schema-prefix-route, auto-expire]
-    forbids: [dedicated-vpc, dedicated-alb, dedicated-aurora, dedicated-neptune, run-forever]
-    cost_policy:
-      # The preview runs the same shared foundation footprint as demo: a
-      # shared-foundation ALB/frontend, Aurora Serverless v2, SQS/SNS, DynamoDB,
-      # S3 object lake, secrets+credential KMS, CloudWatch alarms, inline ML and
-      # Postgres graph. It must not provision the heavy dedicated services
-      # production-scale buys, or any dedicated infrastructure of its own.
-      required_resources:
-        - cloudfront_s3_frontends
-        - alb
-        - aurora_serverless_v2
-        - sqs_sns
-        - dynamodb
-        - s3_object_lake
-        - secrets_kms
-        - credential_kms
-        - cloudwatch_alarms
-        - inline_ml
-        - postgres_graph
-      forbidden_resources:
-        - msk
-        - elasticache
-        - neptune
-        - clickhouse
-        - dedicated_ml_service
-        - frontend_ecs_services
-        - legacy_rds
-        - nat_gateway_unless_explicit
-        - prometheus_grafana_servers
-    budget:
-      currency: USD
-      region: us-east-1
-      # FIXED ceilings for the ephemeral preview footprint, validated by
-      # `validate-ephemeral-budget` against the committed demo-valid/preview-valid
-      # fixtures. Preview clones staging's consolidated footprint (the same as
-      # demo), so the honest ceilings are the same: the fixture prices a fixed
-      # baseline of ~USD 145.60/mo, which is under target and inside the hard
-      # ceiling. target is the design goal, not a forecast; the fixture drives
-      # the floor of what target must allow.
-      target_fixed_monthly: 150
-      hard_fixed_monthly: 220
-      # Reference month length used to convert hourly prices to monthly ones.
-      pricing_hours_per_month: 730
-      # Usage-driven cost is not bounded by the ceilings above; it must still be
-      # modelled and reported as low/expected/high scenarios.
-      variable_cost_model_required: true
-
   staging:
     purpose: Release rehearsal.
     class: staging
@@ -291,7 +133,7 @@ profiles:
             - stripe-price-gamma
             - stripe-price-delta
           secret_registry_source: scripts/bootstrap_aws_secrets.py
-          ecs_mount_source: deploy/aws/terraform/modules/ecs/main.tf
+          ecs_mount_source: infra/aws/terraform/modules/ecs/main.tf
           price_id_format: '^price_[A-Za-z0-9]+$'
     backends:
       database: aurora_postgres
@@ -315,7 +157,7 @@ profiles:
       # Reference month length used to convert hourly prices to monthly ones.
       pricing_hours_per_month: 730
     cost_policy:
-      # Staging rehearses the production-lean release, so it provisions the same
+      # Staging rehearses the production release, so it provisions the same
       # resource shape. `alb` and the compute behind it are required for the plan
       # to be a faithful rehearsal; `always_on_staging_compute` below forbids
       # that compute from being scheduled 24/7, which is the actual cost control.
@@ -334,7 +176,7 @@ profiles:
         - secrets_kms
         - credential_kms
         - inline_ml
-      # Identical heavy-resource exclusions to production-lean, plus the
+      # Identical heavy-resource exclusions to production, plus the
       # always-on prohibition that makes the awake-hours budget meaningful.
       forbidden_resources:
         - msk
@@ -348,7 +190,7 @@ profiles:
         - always_on_staging_compute
         - prometheus_grafana_servers
 
-  production-lean:
+  production:
     purpose: First customer and early controlled production.
     class: production
     cost_capped: true
@@ -362,7 +204,7 @@ profiles:
       object: s3
       ml: inline
     cost_policy:
-      # Resources that a production-lean plan MUST provision.
+      # Resources that a production plan MUST provision.
       required_resources:
         - cloudfront_s3_frontends
         - alb
@@ -376,7 +218,7 @@ profiles:
         - cloudwatch_alarms
         - inline_ml
         - postgres_graph
-      # Resources that a production-lean plan MUST NOT provision. The cost-policy
+      # Resources that a production plan MUST NOT provision. The cost-policy
       # validator asserts every one of these is present in this list; the future
       # Terraform gate asserts the plan excludes them.
       forbidden_resources:
@@ -405,121 +247,10 @@ profiles:
       target_fixed_monthly: 150
       hard_fixed_monthly: 200
       # Reference month length used to convert hourly prices to monthly ones.
-      # production-lean runs continuously, so the full 730h applies.
+      # production runs continuously, so the full 730h applies.
       pricing_hours_per_month: 730
       # Usage-driven cost (S3, DynamoDB on-demand, SQS/SNS, log ingestion, data
       # transfer) is NOT bounded by the ceilings above — it scales with tenant
       # traffic. It must still be modelled and reported as low/expected/high
       # scenarios so the total is never presented as just the fixed baseline.
       variable_cost_model_required: true
-
-  production-scale:
-    purpose: Higher traffic once justified.
-    class: production
-    cost_capped: false
-    backends:
-      database: aurora_postgres
-      cache: redis
-      event: kafka
-      graph: neptune
-      analytics: clickhouse
-      object: s3
-      ml: dedicated
-    may_enable:
-      - multiple_backend_tasks
-      - dedicated_workers
-      - elasticache
-      - neptune
-      - clickhouse
-      - dedicated_ml
-      - private_ecs_subnets
-      - nat_or_controlled_egress
-      - waf
-      - deeper_observability
-    cost_policy:
-      # production-scale legitimately buys the heavy resources listed under
-      # `may_enable` — that is the entire point of the profile — so they are
-      # absent from `forbidden_resources`. What stays required is the baseline
-      # the lean profile also holds: scale ADDS capacity, it never regresses the
-      # delivery, isolation or observability shape.
-      required_resources:
-        - cloudfront_s3_frontends
-        - alb
-        - explicit_runtime_role_services
-        - aurora_serverless_v2
-        - sqs_sns
-        - dynamodb
-        - s3_object_lake
-        - secrets_kms
-        - credential_kms
-        - cloudwatch_alarms
-      # Forbidden even at scale. These are not cost decisions but architectural
-      # regressions: legacy_rds is superseded by Aurora and would fork the
-      # migration path; self-managed Prometheus/Grafana EC2 re-introduces
-      # always-on servers Aether deliberately replaced with managed CloudWatch;
-      # frontend_ecs_services would put the SPAs back on always-on containers
-      # when they are immutable S3 origins behind a CDN at every tier — the
-      # Terraform root creates no frontend ECS service at any profile, so this
-      # is enforcing a property the graph already has rather than a preference.
-      #
-      # frontend_ecs_services was previously absent here while
-      # config/terraform_resource_contracts.yaml declared it forbidden with
-      # `permitted_in: []`, which meant a scale or enterprise plan was never
-      # actually checked for it. Listing it closes that gap.
-      forbidden_resources:
-        - legacy_rds
-        - prometheus_grafana_servers
-        - frontend_ecs_services
-      # No `budget` block: production-scale is cost_capped: false by definition.
-      # Spend is bounded by the traffic that justified the profile, not by a
-      # fixed ceiling, so a numeric gate here would be theatre.
-
-  enterprise-isolated:
-    purpose: Contractual/regulatory/customer isolation.
-    class: enterprise
-    cost_capped: false
-    backends:
-      database: aurora_postgres
-      cache: redis
-      event: kafka
-      graph: neptune
-      analytics: clickhouse
-      object: s3
-      ml: dedicated
-    may_enable:
-      - dedicated_aws_account
-      - dedicated_vpc
-      - dedicated_aurora
-      - dedicated_s3_kms
-      - dedicated_queues_cache
-      - dedicated_neptune
-      - private_connectivity
-      - customer_specific_retention
-      - region_specific_deployment
-    cost_policy:
-      # Enterprise isolation is a contractual obligation, so the heavy and
-      # dedicated resources under `may_enable` are permitted without argument.
-      # The required baseline is unchanged: an isolated deployment is the same
-      # architecture in a dedicated blast radius, not a different one.
-      required_resources:
-        - cloudfront_s3_frontends
-        - alb
-        - explicit_runtime_role_services
-        - aurora_serverless_v2
-        - sqs_sns
-        - dynamodb
-        - s3_object_lake
-        - secrets_kms
-        - credential_kms
-        - cloudwatch_alarms
-      # The same architectural regressions barred at scale. A customer paying
-      # for isolation still gets the supported topology, not a forked one —
-      # frontend_ecs_services included: the SPAs are immutable S3 origins behind
-      # a CDN at every tier, and dedicated infrastructure is not a licence to
-      # run a different frontend architecture.
-      forbidden_resources:
-        - legacy_rds
-        - prometheus_grafana_servers
-        - frontend_ecs_services
-      # No `budget` block: enterprise-isolated is cost_capped: false and its
-      # spend is recovered contractually per customer.

@@ -35,6 +35,7 @@ def _client(
     production_repository: str = checker.REPOSITORY,
     production_commit: str | None = COMMIT,
     domain_branch: str = "main",
+    staging_branch: str = checker.STAGING_BRANCH,
     www_branch: str = "main",
     domain_verified: bool = True,
     domain_dns_record: str | None = None,
@@ -45,6 +46,7 @@ def _client(
     production_auto_build: bool = False,
     production_extra_environment: dict[str, str] | None = None,
     production_app_environment: dict[str, str] | None = None,
+    production_app_auto_build: bool = False,
 ):
     """``consolidated`` is the one-app layout (AETHER-staging-web serves every
     host); otherwise the pre-apply layout: the site app (old name) serves
@@ -70,6 +72,7 @@ def _client(
                 if name == "AETHER-production-web" and production_app_environment
                 else {}
             ),
+            **({"enableBranchAutoBuild": production_app_auto_build} if name == "AETHER-production-web" else {}),
         }
         for name, app_id in APP_IDS.items()
         if name in present
@@ -84,7 +87,7 @@ def _client(
             app_id = args[args.index("--app-id") + 1]
             branch_name = args[args.index("--branch-name") + 1]
             production = app_id == "d-production-status"
-            if branch_name != "main":
+            if branch_name != ("main" if production else staging_branch):
                 raise RuntimeError("AWS Amplify metadata request failed for amplify")
             return {
                 "branch": {
@@ -124,6 +127,8 @@ def _client(
                                     www_branch
                                     if app_id == "d-production-status" and item == "www"
                                     else domain_branch
+                                    if app_id == "d-production-status"
+                                    else staging_branch
                                 ),
                             },
                             "verified": domain_verified,
@@ -226,11 +231,11 @@ def test_production_status_accepts_live_dns_when_legacy_verified_bit_is_stale():
     assert errors == []
 
 
-def test_staging_domain_requires_the_main_branch_mapping():
+def test_staging_domain_requires_the_staging_branch_mapping():
     errors = checker.contract_errors(
         mode="staging",
         expected_commit=COMMIT,
-        client=_client(domain_branch="preview"),
+        client=_client(staging_branch="preview"),
     )
     assert any("staging domain lacks an AVAILABLE" in error for error in errors)
 
@@ -261,7 +266,7 @@ def test_staging_rejects_a_host_that_no_app_serves():
         client=_client(web_hosts=("aether", "www", "status", "app")),
     )
     assert errors == [
-        f"Amplify app {WEB} staging domain lacks an AVAILABLE docs subdomain on main with a live DNS target"
+        f"Amplify app {WEB} staging domain lacks an AVAILABLE docs subdomain on staging with a live DNS target"
     ]
 
 
@@ -379,3 +384,8 @@ def test_production_contract_rejects_a_build_time_site_override():
         client=_client(production_app_environment={"VITE_SITE": "aether"}),
     )
     assert "Amplify app AETHER-production-web sets VITE_SITE; the site must come from the hostname" in errors
+    # The app-level switch auto-builds every branch, so it must be off too.
+    errors = checker.contract_errors(
+        mode="production-status", expected_commit=COMMIT, client=_client(production_app_auto_build=True)
+    )
+    assert "Amplify app AETHER-production-web must not auto-build branches; the workflow releases main" in errors

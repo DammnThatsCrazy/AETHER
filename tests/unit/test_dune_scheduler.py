@@ -21,8 +21,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
-_PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
+BACKEND_ROOT = ROOT / "services" / "api"
+_PREFIXES = ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories")
 
 
 @contextmanager
@@ -82,8 +82,8 @@ def worker(monkeypatch, mock_repo):
     monkeypatch.setenv("AETHER_ENV", "local")
     monkeypatch.setenv("JWT_SECRET", "test-secret")
     with backend_module_path():
-        sched_mod = importlib.import_module("services.dune_feeder.scheduler")
-        models_mod = importlib.import_module("services.dune_feeder.models")
+        sched_mod = importlib.import_module("connectors.dune_feeder.scheduler")
+        models_mod = importlib.import_module("connectors.dune_feeder.models")
 
         # Patch the repository used by ScheduledQueryStore
         with patch.object(sched_mod.ScheduledQueryStore, "__init__", lambda self: None):
@@ -95,7 +95,7 @@ def worker(monkeypatch, mock_repo):
 
 
 def _make_config(sched_mod, *, last_run_at=None, enabled=True, interval=300):
-    models_mod = importlib.import_module("services.dune_feeder.models")
+    models_mod = importlib.import_module("connectors.dune_feeder.models")
     return models_mod.ScheduledQueryConfig(
         schedule_id=str(uuid.uuid4()),
         tenant_scope="tenant-abc",
@@ -200,7 +200,7 @@ async def test_run_one_success(worker, monkeypatch):
 
         with patch.object(sched_mod, "_is_live", return_value=True), \
              patch.object(sched_mod, "_fetch_dune_results", new=AsyncMock(return_value=fake_qr)):
-            import services.dune_feeder.service as svc_mod
+            import connectors.dune_feeder.service as svc_mod
             original_ingest = svc_mod.dune_feeder_service.ingest
             svc_mod.dune_feeder_service.ingest = AsyncMock(return_value=mock_ingest_resp)
             try:

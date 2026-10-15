@@ -9,7 +9,7 @@ def _ids(result: dict) -> set[str]:
 
 
 def test_frontend_change_has_one_planned_disposition_and_scoped_builds() -> None:
-    result = build_disposition(["frontend/aether/src/pages/profile.tsx"])
+    result = build_disposition(["apps/aether-web/src/pages/profile.tsx"])
 
     assert result["authority"] == "verification"
     assert result["blocking"] is True
@@ -20,11 +20,11 @@ def test_frontend_change_has_one_planned_disposition_and_scoped_builds() -> None
     assert result["build_selection"]["packages"] == ["shared"]
     assert result["build_selection"]["applications"] == ["aether"]
     assert result["build_selection"]["workspaces"] == [
-        "packages/brand",
         "packages/shared",
-        "frontend/shared",
-        "packages/web",
-        "frontend/aether",
+        "packages/ui/brand",
+        "packages/sdk/web",
+        "packages/ui/core",
+        "apps/aether-web",
     ]
     assert result["build_selection"]["backend_image"] is False
     assert result["build_selection"]["sdk"] == {
@@ -35,19 +35,19 @@ def test_frontend_change_has_one_planned_disposition_and_scoped_builds() -> None
 
 
 def test_package_workspace_change_selects_its_build_and_dependencies() -> None:
-    result = build_disposition(["packages/server/src/index.ts"])
+    result = build_disposition(["packages/sdk/server/src/index.ts"])
 
     assert result["build_selection"]["workspaces"] == [
         "packages/shared",
-        "packages/server",
+        "packages/sdk/server",
     ]
 
 
 def test_brand_mark_change_rebuilds_the_unified_site() -> None:
-    result = build_disposition(["packages/brand/src/identity/marks/logo-olympus-arch.svg"])
+    result = build_disposition(["packages/ui/brand/src/identity/marks/logo-olympus-arch.svg"])
 
     assert "site" in result["build_selection"]["applications"]
-    assert "frontend/site" in result["build_selection"]["workspaces"]
+    assert "apps/public-site" in result["build_selection"]["workspaces"]
 
 
 def test_global_node_dependency_change_selects_every_buildable_workspace() -> None:
@@ -55,16 +55,16 @@ def test_global_node_dependency_change_selects_every_buildable_workspace() -> No
 
     buildable = {
         "packages/shared",
-        "packages/web",
-        "packages/server",
-        "packages/react-native",
-        "packages/mobile-core",
-        "frontend/aether",
-        "frontend/kyber",
-        "frontend/docs",
-        "frontend/demo",
-        "frontend/olympus-marketing",
-        "frontend/aether-marketing",
+        "packages/sdk/web",
+        "packages/sdk/server",
+        "packages/sdk/react-native",
+        "packages/sdk/mobile-core",
+        "apps/aether-web",
+        "apps/kyber-web",
+        "apps/docs",
+        "apps/demo",
+        "apps/marketing-olympus",
+        "apps/marketing-aether",
     }
     assert buildable <= set(result["build_selection"]["workspaces"])
 
@@ -79,7 +79,7 @@ def test_registry_change_skips_release_only_quarantined_suite() -> None:
 
 
 def test_advisory_suite_is_non_blocking_in_disposition() -> None:
-    result = build_disposition(["frontend/docs/src/main.tsx"])
+    result = build_disposition(["apps/docs/src/main.tsx"])
 
     advisory = [check for check in result["checks"] if check["check_id"] == "frontend-docs"]
     assert advisory and advisory[0]["blocking"] is False
@@ -103,14 +103,14 @@ def test_advisory_failure_does_not_fail_blocking_disposition(monkeypatch) -> Non
         ]
 
     monkeypatch.setattr(disposition_module, "_run_parallel", advisory_failure)
-    result = build_disposition(["frontend/docs/src/main.tsx"], execute=True)
+    result = build_disposition(["apps/docs/src/main.tsx"], execute=True)
 
     assert result["status"] == "PASS"
     assert result["advisory_failures"][0]["check_id"] == "frontend-docs"
 
 
 def test_backend_change_selects_backend_build_without_unrelated_apps() -> None:
-    result = build_disposition(["services/backend/services/profile/routes.py"])
+    result = build_disposition(["services/api/identity/profile/routes.py"])
 
     assert result["impact"]["selected_lane"] == "pr"
     assert "backend-profile360" in _ids(result)
@@ -124,7 +124,10 @@ def test_backend_change_selects_backend_build_without_unrelated_apps() -> None:
     }
 
 
-def test_unresolved_executable_change_blocks_pr_only_disposition() -> None:
+def test_unresolved_executable_change_blocks_pr_only_disposition(monkeypatch) -> None:
+    import scripts.lib.impact_graph as impact_module
+
+    monkeypatch.setattr(impact_module, "_path_exists", lambda path: path == "new-runtime-surface/worker.py")
     result = build_disposition(["new-runtime-surface/worker.py"])
 
     assert result["status"] == "BLOCKED"

@@ -11,16 +11,17 @@ canonical_source: config/runtime_deployment.yaml
 #
 # `execution_mode` names the packing strategy:
 #   consolidated — one task hosts several logical roles through an execution
-#                  group token (services/runtime/roles.py::EXECUTION_GROUPS).
-#                  production-lean and staging: 2 always-on tasks, not 10.
-#   dedicated    — one task per logical role (the pre-v2 1:1 shape).
-#                  production-scale and enterprise-isolated, where per-role
-#                  scaling and blast-radius isolation are worth the tasks.
+#                  group token (services/api/workers/runtime/roles.py::EXECUTION_GROUPS).
+#                  production and staging: 2 always-on tasks, not 10.
+#   dedicated    — one task per logical role (the pre-v2 1:1 shape). No profile
+#                  uses it today. To split a role out later, give it its own
+#                  service entry here (and remove it from `lean-worker`'s
+#                  roles); the one-owner invariant below keeps that safe.
 #
 # Consolidation moves the PROCESS BOUNDARY and nothing else. Inside a
 # consolidated task every member role keeps its own queue, consumer group,
 # DLQ, retry policy, metrics label and restart behaviour — see
-# services/runtime/roles.py::roles_in and services/runtime/consumer_specs.py.
+# services/api/workers/runtime/roles.py::roles_in and services/api/workers/runtime/consumer_specs.py.
 #
 # INVARIANT (enforced by scripts/release/check_delivery_topology.py):
 # every role in roles.py::WORKER_ROLES is hosted by EXACTLY ONE service in
@@ -85,7 +86,7 @@ profiles:
           metric: alb-request-count-per-target
           request_count_target: 800
           cooldown_seconds: 180
-      # Staging runs the same consolidated shape as production-lean so the
+      # Staging runs the same consolidated shape as production so the
       # packing itself is exercised before production sees it. Sized one step
       # down (1 vCPU / 4 GiB): the eight roles are present and attached, but
       # staging throughput never approaches production's.
@@ -102,7 +103,7 @@ profiles:
         desired_count: 1
         cpu: 1024
         memory: 4096
-        # Hosts outbox-relay -> no Spot, same rule as production-lean.
+        # Hosts outbox-relay -> no Spot, same rule as production.
         capacity_provider: {base: FARGATE, base_count: 1, surge: FARGATE}
         autoscaling:
           min_capacity: 1
@@ -111,89 +112,7 @@ profiles:
           queue_depth_target: 1000
           cooldown_seconds: 300
 
-  demo:
-    execution_mode: consolidated
-    static_frontends: true
-    remote_ml: false
-    # Demo is a cost-capped ephemeral environment: the consolidated
-    # shared-foundation footprint, sized one step down from staging.
-    services:
-      api:
-        roles: [api]
-        public: true
-        desired_count: 1
-        cpu: 1024
-        memory: 2048
-        capacity_provider: {base: FARGATE, base_count: 1, surge: FARGATE}
-        autoscaling:
-          min_capacity: 1
-          max_capacity: 2
-          metric: alb-request-count-per-target
-          request_count_target: 800
-          cooldown_seconds: 180
-      lean-worker:
-        roles:
-          - outbox-relay
-          - stream-worker
-          - identity-worker
-          - graph-writer
-          - measurement-worker
-          - semantic-worker
-          - materializer
-          - maintenance
-        desired_count: 1
-        cpu: 1024
-        memory: 4096
-        capacity_provider: {base: FARGATE, base_count: 1, surge: FARGATE}
-        autoscaling:
-          min_capacity: 1
-          max_capacity: 2
-          metric: sqs-queue-depth
-          queue_depth_target: 1000
-          cooldown_seconds: 300
-
-  preview:
-    execution_mode: consolidated
-    static_frontends: true
-    remote_ml: false
-    # Preview is a cost-capped ephemeral environment: the consolidated
-    # shared-foundation footprint, sized one step down from staging.
-    services:
-      api:
-        roles: [api]
-        public: true
-        desired_count: 1
-        cpu: 1024
-        memory: 2048
-        capacity_provider: {base: FARGATE, base_count: 1, surge: FARGATE}
-        autoscaling:
-          min_capacity: 1
-          max_capacity: 2
-          metric: alb-request-count-per-target
-          request_count_target: 800
-          cooldown_seconds: 180
-      lean-worker:
-        roles:
-          - outbox-relay
-          - stream-worker
-          - identity-worker
-          - graph-writer
-          - measurement-worker
-          - semantic-worker
-          - materializer
-          - maintenance
-        desired_count: 1
-        cpu: 1024
-        memory: 4096
-        capacity_provider: {base: FARGATE, base_count: 1, surge: FARGATE}
-        autoscaling:
-          min_capacity: 1
-          max_capacity: 2
-          metric: sqs-queue-depth
-          queue_depth_target: 1000
-          cooldown_seconds: 300
-
-  production-lean:
+  production:
     execution_mode: consolidated
     static_frontends: true
     remote_ml: false
@@ -232,7 +151,7 @@ profiles:
       # Memory 8192: memory, not CPU, is the binding constraint here. Eight
       # roles' DB pools, SQS receive buffers and per-role consumer state now
       # share one heap, and with remote_ml=false the semantic classifier runs
-      # IN-PROCESS in this task (services/semantic_intelligence/consumer.py) —
+      # IN-PROCESS in this task (services/api/intelligence/semantic_intelligence/consumer.py) —
       # a resident model, not a request-scoped allocation. 4 GiB fits the
       # arithmetic but leaves no room for it. The blast radius argues the same
       # way: one OOM kill here takes all eight roles down at once, so headroom
@@ -263,248 +182,4 @@ profiles:
           max_capacity: 4
           metric: sqs-queue-depth
           queue_depth_target: 500
-          cooldown_seconds: 300
-
-  production-scale:
-    # Dedicated: at this tier per-role scaling and per-role blast radius are
-    # worth eight task definitions. Counts and sizing are unchanged from
-    # schema v1 — v2 only re-expressed them as one service per role and added
-    # the autoscaling / capacity-provider envelope around each.
-    execution_mode: dedicated
-    static_frontends: true
-    remote_ml: true
-    services:
-      api:
-        roles: [api]
-        public: true
-        desired_count: 3
-        cpu: 2048
-        memory: 4096
-        capacity_provider: {base: FARGATE, base_count: 3, surge: FARGATE}
-        autoscaling:
-          min_capacity: 3
-          max_capacity: 12
-          metric: alb-request-count-per-target
-          request_count_target: 800
-          cooldown_seconds: 180
-      # Delivery path: on-demand at every capacity, never Spot.
-      outbox-relay:
-        roles: [outbox-relay]
-        desired_count: 2
-        cpu: 1024
-        memory: 2048
-        capacity_provider: {base: FARGATE, base_count: 2, surge: FARGATE}
-        autoscaling:
-          min_capacity: 2
-          max_capacity: 6
-          metric: sqs-queue-depth
-          queue_depth_target: 500
-          cooldown_seconds: 300
-      # Every service below keeps its baseline on-demand and surges onto Spot:
-      # backlog-draining work is interruption-tolerant (at-least-once consumers
-      # with DLQs), so the surge tail is where the Spot discount belongs.
-      stream-worker:
-        roles: [stream-worker]
-        desired_count: 3
-        cpu: 2048
-        memory: 4096
-        capacity_provider: {base: FARGATE, base_count: 3, surge: FARGATE_SPOT}
-        autoscaling:
-          min_capacity: 3
-          max_capacity: 12
-          metric: sqs-queue-depth
-          queue_depth_target: 1000
-          cooldown_seconds: 300
-      identity-worker:
-        roles: [identity-worker]
-        desired_count: 2
-        cpu: 1024
-        memory: 2048
-        capacity_provider: {base: FARGATE, base_count: 2, surge: FARGATE_SPOT}
-        autoscaling:
-          min_capacity: 2
-          max_capacity: 8
-          metric: sqs-queue-depth
-          queue_depth_target: 1000
-          cooldown_seconds: 300
-      graph-writer:
-        roles: [graph-writer]
-        desired_count: 2
-        cpu: 1024
-        memory: 2048
-        capacity_provider: {base: FARGATE, base_count: 2, surge: FARGATE_SPOT}
-        autoscaling:
-          min_capacity: 2
-          max_capacity: 8
-          metric: sqs-queue-depth
-          queue_depth_target: 1000
-          cooldown_seconds: 300
-      measurement-worker:
-        roles: [measurement-worker]
-        desired_count: 2
-        cpu: 1024
-        memory: 2048
-        capacity_provider: {base: FARGATE, base_count: 2, surge: FARGATE_SPOT}
-        autoscaling:
-          min_capacity: 2
-          max_capacity: 8
-          metric: sqs-queue-depth
-          queue_depth_target: 1000
-          cooldown_seconds: 300
-      semantic-worker:
-        roles: [semantic-worker]
-        desired_count: 2
-        cpu: 1024
-        memory: 2048
-        capacity_provider: {base: FARGATE, base_count: 2, surge: FARGATE_SPOT}
-        autoscaling:
-          min_capacity: 2
-          max_capacity: 8
-          metric: sqs-queue-depth
-          queue_depth_target: 1000
-          cooldown_seconds: 300
-      materializer:
-        roles: [materializer]
-        desired_count: 2
-        cpu: 1024
-        memory: 2048
-        capacity_provider: {base: FARGATE, base_count: 2, surge: FARGATE_SPOT}
-        autoscaling:
-          min_capacity: 2
-          max_capacity: 8
-          metric: sqs-queue-depth
-          queue_depth_target: 1000
-          cooldown_seconds: 300
-      # Scheduled/cron loops only — no queue to drain, so it never surges.
-      maintenance:
-        roles: [maintenance]
-        desired_count: 1
-        cpu: 1024
-        memory: 2048
-        capacity_provider: {base: FARGATE, base_count: 1, surge: FARGATE}
-        autoscaling:
-          min_capacity: 1
-          max_capacity: 1
-          metric: sqs-queue-depth
-          queue_depth_target: 1000
-          cooldown_seconds: 300
-
-  enterprise-isolated:
-    # Same dedicated shape and same sizing as production-scale, with one
-    # deliberate difference: NO Spot anywhere. Single-tenant isolation
-    # contracts price predictable, non-interruptible capacity above the Spot
-    # discount, and a reclaimed surge task is an availability event to explain
-    # rather than a cost saving to report.
-    execution_mode: dedicated
-    static_frontends: true
-    remote_ml: true
-    services:
-      api:
-        roles: [api]
-        public: true
-        desired_count: 3
-        cpu: 2048
-        memory: 4096
-        capacity_provider: {base: FARGATE, base_count: 3, surge: FARGATE}
-        autoscaling:
-          min_capacity: 3
-          max_capacity: 12
-          metric: alb-request-count-per-target
-          request_count_target: 800
-          cooldown_seconds: 180
-      outbox-relay:
-        roles: [outbox-relay]
-        desired_count: 2
-        cpu: 1024
-        memory: 2048
-        capacity_provider: {base: FARGATE, base_count: 2, surge: FARGATE}
-        autoscaling:
-          min_capacity: 2
-          max_capacity: 6
-          metric: sqs-queue-depth
-          queue_depth_target: 500
-          cooldown_seconds: 300
-      stream-worker:
-        roles: [stream-worker]
-        desired_count: 3
-        cpu: 2048
-        memory: 4096
-        capacity_provider: {base: FARGATE, base_count: 3, surge: FARGATE}
-        autoscaling:
-          min_capacity: 3
-          max_capacity: 12
-          metric: sqs-queue-depth
-          queue_depth_target: 1000
-          cooldown_seconds: 300
-      identity-worker:
-        roles: [identity-worker]
-        desired_count: 2
-        cpu: 1024
-        memory: 2048
-        capacity_provider: {base: FARGATE, base_count: 2, surge: FARGATE}
-        autoscaling:
-          min_capacity: 2
-          max_capacity: 8
-          metric: sqs-queue-depth
-          queue_depth_target: 1000
-          cooldown_seconds: 300
-      graph-writer:
-        roles: [graph-writer]
-        desired_count: 2
-        cpu: 1024
-        memory: 2048
-        capacity_provider: {base: FARGATE, base_count: 2, surge: FARGATE}
-        autoscaling:
-          min_capacity: 2
-          max_capacity: 8
-          metric: sqs-queue-depth
-          queue_depth_target: 1000
-          cooldown_seconds: 300
-      measurement-worker:
-        roles: [measurement-worker]
-        desired_count: 2
-        cpu: 1024
-        memory: 2048
-        capacity_provider: {base: FARGATE, base_count: 2, surge: FARGATE}
-        autoscaling:
-          min_capacity: 2
-          max_capacity: 8
-          metric: sqs-queue-depth
-          queue_depth_target: 1000
-          cooldown_seconds: 300
-      semantic-worker:
-        roles: [semantic-worker]
-        desired_count: 2
-        cpu: 1024
-        memory: 2048
-        capacity_provider: {base: FARGATE, base_count: 2, surge: FARGATE}
-        autoscaling:
-          min_capacity: 2
-          max_capacity: 8
-          metric: sqs-queue-depth
-          queue_depth_target: 1000
-          cooldown_seconds: 300
-      materializer:
-        roles: [materializer]
-        desired_count: 2
-        cpu: 1024
-        memory: 2048
-        capacity_provider: {base: FARGATE, base_count: 2, surge: FARGATE}
-        autoscaling:
-          min_capacity: 2
-          max_capacity: 8
-          metric: sqs-queue-depth
-          queue_depth_target: 1000
-          cooldown_seconds: 300
-      maintenance:
-        roles: [maintenance]
-        desired_count: 1
-        cpu: 1024
-        memory: 2048
-        capacity_provider: {base: FARGATE, base_count: 1, surge: FARGATE}
-        autoscaling:
-          min_capacity: 1
-          max_capacity: 1
-          metric: sqs-queue-depth
-          queue_depth_target: 1000
           cooldown_seconds: 300

@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -36,11 +36,11 @@ from repositories.jobs_repo import (  # noqa: E402
     JobsRepository,
     reset_jobs_memory,
 )
-from services.jobs import handlers as handlers_mod  # noqa: E402
-from services.jobs.handlers import JobOutcome, register_handler  # noqa: E402
-from services.jobs.models import JobStatus  # noqa: E402
-from services.jobs.service import JobsService  # noqa: E402
-from services.jobs.worker import JobCancelled, JobWorker, LeaseSweeper  # noqa: E402
+from workers.jobs import handlers as handlers_mod  # noqa: E402
+from workers.jobs.handlers import JobOutcome, register_handler  # noqa: E402
+from workers.jobs.models import JobStatus  # noqa: E402
+from workers.jobs.service import JobsService  # noqa: E402
+from workers.jobs.worker import JobCancelled, JobWorker, LeaseSweeper  # noqa: E402
 
 TENANT_A = "tenant-a"
 TENANT_B = "tenant-b"

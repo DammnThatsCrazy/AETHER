@@ -20,7 +20,7 @@ from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND = ROOT / "services" / "backend"
+BACKEND = ROOT / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 
@@ -91,22 +91,22 @@ def test_parameter_names_and_include_prefixes_do_not_hide_a_conflict():
 
 # The handler that owns each URL that used to have a second, shadowed handler.
 RESOLVED_OWNERS = {
-    ("/v1/admin/billing/stripe/webhook", "POST"): "services.admin.webhook_routes",
-    ("/v1/attribution/models", "GET"): "services.attribution.routes",
-    ("/v1/profile/{}/economic", "GET"): "services.profile.routes",
-    ("/v1/profile/{}/economic/web2", "GET"): "services.profile.routes",
-    ("/v1/profile/{}/economic/web3", "GET"): "services.profile.routes",
-    ("/v1/profile/{}/economic/warnings", "GET"): "services.profile.routes",
-    ("/v1/profile/{}/economic/agentic", "GET"): "services.economic.routes",
-    ("/v1/profile/{}/economic/campaigns", "GET"): "services.economic.routes",
-    ("/v1/profile/{}/pnl", "GET"): "services.pnl.routes",
-    ("/v1/profile/{}/social-intelligence", "GET"): "services.profile.routes",
-    # The five /v1/admin/kyber/* copies deleted from services/intelligence/routes.py.
-    ("/v1/admin/kyber/tenant-value-health", "GET"): "services.admin.routes",
-    ("/v1/admin/kyber/outcome-capture-health", "GET"): "services.admin.routes",
-    ("/v1/admin/kyber/playbook-performance", "GET"): "services.admin.routes",
-    ("/v1/admin/kyber/model-confidence-drift", "GET"): "services.admin.routes",
-    ("/v1/admin/kyber/vertical-solution-signals", "GET"): "services.admin.routes",
+    ("/v1/admin/billing/stripe/webhook", "POST"): "governance.admin.webhook_routes",
+    ("/v1/attribution/models", "GET"): "value.attribution.routes",
+    ("/v1/profile/{}/economic", "GET"): "identity.profile.routes",
+    ("/v1/profile/{}/economic/web2", "GET"): "identity.profile.routes",
+    ("/v1/profile/{}/economic/web3", "GET"): "identity.profile.routes",
+    ("/v1/profile/{}/economic/warnings", "GET"): "identity.profile.routes",
+    ("/v1/profile/{}/economic/agentic", "GET"): "value.economic.routes",
+    ("/v1/profile/{}/economic/campaigns", "GET"): "value.economic.routes",
+    ("/v1/profile/{}/pnl", "GET"): "value.pnl.routes",
+    ("/v1/profile/{}/social-intelligence", "GET"): "identity.profile.routes",
+    # The five /v1/admin/kyber/* copies deleted from services/api/intelligence/intelligence/routes.py.
+    ("/v1/admin/kyber/tenant-value-health", "GET"): "governance.admin.routes",
+    ("/v1/admin/kyber/outcome-capture-health", "GET"): "governance.admin.routes",
+    ("/v1/admin/kyber/playbook-performance", "GET"): "governance.admin.routes",
+    ("/v1/admin/kyber/model-confidence-drift", "GET"): "governance.admin.routes",
+    ("/v1/admin/kyber/vertical-solution-signals", "GET"): "governance.admin.routes",
 }
 
 

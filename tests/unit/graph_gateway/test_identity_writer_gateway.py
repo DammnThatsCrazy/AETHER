@@ -11,14 +11,14 @@ from repositories.graph_mutation_ledger import (
     reset_graph_ledger_memory,
 )
 from repositories.repos import reset_in_memory_stores
-from services.identity.graph_writer import IdentityGraphWriter
-from services.identity.metrics import IdentityMetrics
-from services.identity.models import (
+from identity.identity.graph_writer import IdentityGraphWriter
+from identity.identity.metrics import IdentityMetrics
+from identity.identity.models import (
     ConfidenceTier,
     IdentityResolutionDecision,
     MergeDecision,
 )
-from services.identity.repository import IdentityResolutionRepository
+from identity.identity.repository import IdentityResolutionRepository
 from shared.graph.graph import GraphClient
 from shared.graph.mutation_gateway import GraphMutationGateway
 

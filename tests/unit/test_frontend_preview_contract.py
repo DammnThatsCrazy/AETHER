@@ -16,8 +16,8 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/frontend-preview.yml"
 MANIFEST = ROOT / "config/staging_frontend_preview_iam_policy.yaml"
-MAIN_TF = ROOT / "deploy/aws/terraform/main.tf"
-STAGING_TFVARS = ROOT / "deploy/aws/terraform/profiles/staging.tfvars"
+MAIN_TF = ROOT / "infra/aws/terraform/main.tf"
+STAGING_TFVARS = ROOT / "infra/aws/terraform/profiles/staging.tfvars"
 
 def _workflow() -> dict:
     return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
@@ -93,12 +93,13 @@ def test_every_amplify_call_is_granted_on_the_preview_app_only():
                     "arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}/branches/*"
                 ), resource
             elif statement["actions"] != ["amplify:GetApp"]:
-                assert resource.startswith(
-                    "arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}/branches/pr-*"
-                ), resource
+                # Only the PR previews (pr-*) and the one persistent
+                # `development` branch (development-web.yml) are manageable.
+                prefix = "arn:aws:amplify:us-east-1:${account_id}:apps/${frontend_preview_app_id}/branches/"
+                assert resource.startswith(prefix + "pr-*") or resource.startswith(prefix + "development"), resource
 
 
-def test_role_trusts_only_this_repositorys_pull_requests_and_main():
+def test_role_trusts_only_this_repositorys_pull_requests_main_and_development():
     trust = _manifest()["trust"]
     assert trust == {
         "provider": "token.actions.githubusercontent.com",
@@ -106,6 +107,7 @@ def test_role_trusts_only_this_repositorys_pull_requests_and_main():
         "subjects": [
             "repo:DammnThatsCrazy/AETHER:pull_request",
             "repo:DammnThatsCrazy/AETHER:ref:refs/heads/main",
+            "repo:DammnThatsCrazy/AETHER:ref:refs/heads/Development",
         ],
     }
 
@@ -116,7 +118,10 @@ def test_previews_are_staging_only_in_terraform():
     preview = text[text.index('resource "aws_amplify_app" "frontend_preview"'):]
     preview = preview[:preview.index("\n}\n")]
     assert "repository" not in preview, "the preview app must not be connected to the repository"
-    assert 'status = "404-200"' in preview
+    # Deep links (the Auth0 /callback redirect) must rewrite to the app shell
+    # with a 200; a bare "/<*>" 404-200 rule does not apply to uploaded branches.
+    assert "source = local.spa_route_pattern" in preview and 'status = "200"' in preview
+    assert '"404-200"' not in preview
     # Staging declares the toggle explicitly (currently off pending the
     # account's Amplify app limit; see profiles/staging.tfvars).
     assert re.search(r"^enable_frontend_previews\s*=\s*(true|false)$", STAGING_TFVARS.read_text(), re.M)

@@ -12,9 +12,9 @@ from __future__ import annotations
 
 import pytest
 
-from services.security.contracts import PolicyDecision
-from services.security.policy_engine import PolicyEngine, _SENSITIVE_KEYS
-from services.security.repositories import (
+from governance.security.contracts import PolicyDecision
+from governance.security.policy_engine import PolicyEngine, _SENSITIVE_KEYS
+from governance.security.repositories import (
     PolicyDecisionRepository,
     SecurityAuditEventRepository,
 )
@@ -152,7 +152,7 @@ async def test_the_permitting_grant_reaches_the_audit_ledger(engine):
 async def test_a_key_named_authorization_id_really_would_be_dropped(engine):
     """Guards the reason for the rename above: if SECRET_RE ever stops matching
     ``authorization``, this test fails and the rename can be revisited deliberately."""
-    from services.security.contracts import sanitize_metadata
+    from governance.security.contracts import sanitize_metadata
 
     assert sanitize_metadata({"authorization_id": "auth-1"}) == {}
     assert sanitize_metadata({"capability_grant_id": "auth-1"}) == {

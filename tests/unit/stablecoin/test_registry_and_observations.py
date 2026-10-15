@@ -6,9 +6,9 @@ from decimal import Decimal
 
 import pytest
 
-from services.stablecoin.models import StablecoinObservationIngest
-from services.stablecoin.registry import StablecoinRegistry
-from services.stablecoin.service import StablecoinObservationService
+from value.stablecoin.models import StablecoinObservationIngest
+from value.stablecoin.registry import StablecoinRegistry
+from value.stablecoin.service import StablecoinObservationService
 
 USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 TENANT = "t-stable"

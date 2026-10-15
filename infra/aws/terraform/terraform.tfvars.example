@@ -1,0 +1,82 @@
+# ============================================================================
+# AETHER — Terraform variable values example
+# Copy to terraform.tfvars and fill in your values.
+# Do NOT commit terraform.tfvars — it is gitignored.
+# ============================================================================
+
+# Core
+# deployment_profile drives cost/resource toggles (see profiles/*.tfvars).
+# One of: staging | production.
+deployment_profile = "production"
+environment        = "production"
+aws_region         = "us-east-1"
+project            = "AETHER"
+
+# Domain & TLS  — fill in your ACM cert ARN
+domain_name         = "api.olympuslabsml.com"
+acm_certificate_arn = "arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERTIFICATE-ID"
+
+# Auth0 app URLs (canonical production domains). Kyber is kept as an operator
+# allow-list value only; Terraform does not create a public Kyber DNS record.
+aether_app_url = "https://app.olympuslabsml.com"
+kyber_app_url  = "https://kyber.olympuslabsml.com"
+auth0_domain   = "your-tenant.us.auth0.com"
+
+# Amplify Hosting (GitHub token stored in Secrets Manager / CI, not here)
+# amplify_github_access_token = ""  # Set via TF_VAR or Secrets Manager
+amplify_custom_domain_enabled = true
+amplify_domain_name            = "olympuslabsml.com"
+
+# Squarespace & DNS
+# Squarespace remains the registrar/DNS and apex redirect surface. Add the
+# Amplify association CNAME targets there; Route 53 delegation is opt-in.
+# Amplify hosts www, aether, docs, app, and status; Kyber has no public DNS
+# record unless its internal routing target is explicitly approved.
+# api.olympuslabsml.com is wired to the ALB automatically.
+squarespace_hosted_zone_enabled = false
+# squarespace_verification_code = ""  # From Squarespace > Settings > Domains > DNS settings
+# kyber_cname_target  = ""            # Where kyber.olympuslabsml.com points (e.g. another Amplify app or external host)
+# status_cname_target = ""            # Where status.olympuslabsml.com points (e.g. statuspage.io CNAME)
+
+# Monitoring
+alert_email = "ops@yourcompany.com"
+
+# Network
+vpc_cidr              = "10.0.0.0/16"
+network_egress_mode = "public_ip"   # public_ip | single_nat | ha_nat | vpc_endpoints | none; omit to take the profile default
+
+# RDS
+db_instance_class        = "db.t3.medium"
+db_name                  = "aether"
+db_multi_az              = true
+db_allocated_storage     = 100
+db_max_allocated_storage = 500
+
+# ElastiCache Redis
+redis_node_type       = "cache.t3.micro"
+redis_num_cache_nodes = 1
+
+# MSK Kafka
+msk_broker_instance_type = "kafka.m5.large"
+msk_kafka_version        = "3.5.1"
+msk_broker_count         = 3
+msk_broker_volume_size   = 100
+
+# ECS — Backend
+ecs_backend_cpu          = 1024
+ecs_backend_memory       = 2048
+ecs_backend_min_capacity = 1
+ecs_backend_max_capacity = 10
+
+# ECS — ML Serving
+ecs_ml_cpu          = 2048
+ecs_ml_memory       = 4096
+ecs_ml_min_capacity = 1
+ecs_ml_max_capacity = 10
+
+# Neptune
+neptune_instance_class = "db.r6g.large"
+neptune_cluster_size   = 1
+
+# Logs
+log_retention_days = 30

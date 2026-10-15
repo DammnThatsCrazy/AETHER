@@ -5,13 +5,13 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "services" / "backend"))
+sys.path.insert(0, str(ROOT / "services" / "api"))
 
 from repositories.repos import reset_in_memory_stores
 from repositories.stablecoin_repos import StablecoinObservationRepository
-from services.stablecoins.graph_projector import StablecoinGraphProjector
-from services.stablecoins.identity import StablecoinIdentityResolver, StablecoinWalletIdentityLink
-from services.stablecoins.profile360 import StablecoinProfile360Composer
+from value.stablecoins.graph_projector import StablecoinGraphProjector
+from value.stablecoins.identity import StablecoinIdentityResolver, StablecoinWalletIdentityLink
+from value.stablecoins.profile360 import StablecoinProfile360Composer
 
 
 @pytest.fixture(autouse=True)

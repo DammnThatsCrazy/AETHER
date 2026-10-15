@@ -5,7 +5,7 @@ are hand-authored twins; this test fails on drift in the disposition/view/
 temporal-mode vocabularies or the context/envelope field sets. It also pins
 the composition rule: ExplorationContextV1 composes the canonical FilterGroup
 (moved to `shared/contracts_models/filters.py`, re-exported unchanged from
-`services/operational_intelligence/models.py`).
+`services/api/graph/operational_intelligence/models.py`).
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -132,7 +132,7 @@ def test_temporal_selection_and_link_parity():
 def test_context_composes_canonical_filter_group():
     """The fabric composes the ONE filter language — from its shared home and
     (identically) from the legacy operational_intelligence re-export."""
-    from services.operational_intelligence.models import FilterGroup as LegacyFilterGroup
+    from graph.operational_intelligence.models import FilterGroup as LegacyFilterGroup
     from shared.contracts_models.filters import FilterExpression, FilterGroup
 
     assert LegacyFilterGroup is FilterGroup  # re-export, not a copy

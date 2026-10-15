@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Validate the production-lean cost policy.
+"""Validate the production cost policy.
 
 Checks the canonical policy DATA (config/deployment_profiles.yaml). It asserts
-production-lean declares the required cost_policy and that its forbidden list
+production declares the required cost_policy and that its forbidden list
 covers every expensive scale/enterprise resource. The Terraform and immutable-delivery gates independently assert the selected
 profile excludes these resources and deploys the declared role topology.
 
@@ -17,7 +17,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import Reporter, load_yaml, main_guard  # noqa: E402
 
-# Every expensive resource production-lean must forbid (monoprompt §2.1 / §11).
+# Every expensive resource production must forbid (monoprompt §2.1 / §11).
 REQUIRED_FORBIDDEN = {
     "msk", "elasticache", "neptune", "clickhouse",
     "dedicated_ml_service", "frontend_ecs_services",
@@ -35,7 +35,7 @@ REQUIRED_PRESENT = {
 
 
 def check() -> int:
-    r = Reporter("COST POLICY — production-lean forbidden/required resources")
+    r = Reporter("COST POLICY — production forbidden/required resources")
 
     try:
         data = load_yaml("config/deployment_profiles.yaml")
@@ -43,11 +43,11 @@ def check() -> int:
         r.fail("config/deployment_profiles.yaml not found")
         return r.finish()
 
-    lean = ((data or {}).get("profiles", {}) or {}).get("production-lean", {})
-    r.require(bool(lean), "production-lean profile present", "production-lean profile missing")
+    lean = ((data or {}).get("profiles", {}) or {}).get("production", {})
+    r.require(bool(lean), "production profile present", "production profile missing")
 
     cost = (lean or {}).get("cost_policy", {})
-    r.require(bool(cost), "production-lean cost_policy present", "production-lean cost_policy missing")
+    r.require(bool(cost), "production cost_policy present", "production cost_policy missing")
 
     forbidden = set((cost or {}).get("forbidden_resources", []) or [])
     missing_forbidden = REQUIRED_FORBIDDEN - forbidden

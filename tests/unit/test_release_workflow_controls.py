@@ -39,18 +39,14 @@ STRICT_BASH_ELSEWHERE = ("staging-lifecycle.yml", "staging-ttl-guard.yml")
 # They are enumerated so a NEW apply site anywhere in the repository fails the
 # exclusivity test, rather than being tolerated by a root-only glob's silence.
 QUARANTINED_APPLY_SITES = {
-    "cicd/aether-cicd/.github/workflows/cd.yml",
-    "cicd/aether-cicd/.github/workflows/demo-management.yml",
-    "cicd/aether-cicd/.github/workflows/infrastructure.yml",
+    "infra/cicd/aether-cicd/.github/workflows/cd.yml",
+    "infra/cicd/aether-cicd/.github/workflows/demo-management.yml",
+    "infra/cicd/aether-cicd/.github/workflows/infrastructure.yml",
 }
 # Every profile the promotion workflow can dispatch, matching the parity
-# restatement (cloud ∪ ephemeral-class). demo/preview are ephemeral-class and
-# dispatchable; the apply environment mapping in the workflow must cover all
-# six.
-TF_PROFILES = (
-    "staging", "production-lean", "production-scale", "enterprise-isolated",
-    "demo", "preview",
-)
+# restatement (the cloud-class profiles). The apply environment mapping in the
+# workflow must cover both.
+TF_PROFILES = ("staging", "production")
 # Triggers that fire without a human choosing to run the workflow.
 AUTOMATIC_TRIGGERS = {
     "push",
@@ -165,7 +161,7 @@ def test_native_sdk_validation_runs_on_pr_finalization():
     assert "xcrun simctl list devices available -j" in workflow
     assert "steps.simulator.outputs.udid" in workflow
     assert "name=iPhone 16" not in workflow
-    assert "pod spec lint packages/ios/AetherSDK.podspec" in workflow
+    assert "pod spec lint packages/sdk/ios/AetherSDK.podspec" in workflow
 
 
 def test_shared_sdk_parity_changes_trigger_all_sdk_jobs():
@@ -361,9 +357,9 @@ def test_production_status_workflow_binds_the_canonical_build_and_runtime_links(
     # One production web app: the site build with the product under /app,
     # production settings and the staging routing rules, on every host.
     assert "AMPLIFY_APP_NAME: AETHER-production-web" in workflow
-    assert "appRoot: frontend/site" in workflow
-    assert "VITE_BASE_PATH=/app/ npm run build --workspace=frontend/aether" in workflow
-    assert "cp -R frontend/aether/dist/. frontend/site/dist/app/" in workflow
+    assert "appRoot: apps/public-site" in workflow
+    assert "VITE_BASE_PATH=/app/ npm run build --workspace=apps/aether-web" in workflow
+    assert "cp -R apps/aether-web/dist/. apps/public-site/dist/app/" in workflow
     assert '"VITE_STATUS_API_URL": "https://api.olympuslabsml.com/health"' in workflow
     assert '"VITE_SITE_AETHER_URL": "https://aether.olympuslabsml.com"' in workflow
     assert '"VITE_SITE_OLYMPUS_URL": "https://www.olympuslabsml.com"' in workflow
@@ -381,7 +377,7 @@ def test_production_status_workflow_binds_the_canonical_build_and_runtime_links(
     assert '"target": "/app/index.html"' not in workflow
     assert "length == 6" in workflow
     assert "for prefix in www aether docs status app; do" in workflow
-    assert "appRoot: frontend/status" not in workflow
+    assert "appRoot: apps/status" not in workflow
     assert "aws amplify list-jobs" in workflow
     assert "Reusing active Amplify status deployment job" in workflow
     assert "already have pending or running jobs" in workflow
@@ -409,6 +405,11 @@ def test_production_releases_one_main_branch_for_every_host():
     assert "--no-enable-auto-build" in workflow
     assert "--no-enable-branch-auto-build" in workflow
     assert "            --enable-auto-build" not in workflow
+    # A RELEASE job builds main's head, so it starts only while main is the gated SHA,
+    # and the control scripts come from the workflow's own revision.
+    assert 'main_head="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"' in workflow
+    assert 'if [ "$main_head" != "$EXPECTED_COMMIT_SHA" ]; then' in workflow
+    assert "ref: ${{ github.sha }}" in workflow
     assert "--branch-name main" in workflow
     assert 'main_job_id="$(release_branch main)"' in workflow
     assert 'wait_for main "$MAIN_JOB_ID"' in workflow
@@ -766,10 +767,7 @@ def test_staging_lifecycle_defaults_to_pilot_and_promotion_default_is_profile_sa
         promotion_triggers = _workflow_yaml("terraform-promote.yml").get(True)
     promotion_inputs = promotion_triggers["workflow_dispatch"]["inputs"]
     assert promotion_inputs["deployment_lane"]["default"] == "full"
-    assert promotion_inputs["profile"]["options"] == [
-        "staging", "production-lean", "production-scale", "enterprise-isolated",
-        "demo", "preview",
-    ]
+    assert promotion_inputs["profile"]["options"] == ["staging", "production"]
 
 
 def test_deploy_builds_each_spa_with_its_own_auth0_client_and_endpoints():
@@ -780,7 +778,7 @@ def test_deploy_builds_each_spa_with_its_own_auth0_client_and_endpoints():
     assert "secrets.KYBER_GOOGLE_CLIENT_ID" in workflow
     assert "vars.KYBER_API_BASE_URL" in workflow
     assert "vars.KYBER_WS_BASE_URL" in workflow
-    kyber_build = workflow.split("npm --workspace frontend/kyber run build")[0]
+    kyber_build = workflow.split("npm --workspace apps/kyber-web run build")[0]
     assert 'VITE_AUTH0_CLIENT_ID="$KYBER_AUTH0_CLIENT_ID"' in kyber_build
     assert 'VITE_KYBER_ENV=staging' in kyber_build
     assert 'VITE_OIDC_AUTHORITY="https://accounts.google.com"' in kyber_build
@@ -842,7 +840,7 @@ def test_staging_delivery_can_acquire_only_the_exact_main_release_without_rebuil
     assert "inputs.source_run_id != ''" in acquire["if"]
     assert "acquire-release" in build["needs"]
     assert "needs.acquire-release.result == 'skipped'" in build["if"]
-    assert 'test "$run_head_branch" = main' in identity["run"]
+    assert 'test "$run_head_branch" = staging' in identity["run"]
     assert 'test "$run_head_sha" = "$GITHUB_SHA"' in identity["run"]
     assert '"Build immutable release once"' in identity["run"]
     assert '"Deploy exact release"' in identity["run"]
@@ -946,15 +944,11 @@ def test_deploy_armed_check_binds_the_role_before_any_aws_step():
 
 
 def test_ttl_guards_are_loud_noops_without_the_lifecycle_role():
-    for name in ("staging-ttl-guard.yml", "ephemeral-ttl-guard.yml"):
+    for name in ("staging-ttl-guard.yml",):
         doc = _workflow_yaml(name)
         steps = doc["jobs"]["guard"]["steps"]
 
-        secret_name = (
-            "AWS_STAGING_LIFECYCLE_ROLE_ARN"
-            if name == "staging-ttl-guard.yml"
-            else "AWS_EPHEMERAL_LIFECYCLE_ROLE_ARN"
-        )
+        secret_name = "AWS_STAGING_LIFECYCLE_ROLE_ARN"
         check = next(s for s in steps if s.get("id") == "check-armed")
         assert check["env"][secret_name] == f"${{{{ secrets.{secret_name} }}}}"
         check_run = check["run"]
@@ -1016,16 +1010,6 @@ def test_staging_ttl_guard_blocking_alert_keys_on_armed_output_not_readings():
     assert 'if [ "${ARMED:-}" = false ]' in alert["run"]
 
 
-def test_ephemeral_ttl_guard_blocking_alert_only_when_armed_and_expired():
-    doc = _workflow_yaml("ephemeral-ttl-guard.yml")
-    alert = next(
-        s for s in doc["jobs"]["guard"]["steps"]
-        if "Blocking alert" in s.get("name", "")
-    )
-    assert "steps.check-armed.outputs.armed == 'true'" in alert["if"]
-    assert "steps.decision.outputs.expired == 'true'" in alert["if"]
-
-
 def test_infrastructure_promotion_gate_reports_not_armed_without_credentials():
     """A credentialed remote-plan dispatch must fail closed at its final gate."""
     doc = _workflow_yaml("infrastructure.yml")
@@ -1060,7 +1044,7 @@ def test_terraform_promote_uses_remote_backend_in_plan_and_apply():
     # the account-level ECS role bootstrap, in addition to plan and apply.
     assert workflow.count('-backend-config="bucket=${TF_STATE_BUCKET}"') == 3
     assert workflow.count('-backend-config="key=profiles/${PROFILE}/terraform.tfstate"') == 3
-    versions = (ROOT / "deploy/aws/terraform/versions.tf").read_text(
+    versions = (ROOT / "infra/aws/terraform/versions.tf").read_text(
         encoding="utf-8"
     )
     assert 'backend "s3" {}' in versions
@@ -1075,7 +1059,7 @@ def test_terraform_promote_requires_release_digest_inputs():
 
 
 def test_image_digest_variables_have_no_mutable_defaults():
-    variables = (ROOT / "deploy/aws/terraform/variables.tf").read_text(
+    variables = (ROOT / "infra/aws/terraform/variables.tf").read_text(
         encoding="utf-8"
     )
     assert 'default     = "sha256:' not in variables
@@ -1103,7 +1087,7 @@ def test_founding_release_gate_requires_durable_suites_or_hosted_evidence():
 
 
 def test_durable_integration_uses_read_only_repository_test_runner():
-    compose = (ROOT / "deploy/integration/docker-compose.durable.yml").read_text(encoding="utf-8")
+    compose = (ROOT / "infra/integration/docker-compose.durable.yml").read_text(encoding="utf-8")
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
 
     assert "integration-tests:" in compose
@@ -1125,7 +1109,7 @@ def test_durable_integration_uses_read_only_repository_test_runner():
 
 def test_infrastructure_workflow_never_applies_terraform():
     doc = _workflow_yaml("infrastructure.yml")
-    assert "apply-production-lean" not in doc["jobs"], (
+    assert "apply-production" not in doc["jobs"], (
         "the automatic production apply job is back in infrastructure.yml"
     )
     for job_name, step_name, run in _all_run_blocks(doc):
@@ -1338,10 +1322,10 @@ def test_infrastructure_remote_plan_validates_plan_json_for_policy_and_cost():
     policy = run.split("check_terraform_plan_policy.py", 1)[1].split("python", 1)[0]
     assert '--profile "${PROFILE}"' in policy
     assert '--plan-json "${plan_json}"' in policy
-    assert "test -s artifacts/profile-resource-inventory.json" in run
+    assert "test -s .artifacts/profile-resource-inventory.json" in run
     cost = run.split("check_cost_model.py", 1)[1]
     assert '--profile "${PROFILE}"' in cost
-    assert "--inventory artifacts/profile-resource-inventory.json" in cost
+    assert "--inventory .artifacts/profile-resource-inventory.json" in cost
     # The cost model only applies where a budget is declared, and that decision
     # is read from the canonical policy data rather than hardcoded here.
     assert "config/deployment_profiles.yaml" in run
@@ -1360,9 +1344,9 @@ def test_infrastructure_remote_plan_validates_plan_json_for_policy_and_cost():
     paths = uploads[0]["with"]["path"]
     for retained in (
         "remote-plan-${{ matrix.profile }}.json",
-        "artifacts/profile-resource-inventory.json",
-        "artifacts/plan-policy-report-${{ matrix.profile }}.txt",
-        "artifacts/cost-model-report-${{ matrix.profile }}.txt",
+        ".artifacts/profile-resource-inventory.json",
+        ".artifacts/plan-policy-report-${{ matrix.profile }}.txt",
+        ".artifacts/cost-model-report-${{ matrix.profile }}.txt",
     ):
         assert retained in paths, f"remote-plan evidence drops {retained}"
 
@@ -1448,8 +1432,8 @@ def test_promotion_cannot_proceed_when_remote_plan_credentials_are_missing():
     assert guard_index < aws_index < plan_index
 
 
-def test_remote_plan_requires_ml_digest_only_for_dedicated_ml_profiles():
-    """Inline-ML profiles must not be blocked by an unrelated ML image secret."""
+def test_remote_plan_never_requires_an_ml_digest():
+    """Both profiles run ML inline, so no ML image secret may block a plan."""
     infra = _workflow_yaml("infrastructure.yml")
     probe = next(
         s for s in _steps(infra, "remote-plan-readiness") if s.get("id") == "credentials"
@@ -1459,9 +1443,7 @@ def test_remote_plan_requires_ml_digest_only_for_dedicated_ml_profiles():
     assert "TF_ML_IMAGE_DIGEST" not in required_names
 
     remote_plan = _job_script(infra, "remote-plan")
-    assert '"$PROFILE" == production-scale || "$PROFILE" == enterprise-isolated' in remote_plan
-    assert "requires TF_ML_IMAGE_DIGEST" in remote_plan
-    assert "^sha256:[0-9a-f]{64}$" in remote_plan
+    assert "requires TF_ML_IMAGE_DIGEST" not in remote_plan
 
 
 def test_amplify_checkout_token_is_required_for_public_and_private_repositories():
@@ -1521,7 +1503,7 @@ def test_promotion_plan_records_the_full_plan_provenance():
     # Reports retained alongside the plan: the policy validator's canonical
     # inventory becomes the reviewed resource inventory.
     assert (
-        'cp artifacts/profile-resource-inventory.json "${TF_DIR}/reviewed.resources.json"'
+        'cp .artifacts/profile-resource-inventory.json "${TF_DIR}/reviewed.resources.json"'
         in plan_script
     )
     assert 'tee "${TF_DIR}/reviewed.policy.txt"' in plan_script
@@ -1623,11 +1605,9 @@ def test_promotion_uses_per_profile_terraform_environments():
     assert "production-terraform" not in name, "the shared production environment is back"
     expected = {
         "staging": "staging-terraform",
-        "production-lean": "production-lean-terraform",
-        "production-scale": "production-scale-terraform",
-        "enterprise-isolated": "enterprise-terraform",
-        "demo": "demo-terraform",
-        "preview": "preview-terraform",
+        # GitHub environments cannot be renamed, so production keeps the name
+        # it had before the profiles were consolidated.
+        "production": "production-lean-terraform",
     }
     for profile, env_name in expected.items():
         assert f"inputs.profile == '{profile}' && '{env_name}'" in name, (
@@ -1748,8 +1728,8 @@ def test_the_sanitiser_keeps_exactly_what_the_policy_gate_reads():
     assert clean["resource_changes"][0]["change"]["actions"] == ["create"]
 
 
-def test_the_variable_allow_list_is_exactly_what_the_policy_gate_reads():
-    """Derived from the consumer, so it cannot quietly widen.
+def test_the_variable_allow_list_matches_policy_and_apply_consumers():
+    """Keep safe plan variables explicit and secret values redacted by default.
 
     Widening the allow-list is how the leak comes back: it is the one layer that
     works without Terraform having told us which variables are sensitive.
@@ -1758,11 +1738,31 @@ def test_the_variable_allow_list_is_exactly_what_the_policy_gate_reads():
         encoding="utf-8"
     )
     consumed = set(re.findall(r'\(plan\.get\("variables"\) or \{\}\)\.get\("(\w+)"\)', policy))
+    consumed.update(re.findall(r'variables\.get\("(\w+)"\)', policy))
     assert consumed, "the policy gate no longer reads plan variables the way this test detects"
+    # The apply-time scan preflight reads this public digest from the reviewed
+    # plan artifact so it can revalidate the exact image before mutations.
+    consumed.add("access_mcp_image_digest")
     assert set(_sanitiser().KEEP_VARIABLE_VALUES) == consumed, (
-        "the sanitiser's variable allow-list no longer matches what "
-        f"check_terraform_plan_policy.py actually reads ({sorted(consumed)})"
+        "the sanitiser's variable allow-list no longer matches the policy and "
+        f"apply consumers ({sorted(consumed)})"
     )
+
+
+def test_the_mcp_apply_inputs_survive_sanitizing_without_widening_other_values():
+    plan = _plan_with_secret()
+    digest = "sha256:" + "a" * 64
+    plan["variables"].update({
+        "enable_access_mcp": {"value": True},
+        "access_mcp_image_digest": {"value": digest},
+        "access_mcp_allowed_origins": {"value": ["https://console.example.com"]},
+    })
+
+    clean = _sanitiser().sanitize(plan, environ={})
+
+    assert clean["variables"]["enable_access_mcp"]["value"] is True
+    assert clean["variables"]["access_mcp_image_digest"]["value"] == digest
+    assert clean["variables"]["access_mcp_allowed_origins"]["value"] == "__REDACTED_SENSITIVE__"
 
 
 def test_the_allow_list_holds_even_when_terraform_declares_no_sensitivity():
@@ -1934,9 +1934,9 @@ def test_sanitising_a_real_plan_does_not_change_the_policy_verdict(tmp_path):
     cases = [
         ("staging", "staging-awake.json"),
         ("staging", "staging-asleep.json"),
-        ("production-lean", "production-lean-valid.json"),
-        ("production-lean", "production-lean-nat-gateway.json"),
-        ("production-lean", "production-lean-dedicated-ml.json"),
+        ("production", "production-valid.json"),
+        ("production", "production-nat-gateway.json"),
+        ("production", "production-dedicated-ml.json"),
     ]
     for profile, fixture in cases:
         source = fixtures / fixture
@@ -2012,14 +2012,14 @@ def test_the_binary_plan_is_treated_as_a_secret_bearing_artifact():
         s for s in _steps(doc, "plan")
         if str(s.get("uses", "")).startswith("actions/upload-artifact")
     ]
-    binary_path = "deploy/aws/terraform/reviewed.tfplan"
+    binary_path = "infra/aws/terraform/reviewed.tfplan"
     evidence = [u for u in uploads if "reviewed.*" in u["with"]["path"]]
     binary = [u for u in uploads if u["with"]["path"].strip() == binary_path]
     assert len(evidence) == 1 and len(binary) == 1, (
         "the binary plan is not uploaded separately from the reviewable evidence"
     )
     # The long-lived evidence artifact must NOT contain the binary plan.
-    assert "!deploy/aws/terraform/reviewed.tfplan" in evidence[0]["with"]["path"]
+    assert "!infra/aws/terraform/reviewed.tfplan" in evidence[0]["with"]["path"]
     # A reviewed plan is only legal to apply for 24h, so one day is the whole
     # window the apply path can use.
     assert int(binary[0]["with"]["retention-days"]) == 1, (

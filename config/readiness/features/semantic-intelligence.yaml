@@ -26,9 +26,9 @@ repository_ceiling:
   - Insert provider credentials into the credential platform; run credentials-preflight.
   remaining_is_repository_controlled: true
   evidence:
-  - services/backend/services/semantic_intelligence/
-  - services/backend/services/semantic_intelligence/providers.py
-  - services/backend/services/semantic_intelligence/replay.py
+  - services/api/intelligence/semantic_intelligence/
+  - services/api/intelligence/semantic_intelligence/providers.py
+  - services/api/intelligence/semantic_intelligence/replay.py
 implementation:
   state: IMPLEMENTED
   denominator: in-scope repository controls (migration-derived)
@@ -93,7 +93,7 @@ activation:
     affected_release_profiles:
     - staging
     - pilot
-    - production-lean
+    - production
     - production-scale
     evidence_required: credentialed connection self-check
 dependencies:
@@ -134,7 +134,7 @@ business_readiness:
 confidence:
   level: LOW
   reasons:
-  - 'repository evidence: services/backend/services/semantic_intelligence/'
+  - 'repository evidence: services/api/intelligence/semantic_intelligence/'
   evidence_gaps:
   - credentialed environment execution not yet performed
 release_profiles:
@@ -156,7 +156,7 @@ release_profiles:
     productionization_required: true
     environment_gate: pilot
     business_gate: false
-  production-lean:
+  production:
     participation: required
     implementation_floor: TURNKEY
     productionization_required: true

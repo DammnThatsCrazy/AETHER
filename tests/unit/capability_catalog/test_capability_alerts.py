@@ -7,7 +7,7 @@ permission gates and tenant scoping are exercised without standing up the middle
 Three tests carry the weight of this file:
 
 ``test_noesis_agentic_adapter_is_reachable_through_evaluate``
-    The wiring proof. ``services/noesis/adapters/agentic_intelligence_adapter.py`` was
+    The wiring proof. ``services/api/intelligence/noesis/adapters/agentic_intelligence_adapter.py`` was
     imported only by its own unit test — built, correct, and unreachable in production.
     This test drives the *real* production call path (route handler → service → adapter →
     ``obs_agent_risk_signals``) and asserts against the adapter's own literal output
@@ -37,9 +37,9 @@ from repositories.repos import reset_in_memory_stores
 from shared.auth.auth import TenantContext
 from shared.common.common import BadRequestError, ForbiddenError
 
-import services.agent_access_intelligence.alert_routes as alert_routes
-import services.agent_access_intelligence.risk_service as risk_service
-from services.agent_access_intelligence.alerts import (
+import actions.agent_access_intelligence.alert_routes as alert_routes
+import actions.agent_access_intelligence.risk_service as risk_service
+from actions.agent_access_intelligence.alerts import (
     AGENTIC_RISK_SIGNAL_CODE,
     AGENTIC_RISK_SIGNAL_INTENT,
     DEFAULT_RULES,
@@ -51,13 +51,13 @@ from services.agent_access_intelligence.alerts import (
     CapabilityAlertService,
     capability_alert_service,
 )
-from services.agent_access_intelligence.catalog_service import capability_catalog_service
-from services.agent_access_intelligence.identity import IDENTITY_FIELDS
-from services.agentic_observability.models import RiskLevel
-from services.noesis.adapters.agentic_intelligence_adapter import (
+from actions.agent_access_intelligence.catalog_service import capability_catalog_service
+from actions.agent_access_intelligence.identity import IDENTITY_FIELDS
+from actions.agentic_observability.models import RiskLevel
+from intelligence.noesis.adapters.agentic_intelligence_adapter import (
     AgenticIntelligenceAdapter,
 )
-from services.agent_access_intelligence.scanning import CapabilityFinding, FindingCode
+from actions.agent_access_intelligence.scanning import CapabilityFinding, FindingCode
 
 
 # ── harness ───────────────────────────────────────────────────────────────────
@@ -236,7 +236,7 @@ async def test_noesis_agentic_adapter_is_reachable_through_evaluate():
     assert alert is not None, "the agentic rule must fire on an observed high risk signal"
 
     source = alert["evidence_source"]
-    assert source["adapter"] == "services.noesis.adapters.agentic_intelligence_adapter"
+    assert source["adapter"] == "intelligence.noesis.adapters.agentic_intelligence_adapter"
     assert source["intent"] == AGENTIC_RISK_SIGNAL_INTENT
 
     # These strings are produced *inside* the adapter (see its `permission_risk_lookup`
@@ -530,7 +530,7 @@ async def test_export_rejects_an_unknown_dataset():
 
 async def test_durable_export_path_is_registered_with_the_canonical_export_service():
     """Reuse, not a parallel export pipeline."""
-    from services.export.service import EXPORTERS
+    from ingestion.export.service import EXPORTERS
 
     assert DURABLE_EXPORT_TYPE in EXPORTERS
 

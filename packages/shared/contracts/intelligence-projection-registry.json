@@ -53,6 +53,7 @@
     "entity",
     "episode",
     "infrastructure",
+    "journey",
     "population",
     "relationship",
     "source"
@@ -154,7 +155,7 @@
           "profile360"
         ],
         "services": [
-          "services/backend/services/profile"
+          "services/api/identity/profile"
         ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/profile360.md"
@@ -266,7 +267,7 @@
           "profile360"
         ],
         "services": [
-          "services/backend/services/agent"
+          "services/api/actions/agent"
         ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/agent360.md"
@@ -380,8 +381,8 @@
           "profile360"
         ],
         "services": [
-          "services/backend/services/operational_intelligence",
-          "services/backend/services/semantic_intelligence"
+          "services/api/graph/operational_intelligence",
+          "services/api/intelligence/semantic_intelligence"
         ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/relationship360.md"
@@ -396,7 +397,7 @@
       "displayName": "Social 360",
       "projectionKind": "relationship_360",
       "implementationState": "in_flight",
-      "implementationBlueprint": "docs/blueprints/social360.md",
+      "implementationBlueprint": "docs/architecture/blueprints/social360.md",
       "ownsCanonicalTruth": false,
       "subjectKinds": [
         "entity",
@@ -486,10 +487,10 @@
           "profile360"
         ],
         "services": [
-          "services/backend/services/profile"
+          "services/api/identity/profile"
         ],
         "migrationMode": "adapter",
-        "migrationBlueprint": "docs/blueprints/social360.md"
+        "migrationBlueprint": "docs/architecture/blueprints/social360.md"
       },
       "deprecatedReason": null,
       "successorId": null,
@@ -595,8 +596,8 @@
           "timeline"
         ],
         "services": [
-          "services/backend/services/journeys",
-          "services/backend/services/events"
+          "services/api/journeys/journeys",
+          "services/api/ingestion/events"
         ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/episode360.md"
@@ -618,11 +619,12 @@
       "displayName": "Communication 360",
       "projectionKind": "sequence_360",
       "implementationState": "implemented",
-      "implementationBlueprint": "docs/blueprints/communication360.md",
+      "implementationBlueprint": "docs/architecture/blueprints/communication360.md",
       "ownsCanonicalTruth": false,
       "subjectKinds": [
         "campaign",
         "episode",
+        "journey",
         "source"
       ],
       "canonicalAuthorities": [
@@ -726,10 +728,10 @@
           "profile360"
         ],
         "services": [
-          "services/backend/services/comms"
+          "services/api/journeys/comms"
         ],
         "migrationMode": "converged",
-        "migrationBlueprint": "docs/blueprints/communication360.md"
+        "migrationBlueprint": "docs/architecture/blueprints/communication360.md"
       },
       "deprecatedReason": null,
       "successorId": null,
@@ -841,9 +843,9 @@
           "timeline"
         ],
         "services": [
-          "services/backend/services/agent",
-          "services/backend/services/jobs",
-          "services/backend/services/flows"
+          "services/api/actions/agent",
+          "services/api/workers/jobs",
+          "services/api/value/flows"
         ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/execution360.md"
@@ -858,7 +860,7 @@
       "displayName": "Temporal 360",
       "projectionKind": "context_360",
       "implementationState": "implemented",
-      "implementationBlueprint": "docs/blueprints/temporal360.md",
+      "implementationBlueprint": "docs/architecture/blueprints/temporal360.md",
       "ownsCanonicalTruth": false,
       "subjectKinds": [
         "entity",
@@ -942,10 +944,10 @@
           "temporal360"
         ],
         "services": [
-          "services/backend/shared/temporal"
+          "services/api/shared/temporal"
         ],
         "migrationMode": "converged",
-        "migrationBlueprint": "docs/blueprints/temporal360.md"
+        "migrationBlueprint": "docs/architecture/blueprints/temporal360.md"
       },
       "deprecatedReason": null,
       "successorId": null,
@@ -957,7 +959,7 @@
       "displayName": "Geographic 360",
       "projectionKind": "context_360",
       "implementationState": "implemented",
-      "implementationBlueprint": "docs/blueprints/geographic360.md",
+      "implementationBlueprint": "docs/architecture/blueprints/geographic360.md",
       "ownsCanonicalTruth": false,
       "subjectKinds": [
         "entity",
@@ -1044,10 +1046,10 @@
           "geographic360"
         ],
         "services": [
-          "services/backend/services/geo"
+          "services/api/graph/geo"
         ],
         "migrationMode": "converged",
-        "migrationBlueprint": "docs/blueprints/geographic360.md"
+        "migrationBlueprint": "docs/architecture/blueprints/geographic360.md"
       },
       "deprecatedReason": null,
       "successorId": null,
@@ -1059,7 +1061,7 @@
       "displayName": "Population 360",
       "projectionKind": "context_360",
       "implementationState": "implemented",
-      "implementationBlueprint": "docs/blueprints/population360.md",
+      "implementationBlueprint": "docs/architecture/blueprints/population360.md",
       "ownsCanonicalTruth": false,
       "subjectKinds": [
         "entity",
@@ -1148,10 +1150,10 @@
           "population360"
         ],
         "services": [
-          "services/backend/services/population"
+          "services/api/identity/population"
         ],
         "migrationMode": "converged",
-        "migrationBlueprint": "docs/blueprints/population360.md"
+        "migrationBlueprint": "docs/architecture/blueprints/population360.md"
       },
       "deprecatedReason": null,
       "successorId": null,
@@ -1251,7 +1253,7 @@
           "graph"
         ],
         "services": [
-          "services/backend/services/cluster"
+          "services/api/graph/cluster"
         ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/cluster360.md"
@@ -1266,7 +1268,7 @@
       "displayName": "Outcome 360",
       "projectionKind": "measurement_360",
       "implementationState": "implemented",
-      "implementationBlueprint": "docs/blueprints/outcome360.md",
+      "implementationBlueprint": "docs/architecture/blueprints/outcome360.md",
       "ownsCanonicalTruth": false,
       "subjectKinds": [
         "campaign",
@@ -1361,10 +1363,10 @@
           "outcome360"
         ],
         "services": [
-          "services/backend/services/measurement"
+          "services/api/journeys/measurement"
         ],
         "migrationMode": "converged",
-        "migrationBlueprint": "docs/blueprints/outcome360.md"
+        "migrationBlueprint": "docs/architecture/blueprints/outcome360.md"
       },
       "deprecatedReason": null,
       "successorId": null,
@@ -1376,11 +1378,12 @@
       "displayName": "Economic 360",
       "projectionKind": "measurement_360",
       "implementationState": "implemented",
-      "implementationBlueprint": "docs/blueprints/economic360.md",
+      "implementationBlueprint": "docs/architecture/blueprints/economic360.md",
       "ownsCanonicalTruth": false,
       "subjectKinds": [
         "campaign",
         "episode",
+        "journey",
         "source"
       ],
       "canonicalAuthorities": [
@@ -1478,10 +1481,10 @@
           "economic360"
         ],
         "services": [
-          "services/backend/services/economic"
+          "services/api/value/economic"
         ],
         "migrationMode": "converged",
-        "migrationBlueprint": "docs/blueprints/economic360.md"
+        "migrationBlueprint": "docs/architecture/blueprints/economic360.md"
       },
       "deprecatedReason": null,
       "successorId": null,
@@ -1600,7 +1603,7 @@
           "comparison_workbench"
         ],
         "services": [
-          "services/backend/services/campaign"
+          "services/api/journeys/campaign"
         ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/campaign360.md"
@@ -1615,7 +1618,7 @@
       "displayName": "Risk 360",
       "projectionKind": "risk_360",
       "implementationState": "implemented",
-      "implementationBlueprint": "docs/blueprints/risk360.md",
+      "implementationBlueprint": "docs/architecture/blueprints/risk360.md",
       "ownsCanonicalTruth": false,
       "subjectKinds": [
         "entity",
@@ -1714,10 +1717,10 @@
           "risk360"
         ],
         "services": [
-          "services/backend/services/risk_overlay"
+          "services/api/graph/risk_overlay"
         ],
         "migrationMode": "converged",
-        "migrationBlueprint": "docs/blueprints/risk360.md"
+        "migrationBlueprint": "docs/architecture/blueprints/risk360.md"
       },
       "deprecatedReason": null,
       "successorId": null,
@@ -1729,7 +1732,7 @@
       "displayName": "Fraud 360",
       "projectionKind": "risk_360",
       "implementationState": "implemented",
-      "implementationBlueprint": "docs/blueprints/fraud360.md",
+      "implementationBlueprint": "docs/architecture/blueprints/fraud360.md",
       "ownsCanonicalTruth": false,
       "subjectKinds": [
         "entity",
@@ -1825,10 +1828,10 @@
           "fraud360"
         ],
         "services": [
-          "services/backend/services/fraud"
+          "services/api/intelligence/fraud"
         ],
         "migrationMode": "converged",
-        "migrationBlueprint": "docs/blueprints/fraud360.md"
+        "migrationBlueprint": "docs/architecture/blueprints/fraud360.md"
       },
       "deprecatedReason": null,
       "successorId": null,
@@ -1924,7 +1927,7 @@
           "campaign360"
         ],
         "services": [
-          "services/backend/services/imports"
+          "services/api/ingestion/imports"
         ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/source360.md"
@@ -2029,7 +2032,7 @@
           "connection360"
         ],
         "services": [
-          "services/backend/services/provider_runtime"
+          "services/api/connectors/provider_runtime"
         ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/connection360.md"
@@ -2051,7 +2054,7 @@
       "displayName": "Infrastructure 360",
       "projectionKind": "infrastructure_360",
       "implementationState": "implemented",
-      "implementationBlueprint": "docs/blueprints/infrastructure360.md",
+      "implementationBlueprint": "docs/architecture/blueprints/infrastructure360.md",
       "ownsCanonicalTruth": false,
       "subjectKinds": [
         "deployment",
@@ -2134,10 +2137,10 @@
           "infrastructure360"
         ],
         "services": [
-          "services/backend/services/infrastructure"
+          "services/api/graph/infrastructure"
         ],
         "migrationMode": "converged",
-        "migrationBlueprint": "docs/blueprints/infrastructure360.md"
+        "migrationBlueprint": "docs/architecture/blueprints/infrastructure360.md"
       },
       "deprecatedReason": null,
       "successorId": null,

@@ -6,9 +6,9 @@ local -> staging -> prod:
 
   * every required capability is represented (present / partial / optional /
     or an explicitly documented `gap`);
-  * every declared LOCAL compose service actually exists in docker-compose.yml;
+  * every declared LOCAL compose service actually exists in infra/local/docker-compose.yml;
   * every declared CLOUD terraform module actually exists under the modules dir;
-  * every declared runtime role is a real role in services/runtime/roles.py;
+  * every declared runtime role is a real role in services/api/workers/runtime/roles.py;
   * every non-present capability (`gap`) carries an honest `gap` note.
 
 It then validates the capability-matrix JOIN LAYER (config/capability_matrix.yaml),
@@ -25,7 +25,8 @@ which references every other release facet by key:
   * every `control_evidence` resolves to a controls[].id or gate_conditions[].id
     in config/deployment_readiness.yaml;
   * per-profile `states` cover exactly the declared profiles (each a real key
-    of config/deployment_profiles.yaml) with enum values only, a deploy_profile
+    of config/deployment_profiles.yaml, or the local development environment)
+    with enum values only, a deploy_profile
     `gap` capability never claims an enabled state, and required_enabled always
     carries control evidence.
 
@@ -49,7 +50,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 MATRIX = ROOT / "config" / "deploy_profile.yaml"
-ROLES_PY = ROOT / "services" / "backend" / "services" / "runtime" / "roles.py"
+ROLES_PY = ROOT / "services" / "api" / "workers" / "runtime" / "roles.py"
 
 # Join-layer facet files (see join_errors / _join_facets below).
 JOIN_MATRIX = ROOT / "config" / "capability_matrix.yaml"
@@ -57,6 +58,9 @@ ROUTE_REGISTRY = ROOT / "config" / "route_registry.yaml"
 FOUNDING_RELEASE = ROOT / "config" / "founding_tenant_release.yaml"
 DEPLOYMENT_READINESS = ROOT / "config" / "deployment_readiness.yaml"
 DEPLOYMENT_PROFILES = ROOT / "config" / "deployment_profiles.yaml"
+
+# Non-deployment environments the capability matrix may take a position on.
+LOCAL_ENVIRONMENTS = frozenset({"local"})
 
 # Per-profile capability disposition enum for capability_matrix.yaml `states`.
 CAPABILITY_STATES = (
@@ -88,7 +92,7 @@ from check_delivery_topology import runtime_constants  # noqa: E402
 
 
 def _compose_services() -> set[str]:
-    doc = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8")) or {}
+    doc = yaml.safe_load((ROOT / "infra/local/docker-compose.yml").read_text(encoding="utf-8")) or {}
     return set((doc.get("services") or {}).keys())
 
 
@@ -163,7 +167,10 @@ def _join_facets() -> dict:
             {c.get("id") for c in (readiness.get("controls") or [])}
             | {c.get("id") for c in (readiness.get("gate_conditions") or [])}
         ) - {None},
-        "profiles": set((profiles.get("profiles") or {}).keys()),
+        # The matrix also takes a position on local development, which is an
+        # environment but not a deployment profile (the matrix declares only
+        # staging and production), so it is admitted explicitly here.
+        "profiles": set((profiles.get("profiles") or {}).keys()) | LOCAL_ENVIRONMENTS,
     }
 
 
@@ -314,7 +321,7 @@ def check() -> dict:
     matrix = yaml.safe_load(MATRIX.read_text(encoding="utf-8")) or {}
     required = set(matrix.get("required_capabilities") or [])
     caps = matrix.get("capabilities") or []
-    modules_dir = matrix.get("terraform_modules_dir", "deploy/aws/terraform/modules")
+    modules_dir = matrix.get("terraform_modules_dir", "infra/aws/terraform/modules")
 
     compose = _compose_services()
     modules = _terraform_modules(modules_dir)
@@ -338,7 +345,7 @@ def check() -> dict:
         # asserted capabilities: verify declared representations resolve
         for svc in _local_services(cap):
             if svc not in compose:
-                errors.append(f"{cid}: compose service '{svc}' not in docker-compose.yml")
+                errors.append(f"{cid}: compose service '{svc}' not in infra/local/docker-compose.yml")
         mod = _cloud_module(cap)
         if mod and mod not in modules:
             errors.append(f"{cid}: terraform module '{mod}' not found under {modules_dir}")

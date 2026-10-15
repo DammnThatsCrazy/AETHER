@@ -13,7 +13,7 @@ Three jobs, all honest:
   1b. Enforce the per-build DISTRIBUTION PROFILE declaration: each app must
      declare a valid snake_case profile per platform in app.json
      (expo.extra.distributionProfiles.ios/.android). The vocabulary must agree
-     with services/mobile/config.py (drift-guarded by the contract parity test).
+     with services/api/ingestion/mobile/config.py (drift-guarded by the contract parity test).
 
   2. Report the NATIVE build posture. The iOS-simulator / Android-emulator compile
      (`expo prebuild` -> xcodebuild / gradlew) needs macOS + Xcode + the Android SDK
@@ -42,7 +42,7 @@ EXPECTED = {
 PLATFORM_VERSION = "0.1.0-alpha.0"
 
 # Distribution profiles per platform family (snake_case). Must agree with
-# services/mobile/config.py DISTRIBUTION_PROFILES — drift-guarded by
+# services/api/ingestion/mobile/config.py DISTRIBUTION_PROFILES — drift-guarded by
 # tests/contracts/test_mobile_config_parity.py. Every app build MUST declare a
 # per-platform profile in app.json:
 #   expo.extra.distributionProfiles = { "ios": "testflight", "android": "dev" }
@@ -187,7 +187,7 @@ def main() -> int:
         print("Native build: externally_blocked — no macOS/Xcode, Android SDK, or Expo "
               "toolchain in this environment.")
         print("The iOS-simulator / Android-emulator compile runs in the hosted (macOS) CI; "
-              "see reports/mobile-productization/external-blockers.json.")
+              "see docs/reference/reports/mobile-productization/external-blockers.json.")
         print("Scaffolds are valid and the shared SDK typechecks in `make ci-check`. This is "
               "NOT a 'compiled' claim.")
     else:

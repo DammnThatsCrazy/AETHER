@@ -173,6 +173,11 @@ class ShadowComparison:
         }
 
 
+def _path_exists(path: str) -> bool:
+    """Whether a changed path still exists in the working tree (deleted paths have nothing left to verify)."""
+    return (ROOT / path).exists()
+
+
 def _path_matches(path: str, pattern: str) -> bool:
     """Use the router's repository-relative ``/**`` semantics for consistency."""
     return router_matches(path, pattern) or fnmatchcase(path, pattern)
@@ -410,9 +415,12 @@ def build_impact_index(
     }
     selected_check_ids = set(router_impact.selected_checks) | graph_selected_suites
     selected_suites = tuple(sorted(selected_check_ids & known_suites))
+    # A path that no longer exists (deleted, or moved without rename detection) has
+    # nothing left to verify; only paths that exist and match no definition block.
     unresolved = tuple(
         sorted(
-            set(changed)
+            path
+            for path in set(changed)
             - {
                 path
                 for kind, definitions in (
@@ -424,6 +432,7 @@ def build_impact_index(
                 for path in changed
                 if any(_path_matches(path, pattern) for pattern in definition.paths)
             }
+            if _path_exists(path)
         )
     )
     by_kind = {

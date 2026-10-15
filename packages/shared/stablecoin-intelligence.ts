@@ -1,7 +1,7 @@
 /**
- * Stablecoin economic-intelligence contracts (services/stablecoin domain).
+ * Stablecoin economic-intelligence contracts (services/api/value/stablecoin domain).
  * Coexists with the observer-stack contracts in ./stablecoin.ts
- * (services/stablecoins domain). This module pins the no-execution
+ * (services/api/value/stablecoins domain). This module pins the no-execution
  * invariant explicitly: every canonical record carries
  * execution_by_aether: false.
  */

@@ -198,9 +198,8 @@ def check_backend_routes() -> list[str]:
     errors: list[str] = []
     routes_path = (
         REPO_ROOT
-        / "services" / "backend"
-        / "services"
-        / "ml_serving"
+        / "services" / "api"
+        / "intelligence" / "ml_serving"
         / "routes.py"
     )
     if not routes_path.exists():
@@ -416,9 +415,8 @@ def check_no_privilege_header() -> list[str]:
     errors: list[str] = []
     routes_path = (
         REPO_ROOT
-        / "services" / "backend"
-        / "services"
-        / "ml_serving"
+        / "services" / "api"
+        / "intelligence" / "ml_serving"
         / "routes.py"
     )
     if not routes_path.exists():

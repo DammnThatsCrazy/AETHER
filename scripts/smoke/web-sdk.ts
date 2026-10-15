@@ -8,7 +8,7 @@
  * Validates:
  *  - HTTP batch ingestion against POST /v1/batch
  *  - Direct SDK usage via @aether/web (if DOM available)
- *  - Correct canonical event envelope per docs/api/ingestion.md
+ *  - Correct canonical event envelope per docs/reference/api/ingestion.md
  */
 
 // ── Imports ───────────────────────────────────────────────────────────────────
@@ -29,11 +29,11 @@ if (!API_KEY) {
   process.exit(1);
 }
 
-// Read SDK version from packages/web/src/index.ts (SDK_VERSION constant)
+// Read SDK version from packages/sdk/web/src/index.ts (SDK_VERSION constant)
 function readSdkVersionFromSource(): string {
-  // The SDK_VERSION constant is at line 69 of packages/web/src/index.ts:
+  // The SDK_VERSION constant is at line 69 of packages/sdk/web/src/index.ts:
   //   const SDK_VERSION = '0.1.0-alpha.0';
-  const sourcePath = path.resolve(process.cwd(), 'packages/web/src/index.ts');
+  const sourcePath = path.resolve(process.cwd(), 'packages/sdk/web/src/index.ts');
   try {
     const source = require('fs').readFileSync(sourcePath, 'utf-8');
     const match = source.match(/const\s+SDK_VERSION\s*=\s*['"]([^'"]+)['"]/);
@@ -45,7 +45,7 @@ function readSdkVersionFromSource(): string {
 }
 
 function readSdkVersionFromPackageJson(): string {
-  const pkgPath = path.resolve(process.cwd(), 'packages/web/package.json');
+  const pkgPath = path.resolve(process.cwd(), 'packages/sdk/web/package.json');
   try {
     const pkg = JSON.parse(require('fs').readFileSync(pkgPath, 'utf-8'));
     return pkg.version || '';
@@ -79,14 +79,14 @@ function generateUserId(): string {
 }
 
 /**
- * Build a single canonical ingestion event per docs/api/ingestion.md.
+ * Build a single canonical ingestion event per docs/reference/api/ingestion.md.
  *
  * The canonical event types the backend registry validates are the bare
  * EventType union values: 'heartbeat', 'page', 'identify', 'conversion',
  * etc. — NOT dotted strings like 'sdk.heartbeat' or 'page.view'.
  *
  * See: packages/shared/dist/events.d.ts EventType union,
- *       packages/web/src/core/generated-consent-map.ts CANONICAL_EVENT_TYPES.
+ *       packages/sdk/web/src/core/generated-consent-map.ts CANONICAL_EVENT_TYPES.
  */
 function buildEvent(
   type: string,

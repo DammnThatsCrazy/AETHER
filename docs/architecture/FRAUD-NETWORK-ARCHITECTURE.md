@@ -7,10 +7,10 @@ audience: [architect, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - services/backend/services/fraud_networks/
-  - services/backend/services/flow_trace/
-  - services/backend/services/risk_overlay/
-  - services/backend/repositories/repos.py
+  - services/api/intelligence/fraud_networks/
+  - services/api/value/flow_trace/
+  - services/api/graph/risk_overlay/
+  - services/api/repositories/repos.py
   - packages/shared/graph-contract.ts
 reviewed_source_commits:
   - commit: "54eaac5d"
@@ -18,11 +18,11 @@ reviewed_source_commits:
   - commit: "f63d631"
     reason: "Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required."
 source_hashes:
-  "packages/shared/graph-contract.ts": "sha256:22f04a5932fd36c169c27cab2cf3107df3a8ea6150b02796ce30bc77affd6a94"
-  "services/backend/repositories/repos.py": "sha256:0201e4cf561a26915f5a350d80b3c25df99a5f722cb98454c1e6b0127966d1c7"
-  "services/backend/services/flow_trace/": "sha256:ecabf31ddd0dacf96475c891836cc7d7ba3906c17a34f67669393eff874a3348"
-  "services/backend/services/fraud_networks/": "sha256:9c7f503deb4644cf1c70768b9286e147a0ecd22a4d34951b91abfc2036ce06f4"
-  "services/backend/services/risk_overlay/": "sha256:6d04a12540c642817550c816f91c6dfefeab901764d53d05bd0cd7c43e814bc7"
+  "packages/shared/graph-contract.ts": "sha256:662e10a7d4737ba53c673173105344ccf1720ac7e62497d36346734898575087"
+  "services/api/graph/risk_overlay/": "sha256:0e4fa40ecad53abcac06d3d843d1044efff9226aa78ccef901ea0af44684a9a3"
+  "services/api/intelligence/fraud_networks/": "sha256:b8f7d4ac084e4de118d885b2cef1b12d45c066237039600e1e754c2b04d6c8e8"
+  "services/api/repositories/repos.py": "sha256:4763340370ea7ef9e43d91b1156def3188a83114efa832e0a289f267957206e6"
+  "services/api/value/flow_trace/": "sha256:e91b3edfb7d6e7a8a0f89951a87f01491a52a155fe5fca8911abc7b5aa94279f"
 ---
 
 # Fraud Network Architecture
@@ -135,7 +135,7 @@ POST /v1/fraud/networks/{network_id}/takedown   (fraud:evaluate)
   │
   ├─ reattribute_affected(tenant, reason="fraud_takedown",           ← measurement
   │     identity_selectors=members, voided_touchpoint_selectors=members)
-  │     └─ services/backend/services/measurement/reattribution.py (Program 3 M3):
+  │     └─ services/api/journeys/measurement/reattribution.py (Program 3 M3):
   │        for each affected conversion whose ACTIVE run credits a voided
   │        touchpoint → create fresh zero-credit run → deactivate prior runs
   │        (never raises; partial_failure / truncated surfaced)
@@ -153,6 +153,12 @@ touchpoints/conversions as fraud evidence — it only voids the attribution.
 ---
 
 ## Graph Schema
+
+The shared graph contract keeps four counted relationship layers: H2H, H2A,
+A2H, and A2A. `EXCLUDED` is a separate classification for noncanonical
+references, including source-linked economic and delegation records; those
+references remain available for inspection but are omitted from the four-layer
+counts. The fraud edge assignments below remain unchanged.
 
 ### New Vertex Types
 

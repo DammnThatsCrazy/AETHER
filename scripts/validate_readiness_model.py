@@ -238,7 +238,7 @@ def check_feature(feat: FeatureRecord, model: ReadinessModel, ids: set[str]) -> 
     if required_profiles and not feat.operational_ownership.team:
         err(fid, "required capability has no operational owner (operational_ownership.team is empty)")
     production_required = any(
-        pid in {"pilot", "production-lean", "production-scale"} for pid in required_profiles
+        pid in {"pilot", "production", "production-scale"} for pid in required_profiles
     )
     if production_required and not feat.operational_ownership.is_present():
         err(

@@ -78,7 +78,7 @@ def test_checkpoint_is_schema_valid_and_resumes_at_first_incomplete_stage(tmp_pa
     assert final_state["phase"] == "complete"
     assert final_state["resume_count"] == 1
     jsonschema.Draft202012Validator(
-        json.loads((ROOT / "contracts/delivery/staging-orchestration-state.schema.json").read_text()),
+        json.loads((ROOT / "packages/contracts/delivery/staging-orchestration-state.schema.json").read_text()),
         format_checker=jsonschema.FormatChecker(),
     ).validate(final_state)
 
@@ -124,7 +124,7 @@ def test_checkpoint_refuses_a_different_candidate_or_profile(tmp_path: Path):
     with pytest.raises(StateMachineError, match="exact candidate identity"):
         StagingStateMachine.open(state_path, candidate(digest_letter="c"), "staging")
     with pytest.raises(StateMachineError, match="not compatible"):
-        StagingStateMachine.open(tmp_path / "other.json", rc, "production-lean")
+        StagingStateMachine.open(tmp_path / "other.json", rc, "production")
 
 
 def test_checkpoint_binds_environment_resolution_and_rejects_blocked_input(tmp_path: Path):

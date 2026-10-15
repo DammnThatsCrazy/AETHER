@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
@@ -40,7 +40,7 @@ from shared.auth.auth import (  # noqa: E402
     PUBLISHABLE_KEY_PERMISSIONS,
     _build_context_from_key_data,
 )
-from services.me.key_issuance import generate_raw_key, resolve_key_grant  # noqa: E402
+from tenancy.me.key_issuance import generate_raw_key, resolve_key_grant  # noqa: E402
 
 
 # ── What a publishable key is issued with ────────────────────────────────────

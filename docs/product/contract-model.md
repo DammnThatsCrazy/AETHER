@@ -31,6 +31,6 @@ merge.
 
 ## See Also
 
-- `docs/sdks/ingestion-contract.md` — SDK ingestion contract
+- `docs/reference/sdks/ingestion-contract.md` — SDK ingestion contract
 - `docs/product/graph-model.md` — Graph model
 - `docs/product/tenant-model.md` — Tenant model

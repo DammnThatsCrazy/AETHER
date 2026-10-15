@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Validate the Terraform layer honors the production-lean cost policy.
+"""Validate the Terraform layer honors the production cost policy.
 
 Where check_cost_policy.py validates the canonical policy DATA
 (config/deployment_profiles.yaml), this validator asserts the Terraform in
-`deploy/aws/terraform/` actually encodes it:
+`infra/aws/terraform/` actually encodes it:
 
-  1. The `deployment_profile` variable exists with the six valid profiles
-     (four cloud-class + demo/preview ephemeral-class).
+  1. The `deployment_profile` variable exists with the two valid profiles
+     (staging and production).
   2. The profile `locals` derive an `enable_*` toggle for every forbidden
-     production-lean resource, and each is FALSE-by-derivation when the profile
-     is production-lean (i.e. `local.scale || local.enterprise`, or literal
-     `false`). `enable_legacy_rds` must be literally `false`.
-  3. The six `profiles/*.tfvars` files exist and set a valid deployment_profile
+     production resource, and each is FALSE-by-derivation when the profile
+     is production (a literal `false`, or an expression over the profile
+     locals that evaluates false). `enable_legacy_rds` must be literally `false`.
+  3. The two `profiles/*.tfvars` files exist and set a valid deployment_profile
      matching their filename.
 
 Static analysis only (regex + a tiny boolean evaluator over the trusted, static
@@ -29,13 +29,13 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import Reporter, load_yaml, main_guard, repo_root  # noqa: E402
 
-TF_DIR = "deploy/aws/terraform"
+TF_DIR = "infra/aws/terraform"
 PROFILES_TF = f"{TF_DIR}/profiles.tf"
 VARIABLES_TF = f"{TF_DIR}/variables.tf"
 
-VALID_PROFILES = ["staging", "production-lean", "production-scale", "enterprise-isolated", "demo", "preview"]
+VALID_PROFILES = ["staging", "production"]
 
-# Maps a production-lean forbidden resource (config/deployment_profiles.yaml) to
+# Maps a production forbidden resource (config/deployment_profiles.yaml) to
 # the Terraform local that gates it. Resources that are not per-resource toggles
 # (e.g. always_on_staging_compute — a staging lifecycle concern) are intentionally
 # absent; the DATA validator (check_cost_policy.py) covers the full forbidden set.
@@ -75,12 +75,12 @@ def _extract_locals(tf_text: str) -> dict[str, str]:
 
 
 def _eval_lean(rhs: str) -> bool | None:
-    """Evaluate a toggle RHS under the production-lean scenario.
+    """Evaluate a toggle RHS under the production scenario.
 
-    lean=True, scale=False, enterprise=False, staging=False. Returns the boolean
+    production=True, staging=False. Returns the boolean
     result, or None if the RHS contains an unexpected token (treated as a fail).
     """
-    scenario = {"lean": True, "scale": False, "enterprise": False, "staging": False}
+    scenario = {"production": True, "staging": False}
 
     # Tokenize just enough to validate + translate: local.X, true/false, ops.
     tokens = re.findall(r"local\.\w+|true|false|\|\||&&|!|\(|\)", rhs)
@@ -110,7 +110,7 @@ def _eval_lean(rhs: str) -> bool | None:
 
 
 def check() -> int:
-    r = Reporter("COST POLICY (TERRAFORM) — production-lean plan excludes forbidden resources")
+    r = Reporter("COST POLICY (TERRAFORM) — production plan excludes forbidden resources")
 
     # --- Canonical forbidden list from the policy DATA ---
     try:
@@ -119,12 +119,12 @@ def check() -> int:
         r.fail("config/deployment_profiles.yaml not found")
         return r.finish()
 
-    lean = ((data or {}).get("profiles", {}) or {}).get("production-lean", {})
+    lean = ((data or {}).get("profiles", {}) or {}).get("production", {})
     cost = (lean or {}).get("cost_policy", {})
     forbidden = list((cost or {}).get("forbidden_resources", []) or [])
     r.require(bool(forbidden),
-              "production-lean cost_policy.forbidden_resources present",
-              "production-lean cost_policy.forbidden_resources missing")
+              "production cost_policy.forbidden_resources present",
+              "production cost_policy.forbidden_resources missing")
 
     # --- deployment_profile variable ---
     vars_text = _read(VARIABLES_TF)
@@ -136,7 +136,7 @@ def check() -> int:
               "deployment_profile variable declared",
               "deployment_profile variable missing from variables.tf")
     r.require(all(p in vars_text for p in VALID_PROFILES) and "contains(" in vars_text,
-              "deployment_profile validation lists the six valid profiles",
+              "deployment_profile validation lists the two valid profiles",
               "deployment_profile validation does not list all valid profiles")
 
     # --- profiles.tf locals ---
@@ -167,8 +167,8 @@ def check() -> int:
             r.fail(f"{local_name} RHS not statically analyzable: {rhs!r}")
         else:
             r.require(result is False,
-                      f"{local_name} is false for production-lean ({resource})",
-                      f"{local_name} is NOT false for production-lean: {rhs!r}")
+                      f"{local_name} is false for production ({resource})",
+                      f"{local_name} is NOT false for production: {rhs!r}")
 
     # legacy_rds must be hard-disabled (literal false), not merely scale-gated.
     legacy = locals_map.get("enable_legacy_rds", "")

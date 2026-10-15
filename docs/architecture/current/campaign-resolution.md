@@ -44,4 +44,4 @@ observation with source metadata
 ## Current State
 
 Campaign resolution is implemented in
-`services/backend/services/campaigns/`.
+`services/api/services/campaigns/`.

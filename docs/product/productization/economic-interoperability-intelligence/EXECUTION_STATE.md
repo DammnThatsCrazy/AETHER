@@ -1,0 +1,47 @@
+---
+title: Execution State — Economic & Interoperability Intelligence
+slug: productization/economic-interoperability-intelligence/execution-state
+section: operations
+visibility: I
+audience: [architect, ops, buyer]
+status: beta
+since_version: 0.1.0
+source_files: [services/api/value/stablecoin/service.py, services/api/value/derivatives/state_machines.py, services/api/graph/interop/correlation.py]
+canonical_owner: platform@aether
+source_hashes:
+  "services/api/graph/interop/correlation.py": "sha256:cb3c51e9093df2475a788a6fa98544b54bd8b9b6524a8980b19c2211aac1364d"
+  "services/api/value/derivatives/state_machines.py": "sha256:d8fc78fa1063fd5d96a3ee23f311fb3d1b3160dd832aea7966452dd19b17e2ff"
+  "services/api/value/stablecoin/service.py": "sha256:cb06616c015f5dfe9d61d0c4cfaab8bd300461f68466f585f718230058ddf70f"
+---
+
+# Execution State
+
+## Completed in 8.12.0
+
+| Workstream | Status |
+|---|---|
+| Version bump + baseline audit | ✅ |
+| Contracts & registries (TS contracts, 110 events, 2 purposes, permissions, flags, meters, DSR, plans) | ✅ |
+| Alembic migrations ×4 (incl. PR1 adoption) | ✅ |
+| Graph contract (8 vertices, 82 edges, TS parity) | ✅ |
+| Derivatives runtime (FSMs, adapters, streams, reconciliation, P&L) | ✅ |
+| Stablecoin domain (registry, observations, valuation, finality, flows) | ✅ |
+| Interop domain + LayerZero V2 reference adapter + 6 scaffolds | ✅ |
+| Silver/gold projections + Profile360 sub-resources | ✅ |
+| Noesis intents/adapters, OODA suggestion adapters, alert policies, metering | ✅ |
+| API mounting (6 flag-gated routers) | ✅ |
+| Aether tenant frontend (6 pages) + Kyber ops (3 pages) | ✅ |
+| Docs, ADRs, runbooks, productization artifacts | ✅ |
+
+## Deferred (documented, not faked)
+
+| Item | Why | Where tracked |
+|---|---|---|
+| Live venue WebSocket adapters | Requires venue credentials | RELEASE_READINESS blockers |
+| LayerZero live scanning | Requires hosted RPC credentials | adapter is CREDENTIAL_GATED |
+| Chainlink price feeds for valuation | Requires feed credentials | valuation source CREDENTIAL_GATED |
+| 6 non-LayerZero providers | Scaffolds with documented topic refs | scaffold honesty test |
+| Kafka topic provisioning | Infra change outside this repo | streams use local transport |
+| ClickHouse gold query tests | No ClickHouse in CI | TEST_EVIDENCE deferred list |
+| Staging soak / load / chaos | Requires staging environment | RELEASE_READINESS |
+| Historical backfill | Post-staging activity | MIGRATION_AND_BACKFILL |

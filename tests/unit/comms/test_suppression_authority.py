@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -19,7 +19,7 @@ pytest.importorskip("fastapi", reason="Backend deps not installed")
 @pytest.fixture(autouse=True)
 def _clean():
     from repositories.repos import _IN_MEMORY_STORES
-    from services.comms.repository import _local_suppressions
+    from journeys.comms.repository import _local_suppressions
     _IN_MEMORY_STORES.clear()
     _local_suppressions.clear()
     yield
@@ -29,7 +29,7 @@ def _clean():
 
 @pytest.mark.asyncio
 async def test_record_sets_state_separation_and_is_observe_only():
-    from services.comms.suppression_authority import SuppressionAuthorityService
+    from journeys.comms.suppression_authority import SuppressionAuthorityService
 
     svc = SuppressionAuthorityService()
     rec = await svc.record(
@@ -45,7 +45,7 @@ async def test_record_sets_state_separation_and_is_observe_only():
 
 @pytest.mark.asyncio
 async def test_record_is_idempotent():
-    from services.comms.suppression_authority import SuppressionAuthorityService
+    from journeys.comms.suppression_authority import SuppressionAuthorityService
 
     svc = SuppressionAuthorityService()
     a = await svc.record("t1", reason="spam_complaint", scope="provider_account",
@@ -59,7 +59,7 @@ async def test_record_is_idempotent():
 
 @pytest.mark.asyncio
 async def test_record_from_event_maps_signals():
-    from services.comms.suppression_authority import SuppressionAuthorityService
+    from journeys.comms.suppression_authority import SuppressionAuthorityService
 
     svc = SuppressionAuthorityService()
 
@@ -94,7 +94,7 @@ async def test_record_from_event_maps_signals():
 
 @pytest.mark.asyncio
 async def test_is_suppressed_fails_closed():
-    from services.comms.suppression_authority import SuppressionAuthorityService
+    from journeys.comms.suppression_authority import SuppressionAuthorityService
 
     svc = SuppressionAuthorityService()
     # No subject → cannot prove not-suppressed → fail closed.
@@ -108,7 +108,7 @@ async def test_is_suppressed_fails_closed():
 
 @pytest.mark.asyncio
 async def test_reconcile_reports_drift_without_write_back():
-    from services.comms.suppression_authority import SuppressionAuthorityService
+    from journeys.comms.suppression_authority import SuppressionAuthorityService
 
     svc = SuppressionAuthorityService()
     await svc.record("t1", reason="unsubscribe", scope="marketing_channel",

@@ -4,13 +4,13 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "services" / "backend"))
+sys.path.insert(0, str(ROOT / "services" / "api"))
 
 from repositories.repos import reset_in_memory_stores
 from repositories.stablecoin_repos import StablecoinObservationRepository
-from services.stablecoins.models import FinalityState, StablecoinDeployment
-from services.stablecoins.registry import StablecoinDeploymentRegistry
-from services.stablecoins.solana_observer import StablecoinSolanaTransactionVerifier
+from value.stablecoins.models import FinalityState, StablecoinDeployment
+from value.stablecoins.registry import StablecoinDeploymentRegistry
+from value.stablecoins.solana_observer import StablecoinSolanaTransactionVerifier
 
 SOL_USDC_DEPLOYMENT = "usdc:solana:mainnet:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 SOL_USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"

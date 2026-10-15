@@ -35,7 +35,7 @@ DEFAULT_JOB_TIMEOUT_SECONDS = 900.0
 DEFAULT_JOB_POLL_SECONDS = 15.0
 
 STAGING_RUNTIME_ENVIRONMENT: dict[str, dict[str, str]] = {
-    # The one staging app: the unified site (frontend/site) for the aether,
+    # The one staging app: the unified site (apps/public-site) for the aether,
     # www, docs, status and app hosts, and the product built under /app.
     "AETHER-staging-web": {
         "AETHER_ENV": "staging",
@@ -92,11 +92,13 @@ STAGING_HOSTS: dict[str, tuple[str, ...]] = {
 # under /app and serves every production host.
 PRODUCTION_WEB_APP = "AETHER-production-web"
 PRODUCTION_HOSTS = ("www", "aether", "docs", "status", "app")
+# The staging profile's web apps build from the persistent staging branch.
+STAGING_BRANCH = "staging"
 # One branch builds the unified site for every host; the site picks Olympus
 # Labs or Aether from the hostname at runtime.
 PRODUCTION_BRANCH = "main"
 # Until the production backend exists the site is pilot-only and its contact
-# form posts to the always-on lead intake (deploy/aws/lead-intake, stack
+# form posts to the always-on lead intake (infra/aws/lead-intake, stack
 # aether-production-lead-intake, output LeadUrl).
 PRODUCTION_LEAD_URL = "https://cbikbmj7wtuz6atqb62avzcn6e0bpquf.lambda-url.us-east-1.on.aws/"
 PRODUCTION_WEB_ENVIRONMENT = {
@@ -441,6 +443,7 @@ def _staging_host_errors(
             name=owner,
             app_id=app_id,
             subdomain_prefix=prefix,
+            branch_name=STAGING_BRANCH,
             domain_name=None,
             dns_resolver=dns_resolver,
             client=client,
@@ -456,6 +459,10 @@ def _production_branch_errors(app: Mapping[str, Any], app_id: str, client: AwsCa
     site override: VITE_SITE would outrank the hostname and render one site on
     every host. Builds inherit the app's environment too, so check both."""
     errors: list[str] = []
+    if app.get("enableBranchAutoBuild") is not False:
+        errors.append(
+            f"Amplify app {PRODUCTION_WEB_APP} must not auto-build branches; the workflow releases main"
+        )
     if "VITE_SITE" in _mapping(app.get("environmentVariables")):
         errors.append(f"Amplify app {PRODUCTION_WEB_APP} sets VITE_SITE; the site must come from the hostname")
     try:
@@ -511,6 +518,7 @@ def contract_errors(
                     branch_stage="DEVELOPMENT",
                     expected_commit=expected_commit,
                     subdomain_prefix=None,
+                    branch_name=STAGING_BRANCH,
                     expected_branch_environment=(
                         STAGING_RUNTIME_ENVIRONMENT[reviewed_name]
                         if check_runtime_environment

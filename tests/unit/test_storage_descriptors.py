@@ -38,13 +38,13 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 _BACKEND_PREFIXES = (
-    "config", "services", "shared", "middleware", "dependencies", "repositories",
+    "config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories",
 )
 
 
@@ -422,3 +422,24 @@ def test_registry_is_enforced_and_schema_complete():
             assert policy["delete_behavior"] != "hard_delete", (
                 f"{policy['resource_type']}: legal data must not hard_delete"
             )
+
+
+def test_agent_deployment_identity_bindings_has_tenant_scoped_row_policy():
+    import yaml
+
+    data = yaml.safe_load((ROOT / "config" / "storage_policies.yaml").read_text())
+    policies = {item["resource_type"]: item for item in data["policies"]}
+    policy = policies["agent_deployment_identity_bindings"]
+    assert policy["authoritative_store"] == "postgres"
+    assert policy["format"] == "row"
+    assert policy["retention_class"] == "standard"
+    assert policy["delete_behavior"] == "hard_delete"
+    assert policy["allow_object_externalization"] is False
+    assert policy["requires_consent_invalidation"] is False
+
+    migration = (
+        ROOT / "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py"
+    ).read_text(encoding="utf-8")
+    assert "agent_deployment_identity_bindings" in migration
+    assert "tenant_id TEXT" in migration
+    assert "uq_agent_deployment_identity_source" in migration

@@ -1,0 +1,55 @@
+# ============================================================================
+# AETHER — production deployment profile (founding-tenant target)
+# Apply: terraform apply -var-file=profiles/production.tfvars
+#
+# First customer / early controlled production. Forbidden resources (MSK,
+# ElastiCache, Neptune, ClickHouse, dedicated ML, frontend ECS, legacy RDS,
+# always-on NAT, always-on staging compute, Prometheus/Grafana) MUST NOT be
+# provisioned — see config/deployment_profiles.yaml and profiles.tf.
+# ============================================================================
+
+deployment_profile = "production"
+
+# Production owns the canonical public web surfaces after staging evidence is
+# complete. DNS delegation/verification remains an explicit rollout step.
+amplify_custom_domain_enabled = true
+amplify_domain_name           = "olympuslabsml.com"
+# Squarespace remains the authoritative registrar/DNS provider. Add the
+# Amplify association CNAME targets there during the controlled promotion;
+# create a Route 53 zone only as an explicit, separately reviewed DNS move.
+squarespace_hosted_zone_enabled = false
+status_api_url                  = "https://api.olympuslabsml.com/health"
+
+# Network — no NAT Gateway. NAT is forbidden-unless-explicit for this profile;
+# changing this value to single_nat or ha_nat IS the explicit opt-in, and must
+# be reviewed as a cost-policy exception.
+network_egress_mode = "public_ip"
+
+# Aurora Serverless v2 — always warm at a small floor.
+aurora_min_acu = 0.5
+aurora_max_acu = 4
+
+# Logs — short CloudWatch retention; bulk logs to S3.
+log_retention_days = 3
+
+
+# ==============================================================================
+# tfmcp — Terraform MCP Server (opt-in)
+# ============================================================================
+# Set enable_tfmcp_in_lean = true to deploy the tfmcp MCP server on the
+# production profile. Required before applying:
+#   1. Build and push the image: ./AWS\ Deployment/aether-aws/build-tfmcp.sh
+#   2. Pin the digest below (sha256:...)
+#   3. Run the reviewed promotion workflow (.github/workflows/terraform-promote.yml)
+#
+# Cost: one Fargate task at 512 CPU / 1024 MiB is ~$7-15/month. Re-run the
+# cost model before applying to confirm the total stays within the profile
+# budget (config/deployment_profiles.yaml).
+# ============================================================================
+
+# Keep operator MCP tooling out of the first customer-facing release until an
+# immutable image digest and the reviewed credential path exist.
+enable_tfmcp_in_lean = false
+tfmcp_image_digest   = "" # set after build: "sha256:..."
+tfmcp_auth_token     = "" # auto-generated if empty (32+ chars)
+tfmcp_github_pat     = "" # set if Aether repo is private

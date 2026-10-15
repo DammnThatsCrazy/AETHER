@@ -23,9 +23,9 @@ _FEEDBACK = {
 
 
 async def test_pipeline_persists_and_survives_restart():
-    from services.semantic_intelligence.engine import set_store
-    from services.semantic_intelligence.service import SemanticIntelligenceService
-    from services.semantic_intelligence.store import DurableSemanticSentimentStore
+    from intelligence.semantic_intelligence.engine import set_store
+    from intelligence.semantic_intelligence.service import SemanticIntelligenceService
+    from intelligence.semantic_intelligence.store import DurableSemanticSentimentStore
 
     svc = SemanticIntelligenceService()
     obs, sentiments = await svc.classify_and_persist(_FEEDBACK, TENANT)
@@ -40,7 +40,7 @@ async def test_pipeline_persists_and_survives_restart():
 
 
 async def test_pipeline_is_idempotent_and_health_is_computed():
-    from services.semantic_intelligence.service import SemanticIntelligenceService
+    from intelligence.semantic_intelligence.service import SemanticIntelligenceService
 
     svc = SemanticIntelligenceService()
     await svc.classify_and_persist(_FEEDBACK, TENANT)
@@ -54,7 +54,7 @@ async def test_pipeline_is_idempotent_and_health_is_computed():
 
 
 async def test_cross_tenant_reads_are_isolated():
-    from services.semantic_intelligence.service import SemanticIntelligenceService
+    from intelligence.semantic_intelligence.service import SemanticIntelligenceService
 
     svc = SemanticIntelligenceService()
     await svc.classify_and_persist(_FEEDBACK, TENANT)

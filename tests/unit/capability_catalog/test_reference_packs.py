@@ -25,8 +25,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from services.agent_access_intelligence.models import CapabilityKind
-from services.agent_access_intelligence.reference_packs import (
+from actions.agent_access_intelligence.models import CapabilityKind
+from actions.agent_access_intelligence.reference_packs import (
     PACK_DIR,
     SCHEMA_VERSION,
     ReferencePackError,
@@ -36,7 +36,7 @@ from services.agent_access_intelligence.reference_packs import (
     load_reference_packs,
     pack_violations,
 )
-from services.agentic_observability.provider_framework import (
+from actions.agentic_observability.provider_framework import (
     AuthorizationGrantRecord,
     ProviderActionRecord,
     compute_permission_findings,

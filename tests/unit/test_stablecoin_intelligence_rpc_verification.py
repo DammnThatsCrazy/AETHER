@@ -4,12 +4,12 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "services" / "backend"))
+sys.path.insert(0, str(ROOT / "services" / "api"))
 
 from repositories.repos import reset_in_memory_stores
 from repositories.stablecoin_repos import StablecoinObservationRepository
-from services.stablecoins.models import FinalityState
-from services.stablecoins.rpc_observer import StablecoinEVMReceiptVerifier
+from value.stablecoins.models import FinalityState
+from value.stablecoins.rpc_observer import StablecoinEVMReceiptVerifier
 
 BASE_USDC_DEPLOYMENT = "usdc:base:mainnet:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
 BASE_USDC_CONTRACT = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"

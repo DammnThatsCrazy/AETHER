@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_secret_rotation_schedule_uses_stable_secret_arn_identity():
     rotation = (
-        ROOT / "deploy/aws/terraform/modules/secrets/rotation.tf"
+        ROOT / "infra/aws/terraform/modules/secrets/rotation.tf"
     ).read_text(encoding="utf-8")
 
     schedule = re.search(
@@ -29,7 +29,7 @@ def test_secret_rotation_schedule_uses_stable_secret_arn_identity():
 
 def test_shared_preload_libraries_requires_reboot_explicitly():
     aurora = (
-        ROOT / "deploy/aws/terraform/modules/aurora/main.tf"
+        ROOT / "infra/aws/terraform/modules/aurora/main.tf"
     ).read_text(encoding="utf-8")
 
     parameter = re.search(

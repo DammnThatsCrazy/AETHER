@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -43,21 +43,21 @@ class TestWebhookMapping:
         ("Sent Email", "email_sent"),
     ])
     def test_metric_mapping(self, metric, expected):
-        from services.integrations.connectors.klaviyo import KlaviyoConnector
+        from connectors.integrations.connectors.klaviyo import KlaviyoConnector
         events = KlaviyoConnector().parse_webhook({"data": [_klaviyo_record(metric)]})
         assert len(events) == 1
         assert events[0].event_type == expected
         assert events[0].properties["provider"] == "klaviyo"
 
     def test_unknown_metric_dropped(self):
-        from services.integrations.connectors.klaviyo import KlaviyoConnector
+        from connectors.integrations.connectors.klaviyo import KlaviyoConnector
         events = KlaviyoConnector().parse_webhook(
             {"data": [_klaviyo_record("Viewed Product")]},
         )
         assert events == []
 
     def test_campaign_and_link_evidence_extracted(self):
-        from services.integrations.connectors.klaviyo import KlaviyoConnector
+        from connectors.integrations.connectors.klaviyo import KlaviyoConnector
         events = KlaviyoConnector().parse_webhook({"data": [_klaviyo_record(
             "Clicked Email",
             {"$message": "msg-42", "$flow": "flow-7", "URL": "https://x.example/promo",
@@ -70,14 +70,14 @@ class TestWebhookMapping:
         assert props["variant_id"] == "var-b"
 
     def test_hard_bounce_type(self):
-        from services.integrations.connectors.klaviyo import KlaviyoConnector
+        from connectors.integrations.connectors.klaviyo import KlaviyoConnector
         events = KlaviyoConnector().parse_webhook({"data": [_klaviyo_record(
             "Bounced Email", {"Bounce Type": "HardBounce"},
         )]})
         assert events[0].properties["bounce_type"] == "hard"
 
     def test_unsubscribe_scope(self):
-        from services.integrations.connectors.klaviyo import KlaviyoConnector
+        from connectors.integrations.connectors.klaviyo import KlaviyoConnector
         events = KlaviyoConnector().parse_webhook({"data": [_klaviyo_record(
             "Unsubscribed from List",
         )]})
@@ -86,7 +86,7 @@ class TestWebhookMapping:
 
 class TestDescriptor:
     def test_supports_full_lifecycle(self):
-        from services.integrations.connectors.klaviyo import KlaviyoConnector
+        from connectors.integrations.connectors.klaviyo import KlaviyoConnector
         c = KlaviyoConnector()
         assert c.supports_webhook and c.supports_pull
         assert c.supports_historical_backfill
@@ -95,15 +95,15 @@ class TestDescriptor:
             assert t in c.ingest_event_types
 
     def test_registry_serves_expanded_connector(self):
-        from services.integrations.connectors.registry import get_connector
-        from services.integrations.connectors.klaviyo import KlaviyoConnector
+        from connectors.integrations.connectors.registry import get_connector
+        from connectors.integrations.connectors.klaviyo import KlaviyoConnector
         assert isinstance(get_connector("klaviyo"), KlaviyoConnector)
 
 
 class TestIngestBridge:
     @pytest.mark.asyncio
     async def test_comm_events_ingest_to_bronze_pipeline(self):
-        from services.comms.ingest import ingest_normalized_events
+        from journeys.comms.ingest import ingest_normalized_events
         counts = await ingest_normalized_events("tenant-k", [
             {"event_type": "email_delivered", "source": "klaviyo",
              "external_id": "e1", "occurred_at": "2026-07-01T00:00:00+00:00",
@@ -116,7 +116,7 @@ class TestIngestBridge:
 
     @pytest.mark.asyncio
     async def test_catalog_records_register_canonical_campaign(self):
-        from services.comms.ingest import ingest_normalized_events
+        from journeys.comms.ingest import ingest_normalized_events
         counts = await ingest_normalized_events("tenant-k", [
             {"event_type": "klaviyo.campaign", "source": "klaviyo",
              "external_id": "camp-ext-1",

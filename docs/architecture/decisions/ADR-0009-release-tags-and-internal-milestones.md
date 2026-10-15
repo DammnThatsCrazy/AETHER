@@ -30,5 +30,5 @@ Product release tags use `vX.Y.Z` with pre-release suffixes before production. I
 
 ## Enforcement
 
-- Tag policy documented in `docs/releases/tag-policy.md`
+- Tag policy documented in `docs/operations/releases/tag-policy.md`
 - Version validation prevents non-SemVer tags

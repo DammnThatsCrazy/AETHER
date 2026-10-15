@@ -65,7 +65,7 @@ says so in plain language rather than rounding the shortfall away.
 Usage:
   python scripts/release/check_deployment_readiness.py
   python scripts/release/check_deployment_readiness.py --json
-  python scripts/release/check_deployment_readiness.py --profile production-lean
+  python scripts/release/check_deployment_readiness.py --profile production
   python scripts/release/check_deployment_readiness.py --out release-evidence/scorecard/readiness.json
   python scripts/release/check_deployment_readiness.py --require-gates   # release use
 
@@ -108,7 +108,7 @@ EXIT_OK = 0
 EXIT_INTEGRITY = 1
 EXIT_GATE = 2
 
-PROFILES = ("overall", "production-lean", "staging")
+PROFILES = ("overall", "production", "staging")
 
 # The implementation ledger's vocabulary, unchanged. A control and its ledger
 # item must be able to describe the same work in the same words.
@@ -205,13 +205,13 @@ PINNED_CONTROL_WEIGHTS: dict[str, tuple[str, int]] = {
     "OVR-STAGING-LIFECYCLE": ("overall", 10),
     "OVR-CROSS-PROFILE-PARITY": ("overall", 5),
     "OVR-DOCS-RUNBOOKS": ("overall", 5),
-    "LEAN-FORBIDDEN-EXCLUSION": ("production-lean", 25),
-    "LEAN-REQUIRED-PRESENCE": ("production-lean", 10),
-    "LEAN-RUNTIME-TOPOLOGY": ("production-lean", 20),
-    "LEAN-COST-CEILING": ("production-lean", 20),
-    "LEAN-PROMOTION-INTEGRITY": ("production-lean", 10),
-    "LEAN-OBSERVABILITY-ROLLBACK": ("production-lean", 5),
-    "LEAN-DOCS-EVIDENCE": ("production-lean", 10),
+    "LEAN-FORBIDDEN-EXCLUSION": ("production", 25),
+    "LEAN-REQUIRED-PRESENCE": ("production", 10),
+    "LEAN-RUNTIME-TOPOLOGY": ("production", 20),
+    "LEAN-COST-CEILING": ("production", 20),
+    "LEAN-PROMOTION-INTEGRITY": ("production", 10),
+    "LEAN-OBSERVABILITY-ROLLBACK": ("production", 5),
+    "LEAN-DOCS-EVIDENCE": ("production", 10),
     "STG-WAKE": ("staging", 10),
     "STG-EXACT-ARTIFACT": ("staging", 10),
     "STG-MIGRATIONS": ("staging", 15),
@@ -252,7 +252,7 @@ PLACEHOLDER_ACCOUNTS = frozenset({
 })
 
 # Source-path markers that disqualify an artifact from counting as credentialed
-# evidence. reports/cost/cost-report.json in this very repo was generated from
+# evidence. docs/reference/reports/cost/cost-report.json in this very repo was generated from
 # a scratchpad inventory — real output, synthetic input — which is exactly the
 # thing that must never be mistaken for a plan against a real account.
 UNTRUSTED_SOURCE_MARKERS = (

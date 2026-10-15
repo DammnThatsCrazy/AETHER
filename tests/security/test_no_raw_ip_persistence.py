@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -30,11 +30,11 @@ _RAW_IP_PERSIST = re.compile(
 
 # The deprecated ingest alias hashes (sha256) before storing; it predates the
 # HMAC scheme and is scheduled for retirement with the alias itself (PR 4).
-_EXEMPT = ("services/ingestion/routes.py",)
+_EXEMPT = ("services/api/ingestion/ingestion/routes.py",)
 
 
 def _runtime_files():
-    for base in ("services", "shared", "middleware", "repositories"):
+    for base in ("tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "repositories"):
         yield from (BACKEND / base).rglob("*.py")
 
 
@@ -62,7 +62,7 @@ def test_audit_token_is_not_an_address():
 
 
 def test_server_context_payload_has_no_ip_field():
-    from services.ingestion.context_enricher import ServerObservedContext
+    from ingestion.ingestion.context_enricher import ServerObservedContext
 
     fields = set(ServerObservedContext.__dataclass_fields__)
     assert "ip" not in fields and "raw_ip" not in fields and "client_ip" not in fields

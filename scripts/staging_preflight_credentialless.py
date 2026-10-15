@@ -42,7 +42,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 SCRIPTS = ROOT / "scripts"
 for p in (str(ROOT), str(SCRIPTS), str(SCRIPTS / "release"), str(BACKEND_ROOT)):
     if p not in sys.path:
@@ -53,8 +53,8 @@ from scripts.lib.preflight_results import (  # noqa: E402
     CheckResult, all_passed, count_by_status, failed, passed, render_results, skipped,
 )
 
-TF_MODULES = ROOT / "deploy" / "aws" / "terraform" / "modules"
-TF_ROOT = ROOT / "deploy" / "aws" / "terraform"
+TF_MODULES = ROOT / "infra" / "aws" / "terraform" / "modules"
+TF_ROOT = ROOT / "infra" / "aws" / "terraform"
 STALE_MNT = ROOT / "docs" / "archive" / "legacy-architecture" / "aws-deployment" / "mnt"
 FOUNDING = ROOT / "config" / "founding_tenant_release.yaml"
 ROUTE_REGISTRY = ROOT / "config" / "route_registry.yaml"
@@ -80,9 +80,9 @@ def check_code_exists() -> list[CheckResult]:
     out: list[CheckResult] = []
     import py_compile
     mods = [
-        BACKEND_ROOT / "services/runtime/run_role.py",
-        BACKEND_ROOT / "services/runtime/roles.py",
-        BACKEND_ROOT / "services/runtime/consumer_specs.py",
+        BACKEND_ROOT / "workers/runtime/run_role.py",
+        BACKEND_ROOT / "workers/runtime/roles.py",
+        BACKEND_ROOT / "workers/runtime/consumer_specs.py",
     ]
     bad = []
     for m in mods:
@@ -143,14 +143,14 @@ def check_workers_register() -> CheckResult:
     eight in a consolidated one. Reading the removed key returned an empty set
     and turned this into an unconditional failure.
     """
-    roles_py = BACKEND_ROOT / "services/runtime/roles.py"
+    roles_py = BACKEND_ROOT / "workers/runtime/roles.py"
     worker_roles = set(runtime_constants(roles_py)["WORKER_ROLES"])
     mapped = _role_to_spec_names_keys(roles_py)
     if not worker_roles or worker_roles - mapped:
         return failed("workers-register", f"worker roles not fully mapped: {sorted(worker_roles - mapped)}")
     deploy = yaml.safe_load(RUNTIME_DEPLOY.read_text(encoding="utf-8")) or {}
     deployable = worker_roles | {"api"}
-    for prof in ("staging", "production-lean"):
+    for prof in ("staging", "production"):
         services = ((deploy.get("profiles") or {}).get(prof) or {}).get("services") or {}
         owned = [role for cfg in services.values() for role in ((cfg or {}).get("roles") or [])]
         # Set equality alone would accept a role claimed by two services, which
@@ -216,7 +216,7 @@ def check_containers_config() -> list[CheckResult]:
     env = {**os.environ, "JWT_SECRET": "credentialless-parse-only"}
     for label, argv in (
         ("root", ["docker", "compose", "config"]),
-        ("integration", ["docker", "compose", "-f", "deploy/integration/docker-compose.durable.yml", "config"]),
+        ("integration", ["docker", "compose", "-f", "infra/integration/docker-compose.durable.yml", "config"]),
     ):
         proc = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True, timeout=120, env=env)
         out.append(passed(f"containers-config:{label}", "compose config parses")
@@ -242,7 +242,7 @@ def check_mock_provider_replay() -> list[CheckResult]:
                    if not failures else failed("mock-provider", f"cert failures: {failures}"))
     except Exception as exc:
         out.append(failed("mock-provider", f"certification framework failed to load: {exc}"))
-    replay = _run("scripts/graph/replay_relationship_layers.py")
+    replay = _run("scripts/graph_tools/replay_relationship_layers.py")
     out.append(passed("replay-graph", "in-memory relationship-layer replay OK")
                if replay.returncode == 0 else failed("replay-graph", "graph replay failed"))
     return out

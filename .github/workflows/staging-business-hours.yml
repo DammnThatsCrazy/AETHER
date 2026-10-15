@@ -19,7 +19,7 @@ name: Staging business hours
 # scales staging to zero if a lease ever overruns.
 #
 # Both transitions are staging-only and pilot-lane only. Wake always deploys the
-# newest release built from main, the same release a manual wake would use.
+# newest release built from staging, the same release a manual wake would use.
 
 on:
   schedule:
@@ -84,7 +84,7 @@ jobs:
             esac
           fi
           # While the repository variable STAGING_WAKE_HOLD is "true", the
-          # scheduled wake is skipped, so a new release on main is not deployed
+          # scheduled wake is skipped, so a new release on staging is not deployed
           # to staging by the timer. Sleep is never held, and an operator's
           # manual wake is never held.
           if [ "$transition" = wake ] && [ "$EVENT_NAME" = schedule ] && [ "${WAKE_HOLD:-}" = true ]; then
@@ -98,14 +98,14 @@ jobs:
           echo "transition=${transition}" >> "$GITHUB_OUTPUT"
           echo "New York time $(TZ=America/New_York date '+%a %H:%M %Z'); transition: ${transition}"
 
-      - name: Find the newest approved release built from main
+      - name: Find the newest approved release built from staging
         id: release
         if: steps.choose.outputs.transition == 'wake'
         run: |
           set -euo pipefail
-          # The newest successful push-to-main delivery run that still carries
+          # The newest successful push-to-staging delivery run that still carries
           # its release artifact is the release a manual wake would deploy.
-          runs="$(gh api "repos/${REPO}/actions/workflows/deploy.yml/runs?branch=main&event=push&status=success&per_page=20" \
+          runs="$(gh api "repos/${REPO}/actions/workflows/deploy.yml/runs?branch=staging&event=push&status=success&per_page=20" \
             --jq '.workflow_runs[] | "\(.id) \(.head_sha)"')"
           release_run_id=""
           release_sha=""
@@ -119,7 +119,7 @@ jobs:
               break
             fi
           done <<< "$runs"
-          test -n "$release_run_id" || { echo '::error::no successful main delivery run with a release artifact'; exit 1; }
+          test -n "$release_run_id" || { echo '::error::no successful staging delivery run with a release artifact'; exit 1; }
           rm -rf release
           gh run download "$release_run_id" --repo "$REPO" --name "release-${release_sha}" --dir release
           checksum="$(tr -d '[:space:]' < release/release.json.sha256)"
@@ -144,7 +144,7 @@ jobs:
           dispatch() {
             # Prints the created run ID; refuses an ambiguous correlation.
             local output run_id
-            output="$(gh workflow run "$LIFECYCLE_WORKFLOW" --repo "$REPO" --ref main "$@" 2>&1)"
+            output="$(gh workflow run "$LIFECYCLE_WORKFLOW" --repo "$REPO" --ref staging "$@" 2>&1)"
             printf '%s\n' "$output" >&2
             run_id="$(printf '%s\n' "$output" | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"
             test -n "$run_id" || { echo '::error::lifecycle dispatch did not return its run URL' >&2; return 1; }
@@ -205,7 +205,7 @@ jobs:
         if: steps.choose.outputs.transition == 'sleep'
         run: |
           set -euo pipefail
-          output="$(gh workflow run "$LIFECYCLE_WORKFLOW" --repo "$REPO" --ref main \
+          output="$(gh workflow run "$LIFECYCLE_WORKFLOW" --repo "$REPO" --ref staging \
             -f action=apply-sleep -f deployment_lane="$DEPLOYMENT_LANE" 2>&1)"
           printf '%s\n' "$output"
           run_id="$(printf '%s\n' "$output" | sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' | tail -n 1)"

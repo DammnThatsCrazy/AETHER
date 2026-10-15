@@ -5,7 +5,7 @@ Asserts ``packages/shared/contracts/projector-ownership-registry.json``
 matches the LIVE Silver dispatcher — the registry is a declaration, the
 dispatcher is runtime truth, and this gate keeps them identical:
 
-1. Registry projector order == ``services/silver/dispatcher.py::_ALL_PROJECTORS``.
+1. Registry projector order == ``services/api/ingestion/silver/dispatcher.py::_ALL_PROJECTORS``.
 2. Per projector, ``eventTypes`` == the dispatcher handles, and the
    registered-family / unregistered split matches event-registry.json.
 3. ``activityRole`` matches dispatcher semantics: CommsProjector owns comm
@@ -36,10 +36,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-BACKEND = ROOT / "services" / "backend"
+BACKEND = ROOT / "services" / "api"
 REGISTRY_JSON = ROOT / "packages" / "shared" / "contracts" / "projector-ownership-registry.json"
 EVENT_REGISTRY_JSON = ROOT / "packages" / "shared" / "contracts" / "event-registry.json"
-ADAPTERS_PY = BACKEND / "services" / "measurement" / "silver_adapters.py"
+ADAPTERS_PY = BACKEND / "journeys" / "measurement" / "silver_adapters.py"
 
 os.environ.setdefault("AETHER_ENV", "local")
 if str(BACKEND) not in sys.path:
@@ -64,8 +64,8 @@ def _expected_role(name: str, table: str, adapter_tables: set[str]) -> str:
 def main() -> int:
     errors: list[str] = []
 
-    from services.comms.contracts import COMMUNICATION_EVENT_TYPES
-    from services.silver.dispatcher import _ALL_PROJECTORS, _TYPE_MAP
+    from journeys.comms.contracts import COMMUNICATION_EVENT_TYPES
+    from ingestion.silver.dispatcher import _ALL_PROJECTORS, _TYPE_MAP
 
     registry = json.loads(REGISTRY_JSON.read_text(encoding="utf-8"))
     event_registry = json.loads(EVENT_REGISTRY_JSON.read_text(encoding="utf-8"))
@@ -197,7 +197,7 @@ def main() -> int:
             print(f"  - {e}", file=sys.stderr)
         print(
             "Update packages/shared/contracts/projector-ownership-registry.json to match "
-            "services/silver/dispatcher.py (or fix the dispatcher), then run "
+            "services/api/ingestion/silver/dispatcher.py (or fix the dispatcher), then run "
             "python scripts/generate_platform_contracts.py.",
             file=sys.stderr,
         )

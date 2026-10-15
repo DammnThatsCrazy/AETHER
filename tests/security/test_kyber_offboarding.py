@@ -12,13 +12,13 @@ import os
 import sys
 from pathlib import Path
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 
 
 async def test_offboarding_revokes_devices_and_scopes() -> None:
-    from services.kyber.identity.lifecycle import revoke_operator_access
+    from governance.kyber.identity.lifecycle import revoke_operator_access
 
     report = await revoke_operator_access(
         "op_nonexistent", actor_id="op_founder", reason="regression probe"
@@ -37,9 +37,9 @@ async def test_offboarding_actually_revokes_a_real_device_and_scope() -> None:
     Resolving the planes is not the same as revoking anything, so this drives
     real records through the funnel rather than asserting on the report shape.
     """
-    from services.kyber.access.scopes import access_scope_service
-    from services.kyber.devices.approvals import device_approval_service
-    from services.kyber.identity.lifecycle import revoke_operator_access
+    from governance.kyber.access.scopes import access_scope_service
+    from governance.kyber.devices.approvals import device_approval_service
+    from governance.kyber.identity.lifecycle import revoke_operator_access
 
     operator_id = "op_offboard_e2e"
 

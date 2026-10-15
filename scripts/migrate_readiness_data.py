@@ -6,7 +6,7 @@ The legacy signals blended independent conditions into one scalar:
 * scripts/production_status.py         — a 0-5 maturity average per "Area"
 * config/capability_matrix.yaml        — capability x profile states
 * config/deployment_readiness.yaml     — evidence-backed control table
-* reports/mobile-productization/external-blockers.json — external blockers
+* docs/reference/reports/mobile-productization/external-blockers.json — external blockers
 
 A low legacy score does NOT mean incomplete code — it may have been suppressed
 by a missing credential or unprovisioned infrastructure. This migration never
@@ -18,7 +18,7 @@ Usage:
   python scripts/migrate_readiness_data.py                 # print report
   python scripts/migrate_readiness_data.py --json out.json # also write JSON
   python scripts/migrate_readiness_data.py --write         # write the canonical
-      # artifacts/readiness/migration-report.json
+      # .artifacts/readiness/migration-report.json
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ sys.path.insert(0, str(ROOT))
 
 from scripts.lib.readiness_model import load_features  # noqa: E402
 
-REPORT_PATH = ROOT / "artifacts" / "readiness" / "migration-report.json"
+REPORT_PATH = ROOT / ".artifacts" / "readiness" / "migration-report.json"
 
 # Non-authoritative heuristic: a legacy 0-5 maturity score maps onto an
 # implementation state ONLY as a starting hypothesis. It is explicitly flagged
@@ -128,7 +128,7 @@ def build_report() -> dict:
     existing = {f.feature_id: f for f in load_features()}
 
     # External-blocker registry (activation truth the scalar hid).
-    blockers_path = ROOT / "reports" / "mobile-productization" / "external-blockers.json"
+    blockers_path = ROOT / "docs" / "reference" / "reports" / "mobile-productization" / "external-blockers.json"
     external = {}
     if blockers_path.exists():
         for b in (json.loads(blockers_path.read_text()).get("blockers") or []):
@@ -237,7 +237,7 @@ def print_report(report: dict) -> None:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Migrate legacy readiness data")
     ap.add_argument("--json", metavar="PATH", help="write JSON report to PATH")
-    ap.add_argument("--write", action="store_true", help="write artifacts/readiness/migration-report.json")
+    ap.add_argument("--write", action="store_true", help="write .artifacts/readiness/migration-report.json")
     args = ap.parse_args(argv)
 
     report = build_report()

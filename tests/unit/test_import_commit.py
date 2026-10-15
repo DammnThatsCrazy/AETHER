@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -23,11 +23,16 @@ import os  # noqa: E402
 
 os.environ.setdefault("AETHER_ENV", "local")
 
-from services.imports import commit as cm  # noqa: E402
-from services.imports import service as svc  # noqa: E402
+from ingestion.imports import commit as cm  # noqa: E402
+from ingestion.imports import service as svc  # noqa: E402
+from ingestion.imports.rights_admission import (  # noqa: E402
+    ImportRightsAdmission,
+    ImportRightsDenied,
+)
 
 TENANT = "tenant-commit"
 OTHER = "tenant-other"
+SOURCE = "tenant-import-source"
 
 CSV = (
     b"user_id,email,friend_id\n"
@@ -60,22 +65,25 @@ def raises_named(*names: str):
 
 
 @pytest.fixture()
-def clean(monkeypatch):
-    from repositories.import_files import get_import_file_repository
+def clean(monkeypatch, request):
     from repositories.imports_repo import get_imports_repository
-    from repositories.lake import BronzeRepository
+    from repositories.repos import reset_in_memory_stores
+    from repositories.graph_mutation_ledger import reset_graph_ledger_memory
+    from ingestion.silver.writer import reset_local_tables
+    from tenancy.rights_authority.rollout import reset_rollout
 
+    reset_rollout()
+    request.addfinalizer(reset_rollout)
+    reset_in_memory_stores()
+    reset_graph_ledger_memory()
+    reset_local_tables()
     r = get_imports_repository()
-    for attr in ("sessions", "schemas", "mappings", "templates", "validations",
-                 "row_errors", "commits", "rollbacks"):
-        getattr(r, attr)._store.clear()
-    get_import_file_repository()._store.clear()
-    BronzeRepository(cm.BRONZE_DOMAIN)._store.clear()
     _reset_graph()
     # Pin the repo accessor so seeding (svc) and the commit path (cm) share one
     # instance regardless of the suite's sys.modules churn.
     monkeypatch.setattr(svc, "get_imports_repository", lambda: r)
     monkeypatch.setattr(cm, "get_imports_repository", lambda: r)
+    _install_rights(monkeypatch, SOURCE)
     return r
 
 
@@ -91,8 +99,12 @@ def _reset_graph():
                 store.clear()
 
 
-async def _seed_approved(tenant: str = TENANT) -> str:
-    session = await svc.create_import(tenant, created_by="u1")
+async def _seed_approved(
+    tenant: str = TENANT, *, source_id: str | None = SOURCE
+) -> str:
+    session = await svc.create_import(
+        tenant, created_by="u1", source_id=source_id
+    )
     import_id = session["id"]
     await svc.store_file(tenant, import_id, filename="rel.csv", content=CSV, content_type="text/csv")
     await svc.analyze_import(tenant, import_id)
@@ -102,11 +114,115 @@ async def _seed_approved(tenant: str = TENANT) -> str:
     return import_id
 
 
+class _DecisionRepository:
+    def __init__(self):
+        self.rows: dict[str, dict] = {}
+
+    async def record(self, decision, *, identity_key=None):
+        row = decision.model_dump(mode="json")
+        row["identity_key"] = identity_key
+        self.rows[row["decision_id"]] = row
+        return row
+
+
+class _ImportGrantService:
+    def __init__(self, grant, *, revoke_on_hold: bool = False):
+        self.grant = grant
+        self.revoke_on_hold = revoke_on_hold
+
+    async def is_durable(self):
+        return True
+
+    async def get_effective_grant(self, tenant_id, source_id):
+        grant = self.grant
+        status = getattr(getattr(grant, "status", None), "value", None)
+        if (
+            grant is None
+            or grant.tenant_id != tenant_id
+            or grant.source_id != source_id
+            or status != "active"
+            or grant.revoked_at is not None
+        ):
+            return None
+        return grant
+
+    def hold_grant_unrevoked(self, grant_id, *, tenant_id):
+        from contextlib import asynccontextmanager
+        from connectors.integrations.data_rights.models import GrantStatus
+
+        @asynccontextmanager
+        async def _hold():
+            if self.revoke_on_hold:
+                self.grant = self.grant.model_copy(update={
+                    "status": GrantStatus.REVOKED,
+                    "revoked_at": "2026-10-11T00:00:00+00:00",
+                })
+            yield
+
+        return _hold()
+
+
+def _install_rights(
+    monkeypatch,
+    grant_source_id: str | None,
+    *,
+    tenant_lake: bool = True,
+    tenant_graph: bool = True,
+    tenant_insights: bool = True,
+    revoke_on_hold: bool = False,
+):
+    from connectors.integrations.data_rights.models import DataRightsGrant, GrantStatus
+    from ingestion.imports import rights_admission
+    from tenancy.rights_authority.resolver import EffectiveRightsResolver
+    from tenancy.rights_authority.rollout import configure_rollout
+
+    grant = DataRightsGrant(
+        data_rights_grant_id="drg_import_fixture",
+        tenant_id=TENANT,
+        contract_id="contract-import-fixture",
+        source_id=grant_source_id or "unused-import-fixture-source",
+        connector_id="csv_import",
+        connector_class="tenant_import",
+        data_category="customer",
+        data_sensitivity="sensitive_pii",
+        raw_data_owner="tenant",
+        tenant_lake_allowed=tenant_lake,
+        tenant_graph_allowed=tenant_graph,
+        tenant_insights_allowed=tenant_insights,
+        olympus_baseline_allowed=False,
+        cross_tenant_aggregate_allowed=False,
+        model_training_allowed=False,
+        commercial_reuse_allowed=False,
+        legal_basis="contract",
+        granted_by_user_id="tenant-admin",
+        granted_at="2026-10-01T00:00:00+00:00",
+        status=GrantStatus.ACTIVE,
+        audit_event_id="audit-import-fixture",
+    )
+    service = _ImportGrantService(
+        grant if grant_source_id is not None else None,
+        revoke_on_hold=revoke_on_hold,
+    )
+    decisions = _DecisionRepository()
+    resolver = EffectiveRightsResolver(
+        grant_loader=lambda tenant_id, source_id: service.get_effective_grant(
+            tenant_id, source_id
+        ),
+        decision_repository=decisions,
+    )
+    admission = ImportRightsAdmission(resolver=resolver, grant_service=service)
+    monkeypatch.setattr(rights_admission, "_import_rights_admission", admission)
+    # The import-owned gate is mandatory even when shared graph propagation is
+    # disabled; its direct resolver decisions still must be durably stamped.
+    configure_rollout("off")
+    return service, decisions
+
+
 # ── pure planners ────────────────────────────────────────────────────────────
 
 
 def test_build_records_and_plan_graph():
-    from services.imports.contracts import FieldMapping
+    from ingestion.imports.contracts import FieldMapping
 
     fields = [FieldMapping(**f) for f in MAPPING]
     rows = [
@@ -124,7 +240,7 @@ def test_build_records_and_plan_graph():
 
 
 def test_build_records_surfaces_transform_errors():
-    from services.imports.contracts import FieldMapping
+    from ingestion.imports.contracts import FieldMapping
 
     fields = [FieldMapping(source_column="n", primitive="metric", target_field="value",
                            transform="to_number", required=True)]
@@ -137,6 +253,7 @@ def test_build_records_surfaces_transform_errors():
 
 
 async def test_commit_stages_bronze_and_graph(clean):
+    from repositories.lake import BronzeRepository
     from shared.graph.graph import get_graph_client
 
     import_id = await _seed_approved()
@@ -155,6 +272,132 @@ async def test_commit_stages_bronze_and_graph(clean):
 
     detail = await svc.get_import(TENANT, import_id)
     assert detail["session"]["status"] == "committed"
+    assert set(record["rights_decision_refs"]) == {
+        "tenant_lake", "write_tenant_graph", "tenant_insights",
+    }
+    assert all(
+        ref.startswith("rdec_")
+        for ref in record["rights_decision_refs"].values()
+    )
+    bronze_rows = await BronzeRepository(cm.BRONZE_DOMAIN).query_by_source_tag(
+        record["commit_id"], tenant_id=TENANT
+    )
+    assert len(bronze_rows) == 2
+    assert all(
+        row["rights_decision_refs"] == record["rights_decision_refs"]
+        for row in bronze_rows
+    )
+
+
+@pytest.mark.parametrize(
+    ("session_source", "grant_source", "tenant_graph", "revoke_on_hold"),
+    [
+        (None, SOURCE, True, False),
+        (SOURCE, None, True, False),
+        (SOURCE, SOURCE, False, False),
+        ("wrong-source", SOURCE, True, False),
+        (SOURCE, SOURCE, True, True),
+    ],
+    ids=[
+        "missing-source", "missing-grant", "denied-use", "wrong-source",
+        "revoked-before-write",
+    ],
+)
+async def test_rights_denial_precedes_identity_bronze_and_graph_writes(
+    clean, monkeypatch, session_source, grant_source, tenant_graph, revoke_on_hold
+):
+    from repositories.graph_mutation_ledger import GraphMutationLedgerRepository
+    from repositories.lake import BronzeRepository
+    from shared.graph.graph import get_graph_client
+    from ingestion.silver.writer import _local_tables
+
+    _service, decisions = _install_rights(
+        monkeypatch,
+        grant_source,
+        tenant_graph=tenant_graph,
+        revoke_on_hold=revoke_on_hold,
+    )
+    import_id = await _seed_approved(source_id=session_source)
+    identity_calls = []
+
+    async def identity_write_spy(*args, **kwargs):
+        identity_calls.append((args, kwargs))
+        raise AssertionError("identity write ran before rights admission")
+
+    monkeypatch.setattr(cm, "_register_csv_identity_evidence", identity_write_spy)
+    with pytest.raises(ImportRightsDenied):
+        await cm.commit_import(TENANT, import_id)
+
+    assert identity_calls == []
+    bronze = BronzeRepository(cm.BRONZE_DOMAIN)
+    assert await bronze.find_many(filters={"tenant_id": TENANT}, limit=100) == []
+    assert await get_graph_client().get_all_vertices() == []
+    assert await GraphMutationLedgerRepository().list_records(TENANT) == []
+    assert _local_tables.get("silver_import_facts", {}) == {}
+
+    session = await clean.get_session(TENANT, import_id)
+    active_commit = session["active_commit_id"]
+    attempts = session["rights_admissions"][active_commit]
+    assert attempts and attempts[-1]["status"] == "denied"
+    persisted_refs = {
+        ref
+        for attempt in attempts
+        for ref in attempt["decision_refs"].values()
+    }
+    assert persisted_refs
+    assert persisted_refs <= decisions.rows.keys()
+
+
+async def test_rights_refs_survive_commit_replay_and_graph_ledger(clean, monkeypatch):
+    from repositories.graph_mutation_ledger import GraphMutationLedgerRepository
+    from ingestion.silver.writer import _local_tables
+
+    _service, decisions = _install_rights(monkeypatch, SOURCE)
+    import_id = await _seed_approved()
+    first = await cm.commit_import(TENANT, import_id)
+    second = await cm.replay_import(TENANT, import_id)
+    assert first["rights_decision_refs"]["write_tenant_graph"] != (
+        second["rights_decision_refs"]["write_tenant_graph"]
+    )
+
+    graph_ref_1 = first["rights_decision_refs"]["write_tenant_graph"]
+    graph_ref_2 = second["rights_decision_refs"]["write_tenant_graph"]
+    rows = await GraphMutationLedgerRepository().list_records(TENANT)
+    refs = {row.get("rights_decision_ref") for row in rows}
+    assert graph_ref_1 in refs and graph_ref_2 in refs
+    assert graph_ref_1 in decisions.rows and graph_ref_2 in decisions.rows
+
+    session = await clean.get_session(TENANT, import_id)
+    history = session["rights_admissions"]
+    assert first["commit_id"] in history and second["commit_id"] in history
+    for record in (first, second):
+        attempt_refs = {
+            ref
+            for attempt in history[record["commit_id"]]
+            for ref in attempt["decision_refs"].values()
+        }
+        assert set(record["rights_decision_refs"].values()) <= attempt_refs
+
+    from repositories.lake import BronzeRepository
+
+    replay_bronze = await BronzeRepository(cm.BRONZE_DOMAIN).query_by_source_tag(
+        second["commit_id"], tenant_id=TENANT
+    )
+    assert len(replay_bronze) == 2
+    assert all(
+        row["rights_decision_refs"] == second["rights_decision_refs"]
+        for row in replay_bronze
+    )
+    silver_rows = _local_tables.get("silver_import_facts", {}).values()
+    for record in (first, second):
+        rows_for_commit = [
+            row for row in silver_rows if row["commit_id"] == record["commit_id"]
+        ]
+        assert rows_for_commit
+        assert all(
+            row["rights_decision_refs"] == record["rights_decision_refs"]
+            for row in rows_for_commit
+        )
 
 
 async def test_commit_requires_approved(clean):
@@ -181,6 +424,53 @@ async def test_commit_is_idempotent_on_edges(clean):
     assert rec2["counts"]["edges"] == 0  # nothing new to create
     assert _edge_count() == before
     assert rec1["counts"]["edges"] == 4
+
+
+async def test_shadow_ledger_failure_fails_commit_and_retry_repairs_owned_edge(clean, monkeypatch):
+    from repositories.graph_mutation_ledger import GraphMutationLedgerRepository
+    from shared.graph.graph import get_graph_client
+
+    import_id = await _seed_approved()
+    original_append = GraphMutationLedgerRepository.append
+    failed_once = False
+
+    async def fail_first_edge_append(self, record, fact_payload=None):
+        nonlocal failed_once
+        if record.operation == "edge_created" and not failed_once:
+            failed_once = True
+            raise RuntimeError("simulated ledger outage after shadow projection")
+        return await original_append(self, record, fact_payload=fact_payload)
+
+    monkeypatch.setattr(GraphMutationLedgerRepository, "append", fail_first_edge_append)
+    with raises_named("ConflictError"):
+        await cm.commit_import(TENANT, import_id)
+
+    failed_session = await clean.get_session(TENANT, import_id)
+    commit_id = failed_session["active_commit_id"]
+    assert failed_session["status"] == "failed"
+    assert _edge_count() == 1  # the shadow projection happened before its ledger append
+
+    monkeypatch.setattr(GraphMutationLedgerRepository, "append", original_append)
+    committed = await cm.commit_import(TENANT, import_id)
+
+    assert committed["commit_id"] == commit_id
+    assert committed["status"] == "committed"
+    assert committed["counts"]["edges"] == 4
+    assert _edge_count() == 4  # recovery records the owned edge without projecting a duplicate
+
+    rows = await GraphMutationLedgerRepository().list_records(TENANT)
+    commit_mutations = [row for row in rows if row.get("actor_id") == commit_id]
+    assert commit_mutations
+    assert all(
+        str(row.get("rights_decision_ref") or "").startswith("rdec_")
+        for row in commit_mutations
+    )
+
+    rolled_back = await cm.rollback_import(TENANT, import_id, reason="retry recovery")
+    assert rolled_back["edges_revoked"] == 4
+    assert await get_graph_client().get_edges(
+        f"entity:{TENANT}:alice", direction="out"
+    ) == []
 
 
 # ── rollback ─────────────────────────────────────────────────────────────────
@@ -290,7 +580,7 @@ async def test_tenant_isolation(clean):
 
 
 async def test_commit_job_handler(clean):
-    from services.jobs.handlers import JobContext
+    from workers.jobs.handlers import JobContext
 
     # Call the module-level handler directly (via this test's own `cm`), not the
     # global HANDLER_REGISTRY — a registry closure may be bound to a different
@@ -309,8 +599,8 @@ async def test_commit_job_handler(clean):
 
 
 def test_handlers_are_registered():
-    from services.imports.commit import register_import_handlers
-    from services.jobs.handlers import HANDLER_REGISTRY
+    from ingestion.imports.commit import register_import_handlers
+    from workers.jobs.handlers import HANDLER_REGISTRY
 
     register_import_handlers()
     assert "import.commit" in HANDLER_REGISTRY and "import.replay" in HANDLER_REGISTRY

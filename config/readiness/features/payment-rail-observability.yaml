@@ -4,7 +4,7 @@
 feature_id: payment-rail-observability
 title: Payment Rail Observability
 owning_system: aether
-summary: Five named adapters (Privy, Stripe crypto onramp, Coinbase, MoonPay, Bridge) with real HMAC webhook
+summary: Five named adapters (Privy, Stripe merchant payment/onramp, Coinbase, MoonPay, Bridge) with real HMAC webhook
   verification (per-provider scheme, constant-time), recursive sensitive-field stripping.
 scope:
   id: payment-rail-observability-v1
@@ -26,9 +26,9 @@ repository_ceiling:
   - Connect a live provider and open a validated live-data window.
   remaining_is_repository_controlled: true
   evidence:
-  - services/backend/services/integrations/providers/payment_rails/
-  - services/backend/services/integrations/providers/payment_rails/sync_worker.py
-  - docs/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md
+  - services/api/connectors/integrations/providers/payment_rails/
+  - services/api/connectors/integrations/providers/payment_rails/sync_worker.py
+  - docs/reference/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md
 implementation:
   state: RUNTIME_INTEGRATED
   denominator: in-scope repository controls (migration-derived)
@@ -112,7 +112,7 @@ operational_ownership:
   technical_owner: financial-platform
   operational_owner: platform-ops
   escalation: pagerduty:financial-platform
-  runbook: docs/runbooks/PAYMENT_RAILS_RUNBOOK.md
+  runbook: docs/operations/runbooks/PAYMENT_RAILS_RUNBOOK.md
   dashboards:
   - grafana:financial-platform
   alerts:
@@ -125,7 +125,7 @@ business_readiness:
 confidence:
   level: LOW
   reasons:
-  - 'repository evidence: services/backend/services/integrations/providers/payment_rails/'
+  - 'repository evidence: services/api/connectors/integrations/providers/payment_rails/'
   evidence_gaps:
   - credentialed environment execution not yet performed
 release_profiles:
@@ -147,7 +147,7 @@ release_profiles:
     productionization_required: true
     environment_gate: pilot
     business_gate: false
-  production-lean:
+  production:
     participation: not_in_release
     note: Excluded from the founding-tenant release scope (see config/founding_tenant_release.yaml).
   production-scale:

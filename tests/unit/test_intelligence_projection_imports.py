@@ -2,7 +2,7 @@
 
 The shared projection contracts MUST reuse the canonical primitives rather than
 re-declare them. Python ownership lives in
-``services/operational_intelligence/models.py`` (EvidenceRef, PageRequest,
+``services/api/graph/operational_intelligence/models.py`` (EvidenceRef, PageRequest,
 PageInfo, TimeRangeFilter); TS ownership lives in ``./operational-intelligence``
 (PageRequest, EvidenceRef, TimeRangeFilter, PageInfo). ``EntityRef`` is no longer
 referenced by the contracts at all (replaced by the projection-plane
@@ -26,7 +26,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_PROJECTIONS_DIR = (
     REPO_ROOT
-    / "services" / "backend"
+    / "services" / "api"
     / "shared"
     / "intelligence_projections"
 )
@@ -84,7 +84,7 @@ def _ts_import_from(source: str, module: str) -> str:
 
 def _py_models_import_block(source: str) -> str:
     match = re.search(
-        r"from services\.operational_intelligence\.models import \(([^)]*)\)",
+        r"from graph\.operational_intelligence\.models import \(([^)]*)\)",
         source,
         flags=re.DOTALL,
     )
@@ -110,7 +110,7 @@ def test_used_py_primitives_come_from_operational_intelligence_models() -> None:
 
     block = _py_models_import_block(contracts)
     assert block, (
-        "contracts.py has no 'from services.operational_intelligence.models import (...)' block"
+        "contracts.py has no 'from graph.operational_intelligence.models import (...)' block"
     )
 
     for name in _PY_REQUIRED_IMPORTS:
@@ -179,7 +179,7 @@ def test_py_gate_catches_pep695_type_alias() -> None:
 
 def test_py_gate_does_not_false_positive_on_import_block_or_derived_literals() -> None:
     import_block = (
-        "from services.operational_intelligence.models import (\n"
+        "from graph.operational_intelligence.models import (\n"
         "    ContractModel,\n"
         "    EvidenceRef,\n"
         "    PageInfo,\n"

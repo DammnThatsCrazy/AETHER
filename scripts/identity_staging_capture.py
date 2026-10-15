@@ -21,10 +21,10 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-BACKEND_ROOT = Path(__file__).resolve().parents[1] / "services/backend"
+BACKEND_ROOT = Path(__file__).resolve().parents[1] / "services/api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
-from services.identity.contract_inventory import REQUIRED_STAGING_IDENTITY_FLAGS  # noqa: E402
+from identity.identity.contract_inventory import REQUIRED_STAGING_IDENTITY_FLAGS  # noqa: E402
 
 
 def _call_capture(base_url: str, api_key: str) -> dict[str, Any]:
@@ -534,8 +534,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default=os.getenv("AETHER_STAGING_BASE_URL"))
     parser.add_argument("--api-key", default=os.getenv("AETHER_STAGING_CAPTURE_API_KEY"))
-    parser.add_argument("--output", default="artifacts/rehearsal/identity-continuity-capture.json")
-    parser.add_argument("--scenario-artifacts-directory", default="artifacts/rehearsal/identity-continuity-scenarios")
+    parser.add_argument("--output", default=".artifacts/rehearsal/identity-continuity-capture.json")
+    parser.add_argument("--scenario-artifacts-directory", default=".artifacts/rehearsal/identity-continuity-scenarios")
     parser.add_argument("--ui-evidence-directory", help="Optional Playwright UI fixture evidence root to bind as supplemental evidence")
     parser.add_argument("--ui-live-evidence-directory", help="Authenticated live staging UI evidence root; both identity surfaces are required")
     parser.add_argument("--commit-sha", default=os.getenv("GITHUB_SHA"))

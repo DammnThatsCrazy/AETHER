@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -50,7 +50,7 @@ class TestWebhookMapping:
         ("emailUnSubscribe", "unsubscribe_observed"),  # camelCase variant
     ])
     def test_event_mapping(self, event, expected):
-        from services.integrations.connectors.iterable import IterableConnector
+        from connectors.integrations.connectors.iterable import IterableConnector
         events = IterableConnector().parse_webhook(_iterable_record(event))
         assert len(events) == 1
         assert events[0].event_type == expected
@@ -60,7 +60,7 @@ class TestWebhookMapping:
         assert events[0].properties["external_message_id"] == "iter-ev-1"
 
     def test_list_webhook_payload(self):
-        from services.integrations.connectors.iterable import IterableConnector
+        from connectors.integrations.connectors.iterable import IterableConnector
         events = IterableConnector().parse_webhook(
             {"items": [_iterable_record("emailOpen"), _iterable_record("emailClick")]}
         )
@@ -69,20 +69,20 @@ class TestWebhookMapping:
     def test_subscribe_has_no_canonical_event(self):
         """A resubscription is not a communication lifecycle fact Aether observes
         today — the record is dropped (mirrors SendGrid's group_resubscribe)."""
-        from services.integrations.connectors.iterable import IterableConnector
+        from connectors.integrations.connectors.iterable import IterableConnector
         assert IterableConnector().parse_webhook(
             _iterable_record("emailSubscribe")
         ) == []
 
     def test_unknown_event_dropped(self):
-        from services.integrations.connectors.iterable import IterableConnector
+        from connectors.integrations.connectors.iterable import IterableConnector
         assert IterableConnector().parse_webhook(
             _iterable_record("smsReceived")
         ) == []
 
     def test_identify_routes_to_identity_evidence(self):
         """identify/profile payloads are identity evidence, never a communication fact."""
-        from services.integrations.connectors.iterable import IterableConnector
+        from connectors.integrations.connectors.iterable import IterableConnector
         events = IterableConnector().parse_webhook(
             {"eventType": "identify", "userId": "u-1", "email": "jane@example.com"}
         )
@@ -91,21 +91,21 @@ class TestWebhookMapping:
         assert events[0].properties["provider_profile_id"] == "u-1"
 
     def test_hard_bounce_type(self):
-        from services.integrations.connectors.iterable import IterableConnector
+        from connectors.integrations.connectors.iterable import IterableConnector
         events = IterableConnector().parse_webhook(_iterable_record(
             "emailBounce", dataFields={"bounceType": "HardBounce"},
         ))
         assert events[0].properties["bounce_type"] == "hard"
 
     def test_soft_bounce_type(self):
-        from services.integrations.connectors.iterable import IterableConnector
+        from connectors.integrations.connectors.iterable import IterableConnector
         events = IterableConnector().parse_webhook(_iterable_record(
             "emailBounce", bounceType="SoftBounce",
         ))
         assert events[0].properties["bounce_type"] == "soft"
 
     def test_unsubscribe_scope(self):
-        from services.integrations.connectors.iterable import IterableConnector
+        from connectors.integrations.connectors.iterable import IterableConnector
         scoped = IterableConnector().parse_webhook(
             _iterable_record("emailUnsubscribe", listId=9)
         )[0]
@@ -116,7 +116,7 @@ class TestWebhookMapping:
         assert global_.properties["unsubscribe_scope"] == "marketing_channel"
 
     def test_click_link_and_user_agent(self):
-        from services.integrations.connectors.iterable import IterableConnector
+        from connectors.integrations.connectors.iterable import IterableConnector
         events = IterableConnector().parse_webhook(_iterable_record(
             "emailClick", url="https://x.example/promo", userAgent="Mozilla/5.0",
         ))
@@ -129,7 +129,7 @@ class TestSignature:
         return hmac.new(SECRET.encode(), payload, hashlib.sha256).hexdigest()
 
     def test_verify_dispatches_native_query_hmac(self):
-        from services.integrations.connectors.iterable import IterableConnector
+        from connectors.integrations.connectors.iterable import IterableConnector
         sig = self._iterable_sig(PAYLOAD)
         # The generic comms route merges the webhook URL's query params into the
         # headers mapping the native verifier reads (signature/ts as query params).
@@ -147,7 +147,7 @@ class TestSignature:
         )
 
     def test_ts_query_param_rejects_stale_replay(self):
-        from services.integrations.connectors.iterable import IterableConnector
+        from connectors.integrations.connectors.iterable import IterableConnector
         sig = self._iterable_sig(PAYLOAD)
         stale = int(time.time()) - 600  # outside the ±300s window
         headers = {"signature": sig, "ts": str(stale)}
@@ -162,8 +162,8 @@ class TestPull:
     def test_pull_requires_credential(self):
         """Offline (no credential) pull returns [] honestly — never fake data."""
         import asyncio
-        from services.integrations.connectors.base import ConnectorConfig
-        from services.integrations.connectors.iterable import IterableConnector
+        from connectors.integrations.connectors.base import ConnectorConfig
+        from connectors.integrations.connectors.iterable import IterableConnector
 
         cfg = ConnectorConfig(tenant_id="t", connector_type="iterable", enabled=True)
         events = asyncio.run(IterableConnector().pull(cfg, secret=None))
@@ -172,8 +172,8 @@ class TestPull:
     def test_pull_builds_cursor_bounded_export_requests(self):
         """The pull cursor maps onto the Export API startDateTime/endDateTime range
         and parses NDJSON event lines as canonical events."""
-        from services.integrations.connectors.iterable import _EMAIL_EXPORT_DATA_TYPES
-        from services.integrations.connectors.iterable import IterableConnector
+        from connectors.integrations.connectors.iterable import _EMAIL_EXPORT_DATA_TYPES
+        from connectors.integrations.connectors.iterable import IterableConnector
 
         captured: list[tuple[str, str]] = []
 
@@ -190,12 +190,12 @@ class TestPull:
             return 200, ""
 
         conn = IterableConnector()
-        import services.integrations.connectors.iterable as mod
+        import connectors.integrations.connectors.iterable as mod
         original = mod._get_text
         mod._get_text = fake_get_text  # type: ignore[assignment]
         try:
             import asyncio
-            from services.integrations.connectors.base import ConnectorConfig
+            from connectors.integrations.connectors.base import ConnectorConfig
             cfg = ConnectorConfig(tenant_id="t", connector_type="iterable", enabled=True)
             events = asyncio.run(conn.pull(cfg, since="2026-06-01T00:00:00Z", secret=SECRET))
         finally:
@@ -214,7 +214,7 @@ class TestPull:
 
 class TestDescriptor:
     def test_supports_full_lifecycle(self):
-        from services.integrations.connectors.iterable import IterableConnector
+        from connectors.integrations.connectors.iterable import IterableConnector
         c = IterableConnector()
         assert c.supports_webhook and c.supports_pull
         assert c.supports_historical_backfill
@@ -225,7 +225,7 @@ class TestDescriptor:
         assert any(o.startswith("comms.") for o in c.manifest_data_outputs)
 
     def test_honest_readiness_and_credentials(self):
-        from services.integrations.connectors.iterable import IterableConnector
+        from connectors.integrations.connectors.iterable import IterableConnector
         from shared.certification.readiness import to_readiness
         c = IterableConnector()
         assert c.signature_scheme == "iterable_hmac_query"
@@ -233,15 +233,15 @@ class TestDescriptor:
         assert to_readiness(c.implementation_status).value == "credential_waiting"
 
     def test_registry_serves_iterable(self):
-        from services.integrations.connectors.registry import get_connector
-        from services.integrations.connectors.iterable import IterableConnector
+        from connectors.integrations.connectors.registry import get_connector
+        from connectors.integrations.connectors.iterable import IterableConnector
         assert isinstance(get_connector("iterable"), IterableConnector)
 
 
 class TestIngestBridge:
     @pytest.mark.asyncio
     async def test_comm_events_ingest_to_bronze_pipeline(self):
-        from services.comms.ingest import ingest_normalized_events
+        from journeys.comms.ingest import ingest_normalized_events
         counts = await ingest_normalized_events("tenant-i", [
             {"event_type": "email_delivered", "source": "iterable",
              "external_id": "e1", "occurred_at": "2026-07-01T00:00:00+00:00",
@@ -258,8 +258,8 @@ class TestIngestBridge:
     async def test_unsubscribe_flows_to_suppression_authority(self):
         """emailUnsubscribe → unsubscribe_observed → canonical suppression with the
         provider recorded as generic metadata (no provider branching)."""
-        from services.comms.ingest import ingest_normalized_events
-        from services.comms.suppression_authority import SuppressionAuthorityService
+        from journeys.comms.ingest import ingest_normalized_events
+        from journeys.comms.suppression_authority import SuppressionAuthorityService
 
         await ingest_normalized_events("tenant-i", [
             {"event_type": "unsubscribe_observed", "source": "iterable",

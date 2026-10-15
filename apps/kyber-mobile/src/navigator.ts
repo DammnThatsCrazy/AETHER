@@ -1,6 +1,6 @@
 /**
  * The app's typed navigator — one module-scope `createNavigator` instance shared
- * by every screen (see `packages/mobile-ui/src/navigation-container.tsx`).
+ * by every screen (see `packages/ui/mobile/src/navigation-container.tsx`).
  *
  * `Screen` renders the theme-consistent header shell; `navigate` pushes typed
  * routes and `goBack` pops. The root tabs switch via `navigate(tab)`; a back

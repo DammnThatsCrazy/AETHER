@@ -1,0 +1,253 @@
+import { useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useAuth0 } from "@auth0/auth0-react";
+import { Button, SocialProviderIcon } from "@aether/ui";
+import { AetherLogo } from "@aether-app/components/aether-logo";
+import type { SocialProvider } from "@aether/ui";
+import { useAuth, resolveAuthGrant, describeAuthRateLimit } from "@aether-app/features/auth";
+import { rememberPostAuthDestination, resolvePostAuthRedirect } from "@aether-app/features/auth/post-auth-redirect";
+import { api } from "@aether-app/lib/api/endpoints";
+import { env } from "@aether-app/lib/env";
+
+export { resolvePostAuthRedirect } from "@aether-app/features/auth/post-auth-redirect";
+
+type SsoState = "idle" | "loading";
+
+const SSO_PROVIDERS: Array<{ provider: SocialProvider; label: string }> = [
+  { provider: "google", label: "Continue with Google" },
+  { provider: "apple", label: "Continue with Apple" },
+  { provider: "slack", label: "Continue with Slack" },
+  { provider: "microsoft", label: "Continue with Microsoft" },
+];
+
+/** provider → Auth0 connection name, from "google=aether-staging-google,...". */
+function socialConnections(): Map<string, string> {
+  const pairs = (env.VITE_AUTH0_SOCIAL_CONNECTIONS ?? "").split(",").map((pair) => pair.split("=").map((s) => s.trim()));
+  return new Map(pairs.filter((p): p is [string, string] => p.length === 2 && Boolean(p[0] && p[1])));
+}
+
+export function LoginPage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { apiKeyLogin, sessionLogin } = useAuth();
+
+  const [email, setEmail] = useState(searchParams.get("email") ?? "");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [ssoLoading, setSsoLoading] = useState<SsoState>("idle");
+
+  const redirectTo = resolvePostAuthRedirect(searchParams.get("redirect"));
+
+  // Auth0 Universal Login is the sign-in for accounts that do not use a
+  // password registered here: the staging operator (first-admin bootstrap
+  // email) and invited teammates. /callback exchanges the Auth0 token for a
+  // session through /v1/auth/sso/callback, which links a verified email to its
+  // existing user or pending invitation. Only offered when the build carries
+  // Auth0 settings (AetherAuth0Provider mounts Auth0Provider only then).
+  const auth0 = useAuth0();
+  const auth0Configured = Boolean(env.VITE_AUTH0_DOMAIN && env.VITE_AUTH0_CLIENT_ID);
+  // Social buttons open one Auth0 connection directly; only those enabled for
+  // this tenant are listed (none on the pilot lane).
+  const connections = socialConnections();
+  const socialProviders = auth0Configured
+    ? SSO_PROVIDERS.flatMap((p) => {
+        const connection = connections.get(p.provider);
+        return connection ? [{ ...p, connection }] : [];
+      })
+    : [];
+
+  // Marketing→signup continuity: when the visitor reached /login carrying a
+  // genuine post-auth redirect (RequireAuth round-trip of a connect deep link),
+  // carry it into signup so a brand-new account still lands on the provider they
+  // came to connect. Only a real redirect is forwarded — never the fallback —
+  // so a plain sign-in page does not tack `?redirect=/settings` onto the link.
+  const rawRedirect = searchParams.get("redirect");
+  const signupPath =
+    rawRedirect !== null && redirectTo !== "/settings"
+      ? `/signup?redirect=${encodeURIComponent(redirectTo)}`
+      : "/signup";
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email.trim() || !password) return;
+    setLoading(true);
+    setError(null);
+    try {
+      // Trust-plane posture returns a durable session; legacy returns api_key.
+      const grant = resolveAuthGrant(
+        await api.auth.login(email.trim(), password),
+      );
+      if (grant.kind === "session") {
+        await sessionLogin(grant.session);
+      } else {
+        await apiKeyLogin(grant.apiKey);
+      }
+      void navigate(redirectTo, { replace: true });
+    } catch (err) {
+      setError(describeAuthRateLimit(err) ?? "Incorrect email or password");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDevelopmentSession() {
+    setLoading(true);
+    setError(null);
+    try {
+      const grant = resolveAuthGrant(await api.auth.developmentSession());
+      if (grant.kind !== "session") {
+        throw new Error("Development login did not return a backend session");
+      }
+      await sessionLogin(grant.session);
+      void navigate(redirectTo, { replace: true });
+    } catch {
+      setError("Development session unavailable");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function startAuth0Login(connection?: string) {
+    setSsoLoading("loading");
+    rememberPostAuthDestination(redirectTo);
+    void auth0
+      .loginWithRedirect(connection ? { authorizationParams: { connection } } : undefined)
+      .catch(() => {
+        setSsoLoading("idle");
+        setError("Could not reach the sign-in service. Try again.");
+      });
+  }
+
+  return (
+    <div className="min-h-screen bg-surface-base flex items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-8">
+          <AetherLogo size={36} className="justify-center mb-2" />
+          <p className="text-text-muted text-sm">Sign in to your account</p>
+        </div>
+
+        <div className="bg-surface-raised border border-border-default rounded-lg p-6 space-y-5">
+          <form
+            onSubmit={(e) => {
+              void handleSubmit(e);
+            }}
+            className="space-y-3"
+          >
+            <div className="flex flex-col gap-1">
+              <label
+                htmlFor="login-email"
+                className="text-xs text-text-secondary"
+              >
+                Email address
+              </label>
+              <input
+                id="login-email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@company.com"
+                className="bg-surface-base text-text-primary border border-border-default rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-border-focus placeholder:text-text-muted"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label
+                htmlFor="login-password"
+                className="text-xs text-text-secondary"
+              >
+                Password
+              </label>
+              <input
+                id="login-password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Your password"
+                className="bg-surface-base text-text-primary border border-border-default rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-border-focus placeholder:text-text-muted"
+              />
+            </div>
+            {error && <p className="text-danger text-xs font-mono">{error}</p>}
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              className="w-full"
+              disabled={!email.trim() || !password || loading}
+            >
+              {loading ? "[···]" : "Sign in"}
+            </Button>
+          </form>
+
+          {env.VITE_AETHER_ENV === "local" && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="w-full"
+              disabled={loading}
+              onClick={() => {
+                void handleDevelopmentSession();
+              }}
+            >
+              Use backend development session
+            </Button>
+          )}
+
+          {auth0Configured && (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-border-subtle" />
+                <span className="text-text-muted text-xs font-mono">or</span>
+                <div className="flex-1 h-px bg-border-subtle" />
+              </div>
+
+              <div className="space-y-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="w-full"
+                  disabled={ssoLoading === "loading"}
+                  onClick={() => startAuth0Login()}
+                >
+                  {ssoLoading === "loading" ? "[···]" : "Continue with Olympus sign-in"}
+                </Button>
+                {socialProviders.map(({ provider, label, connection }) => (
+                  <Button
+                    key={provider}
+                    variant="secondary"
+                    size="sm"
+                    className="w-full flex items-center gap-2"
+                    disabled={ssoLoading === "loading"}
+                    onClick={() => startAuth0Login(connection)}
+                    aria-label={label}
+                  >
+                    {ssoLoading === "loading" ? (
+                      <span className="text-text-muted">[···]</span>
+                    ) : (
+                      <SocialProviderIcon provider={provider} />
+                    )}
+                    <span>{label}</span>
+                  </Button>
+                ))}
+              </div>
+            </>
+          )}
+
+          <p className="text-center text-xs text-text-muted">
+            No account?{" "}
+            <button
+              onClick={() => void navigate(signupPath)}
+              className="text-accent underline"
+            >
+              Create one
+            </button>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}

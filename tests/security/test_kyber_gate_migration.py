@@ -24,12 +24,12 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret-for-unit-tests")
 
-_DEPENDENCIES_MODULE = "services.kyber.access.dependencies"
+_DEPENDENCIES_MODULE = "governance.kyber.access.dependencies"
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +77,7 @@ class FakeRequest:
 
 @pytest.fixture
 def workforce_session(monkeypatch):
-    """Install a fake ``services.kyber.access.dependencies`` for one test."""
+    """Install a fake ``governance.kyber.access.dependencies`` for one test."""
 
     def install(ctx):
         module = types.ModuleType(_DEPENDENCIES_MODULE)
@@ -116,7 +116,7 @@ def _tenant(permissions: list[str], tenant_id: str = "tenant-a"):
 
 def test_aether_role_admin_tenant_is_still_denied(kyber_flags):
     """The core boundary: a tenant Role.ADMIN is not, and never becomes, an operator."""
-    from services.security.request_context import is_kyber_operator, require_kyber_operator
+    from governance.security.request_context import is_kyber_operator, require_kyber_operator
 
     kyber_flags(workforce_identity_enabled=True, legacy_operator_identity_allowed=True)
     tenant = _tenant(["read", "write", "admin"])
@@ -129,7 +129,7 @@ def test_aether_role_admin_tenant_is_still_denied(kyber_flags):
 
 def test_legacy_operator_permission_allowed_when_legacy_identity_is_on(kyber_flags):
     from config.settings import settings
-    from services.security.request_context import is_kyber_operator, require_kyber_operator
+    from governance.security.request_context import is_kyber_operator, require_kyber_operator
 
     kyber_flags(legacy_operator_identity_allowed=True)
     operator = _tenant(
@@ -145,7 +145,7 @@ def test_legacy_operator_permission_allowed_when_legacy_identity_is_on(kyber_fla
 def test_legacy_operator_permission_denied_when_legacy_identity_is_off(kyber_flags):
     """Flipping one flag retires legacy operator identity across all call sites."""
     from config.settings import settings
-    from services.security.request_context import is_kyber_operator, require_kyber_operator
+    from governance.security.request_context import is_kyber_operator, require_kyber_operator
 
     kyber_flags(legacy_operator_identity_allowed=False)
     operator = _tenant(
@@ -161,7 +161,7 @@ def test_legacy_operator_permission_denied_when_legacy_identity_is_off(kyber_fla
 
 def test_workforce_session_is_allowed_with_no_tenant_at_all(kyber_flags, workforce_session):
     """A workforce principal carries no Aether tenant and needs no permission."""
-    from services.security.request_context import is_kyber_operator, require_kyber_operator
+    from governance.security.request_context import is_kyber_operator, require_kyber_operator
 
     kyber_flags(workforce_identity_enabled=True, legacy_operator_identity_allowed=False)
     workforce_session(FakeKyberContext(operator_id="op-founder"))
@@ -177,7 +177,7 @@ def test_workforce_session_is_allowed_with_no_tenant_at_all(kyber_flags, workfor
 
 def test_workforce_session_ignored_when_the_plane_is_disabled(kyber_flags, workforce_session):
     """The master switch is a real rollback: sessions stop being consulted."""
-    from services.security.request_context import kyber_access_context
+    from governance.security.request_context import kyber_access_context
 
     kyber_flags(workforce_identity_enabled=False)
     workforce_session(FakeKyberContext())
@@ -187,7 +187,7 @@ def test_workforce_session_ignored_when_the_plane_is_disabled(kyber_flags, workf
 
 def test_missing_worker_package_degrades_to_deny(kyber_flags, monkeypatch):
     """An absent dependencies module must resolve to 'no session', never to access."""
-    from services.security.request_context import is_kyber_operator, kyber_access_context
+    from governance.security.request_context import is_kyber_operator, kyber_access_context
 
     kyber_flags(workforce_identity_enabled=True, legacy_operator_identity_allowed=False)
     monkeypatch.setitem(sys.modules, _DEPENDENCIES_MODULE, None)
@@ -203,7 +203,7 @@ def test_missing_worker_package_degrades_to_deny(kyber_flags, monkeypatch):
 
 
 def _declared_policy(path: str, method: str):
-    from services.security.route_registry import classify
+    from governance.security.route_registry import classify
 
     policy = classify(path, method)
     assert policy is not None and policy.required_capability, f"{method} {path} is undeclared"
@@ -361,7 +361,7 @@ def test_middleware_capability_path_is_off_when_backend_authz_is_rolled_back(
 def test_undeclared_kyber_route_needs_no_capability(kyber_flags, workforce_session, monkeypatch):
     from config.settings import settings
     from middleware import middleware as mw
-    from services.security.route_registry import classify
+    from governance.security.route_registry import classify
 
     kyber_flags(workforce_identity_enabled=True, backend_authz_enforced=True)
     monkeypatch.setattr(

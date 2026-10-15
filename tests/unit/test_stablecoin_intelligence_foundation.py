@@ -4,10 +4,10 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "services" / "backend"))
+sys.path.insert(0, str(ROOT / "services" / "api"))
 
-from services.stablecoins.models import StablecoinMoney, StablecoinObservation, FinalityState, StablecoinEventType
-from services.stablecoins.registry import PLATFORM_STABLECOIN_REGISTRY
+from value.stablecoins.models import StablecoinMoney, StablecoinObservation, FinalityState, StablecoinEventType
+from value.stablecoins.registry import PLATFORM_STABLECOIN_REGISTRY
 from repositories.stablecoin_repos import StablecoinGoldIdentity
 from repositories.lake import BronzeRepository, SilverRepository
 

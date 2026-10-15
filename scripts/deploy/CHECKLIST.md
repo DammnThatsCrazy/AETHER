@@ -5,13 +5,13 @@
 | URL | Host | Source |
 |---|---|---|
 | `olympuslabsml.com` | Squarespace | Apex/redirect surface → `www` |
-| `www.olympuslabsml.com` | AWS Amplify | `frontend/olympus-marketing/` |
-| `aether.olympuslabsml.com` | AWS Amplify | `frontend/aether-marketing/` |
-| `docs.olympuslabsml.com` | AWS Amplify | `frontend/docs/` |
-| `app.olympuslabsml.com` | AWS Amplify | `frontend/aether/` |
-| `status.olympuslabsml.com` | AWS Amplify | `frontend/status/` |
+| `www.olympuslabsml.com` | AWS Amplify | `apps/marketing-olympus/` |
+| `aether.olympuslabsml.com` | AWS Amplify | `apps/marketing-aether/` |
+| `docs.olympuslabsml.com` | AWS Amplify | `apps/docs/` |
+| `app.olympuslabsml.com` | AWS Amplify | `apps/aether-web/` |
+| `status.olympuslabsml.com` | AWS Amplify | `apps/status/` |
 | `kyber.olympuslabsml.com` | Internal only | No public DNS/application route by default |
-| `api.olympuslabsml.com` | AWS ECS/ALB | `services/backend/` |
+| `api.olympuslabsml.com` | AWS ECS/ALB | `services/api/` |
 
 ## Prerequisites — gather before running
 
@@ -65,7 +65,7 @@
 
 ## Deployment profile
 
-Start with **`production-lean`** ($187/month baseline):
+Start with **`production`** ($187/month baseline):
 - Aurora Serverless v2 (0.5–4 ACU)
 - DynamoDB cache
 - SNS/SQS events
@@ -81,7 +81,7 @@ export AUTH0_CLIENT_ID="..."
 export AUTH0_CLIENT_SECRET="..."
 
 # Run from repo root
-./scripts/deploy/go_live.sh --profile production-lean --region us-east-1
+./scripts/deploy/go_live.sh --profile production --region us-east-1
 ```
 
 The script is interactive — it pauses at each critical step for your review

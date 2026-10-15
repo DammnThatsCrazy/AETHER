@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import mock_venues as mv
 
-from services.derivatives.adapters.hyperliquid import HyperliquidAdapter
-from services.derivatives.connectors.stream import ReconnectingStream
+from value.derivatives.adapters.hyperliquid import HyperliquidAdapter
+from value.derivatives.connectors.stream import ReconnectingStream
 
 
 def _frame(seq: int) -> dict:

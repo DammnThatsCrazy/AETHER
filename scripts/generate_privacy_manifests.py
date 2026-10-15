@@ -7,7 +7,7 @@ store-facing artifacts, derived deterministically and validated against the
 platform's own governance sources:
 
   * ``PrivacyInfo.xcprivacy`` — an Apple Privacy Manifest, mirroring the structure
-    of the hand-authored SDK manifest (packages/ios/.../PrivacyInfo.xcprivacy):
+    of the hand-authored SDK manifest (packages/sdk/ios/.../PrivacyInfo.xcprivacy):
     NSPrivacyTracking, NSPrivacyTrackingDomains, NSPrivacyAccessedAPITypes, and
     NSPrivacyCollectedDataTypes (grouped by data type, with Linked/Tracking/Purposes).
   * ``data-safety.json`` — a machine-readable Google Play Data Safety declaration:
@@ -51,7 +51,7 @@ ROOT = Path(__file__).resolve().parent.parent
 APPS_DIR = ROOT / "apps"
 CONSENT_REGISTRY = ROOT / "packages" / "shared" / "contracts" / "consent-registry.json"
 CLASSIFICATION_PY = (
-    ROOT / "services" / "backend" / "shared" / "privacy" / "classification.py"
+    ROOT / "services" / "api" / "shared" / "privacy" / "classification.py"
 )
 
 # The two shipping apps. App-level facts (name, bundle ids, plane) are read from
@@ -119,7 +119,7 @@ REQUIRED_FIELDS = (
 
 # The mobile-plane stores a principal DSR erasure ACTUALLY removes. This is the
 # app's real deletion surface — the tenant-scoped tables the backend
-# ``consent.erasure`` job erases for a principal (services/consent/erasure_jobs.py)
+# ``consent.erasure`` job erases for a principal (services/api/governance/consent/erasure_jobs.py)
 # and that the DSR-coverage gate binds (scripts/release/check_dsr_coverage.py). It
 # deliberately does NOT come from a purpose's ``dsrDeleteScope`` in the consent
 # registry: the analytics purpose's scope (events/sessions/profiles) describes

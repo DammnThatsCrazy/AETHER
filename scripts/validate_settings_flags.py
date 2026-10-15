@@ -5,7 +5,7 @@ A flag that no code consults is not a control: setting it changes nothing, yet
 release flag lists, ``.env`` examples, capability overlays and runbooks present
 it as one. "Flags describe capabilities" only holds if a flag gates something.
 
-For every dataclass field in ``services/backend/config/settings.py`` whose
+For every dataclass field in ``services/api/config/settings.py`` whose
 default reads an environment variable (``_env_bool("NAME", ...)`` and friends),
 the field counts as **read** when any of these holds in production Python:
 
@@ -49,7 +49,7 @@ from typing import Any, Iterable, NamedTuple
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND = "services/backend"
+BACKEND = "services/api"
 SETTINGS = f"{BACKEND}/config/settings.py"
 ALLOWLIST = ROOT / "config/unread_settings_flags.yaml"
 LEDGER = ROOT / "config/debt_retirement_ledger.yaml"

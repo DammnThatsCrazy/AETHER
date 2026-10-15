@@ -47,7 +47,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 DEFAULT_SCHEMA = ROOT / "config" / "pilot" / "manifest.schema.json"
 EXAMPLES_DIR = ROOT / "config" / "pilot" / "examples"
 

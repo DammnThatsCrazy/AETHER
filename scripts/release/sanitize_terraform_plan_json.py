@@ -31,6 +31,9 @@ WHAT IT KEEPS
         - `resource_changes`    (planned actions)
         - `variables.environment`          -> check_always_on_staging_compute()
         - `variables.network_egress_mode`  -> check_network_egress()
+        - `variables.enable_access_mcp`    -> Access MCP service cardinality
+    * `.github/workflows/terraform-promote.yml`
+        - `variables.access_mcp_image_digest` -> recheck the exact ECR scan at apply
     * `configuration` is retained for human review and because the
       `sensitive` flag of each root variable is only declared there.
 
@@ -72,7 +75,15 @@ from urllib.parse import unquote
 
 # Root variables whose VALUE a downstream consumer actually reads. Everything
 # else keeps its name and loses its value.
-KEEP_VARIABLE_VALUES = frozenset({"environment", "network_egress_mode"})
+KEEP_VARIABLE_VALUES = frozenset({
+    "environment",
+    "network_egress_mode",
+    # Public deployment selectors consumed by the plan policy/apply gates.
+    # The immutable image digest is not a credential and apply reuses it to
+    # verify the reviewed ECR artifact and scan before any AWS mutation.
+    "enable_access_mcp",
+    "access_mcp_image_digest",
+})
 
 # Top-level keys retained in the published document.
 KEEP_TOP_LEVEL = frozenset({

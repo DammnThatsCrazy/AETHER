@@ -8,13 +8,13 @@ indistinguishable from "there are no such rows".
 
 Four call sites were affected, all returning ``[]`` forever on PostgreSQL:
 
-* ``services/kyber/ops/containment.py`` — ``find_many({"active": True})``. No
+* ``services/api/governance/kyber/ops/containment.py`` — ``find_many({"active": True})``. No
   containment switch was ever readable, so ``is_paused()`` was always False, a
   paused tenant was never actually protected from a command, the
   ``containment_switch_active`` postcondition could never pass, and the console
   reported a frozen platform as unfrozen.
-* ``services/web3/registries.py`` — the stablecoin registry.
-* ``services/notification_intelligence/delivery_router.py`` — active channels.
+* ``services/api/graph/web3/registries.py`` — the stablecoin registry.
+* ``services/api/journeys/notification_intelligence/delivery_router.py`` — active channels.
 * ``repositories/commerce_repos.py`` — active records.
 
 Every one of them passed its tests, because the in-memory backend compares
@@ -31,7 +31,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
@@ -99,9 +99,9 @@ def test_every_boolean_filter_call_site_is_covered_by_this_fix():
     import re
 
     call_sites = [
-        BACKEND / "services" / "kyber" / "ops" / "containment.py",
-        BACKEND / "services" / "web3" / "registries.py",
-        BACKEND / "services" / "notification_intelligence" / "delivery_router.py",
+        BACKEND / "governance" / "kyber" / "ops" / "containment.py",
+        BACKEND / "graph" / "web3" / "registries.py",
+        BACKEND / "journeys" / "notification_intelligence" / "delivery_router.py",
         BACKEND / "repositories" / "commerce_repos.py",
     ]
     pattern = re.compile(r"(find_many|count)\(.*?(True|False)", re.S)

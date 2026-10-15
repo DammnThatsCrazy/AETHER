@@ -1,4 +1,4 @@
-"""frontend/site/src/site/plans.json mirrors the backend plan catalog.
+"""apps/public-site/src/site/plans.json mirrors the backend plan catalog.
 
 The unified site's pricing page and /app signup read plan prices and limits
 from plans.json. The backend catalog (shared/plans/catalog.py) is the source of
@@ -14,8 +14,8 @@ from decimal import Decimal
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
-PLANS_JSON = ROOT / "frontend" / "site" / "src" / "site" / "plans.json"
+BACKEND_ROOT = ROOT / "services" / "api"
+PLANS_JSON = ROOT / "apps" / "public-site" / "src" / "site" / "plans.json"
 
 SELF_SERVE = ("alpha", "beta", "gamma", "delta")
 CONTRACT = ("epsilon", "omicron", "omega")

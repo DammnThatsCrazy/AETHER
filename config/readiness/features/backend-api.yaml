@@ -26,9 +26,9 @@ repository_ceiling:
   - None — repository-controlled work complete
   remaining_is_repository_controlled: false
   evidence:
-  - services/backend/main.py
-  - services/backend/services/ingestion/batch.py
-  - services/backend/middleware/middleware.py
+  - services/api/main.py
+  - services/api/ingestion/ingestion/batch.py
+  - services/api/middleware/middleware.py
 implementation:
   state: VERIFIED
   denominator: in-scope repository controls (migration-derived)
@@ -106,7 +106,7 @@ operational_ownership:
   technical_owner: platform
   operational_owner: platform-ops
   escalation: pagerduty:platform
-  runbook: docs/runbooks/STAGING_PREFLIGHT.md
+  runbook: docs/operations/runbooks/STAGING_PREFLIGHT.md
   dashboards:
   - grafana:platform
   alerts:
@@ -119,7 +119,7 @@ business_readiness:
 confidence:
   level: MODERATE
   reasons:
-  - 'repository evidence: services/backend/main.py'
+  - 'repository evidence: services/api/main.py'
   evidence_gaps:
   - not yet exercised in credentialed staging/production
 release_profiles:
@@ -141,7 +141,7 @@ release_profiles:
     productionization_required: true
     environment_gate: pilot
     business_gate: false
-  production-lean:
+  production:
     participation: required
     implementation_floor: TURNKEY
     productionization_required: true

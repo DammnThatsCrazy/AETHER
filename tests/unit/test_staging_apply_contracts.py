@@ -18,7 +18,7 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[2]
-TF = ROOT / "deploy/aws/terraform"
+TF = ROOT / "infra/aws/terraform"
 ALB = TF / "modules/alb/main.tf"
 PROFILE_PLAN = TF / "tests/profile_plan.tftest.hcl"
 MONITORING = TF / "modules/monitoring/main.tf"
@@ -66,7 +66,7 @@ def test_staging_target_group_replacement_is_name_safe() -> None:
     migration = STATE_MIGRATION.read_text(encoding="utf-8")
     assert "legacy='module.alb.aws_lb_target_group.backend'" in migration
     assert "staging) target='module.alb.aws_lb_target_group.backend[0]'" in migration
-    assert "production-lean|production-scale|enterprise-isolated|demo|preview)" in migration
+    assert "  production)" in migration
     assert "backend_replacement[0]" in migration
     assert 'terraform state mv -lock-timeout=5m "$legacy" "$target"' in migration
     migration_workflow = STATE_MIGRATION_WORKFLOW.read_text(encoding="utf-8")
@@ -207,6 +207,7 @@ def test_staging_plan_trust_is_limited_to_reviewed_github_subjects() -> None:
     }
     assert set(statement["Condition"]["StringLike"]["token.actions.githubusercontent.com:sub"]) == {
         "repo:DammnThatsCrazy/AETHER:ref:refs/heads/main",
+        "repo:DammnThatsCrazy/AETHER:ref:refs/heads/staging",
         "repo:DammnThatsCrazy/AETHER:environment:staging",
         "repo:DammnThatsCrazy/AETHER:environment:staging-terraform",
     }
@@ -433,15 +434,15 @@ def test_staging_cache_readiness_permission_is_applied_and_verified() -> None:
 
     promote = PROMOTE.read_text(encoding="utf-8")
     cache_gate = promote[promote.index("Verify applied staging ECS cache IAM permissions") :]
-    assert "working-directory: deploy/aws/terraform" in cache_gate
+    assert "working-directory: infra/aws/terraform" in cache_gate
     assert "terraform output -raw ecs_task_role_arn" in cache_gate
     assert "terraform output -raw dynamodb_cache_table_name" in cache_gate
     assert "check_staging_runtime_iam.py" in cache_gate
 
     lifecycle = STAGING_LIFECYCLE.read_text(encoding="utf-8")
-    ready_guard = lifecycle[lifecycle.index('status="$(curl -sS -o artifacts/rehearsal/ready.json') :]
+    ready_guard = lifecycle[lifecycle.index('status="$(curl -sS -o .artifacts/rehearsal/ready.json') :]
     assert 'if [ "$status" != 200 ]' in ready_guard
-    assert "jq . artifacts/rehearsal/ready.json" in ready_guard
+    assert "jq . .artifacts/rehearsal/ready.json" in ready_guard
 
 
 def test_staging_cache_iam_checker_fails_closed_on_denied_action() -> None:
@@ -995,7 +996,7 @@ def test_ecr_collision_lookup_precedes_any_apply_mutation() -> None:
     assert 'split("[")[1]' in block
     assert 'rtrimstr("]")' in block
     assert text.index("describe-repositories", start) < text.index("terraform apply", start)
-    assert "inputs.profile == 'staging' || inputs.profile == 'demo' || inputs.profile == 'preview'" in text
+    assert "if: inputs.profile == 'staging'" in text
     assert 'key=profiles/${PROFILE}/terraform.tfstate' in text
 
 
@@ -1147,7 +1148,8 @@ def test_staging_reconciles_preexisting_immutable_aes256_backend_repository() ->
     assert "repository_encryption_types" in variables
     assert "repository_tag_mutabilities" in variables
     assert 'lookup(var.repository_encryption_types, repository, "KMS")' in module
-    assert 'lookup(var.repository_tag_mutabilities, repository, "MUTABLE")' in module
+    assert "lookup(\n      var.repository_tag_mutabilities,\n      repository," in module
+    assert 'repository == "aether-access-mcp" ? "IMMUTABLE" : "MUTABLE"' in module
     assert 'local.encryption_types[each.value] == "KMS" ? aws_kms_key.ecr.arn : null' in module
     assert 'aether-backend = "AES256"' in staging
     assert 'aether-backend = "IMMUTABLE"' in staging

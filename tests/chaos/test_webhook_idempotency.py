@@ -3,10 +3,10 @@
 Two real recovery invariants, credentialless:
 
   * duplicate webhook storm -> the REAL x402 payment-identifier idempotency store
-    (``services.x402.idempotency``) collapses N duplicate deliveries of the same
+    (``value.x402.idempotency``) collapses N duplicate deliveries of the same
     (tenant, payment_identifier) to a single applied effect.
   * worker restart          -> the REAL payment-rails supervised sync worker
-    (``services.integrations.providers.payment_rails.sync_worker``) is
+    (``connectors.integrations.providers.payment_rails.sync_worker``) is
     re-runnable: a second cycle (a "restart") does not re-transition sessions it
     already aged, i.e. the sweep is idempotent across restarts.
 """
@@ -15,14 +15,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from services.x402.idempotency import get_idempotency_store
+from value.x402.idempotency import get_idempotency_store
 
-from services.integrations.providers.payment_rails import sync_worker
-from services.integrations.providers.payment_rails.models import (
+from connectors.integrations.providers.payment_rails import sync_worker
+from connectors.integrations.providers.payment_rails.models import (
     FundingSession,
     ReconciliationRecord,
 )
-from services.integrations.providers.payment_rails.service import PaymentRailsService
+from connectors.integrations.providers.payment_rails.service import PaymentRailsService
 
 OLD_TS = "2020-01-01T00:00:00+00:00"
 NOW = datetime(2026, 7, 18, tzinfo=timezone.utc)
@@ -62,7 +62,7 @@ async def test_idempotency_is_tenant_scoped(tenant):
 # ── supervised-worker restart ─────────────────────────────────────────────────
 def _service() -> PaymentRailsService:
     from shared.store import InMemoryStore
-    from services.integrations.providers.payment_rails.repository import (
+    from connectors.integrations.providers.payment_rails.repository import (
         PaymentRailsRepositories,
     )
 

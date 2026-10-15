@@ -90,7 +90,7 @@ def test_staging_stops_on_missing_command(tmp_path, monkeypatch):
 
 def test_staging_blocks_incompatible_candidate_profile(tmp_path):
     args = staging_args(tmp_path)
-    args.candidate = candidate(tmp_path, deployment_profiles=["production-lean"])
+    args.candidate = candidate(tmp_path, deployment_profiles=["production"])
     assert orchestrator.staging(args) == 1
     result = json.loads(args.output.read_text())
     assert result["checks"][0]["check_id"] == "profile_compatibility"
@@ -189,7 +189,7 @@ def test_missing_migration_metadata_emits_schema_valid_blocked_evidence(tmp_path
     assert orchestrator.migration(args) == 1
     result = json.loads(output.read_text())
     schema = json.loads(
-        (ROOT / "contracts/delivery/migration-evidence.schema.json").read_text()
+        (ROOT / "packages/contracts/delivery/migration-evidence.schema.json").read_text()
     )
     jsonschema.Draft202012Validator(schema, format_checker=jsonschema.FormatChecker()).validate(result)
     assert result["status"] == "BLOCKED"

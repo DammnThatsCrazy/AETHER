@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -21,14 +21,15 @@ import os  # noqa: E402
 
 os.environ.setdefault("AETHER_ENV", "local")
 
-from services.imports import commit as cm  # noqa: E402
-from services.imports import service as svc  # noqa: E402
-from services.silver.projectors.import_projector import (  # noqa: E402
+from ingestion.imports import commit as cm  # noqa: E402
+from ingestion.imports import service as svc  # noqa: E402
+from ingestion.silver.projectors.import_projector import (  # noqa: E402
     SILVER_IMPORT_TABLE,
     ImportProjector,
 )
 
 TENANT = "tenant-silver"
+SOURCE = "tenant-silver-source"
 
 CSV = (
     b"user_id,email,friend_id\n"
@@ -67,6 +68,7 @@ def test_project_records_row_shape():
     result = ImportProjector().project_records(
         tenant_id="t1", commit_id="impc_x", import_id="imp1",
         mapping_version=1, occurred_at="2026-07-20T00:00:00+00:00", records=records,
+        rights_decision_refs={"tenant_lake": "rdec_lake", "tenant_insights": "rdec_insights"},
     )
     assert result.table == SILVER_IMPORT_TABLE
     assert len(result.rows) == 2
@@ -75,10 +77,13 @@ def test_project_records_row_shape():
     assert r0["idempotency_key"] == "impc_x:f1:0:entity"
     assert r0["bronze_record_id"] == "f1:0"
     assert r0["payload"] == {"external_id": "e1"}
+    assert r0["rights_decision_refs"] == {
+        "tenant_lake": "rdec_lake", "tenant_insights": "rdec_insights"
+    }
 
 
 async def test_writer_persists_and_dedupes():
-    from services.silver.writer import SilverFactWriter, _local_tables, reset_local_tables
+    from ingestion.silver.writer import SilverFactWriter, _local_tables, reset_local_tables
 
     reset_local_tables()
     result = ImportProjector().project_records(
@@ -98,19 +103,19 @@ async def test_writer_persists_and_dedupes():
 
 
 @pytest.fixture()
-def clean(monkeypatch):
-    from repositories.import_files import get_import_file_repository
+def clean(monkeypatch, request):
     from repositories.imports_repo import get_imports_repository
-    from repositories.lake import BronzeRepository
-    from services.silver.writer import reset_local_tables
+    from ingestion.silver.writer import reset_local_tables
+    from repositories.repos import reset_in_memory_stores
+    from repositories.graph_mutation_ledger import reset_graph_ledger_memory
+    from tenancy.rights_authority.rollout import reset_rollout
     from shared.graph.graph import get_graph_client
 
+    reset_rollout()
+    request.addfinalizer(reset_rollout)
+    reset_in_memory_stores()
+    reset_graph_ledger_memory()
     r = get_imports_repository()
-    for attr in ("sessions", "schemas", "mappings", "templates", "validations",
-                 "row_errors", "commits", "rollbacks"):
-        getattr(r, attr)._store.clear()
-    get_import_file_repository()._store.clear()
-    BronzeRepository(cm.BRONZE_DOMAIN)._store.clear()
     reset_local_tables()
     backend = getattr(get_graph_client(), "_backend", None)
     if backend is not None:
@@ -124,7 +129,34 @@ def clean(monkeypatch):
 
 
 async def _seed_approved() -> str:
-    session = await svc.create_import(TENANT, created_by="u1")
+    from connectors.integrations.data_rights.models import DataRightsGrant, GrantStatus
+    from connectors.integrations.data_rights.service import data_rights_service
+
+    grant = DataRightsGrant(
+        data_rights_grant_id="drg_silver_fixture",
+        tenant_id=TENANT,
+        contract_id="contract-silver-fixture",
+        source_id=SOURCE,
+        connector_id="csv_import",
+        connector_class="tenant_import",
+        data_category="customer",
+        data_sensitivity="sensitive_pii",
+        raw_data_owner="tenant",
+        tenant_lake_allowed=True,
+        tenant_graph_allowed=True,
+        tenant_insights_allowed=True,
+        olympus_baseline_allowed=False,
+        cross_tenant_aggregate_allowed=False,
+        model_training_allowed=False,
+        commercial_reuse_allowed=False,
+        legal_basis="contract",
+        granted_by_user_id="tenant-admin",
+        granted_at="2026-10-01T00:00:00+00:00",
+        status=GrantStatus.ACTIVE,
+        audit_event_id="audit-silver-fixture",
+    )
+    await data_rights_service._repository.create(grant, actor="tenant-admin")
+    session = await svc.create_import(TENANT, created_by="u1", source_id=SOURCE)
     import_id = session["id"]
     await svc.store_file(TENANT, import_id, filename="rel.csv", content=CSV, content_type="text/csv")
     await svc.analyze_import(TENANT, import_id)
@@ -135,7 +167,8 @@ async def _seed_approved() -> str:
 
 
 async def test_commit_populates_silver(clean):
-    from services.silver.writer import _local_tables
+    from ingestion.silver.writer import _local_tables
+    from repositories.lake import BronzeRepository
 
     import_id = await _seed_approved()
     record = await cm.commit_import(TENANT, import_id)
@@ -143,5 +176,11 @@ async def test_commit_populates_silver(clean):
     assert record["counts"]["silver_rows"] == 6
     facts = _local_tables.get(SILVER_IMPORT_TABLE, {})
     assert len([k for k in facts if k.startswith(f"{TENANT}:")]) == 6
+    bronze = await BronzeRepository(cm.BRONZE_DOMAIN).query_by_source_tag(
+        record["commit_id"], tenant_id=TENANT
+    )
+    bronze_ids = {row["id"] for row in bronze}
     # every fact carries the commit lineage
     assert all(v["commit_id"] == record["commit_id"] for v in facts.values())
+    assert all(v["rights_decision_refs"] == record["rights_decision_refs"] for v in facts.values())
+    assert all(v["bronze_record_id"] in bronze_ids for v in facts.values())

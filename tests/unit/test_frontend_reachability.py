@@ -16,7 +16,7 @@ _spec.loader.exec_module(reach)
 
 
 def _app(tmp_path, files, allow=(), ledger_ids=("row-a",), entries=("src/main.tsx",), extra_app=None):
-    app = tmp_path / "frontend/demo"
+    app = tmp_path / "apps/demo"
     for rel, text in files.items():
         path = app / rel
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -26,7 +26,7 @@ def _app(tmp_path, files, allow=(), ledger_ids=("row-a",), entries=("src/main.ts
         "authority": "frontend-reachability",
         "apps": {
             "demo": {
-                "root": "frontend/demo",
+                "root": "apps/demo",
                 "alias": "@demo",
                 "entries": list(entries),
                 "allow_unreachable": list(allow),

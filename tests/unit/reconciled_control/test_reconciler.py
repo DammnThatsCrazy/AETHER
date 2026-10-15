@@ -10,12 +10,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from services.managed_integrations.desired_policy import build_desired_state
-from services.managed_integrations.reconciler import (
+from connectors.managed_integrations.desired_policy import build_desired_state
+from connectors.managed_integrations.reconciler import (
     DEFAULT_FRESHNESS_WINDOW_SECONDS,
     reconcile,
 )
-from services.managed_integrations.contracts import (
+from connectors.managed_integrations.contracts import (
     DesiredStateSpec,
     ObservedStateSnapshot,
 )

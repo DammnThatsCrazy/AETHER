@@ -8,7 +8,7 @@ Bronze insert, and ``DataRightsGrantRepository.revoke`` takes it exclusively
 inside its transaction.
 
 The scenarios live in
-``services/backend/tests/provider_runtime/rights_fence_scenarios.py`` and also run
+``services/api/tests/provider_runtime/rights_fence_scenarios.py`` and also run
 in memory (``test_rights_revocation_fence.py``); here they run against real
 pooled asyncpg connections so the lock, not asyncio scheduling, serializes them.
 
@@ -31,13 +31,13 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 SCENARIOS = BACKEND_ROOT / "tests" / "provider_runtime" / "rights_fence_scenarios.py"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 _BACKEND_PREFIXES = (
-    "config", "services", "shared", "middleware", "dependencies", "repositories",
+    "config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories",
 )
 
 
@@ -61,8 +61,8 @@ def fresh_backend():
         sys.modules[spec.name] = scenarios  # dataclasses resolve annotations via sys.modules
         spec.loader.exec_module(scenarios)
         repos = importlib.import_module("repositories.repos")
-        data_rights = importlib.import_module("services.integrations.data_rights.service")
-        repository = importlib.import_module("services.integrations.data_rights.repository")
+        data_rights = importlib.import_module("connectors.integrations.data_rights.service")
+        repository = importlib.import_module("connectors.integrations.data_rights.repository")
         yield scenarios, repos, data_rights, repository
     finally:
         sys.modules.pop("rights_fence_scenarios", None)

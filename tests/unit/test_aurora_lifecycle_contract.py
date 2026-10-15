@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-TF = ROOT / "deploy/aws/terraform"
+TF = ROOT / "infra/aws/terraform"
 
 
 def _resource_block(source: str, resource_type: str, name: str) -> str:

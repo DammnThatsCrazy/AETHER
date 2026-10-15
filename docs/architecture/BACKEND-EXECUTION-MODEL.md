@@ -1,0 +1,333 @@
+---
+title: Backend Execution Model
+slug: architecture/backend-execution-model
+section: architecture
+visibility: I
+audience: [dev-senior, architect, ops]
+status: beta
+since_version: "0.1.0"
+source_files:
+  - services/api/config/settings.py
+  - services/api/main.py
+  - services/api/workers/runtime/roles.py
+  - services/api/workers/runtime/run_role.py
+  - services/api/workers/runtime/specs.py
+  - services/api/actions/agent_marketplace/catalog.py
+  - services/api/workers/runtime/consumer_specs.py
+canonical_owner: platform@aether
+estimated_read_minutes: 6
+toc_depth: 3
+source_hashes:
+  "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
+  "services/api/config/settings.py": "sha256:4d2921c8c3a93e5cf0e3ab4eab9172770642684dd20858221481608af2ef69d5"
+  "services/api/main.py": "sha256:f76824db10962390701e0356564ecb69e7fc5c81f25fff6e51c685da359aeb75"
+  "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
+  "services/api/workers/runtime/roles.py": "sha256:061fee9712dee6e5354ba7bc8162eeb06a909e526e6ed45d1dee9a4afe9c63b2"
+  "services/api/workers/runtime/run_role.py": "sha256:787c2388526da3d9bf77aa4d138e35fddf15afeb4aafef0d06f2501834785354"
+  "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
+---
+
+# Backend Execution Model
+
+Aether's backend is a single codebase that runs in one of several **runtime
+roles**. Local and dev run everything in one process (`AETHER_ROLE=all`);
+staging and production split the HTTP API from the background workers so the
+API process no longer starts every worker, consumer, and cron in-request.
+
+## Runtime roles (`AETHER_ROLE`)
+
+| Role | Runs |
+| --- | --- |
+| `all` | Everything in one process (local/dev default). Rejected in staging/production. |
+| `api` | The FastAPI HTTP server only — no supervised workers, no stream consumers. |
+| `outbox-relay` | Outbox relay workers: the notification outbox, the ingestion `event_outbox` relay (FT-6), and the reward delivery outbox (drains `reward_delivery_jobs` through the rail-sender registry — the at-least-once delivery path for the reward plane). |
+| `stream-worker` | Stream loops plus Bronze/Silver projection, the analytics event-store projection (`analytics_event_recorder` → the `events`/`sessions` tables the analytics API reads), notification consumers, safe SDK x402 request/intent observations, and the default-off public agent marketplace catalog observer. |
+| `identity-worker` | Source-identity registration and canonical resolution for validated SDK observations; emits `IDENTITY_RESOLVED` only after a real decision. |
+| `graph-writer` | Profile/graph projection and delegation mutation consumers, including retryable card-linked and external-agent graph projection outboxes. |
+| `measurement-worker` | Identity merge/split journey rebuild and attribution restatement consumers. |
+| `semantic-worker` | Semantic classification + identity-restatement consumers plus the `semantic_reconciler` (Gold recompute sweep, gated by `settings.semantic.reconciler_enabled`), `semantic_retention` (Silver tombstone / Gold delete sweep, gated by `settings.semantic.retention_enabled`), and `semantic_graph_projector` (per-tenant Gold relationship-state projection into the intelligence graph via the canonical mutation gateway, gated by `settings.semantic.graph_projector_enabled`) loop workers. |
+| `materializer` | Artifact materialization sweeps (export expiry, payment-rail sync, object-backed Bronze compaction + scheduled storage reconciler — FT-8, gated by the `settings.storage_plane` flags — and x402 settlement reconciliation, which advances verified PENDING settlements to on-chain finality, gated by the commerce control plane). |
+| `maintenance` | Cross-cutting crons/sweepers (retention — including the flag-gated FT-8 storage-lifecycle retention pass, billing overage, SLA, jobs — plus the reward-plane/credential sweeps: stale reward-budget reservation release, reward DLQ depth gauge, expired credential rotation-overlap tombstoning, and the opt-in ledger chain verifier). Also the Reconciled Control Plane continuous-reconcile scheduler (`reconciled_control_scheduler` — one periodic §32/§35 reconcile→plan→execute loop that rides `maintenance` rather than justifying a runtime role of its own; gated on the plane master switch AND its scheduler kill-switch, both default OFF, so it stays idle until flipped). Also the Rights Authority retention deletion executor (`rights_deletion_executor` — one periodic sweep that executes the pending `delete_at_expiry` impact rows the retention seam only schedules; default OFF). |
+
+The canonical role set lives in `config/settings.py::RUNTIME_ROLES`; the
+role → loop-worker mapping lives in `services/api/workers/runtime/roles.py`; canonical
+stream ownership lives in `services/api/workers/runtime/consumer_specs.py::CONSUMER_SPECS`.
+The catalog observer is registered only when
+`AETHER_AGENT_MARKETPLACE_CATALOG_ENABLED` is true (default OFF); the API mounts
+the read endpoint when either the catalog observer or deployment registry is
+enabled.
+
+The stream worker also projects public SDK x402 request and intent stages through
+`services/api/ingestion/ingestion/lifecycle_worker.py` into the canonical durable lifecycle
+mapper. This path records client-originated evidence as observed. It does not
+accept SDK assertions of authorization resolution, settlement, receipt
+verification, or resource delivery as authoritative outcomes; those require a
+source-authoritative verification path.
+
+## Entry point
+
+Boot exactly one role:
+
+```bash
+python -m workers.runtime.run_role api            # HTTP server (uvicorn main:app)
+python -m workers.runtime.run_role stream-worker  # supervised stream workers
+python -m workers.runtime.run_role maintenance    # cron/sweeper workers
+```
+
+- `api` boots `uvicorn main:app` (host/port from `AETHER_API_HOST` /
+  `AETHER_API_PORT`, defaults `0.0.0.0:8000`).
+- A worker role builds `services/api/workers/runtime/specs.py::build_worker_specs`, filters
+  it to the specs that role owns, and runs them under the existing
+  `WorkerSupervisor` (crash → backoff restart; required workers fail-closed in
+  staging/production). It also selects and attaches only that role's canonical
+  `ConsumerSpec` pipelines. Replicas use stable role-specific consumer groups.
+- Every process registers the durable job handlers through
+  `services/api/workers/jobs/bootstrap.py::register_durable_job_handlers`:
+  the API lifespan in `main.py` and, before its workers start, every worker
+  process in `run_role` (the handler registry is per process). A worker that
+  hosts the `maintenance` role's `job_worker` (for example `lean-worker`)
+  therefore runs the jobs the API enqueues — `consent.erasure`, exports,
+  imports — instead of failing them as `unknown job_type`. Registration is
+  idempotent and keeps each handler's existing flag gate.
+
+## Lifespan gating (`WORKER_ROLES_ENABLED`)
+
+`main.py`'s FastAPI lifespan is gated by `WORKER_ROLES_ENABLED`:
+
+- **Off** (default in local/dev): `all` retains the historical single-process
+  topology. An explicit `api` role remains pure and never attaches consumers.
+- **On** (default in staging/production): an `api` process starts **no** stream
+  consumers and **no** supervised workers; the `all` role still starts
+  everything; workers run in their own role processes.
+
+`should_start_workers(role)` and `should_start_consumers(role)`
+(`services/api/workers/runtime/roles.py`) are the pure gates the lifespan consults.
+
+## Backend selectors
+
+Each subsystem binds an explicit backend, declared via env and surfaced on
+`settings.runtime`:
+
+| Env var | Default | Notes |
+| --- | --- | --- |
+| `DATABASE_BACKEND` | `postgres` | `memory` rejected in production. |
+| `CACHE_BACKEND` | `memory` | Local convenience; `memory` rejected in production. |
+| `EVENT_BACKEND` | `sns_sqs` | Deployment-profile selector read by the release profile tooling, not by the backend; the bus the backend uses is `EVENT_BROKER` (`sns_sqs`, `kafka`). |
+| `GRAPH_BACKEND` | `postgres` | |
+| `OBJECT_BACKEND` | `s3` | |
+| `ML_MODE` | `inline` | `inline` or `remote`. |
+| `DEPLOYMENT_PROFILE` | `local` | Drives compose/helm wiring & ops tooling. |
+
+`ANALYTICS_BACKEND` (`postgres` | `clickhouse`) is a deployment-profile
+selector only, not a backend setting: Terraform uses it to gate the ClickHouse
+appliance and the `CLICKHOUSE_HOST` / `CLICKHOUSE_PORT` task environment, and
+the release profile tooling (`scripts/release/profile_doctor.py`,
+`scripts/release/check_profile_config.py`) checks it. The backend process does
+not read it: the analytics event store (`AnalyticsRepository`) is PostgreSQL
+in every profile, and ClickHouse is reached through `CLICKHOUSE_HOST`
+(`services/api/shared/cis/clickhouse.py`).
+
+## Ingestion event-outbox relay (FT-6)
+
+The `/v1/batch` V2 path (FT-5) writes typed Bronze rows plus a transactional
+`event_outbox` row in one transaction and never publishes in-request. The
+Universal Provider Runtime now uses that same typed Bronze/outbox transaction
+after preserving a verified provider raw record and normalizing it. In
+staging/production, enabling provider ingress without `OUTBOX_RELAY_ENABLED`
+fails both API and split worker startup; local/dev/integration warn. This
+configuration check does not prove that a separate relay process is healthy.
+The
+**event-outbox relay** (`services/api/ingestion/ingestion/outbox_relay.py`, WorkerSpec
+`event_outbox_relay`, owned by the `outbox-relay` role, gated by
+`OUTBOX_RELAY_ENABLED`) drains that table and publishes each row to the event
+bus, where the idempotent consumers run Bronze→Silver projection and
+measurement fan-out. The identity worker registers source identity and invokes
+the canonical resolver on the same validated event — downstream work becomes
+replayable instead of riding the request.
+
+- **Claiming:** one `UPDATE … FROM (SELECT … FOR UPDATE SKIP LOCKED)` claims a
+  batch, so any number of relay processes cooperate without double-claiming.
+- **Leases:** a claim pushes `available_at` forward by
+  `OUTBOX_RELAY_LEASE_SECONDS`; a crashed relay's rows are reclaimed when the
+  lease lapses.
+- **Backoff / dead-letter:** publish failures move rows to `retry` with
+  exponential backoff; after `OUTBOX_RELAY_MAX_ATTEMPTS` a row parks in
+  `dead_letter` (terminal, kept for ops). `attempt_count` increments at claim
+  time, so poison rows converge instead of looping.
+- **Delivery:** at-least-once. Relay-published events carry
+  `source_service="ingestion.outbox_relay"`; the Bronze-writer consumer skips
+  them because the V2 ingest transaction already persisted the typed Bronze row.
+
+Provider `AetherEvent` payloads share the transport topic but are deliberately
+deferred by SDK-only Silver, analytics, and identity consumers. That deferral
+is metered and leaves the canonical Bronze/outbox evidence available for a
+provider-aware authority/projector path. A relay publish does not itself
+create order, payment, or graph truth.
+
+Tuning env vars: `OUTBOX_RELAY_BATCH_SIZE` (100),
+`OUTBOX_RELAY_POLL_INTERVAL_S` (2), `OUTBOX_RELAY_LEASE_SECONDS` (60),
+`OUTBOX_RELAY_MAX_ATTEMPTS` (8) — all on `settings.ingestion_v2`.
+
+## Ingestion-level replay (WS-B4)
+
+Operator-triggered re-delivery of a tenant's durable Bronze SDK events
+(`services/api/ingestion/ingestion/replay.py`, mounted in `main.py` at
+`POST /v1/kyber/ingest/replay/events` and `GET /v1/kyber/ingest/replay/status`,
+Kyber-operator-only) is a synchronous service runner plus a minimal operator
+route — **not** a runtime role and not a durable-jobs control plane. A dry run
+(counts only, zero publishes) is always available; a real run
+(`dry_run=false`) republishes the Bronze rows onto `SDK_EVENTS_VALIDATED` with
+their original occurrence timestamps preserved (Invariant #15) only when
+`AETHER_INGESTION_REPLAY_ENABLED` (`settings.ingest_replay.enabled`, default
+OFF) is on — otherwise refused with 403. Even with the flag on, publishing is
+allowed only when `AETHER_ENV=local`, no `DATABASE_URL` or database pool is
+present, and the producer resolves to the in-memory backend; other modes fail
+closed as unavailable. `replay_run_id` suppression is process-local and does
+not provide durable delivery identity or downstream side-effect guarantees.
+Republished events carry
+`source_service="ingestion.replay"`, and the Bronze-writer consumer
+(`services/api/ingestion/ingestion/workers.py`) skips them for the same reason it skips
+relay-originated events: the durable Bronze row already exists, so writing
+again would mint a second Bronze row for the same original event.
+
+## Analytics event-store projection
+
+The `stream-ingestion-projection` consumer (role `stream-worker`, hosted by
+the `lean-worker` execution group in the staging profile) also subscribes
+`analytics_event_recorder` (`services/api/ingestion/ingestion/workers.py`) on
+`SDK_EVENTS_VALIDATED`. It is the only writer of the `events` and `sessions`
+tables that `AnalyticsRepository` serves to `POST /v1/analytics/events/query`,
+`GET /v1/analytics/dashboard/summary` and the Profile 360
+`/v1/profile/{user_id}/events|timeline` reads.
+
+- **Idempotency:** the `events` row id is a tenant-scoped digest of
+  `(tenant_id, event_id)` inserted with `ON CONFLICT DO NOTHING`; the
+  per-session rollup row (`(tenant_id, session_id)` digest, with
+  `first_seen_at`, `last_seen_at`, `event_count`) advances in the same
+  transaction only when the event row is new. SQS redelivery, relay (V2) and
+  ingestion-replay deliveries therefore never duplicate an event or its count;
+  unlike the Bronze writer, the recorder does not skip relay or replay events,
+  so V2 ingestion and replays reach analytics too.
+- **Privacy:** only identifiers, event type/family, canonical UTC timestamps,
+  schema version and a scalar, PII-filtered subset of `properties` are
+  recorded. `context` (IP, user agent, device, fingerprint signals) is never
+  copied. Consent was enforced before the event reached the topic.
+- **Failure:** a store failure raises, so the consumer retries and then
+  dead-letters the message; the insert-if-absent write makes retries safe.
+- **DSR erasure:** the `consent.erasure` job erases both tables for the data
+  subject under the `analytics_events` DSR propagation component (see
+  `SUBSYSTEM-DATABASE.md`, "Analytics event store").
+
+## Reward & commerce plane workers
+
+Five supervised loops (`services/api/workers/runtime/specs.py::build_worker_specs`, builders
+in `services/api/value/rewards/workers.py` and `services/api/value/rewards/delivery_outbox.py`) close
+the reward/x402/credential planes so activation stays credential-only rather than
+depending on an operator manually draining a queue:
+
+- **`reward_delivery_outbox`** (`outbox-relay`) — drains `reward_delivery_jobs`
+  through the rail-sender registry each tick. It is the reward plane's
+  at-least-once delivery path; before it was supervised a reward left the durable
+  outbox only when an operator hit the drain route.
+- **`x402_settlement_reconciliation`** (`materializer`, gated by
+  `COMMERCE_CONTROL_PLANE_ENABLED`) — re-checks PENDING settlements against the
+  tenant's RPC and advances the on-chain-final ones to SETTLED. Tenant-isolated,
+  idempotent, kill-switch aware (skips SUSPENDED x402 capabilities), durable
+  per-tenant cursor in `x402_reconciliation_cursor`.
+- **`reward_reservation_release`** (`maintenance`) — returns stale,
+  never-committed budget reservations to the tenant's available balance.
+- **`reward_dlq_sweeper`** (`maintenance`) — samples reward-outbox dead-letter
+  depth as a gauge; replay stays an explicit operator action.
+- **`credential_expiry_sweep`** (`maintenance`) — tombstones expired PREVIOUS
+  credential versions across tenants once their rotation-overlap window closes.
+
+Every loop is cancellation-safe and isolates a failing tick (one bad tick logs
+and continues rather than killing the supervised loop). The `/v1/ready`
+component report (`services/api/ingestion/gateway/component_status.py`) folds each plane's
+worker roles into the `rewards`, `commerce`, and `provider_credentials`
+component statuses, so an unsupervised or failed loop is observable rather than
+silent.
+
+## Rights Authority retention deletion executor
+
+**`rights_deletion_executor`** (`maintenance`, WorkerSpec in
+`services/api/workers/runtime/specs.py`) closes the other half of the
+Rights Authority retention seam: `services/api/tenancy/rights_authority/retention.py`
+computes an expiry and persists a **pending** `delete_at_expiry` impact item but
+deletes nothing, so this periodic sweep
+(`services/api/tenancy/rights_authority/deletion_executor.py`) claims those
+rows and deletes through a registered deletion adapter. Deletion is
+irreversible, so it requires **all three** gates, re-read every pass: rollout
+`RIGHTS_AUTHORITY_ROLLOUT=enforce`, the opt-in
+`RIGHTS_AUTHORITY_DELETION_EXECUTOR_ENABLED` (default OFF, under
+`settings.rights_authority`), and a registered adapter for the row's
+`component_type`. Only the `raw_object` byte-plane dimension has a real,
+tenant-scoped delete path today; the other eight cascade dimensions are
+unsupported and their rows stay `pending`. The row is flipped `in_progress`
+*before* the bytes are removed and `complete` only after the adapter reports
+them gone, so a crash never leaves bytes silently missing under a row that still
+advertises them. Interval: `RIGHTS_DELETION_EXECUTOR_INTERVAL_SECONDS` (default
+3600). Not `required=True`: a stalled sweep leaves rows pending and surfaced,
+and must never abort a fresh process's startup.
+
+## Production fail-closed rules
+
+`Settings.__post_init__` (`config/settings.py`) enforces, at process start:
+
+- **Every environment:** `AETHER_ROLE` must name a known role.
+- **Staging & production:** `AETHER_ROLE=all` is rejected — run an explicit role.
+- **Production:** `CACHE_BACKEND=memory` and `DATABASE_BACKEND=memory` are
+  rejected — a memory backend is never a correctness source in production.
+
+Local/dev keep the single-process default (`all`, memory cache) working.
+
+## Remaining validation
+
+The identity, graph, and measurement consumer boundaries are implemented and
+covered by ownership tests. Broker-backed staging evidence for assignment,
+processing lag, restart counts, and bounded deployment drain remains required;
+the ledger therefore remains `implementation_in_progress` rather than claiming
+production validation.
+
+## Model runtime execution flow
+
+The provider-neutral multi-model harness
+(`services/api/intelligence/model_runtime/`, ADR-008) runs
+**in-process via a feature-flagged router mount — not a runtime role.** `main.py`
+mounts `/v1/model-runtime` **unconditionally**: the real guarded router from
+`services/api/intelligence/model_runtime/routes.py` when `ModelRuntimeSettings().enabled` is
+true, otherwise a `model_runtime_disabled` surface that returns 503 for every
+route (so the disabled state is explicit, never a 404). The gate lives in
+`services/api/intelligence/model_runtime/config.py` (`MODEL_RUNTIME_ENABLED`, default OFF per
+ADR-008 D9) rather than `config/settings.py`, and the import is lazy and
+`ImportError`-guarded so `main` stays importable. There is no model-runtime
+entry in `config/settings.py::RUNTIME_ROLES` — the harness has no supervised
+loop or consumer; it executes on the request path, and the mounted surface is
+the control plane under `/v1/model-runtime` (registry, health, entitlements,
+usage, traces, model list, tenant default).
+
+Inside the package it executes as a cross-plane pipeline behind a single facade
+— `HarnessPipeline.run()`: routing → context → grounded synthesis →
+verification, with evaluation as the regression gate and observability
+throughout. Every stage is tenant-scoped (server-authoritative — the tenant
+comes from the authenticated request state, never from client-supplied
+headers) and evidence-backed; see `docs/architecture/PLATFORM-ARCHITECTURE.md` → "Intelligence
+planes".
+
+Fail-closed settings (`services/api/intelligence/model_runtime/config.py`, `MODEL_RUNTIME_*`):
+
+- `MODEL_RUNTIME_ENABLED=false` by default (ADR-008 D9) — fail-closed while
+  OFF: `main.py` still mounts `/v1/model-runtime`, but as the disabled surface
+  that returns 503 `model_runtime_disabled` for every route (never a 404, never
+  a leak of response shape or data).
+- A non-local environment (`staging`/`production`/`test`) with
+  `MODEL_RUNTIME_ENABLED=true` must use a production-safe credential backend
+  (`env` or `aws_secrets`, never `in_memory`/`disabled`) and a real default
+  provider (never `deterministic`); a violation raises `ConfigError` at startup
+  — the process refuses to serve.
+- `credential_backend=aws_secrets` requires a non-empty
+  `MODEL_RUNTIME_CREDENTIAL_AWS_REGION` in every environment.
+
+The pipeline normalizes every stage failure into a content-free
+`HarnessPipelineError` (stage name + exception class only), so evidence content
+and credentials never appear in errors or logs.

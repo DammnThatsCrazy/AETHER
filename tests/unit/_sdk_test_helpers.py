@@ -14,7 +14,7 @@ import types
 from pathlib import Path
 from unittest.mock import MagicMock
 
-BACKEND_ROOT = Path(__file__).resolve().parents[2] / "services" / "backend"
+BACKEND_ROOT = Path(__file__).resolve().parents[2] / "services" / "api"
 
 
 def _load_module_from_file(module_name: str, file_path: Path):

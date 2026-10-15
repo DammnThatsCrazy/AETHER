@@ -31,7 +31,7 @@ class ExecutionPlanValidationError(ValueError):
 def load_plan(path: Path) -> dict[str, Any]:
     try:
         plan = json.loads(path.read_text(encoding="utf-8"))
-        schema = json.loads((ROOT / "contracts/delivery/verification-execution-plan.schema.json").read_text(encoding="utf-8"))
+        schema = json.loads((ROOT / "packages/contracts/delivery/verification-execution-plan.schema.json").read_text(encoding="utf-8"))
         jsonschema.Draft202012Validator(schema).validate(plan)
     except (OSError, json.JSONDecodeError, jsonschema.ValidationError) as exc:
         raise ExecutionPlanValidationError(str(exc)) from exc

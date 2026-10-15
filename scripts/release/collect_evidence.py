@@ -90,8 +90,8 @@ EVIDENCE_CHECK_ARGS: dict[str, list[str]] = {
     # from AWS, which is the precise confusion the bundle exists to prevent.
     # With no real plan present the check fails, and that is the honest result.
     "terraform_plan_policy": [
-        "--profile", "production-lean",
-        "--plan-json", "artifacts/reviewed.tfplan.json",
+        "--profile", "production",
+        "--plan-json", ".artifacts/reviewed.tfplan.json",
     ],
     # Scored against the inventory a credentialed plan produced. The path is the
     # same one `make validate-cost-model` writes the FIXTURE-derived inventory
@@ -102,12 +102,12 @@ EVIDENCE_CHECK_ARGS: dict[str, list[str]] = {
     # bundle exists to prevent, and it was reachable because only the plan gate
     # was pointed at a path a fixture never occupies.
     "cost_model": [
-        "--profile", "production-lean",
-        "--inventory", "artifacts/profile-resource-inventory.json",
+        "--profile", "production",
+        "--inventory", ".artifacts/profile-resource-inventory.json",
     ],
 }
 
-COST_INVENTORY = "artifacts/profile-resource-inventory.json"
+COST_INVENTORY = ".artifacts/profile-resource-inventory.json"
 
 
 def synthetic_inventory_reason(inventory_rel: str = COST_INVENTORY) -> str | None:
@@ -769,9 +769,9 @@ def build_bundle(ci_log: str | None = None, github_checks: str | None = None,
                     "absent": sum(1 for v in results.values()
                                   if v.get("status") == "absent")},
         "docs": [
-            "docs/FOUNDING-TENANT-PRODUCTION.md",
-            "docs/DEPLOYMENT-PROFILES.md",
-            "docs/RELEASE-EVIDENCE.md",
+            "docs/operations/FOUNDING-TENANT-PRODUCTION.md",
+            "docs/architecture/DEPLOYMENT-PROFILES.md",
+            "docs/operations/RELEASE-EVIDENCE.md",
         ],
     }
 

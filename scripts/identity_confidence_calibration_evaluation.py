@@ -18,7 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from services.backend.services.identity.calibration_evaluation import (  # noqa: E402
+from services.api.identity.identity.calibration_evaluation import (  # noqa: E402
     evaluate_calibration,
     load_reviewed_pairs,
 )

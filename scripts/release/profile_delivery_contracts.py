@@ -26,8 +26,7 @@ except ModuleNotFoundError:  # pragma: no cover
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_VERSION = 1
 PROFILE_CONFIG = ROOT / "config" / "deployment_profiles.yaml"
-EPHEMERAL_PROFILES = frozenset({"preview", "demo"})
-PROMOTION_PROFILES = frozenset({"production-lean", "production-scale", "enterprise-isolated"})
+PROMOTION_PROFILES = frozenset({"production"})
 OPERATIONS = frozenset({"wake", "sleep", "deploy", "validate", "promote", "rollback", "reconcile", "destroy"})
 RESULT_STATUSES = frozenset({"DRY_RUN", "BLOCKED", "FAILED", "DEPLOYED", "VALIDATED", "PROMOTED", "ROLLED_BACK", "SLEPT"})
 # A result status is meaningful only in the context of the operation that
@@ -160,11 +159,6 @@ def validate_request(request: DeliveryRequest) -> list[str]:
     config = profiles[request.profile]
     if request.operation in {"wake", "sleep"} and not config.get("wake_sleep"):
         errors.append(f"{request.profile} does not declare wake_sleep")
-    if request.profile in EPHEMERAL_PROFILES:
-        if not config.get("ttl_cleanup_required"):
-            errors.append(f"{request.profile} must require TTL cleanup")
-        if request.operation in {"deploy", "validate", "destroy"} and request.ttl_hours is None:
-            errors.append(f"{request.profile} {request.operation} requires ttl_hours")
     if request.operation == "promote":
         if request.profile not in PROMOTION_PROFILES:
             errors.append("promote target must be a production profile")
@@ -219,10 +213,6 @@ def validate_result(request: DeliveryRequest, result: Mapping[str, Any]) -> list
         errors.append("validate result must set mutation_occurred=false")
     if request.operation == "promote" and status == "PROMOTED" and not request.staging_evidence:
         errors.append("promoted result requires staging evidence")
-    if request.profile in EPHEMERAL_PROFILES and status in {"DEPLOYED", "VALIDATED"}:
-        cleanup = result.get("cleanup")
-        if not isinstance(cleanup, Mapping) or cleanup.get("status") != "PASS":
-            errors.append("ephemeral result requires PASS cleanup evidence")
     if status in {"BLOCKED", "FAILED"} and not result.get("next_action"):
         errors.append("blocked/failed result requires next_action")
     return sorted(set(errors))

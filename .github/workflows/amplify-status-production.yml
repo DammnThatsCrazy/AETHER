@@ -85,9 +85,13 @@ jobs:
       contents: read
       id-token: write
     steps:
+      # Only the control scripts (the contract checker) come from this
+      # checkout; Amplify builds the release from the repository. Use the
+      # workflow's own revision so a dispatch of an older SHA still runs the
+      # current checker.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.expected_commit_sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -231,12 +235,12 @@ jobs:
           web_environment="$(mktemp)"
           web_rules="$(mktemp)"
           trap 'rm -f "$web_build_spec" "$web_environment" "$web_rules"' EXIT
-          # The frontend/site entry of amplify.yml: the unified site plus the
+          # The apps/public-site entry of amplify.yml: the unified site plus the
           # product built under /app.
           cat > "$web_build_spec" <<'YAML'
           version: 1
           applications:
-            - appRoot: frontend/site
+            - appRoot: apps/public-site
               frontend:
                 buildPath: /
                 phases:
@@ -244,16 +248,16 @@ jobs:
                     commands:
                       - npm ci
                       - npm run build --workspace=packages/shared
-                      - npm run build --workspace=packages/web
+                      - npm run build --workspace=packages/sdk/web
                   build:
                     commands:
-                      - npm run build --workspace=frontend/site
-                      - VITE_BASE_PATH=/app/ npm run build --workspace=frontend/aether
-                      - test -f frontend/aether/dist/index.html
-                      - mkdir -p frontend/site/dist/app
-                      - cp -R frontend/aether/dist/. frontend/site/dist/app/
+                      - npm run build --workspace=apps/public-site
+                      - VITE_BASE_PATH=/app/ npm run build --workspace=apps/aether-web
+                      - test -f apps/aether-web/dist/index.html
+                      - mkdir -p apps/public-site/dist/app
+                      - cp -R apps/aether-web/dist/. apps/public-site/dist/app/
                 artifacts:
-                  baseDirectory: frontend/site/dist
+                  baseDirectory: apps/public-site/dist
                   files:
                     - '**/*'
                 cache:
@@ -264,7 +268,7 @@ jobs:
           # when the production backend and sign-in exist. Until then the site
           # is pilot-only (no sign-in, sign-up or status links; plan choices
           # become pilot requests) and its contact form posts to the always-on
-          # lead intake (deploy/aws/lead-intake). The API values are the ones
+          # lead intake (infra/aws/lead-intake). The API values are the ones
           # production will use; the pilot-only site does not call them.
           cat > "$web_environment" <<'JSON'
           {
@@ -369,6 +373,7 @@ jobs:
           APP_ID: ${{ steps.inputs.outputs.app_id }}
           EXPECTED_COMMIT_SHA: ${{ steps.inputs.outputs.expected_commit_sha }}
           BOUND_AT: ${{ steps.bind.outputs.bound_at }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           # Repository-bound Amplify apps can auto-start a release for the push
@@ -410,6 +415,15 @@ jobs:
                 continue
               fi
 
+              # A RELEASE job builds the branch's latest commit. Start one only
+              # while main is still the gated commit: if main moved on, the
+              # newer commit's own run releases it, and an older SHA (a
+              # rollback) cannot be released this way.
+              main_head="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"
+              if [ "$main_head" != "$EXPECTED_COMMIT_SHA" ]; then
+                echo "::error::main is at ${main_head}, not ${EXPECTED_COMMIT_SHA}; a RELEASE job would build ${main_head}, so this run will not start one" >&2
+                return 1
+              fi
               start_output="$(mktemp)"
               if aws amplify start-job \
                 --app-id "$APP_ID" \

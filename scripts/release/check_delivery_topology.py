@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fail closed when deployable runtime topology drifts from runtime roles.
 
-The canonical role registry is ``services/runtime/roles.py``; the canonical
+The canonical role registry is ``services/api/workers/runtime/roles.py``; the canonical
 deployable topology is ``config/runtime_deployment.yaml``. Since schema v2 the
 unit of deployment is a *service* that may host several logical roles (an
 execution group), so the central invariant this script enforces is ownership,
@@ -20,18 +20,15 @@ from typing import Any
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import Reporter, load_yaml, main_guard, repo_root  # noqa: E402
 
-ROLES_PY = "services/backend/services/runtime/roles.py"
+ROLES_PY = "services/api/workers/runtime/roles.py"
 
 # Every deployable profile, and the execution mode it is contractually pinned
-# to. Lean/staging consolidate onto an execution group; the two uncapped
-# profiles keep one task per role for per-role scaling and blast radius.
+# to. Both profiles consolidate onto an execution group. The `dedicated` mode
+# (one task per role) remains supported by the checks below for the day a role
+# needs its own scaling or blast radius, but no committed profile uses it.
 PROFILE_MODES: dict[str, str] = {
     "staging": "consolidated",
-    "demo": "consolidated",
-    "preview": "consolidated",
-    "production-lean": "consolidated",
-    "production-scale": "dedicated",
-    "enterprise-isolated": "dedicated",
+    "production": "consolidated",
 }
 
 # Roles whose interruption is never worth the Spot discount: the public API and
@@ -379,11 +376,11 @@ def check() -> int:
     r.require(not lifecycle,
               "staging can be driven to zero desired tasks without changing topology",
               f"staging lifecycle broken {lifecycle}")
-    lean = profiles.get("production-lean", {})
+    lean = profiles.get("production", {})
     r.require(lean.get("static_frontends") is True and lean.get("remote_ml") is False,
-              "production-lean uses static frontends and inline ML",
-              "production-lean topology violates cost policy")
-    terraform = (repo_root() / "deploy/aws/terraform/modules/ecs/main.tf").read_text(
+              "production uses static frontends and inline ML",
+              "production topology violates cost policy")
+    terraform = (repo_root() / "infra/aws/terraform/modules/ecs/main.tf").read_text(
         encoding="utf-8")
     # Terraform still fans out over the ROLE-keyed variable. The services model
     # requires that to become a SERVICE-keyed variable (var.runtime_services);

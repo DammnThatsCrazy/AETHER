@@ -89,7 +89,7 @@ def _schema(path: Path, draft: type[jsonschema.Validator]) -> None:
 
 def main() -> int:
     errors: list[str] = []
-    delivery_schemas = sorted((ROOT / "contracts/delivery").glob("*.schema.json"))
+    delivery_schemas = sorted((ROOT / "packages/contracts/delivery").glob("*.schema.json"))
     for path in delivery_schemas:
         try:
             _schema(path, jsonschema.Draft202012Validator)

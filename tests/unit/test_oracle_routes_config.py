@@ -8,11 +8,11 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 
 def _evict_backend_modules() -> None:
-    for prefix in ("config", "services", "shared"):
+    for prefix in ("config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared"):
         sys.modules.pop(prefix, None)
         for name in list(sys.modules):
             if name == prefix or name.startswith(f"{prefix}."):
@@ -64,9 +64,9 @@ def test_oracle_routes_require_explicit_secrets_outside_local(monkeypatch):
         # import-time secret reads). Fail-closed moved to the call site: with
         # no ORACLE_SIGNER_KEY and no tenant credential, resolving the signer
         # outside local raises SignerUnavailableError.
-        module = importlib.import_module("services.oracle.routes")
+        module = importlib.import_module("graph.oracle.routes")
         importlib.reload(module)  # import succeeds, no secret read
-        from services.rewards.signing import SignerUnavailableError
+        from value.rewards.signing import SignerUnavailableError
 
         with pytest.raises((RuntimeError, SignerUnavailableError)):
             module._get_signer()

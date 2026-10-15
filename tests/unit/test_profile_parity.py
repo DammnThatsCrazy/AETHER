@@ -58,7 +58,7 @@ def _valid_yaml(extra_profile: str | None = None) -> dict:
 
 
 def test_parity_validator_passes_on_current_tree():
-    """The canonical eight-profile tree satisfies every cross-source check."""
+    """The canonical two-profile tree satisfies every cross-source check."""
     rc = subprocess.run(
         [sys.executable, str(RELEASE / "check_profile_parity.py")],
         cwd=ROOT,
@@ -73,9 +73,9 @@ def test_parity_validator_fails_on_wrong_doc_count(monkeypatch):
 
     def mutated_read(rel_path: str) -> str:
         text = (ROOT / rel_path).read_text()
-        if rel_path == "docs/DEPLOYMENT-PROFILES.md":
+        if rel_path == "docs/architecture/DEPLOYMENT-PROFILES.md":
             # Break every count-carrying phrase the validator watches.
-            text = text.replace("eight deployment profiles", "nine deployment profiles")
+            text = text.replace("two deployment profiles", "three deployment profiles")
         return text
 
     monkeypatch.setattr(parity, "_read", mutated_read)
@@ -88,11 +88,11 @@ def test_parity_validator_fails_on_ninth_profile(monkeypatch):
     _run_check(parity, monkeypatch, lambda p: _valid_yaml(extra_profile="ninth"), fail=True)
 
 
-def test_parity_validator_fails_when_demo_tfvars_missing(monkeypatch, tmp_path):
-    """Deleting demo.tfvars trips the restated selectable-set invariant.
+def test_parity_validator_fails_when_staging_tfvars_missing(monkeypatch, tmp_path):
+    """Deleting staging.tfvars trips the selectable-set invariant.
 
-    The C4 restatement makes the selectable set = cloud ∪ ephemeral and demands
-    ``profiles/*.tfvars`` equal that set. Removing one tfvars file from the
+    The selectable set is exactly the canonical profiles and
+    ``profiles/*.tfvars`` must equal it. Removing one tfvars file from the
     profiles dir must trip the validator even though the canonical YAML still
     declares the profile.
     """
@@ -100,7 +100,7 @@ def test_parity_validator_fails_when_demo_tfvars_missing(monkeypatch, tmp_path):
 
     # The tfvars glob is the one surface read straight from the filesystem via
     # `repo_root() / TF_DIR / "profiles"`. Point repo_root at a tmp tree that
-    # carries a copy of the profiles dir minus demo.tfvars, while every `_read`
+    # carries a copy of the profiles dir minus staging.tfvars, while every `_read`
     # surface (docs, variables.tf, check_cost_policy_terraform.py, env
     # templates) keeps resolving against the real tree. `load_yaml` resolves
     # against the real tree through _common.repo_root, so the canonical config
@@ -111,11 +111,11 @@ def test_parity_validator_fails_when_demo_tfvars_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(parity, "_read", read_from_real_tree)
     monkeypatch.setattr(parity, "repo_root", lambda: tmp_path)
 
-    src = ROOT / "deploy" / "aws" / "terraform" / "profiles"
-    dst = tmp_path / "deploy" / "aws" / "terraform" / "profiles"
+    src = ROOT / "infra" / "aws" / "terraform" / "profiles"
+    dst = tmp_path / "infra" / "aws" / "terraform" / "profiles"
     dst.mkdir(parents=True)
     for tfvars in src.glob("*.tfvars"):
-        if tfvars.name != "demo.tfvars":
+        if tfvars.name != "staging.tfvars":
             shutil.copy2(tfvars, dst / tfvars.name)
 
     assert parity.check() != 0
@@ -132,7 +132,7 @@ def test_profile_config_rejects_missing_profile(monkeypatch):
     cfg = _load("check_profile_config")
 
     def missing(data: dict) -> dict:
-        del data["profiles"]["local"]
+        del data["profiles"]["staging"]
         return data
 
     def load(p: str) -> dict:
@@ -145,6 +145,6 @@ def test_docs_count_matches_canonical_config():
     """The registered count docs carry the exact canonical count, literally."""
     data = yaml.safe_load((ROOT / "config" / "deployment_profiles.yaml").read_text())
     n = len((data.get("profiles") or {}).keys())
-    assert n == 8, f"canonical profile count changed to {n}; update parity phrases/docs"
-    text = (ROOT / "docs" / "DEPLOYMENT-PROFILES.md").read_text()
-    assert f"{n} deployment profiles" in text or "eight deployment profiles" in text
+    assert n == 2, f"canonical profile count changed to {n}; update parity phrases/docs"
+    text = (ROOT / "docs" / "architecture" / "DEPLOYMENT-PROFILES.md").read_text()
+    assert f"{n} deployment profiles" in text or "two deployment profiles" in text

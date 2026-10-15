@@ -3,7 +3,7 @@
 Exercises the core diff functions (`diff_event_types`, `diff_purpose_values`)
 directly against in-memory event-type/purpose sets so the drift-detection path
 is covered without depending on the live native SDK files
-(packages/ios/.../Aether.swift, packages/android/.../Aether.kt). The native
+(packages/sdk/ios/.../Aether.swift, packages/sdk/android/.../Aether.kt). The native
 event-type + consent-purpose regions are now marker-delimited generated regions
 (scripts/generate_contracts.py, WS-A6) and are byte-stable between reviews;
 these tests stay in-memory so the unit suite is never sensitive to a mid-review

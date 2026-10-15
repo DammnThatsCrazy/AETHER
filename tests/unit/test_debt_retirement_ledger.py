@@ -101,7 +101,7 @@ def test_converging_rows_require_a_deadline(tmp_path):
 
 
 def test_a_named_path_that_vanished_is_drift(tmp_path):
-    errors = _check(tmp_path, _entry(current=["services/backend/does_not_exist.py"]))
+    errors = _check(tmp_path, _entry(current=["services/api/does_not_exist.py"]))
     assert any("current path does not exist" in e for e in errors)
 
 

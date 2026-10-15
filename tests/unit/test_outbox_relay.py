@@ -1,6 +1,6 @@
 """Event-outbox relay worker (PR 6 / FT-6-OUTBOX-RELAY).
 
-Exercises ``services.ingestion.outbox_relay.EventOutboxRelay`` against the
+Exercises ``ingestion.ingestion.outbox_relay.EventOutboxRelay`` against the
 in-memory ``event_outbox`` backend (AETHER_ENV=local, no asyncpg), plus the
 runtime-role and worker-spec wiring:
 
@@ -19,7 +19,7 @@ runtime-role and worker-spec wiring:
 
 Robust to suite ordering: every test evicts and re-imports the backend
 modules so a single consistent generation of config.settings /
-repositories.repos / services.ingestion.* is used, resets the in-memory
+repositories.repos / ingestion.ingestion.* is used, resets the in-memory
 stores, and flips ``settings.ingestion_v2`` on the LIVE singleton.
 """
 
@@ -36,13 +36,13 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 _BACKEND_PREFIXES = (
-    "config", "services", "shared", "middleware", "dependencies", "repositories",
+    "config", "tenancy", "ingestion", "identity", "graph", "journeys", "intelligence", "value", "actions", "governance", "workers", "connectors", "replay", "billing", "shared", "middleware", "dependencies", "repositories",
 )
 
 
@@ -60,8 +60,8 @@ class _Backend:
         self.settings_mod = importlib.import_module("config.settings")
         self.repos = importlib.import_module("repositories.repos")
         self.repos.reset_in_memory_stores()
-        self.bulk = importlib.import_module("services.ingestion.bronze_bulk")
-        self.relay_mod = importlib.import_module("services.ingestion.outbox_relay")
+        self.bulk = importlib.import_module("ingestion.ingestion.bronze_bulk")
+        self.relay_mod = importlib.import_module("ingestion.ingestion.outbox_relay")
         self.settings = self.settings_mod.settings
         if iv2_overrides:
             object.__setattr__(
@@ -297,7 +297,7 @@ def test_batch_size_bounds_each_claim():
 
 def test_sdk_bronze_writer_skips_relay_originated_events():
     with fresh() as b:
-        workers = importlib.import_module("services.ingestion.workers")
+        workers = importlib.import_module("ingestion.ingestion.workers")
         events_mod = importlib.import_module("shared.events.events")
 
         payload = {"event_id": "e-relay", "tenant_id": "t1", "event_type": "track"}
@@ -324,7 +324,7 @@ def test_sdk_bronze_writer_skips_relay_originated_events():
 
 def test_outbox_relay_role_owns_the_event_outbox_relay_spec():
     with fresh() as b:
-        roles = importlib.import_module("services.runtime.roles")
+        roles = importlib.import_module("workers.runtime.roles")
         owned = roles.ROLE_TO_SPEC_NAMES["outbox-relay"]
         assert {"notification_outbox", "event_outbox_relay"} <= owned
         picked = roles.specs_for_role(
@@ -336,7 +336,7 @@ def test_outbox_relay_role_owns_the_event_outbox_relay_spec():
 
 def test_event_outbox_relay_spec_is_registered_and_flag_gated():
     with fresh(outbox_relay_enabled=False) as b:
-        specs_mod = importlib.import_module("services.runtime.specs")
+        specs_mod = importlib.import_module("workers.runtime.specs")
         specs = specs_mod.build_worker_specs(
             registry=SimpleNamespace(producer=None), settings=b.settings
         )

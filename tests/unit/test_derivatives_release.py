@@ -3,11 +3,11 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from services.derivatives.models import PositionEpochState, PositionSide, PositionStatus  # noqa: E402
-from services.derivatives.multi_venue import (  # noqa: E402
+from value.derivatives.models import PositionEpochState, PositionSide, PositionStatus  # noqa: E402
+from value.derivatives.multi_venue import (  # noqa: E402
     CANONICAL_CONCEPTS,
     build_scaffolded_adapters,
     cross_venue_parity_report,

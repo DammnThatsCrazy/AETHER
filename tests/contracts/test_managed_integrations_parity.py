@@ -1,7 +1,7 @@
 """TS <-> Python parity for the Reconciled Control Plane contract.
 
 ``packages/shared/managed-integrations.ts`` and
-``services/managed_integrations/contracts.py`` are hand-authored twins; this
+``services/api/connectors/managed_integrations/contracts.py`` are hand-authored twins; this
 test fails if their canonical vocabularies drift (kinds, source origins/owners,
 release channels, CP-12 availability values, reconcile results, observed
 provenance, the Phase-0 emitted drift-type subset, and the Phase-1 canonical
@@ -15,11 +15,11 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from services.managed_integrations.contracts import (  # noqa: E402
+from connectors.managed_integrations.contracts import (  # noqa: E402
     ACTION_REQUIRED_STATUSES,
     HEALTH_GATE_OPERATORS,
     HEALTH_SNAPSHOT_AXES,

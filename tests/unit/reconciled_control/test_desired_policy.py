@@ -10,11 +10,11 @@ from __future__ import annotations
 
 import pytest
 
-from services.ingestion.sdk_version_tiers import (
+from ingestion.ingestion.sdk_version_tiers import (
     SDK_VERSION_BANDS,
     classify_sdk_version,
 )
-from services.managed_integrations.desired_policy import (
+from connectors.managed_integrations.desired_policy import (
     build_desired_state,
     channel_pins_version,
     classify_observed_runtime,

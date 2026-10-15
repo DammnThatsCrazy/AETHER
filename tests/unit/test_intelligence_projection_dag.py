@@ -309,7 +309,7 @@ def test_implemented_blueprint_existing_path_ok() -> None:
                 "a",
                 state="implemented",
                 migration_mode="converged",
-                blueprint="docs/ACCESS-CONTROL.md",
+                blueprint="docs/architecture/ACCESS-CONTROL.md",
             )
         ]
     )

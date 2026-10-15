@@ -12,24 +12,24 @@ import pytest
 
 from comparison_fakes import FakeAnalytics, make_events
 
-from services.intelligence.comparison.collection import AnalyticsDimensionCollector
-from services.intelligence.comparison.contracts import (
+from intelligence.intelligence.comparison.collection import AnalyticsDimensionCollector
+from intelligence.intelligence.comparison.contracts import (
     BaselineSpec,
     ComparisonDefinition,
     ComparisonSubject,
 )
-from services.intelligence.comparison.engine import (
+from intelligence.intelligence.comparison.engine import (
     RUN_STATE_TRANSITIONS,
     ComparisonEngine,
     preflight_dimension,
     validate_definition,
 )
-from services.intelligence.comparison.findings import FindingsService
-from services.intelligence.comparison.generated_vocabulary import (
+from intelligence.intelligence.comparison.findings import FindingsService
+from intelligence.intelligence.comparison.generated_vocabulary import (
     COMPARISON_RUN_STATES,
     FACT_LINKAGE_STATES,
 )
-from services.intelligence.comparison.store import (
+from intelligence.intelligence.comparison.store import (
     ComparisonDefinitionRepository,
     ComparisonFindingRepository,
 )
@@ -131,7 +131,7 @@ class TestEmptyVsEmptyRefusal:
 
 class TestPreflightUnit:
     def test_preflight_states(self, fake_analytics):
-        from services.intelligence.comparison.collection import DimensionObservations
+        from intelligence.intelligence.comparison.collection import DimensionObservations
 
         empty = DimensionObservations(
             dimension="behavior", collectable=True, observation_count=0

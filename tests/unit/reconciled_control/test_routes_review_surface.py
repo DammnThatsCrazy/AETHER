@@ -10,13 +10,13 @@ from __future__ import annotations
 
 from shared.common.common import BadRequestError
 
-from services.managed_integrations.execution_records_repository import (
+from connectors.managed_integrations.execution_records_repository import (
     ActionRequiredView,
     ChangeSetApprovalView,
     get_action_required_repository,
     get_change_set_approval_repository,
 )
-from services.managed_integrations.routes import (
+from connectors.managed_integrations.routes import (
     list_action_required,
     list_change_set_approvals,
 )
@@ -69,7 +69,7 @@ async def _seed_action_required() -> None:
 
 def _operator_gate(monkeypatch) -> None:
     monkeypatch.setattr(
-        "services.managed_integrations.routes._require_operator",
+        "connectors.managed_integrations.routes._require_operator",
         lambda request: None,
     )
 

@@ -28,16 +28,16 @@ from repositories.repos import reset_in_memory_stores
 from shared.auth.auth import TenantContext
 from shared.common.common import BadRequestError, ForbiddenError
 
-import services.agent_access_intelligence.risk_service as risk_service
-import services.agent_access_intelligence.risk_routes as risk_routes
-from services.agent_access_intelligence.authority_routes import (
+import actions.agent_access_intelligence.risk_service as risk_service
+import actions.agent_access_intelligence.risk_routes as risk_routes
+from actions.agent_access_intelligence.authority_routes import (
     CapabilityAuthorizationGrant,
     grant_authorization,
 )
-from services.agent_access_intelligence.catalog_service import capability_catalog_service
-from services.agent_access_intelligence.identity import IDENTITY_FIELDS, artifact_digest_for
-from services.agent_access_intelligence.risk_service import IDENTITY_DRIFT_CODE
-from services.agent_access_intelligence.scanning import CapabilityFinding, FindingCode
+from actions.agent_access_intelligence.catalog_service import capability_catalog_service
+from actions.agent_access_intelligence.identity import IDENTITY_FIELDS, artifact_digest_for
+from actions.agent_access_intelligence.risk_service import IDENTITY_DRIFT_CODE
+from actions.agent_access_intelligence.scanning import CapabilityFinding, FindingCode
 
 
 class FakeProducer:

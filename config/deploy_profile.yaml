@@ -17,16 +17,16 @@
 #   optional - present but gated off in the founding profile by cost policy
 #   gap      - not yet implemented; MUST carry a `gap` note (validator asserts note)
 #
-# Roles come from services/backend/services/runtime/roles.py
+# Roles come from services/api/workers/runtime/roles.py
 # (WORKER_ROLES + api). Terraform modules live under
-# deploy/aws/terraform/modules/<name>.
+# infra/aws/terraform/modules/<name>.
 # =============================================================================
 
 schema_version: 1
 canonical_source: config/deploy_profile.yaml
-compose_file: docker-compose.yml
-terraform_modules_dir: deploy/aws/terraform/modules
-runtime_roles_source: services/backend/services/runtime/roles.py
+compose_file: infra/local/docker-compose.yml
+terraform_modules_dir: infra/aws/terraform/modules
+runtime_roles_source: services/api/workers/runtime/roles.py
 
 # The full required capability set. Every id here must appear in `capabilities`.
 required_capabilities:
@@ -80,7 +80,7 @@ capabilities:
     status: optional
     local: {compose_service: clickhouse}
     cloud: {inline_ref: "enable_clickhouse flag in profiles.tf"}
-    gap: "ClickHouse is FORBIDDEN in production-lean by cost policy; postgres serves analytics there. No dedicated Terraform module yet (flagged only)."
+    gap: "ClickHouse is FORBIDDEN in production by cost policy; postgres serves analytics there. No dedicated Terraform module yet (flagged only)."
 
   - id: graph
     status: present
@@ -122,7 +122,7 @@ capabilities:
 
   - id: logs
     status: present
-    local: {compose_service: grafana, note: "Loki/promtail overlay in deploy/observability/loki"}
+    local: {compose_service: grafana, note: "Loki/promtail overlay in infra/observability/loki"}
     cloud: {terraform_module: monitoring, ref: "CloudWatch log groups + log-archive S3"}
 
   - id: traces
@@ -133,7 +133,7 @@ capabilities:
 
   - id: dashboards_alerts
     status: present
-    local: {compose_service: grafana, note: "deploy/observability/grafana dashboards + prometheus alert_rules.yml + alertmanager"}
+    local: {compose_service: grafana, note: "infra/observability/grafana dashboards + prometheus alert_rules.yml + alertmanager"}
     cloud: {terraform_module: monitoring, ref: "CloudWatch dashboards + metric alarms + SNS"}
 
   - id: backup_restore

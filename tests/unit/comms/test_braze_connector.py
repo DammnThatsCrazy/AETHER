@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -60,7 +60,7 @@ class TestWebhookMapping:
         ("clicked email", "email_clicked"),
     ])
     def test_message_event_mapping(self, event_type, expected):
-        from services.integrations.connectors.braze import BrazeConnector
+        from connectors.integrations.connectors.braze import BrazeConnector
         events = BrazeConnector().parse_webhook(
             {"items": [_braze_message_event(event_type)]},
         )
@@ -70,14 +70,14 @@ class TestWebhookMapping:
         assert events[0].source == "braze"
 
     def test_unknown_event_dropped(self):
-        from services.integrations.connectors.braze import BrazeConnector
+        from connectors.integrations.connectors.braze import BrazeConnector
         events = BrazeConnector().parse_webhook(
             {"items": [_braze_message_event("users.messages.email.CustomTouch")]},
         )
         assert events == []
 
     def test_campaign_and_link_evidence_extracted(self):
-        from services.integrations.connectors.braze import BrazeConnector
+        from connectors.integrations.connectors.braze import BrazeConnector
         events = BrazeConnector().parse_webhook({"items": [_braze_message_event(
             "users.messages.email.Click",
             {"link_url": "https://x.example/promo", "link_id": "link-1",
@@ -97,7 +97,7 @@ class TestWebhookMapping:
         assert props["user_agent"] == "Mozilla/5.0"
 
     def test_hard_bounce_type(self):
-        from services.integrations.connectors.braze import BrazeConnector
+        from connectors.integrations.connectors.braze import BrazeConnector
         events = BrazeConnector().parse_webhook(
             {"items": [_braze_message_event("users.messages.email.Bounce")]},
         )
@@ -105,14 +105,14 @@ class TestWebhookMapping:
 
     def test_soft_bounce_stays_soft(self):
         """SoftBounce never becomes a hard-bounce suppression downstream."""
-        from services.integrations.connectors.braze import BrazeConnector
+        from connectors.integrations.connectors.braze import BrazeConnector
         events = BrazeConnector().parse_webhook(
             {"items": [_braze_message_event("users.messages.email.SoftBounce")]},
         )
         assert events[0].properties["bounce_type"] == "soft"
 
     def test_unsubscribe_scope(self):
-        from services.integrations.connectors.braze import BrazeConnector
+        from connectors.integrations.connectors.braze import BrazeConnector
         events = BrazeConnector().parse_webhook(
             {"items": [_braze_message_event("users.messages.email.Unsubscribe")]},
         )
@@ -124,7 +124,7 @@ class TestEmailListExports:
     events with suppression semantics for downstream suppression_authority."""
 
     def test_hard_bounce_entry(self):
-        from services.integrations.connectors.braze import normalize_braze_event
+        from connectors.integrations.connectors.braze import normalize_braze_event
         ev = normalize_braze_event(
             {"email": "a@example.com", "hard_bounced_at": "2026-07-01T00:00:00Z"},
         )
@@ -134,7 +134,7 @@ class TestEmailListExports:
         assert ev.properties["recipient_email"] == "a@example.com"
 
     def test_unsubscribe_entry(self):
-        from services.integrations.connectors.braze import normalize_braze_event
+        from connectors.integrations.connectors.braze import normalize_braze_event
         ev = normalize_braze_event(
             {"email": "b@example.com", "unsubscribed_at": "2026-07-01T00:00:00Z"},
         )
@@ -144,7 +144,7 @@ class TestEmailListExports:
 
     def test_list_export_events_carry_deterministic_ids(self):
         """Identifiers are derived deterministically (idempotent replay)."""
-        from services.integrations.connectors.braze import normalize_braze_event
+        from connectors.integrations.connectors.braze import normalize_braze_event
         record = {"email": "c@example.com", "hard_bounced_at": "2026-07-01T00:00:00Z"}
         ev1 = normalize_braze_event(record)
         ev2 = normalize_braze_event(record)
@@ -156,9 +156,9 @@ class TestEmailListExports:
 class TestPull:
     @pytest.mark.asyncio
     async def test_pull_builds_list_and_catalog_events(self, monkeypatch):
-        import services.integrations.connectors.braze as braze_mod
-        from services.integrations.connectors.braze import BrazeConnector
-        from services.integrations.connectors.base import ConnectorConfig
+        import connectors.integrations.connectors.braze as braze_mod
+        from connectors.integrations.connectors.braze import BrazeConnector
+        from connectors.integrations.connectors.base import ConnectorConfig
 
         async def fake_get(url, secret):
             assert secret == "rest-key"
@@ -195,9 +195,9 @@ class TestPull:
     async def test_pull_rate_limit_leaves_no_events(self, monkeypatch):
         """A 429 aborts the list export with no events — the service layer then
         leaves the durable cursor put and the next run resumes from here."""
-        import services.integrations.connectors.braze as braze_mod
-        from services.integrations.connectors.braze import BrazeConnector
-        from services.integrations.connectors.base import ConnectorConfig
+        import connectors.integrations.connectors.braze as braze_mod
+        from connectors.integrations.connectors.braze import BrazeConnector
+        from connectors.integrations.connectors.base import ConnectorConfig
 
         async def rate_limited(url, secret):
             return 429, {}
@@ -214,9 +214,9 @@ class TestPullCursor:
     async def test_cursor_advances_only_after_durable_acceptance(self, monkeypatch):
         """Failed pull → sync raises and the cursor never moves; healthy pull →
         events persist AND the cursor advances (service-layer guarantee)."""
-        from services.integrations.connectors.service import connector_service
-        from services.integrations.connectors.braze import BrazeConnector
-        from services.integrations.connectors.base import NormalizedEvent
+        from connectors.integrations.connectors.service import connector_service
+        from connectors.integrations.connectors.braze import BrazeConnector
+        from connectors.integrations.connectors.base import NormalizedEvent
         from repositories.delivery_repos import ConnectorCursorRepository
 
         async def failing_pull(self, config, since=None, secret=None):
@@ -227,7 +227,7 @@ class TestPullCursor:
             "tenant-b", "braze", name="Braze", enabled=True,
             credential="rest-key", actor_id="user-1",
         )
-        from services.delivery.adapters.base import ConnectorSyncError
+        from actions.delivery.adapters.base import ConnectorSyncError
         with pytest.raises(ConnectorSyncError):
             await connector_service.sync("tenant-b", "braze", actor_id="user-1")
 
@@ -257,9 +257,9 @@ class TestPullCursor:
     @pytest.mark.asyncio
     async def test_sync_records_durable_sync_run(self, monkeypatch):
         """The sync-run ledger records cursor_before → cursor_after honestly."""
-        from services.integrations.connectors.service import connector_service
-        from services.integrations.connectors.braze import BrazeConnector
-        from services.integrations.connectors.base import NormalizedEvent
+        from connectors.integrations.connectors.service import connector_service
+        from connectors.integrations.connectors.braze import BrazeConnector
+        from connectors.integrations.connectors.base import NormalizedEvent
 
         async def fake_pull(self, config, since=None, secret=None):
             return [
@@ -288,7 +288,7 @@ class TestPullCursor:
 
 class TestDescriptor:
     def test_supports_pull_first_lifecycle(self):
-        from services.integrations.connectors.braze import BrazeConnector
+        from connectors.integrations.connectors.braze import BrazeConnector
         c = BrazeConnector()
         assert c.supports_webhook and c.supports_pull
         assert c.supports_historical_backfill
@@ -301,7 +301,7 @@ class TestDescriptor:
             assert t in c.ingest_event_types
 
     def test_manifest_data_outputs_are_comms(self):
-        from services.integrations.connectors.braze import BrazeConnector
+        from connectors.integrations.connectors.braze import BrazeConnector
         outputs = BrazeConnector().manifest_data_outputs
         assert outputs
         assert all(o.startswith("comms.") for o in outputs)
@@ -309,19 +309,19 @@ class TestDescriptor:
     def test_webhook_scheme_is_honest_generic_hmac(self):
         """Braze has no provider-native webhook HMAC; the generic timestamped
         HMAC is the honest fallback (pull-model-first)."""
-        from services.integrations.connectors.braze import BrazeConnector
+        from connectors.integrations.connectors.braze import BrazeConnector
         assert BrazeConnector().signature_scheme == "hmac"
 
     def test_registry_serves_expanded_connector(self):
-        from services.integrations.connectors.registry import get_connector
-        from services.integrations.connectors.braze import BrazeConnector
+        from connectors.integrations.connectors.registry import get_connector
+        from connectors.integrations.connectors.braze import BrazeConnector
         assert isinstance(get_connector("braze"), BrazeConnector)
 
 
 class TestIngestBridge:
     @pytest.mark.asyncio
     async def test_comm_events_ingest_to_bronze_pipeline(self):
-        from services.comms.ingest import ingest_normalized_events
+        from journeys.comms.ingest import ingest_normalized_events
         counts = await ingest_normalized_events("tenant-b", [
             {"event_type": "email_delivered", "source": "braze",
              "external_id": "e1", "occurred_at": "2026-07-01T00:00:00+00:00",
@@ -334,7 +334,7 @@ class TestIngestBridge:
 
     @pytest.mark.asyncio
     async def test_catalog_records_register_canonical_campaign(self):
-        from services.comms.ingest import ingest_normalized_events
+        from journeys.comms.ingest import ingest_normalized_events
         counts = await ingest_normalized_events("tenant-b", [
             {"event_type": "braze.campaign", "source": "braze",
              "external_id": "camp-ext-1",

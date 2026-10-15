@@ -1,4 +1,4 @@
-"""Unit tests for services.attribution.models — all attribution model classes.
+"""Unit tests for value.attribution.models — all attribution model classes.
 
 Pure unit tests: no database, no HTTP, no settings loaded.
 Each model's `attribute()` method is tested for:
@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 # shared/__init__.py → shared.decorators → shared.auth.auth → jwt.
 # Stub missing crypto modules so the import chain resolves on runners where
@@ -39,7 +39,7 @@ for _mod in ("jwt", "cryptography", "cryptography.hazmat",
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from services.attribution.models import (  # noqa: E402
+from value.attribution.models import (  # noqa: E402
     ActorWeightedModel,
     AttributionResult,
     DataDrivenModel,
@@ -252,7 +252,7 @@ async def test_data_driven_weights_sum_to_one():
 @pytest.mark.asyncio
 async def test_data_driven_diverse_channels_higher_value():
     """Coalition value should reflect channel diversity."""
-    from services.attribution.models import DataDrivenModel as DDM
+    from value.attribution.models import DataDrivenModel as DDM
     model = DDM()
     tps = [
         Touchpoint(channel="organic", source="google"),
@@ -266,7 +266,7 @@ async def test_data_driven_diverse_channels_higher_value():
 
 @pytest.mark.asyncio
 async def test_data_driven_empty_coalition_value_is_zero():
-    from services.attribution.models import DataDrivenModel as DDM
+    from value.attribution.models import DataDrivenModel as DDM
     tps = [_tp("organic")]
     assert DDM._coalition_value(tps, []) == 0.0
 

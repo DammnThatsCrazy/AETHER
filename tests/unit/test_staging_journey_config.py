@@ -16,7 +16,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-TF = ROOT / "deploy/aws/terraform"
+TF = ROOT / "infra/aws/terraform"
 
 
 def _tfvars(name: str) -> dict[str, str]:
@@ -65,7 +65,7 @@ def test_self_signup_defaults_follow_the_backend_outside_staging() -> None:
         in main
     )
     assert re.search(r"^\s*self_signup_enabled\s+=\s+local\.self_signup_enabled$", main, re.MULTILINE)
-    for profile in ("production", "production-lean"):
+    for profile in ("production", "production"):
         path = TF / "profiles" / f"{profile}.tfvars"
         if path.exists():
             assert _tfvars(profile).get("self_signup_enabled") in (None, "true")
@@ -90,7 +90,7 @@ def test_release_manifests_resolve_every_deploy_default_on_flag() -> None:
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    for name in ("staging", "production-lean"):
+    for name in ("staging", "production"):
         flags = yaml.safe_load(
             (ROOT / f"config/release/feature_flags/{name}.yaml").read_text(encoding="utf-8")
         )["runtime"]["flags"]

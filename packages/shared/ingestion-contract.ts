@@ -2,7 +2,7 @@
 // Aether SDK — Ingestion Contract (canonical source of truth)
 // The single place that pins WHERE SDKs send events and WHAT the backend
 // guarantees about acceptance. Mirrors
-// `services/backend/services/ingestion/batch.py` and is
+// `services/api/ingestion/ingestion/batch.py` and is
 // validated against it by `scripts/validate_sdk_contracts.py`.
 // =============================================================================
 
@@ -59,6 +59,13 @@ export interface BatchIngestResponse {
   events: IngestEventResult[];
   batchId: string;
   receivedAt: string;
+  /** Server correlation references; absent when the owning authority did not persist one. */
+  requestId?: string;
+  usageEventId?: string;
+  usageEvidenceId?: string;
+  auditEventId?: string;
+  /** Actual tenant-scoped receipt IDs used to admit accepted events. */
+  consentReceiptIds?: string[];
 }
 
 /** Request envelope of POST /v1/batch (alias of the SDK BatchPayload). */

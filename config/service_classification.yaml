@@ -23,7 +23,7 @@
 schema_version: 1
 authority: service-classification
 status: proposed
-root: services/backend/services
+root: services/api
 
 services:
   account_lifecycle: {class: core, stage: control-plane, reason: "account suspension, recovery and erasure orchestration (data lifecycle)"}
@@ -33,6 +33,7 @@ services:
   agent: {class: experimental, stage: intelligence, reason: "agent orchestration, task management and worker coordination"}
   agent_access_intelligence: {class: experimental, stage: intelligence, reason: "agent capability catalog, authority and governance"}
   agent_comm_observability: {class: experimental, stage: intake, reason: "observation-only agent communication routes"}
+  agent_marketplace: {class: experimental, stage: intake, reason: "provider-neutral, observation-only agent marketplace catalog and run lineage"}
   agentic_observability: {class: experimental, stage: intake, reason: "observation-only agent activity routes"}
   analytics: {class: beta, stage: product, reason: "dashboard, report and export query engine"}
   analytics_automation: {class: beta, stage: intelligence, reason: "automated campaign performance monitoring pipeline"}
@@ -104,6 +105,7 @@ services:
   metering_evidence: {class: internal, stage: control-plane, reason: "metering evidence for cost tracking"}
   ml_serving: {class: beta, stage: intelligence, reason: "model inference, feature serving and prediction cache"}
   mobile: {class: beta, stage: product, reason: "mobile gateway: installations and push subscriptions"}
+  model_extraction_defense: {class: internal, stage: control-plane, reason: "model-extraction defense layer (formerly the repo-root security/ package)"}
   model_governance: {class: beta, stage: control-plane, reason: "consent-scoped training-data admission and inference gates"}
   model_runtime: {class: experimental, stage: intelligence, reason: "provider-neutral multi-model intelligence harness"}
   noesis: {class: experimental, stage: intelligence, reason: "graph-native natural-language intelligence"}

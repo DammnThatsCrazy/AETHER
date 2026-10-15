@@ -1,0 +1,194 @@
+---
+title: Commerce Operator Runbook
+slug: operations/commerce-runbook
+section: operations
+visibility: I
+audience: [ops]
+status: stable
+since_version: "0.1.0"
+source_files:
+  - services/api/value/x402/
+  - services/api/value/x402/provenance.py
+  - services/api/actions/agent/deployment_routes.py
+  - services/api/actions/agent_marketplace/authority.py
+  - services/api/actions/agent_marketplace/graph_state_check.py
+  - services/api/ingestion/silver/projectors/agent_execution_projector.py
+canonical_owner: commerce@aether
+estimated_read_minutes: 3
+toc_depth: 3
+source_hashes:
+  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
+  "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
+  "services/api/value/x402/": "sha256:5d041fbb1a1fb7494c5a547b4aac97804e0dcf478261170546663918a509377f"
+  "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
+---
+# Commerce Operator Runbook
+
+## 1. Stuck approval (past SLA)
+
+**Symptom:** Kyber Mission → Approval Backlog Summary shows items near/past SLA.
+
+**Steps:**
+1. Kyber Command → Commerce Subsystem → Approval Backlog.
+2. Filter queue by `status=assigned` or `status=pending`.
+3. If unassigned: `POST /v1/approvals/{id}/assign` with new approver.
+4. If assigned but idle: escalate with `POST /v1/approvals/{id}/escalate` (dedicated escalate endpoint; status → `escalated`, appends to escalation chain).
+5. Sweeper runs via `GET /v1/diagnostics/commerce/stuck-approvals` — marks expired items.
+
+## 2. Failed settlement
+
+**Symptom:** Diagnostics page shows settlement failure rate climbing, or explicit `commerce.settlement.failed` event.
+
+**Steps:**
+1. Fetch failure list: `GET /v1/diagnostics/commerce/health` reports aggregate
+   settlement counts (`pending`, lifetime `failed`, and `recent_failed` within the
+   health window); `GET /v1/diagnostics/commerce/stuck-approvals` sweeps expired
+   approvals.
+2. Inspect per-settlement state + `failure_reason` + `attempts`:
+   `GET /v1/admin/operator/agentic/settlements` (Kyber operator, all tenants).
+3. Retry via `SettlementTracker.retry(tenant_id, settlement_id)` or equivalent API.
+4. If facilitator is unhealthy: update health via internal API, select alternate facilitator on retry.
+
+> Expected steady state outside local: newly started settlements park in
+> `PENDING` ("awaiting on-chain finality confirmation") — `SETTLED` is asserted
+> only by the reconciliation path or an explicit operator action, never
+> automatically at start. A growing PENDING backlog with no reconciliation
+> progress is the actionable signal, not PENDING itself.
+
+## 3. Facilitator outage
+
+**Symptom:** `avg_latency_ms` climbing, `success_rate` dropping on Command Facilitator panel.
+
+**Steps:**
+1. Health is derived automatically from verification outcomes: a 200 verdict marks
+   the facilitator `healthy`, a non-200 response `degraded`, and a timeout or
+   connection failure `down`. Manual override via the registry's `update_health`
+   remains available for operator intervention.
+2. `authorize_payment()` excludes facilitators marked `down` and ranks
+   `healthy` ahead of unprobed (`unknown`) ahead of `degraded` on the next
+   selection — freshly seeded facilitators are selectable before their first
+   health observation.
+3. The commerce health endpoint (`GET /v1/diagnostics/commerce/health`)
+   degrades on **recent** failed settlements only (a rolling window), not the
+   lifetime failure count — so a single historical invalid payment no longer
+   pins the endpoint to `degraded` after facilitators recover. The response
+   reports both `failed` (lifetime) and `recent_failed` (in-window).
+4. If all facilitators down: verification falls back to local verification per chain.
+5. Outside the local environment, LOCAL-mode facilitators (the internal Aether
+   verifier seed) are never auto-selected and never confer verification — a
+   tenant with only the internal seed routes straight to on-chain RPC
+   verification.
+
+## 4. Duplicate payment detected
+
+**Symptom:** `commerce_duplicate_payment_detected_total` metric rising, or Kyber alert.
+
+**Steps:**
+1. Idempotency store returns cached result → client sees deterministic replay.
+2. If malicious replay: revoke approval via `POST /v1/approvals/{id}/revoke`.
+3. Revoke entitlement: `POST /v1/entitlements/{id}/revoke`.
+
+## 5. Settlement reconciliation backlog
+
+**Symptom:** PENDING settlements accumulate; `x402_reconciliation_cursor`
+`last_pending` climbs across runs.
+
+**Steps:**
+1. The `X402ReconciliationWorker` (`services/api/value/x402/reconciliation.py`) re-checks
+   each PENDING settlement against the tenant's RPC and advances it to SETTLED
+   only on confirmed finality; a reverted/underpaid/payer-mismatched payment is
+   failed. Persistent PENDING means `verification_unavailable` (RPC not
+   configured/reachable) or `not_finalized` — check the tenant's
+   `rpc_endpoint_pair` credential and RPC health, not the worker.
+2. The worker skips tenants whose x402 capability is SUSPENDED (kill switch) —
+   resume the capability to re-enable reconciliation.
+
+## 6. Agent-reported economic outcomes
+
+**Symptom:** An Agent run reports a payment or settlement reference, or its
+timeline shows a missing, unavailable, or unmatched economic record.
+
+**Steps:**
+1. Read the tenant-scoped run timeline at
+   `GET /v1/agent/deployments/{deployment_id}/runs/{run_id}/explanation`.
+   Inspect `economic_outcome.status` and the exact payment-intent or
+   settlement-event references. `matched`, `unresolved`, `unavailable`, and
+   `not_supplied` describe the lookup result; `not_supplied` does not prove no
+   payment occurred.
+2. For a `matched` result, use the authoritative tenant payment-intent and
+   settlement records to confirm their current state and settlement finality.
+   A source-reported Agent event or a matching reference establishes neither
+   causation nor a completed payment.
+3. Treat public SDK x402 observations as telemetry only. They cannot create or
+   overwrite authoritative payment, settlement, or access-grant state. The
+   server commerce event registry and x402 provenance rules determine which
+   lifecycle records count as server-observed evidence.
+4. Do not replay a graph projection merely because a source claim is
+   unmatched. For graph evidence, use the independent Kyber state check in the
+   Operations Runbook; it reports graph drift without repairing it.
+
+## 6. Override review
+
+**Symptom:** `COMMERCE_APPROVAL_OVERRIDE` audit entry surfaces.
+
+**Steps:**
+1. Kyber Review → filter by `is_override=true`.
+2. Validate override reason, approver scope.
+3. If unauthorized: escalate to admin.
+
+## 7. Evidence export
+
+For audit/compliance:
+```bash
+curl /v1/approvals/{id}/evidence → JSON bundle
+curl /v1/x402/explain/{challenge_id} → full lifecycle trace
+```
+
+Both responses include all context needed for SOC2/GDPR evidence.
+
+## 8. Managing budget policies
+
+Budget policies short-circuit the approval queue: an over-cap spend is denied
+at policy time before an approval request is ever issued. Manage them via
+three endpoints on the commerce router (require `x402:write` for mutation,
+`x402:read` for query):
+
+```bash
+# Create or replace a per-subject policy
+curl -X POST /v1/x402/policies/budget \
+  -d '{"subject_id":"agent-42","subject_type":"agent",
+       "daily_cap_usd":100,"monthly_cap_usd":1000,"per_transaction_cap_usd":50}'
+
+# List tenant-wide policies
+curl /v1/x402/policies/budget
+
+# Get one subject's active policy
+curl /v1/x402/policies/budget/agent-42
+```
+
+**When to use it:** a runaway agent or compromised key is racking up
+charges. Set a tight `per_transaction_cap_usd` first (immediate
+limitation), then a tighter `daily_cap_usd` for cumulative protection.
+Re-issue the same `POST` with new caps to replace; there's no separate
+PATCH/DELETE — an absent policy means no caps.
+
+## 9. Signer-authority enforcement at verification
+
+A tenant that has **registered** signer references (via the x402 signer
+authority) is enforced **fail-closed** at payment-proof verification: a proof
+from an unregistered or deactivated payer is rejected with verdict
+`unauthorized_signer` even when on-chain/facilitator verification would
+otherwise succeed. A tenant with **no** signer references (the default) is
+unaffected — the authority never invents an authorized signer.
+
+Revoking the tenant's **last** active signer reference does **not** reopen the
+gate: the registry stays "configured" with zero active references, so every
+payer is rejected fail-closed (`no active signer references`) until an operator
+re-registers or re-activates a signer reference. Deactivating the final signer
+is an intentional lock-out, not a reset to the unconfigured default.
+
+If a previously-valid payment starts failing with
+`verification_verdict="unauthorized_signer"`, re-check the tenant's signer
+registry (a deactivated/rotated reference), not the facilitator or RPC.

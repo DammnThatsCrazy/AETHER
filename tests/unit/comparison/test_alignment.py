@@ -1,15 +1,15 @@
 """Semantic alignment produces TYPED registry outcomes — no silent matching."""
 from __future__ import annotations
 
-from services.intelligence.comparison.alignment import (
+from intelligence.intelligence.comparison.alignment import (
     align_dimension,
     overall_alignment,
 )
-from services.intelligence.comparison.collection import (
+from intelligence.intelligence.comparison.collection import (
     DimensionObservations,
     MetricValue,
 )
-from services.intelligence.comparison.generated_vocabulary import ALIGNMENT_OUTCOMES
+from intelligence.intelligence.comparison.generated_vocabulary import ALIGNMENT_OUTCOMES
 
 
 def obs(

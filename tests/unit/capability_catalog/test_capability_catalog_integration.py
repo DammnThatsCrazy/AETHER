@@ -13,8 +13,8 @@ import asyncio
 import pytest
 
 from repositories.repos import reset_in_memory_stores
-from services.silver.dispatcher import SilverDispatcher
-from services.agent_access_intelligence.catalog_service import capability_catalog_service
+from ingestion.silver.dispatcher import SilverDispatcher
+from actions.agent_access_intelligence.catalog_service import capability_catalog_service
 
 
 @pytest.fixture(autouse=True)

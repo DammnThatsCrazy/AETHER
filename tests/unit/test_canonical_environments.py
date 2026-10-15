@@ -1,4 +1,4 @@
-"""Canonical environments map onto existing profiles; capabilities are flags, not profiles."""
+"""Canonical environments (staging, production) map onto the two profiles; capabilities are flags, not profiles."""
 
 from __future__ import annotations
 
@@ -56,7 +56,19 @@ def test_every_profile_is_mapped_exactly_once_or_explicitly_unmapped():
 
 
 def test_an_unmapped_profile_is_caught():
-    assert any("unmapped profiles" in f for f in _failures(lambda d: d["canonical_environments"]["preview"].update(profiles=[])))
+    assert any("unmapped profiles" in f for f in _failures(lambda d: d["canonical_environments"]["production"].update(profiles=[])))
+
+
+def test_production_must_map_to_exactly_the_production_profile():
+    def extra(d):
+        d["canonical_environments"]["production"]["profiles"] = ["production", "staging"]
+    assert any("production environment must map to [production]" in f for f in _failures(extra))
+
+
+def test_there_are_exactly_two_canonical_environments():
+    def add(d):
+        d["canonical_environments"]["preview"] = {"profiles": []}
+    assert any("canonical environments must be" in f for f in _failures(add))
 
 
 def test_a_profile_in_two_environments_is_caught():
@@ -71,20 +83,6 @@ def test_a_profile_cannot_be_both_mapped_and_unmapped():
     def both(d):
         d["unmapped_profiles"] = list(d["unmapped_profiles"]) + ["staging"]
     assert any("both mapped and unmapped" in f for f in _failures(both))
-
-
-def test_pilot_prod_cannot_silently_alias_the_staging_pilot_lane():
-    def alias(d):
-        d["canonical_environments"]["pilot-prod"] = {"profiles": ["staging"]}
-    failures = _failures(alias)
-    assert any("approvals and rollback_source" in f for f in failures)
-    assert any("must not reuse a staging or production profile" in f for f in failures)
-
-
-def test_pilot_prod_stays_explicitly_undefined_until_it_is_defined():
-    def blank(d):
-        d["canonical_environments"]["pilot-prod"] = {"profiles": []}
-    assert any("status: undefined" in f for f in _failures(blank))
 
 
 def test_staging_lanes_must_match_the_profile():
@@ -102,7 +100,7 @@ def _overlay_errors(tmp_path, spec, name="enable-thing"):
     reg.write_text(
         yaml.safe_dump({
             "schema_version": 1,
-            "flags_source": "services/backend/config/settings.py",
+            "flags_source": "services/api/config/settings.py",
             "overlays": {name: spec},
         }),
         encoding="utf-8",
@@ -152,7 +150,7 @@ def test_a_capability_cannot_hide_behind_the_enable_prefix(tmp_path):
     reg.write_text(
         yaml.safe_dump({
             "schema_version": 1,
-            "flags_source": "services/backend/config/settings.py",
+            "flags_source": "services/api/config/settings.py",
             "overlays": {
                 "enable-communications": {"class": "beta", "status": "bound", "flags": ["AETHER_COMMS_INGESTION_ENABLED"]}
             },

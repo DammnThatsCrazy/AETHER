@@ -10,7 +10,7 @@ on:
     inputs:
       profile:
         type: choice
-        options: [staging, production-lean, production-scale, enterprise-isolated, demo, preview]
+        options: [staging, production]
         default: staging
         required: true
       deployment_lane:
@@ -32,12 +32,50 @@ on:
         description: Immutable ML serving image digest from the approved release manifest (sha256:...) — required for plan
         type: string
         required: false
+      enable_access_mcp_repository:
+        description: Plan-only opt-in to create the dedicated immutable Access Kit MCP ECR repository
+        type: boolean
+        default: false
+        required: false
+      enable_access_mcp:
+        description: Plan-only opt-in for the customer-facing MCP Fargate service and ALB route; production only
+        type: boolean
+        default: false
+        required: false
+      enable_access_mcp_oauth:
+        description: Plan-only opt-in for the dedicated Auth0 MCP resource audience and OAuth discovery; client onboarding is separately reviewed
+        type: boolean
+        default: false
+        required: false
+      enable_access_continuations:
+        description: Plan-only opt-in for the existing tenant continuation API used by Access Kit create/get; default off
+        type: boolean
+        default: false
+        required: false
+      access_mcp_image_digest:
+        description: Plan-only immutable sha256 digest already published in aether-access-mcp; required when enabling the service
+        type: string
+        required: false
+      access_mcp_desired_count:
+        description: Plan-only fixed Access Kit MCP Fargate task count (1–4)
+        type: number
+        default: 2
+        required: false
+      access_mcp_allowed_origins:
+        description: Plan-only JSON array of exact HTTPS browser origins (use [] for server-to-server clients)
+        type: string
+        default: "[]"
+        required: false
+      access_mcp_path:
+        description: Plan-only customer MCP route path; must not overlap the reserved /mcp* operator route
+        type: string
+        default: /v1/access/mcp
+        required: false
       staging_state:
         description: >-
           Staging wake/sleep shape for the plan. `asleep` drives every ECS
-          desired count and autoscaling floor to zero. Ignored by the three
-          production-class profiles and the demo/preview ephemeral profiles,
-          which have no staging_state block in config/runtime_deployment.yaml.
+          desired count and autoscaling floor to zero. Ignored by production,
+          which has no staging_state block in config/runtime_deployment.yaml.
           Plan-time only — an apply consumes the stored plan and cannot
           reshape it.
         type: choice
@@ -68,15 +106,15 @@ on:
 permissions:
   contents: read
 concurrency:
-  # Staging, demo, and preview share an account and globally named ECR
-  # repositories. Serialize those profiles with reconciliation to make the
-  # ownership check and import decision atomic; production profiles retain
-  # independent concurrency.
-  group: ${{ (inputs.profile == 'staging' || inputs.profile == 'demo' || inputs.profile == 'preview') && 'terraform-nonprod-shared' || format('terraform-{0}', inputs.profile) }}
+  # Staging shares an account and globally named ECR repositories with the
+  # reconciliation workflows. Serialize it with them to make the ownership
+  # check and import decision atomic; production retains independent
+  # concurrency.
+  group: ${{ inputs.profile == 'staging' && 'terraform-nonprod-shared' || format('terraform-{0}', inputs.profile) }}
   cancel-in-progress: false
 env:
   AWS_REGION: us-east-1
-  TF_DIR: deploy/aws/terraform
+  TF_DIR: infra/aws/terraform
 jobs:
   staging-secret-payload-preflight:
     name: Verify staging secret payloads before plan or apply
@@ -194,6 +232,14 @@ jobs:
       TF_VAR_aether_app_url: ${{ secrets.TF_AETHER_APP_URL }}
       TF_VAR_kyber_app_url: ${{ secrets.TF_KYBER_APP_URL }}
       TF_VAR_kyber_google_hosted_domain: ${{ vars.KYBER_GOOGLE_HOSTED_DOMAIN || 'olympuslabs.ai' }}
+      TF_VAR_enable_access_mcp_repository: ${{ inputs.enable_access_mcp_repository }}
+      TF_VAR_enable_access_mcp: ${{ inputs.enable_access_mcp }}
+      TF_VAR_enable_access_mcp_oauth: ${{ inputs.enable_access_mcp_oauth }}
+      TF_VAR_enable_access_continuations: ${{ inputs.enable_access_continuations }}
+      TF_VAR_access_mcp_image_digest: ${{ inputs.access_mcp_image_digest }}
+      TF_VAR_access_mcp_desired_count: ${{ inputs.access_mcp_desired_count }}
+      TF_VAR_access_mcp_allowed_origins: ${{ inputs.access_mcp_allowed_origins || '[]' }}
+      TF_VAR_access_mcp_path: ${{ inputs.access_mcp_path || '/v1/access/mcp' }}
       # The custom KMS key policy must name the protected staging apply role as
       # an explicit administrator. Keep the value in the encrypted secret
       # store; the ARN is non-sensitive, but the repository variable was never
@@ -246,6 +292,17 @@ jobs:
             echo '::error::deployment_lane=pilot is valid only with the canonical profile=staging'
             exit 1
           fi
+      - name: Validate customer Access Kit MCP deployment inputs
+        env:
+          PROFILE: ${{ inputs.profile }}
+          ENABLE_ACCESS_MCP_REPOSITORY: ${{ inputs.enable_access_mcp_repository }}
+          ENABLE_ACCESS_MCP: ${{ inputs.enable_access_mcp }}
+          ENABLE_ACCESS_MCP_OAUTH: ${{ inputs.enable_access_mcp_oauth }}
+          ACCESS_MCP_IMAGE_DIGEST: ${{ inputs.access_mcp_image_digest }}
+          ACCESS_MCP_DESIRED_COUNT: ${{ inputs.access_mcp_desired_count }}
+          ACCESS_MCP_ALLOWED_ORIGINS: ${{ inputs.access_mcp_allowed_origins || '[]' }}
+          ACCESS_MCP_PATH: ${{ inputs.access_mcp_path || '/v1/access/mcp' }}
+        run: python scripts/release/validate_access_mcp_inputs.py
       - name: Require secret-preflight bypass to be sleep-only
         if: inputs.profile == 'staging' && inputs.secret_preflight_required == false
         env:
@@ -453,10 +510,8 @@ jobs:
           set -euo pipefail
           test -n "$BACKEND_IMAGE_DIGEST" || { echo '::error::backend_image_digest is required for plan'; exit 1; }
           case "${PROFILE}" in
-            production-scale|enterprise-isolated)
-              test -n "$ML_IMAGE_DIGEST" || { echo '::error::ml_image_digest is required for dedicated-ML profiles'; exit 1; } ;;
-            staging|production-lean|demo|preview)
-              # These profiles run ML inline; an empty ML digest is intentional.
+            staging|production)
+              # Both profiles run ML inline; an empty ML digest is intentional.
               : ;;
             *)
               echo "::error::unsupported profile ${PROFILE}"; exit 1 ;;
@@ -469,13 +524,22 @@ jobs:
               --digest "$BACKEND_IMAGE_DIGEST" \
               --expected-commit "${{ inputs.expected_commit_sha }}"
           fi
+      - name: Verify Access Kit MCP ECR digest and scan before planning
+        if: inputs.enable_access_mcp
+        env:
+          AWS_REGION: us-east-1
+          ACCESS_MCP_IMAGE_DIGEST: ${{ inputs.access_mcp_image_digest }}
+        run: |
+          set -euo pipefail
+          bash infra/aws/terraform/scripts/verify_access_mcp_image_scan.sh \
+            "$ACCESS_MCP_IMAGE_DIGEST" >/dev/null
       - name: Record reviewed maintenance listener input
         env:
           STAGING_LISTENER_TARGET_GROUP_ARN: ${{ inputs.staging_listener_target_group_arn }}
-        working-directory: deploy/aws/terraform
+        working-directory: infra/aws/terraform
         run: printf '%s\n' "$STAGING_LISTENER_TARGET_GROUP_ARN" > reviewed.staging-listener-target-group-arn
       - name: Create immutable reviewed plan
-        working-directory: deploy/aws/terraform
+        working-directory: infra/aws/terraform
         env:
           PROFILE: ${{ inputs.profile }}
           BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
@@ -673,7 +737,7 @@ jobs:
           DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
-          mkdir -p artifacts
+          mkdir -p .artifacts
           python scripts/release/check_terraform_plan_policy.py \
             --profile "$PROFILE" \
             --deployment-lane "$DEPLOYMENT_LANE" \
@@ -681,19 +745,19 @@ jobs:
             | tee "${TF_DIR}/reviewed.policy.txt"
           # The canonical resource inventory the policy validator emits travels
           # with the plan, so apply reviews the same resource set.
-          cp artifacts/profile-resource-inventory.json "${TF_DIR}/reviewed.resources.json"
+          cp .artifacts/profile-resource-inventory.json "${TF_DIR}/reviewed.resources.json"
           if python -c "import os, yaml; p = (yaml.safe_load(open('config/deployment_profiles.yaml')) or {}).get('profiles') or {}; raise SystemExit(0 if (p.get(os.environ['PROFILE']) or {}).get('budget') else 1)"; then
             python scripts/release/check_cost_model.py \
               --profile "$PROFILE" \
               --inventory "${TF_DIR}/reviewed.resources.json" \
-              --out-dir "artifacts/cost-${PROFILE}" \
+              --out-dir ".artifacts/cost-${PROFILE}" \
               | tee "${TF_DIR}/reviewed.cost.txt"
           else
             echo "${PROFILE} declares no budget in config/deployment_profiles.yaml; no numeric ceiling to enforce." \
               | tee "${TF_DIR}/reviewed.cost.txt"
           fi
       - name: Summarise the reviewed plan identity
-        working-directory: deploy/aws/terraform
+        working-directory: infra/aws/terraform
         run: |
           set -euo pipefail
           {
@@ -717,8 +781,8 @@ jobs:
         with:
           name: terraform-plan-${{ inputs.profile }}-${{ github.sha }}
           path: |
-            deploy/aws/terraform/reviewed.*
-            !deploy/aws/terraform/reviewed.tfplan
+            infra/aws/terraform/reviewed.*
+            !infra/aws/terraform/reviewed.tfplan
           if-no-files-found: error
           retention-days: 14
       # SECRET-BEARING ARTIFACT. The binary plan embeds every root variable value
@@ -735,7 +799,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: terraform-plan-${{ inputs.profile }}-binary-${{ github.sha }}
-          path: deploy/aws/terraform/reviewed.tfplan
+          path: infra/aws/terraform/reviewed.tfplan
           if-no-files-found: error
           retention-days: 1
 
@@ -755,16 +819,15 @@ jobs:
     timeout-minutes: 120
     # Per-profile environments: each profile carries its own reviewers and
     # protection rules. staging cannot borrow production's approvals, and
-    # production cannot be applied behind staging's.
+    # production cannot be applied behind staging's. Production's environment
+    # keeps the name `production-lean-terraform` from before the profiles were
+    # consolidated: GitHub environments cannot be renamed, and renaming would
+    # detach the reviewers and secrets configured on it.
     environment:
       name: >-
         ${{ inputs.profile == 'staging' && 'staging-terraform'
-        || inputs.profile == 'production-lean' && 'production-lean-terraform'
-        || inputs.profile == 'production-scale' && 'production-scale-terraform'
-        || inputs.profile == 'enterprise-isolated' && 'enterprise-terraform'
-        || inputs.profile == 'demo' && 'demo-terraform'
-        || inputs.profile == 'preview' && 'preview-terraform'
-        || 'enterprise-terraform' }}
+        || inputs.profile == 'production' && 'production-lean-terraform'
+        || 'production-lean-terraform' }}
     permissions: {contents: read, actions: read, id-token: write}
     steps:
       - name: Require explicit reviewed plan identity
@@ -778,7 +841,7 @@ jobs:
           test -n "$PLAN_RUN_ID" || { echo '::error::plan_run_id required'; exit 1; }
           test -n "$PLAN_CHECKSUM" || { echo '::error::plan_checksum required'; exit 1; }
           case "$PROFILE" in
-            staging|production-lean|production-scale|enterprise-isolated|demo|preview) ;;
+            staging|production) ;;
             *) echo "::error::unknown profile ${PROFILE}"; exit 1 ;;
           esac
           case "$DEPLOYMENT_LANE" in
@@ -1019,7 +1082,7 @@ jobs:
           set -euo pipefail
           python -m pip install --disable-pip-version-check pyyaml boto3
       - name: Stage the reviewed plan before any AWS prerequisite mutation
-        working-directory: deploy/aws/terraform
+        working-directory: infra/aws/terraform
         run: |
           set -euo pipefail
           cp "${RUNNER_TEMP}/reviewed-plan"/reviewed.* .
@@ -1093,6 +1156,30 @@ jobs:
           else
             echo "Verified ${PROFILE} apply credentials resolve to the encrypted role ARN in the expected account."
           fi
+      - name: Recheck the reviewed Access Kit MCP image scan before apply
+        env:
+          AWS_REGION: us-east-1
+          REVIEWED_PLAN_JSON: ${{ runner.temp }}/reviewed-plan/reviewed.tfplan.json
+        run: |
+          set -euo pipefail
+          enabled="$(jq -r '.variables.enable_access_mcp.value // false' "$REVIEWED_PLAN_JSON")"
+          case "$enabled" in
+            true)
+              digest="$(jq -r '.variables.access_mcp_image_digest.value // empty' "$REVIEWED_PLAN_JSON")"
+              printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$' || {
+                echo '::error::reviewed Access Kit MCP plan is missing its exact immutable image digest'
+                exit 1
+              }
+              bash infra/aws/terraform/scripts/verify_access_mcp_image_scan.sh \
+                "$digest" >/dev/null
+              ;;
+            false)
+              ;;
+            *)
+              echo '::error::reviewed plan contains a missing or invalid Access Kit MCP enablement value'
+              exit 1
+              ;;
+          esac
       - name: Verify effective Terraform state permissions
         env:
           AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
@@ -1361,7 +1448,7 @@ jobs:
           DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
         run: |
           set -euo pipefail
-          mkdir -p artifacts
+          mkdir -p .artifacts
           python scripts/release/check_terraform_plan_policy.py \
             --profile "$PROFILE" \
             --deployment-lane "$DEPLOYMENT_LANE" \
@@ -1370,11 +1457,11 @@ jobs:
             python scripts/release/check_cost_model.py \
               --profile "$PROFILE" \
               --inventory "${TF_DIR}/reviewed.resources.json" \
-              --out-dir "artifacts/cost-${PROFILE}"
+              --out-dir ".artifacts/cost-${PROFILE}"
           fi
       - name: Check ECR collisions before account-level role bootstrap
-        if: inputs.profile == 'staging' || inputs.profile == 'demo' || inputs.profile == 'preview'
-        working-directory: deploy/aws/terraform
+        if: inputs.profile == 'staging'
+        working-directory: infra/aws/terraform
         env:
           PROFILE: ${{ inputs.profile }}
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
@@ -1470,7 +1557,7 @@ jobs:
       # not proof. The policy and cost rules that ship with the reviewed code
       # must still pass against the reviewed plan at apply time.
       - name: Apply the exact approved plan (never re-plan)
-        working-directory: deploy/aws/terraform
+        working-directory: infra/aws/terraform
         env:
           PROFILE: ${{ inputs.profile }}
           PLAN_CHECKSUM: ${{ inputs.plan_checksum }}
@@ -1605,7 +1692,7 @@ jobs:
           # no Amplify build, so the host would keep the bundle built from the
           # old inputs. Release those branches at the reviewed commit and wait.
           python scripts/release/release_changed_amplify_apps.py \
-            --plan-json deploy/aws/terraform/reviewed.tfplan.json \
+            --plan-json infra/aws/terraform/reviewed.tfplan.json \
             --commit "$REVIEWED_COMMIT"
       - name: Verify applied staging frontend runtime links
         if: inputs.profile == 'staging'
@@ -1683,7 +1770,7 @@ jobs:
             --lane "$DEPLOYMENT_LANE" --revision family-latest
       - name: Verify applied staging ECS cache IAM permissions
         if: inputs.profile == 'staging'
-        working-directory: deploy/aws/terraform
+        working-directory: infra/aws/terraform
         run: |
           set -euo pipefail
           account_id="$(aws sts get-caller-identity --query Account --output text)"
@@ -1696,7 +1783,7 @@ jobs:
         with:
           name: terraform-apply-evidence-${{ github.run_id }}
           path: |
-            deploy/aws/terraform/reviewed.apply.*
-            deploy/aws/terraform/reviewed.api-host
-            deploy/aws/terraform/reviewed.alb-dns
+            infra/aws/terraform/reviewed.apply.*
+            infra/aws/terraform/reviewed.api-host
+            infra/aws/terraform/reviewed.alb-dns
           if-no-files-found: error

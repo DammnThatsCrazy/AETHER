@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from services.ingestion import batch
-from services.ingestion import validation
+from ingestion.ingestion import batch
+from ingestion.ingestion import validation
 
 
 class _Cache:

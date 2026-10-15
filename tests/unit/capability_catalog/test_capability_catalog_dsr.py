@@ -13,8 +13,8 @@ import pytest
 from repositories.repos import reset_in_memory_stores
 from shared.privacy.retention import DeletionPlan
 
-from services.agent_access_intelligence.catalog_service import capability_catalog_service
-from services.agent_access_intelligence.repositories import (
+from actions.agent_access_intelligence.catalog_service import capability_catalog_service
+from actions.agent_access_intelligence.repositories import (
     CapabilityCatalogRepository,
     CapabilityInstallationRepository,
 )

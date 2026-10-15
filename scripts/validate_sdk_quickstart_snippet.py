@@ -2,8 +2,8 @@
 """Validate that the install snippet is one language, spoken in two places.
 
 The snippet is written twice: the server renders it
-(``services/backend/services/sdk_distribution/snippet.py``) and the loader
-interprets it (``packages/web/src/loader/auto-init.ts``). Nothing links the two
+(``services/api/ingestion/sdk_distribution/snippet.py``) and the loader
+interprets it (``packages/sdk/web/src/loader/auto-init.ts``). Nothing links the two
 at runtime — the loader is a standalone script on a CDN and the server is
 Python — so a rename on one side produces a snippet that looks right, installs
 nothing, and reports no error, because a loader attribute it does not recognise
@@ -28,9 +28,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ERRORS: list[str] = []
 
-LOADER_TS = 'packages/web/src/loader/auto-init.ts'
-LOADER_BUNDLE = 'packages/web/rollup.loader.mjs'
-SERVER_SNIPPET = 'services/backend/services/sdk_distribution/snippet.py'
+LOADER_TS = 'packages/sdk/web/src/loader/auto-init.ts'
+LOADER_BUNDLE = 'packages/sdk/web/rollup.loader.mjs'
+SERVER_SNIPPET = 'services/api/ingestion/sdk_distribution/snippet.py'
 
 
 def fail(msg: str) -> None:

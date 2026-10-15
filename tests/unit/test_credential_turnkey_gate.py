@@ -96,7 +96,7 @@ def test_scaffolding_only_provider_fails_canonical_manifest_row():
 
 def test_hardcoded_secret_fails_secret_safe():
     ev = dict(gate.complete_evidence())
-    ev["secret_findings"] = [("services/x402/service.py", 12, "sk_live_AB...")]
+    ev["secret_findings"] = [("services/api/value/x402/service.py", 12, "sk_live_AB...")]
     ev["secret_scan_ran"] = True
     row = _row(gate.evaluate_matrix(ev), "secret_safe")
     assert row["status"] == "fail"

@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parents[2]
-BACKEND_ROOT = REPO_ROOT / "services" / "backend"
+BACKEND_ROOT = REPO_ROOT / "services" / "api"
 
 
 @contextmanager
@@ -40,17 +40,17 @@ def _read(rel: str) -> str:
 
 
 def test_release_gate_script_exists() -> None:
-    gate = REPO_ROOT / "scripts" / "graph" / "check_graph_release_gate.py"
-    assert gate.exists(), "check_graph_release_gate.py must exist in scripts/graph/"
+    gate = REPO_ROOT / "scripts" / "graph_tools" / "check_graph_release_gate.py"
+    assert gate.exists(), "check_graph_release_gate.py must exist in scripts/graph_tools/"
 
 
 def test_replay_workload_script_exists() -> None:
-    script = REPO_ROOT / "scripts" / "graph" / "replay_relationship_layers.py"
+    script = REPO_ROOT / "scripts" / "graph_tools" / "replay_relationship_layers.py"
     assert script.exists()
 
 
 def test_graph_rebuild_validation_script_exists() -> None:
-    script = REPO_ROOT / "scripts" / "graph" / "graph_rebuild_validation.py"
+    script = REPO_ROOT / "scripts" / "graph_tools" / "graph_rebuild_validation.py"
     assert script.exists()
 
 
@@ -95,7 +95,7 @@ def test_makefile_has_graph_replay_target() -> None:
 
 
 def test_graph_alignment_doc_has_source_files_frontmatter() -> None:
-    content = _read("docs/source-of-truth/GRAPH_ALIGNMENT.md")
+    content = _read("docs/reference/source-of-truth/GRAPH_ALIGNMENT.md")
     assert content, "GRAPH_ALIGNMENT.md not found"
     assert "source_files:" in content, (
         "GRAPH_ALIGNMENT.md is missing source_files: frontmatter"

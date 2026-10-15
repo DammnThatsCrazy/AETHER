@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -31,14 +31,14 @@ PROFILE_B = "profile-B-001"
 class TestTouchpointTenantIsolation:
     @pytest.fixture(autouse=True)
     def clear(self):
-        from services.measurement.repositories.touchpoint_repo import _local_store
+        from journeys.measurement.repositories.touchpoint_repo import _local_store
         _local_store.clear()
         yield
         _local_store.clear()
 
     @pytest.mark.asyncio
     async def test_list_by_profile_scoped_to_tenant(self):
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
         repo = TouchpointRepository()
         tp_a = {
             "tenant_id": TENANT_A, "profile_id": PROFILE_A,
@@ -59,7 +59,7 @@ class TestTouchpointTenantIsolation:
 
     @pytest.mark.asyncio
     async def test_get_does_not_leak_cross_tenant(self):
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
         repo = TouchpointRepository()
         shared_id = str(uuid4())
         tp_a = {
@@ -75,7 +75,7 @@ class TestTouchpointTenantIsolation:
 
     @pytest.mark.asyncio
     async def test_tombstone_scoped_to_tenant(self):
-        from services.measurement.repositories.touchpoint_repo import TouchpointRepository, _local_store
+        from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository, _local_store
         repo = TouchpointRepository()
         key_a = f"iso-tp-a-{uuid4()}"
         key_b = f"iso-tp-b-{uuid4()}"
@@ -96,14 +96,14 @@ class TestTouchpointTenantIsolation:
 class TestConversionTenantIsolation:
     @pytest.fixture(autouse=True)
     def clear(self):
-        from services.measurement.repositories.conversion_repo import _local_store
+        from journeys.measurement.repositories.conversion_repo import _local_store
         _local_store.clear()
         yield
         _local_store.clear()
 
     @pytest.mark.asyncio
     async def test_get_conversion_scoped_to_tenant(self):
-        from services.measurement.repositories.conversion_repo import ConversionRepository
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository
         repo = ConversionRepository()
         conv_id = str(uuid4())
         row = {
@@ -121,7 +121,7 @@ class TestConversionTenantIsolation:
 
     @pytest.mark.asyncio
     async def test_list_by_profile_scoped_to_tenant(self):
-        from services.measurement.repositories.conversion_repo import ConversionRepository
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository
         repo = ConversionRepository()
         for tenant in (TENANT_A, TENANT_B):
             await repo.upsert({
@@ -140,7 +140,7 @@ class TestConversionTenantIsolation:
 
     @pytest.mark.asyncio
     async def test_tombstone_does_not_cross_tenant(self):
-        from services.measurement.repositories.conversion_repo import ConversionRepository, _local_store
+        from journeys.measurement.repositories.conversion_repo import ConversionRepository, _local_store
         repo = ConversionRepository()
         key_a = f"tomb-a-{uuid4()}"
         key_b = f"tomb-b-{uuid4()}"
@@ -163,14 +163,14 @@ class TestConversionTenantIsolation:
 class TestSpendTenantIsolation:
     @pytest.fixture(autouse=True)
     def clear(self):
-        from services.measurement.repositories.spend_repo import _local_store
+        from journeys.measurement.repositories.spend_repo import _local_store
         _local_store.clear()
         yield
         _local_store.clear()
 
     @pytest.mark.asyncio
     async def test_list_by_campaign_scoped_to_tenant(self):
-        from services.measurement.repositories.spend_repo import SpendRepository
+        from journeys.measurement.repositories.spend_repo import SpendRepository
         repo = SpendRepository()
         for tenant in (TENANT_A, TENANT_B):
             await repo.upsert({

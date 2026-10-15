@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 
 for _mod in ("jwt", "cryptography", "cryptography.hazmat"):
     if _mod not in sys.modules:
@@ -25,9 +25,9 @@ os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from repositories.repos import reset_in_memory_stores  # noqa: E402
-from services.policy import signal_use_matrix as matrix  # noqa: E402
-from services.policy.engine import ConsentPolicyEngine  # noqa: E402
-import services.security.audit_ledger as audit_mod  # noqa: E402
+from governance.policy import signal_use_matrix as matrix  # noqa: E402
+from governance.policy.engine import ConsentPolicyEngine  # noqa: E402
+import governance.security.audit_ledger as audit_mod  # noqa: E402
 
 pytestmark = pytest.mark.asyncio
 

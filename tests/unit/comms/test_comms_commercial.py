@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "services" / "backend"
+BACKEND_ROOT = ROOT / "services" / "api"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -26,14 +26,14 @@ def _clean():
 # ── entitlement policy (pure) ────────────────────────────────────────────────
 
 def test_hobbyist_has_no_comms():
-    from services.comms.entitlements import CommsEntitlementPolicy
+    from journeys.comms.entitlements import CommsEntitlementPolicy
     from shared.auth.auth import PlanTier
     d = CommsEntitlementPolicy().evaluate_connection(PlanTier.ALPHA)
     assert not d.allowed and d.state == "upgrade_required"
 
 
 def test_professional_allows_lifecycle_up_to_cap():
-    from services.comms.entitlements import CommsEntitlementPolicy
+    from journeys.comms.entitlements import CommsEntitlementPolicy
     from shared.auth.auth import PlanTier
     policy = CommsEntitlementPolicy()
     assert policy.evaluate_connection(
@@ -45,7 +45,7 @@ def test_professional_allows_lifecycle_up_to_cap():
 
 
 def test_premium_family_requires_upgrade_on_professional():
-    from services.comms.entitlements import CommsEntitlementPolicy
+    from journeys.comms.entitlements import CommsEntitlementPolicy
     from shared.auth.auth import PlanTier
     d = CommsEntitlementPolicy().evaluate_connection(
         PlanTier.BETA, provider_family="mailbox")
@@ -53,7 +53,7 @@ def test_premium_family_requires_upgrade_on_professional():
 
 
 def test_backfill_window_clamped_never_exceeds_plan():
-    from services.comms.entitlements import CommsEntitlementPolicy
+    from journeys.comms.entitlements import CommsEntitlementPolicy
     from shared.auth.auth import PlanTier
     policy = CommsEntitlementPolicy()
     days, clamped = policy.clamp_backfill_days(PlanTier.BETA, 365)
@@ -63,7 +63,7 @@ def test_backfill_window_clamped_never_exceeds_plan():
 
 
 def test_event_volume_states():
-    from services.comms.entitlements import CommsEntitlementPolicy
+    from journeys.comms.entitlements import CommsEntitlementPolicy
     from shared.auth.auth import PlanTier
     policy = CommsEntitlementPolicy()
     # P2 cap 100k → 85k is approaching, 100k reached
@@ -76,7 +76,7 @@ def test_event_volume_states():
 
 
 def test_is_comms_connector():
-    from services.comms.entitlements import is_comms_connector
+    from journeys.comms.entitlements import is_comms_connector
     assert is_comms_connector("klaviyo") is True
     assert is_comms_connector("stripe") is False
 
@@ -85,8 +85,8 @@ def test_is_comms_connector():
 
 @pytest.mark.asyncio
 async def test_event_metering_is_dedupe_safe():
-    from services.comms.metering import record_event_usage
-    from services.metering_evidence.service import MeteringEvidenceRepository
+    from journeys.comms.metering import record_event_usage
+    from billing.metering_evidence.service import MeteringEvidenceRepository
 
     await record_event_usage("t1", event_type="email_clicked",
                              event_id="klaviyo:ev-1", provider="klaviyo")
@@ -103,8 +103,8 @@ async def test_event_metering_is_dedupe_safe():
 
 @pytest.mark.asyncio
 async def test_reply_metered_on_its_own_dimension():
-    from services.comms.metering import record_event_usage
-    from services.metering_evidence.service import MeteringEvidenceRepository
+    from journeys.comms.metering import record_event_usage
+    from billing.metering_evidence.service import MeteringEvidenceRepository
 
     await record_event_usage("t1", event_type="email_replied",
                              event_id="klaviyo:r-1", provider="klaviyo")
@@ -116,8 +116,8 @@ async def test_reply_metered_on_its_own_dimension():
 
 @pytest.mark.asyncio
 async def test_sync_usage_meters_backfill_and_campaigns():
-    from services.comms.metering import record_sync_usage
-    from services.metering_evidence.service import MeteringEvidenceRepository
+    from journeys.comms.metering import record_sync_usage
+    from billing.metering_evidence.service import MeteringEvidenceRepository
 
     await record_sync_usage("t1", {
         "sync_run_id": "run-1", "provider": "klaviyo", "mode": "backfill",

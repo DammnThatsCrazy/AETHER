@@ -9,7 +9,7 @@ ContinuationCanonicalContext composes the canonical ExplorationContextV1 by
 reference (`filters`), never a second context language.
 
 Wire fields are snake_case so the (camelCase-blind) scraper actually captures
-them — see reports/mobile-productization/decision-log.md (D6).
+them — see docs/reference/reports/mobile-productization/decision-log.md (D6).
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "services" / "backend"
+BACKEND = REPO_ROOT / "services" / "api"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 

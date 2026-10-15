@@ -28,16 +28,16 @@ from datetime import datetime, timezone
 
 import pytest
 
-from services.managed_integrations import flags
-from services.managed_integrations.contracts import (
+from connectors.managed_integrations import flags
+from connectors.managed_integrations.contracts import (
     ObservationEquivalenceKeyView,
     SourceAuthorityRuleView,
 )
-from services.managed_integrations.source_authority import (
+from connectors.managed_integrations.source_authority import (
     apply_precedence,
     equivalence_group,
 )
-from services.managed_integrations.source_authority_repository import (
+from connectors.managed_integrations.source_authority_repository import (
     get_observation_equivalence_key_repository,
     get_source_authority_rule_repository,
     reset_source_authority_stores,
@@ -70,7 +70,7 @@ def _authority_db_free(monkeypatch: pytest.MonkeyPatch) -> None:
         return None
 
     monkeypatch.setattr(
-        "services.managed_integrations.source_authority_repository.get_pool",
+        "connectors.managed_integrations.source_authority_repository.get_pool",
         _no_pool,
     )
 
@@ -700,11 +700,11 @@ async def test_source_authority_modules_import_and_run_with_flags_off() -> None:
     # callable — an explicit caller may invoke them; OFF only means nothing
     # *automatically* triggers the plane (same parity as the Phase-0/1 lanes).
     assert flags.enabled() is False
-    from services.managed_integrations.source_authority import (
+    from connectors.managed_integrations.source_authority import (
         apply_precedence as _apply,
         equivalence_group as _group,
     )
-    from services.managed_integrations.source_authority_repository import (
+    from connectors.managed_integrations.source_authority_repository import (
         reset_source_authority_stores as _reset,
     )
 

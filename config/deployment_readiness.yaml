@@ -38,7 +38,7 @@
 # SCHEMA — every control carries all of these, no exceptions
 # ----------------------------------------------------------
 #   id                     unique, stable, referenced in reports
-#   profile                overall | production-lean | staging
+#   profile                overall | production | staging
 #   description            what the control actually asserts
 #   weight                 points within its scorecard (each totals 100)
 #   required_evidence      the concrete artifacts that earn the weight
@@ -115,8 +115,8 @@ scorecards:
       "the code is written" has never been the question anyone was asking when
       they asked whether Aether can be deployed.
 
-  production-lean:
-    title: production-lean profile readiness (founding-tenant target)
+  production:
+    title: production profile readiness (founding-tenant target)
     total: 100
     gate: 92
     gate_basis: externally_verified
@@ -162,7 +162,7 @@ gate_conditions:
 
   - id: COND-LEAN-PLAN-CREDENTIALED
     description: >-
-      A credentialed `terraform plan` for production-lean against the real
+      A credentialed `terraform plan` for production against the real
       backend and state key, not a local plan with a fake provider.
     evidence: release-evidence/terraform/lean-plan-provenance.json
     kind: credentialed_artifact
@@ -311,7 +311,7 @@ exceptions:
     mitigation: >-
       After seven consecutive days of real spend, export Cost Explorer daily
       totals to release-evidence/cost/observed-cost.json and reconcile against
-      reports/cost/cost-report.json.
+      docs/reference/reports/cost/cost-report.json.
     follow_up: FT-COST-POLICY-DATA
 
 # =============================================================================
@@ -339,13 +339,13 @@ controls:
         description: Terraform encodes the profile cost policy declared in deployment_profiles.yaml.
       - id: profile-tests
         kind: repo_file
-        path: deploy/aws/terraform/tests/profile_plan.tftest.hcl
+        path: infra/aws/terraform/tests/profile_plan.tftest.hcl
         contains: run
         external: false
         description: Native terraform test coverage over per-profile planning.
       - id: plan-policy-result
         kind: json_artifact
-        path: artifacts/profile-policy-result.json
+        path: .artifacts/profile-policy-result.json
         require_keys: [profile, passed, violations, checks_total]
         require_true: [passed]
         external: false
@@ -445,7 +445,7 @@ controls:
         description: The price book the cost model prices a plan against.
       - id: cost-report
         kind: json_artifact
-        path: reports/cost/cost-report.json
+        path: docs/reference/reports/cost/cost-report.json
         require_keys: [profile, gated_amount, effective_ceiling, passed]
         external: false
         description: check_cost_model.py priced a concrete inventory against the ceiling.
@@ -479,7 +479,7 @@ controls:
     required_evidence:
       - id: rollback-runbook
         kind: repo_file
-        path: docs/ROLLBACK-RUNBOOK.md
+        path: docs/operations/ROLLBACK-RUNBOOK.md
         external: false
         description: The documented rollback procedure.
       - id: manifest-tool
@@ -512,7 +512,7 @@ controls:
     required_evidence:
       - id: staging-profile
         kind: repo_file
-        path: deploy/aws/terraform/profiles/staging.tfvars
+        path: infra/aws/terraform/profiles/staging.tfvars
         external: false
         description: The staging profile the lifecycle runs against.
       - id: wake-evidence
@@ -556,7 +556,7 @@ controls:
         description: The resource-class contracts each profile is scored against.
       - id: profiles-tf
         kind: repo_file
-        path: deploy/aws/terraform/profiles.tf
+        path: infra/aws/terraform/profiles.tf
         external: false
         description: The Terraform-side profile definitions.
     status: subsystem_tests_pass
@@ -578,17 +578,17 @@ controls:
     required_evidence:
       - id: deployment-runbook
         kind: repo_file
-        path: docs/DEPLOYMENT-RUNBOOK.md
+        path: docs/operations/DEPLOYMENT-RUNBOOK.md
         external: false
         description: Operator-level deployment procedure.
       - id: migration-runbook
         kind: repo_file
-        path: docs/MIGRATION-RUNBOOK.md
+        path: docs/operations/MIGRATION-RUNBOOK.md
         external: false
         description: Operator-level migration procedure.
       - id: profiles-doc
         kind: repo_file
-        path: docs/DEPLOYMENT-PROFILES.md
+        path: docs/architecture/DEPLOYMENT-PROFILES.md
         external: false
         description: The profile matrix operators choose from.
       - id: bundle-checksum
@@ -610,9 +610,9 @@ controls:
   # ---------------------------------------------------------------------------
 
   - id: LEAN-FORBIDDEN-EXCLUSION
-    profile: production-lean
+    profile: production
     description: >-
-      Forbidden-resource exclusion — the production-lean plan contains no MSK,
+      Forbidden-resource exclusion — the production plan contains no MSK,
       ElastiCache, Neptune, ClickHouse, dedicated ML service, frontend ECS
       service, legacy RDS, unexplained NAT gateway or self-managed monitoring.
     weight: 25
@@ -630,7 +630,7 @@ controls:
         description: Terraform encodes the exclusions.
       - id: plan-policy-result
         kind: json_artifact
-        path: artifacts/profile-policy-result.json
+        path: .artifacts/profile-policy-result.json
         require_keys: [profile, passed, violations, checks_total]
         require_true: [passed]
         external: false
@@ -647,11 +647,11 @@ controls:
     evidence_path: release-evidence/terraform/
     external_dependency:
       required: true
-      what: A credentialed production-lean plan.
+      what: A credentialed production plan.
     exception: DR-EX-NO-CLOUD-ACCOUNT
 
   - id: LEAN-REQUIRED-PRESENCE
-    profile: production-lean
+    profile: production
     description: >-
       Required-resource presence — the plan provisions the full lean stack
       (CloudFront/S3 frontends, ALB, Aurora Serverless v2, SQS/SNS, DynamoDB,
@@ -666,7 +666,7 @@ controls:
         description: The required list the plan is scored against.
       - id: plan-policy-result
         kind: json_artifact
-        path: artifacts/profile-policy-result.json
+        path: .artifacts/profile-policy-result.json
         require_keys: [profile, passed, violations, checks_total]
         require_true: [passed]
         external: false
@@ -683,11 +683,11 @@ controls:
     evidence_path: release-evidence/terraform/
     external_dependency:
       required: true
-      what: A credentialed production-lean plan.
+      what: A credentialed production plan.
     exception: DR-EX-NO-CLOUD-ACCOUNT
 
   - id: LEAN-RUNTIME-TOPOLOGY
-    profile: production-lean
+    profile: production
     description: >-
       Lean runtime topology — one shared runtime fleet under explicit roles,
       with no per-service always-on containers and no frontend compute.
@@ -705,7 +705,7 @@ controls:
         description: Canonical runtime/service topology declaration.
       - id: lean-tfvars
         kind: repo_file
-        path: deploy/aws/terraform/profiles/production-lean.tfvars
+        path: infra/aws/terraform/profiles/production.tfvars
         external: false
         description: The profile inputs that produce the lean topology.
     status: implementation_in_progress
@@ -718,7 +718,7 @@ controls:
     exception: null
 
   - id: LEAN-COST-CEILING
-    profile: production-lean
+    profile: production
     description: >-
       Cost model and hard ceiling — the fixed monthly baseline is priced from
       the plan, sits under the hard ceiling, and has been reconciled against a
@@ -733,7 +733,7 @@ controls:
         description: The ceiling the model is compared against.
       - id: cost-report
         kind: json_artifact
-        path: reports/cost/cost-report.json
+        path: docs/reference/reports/cost/cost-report.json
         require_keys: [profile, gated_amount, effective_ceiling, passed]
         require_true: [passed]
         external: false
@@ -743,7 +743,7 @@ controls:
         path: release-evidence/cost/observed-cost.json
         require_keys: [profile, days, daily_usd, provenance]
         external: true
-        description: Seven days of real spend for production-lean.
+        description: Seven days of real spend for production.
       - id: reconciliation
         kind: credentialed_artifact
         path: release-evidence/cost/reconciliation.json
@@ -756,11 +756,11 @@ controls:
     evidence_path: release-evidence/cost/
     external_dependency:
       required: true
-      what: Real AWS billing data for the production-lean profile.
+      what: Real AWS billing data for the production profile.
     exception: DR-EX-NO-BILLING-HISTORY
 
   - id: LEAN-PROMOTION-INTEGRITY
-    profile: production-lean
+    profile: production
     description: >-
       Reviewed promotion integrity — an apply is bound to the exact reviewed
       plan by digest, inside its expiry window, on the recorded lockfile,
@@ -789,7 +789,7 @@ controls:
     exception: DR-EX-NO-CLOUD-ACCOUNT
 
   - id: LEAN-OBSERVABILITY-ROLLBACK
-    profile: production-lean
+    profile: production
     description: >-
       Observability and rollback — alarms exist and have been seen firing, and
       a rollback has been executed against the deployed profile.
@@ -797,7 +797,7 @@ controls:
     required_evidence:
       - id: monitoring-module
         kind: repo_file
-        path: deploy/aws/terraform/modules/monitoring/main.tf
+        path: infra/aws/terraform/modules/monitoring/main.tf
         external: false
         description: The alarms the profile provisions.
       - id: alarm-evidence
@@ -822,7 +822,7 @@ controls:
     exception: DR-EX-NO-CLOUD-ACCOUNT
 
   - id: LEAN-DOCS-EVIDENCE
-    profile: production-lean
+    profile: production
     description: >-
       Documentation and evidence — the lean profile is documented for operators
       and its evidence bundle validates against its published checksum.
@@ -830,13 +830,13 @@ controls:
     required_evidence:
       - id: profiles-doc
         kind: repo_file
-        path: docs/DEPLOYMENT-PROFILES.md
-        contains: production-lean
+        path: docs/architecture/DEPLOYMENT-PROFILES.md
+        contains: production
         external: false
         description: The lean profile is documented.
       - id: evidence-doc
         kind: repo_file
-        path: docs/RELEASE-EVIDENCE.md
+        path: docs/operations/RELEASE-EVIDENCE.md
         external: false
         description: How the evidence bundle is produced and read.
       - id: bundle-manifest
@@ -869,7 +869,7 @@ controls:
     required_evidence:
       - id: staging-tfvars
         kind: repo_file
-        path: deploy/aws/terraform/profiles/staging.tfvars
+        path: infra/aws/terraform/profiles/staging.tfvars
         external: false
         description: The staging profile inputs.
       - id: wake-evidence
@@ -924,7 +924,7 @@ controls:
     required_evidence:
       - id: migration-runbook
         kind: repo_file
-        path: docs/MIGRATION-RUNBOOK.md
+        path: docs/operations/MIGRATION-RUNBOOK.md
         external: false
         description: The documented migration procedure.
       - id: migration-result
@@ -1032,7 +1032,7 @@ controls:
     required_evidence:
       - id: rollback-runbook
         kind: repo_file
-        path: docs/ROLLBACK-RUNBOOK.md
+        path: docs/operations/ROLLBACK-RUNBOOK.md
         external: false
         description: The documented rollback procedure.
       - id: rollback-result
@@ -1087,7 +1087,7 @@ controls:
     required_evidence:
       - id: evidence-doc
         kind: repo_file
-        path: docs/RELEASE-EVIDENCE.md
+        path: docs/operations/RELEASE-EVIDENCE.md
         external: false
         description: How the bundle is produced and read.
       - id: rehearsal-history

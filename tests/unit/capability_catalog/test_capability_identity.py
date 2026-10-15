@@ -1,6 +1,6 @@
 """Artifact / publisher identity tests (PR 2, Phase B2).
 
-Pins the honesty properties of ``services/agent_access_intelligence/identity.py``: there is
+Pins the honesty properties of ``services/api/actions/agent_access_intelligence/identity.py``: there is
 no ``verified`` state and none can be added by accident; a publisher ref groups by claimed
 origin without asserting the origin is genuine; an artifact digest is stable against fields
 that are not identity, so re-observation does not manufacture drift; and an unresolvable
@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import pytest
 
-from services.agent_access_intelligence.catalog_service import CapabilityCatalogService
-from services.agent_access_intelligence.identity import (
+from actions.agent_access_intelligence.catalog_service import CapabilityCatalogService
+from actions.agent_access_intelligence.identity import (
     IdentityState,
     artifact_digest_for,
     declaration_id_for,
@@ -20,7 +20,7 @@ from services.agent_access_intelligence.identity import (
     publisher_label_for,
     publisher_ref_for,
 )
-from services.agent_access_intelligence.models import capability_id_for
+from actions.agent_access_intelligence.models import capability_id_for
 
 
 def _fact(**over):
@@ -121,7 +121,7 @@ def test_enum_members_digest_as_their_plain_value():
     written at upsert would disagree with one recomputed from the row's own stored fields,
     and no declaration could ever match — Phase C would report the whole declared inventory
     as drifted."""
-    from services.agent_access_intelligence.models import CapabilityKind
+    from actions.agent_access_intelligence.models import CapabilityKind
 
     assert artifact_digest_for({"capability_kind": CapabilityKind.MCP_TOOL}) == (
         artifact_digest_for({"capability_kind": "mcp_tool"})

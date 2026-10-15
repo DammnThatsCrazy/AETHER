@@ -17,13 +17,13 @@ import pytest
 from repositories.repos import reset_in_memory_stores
 from shared.common.common import BadRequestError
 
-from services.agent_access_intelligence.authority import (
+from actions.agent_access_intelligence.authority import (
     CapabilityAuthorityService,
     authorization_state,
 )
-from services.agent_access_intelligence.catalog_service import CapabilityCatalogService
-from services.agent_access_intelligence.declarations import CapabilityDeclarationService
-from services.agent_access_intelligence.identity import (
+from actions.agent_access_intelligence.catalog_service import CapabilityCatalogService
+from actions.agent_access_intelligence.declarations import CapabilityDeclarationService
+from actions.agent_access_intelligence.identity import (
     IDENTITY_FIELDS,
     IdentityState,
     artifact_digest_for,
@@ -311,7 +311,7 @@ async def test_digest_map_reports_truncation():
 
 
 def _scan_codes(**over):
-    from services.agent_access_intelligence.scanning import scan_capability
+    from actions.agent_access_intelligence.scanning import scan_capability
 
     record = {"capability_id": "cap_x", "tool_name": "search"}
     record.update(over)

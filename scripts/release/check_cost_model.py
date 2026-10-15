@@ -43,10 +43,10 @@ PRECISION
   config/aws_price_book.yaml.
 
 Usage:
-  python scripts/release/check_cost_model.py --profile production-lean \\
-      --inventory artifacts/profile-resource-inventory.json
+  python scripts/release/check_cost_model.py --profile production \\
+      --inventory .artifacts/profile-resource-inventory.json
   python scripts/release/check_cost_model.py --profile staging \\
-      --inventory inv.json --out-dir artifacts/cost --fail-on-target
+      --inventory inv.json --out-dir .artifacts/cost --fail-on-target
 
 Exit codes:
   0  budget respected (target may have been exceeded; that only warns unless
@@ -689,7 +689,7 @@ def build_cost_model(
 def resolve_budget(budget: dict[str, Any], price_book: dict[str, Any]) -> dict[str, Any]:
     """Normalise the two budget dialects into one comparison contract.
 
-    `fixed` mode (production-lean): the gate is the plan-determined fixed
+    `fixed` mode (production): the gate is the plan-determined fixed
     baseline, because that is the only figure the plan actually fixes.
     `total` mode (staging, wake/sleep): the gate is fixed + expected variable,
     because the profile is budgeted on what it spends in a month, not on what it
@@ -834,8 +834,8 @@ def run(argv: list[str] | None = None) -> int:
                     help="Deployment profile to score (must declare a budget)")
     ap.add_argument("--inventory", required=True,
                     help="Path to profile-resource-inventory.json (schema_version 1)")
-    # Mirrors the supply-chain gate's reports/sbom/ convention; gitignored.
-    ap.add_argument("--out-dir", default="reports/cost",
+    # Mirrors the supply-chain gate's docs/reference/reports/sbom/ convention; gitignored.
+    ap.add_argument("--out-dir", default="docs/reference/reports/cost",
                     help="Directory for cost-report.json / cost-report.md")
     ap.add_argument("--price-book", default=None, help="Override the price book path")
     ap.add_argument("--exceptions", default=None, help="Override the exceptions path")
@@ -1063,7 +1063,7 @@ def run(argv: list[str] | None = None) -> int:
         "profile": args.profile,
         "inventory_path": str(args.inventory),
         # The inventory's OWN provenance, carried forward. Without it the report
-        # records only that it priced `artifacts/profile-resource-inventory.json`
+        # records only that it priced `.artifacts/profile-resource-inventory.json`
         # -- a path a fixture-derived inventory and a credentialed one both
         # occupy -- and a downstream reader cannot tell a priced fixture from a
         # priced deployment. The chain has to survive one step of indirection or

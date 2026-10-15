@@ -3,7 +3,7 @@
 These tests prove the properties that make the gate worth having: that the hard
 ceiling actually stops a release, that an unpriceable fixed resource fails
 closed instead of scoring zero, that cost exceptions expire loudly, and that a
-blanket production-lean exception cannot be written down at all.
+blanket production exception cannot be written down at all.
 
 Inventory fixtures are built inline against the pinned
 `profile-resource-inventory.json` schema (schema_version 1) emitted by
@@ -83,7 +83,7 @@ def _write_exceptions(tmp_path: Path, entries: list[dict]) -> Path:
     return path
 
 
-def _run(tmp_path: Path, inventory: Path, profile: str = "production-lean",
+def _run(tmp_path: Path, inventory: Path, profile: str = "production",
          exceptions: Path | None = None, extra: list[str] | None = None) -> int:
     argv = [
         "--profile", profile,
@@ -102,10 +102,10 @@ def _report(tmp_path: Path) -> dict:
 
 
 def _valid_exception(**overrides) -> dict:
-    """A well-formed, active production-lean exception. Override to break it."""
+    """A well-formed, active production exception. Override to break it."""
     base = {
         "id": "COST-EX-TEST",
-        "profile": "production-lean",
+        "profile": "production",
         "reason": "Temporary third EC2 runner while the Fargate migration lands.",
         "estimated_amount": 100.0,
         "owner": "platform@aether",
@@ -136,7 +136,7 @@ _OVER_CEILING = [
 def test_hard_ceiling_is_enforced(tmp_path: Path) -> None:
     """A plan whose fixed baseline exceeds hard_fixed_monthly must fail."""
     # A 3-broker MSK cluster: ~$460/mo, more than twice the lean ceiling.
-    inv = _write_inventory(tmp_path, "production-lean", [
+    inv = _write_inventory(tmp_path, "production", [
         _resource("aws_msk_cluster.events", "aws_msk_cluster",
                   {"instance_type": "kafka.m5.large", "number_of_broker_nodes": 3}),
     ])
@@ -150,7 +150,7 @@ def test_hard_ceiling_is_enforced(tmp_path: Path) -> None:
 
 def test_plan_under_target_passes(tmp_path: Path) -> None:
     """A lean plan inside the target exits 0 and reports both cost classes."""
-    inv = _write_inventory(tmp_path, "production-lean", [
+    inv = _write_inventory(tmp_path, "production", [
         _resource("module.aurora.aws_rds_cluster.this", "aws_rds_cluster",
                   {"serverlessv2_scaling_configuration": [{"min_capacity": 0.5}]}),
         _resource("module.alb.aws_lb.this", "aws_lb", {"load_balancer_type": "application"}),
@@ -173,7 +173,7 @@ def test_soft_target_only_fails_when_requested(tmp_path: Path) -> None:
     resources = _OVER_CEILING[:2] + [
         _resource("aws_lb.main", "aws_lb", {"load_balancer_type": "application"}),
     ]
-    inv = _write_inventory(tmp_path, "production-lean", resources)
+    inv = _write_inventory(tmp_path, "production", resources)
 
     assert _run(tmp_path, inv) == 0
     report = _report(tmp_path)
@@ -188,7 +188,7 @@ def test_soft_target_only_fails_when_requested(tmp_path: Path) -> None:
 
 def test_unknown_resource_type_fails_closed_not_zero(tmp_path: Path) -> None:
     """An unrecognised type is an error; it never silently contributes $0."""
-    inv = _write_inventory(tmp_path, "production-lean", [
+    inv = _write_inventory(tmp_path, "production", [
         _resource("aws_brand_new_service.x", "aws_brand_new_service"),
     ])
     assert _run(tmp_path, inv) == 1
@@ -204,7 +204,7 @@ def test_unknown_resource_type_fails_closed_not_zero(tmp_path: Path) -> None:
 
 def test_unpriced_instance_class_fails_closed(tmp_path: Path) -> None:
     """A known fixed type with a size absent from the price book is an error."""
-    inv = _write_inventory(tmp_path, "production-lean", [
+    inv = _write_inventory(tmp_path, "production", [
         _resource("aws_db_instance.big", "aws_db_instance",
                   {"instance_class": "db.r6g.16xlarge"}),
     ])
@@ -218,7 +218,7 @@ def test_unpriced_instance_class_fails_closed(tmp_path: Path) -> None:
 
 def test_fargate_task_without_size_fails_closed(tmp_path: Path) -> None:
     """An always-on task with no cpu/memory cannot be priced, so it must fail."""
-    inv = _write_inventory(tmp_path, "production-lean", [
+    inv = _write_inventory(tmp_path, "production", [
         _resource("aws_ecs_service.api", "aws_ecs_service", {"desired_count": 2}),
     ])
     assert _run(tmp_path, inv) == 1
@@ -250,7 +250,7 @@ def test_fargate_cost_counts_desired_tasks_not_capacity_provider_base() -> None:
 
 def test_unpriced_baseline_is_not_certified_as_within_budget(tmp_path: Path) -> None:
     """With anything unpriced the baseline is a lower bound, never a pass."""
-    inv = _write_inventory(tmp_path, "production-lean", [
+    inv = _write_inventory(tmp_path, "production", [
         _resource("aws_kms_key.main", "aws_kms_key"),
         _resource("aws_brand_new_service.x", "aws_brand_new_service"),
     ])
@@ -264,14 +264,14 @@ def test_unpriced_baseline_is_not_certified_as_within_budget(tmp_path: Path) -> 
 
 def test_aurora_scale_to_zero_is_priced_but_missing_config_is_not(tmp_path: Path) -> None:
     """min_capacity 0 is a legitimate $0 floor; an absent block is an error."""
-    inv_zero = _write_inventory(tmp_path, "production-lean", [
+    inv_zero = _write_inventory(tmp_path, "production", [
         _resource("aws_rds_cluster.z", "aws_rds_cluster",
                   {"serverlessv2_scaling_configuration": [{"min_capacity": 0}]}),
     ])
     assert _run(tmp_path, inv_zero) == 0
     assert _report(tmp_path)["model"]["fixed_monthly_usd"] == 0.0
 
-    inv_missing = _write_inventory(tmp_path, "production-lean", [
+    inv_missing = _write_inventory(tmp_path, "production", [
         _resource("aws_rds_cluster.m", "aws_rds_cluster", {}),
     ])
     assert _run(tmp_path, inv_missing) == 1
@@ -286,7 +286,7 @@ def test_aurora_scale_to_zero_is_priced_but_missing_config_is_not(tmp_path: Path
 
 def test_fixed_and_variable_costs_are_separated(tmp_path: Path) -> None:
     """Traffic-driven resources never enter the fixed baseline, and vice versa."""
-    inv = _write_inventory(tmp_path, "production-lean", [
+    inv = _write_inventory(tmp_path, "production", [
         _resource("aws_lb.main", "aws_lb", {"load_balancer_type": "application"}),
         _resource("aws_s3_bucket.lake", "aws_s3_bucket"),
         _resource("aws_dynamodb_table.cache", "aws_dynamodb_table",
@@ -342,7 +342,7 @@ def test_provisioned_dynamodb_is_priced_as_fixed_and_gated(tmp_path: Path) -> No
     not detecting it: `r.warn` never touches the exit code, so the line reads
     as handled while ~$2,900/mo of reserved capacity passes the ceiling.
     """
-    inv = _write_inventory(tmp_path, "production-lean", [
+    inv = _write_inventory(tmp_path, "production", [
         _resource("aws_dynamodb_table.t", "aws_dynamodb_table",
                   {"billing_mode": "PROVISIONED",
                    "read_capacity": 4000, "write_capacity": 4000}),
@@ -367,7 +367,7 @@ def test_provisioned_dynamodb_is_priced_as_fixed_and_gated(tmp_path: Path) -> No
 
 def test_provisioned_dynamodb_without_capacity_fails_closed(tmp_path: Path) -> None:
     """A reserved-capacity table the plan does not size is an error, not a zero."""
-    inv = _write_inventory(tmp_path, "production-lean", [
+    inv = _write_inventory(tmp_path, "production", [
         _resource("aws_dynamodb_table.t", "aws_dynamodb_table",
                   {"billing_mode": "PROVISIONED"}),
     ])
@@ -381,7 +381,7 @@ def test_provisioned_dynamodb_without_capacity_fails_closed(tmp_path: Path) -> N
 
 def test_on_demand_dynamodb_stays_usage_variable(tmp_path: Path) -> None:
     """The re-class is triggered by billing_mode, not by the resource type."""
-    inv = _write_inventory(tmp_path, "production-lean", [
+    inv = _write_inventory(tmp_path, "production", [
         _resource("aws_dynamodb_table.t", "aws_dynamodb_table",
                   {"billing_mode": "PAY_PER_REQUEST"}),
     ])
@@ -431,14 +431,14 @@ def test_staging_is_scored_against_its_own_usage_scenario(tmp_path: Path) -> Non
     # that gap is the whole reason a rehearsal environment needs its own
     # scenario, and it is what made the staging ceiling unsatisfiable.
     production = MODULE.build_cost_model(
-        json.loads(inv.read_text()), PRICE_BOOK, 40.0, profile="production-lean")
+        json.loads(inv.read_text()), PRICE_BOOK, 40.0, profile="production")
     staged = report["model"]["variable_monthly_usd"]["expected"]
     assert production["variable_monthly_usd"]["expected"] > 4 * staged
 
 
 def test_production_lean_keeps_the_founding_tenant_scenario(tmp_path: Path) -> None:
     """Only profiles named under profile_usage_scenarios are overridden."""
-    inv = _write_inventory(tmp_path, "production-lean", [
+    inv = _write_inventory(tmp_path, "production", [
         _resource("aws_kms_key.main", "aws_kms_key"),
     ])
     assert _run(tmp_path, inv) == 0
@@ -486,7 +486,7 @@ def test_destroyed_resources_are_not_priced(tmp_path: Path) -> None:
     doomed = _resource("aws_msk_cluster.old", "aws_msk_cluster",
                        {"instance_type": "kafka.m5.large", "number_of_broker_nodes": 3})
     doomed["actions"] = ["delete"]
-    inv = _write_inventory(tmp_path, "production-lean", [doomed])
+    inv = _write_inventory(tmp_path, "production", [doomed])
     assert _run(tmp_path, inv) == 0
     assert _report(tmp_path)["model"]["fixed_monthly_usd"] == 0.0
 
@@ -497,7 +497,7 @@ def test_destroyed_resources_are_not_priced(tmp_path: Path) -> None:
 
 def test_largest_contributors_are_ranked_correctly(tmp_path: Path) -> None:
     """Contributors are aggregated per type and ordered by expected monthly cost."""
-    inv = _write_inventory(tmp_path, "production-lean", [
+    inv = _write_inventory(tmp_path, "production", [
         _resource("aws_msk_cluster.k", "aws_msk_cluster",
                   {"instance_type": "kafka.m5.large", "number_of_broker_nodes": 3}),
         _resource("aws_instance.runner", "aws_instance", {"instance_type": "m6i.large"}),
@@ -527,7 +527,7 @@ def test_free_tier_allowance_applies_across_the_plan(tmp_path: Path) -> None:
         _resource(f"aws_cloudwatch_metric_alarm.a{n}", "aws_cloudwatch_metric_alarm")
         for n in range(12)
     ]
-    inv = _write_inventory(tmp_path, "production-lean", alarms)
+    inv = _write_inventory(tmp_path, "production", alarms)
     assert _run(tmp_path, inv) == 0
     # 12 alarms, 10 free, 2 billed at $0.10.
     assert _report(tmp_path)["model"]["fixed_monthly_usd"] == 0.20
@@ -539,7 +539,7 @@ def test_free_tier_allowance_applies_across_the_plan(tmp_path: Path) -> None:
 
 def test_active_exception_permits_a_documented_overage(tmp_path: Path) -> None:
     """A valid, unexpired grant raises the ceiling by exactly its amount."""
-    inv = _write_inventory(tmp_path, "production-lean", _OVER_CEILING)
+    inv = _write_inventory(tmp_path, "production", _OVER_CEILING)
 
     # $210.24 fixed against a $200 ceiling: fails with no exception on file.
     assert _run(tmp_path, inv, exceptions=_write_exceptions(tmp_path, [])) == 1
@@ -556,7 +556,7 @@ def test_active_exception_permits_a_documented_overage(tmp_path: Path) -> None:
 
 def test_exception_headroom_is_bounded_by_its_stated_amount(tmp_path: Path) -> None:
     """Understating the overage buys nothing — the gate still fails."""
-    inv = _write_inventory(tmp_path, "production-lean", [
+    inv = _write_inventory(tmp_path, "production", [
         _resource("aws_msk_cluster.k", "aws_msk_cluster",
                   {"instance_type": "kafka.m5.large", "number_of_broker_nodes": 3}),
     ])
@@ -566,7 +566,7 @@ def test_exception_headroom_is_bounded_by_its_stated_amount(tmp_path: Path) -> N
 
 def test_expired_exception_fails_rather_than_being_ignored(tmp_path: Path) -> None:
     """Expiry is a build failure. This is the whole anti-rot mechanism."""
-    inv = _write_inventory(tmp_path, "production-lean", [
+    inv = _write_inventory(tmp_path, "production", [
         _resource("aws_kms_key.main", "aws_kms_key"),
     ])
     exc = _write_exceptions(tmp_path, [
@@ -579,8 +579,8 @@ def test_expired_exception_fails_rather_than_being_ignored(tmp_path: Path) -> No
 
 
 def test_blanket_lean_exception_is_structurally_rejected(tmp_path: Path) -> None:
-    """production-lean may not hold an exception scoped to everything."""
-    inv = _write_inventory(tmp_path, "production-lean", _OVER_CEILING)
+    """production may not hold an exception scoped to everything."""
+    inv = _write_inventory(tmp_path, "production", _OVER_CEILING)
     for token in ("all", "*", "everything"):
         exc = _write_exceptions(tmp_path, [
             _valid_exception(affected_resources=[token]),
@@ -591,7 +591,7 @@ def test_blanket_lean_exception_is_structurally_rejected(tmp_path: Path) -> None
 
 def test_permanent_lean_exception_cannot_be_expressed(tmp_path: Path) -> None:
     """The closed schema rejects any field invented to mean 'never expires'."""
-    inv = _write_inventory(tmp_path, "production-lean", _OVER_CEILING)
+    inv = _write_inventory(tmp_path, "production", _OVER_CEILING)
     for extra in ({"permanent": True}, {"never_expires": True}, {"indefinite": "yes"}):
         entry = _valid_exception(**extra)
         exc = _write_exceptions(tmp_path, [entry])
@@ -601,7 +601,7 @@ def test_permanent_lean_exception_cannot_be_expressed(tmp_path: Path) -> None:
 
 def test_lean_exception_duration_is_capped_at_thirty_days(tmp_path: Path) -> None:
     """A long-dated lean grant is rejected even though it has not expired."""
-    inv = _write_inventory(tmp_path, "production-lean", _OVER_CEILING)
+    inv = _write_inventory(tmp_path, "production", _OVER_CEILING)
     exc = _write_exceptions(tmp_path, [
         _valid_exception(created="2026-07-01", expires="2026-12-31"),
     ])
@@ -611,7 +611,7 @@ def test_lean_exception_duration_is_capped_at_thirty_days(tmp_path: Path) -> Non
 
 def test_lean_exception_amount_is_capped(tmp_path: Path) -> None:
     """A lean grant cannot authorise an unbounded overage."""
-    inv = _write_inventory(tmp_path, "production-lean", _OVER_CEILING)
+    inv = _write_inventory(tmp_path, "production", _OVER_CEILING)
     exc = _write_exceptions(tmp_path, [_valid_exception(estimated_amount=5000.0)])
     assert _run(tmp_path, inv, exceptions=exc) == 1
     assert any("exceeds the" in f and "cap" in f for f in _report(tmp_path)["failures"])
@@ -619,7 +619,7 @@ def test_lean_exception_amount_is_capped(tmp_path: Path) -> None:
 
 def test_self_approved_exception_is_rejected(tmp_path: Path) -> None:
     """The person carrying the overage cannot be the person signing it off."""
-    inv = _write_inventory(tmp_path, "production-lean", _OVER_CEILING)
+    inv = _write_inventory(tmp_path, "production", _OVER_CEILING)
     exc = _write_exceptions(tmp_path, [
         _valid_exception(owner="platform@aether", approver="platform@aether"),
     ])
@@ -629,7 +629,7 @@ def test_self_approved_exception_is_rejected(tmp_path: Path) -> None:
 
 def test_incomplete_exception_is_rejected(tmp_path: Path) -> None:
     """Every documentation field is required; a grant with no owner is not a grant."""
-    inv = _write_inventory(tmp_path, "production-lean", _OVER_CEILING)
+    inv = _write_inventory(tmp_path, "production", _OVER_CEILING)
     entry = _valid_exception()
     del entry["mitigation"]
     exc = _write_exceptions(tmp_path, [entry])
@@ -639,7 +639,7 @@ def test_incomplete_exception_is_rejected(tmp_path: Path) -> None:
 
 def test_malformed_neighbour_exception_voids_the_allowance(tmp_path: Path) -> None:
     """A broken entry cannot be used to smuggle headroom past review."""
-    inv = _write_inventory(tmp_path, "production-lean", _OVER_CEILING)
+    inv = _write_inventory(tmp_path, "production", _OVER_CEILING)
     exc = _write_exceptions(tmp_path, [
         _valid_exception(),
         _valid_exception(id="COST-EX-BROKEN", expires="2026-01-01"),
@@ -655,8 +655,8 @@ def test_malformed_neighbour_exception_voids_the_allowance(tmp_path: Path) -> No
 def test_shipped_exceptions_file_has_no_active_exceptions() -> None:
     """Aether ships with a clean slate; an entry here means we are over budget."""
     assert EXCEPTIONS_FILE["exceptions"] == []
-    assert "production-lean" in EXCEPTIONS_FILE["policy"]["no_blanket_exception_profiles"]
-    assert EXCEPTIONS_FILE["policy"]["max_duration_days"]["production-lean"] == 30
+    assert "production" in EXCEPTIONS_FILE["policy"]["no_blanket_exception_profiles"]
+    assert EXCEPTIONS_FILE["policy"]["max_duration_days"]["production"] == 30
 
 
 def test_every_exception_policy_constant_is_pinned() -> None:
@@ -675,16 +675,16 @@ def test_every_exception_policy_constant_is_pinned() -> None:
     assert policy["require_distinct_approver"] is True
 
     # 2. Per-profile duration cap.
-    assert policy["max_duration_days"]["production-lean"] == 30
+    assert policy["max_duration_days"]["production"] == 30
 
     # 3. Per-profile amount cap. Deleting the lean entry silently raises the
     #    cap to the 500.0 default, tripling what a grant can authorise.
-    assert policy["max_estimated_amount"]["production-lean"] == 100
-    assert policy["max_estimated_amount"]["production-lean"] < policy[
+    assert policy["max_estimated_amount"]["production"] == 100
+    assert policy["max_estimated_amount"]["production"] < policy[
         "max_estimated_amount"].get("default", 500)
 
     # 4. Profiles that may not hold a blanket grant.
-    assert "production-lean" in policy["no_blanket_exception_profiles"]
+    assert "production" in policy["no_blanket_exception_profiles"]
 
     # 5. The tokens that make a grant blanket. An empty list makes the
     #    blanket-scope rule unenforceable while still appearing to exist.
@@ -742,8 +742,8 @@ def test_cost_policy_enforces_the_control_the_plan_gate_defers_to_it() -> None:
 
 
 def test_cost_capped_production_profiles_declare_a_budget() -> None:
-    """production-lean and staging must carry enforceable numeric ceilings."""
-    lean = PROFILES["profiles"]["production-lean"]["budget"]
+    """production and staging must carry enforceable numeric ceilings."""
+    lean = PROFILES["profiles"]["production"]["budget"]
     assert lean["hard_fixed_monthly"] > lean["target_fixed_monthly"]
     assert lean["region"] == PRICE_BOOK["region"]
     assert lean["variable_cost_model_required"] is True
@@ -752,31 +752,14 @@ def test_cost_capped_production_profiles_declare_a_budget() -> None:
     assert staging["hard_monthly_spend"] > staging["target_monthly_spend"]
     assert staging["maximum_scheduled_awake_hours_per_month"] < staging["pricing_hours_per_month"]
 
-    # demo/preview are cost_capped: true, so the same invariant holds: a capped
-    # profile with no numeric ceiling is unenforceable. resolve_budget accepts
-    # either dialect (fixed or total), so assert the invariant generically —
-    # a hard ceiling strictly above the matching target, in the price-book region.
-    for name in ("demo", "preview"):
-        cfg = PROFILES["profiles"][name]
-        assert cfg["cost_capped"] is True, name
-        budget = cfg["budget"]
-        hard_keys = sorted(k for k in budget if str(k).startswith("hard_"))
-        target_keys = sorted(k for k in budget if str(k).startswith("target_"))
-        assert hard_keys and target_keys, f"{name} budget lacks hard/target ceilings"
-        for hk, tk in zip(hard_keys, target_keys):
-            assert budget[hk] > budget[tk], f"{name}: {hk} must exceed {tk}"
-        assert budget.get("region") == PRICE_BOOK["region"], name
 
-
-def test_profile_doctor_budget_declared_check_is_hard(tmp_path: Path) -> None:
+def test_profile_doctor_budget_declared_check_is_hard() -> None:
     """The doctor's budget-declared check fails a cost_capped profile closed.
 
     The budget-declared check lives in profile_doctor.py (not in
     check_cost_model.py, which only refuses to SCORE an unbudgeted profile with
     exit 2). The doctor's contract is stronger: a cost_capped profile with no
-    budget is INVALID, not integration_ready — a ceiling nobody can enforce is
-    no ceiling at all. This is exercised on a synthetic realized demo so it is
-    deterministic before and after the demo/preview budgets land in config/.
+    budget is INVALID — a ceiling nobody can enforce is no ceiling at all.
     """
     import importlib.util as _il
 
@@ -786,51 +769,23 @@ def test_profile_doctor_budget_declared_check_is_hard(tmp_path: Path) -> None:
     spec.loader.exec_module(doctor)
 
     data = copy.deepcopy(PROFILES)
-    demo = data["profiles"]["demo"]
-    demo["cost_policy"] = {
-        "required_resources": ["cloudfront_s3_frontends", "alb", "dynamodb", "sqs_sns"],
-        "forbidden_resources": ["msk"],
-    }
-    demo["budget"] = {
-        "currency": "USD",
-        "region": "us-east-1",
-        "target_monthly_spend": 10,
-        "hard_monthly_spend": 25,
-    }
     contracts = yaml.safe_load((ROOT / "config/terraform_resource_contracts.yaml").read_text())
     readiness = yaml.safe_load((ROOT / "config/deployment_readiness.yaml").read_text())
     runtime = yaml.safe_load((ROOT / "config/runtime_deployment.yaml").read_text())
-    runtime["profiles"]["demo"] = {
-        "execution_mode": "consolidated",
-        "services": {"api": {"roles": ["api"]}},
-    }
-
-    tf_dir = tmp_path / "deploy" / "aws" / "terraform"
-    (tf_dir / "profiles").mkdir(parents=True)
-    (tf_dir / "profiles" / "demo.tfvars").write_text('deployment_profile = "demo"\n')
-    (tf_dir / "variables.tf").write_text(
-        'variable "deployment_profile" {\n'
-        "  validation {\n"
-        '    condition = contains(["staging", "production-lean", "demo"], var.deployment_profile)\n'
-        "  }\n"
-        "}\n")
 
     def report():
         return doctor.build_profile_report(
-            tmp_path, "demo", data=data, contracts=contracts,
+            ROOT, "production", data=data, contracts=contracts,
             runtime=runtime, readiness=readiness, spine_rows=[])
 
     def budget_row(doc):
         return next(c for c in doc["checks"] if c["id"] == "budget-declared")
 
-    # Budget present: every static check passes; no guard files yet, so the
-    # profile is integration_ready, never invalid.
-    with_budget = report()
-    assert budget_row(with_budget)["result"] == "passed"
-    assert with_budget["readiness_state"] == "integration_ready"
+    assert data["profiles"]["production"]["cost_capped"] is True
+    assert budget_row(report())["result"] == "passed"
 
-    # Budget removed: the same profile is INVALID, not integration_ready.
-    del demo["budget"]
+    # Budget removed: the same profile is INVALID.
+    del data["profiles"]["production"]["budget"]
     without_budget = report()
     assert budget_row(without_budget)["result"] == "failed"
     assert "no budget" in budget_row(without_budget)["detail"]
@@ -838,10 +793,15 @@ def test_profile_doctor_budget_declared_check_is_hard(tmp_path: Path) -> None:
 
 
 def test_profile_without_a_budget_cannot_be_scored(tmp_path: Path) -> None:
-    """Scoring an uncapped profile is a usage error (exit 2), not a silent pass."""
+    """Scoring a profile with no budget is a usage error (exit 2), not a silent pass.
+
+    Every declared profile carries a budget now, so the unscorable case is a
+    profile the matrix does not declare.
+    """
     inv = _write_inventory(tmp_path, "production-scale", [
         _resource("aws_kms_key.main", "aws_kms_key"),
     ])
+    assert "production-scale" not in PROFILES["profiles"]
     assert _run(tmp_path, inv, profile="production-scale") == MODULE.EXIT_USAGE
 
 
@@ -850,13 +810,13 @@ def test_inventory_profile_mismatch_is_refused(tmp_path: Path) -> None:
     inv = _write_inventory(tmp_path, "staging", [
         _resource("aws_kms_key.main", "aws_kms_key"),
     ])
-    assert _run(tmp_path, inv, profile="production-lean") == MODULE.EXIT_USAGE
+    assert _run(tmp_path, inv, profile="production") == MODULE.EXIT_USAGE
 
 
 def test_unsupported_inventory_schema_is_refused(tmp_path: Path) -> None:
     """The pinned input contract is enforced, not guessed at."""
     path = tmp_path / "inv.json"
-    data = _inventory("production-lean", [])
+    data = _inventory("production", [])
     data["schema_version"] = 99
     path.write_text(json.dumps(data), encoding="utf-8")
     assert _run(tmp_path, path) == MODULE.EXIT_USAGE
@@ -875,7 +835,7 @@ def test_price_book_entries_declare_a_cost_class_and_notes() -> None:
 
 def test_reports_are_written_and_state_their_assumptions(tmp_path: Path) -> None:
     """Both artifacts land, and the human one leads with the precision caveat."""
-    inv = _write_inventory(tmp_path, "production-lean", [
+    inv = _write_inventory(tmp_path, "production", [
         _resource("aws_kms_key.main", "aws_kms_key"),
     ])
     assert _run(tmp_path, inv) == 0

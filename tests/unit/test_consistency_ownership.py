@@ -26,7 +26,7 @@ def test_ownership_map_has_required_categories() -> None:
 
 def test_glob_negation_excludes_sync_managed_docs() -> None:
     patterns = ["docs/**/*.md", "!docs/REPO-INDEX.md", "!docs/AUTOMATION.md"]
-    assert ownership._matches("docs/SDK-WEB.md", patterns)
+    assert ownership._matches("docs/reference/SDK-WEB.md", patterns)
     assert not ownership._matches("docs/REPO-INDEX.md", patterns)
     assert not ownership._matches("docs/AUTOMATION.md", patterns)
 

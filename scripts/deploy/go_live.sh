@@ -25,16 +25,16 @@
 #
 # Usage:
 #   cd "$(git rev-parse --show-toplevel)"
-#   ./scripts/deploy/go_live.sh [--profile production-lean] [--region us-east-1]
+#   ./scripts/deploy/go_live.sh [--profile production] [--region us-east-1]
 # =============================================================================
 set -euo pipefail
 
 # ─── Defaults ────────────────────────────────────────────────────────────────
-PROFILE="${PROFILE:-production-lean}"
+PROFILE="${PROFILE:-production}"
 REGION="${AWS_REGION:-us-east-1}"
 DOMAIN="olympuslabsml.com"
 API_DOMAIN="api.${DOMAIN}"
-TF_DIR="deploy/aws/terraform"
+TF_DIR="infra/aws/terraform"
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 while [ $# -gt 0 ]; do
@@ -180,7 +180,7 @@ aws ecr get-login-password --region "${REGION}" | \
   docker login --username AWS --password-stdin "${ECR_BASE}"
 
 echo "    Building backend image..."
-cd "${REPO_ROOT}/services/backend"
+cd "${REPO_ROOT}/services/api"
 docker build -t aether-backend .
 
 docker tag aether-backend:latest "${ECR_BASE}/aether-backend:latest"
