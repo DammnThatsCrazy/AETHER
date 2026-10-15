@@ -100,8 +100,7 @@ Valid `event_type` values: `acknowledged`, `accepted`, `rejected`, `commented`, 
 `delivery_id` must be the `X-Aether-Delivery-Id` of the delivery being answered:
 Aether resolves the tenant from that stored delivery, never from a header or
 `tenant_id` query parameter. Sign the callback with the same channel secret that
-signed the delivery; the platform-wide `DELIVERY_WEBHOOK_SIGNING_SECRET` is not
-accepted for callbacks. `X-Aether-Timestamp`
+signed the delivery; there is no platform-wide secret for callbacks. `X-Aether-Timestamp`
 (unix seconds) is required and must be within 300 seconds of receipt. Callbacks
 that match no stored delivery are dead-lettered and never applied. A channel
 without a signing secret sends unsigned deliveries, and callbacks for them can

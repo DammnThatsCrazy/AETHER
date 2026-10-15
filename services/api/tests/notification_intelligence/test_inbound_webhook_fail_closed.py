@@ -162,7 +162,6 @@ async def test_generic_webhook_verifies_only_with_the_channel_secret(monkeypatch
     import time
 
     platform_secret = "generic-callback-secret"
-    _set_delivery(monkeypatch, webhook_signing_secret=platform_secret)
     ts = str(int(time.time()))
     body = '{"outcome":"delivered"}'
 
