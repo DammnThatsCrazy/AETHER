@@ -2452,9 +2452,33 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/engineering/ci-v2/migration-runbook.md",
+      "title": "CI V2 Branch Migration Runbook",
+      "slug": "engineering/ci-v2-migration-runbook",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/engineering/ci-v2/parity-report.md",
       "title": "CI V2 Parity Report",
       "slug": "engineering/ci-v2-parity-report",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/engineering/ci-v2/test-retirement-ledger.md",
+      "title": "CI V2 Retirement Ledger",
+      "slug": "engineering/ci-v2-retirement-ledger",
       "section": "operations",
       "visibility": "I",
       "audience": [
