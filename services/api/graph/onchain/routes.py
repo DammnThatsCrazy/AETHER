@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
+from governance.security.request_context import require_platform_operator
 from shared.common.common import APIResponse, NotFoundError
 from shared.logger.logger import get_logger
 
@@ -57,6 +58,7 @@ async def get_contract(address: str, request: Request, chain_id: str | None = No
 async def configure_listener(body: ChainListenerConfig, request: Request):
     """Configure a chain event listener stream."""
     request.state.tenant.require_permission("admin")
+    require_platform_operator(request)
     config = await _listener.configure(body)
     return APIResponse(data=config.model_dump()).to_dict()
 
