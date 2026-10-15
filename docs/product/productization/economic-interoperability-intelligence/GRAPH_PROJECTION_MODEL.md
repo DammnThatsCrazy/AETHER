@@ -22,13 +22,13 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
-  "services/api/repositories/repos.py": "sha256:4f13803cb0e92160ac3c4769b18d9853b453dd04a231421a3fe1f90977572439"
-  "services/api/shared/graph/graph.py": "sha256:07c5a70eb15c7924fad58de63eba5d3d984b6eac21c328cd3072de0f77ee14fd"
+  "services/api/repositories/repos.py": "sha256:f3878d58876bd0c84bedffd8a44734bf60b16b2149e2cde21e133f6140971327"
+  "services/api/shared/graph/graph.py": "sha256:53ffd8b9993a0bea144f1eee87454dbfc6ba9bd7a01107200c5f925a4c51b149"
   "services/api/shared/graph/relationship_layers.py": "sha256:0d36b34a5c4496e15afa03da596d019d70492fb607184a87e737bd9f949cb2b0"
   "services/api/value/x402/economic_mutations.py": "sha256:bdd180a936e048840636f221fdee3b142c0babab5d8e2bcc59b4a51983198f51"
   "services/api/value/x402/lifecycle_mapper.py": "sha256:77066a174bdf8e3feed32e1a7b81feb321983975b5cd9e6116a4fa5a588c473e"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
-  "services/api/workers/profile360_workers/workers.py": "sha256:0c79f5ee2cc03eb0ae92d8690a8622b8ebaea245dc047c7643107fe909d7170a"
+  "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
 ---
 
 # Graph Projection Model
@@ -69,6 +69,21 @@ tenant-scoped: `GraphClient.delete_tenant_data` removes projection vertices and
 tenant-tagged edges for both `tenantId` and legacy `tenant_id`, including edges
 to shared endpoints. It fails closed on a backend error and never removes
 unscoped/system graph data.
+
+## Vertex ownership on writes
+
+A vertex write never changes the vertex's owner: the backends and
+`GraphMutationGateway` refuse a write whose `tenant_of` differs from the stored
+vertex's (`VertexOwnershipError`), and a write whose two tenant spellings
+disagree. `chain:` vertices are `platform`-owned registry vertices; the interop
+topology and card-linked flows only add edges to them. The interop projector
+links a gateway to the registry's CAIP-2 chain vertex (a numeric
+`native_chain_id` is an EVM chain id, `chain:eip155:{id}`) only when that
+platform vertex exists; otherwise it drops the `CONNECTS_CHAIN` edge, logs it
+and counts `interop_chain_link_skipped`, so no edge points at a missing vertex.
+The card catalog
+(`card_program:`, `card_issuer:`, `payment_network:`) is written as `platform`
+by `build_catalog_mutations`, with `build_flow_mutations` linking a flow to it.
 
 ## Tenant scoping on reads
 

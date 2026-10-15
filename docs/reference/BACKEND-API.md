@@ -25,20 +25,20 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:6df18d4874a2dab065acaaa3aec2a246cfcb3885875e7a96d8a0213f367e52b0"
+  "services/api/actions/": "sha256:2bae09df3369e8d9c89051a9abf2c148a70c43e51d68007b3fa3d0a65f03afbe"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:0740c89ed3bf089b8ded5f9a319b7670a0afb18bda8f58a69a11a03c2a0a5d75"
-  "services/api/connectors/": "sha256:10c2bca5b954c355200b37d120d43b72b0e42b2ba33f003bc3b0b779f86e3761"
-  "services/api/governance/": "sha256:e31d3aaddeb1bda4ff41f03e94f6231d6db58650abbda9467210ad99fdc13024"
-  "services/api/graph/": "sha256:c8c0525114b6326597ebb3ede8c3ef3eb760634589dc88c0299053ab9a17bdcf"
-  "services/api/identity/": "sha256:4a38f9d3f2cd344facc8e9e01ec75963071f283da616fd57c064d46f3d8dbc27"
-  "services/api/ingestion/": "sha256:65e7b34506d7c82cd279f651acdf71ccd09c89aaef5e20208300af0767cdc8df"
-  "services/api/intelligence/": "sha256:f62be8bd82052f7150a6829419803f06bc72d3a540997977f61d14925124e97e"
+  "services/api/connectors/": "sha256:74f79bcb2b389af578e365217ec1db6271c03e0b8a10bd0e3d67f0e6117d3ace"
+  "services/api/governance/": "sha256:4d1d5ebfff79f8e4e2aba0d960a87ae1d0aa19b5bb6b0878f93f33b0006086b7"
+  "services/api/graph/": "sha256:2e5bb882df912a56ddf8bb116cf6887b2da46722ab9b07b08bb245c530cfa4e1"
+  "services/api/identity/": "sha256:9d5a4ac51012e6a7d11856665e95cae3b82a4ce63e80673aada051fab60f7d4b"
+  "services/api/ingestion/": "sha256:bd5b01dbb8f0ad98a2cd83aeb682c0b01badea4f481ee74b15f430043e004599"
+  "services/api/intelligence/": "sha256:3dcb322380fba0232f313fa5e38b0d8cda7ab2009ffe38151bdc9e563a852657"
   "services/api/journeys/": "sha256:9a1935e1a9753e430a16063f2d50770b9692095d72cd2416df9f90dd664c7289"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:228120a11b8e6c3fec9405ed272e61de894b658274a33da129facc9c074a8224"
-  "services/api/value/": "sha256:1a21848aad5f0a769a41b7d95e2188484d81be4f3bb7baf39e3b4f9ee9d31ae8"
-  "services/api/workers/": "sha256:2ba7219cc4a6bb8a77040d5871b16f764631ca87da8f36de0ba2140b59a015e6"
+  "services/api/value/": "sha256:13540be4242a207a64a48be123e6ebf509039faa27da35d7cf5ad9482f96e8ec"
+  "services/api/workers/": "sha256:00cdccad21cee863998d1bc30656ac8c6402b0bf594d2f91630909e204c32b11"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -2256,7 +2256,7 @@ Cancel a queued or running replay job. Sets `status` to `cancelled` and records 
 
 #### POST /v1/events/ingest
 
-Ingest a single `EventPipelineEnvelope` (used by the replay feed to re-introduce events into the processing pipeline). Enforces tenant isolation before accepting.
+Ingest a single `EventPipelineEnvelope` (used by the replay feed to re-introduce events into the processing pipeline). Enforces tenant isolation before accepting. The envelope is stored per tenant (row id `{tenantId}:{id}`), so two tenants can ingest the same envelope id without touching each other's envelope.
 
 **Permissions:** `write`
 
@@ -2782,6 +2782,11 @@ Core entity management — create, resolve, and manage entity records and cluste
 | POST | `/v1/entities/{id}/membership` | Add an entity to a population group |
 
 **Permissions:** `write` for mutations, `read` for queries
+
+An entity id belongs to the first tenant that creates it: creating or updating
+an id another tenant already holds answers `409 Conflict` without naming the
+owner, and leaves that tenant's record unchanged. Delegation ids behave the
+same way.
 
 ---
 

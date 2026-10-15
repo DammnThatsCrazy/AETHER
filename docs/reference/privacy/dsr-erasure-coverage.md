@@ -15,7 +15,7 @@ source_hashes:
   "services/api/governance/dsr_propagation/models.py": "sha256:c5afa46e9327a7d48ab0583836932ffb3e8f14ce3f420d7afe404ae5afe3450f"
   "services/api/graph/web3/registries.py": "sha256:13f14a786f6da928db1526c5f01d553f21fd388805feb368c4f6c18493ebdffe"
   "services/api/shared/storage/lifecycle.py": "sha256:f5446beb697cab99031cf464d9dcdb95310ad83870036fe0e5f1baf09d16d712"
-  "services/api/value/x402/commerce_store.py": "sha256:e5bf2b6cffad86e8c21fe08669961e20b74838939bc3f8cc857572b30d0dd5d8"
+  "services/api/value/x402/commerce_store.py": "sha256:b8ad52e6ef1587e0b9439787c7d6cbc0e15c66ab05f2434e80890dae5ba44835"
 ---
 
 # DSR Erasure Coverage — Every Component, Every Store

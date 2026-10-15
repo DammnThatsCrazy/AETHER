@@ -21,7 +21,7 @@ source_hashes:
   "services/api/ingestion/ingestion/validation.py": "sha256:0b5528935209e6b9a75c0c58ece7cde8e5097ed13b5e199d3d76853ace69b2ee"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
-  "services/api/repositories/repos.py": "sha256:4f13803cb0e92160ac3c4769b18d9853b453dd04a231421a3fe1f90977572439"
+  "services/api/repositories/repos.py": "sha256:f3878d58876bd0c84bedffd8a44734bf60b16b2149e2cde21e133f6140971327"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
 ---

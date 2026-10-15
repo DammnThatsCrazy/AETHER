@@ -12,7 +12,7 @@ related: [ai/kyber-strategic-observability, ai/playbooks, ai/recommendation-fami
 source_hashes:
   "apps/kyber-web/src/components/recommendation-observability-panel.tsx": "sha256:7aa4bfb78ced06b43c567563ca81a208a9e2f85e53bd184265e736758318bae1"
   "services/api/governance/admin/kyber_strategic.py": "sha256:814a81f744d044cf8dbd533d29d53373772a2e1c97eeb97db084c271bb9b583a"
-  "services/api/governance/admin/routes.py": "sha256:c215417a694ff2759b9eb0b5e4593cb4573fff8c799f5db0bedb50534376da7d"
+  "services/api/governance/admin/routes.py": "sha256:7229a73876d927926fe1ac82741d0e058b215538a9e7c23a3c9a84509c0cbfe8"
 ---
 
 # Kyber Revenue Intelligence
@@ -64,7 +64,7 @@ Kyber operators can inspect per-tenant agentic activity and economic health via:
 | Endpoint | Description |
 |---|---|
 | `GET /operator/agentic/overview` | Cross-tenant aggregate: active agents, active delegations, total spend, subagent count, abandoned payment count, top protocols/providers/capabilities, recent failures |
-| `GET /operator/agentic/agents/{agent_id}` | Single agent detail: config, behavior profile, intent and settlement counts, recent executions |
+| `GET /operator/agentic/agents/{agent_id}` | Single agent detail: config, the behavior profile of the config's tenant, intent and settlement counts, recent executions |
 | `GET /operator/agentic/authorization-violations` | Delegations that exceeded their granted scope (revoked entries as proxy signal) |
 | `GET /operator/agentic/spend-limits` | Agents where total spend exceeds 3× the per-tenant average — potential budget overruns |
 | `GET /operator/agentic/trust` | Agent behavior profiles ranked by risk_score for trust triage |
