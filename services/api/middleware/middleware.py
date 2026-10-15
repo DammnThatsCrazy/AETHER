@@ -73,6 +73,10 @@ _MCP_OAUTH_READ_ROUTES = frozenset(
 )
 
 
+class McpReadScopeDeniedError(ForbiddenError):
+    """Machine-readable missing-scope denial for the MCP OAuth challenge."""
+
+
 def _token_declares_mcp_audience(token: str) -> bool:
     """Prevent MCP-audience tokens from falling through to legacy JWT auth."""
     audience = settings.auth0.mcp_audience
@@ -1452,7 +1456,7 @@ async def _resolve_mcp_oauth_token(token: str) -> TenantContext:
             raise UnauthorizedError("MCP OAuth member has no read permission")
         plan_tier = PlanTier(tenant.get("plan_tier") or tenant.get("plan"))
     except McpOAuthScopeError as exc:
-        raise ForbiddenError("MCP OAuth read scope is missing") from exc
+        raise McpReadScopeDeniedError("MCP OAuth read scope is missing") from exc
     except (UnauthorizedError, ForbiddenError):
         raise
     except Exception as exc:

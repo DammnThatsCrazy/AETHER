@@ -12,11 +12,12 @@ export const MAX_OVERVIEW_BUCKETS = 50;
 const ACCESS_SURFACES = new Set(['cli', 'mcp_stdio', 'mcp_http', 'access_sdk']);
 
 export class AccessApiError extends Error {
-  constructor(message, { status, code, requestId, apiRequestId, interaction } = {}) {
+  constructor(message, { status, code, problemCode, requestId, apiRequestId, interaction } = {}) {
     super(message);
     this.name = 'AccessApiError';
     this.status = status;
     this.code = code;
+    this.problemCode = problemCode;
     this.requestId = requestId;
     this.apiRequestId = apiRequestId;
     this.interaction = interaction;
@@ -171,7 +172,9 @@ async function readRequest(
     throw new AccessApiError(
       `Aether API request failed (HTTP ${response.status}${errorCode ? `, ${errorCode}` : ''}).`,
       {
-        status: response.status, code: errorCode, requestId: headerRequestId, apiRequestId,
+        status: response.status, code: errorCode,
+        problemCode: typeof payload?.code === 'string' ? payload.code : undefined,
+        requestId: headerRequestId, apiRequestId,
         interaction: normalizeInteractionOutcome({
           operation, httpStatus: response.status, requestId: headerRequestId,
           apiRequestId, responseOk: false, code: errorCode, data: interactionData,

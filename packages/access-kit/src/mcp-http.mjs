@@ -189,10 +189,10 @@ function buildTenantEnv(apiOrigin, credential, observe, serviceAssertionKey) {
   return env;
 }
 
-function oauthChallenge(response, config) {
-  if (config.oauth && response.status === 401) {
+function oauthChallenge(response, config, { insufficientScope = false } = {}) {
+  if (config.oauth && (response.status === 401 || (response.status === 403 && insufficientScope))) {
     response.headers.set('www-authenticate',
-      `Bearer resource_metadata="${new URL(MCP_RESOURCE_METADATA_PATH + config.path, config.oauth.resource).href}", scope="${MCP_OAUTH_READ_SCOPE}"`);
+      `Bearer ${insufficientScope ? 'error="insufficient_scope", ' : ''}resource_metadata="${new URL(MCP_RESOURCE_METADATA_PATH + config.path, config.oauth.resource).href}", scope="${MCP_OAUTH_READ_SCOPE}"`);
   }
   return response;
 }
@@ -221,6 +221,9 @@ function readObserveHeaders(request) {
 function authFailure(error) {
   if (!(error instanceof AccessApiError)) return { status: 503, code: 'aether_api_unavailable' };
   if (error.status === 401) return { status: 401, code: 'aether_credential_rejected' };
+  if (error.status === 403 && error.problemCode === 'MCP_READ_SCOPE_DENIED') {
+    return { status: 403, code: 'mcp_oauth_insufficient_scope', insufficientScope: true };
+  }
   if (error.status === 403) return { status: 403, code: 'aether_permission_denied' };
   if (error.status === undefined || error.status >= 500) return { status: 503, code: 'aether_api_unavailable' };
   return { status: 502, code: 'aether_api_error' };
@@ -334,7 +337,7 @@ export function createRemoteMcpFetchHandler({ env = process.env } = {}) {
       return oauthChallenge(jsonResponse(failure.status, failure.code, {
         requestId: error?.requestId,
         origin: access.origin,
-      }), config);
+      }), config, { insufficientScope: credential.kind === 'oauth' && failure.insufficientScope });
     }
 
     const observeInput = readObserveHeaders(request);
