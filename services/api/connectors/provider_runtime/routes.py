@@ -662,20 +662,17 @@ async def list_accounts(connection_id: str, request: Request):
     connection = await _load_connection(orchestrator, connection_id, tenant_id)
     plugin = _get_registry().get(connection.provider_identity)
     credential = None
-    if (
-        connection.provider_identity == "shopify.admin.orders_read"
-        and str((connection.config or {}).get("orders_api") or "rest").lower() == "graphql"
-    ):
+    if connection.provider_identity == "shopify.admin.orders_read":
+        # Selection needs live shop identity in every mode, so discovery uses
+        # the stored credential whenever there is one; GraphQL requires it.
         from connectors.provider_runtime.errors import CredentialMissing
 
-        if not connection.credential_ref or not getattr(orchestrator, "broker", None):
-            _raise_runtime_error(
-                CredentialMissing("Shopify GraphQL account discovery requires a stored credential")
+        graphql = str((connection.config or {}).get("orders_api") or "rest").lower() == "graphql"
+        if connection.credential_ref and getattr(orchestrator, "broker", None):
+            credential = await _await_or_error(
+                orchestrator.broker.reveal(connection.tenant_id, connection.credential_ref)
             )
-        credential = await _await_or_error(
-            orchestrator.broker.reveal(connection.tenant_id, connection.credential_ref)
-        )
-        if credential is None:
+        if graphql and credential is None:
             _raise_runtime_error(
                 CredentialMissing("Shopify GraphQL account discovery requires a stored credential")
             )
