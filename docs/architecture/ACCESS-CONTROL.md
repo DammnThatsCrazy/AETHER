@@ -72,8 +72,10 @@ therefore marks every route with an `admin` path segment and every
 `/v1/diagnostics/**` route `platform_operator_required`, except public paths
 (the Stripe webhook), `/kyber` routes (Kyber operators only), and the tenant's
 own SDK heartbeat, health and silent-SDK routes. The middleware resolves
-`is_platform_operator` before the route policy and admits a platform operator
-tenant or a Kyber operator; anyone else gets `ROUTE_POLICY_PLATFORM_OPERATOR_REQUIRED`
+`is_platform_operator` before the route policy and admits an admin (the
+`admin` permission) of a platform operator tenant or a Kyber operator. Members
+and viewers of an operator tenant keep the plan and quota treatment above but
+are refused here; anyone else likewise gets `ROUTE_POLICY_PLATFORM_OPERATOR_REQUIRED`
 when the registry is enforced, or is logged and counted as
 `route_policy_platform_operator_observed` when it only observes. Handlers that
 act on another tenant or on process-global state (tenant and admin API-key
@@ -84,7 +86,8 @@ diagnostics) call `require_platform_operator()`
 (`governance/security/request_context.py`) as well, so the rule holds in observe
 mode. Production has no bootstrap tenant: until a lane sets
 `PLATFORM_OPERATOR_TENANT_IDS` (Terraform `platform_operator_tenant_ids`), only
-Kyber operators reach these routes.
+Kyber operators reach these routes. The API logs a startup warning when the list
+is empty outside local development.
 
 ## Staging sign-in
 

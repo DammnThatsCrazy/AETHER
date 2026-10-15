@@ -54,8 +54,8 @@ source_hashes:
   "services/api/ingestion/ingestion/replay.py": "sha256:65f898480787b71d14c8f687351844fdf5585cd67664ff5c32699328594b24ce"
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
-  "services/api/main.py": "sha256:f76824db10962390701e0356564ecb69e7fc5c81f25fff6e51c685da359aeb75"
-  "services/api/middleware/middleware.py": "sha256:e750856ca862357dfc6cf58101232167db21ec862f771d7e9c19bf4e516ba3ee"
+  "services/api/main.py": "sha256:52e672c1c82e17907041ba173b1fb7cee68bfb03b158eb370fd4f25b584cc726"
+  "services/api/middleware/middleware.py": "sha256:b7b81dc3cd624bd0758f8a64ba439f8e94187641c139f18be2b2b7fcf533a11e"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
   "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
@@ -506,7 +506,8 @@ mesh → legacy defense layer → off); with `REQUIRE_EXTRACTION_DEFENSE=true`
 operator tenants (Olympus staff; see [Access Control](ACCESS-CONTROL.md#platform-operators))
 skip it, together with the burst limit and quota metering. The middleware
 resolves that operator status before the route policy, which admits only
-platform or Kyber operators to `/v1/admin/**` and `/v1/diagnostics/**`. See
+admins of platform operator tenants or Kyber operators to `/v1/admin/**` and
+`/v1/diagnostics/**`. See
 [Model Extraction Defense](MODEL-EXTRACTION-DEFENSE.md) for full documentation.
 
 ## Multi-Model Intelligence Harness (0.1.0-alpha.0)
