@@ -454,11 +454,13 @@ def _staging_host_errors(
             first_errors = owner_errors
     return first_errors or [f"no Amplify app serves the staging {prefix} host"]
 
-def _production_branch_errors(app_id: str, client: AwsCall) -> list[str]:
+def _production_branch_errors(app: Mapping[str, Any], app_id: str, client: AwsCall) -> list[str]:
     """Production has exactly one branch, main, and main carries no build-time
     site override: VITE_SITE would outrank the hostname and render one site on
-    every host."""
+    every host. Builds inherit the app's environment too, so check both."""
     errors: list[str] = []
+    if "VITE_SITE" in _mapping(app.get("environmentVariables")):
+        errors.append(f"Amplify app {PRODUCTION_WEB_APP} sets VITE_SITE; the site must come from the hostname")
     try:
         listed = client(["amplify", "list-branches", "--app-id", app_id, "--max-results", "50"])
     except RuntimeError as exc:
@@ -565,7 +567,7 @@ def contract_errors(
         )
         production_app_id = production_app.get("appId") if production_app is not None else None
         if isinstance(production_app_id, str) and production_app_id:
-            errors.extend(_production_branch_errors(production_app_id, client))
+            errors.extend(_production_branch_errors(_mapping(production_app), production_app_id, client))
             for prefix in PRODUCTION_HOSTS:
                 if prefix == "status":
                     continue

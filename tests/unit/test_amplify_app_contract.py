@@ -45,6 +45,7 @@ def _client(
     production_branches: tuple[str, ...] = ("main",),
     production_auto_build: bool = False,
     production_extra_environment: dict[str, str] | None = None,
+    production_app_environment: dict[str, str] | None = None,
 ):
     """``consolidated`` is the one-app layout (AETHER-staging-web serves every
     host); otherwise the pre-apply layout: the site app (old name) serves
@@ -65,6 +66,11 @@ def _client(
             "appId": app_id,
             "repository": production_repository if name == "AETHER-production-web" else checker.REPOSITORY,
             "platform": "WEB",
+            **(
+                {"environmentVariables": production_app_environment}
+                if name == "AETHER-production-web" and production_app_environment
+                else {}
+            ),
         }
         for name, app_id in APP_IDS.items()
         if name in present
@@ -369,3 +375,10 @@ def test_production_contract_rejects_a_build_time_site_override():
         client=_client(production_extra_environment={"VITE_SITE": "olympus"}),
     )
     assert "Amplify app AETHER-production-web main branch sets VITE_SITE; the site must come from the hostname" in errors
+    # An app-level override is inherited by every branch build, so it fails too.
+    errors = checker.contract_errors(
+        mode="production-status",
+        expected_commit=COMMIT,
+        client=_client(production_app_environment={"VITE_SITE": "aether"}),
+    )
+    assert "Amplify app AETHER-production-web sets VITE_SITE; the site must come from the hostname" in errors
