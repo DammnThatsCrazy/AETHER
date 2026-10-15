@@ -25,16 +25,16 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:ad1434cca0217bca617c957e4e41b751162274803a2f4e24bd06c6944d1b1baf"
+  "services/api/actions/": "sha256:f3277871a5dede7691ea809c8c5f7f720ab643b5f280fd0f9f92df3bd9ee043b"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:0740c89ed3bf089b8ded5f9a319b7670a0afb18bda8f58a69a11a03c2a0a5d75"
   "services/api/connectors/": "sha256:25aea32c107687a0c3d95bf61df98f69623c46d1e68b68dd076de2972242707b"
   "services/api/governance/": "sha256:7babd09f496c3d1339dd2853f89d4fa3174b29fbeea1dc2e680130d6d7986540"
   "services/api/graph/": "sha256:c8c0525114b6326597ebb3ede8c3ef3eb760634589dc88c0299053ab9a17bdcf"
-  "services/api/identity/": "sha256:d35f55f1855f5be8f981bb4d9dc0a372de2831fdb161775bee142c8049222459"
+  "services/api/identity/": "sha256:4a38f9d3f2cd344facc8e9e01ec75963071f283da616fd57c064d46f3d8dbc27"
   "services/api/ingestion/": "sha256:65e7b34506d7c82cd279f651acdf71ccd09c89aaef5e20208300af0767cdc8df"
   "services/api/intelligence/": "sha256:f62be8bd82052f7150a6829419803f06bc72d3a540997977f61d14925124e97e"
-  "services/api/journeys/": "sha256:035f0a3fd053a77a0406740175359fbde03dba991cedbe4ec23ea8651652177f"
+  "services/api/journeys/": "sha256:44856cc60dbd6b017a3833f76235c90a463e8230bc250f91c8972ff3e212e544"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:228120a11b8e6c3fec9405ed272e61de894b658274a33da129facc9c074a8224"
   "services/api/value/": "sha256:5004a9cc437f7eb5b7e7ff1eff7090c4d956f356f3f16bc4031e12ce26ccc5ee"
@@ -3434,6 +3434,13 @@ These endpoints are gated by feature flags (`FEATURE_FRAUD_NETWORKS`, `FEATURE_F
 | POST | `/v1/webhooks/linear/events` | Linear-Signature HMAC | Linear issue/event webhook; persisted to WebhookInbox and processed async |
 | POST | `/v1/webhooks/jira/events` | X-Hub-Signature-256 HMAC | Jira issue webhook; persisted to WebhookInbox and processed async |
 | POST | `/v1/webhooks/aether/callback` | X-Aether-Signature HMAC | Generic signed outcome callback from webhook delivery targets |
+
+An inbound outcome only changes the objects named by the `ExternalResourceLink`
+resolved within the webhook's tenant: the linked suggestion (through the
+tenant-checked `SuggestionRepository.patch`) and the linked notification, which
+is skipped when it belongs to another tenant. Ids carried in the provider
+payload are never used. Likewise, a confirmed delivery receipt marks the source
+suggestion `delivered` only within the delivery job's tenant.
 
 Comms provider webhooks (`/v1/integrations/webhooks/comms/*`, ADR-C11) use
 server-controlled durable endpoint ids; tenant ownership is resolved from the
