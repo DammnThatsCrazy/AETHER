@@ -20,11 +20,21 @@ import hashlib
 import hmac
 import json
 import logging
-from typing import Any, Optional
+import time
+from datetime import datetime
+from typing import Any, Awaitable, Callable, Optional
+from urllib.parse import urlparse
 
 from actions.delivery.models import ExternalOutcomeEvent, ExternalOutcomeType
 
 logger = logging.getLogger("aether.delivery.outcome_processor")
+
+# Providers whose callbacks are routed only to the tenant of the stored
+# ExternalResourceLink (and its receipt/job) the delivery resolves to.
+_BOUND_PROVIDERS = frozenset({"linear", "jira", "webhook"})
+_MAX_LINK_CANDIDATES = 20
+_CALLBACK_REPLAY_WINDOW_SECONDS = 300
+_LINEAR_REPLAY_WINDOW_SECONDS = 60
 
 
 # ─── OutcomeRouter ───────────────────────────────────────────────────────────
@@ -61,7 +71,7 @@ class OutcomeRouter:
         provider = outcome.provider
 
         # Resolve ExternalResourceLink
-        link = await self._resolve_link(provider, external_id, tenant_id)
+        link = await self._resolve_link(provider, external_id, tenant_id, outcome.receipt_id)
 
         # Loop-prevention: skip if state hasn't changed
         new_state = raw.get("new_state")
@@ -158,13 +168,13 @@ class OutcomeRouter:
             logger.warning("route_to_notification_failed id=%s: %s", notification_id, exc)
 
     async def _resolve_link(
-        self, provider: str, external_id: str, tenant_id: str
+        self, provider: str, external_id: str, tenant_id: str, receipt_id: Optional[str] = None
     ) -> Optional[dict]:
+        filters = {"provider": provider, "external_id": external_id, "tenant_id": tenant_id}
+        if receipt_id:
+            filters["receipt_id"] = receipt_id
         try:
-            results = await self._link_repo.find_many(
-                filters={"provider": provider, "external_id": external_id, "tenant_id": tenant_id},
-                limit=1,
-            )
+            results = await self._link_repo.find_many(filters=filters, limit=1)
             return results[0] if results else None
         except Exception as exc:
             logger.warning("resolve_link_failed provider=%s ext_id=%s: %s", provider, external_id, exc)
@@ -184,11 +194,24 @@ class WebhookInboxProcessor:
     5. Mark record as processed.
     """
 
-    def __init__(self, inbox_repo, outcome_repo, link_repo, router=None):
+    def __init__(
+        self,
+        inbox_repo,
+        outcome_repo,
+        link_repo,
+        router=None,
+        *,
+        receipt_repo=None,
+        job_repo=None,
+        secret_resolver: Optional[Callable[[dict], Awaitable[Optional[str]]]] = None,
+    ):
         self._inbox_repo = inbox_repo
         self._outcome_repo = outcome_repo
         self._link_repo = link_repo
         self._router: Optional[OutcomeRouter] = router
+        self._receipt_repo = receipt_repo
+        self._job_repo = job_repo
+        self._secret_resolver = secret_resolver
 
     async def process_pending(self, limit: int = 20) -> int:
         """Claim pending WebhookInbox records, verify, normalise, persist, route.
@@ -211,8 +234,23 @@ class WebhookInboxProcessor:
         for record in records:
             record_id = record.get("id", "")
             try:
+                # 0. Resolve the stored delivery this callback refers to. The
+                #    tenant comes only from that binding; a lookup failure is
+                #    retryable, an unmatched delivery is terminal.
+                binding = await self._bind(record)
+                if record.get("provider") in _BOUND_PROVIDERS and binding is None:
+                    logger.warning(
+                        "inbox_delivery_unbound id=%s provider=%s — skipping routing",
+                        record_id, record.get("provider"),
+                    )
+                    await self._inbox_repo.mark_processed(record_id, error="unbound_delivery")
+                    count += 1
+                    continue
+
                 # 1. Signature verification
-                sig_verified = await self._verify_signature(record)
+                sig_verified = await self._verify_signature(
+                    record, secret=(binding or {}).get("secret")
+                )
                 try:
                     await self._inbox_repo.update(record_id, {"verified": sig_verified})
                 except Exception:
@@ -237,6 +275,13 @@ class WebhookInboxProcessor:
                     await self._inbox_repo.mark_processed(record_id)
                     count += 1
                     continue
+                if binding is not None:
+                    link = binding["link"]
+                    outcome = outcome.model_copy(update={
+                        "tenant_id": link["tenant_id"],
+                        "intent_id": link.get("intent_id"),
+                        "receipt_id": link.get("receipt_id"),
+                    })
 
                 # 3. Persist ExternalOutcomeEvent. A failure here must NOT mark the
                 #    record processed — it will be retried on the next tick.
@@ -267,11 +312,12 @@ class WebhookInboxProcessor:
 
         return count
 
-    async def _verify_signature(self, inbox: dict) -> bool:
+    async def _verify_signature(self, inbox: dict, *, secret: Optional[str] = None) -> bool:
         """Provider-specific signature verification.
 
         Returns True when the signature is valid.  Unknown providers or
-        missing secrets yield False without discarding the record.
+        missing secrets yield False without discarding the record. ``secret``
+        is the bound channel's secret for Aether delivery callbacks.
         """
         provider = inbox.get("provider", "")
         headers: dict = {k.lower(): v for k, v in (inbox.get("headers") or {}).items()}
@@ -316,7 +362,13 @@ class WebhookInboxProcessor:
                     webhook_secret.encode(), raw_body, hashlib.sha256
                 ).hexdigest()
                 from actions.delivery.security import constant_time_compare
-                return constant_time_compare(expected, linear_sig)
+                if not constant_time_compare(expected, linear_sig):
+                    return False
+                try:
+                    sent_at = float(json.loads(raw_body_str)["webhookTimestamp"]) / 1000
+                except (KeyError, TypeError, ValueError):
+                    return False
+                return _within_window(sent_at, inbox, _LINEAR_REPLAY_WINDOW_SECONDS)
 
             elif provider == "jira":
                 from config.settings import settings as _settings
@@ -334,19 +386,19 @@ class WebhookInboxProcessor:
                 return constant_time_compare(expected, jira_sig)
 
             elif provider == "webhook":
-                from config.settings import settings as _settings
-
                 aether_sig = headers.get("x-aether-signature", "")
                 aether_ts = headers.get("x-aether-timestamp", "")
-                signing_secret = inbox.get("signing_secret", "") or (
-                    _settings.delivery.webhook_signing_secret
-                )
-                # Require both signature and a known secret — never accept unsigned
-                if not aether_sig or not signing_secret:
+                signing_secret = secret
+                # Signature, timestamp and the bound channel's secret are all
+                # required — a platform-wide secret never verifies a callback.
+                if not aether_sig or not aether_ts or not signing_secret:
                     return False
-                # Reject stale timestamps (replay protection)
-                from actions.delivery.security import verify_timestamp_tolerance, constant_time_compare
-                if aether_ts and not verify_timestamp_tolerance(aether_ts, max_age_seconds=300):
+                from actions.delivery.security import constant_time_compare
+                try:
+                    sent_at = float(aether_ts)
+                except ValueError:
+                    return False
+                if not _within_window(sent_at, inbox, _CALLBACK_REPLAY_WINDOW_SECONDS):
                     logger.warning("webhook_callback_timestamp_stale inbox_id=%s", inbox.get("id"))
                     return False
                 # Verify HMAC-SHA256 of timestamp.body
@@ -461,6 +513,9 @@ class WebhookInboxProcessor:
                 # Generic webhook / Aether callback
                 event_data = payload.get("event_data") or payload
                 event_type = event_data.get("event_type", "delivered")
+                delivery_id = _delivery_id(payload)
+                if delivery_id:
+                    external_id = delivery_id
                 extra_meta.update(
                     {k: v for k, v in event_data.items() if k != "event_type"}
                 )
@@ -511,6 +566,93 @@ class WebhookInboxProcessor:
             raw_payload=raw_payload,
         )
 
+    async def _bind(self, inbox: dict) -> Optional[dict]:
+        """Resolve the one stored delivery this callback refers to.
+
+        Returns ``{"link": ..., "secret": ...}`` or ``None`` when the callback
+        matches no delivery, or deliveries in more than one tenant. Nothing the
+        sender chose (headers, query, body tenant ids) is consulted.
+        """
+        provider = inbox.get("provider", "")
+        if provider not in _BOUND_PROVIDERS:
+            return None
+        try:
+            payload = json.loads(inbox.get("raw_body") or "")
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(payload, dict):
+            return None
+        if provider == "linear":
+            key = (payload.get("data") or {}).get("id")
+        elif provider == "jira":
+            key = (payload.get("issue") or {}).get("key")
+        else:
+            key = _delivery_id(payload)
+        if not key:
+            return None
+
+        links = await self._link_repo.find_many(
+            filters={"provider": provider, "external_id": str(key)},
+            limit=_MAX_LINK_CANDIDATES,
+        )
+        matches: list[dict] = []
+        for link in links:
+            if not link.get("tenant_id"):
+                continue
+            stored = await self._stored_delivery(link)
+            if stored is None:
+                continue
+            receipt, job = stored
+            secret = None
+            if provider == "jira" and not _jira_site_matches(payload, receipt, job):
+                continue
+            if provider == "linear" and not _linear_scope_matches(payload, receipt, job):
+                continue
+            if provider == "webhook":
+                if not job:
+                    continue
+                secret = await self._resolve_secret(job)
+                if not secret:
+                    continue
+            matches.append({"link": link, "secret": secret})
+        if len({m["link"]["tenant_id"] for m in matches}) != 1:
+            return None
+        return matches[0]
+
+    async def _stored_delivery(self, link: dict) -> Optional[tuple[dict, dict]]:
+        """The link's receipt and job (``{}`` when not stored); ``None`` when
+        either belongs to a tenant other than the link's."""
+        tenant_id = link["tenant_id"]
+        receipt: dict = {}
+        job: dict = {}
+        if link.get("receipt_id"):
+            receipt = await self._receipts().find_by_id(link["receipt_id"]) or {}
+        if receipt and receipt.get("job_id"):
+            job = await self._jobs().find_by_id(receipt["job_id"]) or {}
+        if (receipt and receipt.get("tenant_id") != tenant_id) or (
+            job and job.get("tenant_id") != tenant_id
+        ):
+            return None
+        return receipt, job
+
+    def _receipts(self):
+        if self._receipt_repo is None:
+            from repositories.delivery_repos import ProviderReceiptRepository
+            self._receipt_repo = ProviderReceiptRepository()
+        return self._receipt_repo
+
+    def _jobs(self):
+        if self._job_repo is None:
+            from repositories.delivery_repos import DeliveryJobRepository
+            self._job_repo = DeliveryJobRepository()
+        return self._job_repo
+
+    async def _resolve_secret(self, job: dict) -> Optional[str]:
+        if self._secret_resolver is None:
+            from actions.delivery.worker import resolve_job_credential
+            self._secret_resolver = resolve_job_credential
+        return await self._secret_resolver(job)
+
     async def _resolve_external_link(
         self, external_system: str, external_id: str, tenant_id: str
     ) -> Optional[dict]:
@@ -547,3 +689,56 @@ class WebhookInboxProcessor:
             except Exception as exc:
                 logger.warning("inbox_processor_loop_error: %s", exc)
                 await asyncio.sleep(5.0)
+
+
+# ─── Binding helpers ─────────────────────────────────────────────────────────
+
+def _delivery_id(payload: dict) -> str:
+    event_data = payload.get("event_data")
+    if not isinstance(event_data, dict):
+        event_data = payload
+    return str(event_data.get("delivery_id") or payload.get("delivery_id") or "")
+
+
+def _host(url: Any) -> Optional[str]:
+    if not isinstance(url, str) or not url:
+        return None
+    return (urlparse(url).hostname or "").lower() or None
+
+
+def _jira_site_matches(payload: dict, receipt: dict, job: dict) -> bool:
+    """Issue keys repeat across Jira sites; the event's ``issue.self`` host
+    must be the site the bound job created the issue on."""
+    host = _host((payload.get("issue") or {}).get("self"))
+    config = job.get("provider_config") or {}
+    bound = {
+        _host((receipt.get("raw_response") or {}).get("self")),
+        _host(config.get("base_url") or config.get("site_url")),
+    } - {None}
+    return host is not None and host in bound
+
+
+def _linear_scope_matches(payload: dict, receipt: dict, job: dict) -> bool:
+    """Where the bound delivery stored a team / organisation, the event must
+    come from the same one."""
+    issue = (
+        ((receipt.get("raw_response") or {}).get("data") or {}).get("issueCreate") or {}
+    ).get("issue") or {}
+    team = issue.get("team") or {}
+    stored_team = team.get("id") or (job.get("provider_config") or {}).get("team_id")
+    stored_org = (team.get("organization") or {}).get("id")
+    if stored_team and (payload.get("data") or {}).get("teamId") != stored_team:
+        return False
+    if stored_org and payload.get("organizationId") != stored_org:
+        return False
+    return True
+
+
+def _within_window(sent_at: float, inbox: dict, window_seconds: int) -> bool:
+    """Compare the sender's timestamp with when the route received the
+    callback, so a processing backlog never rejects a fresh delivery."""
+    try:
+        received_at = datetime.fromisoformat(str(inbox["received_at"])).timestamp()
+    except (KeyError, ValueError):
+        received_at = time.time()
+    return abs(received_at - sent_at) <= window_seconds

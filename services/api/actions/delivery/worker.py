@@ -401,32 +401,7 @@ class DeliveryWorker:
             logger.warning(f"Intent completion check failed for {intent_id!r}: {exc}")
 
     async def _resolve_credential(self, job: dict[str, Any]) -> Optional[str]:
-        """Look up the job tenant's credential via secret_ref in provider_config.
-
-        Raises RetryableProviderError on transient vault failures so the job
-        is retried rather than dead-lettered.
-        """
-        from actions.delivery.adapters.base import RetryableProviderError
-        provider_config = job.get("provider_config") or {}
-        secret_ref = provider_config.get("secret_ref")
-        tenant_id = job.get("tenant_id") or ""
-        if not secret_ref or not tenant_id:
-            return None
-        try:
-            from shared.credentials.service import credential_service
-            secret = await credential_service.reveal(tenant_id, secret_ref)
-            if secret:
-                return secret
-            from repositories.repos import ProvidersRepository
-            record = await ProvidersRepository().find_for_tenant(tenant_id, secret_ref)
-            if record:
-                return record.get("api_key") or record.get("token")
-            return None
-        except Exception as exc:
-            logger.warning(f"Credential resolution failed for secret_ref={secret_ref!r}: {exc}")
-            raise RetryableProviderError(
-                f"Transient vault failure resolving credential: {exc}"
-            ) from exc
+        return await resolve_job_credential(job)
 
     async def _advance_suggestion_delivered(
         self, suggestion_id: str, receipt_id: str, tenant_id: str,
@@ -460,6 +435,35 @@ def _now_iso() -> str:
 def _now_ms() -> int:
     import time
     return int(time.time() * 1000)
+
+
+async def resolve_job_credential(job: dict[str, Any]) -> Optional[str]:
+    """Look up the job tenant's credential via secret_ref in provider_config.
+
+    Raises RetryableProviderError on transient vault failures so the job
+    is retried rather than dead-lettered.
+    """
+    from actions.delivery.adapters.base import RetryableProviderError
+    provider_config = job.get("provider_config") or {}
+    secret_ref = provider_config.get("secret_ref")
+    tenant_id = job.get("tenant_id") or ""
+    if not secret_ref or not tenant_id:
+        return None
+    try:
+        from shared.credentials.service import credential_service
+        secret = await credential_service.reveal(tenant_id, secret_ref)
+        if secret:
+            return secret
+        from repositories.repos import ProvidersRepository
+        record = await ProvidersRepository().find_for_tenant(tenant_id, secret_ref)
+        if record:
+            return record.get("api_key") or record.get("token")
+        return None
+    except Exception as exc:
+        logger.warning(f"Credential resolution failed for secret_ref={secret_ref!r}: {exc}")
+        raise RetryableProviderError(
+            f"Transient vault failure resolving credential: {exc}"
+        ) from exc
 
 
 # Module-level singleton — started from main.py lifespan
