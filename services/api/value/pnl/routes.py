@@ -9,8 +9,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from dependencies.providers import get_clickhouse, get_provider_gateway
+from repositories.repos import EntityRepository, WalletRepository
 from value.pnl.pnl_calculator import PNLCalculator
-from shared.common.common import APIResponse
+from shared.common.common import APIResponse, NotFoundError
 from shared.logger.logger import get_logger
 
 logger = get_logger("aether.pnl.routes")
@@ -40,6 +41,16 @@ def _moralis_provider(gateway):
         return None
 
 
+async def _require_tenant_entity(entity_id: str, tenant_id: str) -> None:
+    """404 unless ``tenant_id`` holds the entity row or a wallet linked to it."""
+    entity = await EntityRepository().find_by_id(entity_id)
+    if entity is not None and entity.get("tenant_id") == tenant_id:
+        return
+    if await WalletRepository().count({"owner_entity_id": entity_id, "tenant_id": tenant_id}):
+        return
+    raise NotFoundError("Entity")
+
+
 class _NullProvider:
     """Stands in when the real provider is not configured."""
 
@@ -66,6 +77,7 @@ async def get_pnl(
 
     tenant_id = request.state.tenant.tenant_id
     window_days = _WINDOW_MAP[window]
+    await _require_tenant_entity(entity_id, tenant_id)
 
     coingecko = _coingecko_provider(provider_gateway) or _NullProvider()
     moralis = _moralis_provider(provider_gateway) or _NullProvider()

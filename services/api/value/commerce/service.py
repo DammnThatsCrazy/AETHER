@@ -54,8 +54,8 @@ class CommerceService:
 
         # Persist the tenant on the record so tenant-scoped reads
         # (get_fee_elimination_report / get_agent_spend) can never observe
-        # another tenant's payments. An empty caller tenant stays empty (the
-        # record is then visible to unscoped/operator reads only).
+        # another tenant's payments. An empty caller tenant stays empty, and
+        # no tenant-scoped read ever returns such a record.
         payment.tenant_id = tenant_id or None
 
         # Calculate fee elimination if using crypto/x402 instead of card
@@ -177,11 +177,11 @@ class CommerceService:
         logger.info(f"Agent hire recorded: {hire.hiring_agent_id} hired {hire.hired_agent_id}")
         return hire
 
-    async def get_fee_elimination_report(self, period: str = "all", tenant_id: str = "") -> FeeEliminationReport:
-        """Generate fee elimination report for a period."""
-        payments = self._payments
-        if tenant_id:
-            payments = [p for p in payments if getattr(p, 'tenant_id', '') == tenant_id]
+    async def get_fee_elimination_report(self, period: str, tenant_id: str) -> FeeEliminationReport:
+        """Generate the tenant's fee elimination report for a period."""
+        if not tenant_id:
+            raise ValueError("get_fee_elimination_report requires a tenant_id")
+        payments = [p for p in self._payments if getattr(p, 'tenant_id', '') == tenant_id]
 
         total_volume = sum(p.amount for p in payments)
         total_eliminated = sum(p.fee_eliminated_usd for p in payments)
@@ -196,14 +196,15 @@ class CommerceService:
             eliminated_usd=round(total_eliminated, 2),
         )
 
-    async def get_agent_spend(self, agent_id: str, tenant_id: str = "") -> dict:
-        """Get spending history for an agent."""
+    async def get_agent_spend(self, agent_id: str, tenant_id: str) -> dict:
+        """Get the tenant's spending history for an agent."""
+        if not tenant_id:
+            raise ValueError("get_agent_spend requires a tenant_id")
         agent_payments = [
             p for p in self._payments
             if p.payer_id == agent_id and p.payer_type == "agent"
+            and getattr(p, 'tenant_id', '') == tenant_id
         ]
-        if tenant_id:
-            agent_payments = [p for p in agent_payments if getattr(p, 'tenant_id', '') == tenant_id]
 
         return {
             "agent_id": agent_id,

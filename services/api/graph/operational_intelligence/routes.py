@@ -739,7 +739,7 @@ async def traverse_graph(
     if body.filter:
         result = _filter_result(result, body.filter)
 
-    start_vertex = await graph.get_vertex(body.start.id)
+    start_vertex = await graph.get_vertex_for_tenant(body.tenantId, body.start.id)
     if start_vertex:
         start_node = _vertex_to_node(start_vertex)
     else:
@@ -795,8 +795,8 @@ async def shortest_path(
     )
 
     if not result.nodes:
-        from_v = await graph.get_vertex(body.from_.id)
-        to_v = await graph.get_vertex(body.to.id)
+        from_v = await graph.get_vertex_for_tenant(body.tenantId, body.from_.id)
+        to_v = await graph.get_vertex_for_tenant(body.tenantId, body.to.id)
         anchors = []
         if from_v:
             anchors.append(_vertex_to_node(from_v))
@@ -831,7 +831,7 @@ async def temporal_graph(
         tenant_id=body.tenantId,
     )
 
-    anchor_v = await graph.get_vertex(body.anchor.id)
+    anchor_v = await graph.get_vertex_for_tenant(body.tenantId, body.anchor.id)
     anchor_node = _vertex_to_node(anchor_v) if anchor_v else GraphNode(
         id=body.anchor.id, kind=body.anchor.kind, label=body.anchor.label,
         properties={"tenantId": body.tenantId, "asOf": body.asOf},

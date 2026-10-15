@@ -13,7 +13,7 @@ from typing import Optional
 
 from datetime import datetime, timedelta
 
-from repositories.repos import BaseRepository, AnalyticsRepository
+from repositories.repos import AnalyticsRepository, TenantOwnedRepository
 from repositories.lake import silver_identity, silver_onchain, silver_social
 from shared.graph.graph import GraphClient
 from shared.common.common import utc_now
@@ -71,8 +71,11 @@ def _parse_event_time(event: dict) -> Optional[datetime]:
 logger = get_logger("aether.behavioral.engines")
 
 
-class SignalObservationRepository(BaseRepository):
-    """Stores derived behavioral signal observations."""
+class SignalObservationRepository(TenantOwnedRepository):
+    """Stores derived behavioral signal observations.
+
+    Reads go through ``signal_repo.for_tenant(tenant_id)``.
+    """
 
     def __init__(self) -> None:
         super().__init__("behavioral_signals")

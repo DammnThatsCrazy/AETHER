@@ -35,10 +35,11 @@ def test_entity_create_and_list():
 def test_identifier_link_unlink():
     repo = IdentityClusterRepository()
     _run(repo.link("c1", "e1", "tenant1", "wallet", "0xabc"))
-    rows = _run(repo.list_for_entity("e1"))
+    rows = _run(repo.list_for_entity("e1", "tenant1"))
     assert len(rows) == 1
+    assert _run(repo.list_for_entity("e1", "tenant2")) == []
     _run(repo.unlink("c1"))
-    rows_after = _run(repo.list_for_entity("e1"))
+    rows_after = _run(repo.list_for_entity("e1", "tenant1"))
     assert rows_after == []
 
 

@@ -392,6 +392,9 @@ async def escalate_notification(notification_id: str, request: Request, tenantId
     # Escalate stays in operator_review but advances with escalation metadata
     _require(request, tenantId, "write")
     request.state.tenant.require_permission("notifications:approve")
+    row = await _notif_repo.find_by_id(notification_id)
+    if not row or row.get("tenant_id") != tenantId:
+        raise NotFoundError(f"Notification {notification_id!r} not found")
     engine = _get_lifecycle_engine()
     updated = await engine.advance(
         notification_id, NotificationLifecycleState.OPERATOR_REVIEW,

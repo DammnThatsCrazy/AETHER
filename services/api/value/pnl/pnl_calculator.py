@@ -111,16 +111,21 @@ class PNLCalculator:
     """
     Computes PNL for an entity across a time window.
     Reads from:
+      - entity_wallets (the tenant's wallet addresses for the entity)
       - silver_web3_events (tx history with buy/sell)
       - gold_web3_daily_metrics (TVL snapshots)
       - CoinGecko provider (historical prices)
       - Moralis provider (current portfolio)
     """
 
-    def __init__(self, clickhouse_client, coingecko_provider, moralis_provider):
+    def __init__(self, clickhouse_client, coingecko_provider, moralis_provider, wallet_repo=None):
         self.ch = clickhouse_client
         self.coingecko = coingecko_provider
         self.moralis = moralis_provider
+        if wallet_repo is None:
+            from repositories.repos import WalletRepository
+            wallet_repo = WalletRepository()
+        self.wallets = wallet_repo
 
     async def compute(
         self,
@@ -240,12 +245,19 @@ class PNLCalculator:
         Compute realized PNL via FIFO from silver_web3_events.
         Returns (realized_pnl_usd, data_confidence).
         data_confidence = 'estimated' if full tx history is unavailable.
+
+        Only the addresses ``tenant_id`` linked to the entity are read: the
+        events table is keyed by wallet address, not by tenant.
         """
-        where_clause = (
-            "wallet_address IN (SELECT address FROM wallets WHERE entity_id = %(entity_id)s) "
-            "AND tx_status = 'confirmed'"
+        wallet_rows = await self.wallets.find_many(
+            filters={"owner_entity_id": entity_id, "tenant_id": tenant_id}, limit=1000,
         )
-        params: dict = {"entity_id": entity_id}
+        addresses = tuple(sorted({r["address"] for r in wallet_rows if r.get("address")}))
+        if not addresses:
+            return Decimal("0"), "exact"
+
+        where_clause = "wallet_address IN %(addresses)s AND tx_status = 'confirmed'"
+        params: dict = {"addresses": addresses}
         if window_start:
             where_clause += " AND timestamp >= %(start)s"
             params["start"] = window_start.isoformat()

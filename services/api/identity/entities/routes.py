@@ -277,7 +277,7 @@ async def list_identifiers(entity_id: str, request: Request):
     entity = await _entities.find_by_id(entity_id)
     if entity is None or entity.get("tenant_id") != tenant.tenant_id:
         raise NotFoundError("Entity")
-    rows = await _identifiers.list_for_entity(entity_id)
+    rows = await _identifiers.list_for_entity(entity_id, tenant.tenant_id)
     return APIResponse(data={"entity_id": entity_id, "identifiers": rows, "count": len(rows)}).to_dict()
 
 

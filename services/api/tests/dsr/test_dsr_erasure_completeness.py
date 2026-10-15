@@ -539,7 +539,7 @@ async def _assert_stores_erased(world: World) -> None:
     assert await repo.find_entities_by_alias(ot, "user_id", USER) == [world.b_entity]
     assert await EntityRepository().find_by_id(world.entity) is None
     assert await EntityRepository().find_by_id(world.other_entity) is not None
-    assert await IdentityClusterRepository().list_for_entity(world.entity) == []
+    assert await IdentityClusterRepository().list_for_entity(world.entity, t) == []
 
     graph = get_graph_client()
     live = await graph.get_edges(world.entity, direction="both")
