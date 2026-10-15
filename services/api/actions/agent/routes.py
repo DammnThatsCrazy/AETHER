@@ -227,9 +227,9 @@ async def submit_objective(body: ObjectiveSubmission, request: Request):
         tenant.tenant_id, body.goal, body.objective_type, body.severity, body.priority,
         payload, _actor_id(request), idem, _request_id(request),
     )
-    # Idempotent retries (same idempotency key) return the existing objective; only
-    # stage a review batch the first time so retries don't pile up duplicate
-    # pending approvals for a single objective.
+    # Exact retries return the existing objective; reusing a key for changed
+    # objective content raises a conflict. Only stage a review batch the first
+    # time so retries don't pile up duplicate pending approvals.
     if isinstance(staged, list) and staged and not await _runtime_repo.review_batches_for_objective(
         tenant.tenant_id, objective["objective_id"]
     ):
