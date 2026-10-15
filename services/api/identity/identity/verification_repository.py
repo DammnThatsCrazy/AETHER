@@ -92,6 +92,103 @@ class VerificationChallengeRepository(_ScopedRepo):
             fields["state"] = "locked"
         return await self.update(challenge_id, fields)
 
+    async def record_failed_attempt(
+        self, tenant_id: str, challenge_id: str
+    ) -> Optional[dict]:
+        """Atomically count a failed wallet proof and lock at the limit."""
+        pool = await self._ensure_pool()
+        if pool is not None:
+            await self._ensure_table()
+            row = await pool.fetchrow(
+                f"""UPDATE {self.table_name}
+                    SET data = data || jsonb_build_object(
+                        'attempt_count',
+                        COALESCE(NULLIF(data->>'attempt_count', '')::integer, 0) + 1,
+                        'state', CASE
+                            WHEN COALESCE(NULLIF(data->>'attempt_count', '')::integer, 0) + 1
+                                 >= COALESCE(NULLIF(data->>'max_attempts', '')::integer, 5)
+                            THEN 'locked'
+                            ELSE 'issued'
+                        END
+                    ), updated_at = NOW()
+                    WHERE id = $1 AND tenant_id = $2
+                      AND data->>'state' = 'issued'
+                      AND COALESCE(NULLIF(data->>'attempt_count', '')::integer, 0)
+                          < COALESCE(NULLIF(data->>'max_attempts', '')::integer, 5)
+                    RETURNING data""",
+                challenge_id,
+                tenant_id,
+            )
+            if row is None:
+                return None
+            data = row["data"]
+            return json.loads(data) if isinstance(data, str) else dict(data)
+
+        async with _consume_lock():
+            record = await self.get_for_tenant(tenant_id, challenge_id)
+            if record is None or record.get("state") != "issued":
+                return None
+            attempts = int(record.get("attempt_count", 0))
+            max_attempts = int(record.get("max_attempts", 5))
+            if attempts >= max_attempts:
+                return None
+            attempts += 1
+            state = "locked" if attempts >= max_attempts else "issued"
+            return await self.update(
+                challenge_id, {"attempt_count": attempts, "state": state}
+            )
+
+    async def consume_wallet_atomic(
+        self, tenant_id: str, challenge_id: str
+    ) -> Optional[dict]:
+        """Count a valid attempt and consume an issued wallet challenge once.
+
+        Signature verification happens before this guarded transition. A valid
+        signature on the configured final attempt is therefore accepted, while
+        concurrent requests cannot resurrect a consumed challenge.
+        """
+        now = utc_now().isoformat()
+        pool = await self._ensure_pool()
+        if pool is not None:
+            await self._ensure_table()
+            row = await pool.fetchrow(
+                f"""UPDATE {self.table_name}
+                    SET data = data || jsonb_build_object(
+                        'state', 'consumed',
+                        'attempt_count',
+                        COALESCE(NULLIF(data->>'attempt_count', '')::integer, 0) + 1,
+                        'consumed_at', $1
+                    ), updated_at = NOW()
+                    WHERE id = $2 AND tenant_id = $3
+                      AND data->>'state' = 'issued'
+                      AND COALESCE(NULLIF(data->>'attempt_count', '')::integer, 0)
+                          < COALESCE(NULLIF(data->>'max_attempts', '')::integer, 5)
+                    RETURNING data""",
+                now,
+                challenge_id,
+                tenant_id,
+            )
+            if row is None:
+                return None
+            data = row["data"]
+            return json.loads(data) if isinstance(data, str) else dict(data)
+
+        async with _consume_lock():
+            record = await self.get_for_tenant(tenant_id, challenge_id)
+            if record is None or record.get("state") != "issued":
+                return None
+            attempts = int(record.get("attempt_count", 0))
+            if attempts >= int(record.get("max_attempts", 5)):
+                return None
+            return await self.update(
+                challenge_id,
+                {
+                    "state": "consumed",
+                    "attempt_count": attempts + 1,
+                    "consumed_at": now,
+                },
+            )
+
     async def consume_atomic(
         self, tenant_id: str, challenge_id: str
     ) -> Optional[dict]:

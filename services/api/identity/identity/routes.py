@@ -2107,6 +2107,7 @@ async def revoke_siwx_session(session_id: str, request: Request) -> dict:
 #   POST /v1/identity/verification/wallet/challenges
 #   POST /v1/identity/verification/wallet/challenges/{challenge_id}/verify
 #   GET  /v1/identity/entities/{canonical_entity_id}/evidence   (redacted)
+#   POST /v1/identity/evidence/{evidence_id}/replay
 #   POST /v1/identity/evidence/{evidence_id}/revoke
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -2163,6 +2164,30 @@ async def _require_identity_link_consent(tenant_id: str, anonymous_id: str) -> d
     if not allowed or not context:
         raise BadRequestError("Identity-link consent is required")
     return context
+
+
+def _wallet_identity_namespace(tenant: Any, requested_app: Optional[str]) -> str:
+    """Resolve the SDK identity namespace from authenticated app bindings."""
+    tenant_id = str(getattr(tenant, "tenant_id", "") or "").strip()
+    site_ids = getattr(tenant, "site_ids", None)
+    supplied = str(requested_app or "").strip()
+    if site_ids is None:
+        # Tenant-wide API keys use the same default namespace as SDK batch
+        # ingestion. A caller cannot select a narrower app scope on this key.
+        if supplied:
+            raise BadRequestError("Wallet proof app scope is not authorized")
+        if not tenant_id:
+            raise BadRequestError("Wallet proof app scope is unavailable")
+        return f"tenant:{tenant_id}"
+
+    allowed = {str(site).strip() for site in site_ids if str(site).strip()}
+    if supplied:
+        if supplied not in allowed:
+            raise BadRequestError("Wallet proof app scope is not authorized")
+        return supplied
+    if len(allowed) == 1:
+        return next(iter(allowed))
+    raise BadRequestError("Wallet proof app scope is required")
 
 
 # ── Request models ─────────────────────────────────────────────────────────
@@ -2281,12 +2306,16 @@ async def issue_wallet_verification_challenge(
     consent_context = await _require_identity_link_consent(
         tenant.tenant_id, body.anonymous_id
     )
+    identity_namespace = _wallet_identity_namespace(
+        tenant, body.tenant_app_key
+    )
     try:
         result = await _get_wallet_verification_service().issue_wallet_challenge(
             tenant_id=tenant.tenant_id,
             anonymous_id=body.anonymous_id,
             wallet_address=body.wallet_address,
             chain_namespace=body.chain_namespace,
+            identity_namespace=identity_namespace,
             consent_snapshot=consent_context,
         )
     except ValueError as exc:
@@ -2310,6 +2339,9 @@ async def verify_wallet_verification_challenge(
     consent_context = await _require_identity_link_consent(
         tenant.tenant_id, body.anonymous_id
     )
+    identity_namespace = _wallet_identity_namespace(
+        tenant, body.tenant_app_key
+    )
     if body.challenge_id != challenge_id:
         raise BadRequestError("Wallet proof challenge does not match the request")
     try:
@@ -2320,6 +2352,7 @@ async def verify_wallet_verification_challenge(
             wallet_address=body.wallet_address,
             chain_namespace=body.chain_namespace,
             signature=body.signature,
+            identity_namespace=identity_namespace,
             consent_snapshot=consent_context,
         )
     except ValueError as exc:
@@ -2361,6 +2394,28 @@ async def list_entity_verification_evidence(
         "canonical_entity_id": canonical_entity_id,
         "evidence": rows,
         "total": len(rows),
+    }).to_dict()
+
+
+@router.post("/evidence/{evidence_id}/replay")
+async def replay_verification_evidence(
+    evidence_id: str,
+    request: Request,
+) -> dict:
+    """Retry resolution from durable evidence without resupplying the subject."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    result = await _get_evidence_service().retry_evidence_replay(
+        tenant.tenant_id, evidence_id
+    )
+    if result.get("status") == "not_found":
+        raise NotFoundError("VerificationEvidence")
+    return APIResponse(data={
+        "evidence_id": evidence_id,
+        "status": result.get("status"),
+        "decision": result.get("decision"),
+        "canonical_entity_id": result.get("canonical_entity_id"),
+        "error": result.get("error"),
     }).to_dict()
 
 

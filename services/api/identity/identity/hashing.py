@@ -9,11 +9,15 @@ Rules:
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import os
 import re
 from typing import Optional
+
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
 # Fallback HMAC key used when no env var is set (test/local only).
@@ -35,6 +39,26 @@ def _hmac_key() -> bytes:
 def _verification_hmac_key() -> bytes:
     raw = os.getenv("IDENTITY_VERIFICATION_TOKEN_KEY", "")
     return raw.encode() if raw else _DEFAULT_VERIFICATION_KEY
+
+
+def _wallet_subject_binding_key(tenant_id: str) -> bytes:
+    raw = os.getenv("IDENTITY_VERIFICATION_TOKEN_KEY", "")
+    environment = os.getenv("AETHER_ENV", "local").strip().lower()
+    if not raw and environment not in {"local", "test", "development"}:
+        raise RuntimeError("IDENTITY_VERIFICATION_TOKEN_KEY is required")
+    material = raw.encode() if raw else _DEFAULT_VERIFICATION_KEY
+    return hmac.new(
+        material,
+        f"wallet-proof-subject-binding:{tenant_id}".encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+
+
+def ensure_wallet_subject_binding_key(tenant_id: str) -> None:
+    """Fail early if production cannot safely persist replay bindings."""
+    if not tenant_id:
+        raise ValueError("tenant id is required for wallet subject binding")
+    _wallet_subject_binding_key(tenant_id)
 
 
 def hash_value(value: str, scope: str = "") -> str:
@@ -64,6 +88,39 @@ def verify_token_digest(token: str, expected_digest: str, scope: str = "") -> bo
     if not token or not expected_digest:
         return False
     return hmac.compare_digest(hash_verification_token(token, scope), expected_digest)
+
+
+def encrypt_wallet_subject_binding(subject_id: str, tenant_id: str) -> str:
+    """Encrypt a wallet proof's anonymous subject for durable replay recovery.
+
+    The ciphertext is authenticated and tenant-bound. The verification secret
+    key is used as key material so this recoverable value stays in a separate
+    key domain from identity aliases and is never written to logs or API output.
+    """
+    if not subject_id or not tenant_id:
+        return ""
+    key = _wallet_subject_binding_key(tenant_id)
+    nonce = os.urandom(12)
+    encrypted = AESGCM(key).encrypt(
+        nonce, subject_id.encode("utf-8"), tenant_id.encode("utf-8")
+    )
+    return base64.urlsafe_b64encode(nonce + encrypted).decode("ascii")
+
+
+def decrypt_wallet_subject_binding(ciphertext: str, tenant_id: str) -> str:
+    """Recover a tenant-bound wallet proof subject from its stored ciphertext."""
+    if not ciphertext or not tenant_id:
+        return ""
+    try:
+        packed = base64.urlsafe_b64decode(ciphertext.encode("ascii"))
+        if len(packed) <= 12:
+            return ""
+        key = _wallet_subject_binding_key(tenant_id)
+        return AESGCM(key).decrypt(
+            packed[:12], packed[12:], tenant_id.encode("utf-8")
+        ).decode("utf-8")
+    except (ValueError, UnicodeDecodeError, InvalidTag, RuntimeError):
+        return ""
 
 
 def hash_email(email: str, tenant_id: str) -> str:

@@ -80,6 +80,7 @@ class ResolutionReplayService:
         consent_snapshot: Optional[dict] = None,
         chain_namespace: Optional[str] = None,
         subject_hint_id: Optional[str] = None,
+        identity_namespace: Optional[str] = None,
     ) -> dict:
         """Idempotently replay resolution for a verified identifier.
 
@@ -92,6 +93,7 @@ class ResolutionReplayService:
         # reused trigger id with a different value or consent snapshot is a
         # caller error, not permission to silently skip new evidence.
         normalized_chain_namespace = str(chain_namespace or "").strip().lower()
+        normalized_identity_namespace = str(identity_namespace or "").strip()
         subject_hint_hash = hash_value(
             str(subject_hint_id or "").strip(),
             scope=f"wallet-proof-subject:{tenant_id}",
@@ -105,6 +107,7 @@ class ResolutionReplayService:
             fingerprint_payload.update({
                 "chain_namespace": normalized_chain_namespace,
                 "subject_hint_hash": subject_hint_hash,
+                "identity_namespace": normalized_identity_namespace,
             })
         evidence_fingerprint = hashlib.sha256(json.dumps(
             fingerprint_payload,
@@ -127,9 +130,12 @@ class ResolutionReplayService:
                     "idempotent": False,
                     "policy_version": policy_version,
                 }
+            summary = existing.get("summary") or {}
             return {
                 "status": "noop", "idempotent": True, "key": key,
                 "policy_version": policy_version,
+                "decision": summary.get("decision"),
+                "canonical_entity_id": summary.get("canonical_entity_id"),
             }
 
         try:
@@ -211,15 +217,23 @@ class ResolutionReplayService:
                 }
             ]
             if sig_type == IdentitySignalType.WALLET_SIGNATURE_VERIFIED:
+                scoped_subject_id = (
+                    f"{normalized_identity_namespace}:{str(subject_hint_id).strip()}"
+                    if normalized_identity_namespace
+                    else str(subject_hint_id).strip()
+                )
                 pre_hashed_signals.append({
                     "type": IdentitySignalType.ANONYMOUS_ID.value,
-                    "hash": str(subject_hint_id).strip(),
+                    "hash": scoped_subject_id,
                     "display": "[REDACTED:anonymous_id]",
                 })
             synthetic = {
                 "event_id": f"verify:{trigger_id}",
                 "tenant_id": tenant_id,
-                "context": {"consent": consent_snapshot},
+                "context": {
+                    "consent": consent_snapshot,
+                    "identity_namespace": normalized_identity_namespace,
+                },
                 "_pre_hashed_signals": pre_hashed_signals,
                 "source": "resolution_replay",
             }

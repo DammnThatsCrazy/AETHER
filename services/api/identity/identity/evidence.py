@@ -18,6 +18,7 @@ from typing import Any, Optional
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger
 
+from .hashing import decrypt_wallet_subject_binding, encrypt_wallet_subject_binding
 from .metrics import IdentityMetrics
 from .models import (
     IdentitySignalType,
@@ -90,6 +91,7 @@ class EvidenceService:
         challenge_id: Optional[str] = None,
         source_event_id: Optional[str] = None,
         subject_hint_id: Optional[str] = None,
+        identity_namespace: Optional[str] = None,
         proof_reference: Optional[str] = None,
         proof_digest: Optional[str] = None,
         assurance_level: str = "verified",
@@ -122,11 +124,17 @@ class EvidenceService:
             expires_at=expires_at,
             policy_version=policy_version,
             consent_snapshot=consent_snapshot,
+            subject_hint_ciphertext=(
+                encrypt_wallet_subject_binding(subject_hint_id, tenant_id)
+                if identifier_type == "wallet" and subject_hint_id
+                else None
+            ),
+            identity_namespace=identity_namespace,
             metadata=dict(metadata or {}),
         )
         await self._repo.create(evidence)
         self._metrics.record_evidence_active(evidence_type)
-        await self._trigger_replay(
+        replay_result = await self._trigger_replay(
             tenant_id=tenant_id,
             identifier_type=identifier_type,
             identifier_hash=identifier_hash,
@@ -136,7 +144,9 @@ class EvidenceService:
             consent_snapshot=consent_snapshot,
             chain_namespace=(metadata or {}).get("chain_namespace"),
             subject_hint_id=subject_hint_id,
+            identity_namespace=identity_namespace,
         )
+        await self._bind_entity_if_resolved(evidence.id, tenant_id, replay_result)
         return evidence
 
     async def revoke_evidence(
@@ -150,7 +160,7 @@ class EvidenceService:
         if row is None:
             return None
         self._metrics.record_evidence_revoked(row.get("evidence_type", ""))
-        await self._trigger_replay(
+        replay_result = await self._trigger_replay(
             tenant_id=tenant_id,
             identifier_type=row.get("identifier_type", ""),
             identifier_hash=row.get("identifier_hash", ""),
@@ -158,8 +168,62 @@ class EvidenceService:
             trigger_id=evidence_id,
             policy_version=row.get("policy_version", "1.0.0"),
             consent_snapshot=row.get("consent_snapshot"),
+            chain_namespace=(row.get("metadata") or {}).get("chain_namespace"),
+            subject_hint_id=self._recover_subject_hint(row, tenant_id),
+            identity_namespace=row.get("identity_namespace"),
         )
+        await self._bind_entity_if_resolved(evidence_id, tenant_id, replay_result)
         return row
+
+    async def retry_evidence_replay(
+        self, tenant_id: str, evidence_id: str
+    ) -> dict:
+        """Retry replay from the durable, encrypted wallet subject binding.
+
+        This supports operator reconciliation after a resolver outage without
+        retaining the caller's raw anonymous identifier in process state.
+        """
+        row = await self._repo.get_for_tenant(tenant_id, evidence_id)
+        if row is None:
+            return {"status": "not_found"}
+        if row.get("status") != VerificationEvidenceStatus.ACTIVE.value:
+            return {"status": "inactive_evidence"}
+        result = await self._trigger_replay(
+            tenant_id=tenant_id,
+            identifier_type=row.get("identifier_type", ""),
+            identifier_hash=row.get("identifier_hash", ""),
+            trigger_type="verification_evidence_issued",
+            trigger_id=evidence_id,
+            policy_version=row.get("policy_version", "1.0.0"),
+            consent_snapshot=row.get("consent_snapshot"),
+            chain_namespace=(row.get("metadata") or {}).get("chain_namespace"),
+            subject_hint_id=self._recover_subject_hint(row, tenant_id),
+            identity_namespace=row.get("identity_namespace"),
+        )
+        await self._bind_entity_if_resolved(evidence_id, tenant_id, result)
+        return result or {"status": "error", "error": "resolution replay failed"}
+
+    @staticmethod
+    def _recover_subject_hint(row: dict, tenant_id: str) -> Optional[str]:
+        ciphertext = str(row.get("subject_hint_ciphertext") or "")
+        if not ciphertext:
+            return None
+        return decrypt_wallet_subject_binding(ciphertext, tenant_id) or None
+
+    async def _bind_entity_if_resolved(
+        self, evidence_id: str, tenant_id: str, result: Optional[dict]
+    ) -> None:
+        if not result or result.get("status") not in {"complete", "noop"}:
+            return
+        canonical_entity_id = result.get("canonical_entity_id")
+        if not canonical_entity_id:
+            return
+        try:
+            await self._repo.bind_entity(tenant_id, evidence_id, canonical_entity_id)
+        except Exception as exc:  # noqa: BLE001 - evidence issuance remains durable
+            logger.warning(
+                "verification evidence entity binding failed: %s", exc
+            )
 
     async def list_for_entity(
         self, tenant_id: str, canonical_entity_id: str
@@ -199,7 +263,8 @@ class EvidenceService:
         consent_snapshot: Optional[dict],
         chain_namespace: Optional[str] = None,
         subject_hint_id: Optional[str] = None,
-    ) -> None:
+        identity_namespace: Optional[str] = None,
+    ) -> Optional[dict]:
         """Best-effort resolution replay fan-out.
 
         Uses an injected replay service when present (tests); otherwise lazily
@@ -228,7 +293,7 @@ class EvidenceService:
                     metrics=metrics,
                 )
                 replay = ResolutionReplayService(resolver=resolver, repo=repo)
-            await replay.request_replay(
+            result = await replay.request_replay(
                 tenant_id=tenant_id,
                 identifier_type=identifier_type,
                 identifier_hash=identifier_hash,
@@ -238,14 +303,17 @@ class EvidenceService:
                 consent_snapshot=consent_snapshot,
                 chain_namespace=chain_namespace,
                 subject_hint_id=subject_hint_id,
+                identity_namespace=identity_namespace,
             )
             self._metrics.record_resolution_replay("requested")
+            return result if isinstance(result, dict) else None
         except Exception as exc:  # noqa: BLE001 - replay must never break evidence
             logger.warning("resolution replay trigger failed: %s", exc)
             try:
                 self._metrics.record_resolution_replay("error")
             except Exception:  # noqa: BLE001 - metrics are best-effort too
                 pass
+            return None
 
 
 __all__ = ["EvidenceService"]

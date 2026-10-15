@@ -72,6 +72,34 @@ class MemoryChallengeRepository:
         self.rows[challenge_id] = row
         return dict(row)
 
+    async def record_failed_attempt(self, tenant_id: str, challenge_id: str):
+        row = await self.get_for_tenant(tenant_id, challenge_id)
+        if row is None or row.get("state") != "issued":
+            return None
+        attempts = int(row.get("attempt_count", 0))
+        if attempts >= int(row.get("max_attempts", 5)):
+            return None
+        row["attempt_count"] = attempts + 1
+        if row["attempt_count"] >= int(row.get("max_attempts", 5)):
+            row["state"] = "locked"
+        self.rows[challenge_id] = row
+        return dict(row)
+
+    async def consume_wallet_atomic(self, tenant_id: str, challenge_id: str):
+        row = await self.get_for_tenant(tenant_id, challenge_id)
+        if row is None or row.get("state") != "issued":
+            return None
+        attempts = int(row.get("attempt_count", 0))
+        if attempts >= int(row.get("max_attempts", 5)):
+            return None
+        row.update(
+            state="consumed",
+            attempt_count=attempts + 1,
+            consumed_at="2026-10-15T12:00:00+00:00",
+        )
+        self.rows[challenge_id] = row
+        return dict(row)
+
     async def apply_update(self, tenant_id: str, challenge_id: str, fields: dict):
         row = await self.get_for_tenant(tenant_id, challenge_id)
         if row is None:

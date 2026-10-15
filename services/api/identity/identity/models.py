@@ -672,6 +672,10 @@ class VerificationEvidence:
     revoked_at: Optional[str] = None
     policy_version: str = "1.0.0"
     consent_snapshot: Optional[dict] = None
+    # Wallet replay needs the subject value again after the challenge request
+    # has ended. Store it encrypted and tenant-bound; it is never API-visible.
+    subject_hint_ciphertext: Optional[str] = None
+    identity_namespace: Optional[str] = None
     metadata: dict = field(default_factory=dict)
     created_at: str = ""
     updated_at: str = ""
@@ -699,6 +703,8 @@ class VerificationEvidence:
             "revoked_at": self.revoked_at,
             "policy_version": self.policy_version,
             "consent_snapshot": self.consent_snapshot,
+            "subject_hint_ciphertext": self.subject_hint_ciphertext,
+            "identity_namespace": self.identity_namespace,
             "metadata": dict(self.metadata),
             "created_at": self.created_at,
             "updated_at": self.updated_at,
