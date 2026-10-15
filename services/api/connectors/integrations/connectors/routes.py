@@ -254,8 +254,11 @@ async def ingest_connector_webhook(connector_type: str, request: Request):
 # so the middleware skips token auth.  Security is enforced inside the handler via
 # provider-native or Aether HMAC signature verification.
 #
-# Tenant routing: Shopify deliveries resolve the tenant from the signed body's
-# shop domain, which must match exactly one stored Shopify connector binding.
+# Tenant routing: Shopify deliveries resolve the tenant from the shop domain in
+# X-Shopify-Shop-Domain (else the body ``domain``; the two must agree when both
+# are present), which must match exactly one enabled stored Shopify binding.
+# The domain is only a routing candidate: that tenant's own secret must then
+# verify the HMAC over the raw body.
 # Other non-comms connectors still scope the secret lookup by the
 # X-Aether-Tenant-ID header; the tenant's own stored secret must then verify.
 # Every denial past connector lookup returns the same generic 400 so the
@@ -267,10 +270,10 @@ _WEBHOOK_REJECTED = "webhook rejected"
 
 
 async def _shopify_tenant_for(raw_body: bytes, headers: dict[str, str]) -> Optional[str]:
-    """Tenant whose single enabled Shopify binding owns the body's shop domain."""
+    """Tenant whose single enabled Shopify binding owns the delivery's shop domain."""
     import json as _json
 
-    from connectors.providers.shopify.auth import _validated_shop_domain
+    from connectors.providers.shopify.auth import _stored_shop_domain
     from connectors.providers.shopify.webhook import ShopifyWebhookAdapter
 
     try:
@@ -284,7 +287,7 @@ async def _shopify_tenant_for(raw_body: bytes, headers: dict[str, str]) -> Optio
     tenants = {
         row["tenant_id"] for row in rows
         if row.get("enabled")
-        and _validated_shop_domain(str((row.get("config") or {}).get("shop_domain") or "")) == domain
+        and _stored_shop_domain((row.get("config") or {}).get("shop_domain")) == domain
     }
     return tenants.pop() if len(tenants) == 1 else None
 
@@ -296,7 +299,8 @@ async def public_webhook_ingest(connector_type: str, request: Request):
 
     - No API key required.
     - Provider-native or Aether HMAC signature verification.
-    - Shopify: tenant from the signed body's shop domain (unique stored binding).
+    - Shopify: tenant from X-Shopify-Shop-Domain or the body domain (unique
+      stored binding), then that tenant's HMAC must verify.
     - Other connectors: tenant from X-Aether-Tenant-ID, authenticated by that
       tenant's stored secret.
     - Generic HMAC replay prevention: 5-minute timestamp window.

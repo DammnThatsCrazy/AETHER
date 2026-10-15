@@ -408,6 +408,32 @@ def test_webhook_verify_no_secret_or_header_fails(orders: list[dict]) -> None:
     assert not adapter.verify(raw_body, {}, "synth-webhook-secret")
 
 
+def test_webhook_shop_domain_prefers_header_and_requires_agreement() -> None:
+    domain_of = ShopifyWebhookAdapter.shop_domain_from_payload
+    header = {"X-Shopify-Shop-Domain": SHOP_DOMAIN.upper()}
+    assert domain_of({"id": 1}, headers=header) == SHOP_DOMAIN
+    assert domain_of({"domain": SHOP_DOMAIN}, headers={}) == SHOP_DOMAIN
+    assert domain_of({"domain": SHOP_DOMAIN}, headers=header) == SHOP_DOMAIN
+    for payload, headers in (
+        ({"domain": "other-shop.myshopify.com"}, header),
+        ({"id": 1}, {}),
+        ({"id": 1}, {"X-Shopify-Shop-Domain": "https://other-host.test"}),
+        ({"domain": "not-a-shop.test"}, header),
+    ):
+        with pytest.raises(ValueError):
+            domain_of(payload, headers=headers)
+
+
+def test_stored_shop_domain_normalizes_scheme_slash_and_case() -> None:
+    from connectors.providers.shopify.auth import _stored_shop_domain
+
+    assert _stored_shop_domain("https://Synth-Demo.myshopify.com/") == SHOP_DOMAIN
+    assert _stored_shop_domain(" synth-demo.myshopify.com/ ") == SHOP_DOMAIN
+    assert _stored_shop_domain("http://synth-demo.myshopify.com") is None
+    assert _stored_shop_domain("https://synth-demo.example.com") is None
+    assert _stored_shop_domain(None) is None
+
+
 def test_webhook_parse_emits_order_record(orders: list[dict]) -> None:
     envelope = {
         "id": 7000100001,
