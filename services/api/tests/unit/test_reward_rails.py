@@ -619,7 +619,7 @@ def test_webhook_destination_that_does_not_resolve_is_retried(monkeypatch, faili
         return [(2, 1, 6, "", ("93.184.216.34", 443))]
 
     send = AsyncMock(side_effect=AssertionError("connection attempted"))
-    job = {"tenant_id": "t1", "provider_config": {"webhook_url": "https://example.com/hook"},
+    job = {"tenant_id": "t1", "provider_config": {"webhook_url": "https://https-missing.example.com/hook"},
            "payload": _WEBHOOK_ACTION["payload"]}
     with patch("socket.getaddrinfo", side_effect=resolver), patch.object(httpx.AsyncClient, "send", send):
         result = _run(RewardWebhookSender().send(job))

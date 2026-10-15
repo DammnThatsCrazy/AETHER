@@ -279,6 +279,8 @@ class RewardWebhookSender:
             return SenderResult("fatal", response_code=code, error=err)
         if code is not None and (code >= 500 or code == 429):
             return SenderResult("retryable", response_code=code, error=err)
+        if err.startswith(UNRESOLVED_DESTINATION):
+            return SenderResult("retryable", error=err)
         # No HTTP status → network/timeout OR a fail-closed config/SSRF block.
         lowered = err.lower()
         if any(tok in lowered for tok in ("ssrf", "https", "malformed", "missing", "not available", "invalid webhook")):
