@@ -142,6 +142,13 @@ class OutcomeRouter:
         if not notification_id:
             return
         try:
+            row = await self._notification_repo.find_by_id(notification_id)
+            if row is None or row.get("tenant_id") != outcome.tenant_id:
+                logger.warning(
+                    "route_to_notification_skipped id=%s: not in tenant %s",
+                    notification_id, outcome.tenant_id,
+                )
+                return
             raw = outcome.raw_payload or {}
             await self._notification_repo.update(notification_id, {
                 "last_external_outcome": raw.get("event_type", "delivered"),
