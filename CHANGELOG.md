@@ -14,6 +14,9 @@ Versions before `1.0.0` are private alpha, beta, or release-candidate milestones
 - One-tag SDK install: quickstart collapses to a single auto-init script tag that is a real install path, with the canonical envelope stamped on the signals it emits.
 - Install observability: the `sdk_*` event family (loaded / initialized / failed) is registered in the contract registry, and an install verifier reports whether a pasted install came up — distinguishing an install that failed from one that never ran.
 - Site registry (`sdk_sites`) and site-scoped install records, so an install signal is confined to the site the request authenticated as.
+- Root gateway documents `ARCHITECTURE.md`, `RELEASES.md` and `DEVELOPMENT.md`, linked from the README and mapped in the impact graph.
+- Root-layout gate (`scripts/validate_root_layout.py`) and deprecated-language gate (`scripts/check_deprecated_language.py`), both run by `make repo-doctor` and `make docs-check`.
+- Legacy-tag and blueprint-adaptation notes in `docs/operations/releases/tag-policy.md` and `docs/reference/source-of-truth/repo-truth.md`.
 - Reconciled Control Plane seam: a site install is observed as a managed integration and admitted through the §16 lifecycle, so an install the loader could not bring up reconciles as drift instead of as nothing to reconcile.
 
 ### Changed
@@ -21,9 +24,15 @@ Versions before `1.0.0` are private alpha, beta, or release-candidate milestones
 - Loader URL and API origin are canonicalized (`https://cdn.aether.network/v1.js`, `https://api.aether.io`) and enforced by a domain gate. The two origins remain deliberately separate.
 - A failed site install observes as `degraded`, never `missing`: the record exists and says the install is broken, which is evidence.
 - `loader_version` is the version the control plane reconciles against, the same field the distribution layer derives `drift_status` from.
+- The first external SDK release target is `0.1.0-alpha.0` (publish workflow hint, staging and production release flags, SDK readiness docs), matching the single pre-1.0 platform version.
+- The `economic360` projection now displays as `Value 360` in the projection registry, generated artifacts and both web apps; its id is unchanged.
 
 ### Fixed
 
+- `bump_version.py` now writes and checks the root `VERSION` file and rejects numeric prerelease identifiers with leading zeroes.
+- The React Native podspec pins `AetherSDK` to the current minor for 0.x versions instead of the major.
+- `Web3TransactionProjector` handles `wallet` and `transaction`, and the projector ownership registry now declares them, so `validate_projector_ownership.py` passes.
+- The ingestion worker `*_total` counters are in the canonical meter list, so `validate_meter_names.py` passes.
 - `bump_version.py` validated SDK/native version constants it never rewrote, so a platform bump failed the check and named a command that could not fix it. The remediation now names the SDK release script for those surfaces, and `bump-sdk-version.sh` plus the release workflow carry the loader and backend constants.
 
 Note: the Reconciled Control Plane spine remains `pending` with all 14 conformance items open; nothing in this entry moves it, and every control-plane capability stays flag-gated off (`AETHER_RECONCILED_CONTROL_*`).
