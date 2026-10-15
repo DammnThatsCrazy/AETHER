@@ -531,8 +531,10 @@ its mappings (every host to `main`) before release. The app has one branch,
 production-status check covers the branch's settings and job. Squarespace
 remains authoritative.
 A repository-backed status app is updated in place on later runs; it is never
-treated as a staging ECS or Terraform mutation. Since Amplify can auto-start
-the branch build for the pushed SHA, the workflow reuses an active exact-SHA
+treated as a staging ECS or Terraform mutation. The workflow binds `main`
+with auto-build off, so only its gated release publishes a push. Since a job can
+still be active (started from the console, or by an earlier auto-build), the
+workflow reuses an active exact-SHA
 job that started after it applied the build settings, waits for every other
 active job (including an earlier auto-build with the previous settings) to
 clear, and starts a release only when no matching job exists.

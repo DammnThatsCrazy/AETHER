@@ -309,13 +309,16 @@ jobs:
             --build-spec "$(cat "$web_build_spec")" \
             --environment-variables "file://$web_environment" \
             --custom-rules "file://$web_rules" \
-            --enable-branch-auto-build \
+            --no-enable-branch-auto-build \
             >/dev/null
           branch_args=(
             --app-id "$APP_ID"
             --branch-name main
             --stage PRODUCTION
-            --enable-auto-build
+            # No auto-build: every host serves main, so a push must not go live
+            # before the integration authority passes; the release step below
+            # starts the commit-pinned job.
+            --no-enable-auto-build
             --environment-variables "file://$web_environment"
           )
           if aws amplify get-branch --app-id "$APP_ID" --branch-name main >/dev/null 2>&1; then

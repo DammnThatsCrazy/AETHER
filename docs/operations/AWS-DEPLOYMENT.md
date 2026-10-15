@@ -689,8 +689,10 @@ branches or call `UpdateDomainAssociation`; they verify the AVAILABLE
 association and canonical `main` mapping before release. Amplify performs a
 dependent `iam:PassRole` authorization for domain mutations, so the status
 workflow intentionally does not make that API call from its OIDC deploy role.
-Because a repository-bound app can auto-start the branch build for a pushed
-commit, the workflow first reuses an active job for the exact reviewed SHA,
+The workflow binds `main` with auto-build off, so a push never goes live before
+the integration authority passes; only its commit-pinned release publishes.
+Because a job can still be active (started from the console, or by auto-build
+before this setting), the workflow first reuses an active job for the exact reviewed SHA,
 but only one that started after it applied the build settings: a job reads its
 environment variables when it starts, so an earlier auto-build would publish
 the previous settings. It waits for any other active branch job to clear, and
