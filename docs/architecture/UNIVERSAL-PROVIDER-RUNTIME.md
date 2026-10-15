@@ -19,8 +19,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 14
 toc_depth: 3
 source_hashes:
-  "services/api/config/settings.py": "sha256:4d2921c8c3a93e5cf0e3ab4eab9172770642684dd20858221481608af2ef69d5"
-  "services/api/connectors/provider_runtime/": "sha256:5769171596f5a3c50af0a39ed9ec1b6fcddd4f67ee352d05d85ddc708cd84302"
+  "services/api/config/settings.py": "sha256:df9bdf848c96816ea19e07f07026fbdfb1a29d75b6c09cbe253191b9cbe72b36"
+  "services/api/connectors/provider_runtime/": "sha256:9bba464d8af68941a26a69baee1102ff7a0748c4018e3e46ab448e111abef85c"
   "services/api/connectors/providers/": "sha256:7439f7c76f1a5691b51f563ac542225b53588f820b85e5234f7770da059d9bfa"
   "services/api/connectors/providers/shopify/": "sha256:415167f6f05ab8a2ff3fcaa432c18e854f8b07a30e97e7d9e53b935028f45396"
   "services/api/main.py": "sha256:52e672c1c82e17907041ba173b1fb7cee68bfb03b158eb370fd4f25b584cc726"

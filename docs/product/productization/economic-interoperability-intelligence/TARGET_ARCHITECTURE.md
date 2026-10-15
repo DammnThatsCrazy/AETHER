@@ -16,7 +16,7 @@ source_hashes:
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/config/settings.py": "sha256:4d507b4ac3cab63aec2df92c69bcb20c42d6c6f9fb54441e06353ccd34619246"
+  "services/api/config/settings.py": "sha256:df9bdf848c96816ea19e07f07026fbdfb1a29d75b6c09cbe253191b9cbe72b36"
   "services/api/main.py": "sha256:52e672c1c82e17907041ba173b1fb7cee68bfb03b158eb370fd4f25b584cc726"
 ---
 

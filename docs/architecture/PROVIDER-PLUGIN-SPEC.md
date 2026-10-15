@@ -19,7 +19,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "services/api/connectors/provider_runtime/": "sha256:5769171596f5a3c50af0a39ed9ec1b6fcddd4f67ee352d05d85ddc708cd84302"
+  "services/api/connectors/provider_runtime/": "sha256:9bba464d8af68941a26a69baee1102ff7a0748c4018e3e46ab448e111abef85c"
   "services/api/connectors/providers/shopify/": "sha256:415167f6f05ab8a2ff3fcaa432c18e854f8b07a30e97e7d9e53b935028f45396"
   "services/api/shared/integration_contracts/capabilities.py": "sha256:0549328cc36de3ad566dcc2bbdf2792cab4eafbf3a6785141485d5cdf0058b6f"
   "services/api/shared/integration_contracts/events.py": "sha256:3db66be3c58959b1ac01cebaee21559d19069abf617ed8086c474f3161f5a80e"
@@ -285,7 +285,9 @@ Registration is additive and does not touch central type unions:
 - `account.py` — `AccountAdapter`: one selected account per shop. The opt-in
   GraphQL path discovers immutable Shop GID and explicit live/test realm with
   brokered credentials; domain-only structural discovery is insufficient for
-  v2 source-object mapping.
+  v2 source-object mapping. In every orders mode the acquisition coordinator
+  selects a shop only after discovery recorded its live identity, and rejects a
+  shop another tenant holds selected on a live connection.
 - `pull.py` — `PullAdapter`: REST orders with `page_info` or `since_id`
   compatibility cursors; batches honor `has_more ⇒ next_cursor`.
 - `graphql_pull.py` — opt-in, version-pinned GraphQL Admin order snapshots with

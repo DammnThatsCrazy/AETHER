@@ -63,15 +63,16 @@ In the delivery channel `provider_config`:
 ### 4. Configure Webhooks (for outcome loop)
 
 1. Go to **Jira** → **Settings** → **System** → **WebHooks**
-2. URL: `https://{your-aether-domain}/v1/webhooks/jira/events`
+2. URL: `https://{your-aether-domain}/v1/notifications/webhooks/jira/events`
 3. JQL scope: `project = PROJ` (or all projects)
 4. Events: Issue Created, Issue Updated, Issue Deleted
-5. Generate a signing secret and store as `JIRA_WEBHOOK_SECRET`
+5. Generate a signing secret and store as `DELIVERY_JIRA_WEBHOOK_SECRET`
 
 ### 5. Set Env Vars
 
 ```bash
-JIRA_WEBHOOK_SECRET=<your-webhook-signing-secret>
+DELIVERY_JIRA_WEBHOOK_SECRET=<your-webhook-signing-secret>
+INBOUND_JIRA_WEBHOOK_ENABLED=true  # default; false makes the inbound route answer 404
 ```
 
 ### 6. Test Connection
@@ -99,7 +100,19 @@ Default issue type is `Task`. Configure in `provider_config.issue_type`. Common 
 
 ## Webhook Signature Verification
 
-Aether verifies `X-Hub-Signature-256: sha256=<hex>` using `HMAC-SHA256(JIRA_WEBHOOK_SECRET, raw_body)`. Requests without a valid `sha256=` prefix are stored with `signature_verified=False`.
+Aether verifies `X-Hub-Signature-256: sha256=<hex>` using `HMAC-SHA256(DELIVERY_JIRA_WEBHOOK_SECRET, raw_body)`. Requests without a valid `sha256=` prefix are stored with `signature_verified=False`.
+
+## Outcome Routing
+
+The webhook never names its tenant: an `X-Aether-Tenant-ID` header or `tenant_id`
+query parameter is ignored. Aether routes an event only to the tenant whose stored
+delivery created that issue — the issue key must match a stored issue link, and the
+event's `issue.self` host must be the Jira site (`base_url`) that delivery used,
+because issue keys repeat across sites. Events matching no stored issue, or issues
+in more than one tenant, are dead-lettered and never applied.
+
+The inbound route is gated by `INBOUND_JIRA_WEBHOOK_ENABLED` (default on); when it
+is off the route answers `404` and stores nothing.
 
 ## Troubleshooting
 

@@ -81,7 +81,7 @@ Blocked protocols: HTTP (HTTPS required unless `AETHER_ENV=local`). DNS is resol
 To close the loop, your webhook receiver can POST outcome events back to Aether:
 
 ```
-POST /v1/webhooks/aether/callback
+POST /v1/notifications/webhooks/aether/callback
 X-Aether-Signature: v1=<hmac>
 X-Aether-Timestamp: <unix-ts>
 Content-Type: application/json
@@ -96,6 +96,14 @@ Content-Type: application/json
 ```
 
 Valid `event_type` values: `acknowledged`, `accepted`, `rejected`, `commented`, `resolved`, `cancelled`.
+
+`delivery_id` must be the `X-Aether-Delivery-Id` of the delivery being answered:
+Aether resolves the tenant from that stored delivery, never from a header or
+`tenant_id` query parameter. Sign the callback with the same channel secret that
+signed the delivery; the platform-wide `DELIVERY_WEBHOOK_SIGNING_SECRET` is not
+accepted for callbacks. `X-Aether-Timestamp`
+(unix seconds) is required and must be within 300 seconds of receipt. Callbacks
+that match no stored delivery are dead-lettered and never applied.
 
 ## Secret Rotation
 
