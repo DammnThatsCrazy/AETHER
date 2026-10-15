@@ -250,6 +250,8 @@ async def get_journey_economic_operations(
     timestamp, identity, order ID, or payment ID and returns no copied value.
     """
     tenant = _require_tenant(request)
+    # Provider order/payment/refund references keep the commerce read boundary.
+    tenant.require_permission("commerce:read")
     journey = await _journey_repo.get_current(tenant.tenant_id, journey_id)
     if journey is None:
         raise NotFoundError("Journey")

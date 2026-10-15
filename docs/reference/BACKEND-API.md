@@ -34,10 +34,10 @@ source_hashes:
   "services/api/identity/": "sha256:ba702f6a5f25ce0100bc118bf1b62f3a883cdaa777c56bd33c73aac72c1f003f"
   "services/api/ingestion/": "sha256:89757f37b1e77f0bf3f55a5cb6e7a7df86ed5cfe5478010497e4e86d51333145"
   "services/api/intelligence/": "sha256:21066dbfa991f01ee3070734c364087d7e5e538c4fda48efc8993fdb7b4ce56a"
-  "services/api/journeys/": "sha256:fcd9a0fe60b841344f6391b3265abc58a847d31e892977362515667781c43eba"
+  "services/api/journeys/": "sha256:eb91a2b7cfeb14aabae051b0d1b0a56259dd9c1dd84c032ec49ef2fd02dcb093"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:b8b5c4e0956e300494f051e9b82958da6caf3ca375b8c79f00d5b76dd061fc63"
-  "services/api/value/": "sha256:7a31f39d5aec70568ed834fc1c4b276a3d7fd2d85b61e98fdaaff6c4e6cf8ef7"
+  "services/api/value/": "sha256:f47b0169c43a73e256c17378347cb54ff0c72bb47224fc3eb0cfbb625387b7a4"
   "services/api/workers/": "sha256:bebf5c0765768bd9b025b1847bb728c5296491d5d8cb511e4ae4a15121e09aef"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -2696,7 +2696,7 @@ Unified cross-rail journey compilation — Web2, Web3, agent, x402, and campaign
 | GET | `/v1/journeys/{id}` | Get the current journey version for a journey |
 | GET | `/v1/journeys/{id}/versions` | List all versions of a journey, newest first |
 | GET | `/v1/journeys/{id}/steps` | Paginated journey steps (filterable by `family`, `status`, `session_id`, `wallet_id`, `chain_id`, `campaign_id`) |
-| GET | `/v1/journeys/{id}/economic-operations` | Exact-reference commerce operation links carried by journey-step evidence; optional timezone-qualified `as_of`; no copied amounts or inferred joins |
+| GET | `/v1/journeys/{id}/economic-operations` | Exact-reference commerce operation links carried by journey-step evidence (requires `commerce:read`); optional timezone-qualified `as_of`; no copied amounts or inferred joins |
 | GET | `/v1/journeys/{id}/steps/{step_id}` | Single step with full activity detail |
 | GET | `/v1/journeys/{id}/transitions` | Transition type summary between steps |
 | GET | `/v1/journeys/{id}/explain` | Identity evidence and confidence explanation |

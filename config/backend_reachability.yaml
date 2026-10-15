@@ -17,6 +17,10 @@ allow_unreachable:
     modules: [admin_cli, mesh_config]
     ledger: product-backend-unmounted-code-pending
     reason: formerly the repo-root security/ package (outside the scanned tree); admin_cli is an operator `python -m` entry point and mesh_config has no import path, so removal is an owner decision
+  - package: services.social360
+    modules: [provider]
+    ledger: product-backend-unmounted-code-pending
+    reason: Social360 stays registry-state in_flight, so the provider is intentionally not registered at boot; re-register it (and add services/api/services to the image) when the projection is promoted
   - package: journeys
     modules: [communication360]
     ledger: product-backend-unmounted-code-pending
