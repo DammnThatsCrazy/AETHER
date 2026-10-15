@@ -122,7 +122,7 @@ def test_web3_registration_works_and_is_private_to_the_tenant():
         "contract" not in b.get("/v1/web3/contracts/base/0xabc").json()
 
 
-def test_web3_cannot_take_over_another_tenants_id():
+def test_web3_id_reused_by_another_tenant_conflicts():
     a, b = _client("t1"), _client("t2")
     assert a.post("/v1/web3/tokens", json={"token_id": "tok", "symbol": "MINE"}).status_code == 200
     taken = b.post("/v1/web3/tokens", json={"token_id": "tok", "symbol": "THEIRS"})
