@@ -227,6 +227,17 @@ async def test_jira_route_is_404_when_disabled(world, monkeypatch):
     assert world.inbox._store == {}
 
 
+@pytest.mark.asyncio
+async def test_jira_route_is_404_by_default(world, monkeypatch):
+    from config.settings import settings
+
+    monkeypatch.setattr(settings, "delivery", dataclasses.replace(
+        type(settings.delivery)(), jira_webhook_secret=GLOBAL_SECRET,
+    ))
+    assert _post_jira(world, _jira_event("b-co.atlassian.net")) == 404
+    assert world.inbox._store == {}
+
+
 # ── Linear ────────────────────────────────────────────────────────────────────
 
 

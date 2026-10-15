@@ -3152,7 +3152,7 @@ identifiers, or response content.
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/v1/notifications/slack/callback` | Slack Block Kit action handler (HMAC-verified); acts in the notification's tenant only when the clicking Slack team is an active Slack channel of that tenant — the tenant segment of the action id is ignored |
-| POST | `/v1/notifications/telegram/callback` | Telegram inline keyboard handler; acts only on notifications owned by the authenticated caller's tenant; `404` when `INBOUND_TELEGRAM_CALLBACK_ENABLED` is off |
+| POST | `/v1/notifications/telegram/callback` | Telegram inline keyboard handler; acts only on notifications owned by the authenticated caller's tenant; `404` unless `INBOUND_TELEGRAM_CALLBACK_ENABLED` is on (off by default) |
 
 ### Required Permissions
 
@@ -3437,7 +3437,7 @@ These endpoints are gated by feature flags (`FEATURE_FRAUD_NETWORKS`, `FEATURE_F
 |--------|------|------|-------------|
 | POST | `/v1/notifications/slack/callback` | Slack signing secret | Slack interactive action callback; written to WebhookInbox before processing |
 | POST | `/v1/notifications/webhooks/linear/events` | Linear-Signature HMAC (`DELIVERY_LINEAR_WEBHOOK_SECRET`) | Linear issue/event webhook; persisted to WebhookInbox and processed async |
-| POST | `/v1/notifications/webhooks/jira/events` | X-Hub-Signature-256 HMAC (`DELIVERY_JIRA_WEBHOOK_SECRET`) | Jira issue webhook; persisted to WebhookInbox and processed async; `404` when `INBOUND_JIRA_WEBHOOK_ENABLED` is off |
+| POST | `/v1/notifications/webhooks/jira/events` | X-Hub-Signature-256 HMAC (`DELIVERY_JIRA_WEBHOOK_SECRET`) | Jira issue webhook; persisted to WebhookInbox and processed async; `404` unless `INBOUND_JIRA_WEBHOOK_ENABLED` is on (off by default) |
 | POST | `/v1/notifications/webhooks/aether/callback` | X-Aether-Signature HMAC (bound delivery channel secret) | Generic signed outcome callback from webhook delivery targets |
 
 The receiving tenant of an inbound outcome is never read from the request: the
@@ -3452,7 +3452,8 @@ to, together with that link's receipt and delivery job:
   within 60 seconds of receipt.
 - Jira — the link on the issue key, accepted only when the `issue.self` host is
   the Jira site the bound job created the issue on (issue keys repeat across
-  sites). The route answers `404` when `INBOUND_JIRA_WEBHOOK_ENABLED` is off.
+  sites). The route answers `404` unless `INBOUND_JIRA_WEBHOOK_ENABLED` is on;
+  it is off by default until per-connection secrets exist.
 - Aether callback — the link on the body's `delivery_id`; the signature is
   verified with that delivery channel's own secret (a platform-wide secret never
   verifies), and `X-Aether-Timestamp` (unix seconds) is required within 300

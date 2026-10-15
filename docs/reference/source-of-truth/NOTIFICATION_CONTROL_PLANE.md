@@ -46,7 +46,8 @@ tenant when the Slack team is bound there, and Telegram actions only for the
 authenticated caller's own notifications. Two routes without a per-connection
 provider secret are gated: the Jira inbound webhook by
 `INBOUND_JIRA_WEBHOOK_ENABLED` and the Telegram callback by
-`INBOUND_TELEGRAM_CALLBACK_ENABLED` (both default on; off answers `404`).
+`INBOUND_TELEGRAM_CALLBACK_ENABLED`. Both are off by default until per-connection
+secrets exist; while off the route answers `404`.
 
 Desktop and mobile read the **same** `notification_inbox` records — a
 notification opened on mobile is opened on desktop. Client-specific copies are not
