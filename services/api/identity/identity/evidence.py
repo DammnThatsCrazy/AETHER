@@ -15,7 +15,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, Optional
 
-from shared.common.common import utc_now
+from shared.common.common import parse_iso, utc_now
 from shared.logger.logger import get_logger
 
 from .hashing import decrypt_wallet_subject_binding, encrypt_wallet_subject_binding
@@ -193,8 +193,29 @@ class EvidenceService:
         row = await self._repo.get_for_tenant(tenant_id, evidence_id)
         if row is None:
             return {"status": "not_found"}
+        if row.get("status") == VerificationEvidenceStatus.EXPIRED.value:
+            return {"status": "expired_evidence"}
         if row.get("status") != VerificationEvidenceStatus.ACTIVE.value:
             return {"status": "inactive_evidence"}
+        expires_at = row.get("expires_at")
+        if expires_at:
+            try:
+                expired = utc_now() >= parse_iso(str(expires_at))
+            except Exception:  # noqa: BLE001 - malformed expiry must fail closed
+                expired = True
+            if expired:
+                try:
+                    await self._repo.expire_if_active(tenant_id, evidence_id)
+                except Exception as exc:  # noqa: BLE001 - replay remains blocked
+                    logger.warning(
+                        "expired verification evidence status update failed",
+                        extra={
+                            "tenant_id": tenant_id,
+                            "evidence_id": evidence_id,
+                            "error_type": type(exc).__name__,
+                        },
+                    )
+                return {"status": "expired_evidence"}
         subject_hint_id = self._recover_subject_hint(row, tenant_id)
         if row.get("identifier_type") == "wallet" and not subject_hint_id:
             try:

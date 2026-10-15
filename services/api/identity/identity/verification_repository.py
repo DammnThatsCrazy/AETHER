@@ -245,6 +245,39 @@ class VerificationEvidenceRepository(_ScopedRepo):
             return None
         return record
 
+    async def expire_if_active(
+        self, tenant_id: str, evidence_id: str
+    ) -> Optional[dict]:
+        """Atomically mark a tenant-owned active evidence row as expired."""
+        now = utc_now().isoformat()
+        pool = await self._ensure_pool()
+        if pool is None:
+            record = await self.get_for_tenant(tenant_id, evidence_id)
+            if record is None or record.get("status") != "active":
+                return record
+            return await self.update(
+                evidence_id, {"status": "expired", "expired_at": now}
+            )
+
+        await self._ensure_table()
+        row = await pool.fetchrow(
+            f"""UPDATE {self.table_name}
+                SET data = data || jsonb_build_object(
+                        'status', 'expired', 'expired_at', $1::text
+                    ),
+                    updated_at = NOW()
+                WHERE id = $2 AND tenant_id = $3
+                  AND data->>'status' = 'active'
+                RETURNING data""",
+            now,
+            evidence_id,
+            tenant_id,
+        )
+        if row is None:
+            return await self.get_for_tenant(tenant_id, evidence_id)
+        data = row["data"]
+        return json.loads(data) if isinstance(data, str) else dict(data)
+
     async def get_active_for_identifier(
         self, tenant_id: str, identifier_type: str, identifier_hash: str
     ) -> list[dict]:

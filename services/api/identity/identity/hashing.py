@@ -158,12 +158,16 @@ def decrypt_wallet_subject_binding(ciphertext: str, tenant_id: str) -> str:
             if version != _WALLET_SUBJECT_BINDING_CIPHERTEXT_VERSION:
                 return ""
             key = keyring.get(key_id)
-            if key is None:
-                return ""
             packed = base64.b64decode(
                 encoded_payload.encode("ascii"), altchars=b"-_", validate=True
             )
-            keys = [key]
+            # Prefer the exact key version, then try the configured overlap
+            # keys. This keeps records decryptable during deployments where
+            # the environment has the active/previous materials but retains
+            # the default role IDs used when the ciphertext was written.
+            keys = list(dict.fromkeys(
+                ([key] if key is not None else []) + list(keyring.values())
+            ))
         else:
             # Pre-v2 records were unversioned and used only the then-active
             # key. Try the configured active and previous keys during a

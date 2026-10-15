@@ -2417,6 +2417,10 @@ async def replay_verification_evidence(
     """Retry resolution from durable evidence without resupplying the subject."""
     tenant = request.state.tenant
     tenant.require_permission("write")
+    from config.settings import settings
+
+    if not settings.identity_continuity.resolution_enabled:
+        raise NotFoundError("Identity resolution is not enabled")
     result = await _get_evidence_service().retry_evidence_replay(
         tenant.tenant_id, evidence_id
     )
@@ -2427,6 +2431,8 @@ async def replay_verification_evidence(
     accepted_decision = decision in {"create", "link", "merge"}
     if status == "reverification_required":
         error_code = "wallet_evidence_reverification_required"
+    elif status == "expired_evidence":
+        error_code = "verification_evidence_expired"
     elif status == "error":
         error_code = "evidence_replay_failed"
     else:

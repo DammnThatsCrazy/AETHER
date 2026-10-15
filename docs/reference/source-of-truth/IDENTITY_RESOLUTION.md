@@ -10,19 +10,19 @@ source_files: [services/api/identity/identity/models.py, services/api/identity/i
 canonical_owner: identity@aether
 last_synced_commit: 4764707
 source_hashes:
-  "services/api/identity/identity/evidence.py": "sha256:d826d5aa1b548b34ea58c881c2958308d3556a2fce78fddd436ec00fcacdc849"
-  "services/api/identity/identity/hashing.py": "sha256:9788056db426269a163e0983a15eca89e8c11d24027947a9ad6db7baf4901a14"
+  "services/api/identity/identity/evidence.py": "sha256:9fce2dc54d6072c48d6f0dc70e75a97485755c1c684376bbe0173d93a8121559"
+  "services/api/identity/identity/hashing.py": "sha256:87d8eb92c18c811561e2e6202c34b0674a68d1db6cbee3df1bc04bb8adcd43c3"
   "services/api/identity/identity/ingestion_worker.py": "sha256:a861b2e6094cd0ddb271f058e3f6bb63a132afc9e72c7c0d37ff88fc6139664d"
   "services/api/identity/identity/models.py": "sha256:8d348fd95b8292492d6bde461e6215da52cd802252bfe7e473c839ec529783ee"
   "services/api/identity/identity/repository.py": "sha256:910271250d75a2a602256915c625e91b19aa23e11b57d72cff5b3e56fdaaae88"
-  "services/api/identity/identity/resolution_replay.py": "sha256:a00ebf20ccbe6568ed2d0294bd50ad5817cc0a72bdffd2f8c9e0aa33ca013b5d"
+  "services/api/identity/identity/resolution_replay.py": "sha256:416f87ef76c78c705741e39777290f80c44c7fb4a7ad51573078b3bf884f0b8b"
   "services/api/identity/identity/resolver.py": "sha256:94f75e17e50fddfa2892e5737473f0a014fb4d868eb2e7441438389650656197"
-  "services/api/identity/identity/routes.py": "sha256:677fc065efc3aa7b4a7172626844cf05cbe9d614fc0a5bbe82291ec97592d362"
+  "services/api/identity/identity/routes.py": "sha256:6efdac3329d61025d290a590bb53107fa702f8fd2f794189e131d7dec96cdcb6"
   "services/api/identity/identity/schemas.py": "sha256:824ccc8a4798572e4bdc280dcc0b11cce3a151836e6252d03c3a9a86481e08c0"
   "services/api/identity/identity/signals.py": "sha256:58912180329dd296317cda10c493935b0a988a5db4137670b9fd0d785f5bfa52"
   "services/api/identity/identity/source_identity_registry.py": "sha256:c784a3d512611554e7f8c1fbf784c8ec953adbdd420d0ff24af22139d6ace03c"
   "services/api/identity/identity/verification.py": "sha256:59fa97e3e3d47b89b0ab4ba2416414fc1e41fc293f4d12c5bd02edc91067c278"
-  "services/api/identity/identity/verification_repository.py": "sha256:e7e23a0da5054e242550a4207efd189cb20676d7ea2355090224d1007128d16b"
+  "services/api/identity/identity/verification_repository.py": "sha256:1a39acfcbe04ed2ec451e7cdbd717c36c0b03d39b9e91ef68b9a47bfdca1bc18"
   "services/api/identity/profile/aggregator.py": "sha256:228b48e5b06d6f4355c1d5fda2363ef5e3265570e750863bd7fd98941a41109f"
   "services/api/identity/profile/composer.py": "sha256:aae09f67a164f0e2b940676e52841ff325f36650ac4b1c022cc2a60a31505c20"
   "services/api/ingestion/ingestion/batch.py": "sha256:fbb659145f6cf52cff5af991099fb2cd78bd306729b6144a3ddb93bb8dbdda45"
@@ -244,16 +244,23 @@ and idempotent on
 callback can never double-merge.
 
 `POST /v1/identity/evidence/{evidence_id}/replay` retries an active evidence
-record with `write` permission. Evidence is bound to a canonical entity only
+record with `write` permission, and is unavailable while the resolution kill
+switch is off. Replay jobs use an atomic claim: a concurrent retry receives
+`in_progress` without running the resolver again, while a failed job can be
+claimed for retry. Evidence with an elapsed or malformed `expires_at` is marked
+expired and cannot be replayed. Evidence is bound to a canonical entity only
 for accepted `create`, `link`, or `merge` decisions; `candidate`, `reject`, and
 `blocked` decisions never persist a canonical entity binding. The API returns
-stable public error codes and withholds internal replay exception details.
+stable public error codes, including `verification_evidence_expired`, and
+withholds internal replay exception details.
 
 Wallet evidence stores its replay subject as tenant-bound authenticated
 ciphertext. Ciphertexts are versioned with a key ID. During key rotation, set
 the new active key and ID and retain the previous key and its ID until encrypted
-evidence has been re-encrypted or expired. Existing unversioned ciphertext is
-also decrypted with the configured active/previous key pair. Wallet evidence
+evidence has been re-encrypted or expired. The configured key ID is tried
+first, followed by the other active/previous key during the overlap window.
+Existing unversioned ciphertext is also decrypted with the configured
+active/previous key pair. Wallet evidence
 created before subject ciphertext was introduced has no recoverable subject:
 successful prior replay jobs return their cached result; otherwise replay
 returns `reverification_required`, and a new wallet proof must be collected.

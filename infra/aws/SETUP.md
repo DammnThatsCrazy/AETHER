@@ -233,14 +233,31 @@ procedure is [`docs/operations/DEPLOYMENT-RUNBOOK.md`](../../docs/operations/DEP
 
 1. **Confirm the SNS email subscription** sent to `alert_email` — alarms deliver
    nothing until the link is clicked.
-2. **Inject secret values.** Secrets Manager stubs are created empty. Store
-   **raw strings, not JSON** (ECS `valueFrom` injects the whole secret string):
+2. **Inject secret values.** Secrets Manager stubs are created empty. The
+   bootstrap script writes generated secrets without printing their values and
+   preserves them on a normal rerun:
+
+   ```bash
+   python scripts/bootstrap_aws_secrets.py --env staging
+   ```
+
+   It initializes the active and previous identity-verification keys to the
+   same random value. For later rotation, supply both key values through a
+   secure env file. Store **raw strings, not JSON** (ECS `valueFrom` injects
+   the whole secret string).
+
+   For manual single-secret setup:
 
    ```bash
    aws secretsmanager put-secret-value \
      --secret-id aether/jwt-secret \
      --secret-string 'REPLACE_WITH_SECURE_RANDOM_256BIT_KEY'
    ```
+
+   Before enabling wallet identity verification, also initialize
+   `aether/identity-verification-token-key` and
+   `aether/identity-verification-token-key-previous` with the same high-entropy
+   value. ECS mounts these as the active and previous verification keys.
 
    `aether/db-password` is populated automatically by Aurora's managed rotation;
    `aether/redis-auth-token` exists only on Redis profiles.

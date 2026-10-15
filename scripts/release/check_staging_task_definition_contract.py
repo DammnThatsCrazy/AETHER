@@ -44,6 +44,8 @@ SECRET_ENV_TO_CANONICAL_NAME = {
     "CANARY_SECRET_SEED": "canary-secret-seed",
     "EXTRACTION_CANARY_SEED": "extraction-canary-seed",
     "SDK_CONFIG_SECRET": "sdk-config-secret",
+    "IDENTITY_VERIFICATION_TOKEN_KEY": "identity-verification-token-key",
+    "IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS": "identity-verification-token-key-previous",
     "FIRST_ADMIN_BOOTSTRAP_TOKEN": "first-admin-bootstrap-token",
     "JWT_SECRET_PREVIOUS": "jwt-secret-previous",
     "BYOK_ENCRYPTION_KEY_PREVIOUS": "byok-encryption-key-previous",
@@ -85,9 +87,11 @@ COMMON_SECRET_ENV = frozenset(
         "CANARY_SECRET_SEED",
         "EXTRACTION_CANARY_SEED",
         "SDK_CONFIG_SECRET",
+        "IDENTITY_VERIFICATION_TOKEN_KEY",
         "FIRST_ADMIN_BOOTSTRAP_TOKEN",
         "JWT_SECRET_PREVIOUS",
         "BYOK_ENCRYPTION_KEY_PREVIOUS",
+        "IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS",
     }
 )
 PILOT_PRICE_SECRET_ENV = frozenset(

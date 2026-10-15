@@ -443,17 +443,18 @@ locals {
   # all secrets exist before any task definition is created.
   backend_secrets = merge(
     {
-      JWT_SECRET                  = lookup(var.secret_arns, "jwt-secret", "")
-      BYOK_ENCRYPTION_KEY         = lookup(var.secret_arns, "byok-encryption-key", "")
-      DATABASE_URL_SECRET         = lookup(var.secret_arns, "db-password", "")
-      STRIPE_SECRET_KEY           = lookup(var.secret_arns, "stripe-secret-key", "")
-      STRIPE_WEBHOOK_SECRET       = lookup(var.secret_arns, "stripe-webhook-secret", "")
-      ORACLE_SIGNER_PRIVATE_KEY   = lookup(var.secret_arns, "oracle-signer-private-key", "")
-      WATERMARK_SECRET_KEY        = lookup(var.secret_arns, "watermark-secret-key", "")
-      CANARY_SECRET_SEED          = lookup(var.secret_arns, "canary-secret-seed", "")
-      EXTRACTION_CANARY_SEED      = lookup(var.secret_arns, "extraction-canary-seed", "")
-      SDK_CONFIG_SECRET           = lookup(var.secret_arns, "sdk-config-secret", "")
-      FIRST_ADMIN_BOOTSTRAP_TOKEN = lookup(var.secret_arns, "first-admin-bootstrap-token", "")
+      JWT_SECRET                       = lookup(var.secret_arns, "jwt-secret", "")
+      BYOK_ENCRYPTION_KEY              = lookup(var.secret_arns, "byok-encryption-key", "")
+      DATABASE_URL_SECRET              = lookup(var.secret_arns, "db-password", "")
+      STRIPE_SECRET_KEY                = lookup(var.secret_arns, "stripe-secret-key", "")
+      STRIPE_WEBHOOK_SECRET            = lookup(var.secret_arns, "stripe-webhook-secret", "")
+      ORACLE_SIGNER_PRIVATE_KEY        = lookup(var.secret_arns, "oracle-signer-private-key", "")
+      WATERMARK_SECRET_KEY             = lookup(var.secret_arns, "watermark-secret-key", "")
+      CANARY_SECRET_SEED               = lookup(var.secret_arns, "canary-secret-seed", "")
+      EXTRACTION_CANARY_SEED           = lookup(var.secret_arns, "extraction-canary-seed", "")
+      SDK_CONFIG_SECRET                = lookup(var.secret_arns, "sdk-config-secret", "")
+      IDENTITY_VERIFICATION_TOKEN_KEY  = lookup(var.secret_arns, "identity-verification-token-key", "")
+      FIRST_ADMIN_BOOTSTRAP_TOKEN      = lookup(var.secret_arns, "first-admin-bootstrap-token", "")
     },
     # Full staging keeps the two workforce credentials in the ECS execution
     # role's secret injection set. Pilot deliberately omits them; the backend
@@ -486,13 +487,17 @@ locals {
     var.enable_elasticache ? {
       REDIS_PASSWORD = lookup(var.secret_arns, "redis-auth-token", "")
     } : {},
-    # Companion secrets for zero-downtime rotation window.
-    # Populated by the rotation Lambda in setSecret phase; empty until first rotation.
+    # Companion secrets for zero-downtime rotation windows.
+    # Identity verification's companion is retained while existing evidence
+    # still depends on the previous key and is operator-populated.
     lookup(var.companion_secret_arns, "jwt-secret-previous", null) != null ? {
       JWT_SECRET_PREVIOUS = var.companion_secret_arns["jwt-secret-previous"]
     } : {},
     lookup(var.companion_secret_arns, "byok-encryption-key-previous", null) != null ? {
       BYOK_ENCRYPTION_KEY_PREVIOUS = var.companion_secret_arns["byok-encryption-key-previous"]
+    } : {},
+    lookup(var.companion_secret_arns, "identity-verification-token-key-previous", null) != null ? {
+      IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS = var.companion_secret_arns["identity-verification-token-key-previous"]
     } : {},
   )
 

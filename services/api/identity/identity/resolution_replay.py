@@ -22,6 +22,7 @@ from typing import Any, Optional
 from shared.logger.logger import get_logger
 
 from governance.security.repositories import _ScopedRepo
+from shared.common.common import utc_now
 
 from .models import IdentitySignalType
 from .hashing import hash_value
@@ -51,6 +52,59 @@ class _ReplayJobsRepo(_ScopedRepo):
 
     def __init__(self) -> None:
         super().__init__("identity_resolution_replay_jobs")
+
+    async def claim(
+        self, key: str, record: dict
+    ) -> tuple[bool, Optional[dict]]:
+        """Atomically create a replay claim or reclaim a failed job.
+
+        A competing request can only observe the existing row; it cannot
+        replace an ``in_progress`` or ``completed`` job. PostgreSQL enforces
+        that transition in the conflicting INSERT itself, so separate API
+        processes cannot both enter the resolver for the same evidence.
+        """
+        now = utc_now().isoformat()
+        claim = {
+            **record,
+            "id": key,
+            "created_at": now,
+            "updated_at": now,
+        }
+        tenant_id = str(record.get("tenant_id") or "")
+
+        pool = await self._ensure_pool()
+        if pool is None:
+            existing = self._store.get(key)
+            if existing is not None:
+                if (
+                    self._tenant_guard
+                    and str(existing.get("tenant_id") or "") != tenant_id
+                ):
+                    return False, None
+                if existing.get("status") != "failed":
+                    return False, existing
+                claim["created_at"] = existing.get("created_at", now)
+            self._store[key] = claim
+            return True, claim
+
+        await self._ensure_table()
+        row = await pool.fetchrow(
+            f"""INSERT INTO {self.table_name}
+                    (id, data, tenant_id, created_at, updated_at)
+                VALUES ($1, $2::jsonb, $3, NOW(), NOW())
+                ON CONFLICT (id) DO UPDATE
+                    SET data = EXCLUDED.data, updated_at = NOW()
+                    WHERE COALESCE({self.table_name}.tenant_id, '') = EXCLUDED.tenant_id
+                      AND {self.table_name}.data->>'status' = 'failed'
+                RETURNING data""",
+            key,
+            json.dumps(claim, default=str),
+            tenant_id,
+        )
+        if row is not None:
+            data = row["data"]
+            return True, json.loads(data) if isinstance(data, str) else dict(data)
+        return False, await self.find_by_id(key)
 
 
 class ResolutionReplayService:
@@ -145,11 +199,23 @@ class ResolutionReplayService:
             default=str,
         ).encode("utf-8")).hexdigest()
 
-        # ── Idempotency: a completed job is never re-run ──────────────────
+        # ── Idempotency: completed and in-progress jobs are never re-run ──
         try:
             existing = await self._jobs.find_by_id(key)
         except Exception:  # noqa: BLE001 - missing ledger row is not an error
             existing = None
+        if (
+            existing
+            and existing.get("evidence_fingerprint") is not None
+            and existing.get("evidence_fingerprint") != evidence_fingerprint
+        ):
+            return {
+                "status": "error",
+                "error": "trigger_id_reused_with_different_evidence",
+                "key": key,
+                "idempotent": False,
+                "policy_version": policy_version,
+            }
         if existing and existing.get("status") == "completed":
             if existing.get("evidence_fingerprint") != evidence_fingerprint:
                 return {
@@ -166,14 +232,19 @@ class ResolutionReplayService:
                 "decision": summary.get("decision"),
                 "canonical_entity_id": summary.get("canonical_entity_id"),
             }
+        if existing and existing.get("status") == "in_progress":
+            return {
+                "status": "in_progress",
+                "idempotent": True,
+                "key": key,
+                "policy_version": policy_version,
+            }
+
+        owns_claim = False
 
         try:
             sig_type = _IDENTIFIER_SIGNAL_TYPES.get(normalized_identifier_type)
             if sig_type is None:
-                await self._mark(
-                    key, tenant_id, trigger_type, trigger_id, policy_version,
-                    "failed", error=f"unsupported identifier_type: {identifier_type!r}",
-                )
                 return {
                     "status": "error",
                     "error": f"unsupported identifier_type: {identifier_type!r}",
@@ -188,11 +259,6 @@ class ResolutionReplayService:
                     normalized_chain_namespace,
                 )
             ):
-                await self._mark(
-                    key, tenant_id, trigger_type, trigger_id, policy_version,
-                    "failed", error="wallet replay requires subject and chain scope",
-                    evidence_fingerprint=evidence_fingerprint,
-                )
                 return {
                     "status": "error",
                     "error": "wallet replay requires subject and chain scope",
@@ -200,11 +266,63 @@ class ResolutionReplayService:
                     "idempotent": False,
                 }
 
-            # Record an in-progress job before doing any work.
-            await self._mark(
-                key, tenant_id, trigger_type, trigger_id, policy_version, "in_progress",
-                evidence_fingerprint=evidence_fingerprint,
-            )
+            # Claim before any resolver or graph work. A duplicate request
+            # that loses the conditional write returns without side effects.
+            owns_claim, current = await self._jobs.claim(key, {
+                "tenant_id": tenant_id,
+                "trigger_type": trigger_type,
+                "trigger_id": trigger_id,
+                "policy_version": policy_version,
+                "evidence_fingerprint": evidence_fingerprint,
+                "status": "in_progress",
+                "summary": None,
+                "error": None,
+            })
+            if not owns_claim:
+                if (
+                    current
+                    and current.get("evidence_fingerprint") is not None
+                    and current.get("evidence_fingerprint") != evidence_fingerprint
+                ):
+                    return {
+                        "status": "error",
+                        "error": "trigger_id_reused_with_different_evidence",
+                        "key": key,
+                        "idempotent": False,
+                        "policy_version": policy_version,
+                    }
+                if current and current.get("status") == "completed":
+                    if current.get("evidence_fingerprint") != evidence_fingerprint:
+                        return {
+                            "status": "error",
+                            "error": "trigger_id_reused_with_different_evidence",
+                            "key": key,
+                            "idempotent": False,
+                            "policy_version": policy_version,
+                        }
+                    summary = current.get("summary") or {}
+                    return {
+                        "status": "noop",
+                        "idempotent": True,
+                        "key": key,
+                        "policy_version": policy_version,
+                        "decision": summary.get("decision"),
+                        "canonical_entity_id": summary.get("canonical_entity_id"),
+                    }
+                if current and current.get("status") == "in_progress":
+                    return {
+                        "status": "in_progress",
+                        "idempotent": True,
+                        "key": key,
+                        "policy_version": policy_version,
+                    }
+                return {
+                    "status": "error",
+                    "error": "replay_claim_unavailable",
+                    "key": key,
+                    "idempotent": False,
+                    "policy_version": policy_version,
+                }
 
             supports_policy = getattr(self._resolver, "supports_policy_version", None)
             if callable(supports_policy) and not supports_policy(policy_version):
@@ -307,14 +425,15 @@ class ResolutionReplayService:
             }
         except Exception as exc:  # noqa: BLE001 - replay must never raise
             logger.warning("resolution replay failed for key=%s: %s", key, exc)
-            try:
-                await self._mark(
-                    key, tenant_id, trigger_type, trigger_id, policy_version,
-                    "failed", error=str(exc),
-                    evidence_fingerprint=evidence_fingerprint,
-                )
-            except Exception:  # noqa: BLE001
-                pass
+            if owns_claim:
+                try:
+                    await self._mark(
+                        key, tenant_id, trigger_type, trigger_id, policy_version,
+                        "failed", error=str(exc),
+                        evidence_fingerprint=evidence_fingerprint,
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
             return {"status": "error", "error": str(exc), "key": key, "idempotent": False}
 
     async def _mark(

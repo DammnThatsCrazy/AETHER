@@ -31,7 +31,7 @@ source_hashes:
   "services/api/connectors/": "sha256:be5c00bffaa216ecd12b669cb41ee011c177800fbc7d70c5e9bd4c1b4c3f6e76"
   "services/api/governance/": "sha256:f0fb64d3cc3dccc64070ee90276d01de955a457ea04fd3cc8d538a19c64c2fdc"
   "services/api/graph/": "sha256:bda39e64fa30ae40f4acbf0fa85092aa50d7cb601037bdcd6870b241ea09fe13"
-  "services/api/identity/": "sha256:43125b283d76a8495e4096e962a0f45c25efa52616e1d6557e78b095bdbbcdba"
+  "services/api/identity/": "sha256:5dc3ba5b90f5889a2ce60f787ea62b3c108da85ea757655594e9785d3c8900c0"
   "services/api/ingestion/": "sha256:1e13d282a2ef03b1673b631a9e564e27ed09690a695531674ed26967559eda0a"
   "services/api/intelligence/": "sha256:9b583b5a699e01018b213383848636ee011384fa9f6115d1cda00977dfdb3e58"
   "services/api/journeys/": "sha256:8db7d48b7f8247ab5adfde2fef24d3d7d4d6b2b4b7b721fd1129e836c9ad5301"
@@ -1733,8 +1733,12 @@ retries resolution using the durable evidence record and requires `write`.
 Its response includes `evidence_id`, `status`, `decision`,
 `canonical_entity_id`, and `error_code`; a canonical ID is returned only for
 accepted `create`, `link`, or `merge` decisions. Public errors use stable codes:
-`evidence_replay_failed` and `wallet_evidence_reverification_required`.
-Detailed resolver and repository exceptions remain in server logs. For legacy
+`evidence_replay_failed`, `verification_evidence_expired`, and
+`wallet_evidence_reverification_required`. A concurrent retry returns
+`in_progress` without starting a second resolver run. The endpoint is
+unavailable while identity resolution is disabled, and expired or malformed
+evidence is marked expired without replay. Detailed resolver and repository
+exceptions remain in server logs. For legacy
 wallet evidence without an encrypted subject, a previously completed replay
 returns its cached outcome; if no completed result exists, the endpoint returns
 `reverification_required` and a fresh wallet proof is required. Revoking a
