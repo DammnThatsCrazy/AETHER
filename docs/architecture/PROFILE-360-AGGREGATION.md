@@ -11,7 +11,7 @@ canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  "services/api/identity/profile/aggregator.py": "sha256:a901c1088e387bb967d425b1aed3673fc3942b7b6bf017648c78aad860bfe04b"
+  "services/api/identity/profile/aggregator.py": "sha256:6cecf0f6e437895bdd6f6516f30dd63d143d9799b92b751dc8e2e93acc2df57b"
   "services/api/identity/profile/intelligence.py": "sha256:63e2e79507cb46e63b3e1f7cb606db7da2cb9e8e283d70cc9a478e5251e5d7e0"
   "services/api/identity/profile/read_result.py": "sha256:be38b15f1b60afa0743471e48ac1e9dfddfddd42880b4f78e6e848761b72d056"
   "services/api/identity/profile/routes.py": "sha256:db152bc22effffbb626e2de110e7b369c05be76efd543316045fabd54066b70a"
@@ -317,6 +317,9 @@ result on it before returning. Legacy rows with no `tenant_id` at all are
 permitted (they pre-date the multi-tenant rollout) but the aggregator
 inherits the existing `_compose_graph` alignment audit so operators can
 backfill them. Cross-tenant rows are silently dropped, never surfaced.
+The drill endpoint is stricter: an object, or the agent or wallet whose related
+rows it would expand, must carry the caller's `tenant_id`; a row with no tenant
+answers `found: false`.
 
 The graph aggregator additionally respects the existing alignment audit
 counters (`cross_tenant_neighbors_excluded`,

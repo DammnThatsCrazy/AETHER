@@ -36,7 +36,7 @@ source_hashes:
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/identity/identity/": "sha256:3fbd070de33166053db88a263f75d5f2ad56339b9b826c2445a6577aa0360a0e"
-  "services/api/identity/profile/aggregator.py": "sha256:a901c1088e387bb967d425b1aed3673fc3942b7b6bf017648c78aad860bfe04b"
+  "services/api/identity/profile/aggregator.py": "sha256:6cecf0f6e437895bdd6f6516f30dd63d143d9799b92b751dc8e2e93acc2df57b"
   "services/api/identity/profile/composer.py": "sha256:aae09f67a164f0e2b940676e52841ff325f36650ac4b1c022cc2a60a31505c20"
   "services/api/ingestion/ingestion/batch.py": "sha256:fbb659145f6cf52cff5af991099fb2cd78bd306729b6144a3ddb93bb8dbdda45"
   "services/api/intelligence/analytics/routes.py": "sha256:b51cb890d703eb9c495b723fd79b6e03bf292300db82441024b5b645e6b341b7"
