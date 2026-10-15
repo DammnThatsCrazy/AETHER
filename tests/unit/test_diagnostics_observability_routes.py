@@ -48,7 +48,9 @@ def obs_routes(monkeypatch):
 
 
 def make_request(tenant_id: str = "t-001", platform_operator: bool = False):
-    tenant = SimpleNamespace(tenant_id=tenant_id, require_permission=lambda perm: None)
+    tenant = SimpleNamespace(
+        tenant_id=tenant_id, require_permission=lambda perm: None, has_permission=lambda perm: True,
+    )
     return SimpleNamespace(state=SimpleNamespace(tenant=tenant, platform_operator=platform_operator))
 
 

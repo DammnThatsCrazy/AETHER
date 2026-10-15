@@ -1169,7 +1169,8 @@ def _evaluate_route_policy(
     """Apply the canonical route policy and return a stable denial.
 
     ``platform_operator`` is the caller's ``is_platform_operator`` result,
-    resolved by the async middleware before this synchronous check.
+    resolved by the async middleware before this synchronous check. Only an
+    admin of that tenant passes a platform-operator route.
 
     In enforced mode any evaluator error is itself denied.  This deliberately
     avoids the old fail-open exception handler.  Local observe mode retains
@@ -1222,9 +1223,15 @@ def _evaluate_route_policy(
             denial = _evaluate_kyber_capability(request, path, pol)
             if denial is not None:
                 return denial
-        if pol.platform_operator_required and not platform_operator:
-            from governance.security.request_context import is_kyber_operator
-            if not is_kyber_operator(context, request=request):
+        if pol.platform_operator_required:
+            from governance.security.request_context import (
+                is_kyber_operator,
+                is_platform_operator_admin,
+            )
+            if not (
+                is_platform_operator_admin(context, platform_operator)
+                or is_kyber_operator(context, request=request)
+            ):
                 if rr.route_registry_enforced:
                     return ForbiddenError("ROUTE_POLICY_PLATFORM_OPERATOR_REQUIRED")
                 logger.warning(f"route policy: non-operator on platform route {path}")

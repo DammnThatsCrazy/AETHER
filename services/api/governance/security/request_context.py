@@ -249,18 +249,24 @@ def require_kyber_operator(request: Request):  # noqa: ANN201
     return operator_actor(request)
 
 
+def is_platform_operator_admin(tenant, platform_operator: bool) -> bool:  # noqa: ANN001
+    """An admin of a platform operator tenant; its members and viewers are not."""
+    return platform_operator is True and tenant is not None and tenant.has_permission("admin")
+
+
 def is_platform_operator_request(request: Request) -> bool:
     """True when the caller runs the platform rather than consumes it.
 
-    A platform operator tenant (``request.state.platform_operator``, resolved by
-    the auth middleware from ``is_platform_operator``) or a Kyber operator. A
-    customer owner's role admin, which passes every ``require_permission()``
-    check, never passes this one.
+    An admin of a platform operator tenant (``request.state.platform_operator``,
+    resolved by the auth middleware from ``is_platform_operator``) or a Kyber
+    operator. A customer owner's role admin, which passes every
+    ``require_permission()`` check, never passes this one.
     """
     state = getattr(request, "state", None)
-    if getattr(state, "platform_operator", False) is True:
+    tenant = getattr(state, "tenant", None)
+    if is_platform_operator_admin(tenant, getattr(state, "platform_operator", False)):
         return True
-    return is_kyber_operator(getattr(state, "tenant", None), request=request)
+    return is_kyber_operator(tenant, request=request)
 
 
 def require_platform_operator(request: Request) -> None:
