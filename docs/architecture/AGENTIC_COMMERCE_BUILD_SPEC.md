@@ -26,8 +26,8 @@ source_hashes:
   "services/api/repositories/repos.py": "sha256:4763340370ea7ef9e43d91b1156def3188a83114efa832e0a289f267957206e6"
   "services/api/value/commerce/": "sha256:52c0fe8788e4edb8debcc50289d3fdec46426e57d5883d537417cb39de543b84"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
-  "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
-  "services/api/value/x402/": "sha256:5d041fbb1a1fb7494c5a547b4aac97804e0dcf478261170546663918a509377f"
+  "services/api/value/economic/operation_linkage.py": "sha256:29544d6511463065fed4bba6acb212b9a1c57bb12800733bf6de00a56cf046fa"
+  "services/api/value/x402/": "sha256:1866ae49577a4eb8b32c97fceed7c02c4e5ae10b8c94bec501693759a619a46c"
   "services/api/workers/profile360_workers/workers.py": "sha256:0c79f5ee2cc03eb0ae92d8690a8622b8ebaea245dc047c7643107fe909d7170a"
 ---
 # Aether Agentic Commerce — Day-1 Build Specification
@@ -930,6 +930,9 @@ Extend existing `X-Request-ID` correlation through challenge → approval → ve
 - `GET /v1/diagnostics/commerce/reconciliation` — graph vs silver drift
 - `POST /v1/diagnostics/commerce/replay/{correlation_id}` — safe replay
 - `POST /v1/diagnostics/commerce/recheck/{settlement_id}` — force recheck
+
+As implemented, every `/v1/diagnostics/**` route except the tenant's own SDK
+heartbeat, health and silent-SDK routes admits only platform operators.
 
 ### 11.5 Circuit breakers
 

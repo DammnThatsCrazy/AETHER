@@ -25,20 +25,20 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:f5e9afb088d3a8f9e93bdd981db2b6dd1fc522c67d22d37b72d20d1b720791cb"
+  "services/api/actions/": "sha256:9808e2f84d02d427b0cb9171a8a054c5bdb64a501f05c61d63226c3e6d082bcf"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
-  "services/api/billing/": "sha256:4dd92369eb7f8e3183dc069a284afb09450eeabbdd24a504a24401c270684e22"
+  "services/api/billing/": "sha256:0740c89ed3bf089b8ded5f9a319b7670a0afb18bda8f58a69a11a03c2a0a5d75"
   "services/api/connectors/": "sha256:01f3d11694ce153f102de85133e514fe4548877376c05668c2ee6fe63e1ad633"
-  "services/api/governance/": "sha256:88d555a3245092c8b9359f48213c260d0e370b82d615858a14c11ac744bd48a6"
-  "services/api/graph/": "sha256:4955410983baf725cbace6872f3d013315fff1482b42e71b36ba94167a1c4e5b"
-  "services/api/identity/": "sha256:ba702f6a5f25ce0100bc118bf1b62f3a883cdaa777c56bd33c73aac72c1f003f"
-  "services/api/ingestion/": "sha256:89757f37b1e77f0bf3f55a5cb6e7a7df86ed5cfe5478010497e4e86d51333145"
-  "services/api/intelligence/": "sha256:21066dbfa991f01ee3070734c364087d7e5e538c4fda48efc8993fdb7b4ce56a"
-  "services/api/journeys/": "sha256:eb91a2b7cfeb14aabae051b0d1b0a56259dd9c1dd84c032ec49ef2fd02dcb093"
+  "services/api/governance/": "sha256:2622bb5774fd4abc879cda3dff332aa64d6c5b5a14b99099e72266460f1efc8d"
+  "services/api/graph/": "sha256:4c1c2d5e1ddc4f87f67f84d8cd4bd5d5f863b1f7a4003be64137a6cd5690435f"
+  "services/api/identity/": "sha256:3899aca8a5fe95b1f975945913ebbd0cef920109649676c9b48b49fd6fcd2a1f"
+  "services/api/ingestion/": "sha256:201513b270e7c49a9636eb99cbd9d8ca92247a0e1a7363fee7a9315dc895bf46"
+  "services/api/intelligence/": "sha256:963f6b087bfa86e49a680408faca800a0d872ea5b8d65bd0332e66875130b5dd"
+  "services/api/journeys/": "sha256:1b39920846d458dde3378049c8d25a6a6eda06826de370862102305373c85cf8"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
-  "services/api/tenancy/": "sha256:b8b5c4e0956e300494f051e9b82958da6caf3ca375b8c79f00d5b76dd061fc63"
-  "services/api/value/": "sha256:f47b0169c43a73e256c17378347cb54ff0c72bb47224fc3eb0cfbb625387b7a4"
-  "services/api/workers/": "sha256:bebf5c0765768bd9b025b1847bb728c5296491d5d8cb511e4ae4a15121e09aef"
+  "services/api/tenancy/": "sha256:228120a11b8e6c3fec9405ed272e61de894b658274a33da129facc9c074a8224"
+  "services/api/value/": "sha256:a999ff77ca6c45839fef1abdd7d4f418c90585fed9f4f240b7b439775dbfe087"
+  "services/api/workers/": "sha256:2ba7219cc4a6bb8a77040d5871b16f764631ca87da8f36de0ba2140b59a015e6"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -144,6 +144,32 @@ metered per-service for billing (see `OverageCalculator`).
 
 **Feature gating** rejects requests for services outside the tenant's
 plan with HTTP 403 and a structured `required_plan` upgrade message.
+
+### Platform-wide routes require a platform operator
+
+Every customer owner holds role `admin`, which passes every
+`require_permission(...)` check, so the `admin` permission does not separate a
+customer from the people who run the platform. The route registry
+(`config/route_registry.yaml`) marks every route with an `admin` path segment
+and every `/v1/diagnostics/**` route `platform_operator_required`. Exceptions:
+public paths (the Stripe webhook), `/kyber` routes (which keep the narrower
+Kyber operator gate), and the tenant's own SDK routes `POST
+/v1/diagnostics/sdk/heartbeat`, `GET /v1/diagnostics/sdk/health`, `GET
+/v1/diagnostics/sdk/health/{sdk_id}` and `GET /v1/diagnostics/sdk/silent`. Only
+a tenant in `PLATFORM_OPERATOR_TENANT_IDS` (plus, in staging, the first-admin
+bootstrap tenant) or a Kyber operator passes; anyone else gets `403
+ROUTE_POLICY_PLATFORM_OPERATOR_REQUIRED` when the registry is enforced.
+
+Handlers that act on another tenant or on process-global state also check for a
+platform operator themselves, so the rule holds when the registry only
+observes: tenant create/read/update, admin API-key mint/list/revoke, tenant
+deactivation and deletion, the cross-tenant delivery job list, the overage
+cycle, `PUT /v1/fraud/config`, `POST /v1/web3/seed`, `GET
+/v1/lake/quality/{domain}`, `POST /v1/onchain/listener/configure`, `POST
+/v1/x402/graph/snapshot` and `GET /v1/cis/health/global`. Admin billing routes,
+SDK drift analysis, the SDK fleet read and CIS tenant governance accept another
+tenant's id only from a platform operator. A tenant manages its own account
+through `/v1/me/*`, `/v1/account/*` and `/v1/billing/*`.
 
 ### Administrative tenant cleanup
 
@@ -357,7 +383,7 @@ mapping status.
 | `/v1/admin/kyber/revops/provider-status` | GET | Provider mode, health, sync flags, invoice export mode, and mapping status without secrets |
 | `/v1/admin/kyber/revops/product-mappings` | GET | Product/price mapping catalog and mapping completeness without secrets |
 
-### Admin tenant lifecycle (admin permission required)
+### Admin tenant lifecycle (platform operator required)
 
 Deactivation and hard deletion revoke every active credential owned by the
 tenant, including durable API-key rows and contained `public_ingest_identifier`
@@ -452,7 +478,7 @@ self-service billing. The overage cycle also runs from the backend lifespan cron
 
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
-| `/v1/admin/billing/overage-cycle` | POST | Admin | Trigger the monthly overage invoice cycle |
+| `/v1/admin/billing/overage-cycle` | POST | Platform operator | Trigger the monthly overage invoice cycle |
 
 ### Kyber revenue-operations billing (`/v1/admin/kyber/revops/*`, admin permission required)
 
@@ -482,7 +508,8 @@ mapping status.
 | `/v1/admin/kyber/revops/product-mappings` | GET | Product/price mapping catalog and mapping completeness without secrets |
 
 
-The following admin tenant billing endpoints require the `billing` permission.
+The following admin tenant billing endpoints require the `billing` permission
+and, like every `/v1/admin` route, a platform operator.
 
 ### GET /v1/admin/tenants/{tenant_id}/billing
 
@@ -1425,7 +1452,7 @@ Kyber operator review queue for the x402 commerce control plane. All endpoints r
 | GET | `/v1/agent/{id}/trust` | Agent trust score + history |
 | POST | `/v1/agent/{id}/a2h` | Record agent-to-human interaction (notification, recommendation, delivery, escalation) |
 
-### Diagnostics Service (Admin Only)
+### Diagnostics Service (Platform Operators Only)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -1442,7 +1469,9 @@ Kyber operator review queue for the x402 commerce control plane. All endpoints r
 | GET | `/v1/diagnostics/commerce/reconciliation-drift` | Payment intents with no corresponding settlement event (`commerce:read`) |
 | GET | `/v1/diagnostics/commerce/reconciliation` | Read-only reconciliation of the tenant's commerce state against Silver and the graph: rebuild counts, graph consistency and drift (`x402:read`) |
 
-All general diagnostics endpoints require `admin` permission. Commerce diagnostics require `commerce:read`.
+All diagnostics endpoints require a platform operator; general diagnostics also
+require the `admin` permission and commerce diagnostics `commerce:read`. Only
+the tenant's own SDK heartbeat, health and silent-SDK routes are open to tenants.
 
 **x402 environment & credential-only verification.** Every authorization,
 receipt, and settlement carries a credential `environment` (`sandbox` | `live`)

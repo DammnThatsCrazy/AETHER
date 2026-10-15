@@ -12,7 +12,7 @@ related: [ai/kyber-strategic-observability, ai/playbooks, ai/recommendation-fami
 source_hashes:
   "apps/kyber-web/src/components/recommendation-observability-panel.tsx": "sha256:7aa4bfb78ced06b43c567563ca81a208a9e2f85e53bd184265e736758318bae1"
   "services/api/governance/admin/kyber_strategic.py": "sha256:814a81f744d044cf8dbd533d29d53373772a2e1c97eeb97db084c271bb9b583a"
-  "services/api/governance/admin/routes.py": "sha256:448866155ff0ffee0857e0843e3ac9c25dec4c32a9a1c30ba1b749e3eb4c168c"
+  "services/api/governance/admin/routes.py": "sha256:c215417a694ff2759b9eb0b5e4593cb4573fff8c799f5db0bedb50534376da7d"
 ---
 
 # Kyber Revenue Intelligence

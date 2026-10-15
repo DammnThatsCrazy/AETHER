@@ -13,7 +13,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
-  "services/api/governance/admin/routes.py": "sha256:448866155ff0ffee0857e0843e3ac9c25dec4c32a9a1c30ba1b749e3eb4c168c"
+  "services/api/governance/admin/routes.py": "sha256:c215417a694ff2759b9eb0b5e4593cb4573fff8c799f5db0bedb50534376da7d"
   "services/api/intelligence/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
   "services/api/intelligence/intelligence/routes.py": "sha256:355eb639eb8cf03f9a79903ae67b1665b688e2fc095536e8d8bd44b2c06fcc18"
 ---
