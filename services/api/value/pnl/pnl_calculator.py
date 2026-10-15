@@ -91,7 +91,7 @@ class FIFOLedger:
 class PNLResult:
     entity_id: str
     window_days: int | None
-    realized_pnl_usd: Decimal
+    realized_pnl_usd: Decimal | None   # None when the entity has no linked wallet
     unrealized_pnl_usd: Decimal
     # tvl_delta and best/worst "day" are BALANCE-SNAPSHOT changes (deposits +
     # withdrawals + price moves), i.e. TVL change — NOT realized P&L. They are a
@@ -240,11 +240,13 @@ class PNLCalculator:
         tenant_id: str,
         window_start: datetime | None,
         window_end: datetime,
-    ) -> tuple[Decimal, str]:
+    ) -> tuple[Decimal | None, str]:
         """
         Compute realized PNL via FIFO from silver_web3_events.
         Returns (realized_pnl_usd, data_confidence).
-        data_confidence = 'estimated' if full tx history is unavailable.
+        data_confidence = 'estimated' if full tx history is unavailable, and
+        ``(None, 'unavailable')`` when the tenant linked no wallet to the
+        entity: there is no history to read, which is not a flat P&L.
 
         Only the addresses ``tenant_id`` linked to the entity are read: the
         events table is keyed by wallet address, not by tenant.
@@ -254,7 +256,7 @@ class PNLCalculator:
         )
         addresses = tuple(sorted({r["address"] for r in wallet_rows if r.get("address")}))
         if not addresses:
-            return Decimal("0"), "exact"
+            return None, "unavailable"
 
         where_clause = "wallet_address IN %(addresses)s AND tx_status = 'confirmed'"
         params: dict = {"addresses": addresses}
