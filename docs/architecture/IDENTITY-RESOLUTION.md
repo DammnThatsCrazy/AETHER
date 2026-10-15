@@ -35,12 +35,12 @@ source_hashes:
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/identity/identity/": "sha256:be75727023c1dba7d10db42dd0766c24a1e57f0f0f8d81d0b02d4dbaf30fc3b1"
+  "services/api/identity/identity/": "sha256:3fbd070de33166053db88a263f75d5f2ad56339b9b826c2445a6577aa0360a0e"
   "services/api/identity/profile/aggregator.py": "sha256:a901c1088e387bb967d425b1aed3673fc3942b7b6bf017648c78aad860bfe04b"
   "services/api/identity/profile/composer.py": "sha256:aae09f67a164f0e2b940676e52841ff325f36650ac4b1c022cc2a60a31505c20"
   "services/api/ingestion/ingestion/batch.py": "sha256:fbb659145f6cf52cff5af991099fb2cd78bd306729b6144a3ddb93bb8dbdda45"
   "services/api/intelligence/analytics/routes.py": "sha256:b51cb890d703eb9c495b723fd79b6e03bf292300db82441024b5b645e6b341b7"
-  "services/api/repositories/repos.py": "sha256:64a081a8a32252aa73360bb861c2af4d738aa92831b8f4a93bcb4818f0aa3928"
+  "services/api/repositories/repos.py": "sha256:4f13803cb0e92160ac3c4769b18d9853b453dd04a231421a3fe1f90977572439"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
 ---
 # Aether Identity Resolution v0.1.0-alpha.0 — Technical Guide
@@ -403,8 +403,8 @@ Production routes are served under `/v1/identity/` by `services/api/identity/ide
 | `/v1/identity/suppress` | POST | Suppress an identifier hash — revokes matching aliases + blocks future resolution (`write` permission) |
 | `/v1/identity/suppress/{suppression_id}` | DELETE | Revoke a suppression rule (`write` permission) |
 | `/v1/identity/suppressions` | GET | List active suppression rules for tenant |
-| `/v1/identity/profiles/{user_id}` | GET/PUT | Legacy profile read/write (backwards-compatible; `read` / `write` permission) |
-| `/v1/identity/profiles/{user_id}/graph` | GET | Legacy profile graph (backwards-compatible) |
+| `/v1/identity/profiles/{user_id}` | GET/PUT | Legacy profile read/write (backwards-compatible; `read` / `write` permission). A read answers 404 for a profile stored under another tenant |
+| `/v1/identity/profiles/{user_id}/graph` | GET | Legacy profile graph (backwards-compatible): 404 for another tenant's profile, and only neighbours tagged with the caller's tenant |
 | `/v1/identity/siwx/bind` | POST | SIWX session binding |
 | `/v1/identity/siwx/status/{session_id}` | GET | SIWX session status |
 | `/v1/identity/siwx/{session_id}` | DELETE | Revoke SIWX session |

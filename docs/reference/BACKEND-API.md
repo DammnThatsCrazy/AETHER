@@ -25,19 +25,19 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:7c851ff577675a519372e3fa3646b6bd9702f70e6dc10a15b8631fb2f23f0d13"
+  "services/api/actions/": "sha256:ad1434cca0217bca617c957e4e41b751162274803a2f4e24bd06c6944d1b1baf"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:0740c89ed3bf089b8ded5f9a319b7670a0afb18bda8f58a69a11a03c2a0a5d75"
   "services/api/connectors/": "sha256:25aea32c107687a0c3d95bf61df98f69623c46d1e68b68dd076de2972242707b"
   "services/api/governance/": "sha256:7babd09f496c3d1339dd2853f89d4fa3174b29fbeea1dc2e680130d6d7986540"
-  "services/api/graph/": "sha256:bd963613166312ac99a29e07d2250a7cc45d55618204a62c969d0b801d8e2231"
-  "services/api/identity/": "sha256:3899aca8a5fe95b1f975945913ebbd0cef920109649676c9b48b49fd6fcd2a1f"
-  "services/api/ingestion/": "sha256:201513b270e7c49a9636eb99cbd9d8ca92247a0e1a7363fee7a9315dc895bf46"
-  "services/api/intelligence/": "sha256:5a1440114bcdbf9bb1645f6d223a55c89615068c42e8bec283a18d5ea8835796"
-  "services/api/journeys/": "sha256:ce869bbb77d4e2a526e2313077adb3e087e1d34b3c823eb46cb736b5e3caccbe"
+  "services/api/graph/": "sha256:c8c0525114b6326597ebb3ede8c3ef3eb760634589dc88c0299053ab9a17bdcf"
+  "services/api/identity/": "sha256:d35f55f1855f5be8f981bb4d9dc0a372de2831fdb161775bee142c8049222459"
+  "services/api/ingestion/": "sha256:65e7b34506d7c82cd279f651acdf71ccd09c89aaef5e20208300af0767cdc8df"
+  "services/api/intelligence/": "sha256:f62be8bd82052f7150a6829419803f06bc72d3a540997977f61d14925124e97e"
+  "services/api/journeys/": "sha256:035f0a3fd053a77a0406740175359fbde03dba991cedbe4ec23ea8651652177f"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:228120a11b8e6c3fec9405ed272e61de894b658274a33da129facc9c074a8224"
-  "services/api/value/": "sha256:a1b747c3317fa53f2516f1d18d9852a0187b56567b0ab2c9434ffa37c874d9e5"
+  "services/api/value/": "sha256:5004a9cc437f7eb5b7e7ff1eff7090c4d956f356f3f16bc4031e12ce26ccc5ee"
   "services/api/workers/": "sha256:2ba7219cc4a6bb8a77040d5871b16f764631ca87da8f36de0ba2140b59a015e6"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -1365,9 +1365,9 @@ Three service groups are available when Intelligence Graph feature flags are ena
 |--------|----------|-------------|
 | POST | `/v1/commerce/payments` | Record payment + create `PAYS` edge in graph |
 | POST | `/v1/commerce/hires` | Record agent hire + create `HIRED` edge |
-| GET | `/v1/commerce/fees/report` | Fee elimination report for tenant |
+| GET | `/v1/commerce/fees/report` | Fee elimination report over the caller's tenant's payments only |
 | GET | `/v1/commerce/reconciliation/order-payments` | Tenant-scoped order/payment evidence plus an evidence-only `operationLink`; accepts optional exact `commerce_order_ref`, optional timezone-qualified `as_of`, and requires `commerce:read` |
-| GET | `/v1/commerce/agent/{id}/spend` | Agent spend history |
+| GET | `/v1/commerce/agent/{id}/spend` | Agent spend history from the caller's tenant's payments only |
 | GET | `/v1/commerce/agents/{id}/economics` | Full economic profile: budget usage, delegation policy, economic identity, and evidence-only operation links across exact-matched intent, authorization, execution, and settlement records |
 | GET | `/v1/commerce/revenue/{service_id}` | Service revenue over a time window (settled payments attributed to service) |
 | GET | `/v1/commerce/cluster/{id}/spend` | Cluster spend analytics: settled volume and unique agents |
@@ -1453,8 +1453,8 @@ Kyber operator review queue for the x402 commerce control plane. All endpoints r
 | POST | `/v1/agent/tasks/{id}/lifecycle` | Update task lifecycle state |
 | POST | `/v1/agent/tasks/{id}/decision` | Record an agent decision |
 | POST | `/v1/agent/tasks/{id}/feedback` | Submit feedback on task outcome |
-| GET | `/v1/agent/{id}/graph` | Agent's full graph neighborhood |
-| GET | `/v1/agent/{id}/trust` | Agent trust score + history |
+| GET | `/v1/agent/{id}/graph` | Agent's graph neighborhood within the caller's tenant (404 unless the agent's vertex belongs to it) |
+| GET | `/v1/agent/{id}/trust` | Agent trust score + history (404 unless the agent's vertex belongs to the caller's tenant) |
 | POST | `/v1/agent/{id}/a2h` | Record agent-to-human interaction (notification, recommendation, delivery, escalation) |
 
 ### Diagnostics Service (Platform Operators Only)
@@ -1596,7 +1596,7 @@ credential slot must be ACTIVE, entitlement must approve).
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/v1/intelligence/wallet/{address}/risk` | Composite wallet risk score (trust scorer + graph + features) |
+| GET | `/v1/intelligence/wallet/{address}/risk` | Composite wallet risk score (trust scorer + graph + features); features are materialized, stored and cached per tenant from that tenant's lake rows |
 | GET | `/v1/intelligence/protocol/{id}/analytics` | Protocol-level analytics from Gold tier |
 | GET | `/v1/intelligence/entity/{id}/cluster` | Identity cluster via graph relationships |
 | GET | `/v1/intelligence/alerts` | Anomaly alerts from Gold tier |
@@ -1690,11 +1690,9 @@ Core identity resolution and entity management endpoints.
 | POST | `/v1/identity/suppress` | Suppress an identifier hash — revokes matching aliases and blocks future resolution (`write`) |
 | DELETE | `/v1/identity/suppress/{suppression_id}` | Revoke an active suppression rule (`write`) |
 | GET | `/v1/identity/suppressions` | List active suppression rules for the authenticated tenant (`read`) |
-| GET | `/v1/identity/profiles/{user_id}` | Get stored profile for a user/entity |
+| GET | `/v1/identity/profiles/{user_id}` | Get the caller's tenant's stored profile for a user/entity (404 for another tenant's) |
 | PUT | `/v1/identity/profiles/{user_id}` | Upsert profile record for a user/entity |
-| GET | `/v1/identity/profiles/{user_id}/graph` | Profile-scoped graph view (bounded to 50 neighbors) |
-| POST | `/v1/identity/verification/wallet/challenges` | Issue a five-minute, tenant/subject/wallet/chain-bound wallet ownership message (`write`; current server-evaluated identity-link consent required) |
-| POST | `/v1/identity/verification/wallet/challenges/{challenge_id}/verify` | Verify and consume the wallet signature, then issue durable evidence and replay identity resolution (`write`; consent is re-evaluated) |
+| GET | `/v1/identity/profiles/{user_id}/graph` | Profile-scoped graph view (bounded to 50 neighbors); only neighbours tagged with the caller's tenant |
 
 **Permissions:** `read` for GET queries; `write` for resolve/profiles/wallet proof; `admin` for merge/split/recompute/conflicts.
 
@@ -1747,7 +1745,7 @@ Holistic user/entity omniview — composes data from all Aether subsystems into 
 | GET | `/v1/profile/{user_id}/campaigns` | Campaign attribution derived from analytics event stream |
 | GET | `/v1/profile/{user_id}/tier` | Entity tier (Whale/Shark/Dolphin/Fish/Shrimp) + percentile rank |
 | GET | `/v1/profile/{user_id}/asset-composition` | On-chain portfolio composition by asset category |
-| GET | `/v1/profile/{user_id}/pnl` | Realized + unrealized PNL, TVL delta |
+| GET | `/v1/profile/{user_id}/pnl` | Realized + unrealized PNL, TVL delta. 404 unless the entity row or a wallet linked to it belongs to the caller's tenant; realized PNL reads only the addresses that tenant linked to the entity |
 | GET | `/v1/profile/{user_id}/trading-profile` | On-chain trading behavior (pairs, protocol loyalty, gas) |
 | GET | `/v1/profile/{user_id}/location-history` | City-level location history with classification |
 | GET | `/v1/profile/{user_id}/temporal-heatmap` | 24×7 activity density matrix + streaks |
@@ -1897,7 +1895,7 @@ Macro-to-micro group intelligence. Supports segments, cohorts, clusters, communi
 | GET | `/v1/population/trends` | Group creation over time |
 | POST | `/v1/population/groups` | Create a new group (segment, cohort, cluster, community, etc.) |
 | GET | `/v1/population/groups/{id}` | Group details with member count |
-| GET | `/v1/population/groups/{id}/members` | Paginated members with `min_confidence` filter |
+| GET | `/v1/population/groups/{id}/members` | Paginated members with `min_confidence` filter (404 for a group outside the caller's tenant) |
 | POST | `/v1/population/groups/{id}/members` | Add members with basis, confidence, reason, source_tag |
 | GET | `/v1/population/groups/{id}/intelligence` | Group intelligence summary (basis distribution, avg confidence) |
 | GET | `/v1/population/compare` | Compare two groups: overlap, unique counts (`group_a`, `group_b` query params) |
@@ -1935,6 +1933,8 @@ Negative-space intelligence: what should have happened but did not. Detects abse
 
 **Permissions:** `read` for queries, `write` for triggering scans
 
+Signals belong to the tenant whose scan produced them. Entity, group and `/signal/{id}` reads return only the caller's tenant's signals; another tenant's signal id answers 404.
+
 ---
 
 ### Behavioral Continuity & Friction Service (v8.6.0)
@@ -1952,6 +1952,8 @@ Derived signals from data Aether already collects. 10 signal families detecting 
 **Signal families:** `intent_residue`, `wallet_friction`, `identity_delta`, `pre_post_continuity`, `sequence_scar`, `source_shadow`, `reward_near_miss`, `social_chain_lag`, `cex_dex_transition`, `behavioral_twin`
 
 **Permissions:** `read` for queries, `write` for triggering scans
+
+Persisted signals are read only within the caller's tenant.
 
 ---
 
@@ -1980,6 +1982,8 @@ Tokenized real-world asset observation, analysis, and scoring. Aether does NOT i
 **Policy types:** `whitelist`, `accreditation`, `jurisdiction`, `lockup`, `holder_cap`, `secondary_transfer`, `aml_kyc`
 
 **Permissions:** `write` for asset/policy/cashflow/holder creation, `read` for queries
+
+Asset, policy, cashflow, exposure and holder rows belong to the tenant that wrote them. An asset id outside the caller's tenant answers 404 on every `/v1/rwa/assets/{id}` read, on `POST /v1/rwa/simulate-transfer`, and on `POST /v1/rwa/policies`, `/cashflows` and `/holders`. `GET /v1/rwa/exposure/{entity_id}` counts only the caller's holder records.
 
 ---
 
@@ -2975,7 +2979,7 @@ Event-driven multi-channel operator notification pipeline. Ingests intelligence 
 | GET | `/v1/notifications/intelligence/{id}/audit` | Full append-only audit log |
 | PATCH | `/v1/notifications/intelligence/{id}/approve` | Operator approve (propagates to graph) |
 | PATCH | `/v1/notifications/intelligence/{id}/suppress` | Operator suppress |
-| PATCH | `/v1/notifications/intelligence/{id}/escalate` | Operator escalate |
+| PATCH | `/v1/notifications/intelligence/{id}/escalate` | Operator escalate (404 for a notification outside `tenantId`) |
 | PATCH | `/v1/notifications/intelligence/{id}/annotate` | Add annotation |
 | POST | `/v1/notifications/intelligence/{id}/replay` | Re-deliver to all active channels |
 | GET | `/v1/notifications/coverage` | Producer-coverage report (honest states; never "healthy" without a declared baseline) |

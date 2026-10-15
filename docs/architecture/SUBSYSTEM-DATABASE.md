@@ -18,7 +18,7 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
-  "services/api/repositories/repos.py": "sha256:64a081a8a32252aa73360bb861c2af4d738aa92831b8f4a93bcb4818f0aa3928"
+  "services/api/repositories/repos.py": "sha256:4f13803cb0e92160ac3c4769b18d9853b453dd04a231421a3fe1f90977572439"
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -220,11 +220,18 @@ does not claim that either has been applied.
   `_column_renames`, or the `_payload_column` key. A retry deletes nothing. The
   `consent.erasure` completeness planes use it for the identity, Profile 360,
   Gold feature, connector and replay stores
-  (`docs/reference/privacy/dsr-erasure-coverage.md`).
+  (`docs/reference/privacy/dsr-erasure-coverage.md`). `DeletionPlan.execute`
+  (`shared/privacy/retention.py`) uses it for `HARD_DELETE` and `EDGE_SEVER`
+  steps whenever the store adapter provides it, so a plan only deletes its own
+  tenant's rows; a plan with no tenant fails those steps instead of deleting
+  unscoped. Adapters without it (the externalized Bronze adapter, which is bound
+  to one tenant when it is built) keep `delete_by_entity`.
 
 - **Tenant-owned repositories:** `TenantOwnedRepository` (a `BaseRepository`
   subclass) is for registries whose ids come from the caller, such as the Web3
-  and cross-domain registries. `upsert(record_id, data, tenant_id)` stamps the
+  and cross-domain registries, and for rows that routes read back by an id the
+  caller supplies: expectation and behavioral signals and the RWA asset,
+  policy, cashflow, exposure and holder stores. `upsert(record_id, data, tenant_id)` stamps the
   row with the tenant, merges into that tenant's own row (keeping `created_at`),
   and raises `ConflictError` rather than overwrite a row another tenant owns.
   Reads only work on a view bound with `for_tenant(tenant_id)`; an unbound

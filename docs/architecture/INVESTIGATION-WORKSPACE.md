@@ -14,7 +14,7 @@ estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
   "services/api/intelligence/intelligence/investigations.py": "sha256:3369a68e9650eedefd7709a2e2ff91e2294d3dabe50cf38659a6309365bef517"
-  "services/api/intelligence/intelligence/routes.py": "sha256:6f8183f99e28149006abab4dd56e8d006430b1fcc69a4307632f686e9a7c8f6d"
+  "services/api/intelligence/intelligence/routes.py": "sha256:e1435c37fe23a4ef9a806db9e90f6048cee9364fae06b71336b24dfda362cded"
 ---
 # Investigation Workspace
 

@@ -19,7 +19,7 @@ source_hashes:
   "services/api/intelligence/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
   "services/api/intelligence/intelligence/recommendation_families.py": "sha256:1d4ef3823c50ca7cd13617c779fb0c83266dd9d57f1b61e4f819f8c820b5bb6a"
   "services/api/intelligence/intelligence/repositories.py": "sha256:e1640a8ffe056bb2c6347773e0efb6080fc470931b4da7a4efcb8cfbe109837a"
-  "services/api/intelligence/intelligence/routes.py": "sha256:6f8183f99e28149006abab4dd56e8d006430b1fcc69a4307632f686e9a7c8f6d"
+  "services/api/intelligence/intelligence/routes.py": "sha256:e1435c37fe23a4ef9a806db9e90f6048cee9364fae06b71336b24dfda362cded"
 ---
 # Decision & Outcome Intelligence
 
