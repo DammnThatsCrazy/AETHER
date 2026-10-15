@@ -69,6 +69,24 @@ async def test_tenant_writer_cannot_touch_platform_vertices(mode):
     assert (await graph.get_vertex(vid)).properties["symbol"] == "USDC.e"
 
 
+@pytest.mark.parametrize("mode", ["off", "shadow", "enforce"])
+async def test_tenant_writer_cannot_rewrite_another_tenants_vertex(mode):
+    ledger.reset_graph_ledger_memory()
+    graph = _graph()
+    gateway = GraphMutationGateway(graph_client=graph)
+    vid = f"entity:{uuid.uuid4().hex[:8]}"
+    await _write(gateway, _vertex(vid, "tenant-a", secret="a"), "tenant-a", mode)
+
+    # The vertex keeps its owner, but the write is made for another tenant.
+    with pytest.raises(VertexOwnershipError):
+        await _write(gateway, _vertex(vid, "tenant-a", secret="b"), "tenant-b", mode)
+    with pytest.raises(VertexOwnershipError):  # nor create one owned by another tenant
+        await _write(gateway, _vertex(f"{vid}-new", "tenant-a"), "tenant-b", mode)
+
+    assert (await graph.get_vertex(vid)).properties["secret"] == "a"
+    assert await graph.get_vertex(f"{vid}-new") is None
+
+
 async def test_rejected_cross_tenant_write_leaves_no_ledger_record():
     ledger.reset_graph_ledger_memory()
     graph = _graph()
