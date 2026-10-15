@@ -223,3 +223,98 @@ async def test_provenance_records_for_one_entity_coexist_across_tenants(monkeypa
     mine = await tracker.get(entity_id, a)
     assert mine.origin_agent_id == "agent-a" and mine.contamination_score == 0.0
     assert (await tracker.get(entity_id, b)).contamination_score == 0.9
+# ── tenant-derived keys: the same natural id coexists per tenant ────────────
+
+
+async def test_behavior_profiles_for_one_entity_coexist_across_tenants(backend):
+    from workers.profile360_workers import workers as profile_workers
+
+    a, b, token = _ids()
+    profiles = BehaviorProfileRepository()
+    user_id = f"user-{token}"
+    await profiles.upsert_snapshot(user_id, a, "w0", "w1", risk_score=0.91,
+                                   anomaly_flags=["a_only_flag"], top_patterns=["a_pattern"])
+
+    await profile_workers.IntentInferrer(profiles).handle(SimpleNamespace(
+        tenant_id=b, topic=Topic.AGENT_EXECUTION_COMPLETED,
+        payload={"user_id": user_id, "action": "checkout"}, envelope=None,
+    ))
+
+    mine = await profiles.find_for_entity(a, user_id)
+    theirs = await profiles.find_for_entity(b, user_id)
+    assert mine["tenant_id"] == a and mine["risk_score"] == 0.91
+    assert mine["anomaly_flags"] == ["a_only_flag"]
+    assert theirs["tenant_id"] == b and theirs["risk_score"] == 0.0
+    assert theirs["anomaly_flags"] == [] and theirs["top_patterns"] == []
+
+
+async def test_journey_chains_for_one_entity_coexist_across_tenants(backend):
+    from workers.profile360_workers import workers as profile_workers
+
+    a, b, token = _ids()
+    chains = JourneyChainRepository()
+    user_id = f"user-{token}"
+    linker = profile_workers.JourneyChainLinker(chains)
+    for tenant, session in ((a, "s-a"), (b, "s-b")):
+        await linker.handle(SimpleNamespace(
+            tenant_id=tenant, topic=Topic.AGENT_EXECUTION_COMPLETED, event_id=session,
+            payload={"user_id": user_id, "session_id": session}, envelope=None,
+        ))
+
+    mine = await chains.find_for_entity(a, user_id)
+    theirs = await chains.find_for_entity(b, user_id)
+    assert mine["chain_id"] == f"journey_chain:{a}:{user_id}"
+    assert mine["first_journey_id"] == "s-a" and mine["journey_count"] == 1
+    assert theirs["first_journey_id"] == "s-b" and theirs["journey_count"] == 1
+
+
+async def test_event_envelopes_with_one_id_coexist_across_tenants(backend):
+    a, b, token = _ids()
+    envelopes = EventEnvelopeRepository()
+    event_id = f"evt-{token}"
+    for tenant in (a, b):
+        await envelopes.create({"id": event_id, "tenantId": tenant, "type": "x",
+                                "replayable": True, "payload": {"secret": tenant}})
+
+    for tenant in (a, b):
+        rows = await envelopes.list_replayable(tenant)
+        assert [r["payload"]["secret"] for r in rows] == [tenant]
+        assert rows[0]["envelope_id"] == event_id
+    if backend.pool is not None:
+        columns = await backend.pool.fetch(
+            "SELECT tenant_id FROM event_envelopes WHERE data->>'envelope_id' = $1", event_id,
+        )
+        assert sorted(r["tenant_id"] for r in columns) == sorted([a, b])
+
+
+async def test_x402_seeds_and_resources_coexist_per_tenant(backend, monkeypatch):
+    if backend.kind == "inmem":
+        pytest.skip("local mode keeps commerce objects in per-tenant TenantCollections")
+    import value.x402.commerce_store as commerce_store
+    import value.x402.facilitators as facilitators
+    from value.x402.commerce_models import ProtectedResource, ResourceClass
+
+    monkeypatch.setattr(commerce_store, "_is_local", lambda: False)
+    monkeypatch.setattr(facilitators, "_is_local_env", lambda: False)
+    store = commerce_store.CommerceStore()
+    monkeypatch.setattr(facilitators, "get_commerce_store", lambda: store)
+
+    a, b, token = _ids()
+    for tenant in (a, b, a):
+        await facilitators.seed_facilitators_and_assets(tenant)
+    registry = facilitators.FacilitatorRegistry()
+    for tenant in (a, b):
+        chosen = await registry.select_for(tenant, "USDC", "eip155:8453")
+        assert chosen is not None and chosen.facilitator_id == "fac_circle_v2"
+
+    resource_id = f"res-{token}"
+    for tenant, price in ((a, 5.0), (b, 0.0)):
+        await store.put_resource(ProtectedResource(
+            resource_id=resource_id, tenant_id=tenant, name="paid", path_pattern="/paid",
+            resource_class=next(iter(ResourceClass)), price_usd=price,
+        ))
+    assert (await store.get_resource(a, resource_id)).price_usd == 5.0
+    assert (await store.get_resource(b, resource_id)).price_usd == 0.0
+    assert await store.resources.delete(b, resource_id)
+    assert (await store.get_resource(a, resource_id)).price_usd == 5.0
+    assert await store.get_resource(b, resource_id) is None

@@ -85,7 +85,7 @@ class AgentProfile360Composer:
         intents = await self._payment_intents.list_for_agent(agent_id, tenant_id, limit=limit)
         settlements = await self._settlements.list_for_agent(agent_id, tenant_id, limit=limit)
         economic_identity = await self._economic_identities.find_for_agent(agent_id, tenant_id)
-        behavior = await self._behavior_profiles.find_by_id(agent_id)
+        behavior = await self._behavior_profiles.find_for_entity(tenant_id, agent_id)
         from value.x402.commerce_store import get_commerce_store
 
         commerce_store = get_commerce_store()

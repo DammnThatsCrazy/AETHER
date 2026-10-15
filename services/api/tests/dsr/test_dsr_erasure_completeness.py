@@ -550,10 +550,10 @@ async def _assert_stores_erased(world: World) -> None:
     # profile360
     assert await _ProfileStore().find_by_id(USER) is None
     assert await _ProfileStore().find_by_id(OTHER_USER) is not None
-    assert await BehaviorProfileRepository().find_by_id(world.entity) is None
-    assert await BehaviorProfileRepository().find_by_id(world.other_entity) is not None
-    assert await JourneyChainRepository().find_by_id(f"chain-{world.entity}") is None
-    assert await JourneyChainRepository().find_by_id(f"chain-{world.other_entity}") is not None
+    assert await BehaviorProfileRepository().find_for_entity(t, world.entity) is None
+    assert await BehaviorProfileRepository().find_for_entity(t, world.other_entity) is not None
+    assert await JourneyChainRepository().find_for_entity(t, world.entity) is None
+    assert await JourneyChainRepository().find_for_entity(t, world.other_entity) is not None
 
     # feature rows (Gold) + caches
     gold = _IN_MEMORY_STORES["gold_trading_profile"].values()
@@ -583,7 +583,7 @@ async def _assert_stores_erased(world: World) -> None:
     assert await artifacts.verify(ot, world.exports["other_tenant"])
 
     # replay bundles
-    envelopes = {e["id"] for e in _IN_MEMORY_STORES["event_envelopes"].values()}
+    envelopes = {e["envelope_id"] for e in _IN_MEMORY_STORES["event_envelopes"].values()}
     assert envelopes == {f"env-o-{t}", f"env-b-{t}"}
 
     # rewards retained (legal), connectors
@@ -843,8 +843,8 @@ async def test_base_repository_delete_for_tenant_where_is_tenant_scoped():
         await repo.upsert_chain(chain, entity, tenant, "j", "j", 1, "a", "b")
     assert await repo.delete_for_tenant_where("ta", "entity_id", ["e1"]) == 1
     assert await repo.delete_for_tenant_where("ta", "entity_id", ["e1"]) == 0  # idempotent
-    assert await repo.find_by_id("c3") is not None  # same entity, other tenant
-    assert await repo.find_by_id("c2") is not None
+    assert await repo.find_for_entity("tb", "e1") is not None  # same entity, other tenant
+    assert await repo.find_for_entity("ta", "e2") is not None
     assert await repo.delete_for_tenant_where("ta", "entity_id", []) == 0
     with pytest.raises(ValueError):
         await repo.delete_for_tenant_where("", "entity_id", ["e2"])
