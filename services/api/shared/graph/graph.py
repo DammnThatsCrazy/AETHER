@@ -86,9 +86,14 @@ def vertex_tenant(properties: Optional[dict[str, Any]]) -> Optional[str]:
     return tenant_of(properties)
 
 
+def tenant_vertex_id(tenant_id: str, vertex_id: str) -> str:
+    """Id of a tenant's own copy of a vertex whose bare id other tenants also use."""
+    return f"{tenant_id}:{vertex_id}"
+
+
 def user_vertex_id(tenant_id: str, user_id: str) -> str:
     """Vertex id of a tenant's user: SDK user ids are unique only inside a tenant."""
-    return f"{tenant_id}:user:{user_id}"
+    return tenant_vertex_id(tenant_id, f"user:{user_id}")
 
 
 def check_vertex_owner(
