@@ -2,19 +2,22 @@
  * Built from design/designs/Aether Agents.dc.html (copy, layout and styles verbatim).
  */
 import { Fragment } from 'react';
-import { css, portalLabel, useDesignState, useLink, useReducedMotion } from '@site/design/runtime';
+import { asset, css, portalLabel, useDesignState, useLink, useReducedMotion } from '@site/design/runtime';
+import { markSrc } from '@site/components/brand-mark';
 import { usePageMeta } from '@site/design/page-meta';
 import { SiteFooter } from '@site/components/site-footer';
 import { SiteHeader } from '@site/components/site-header';
 import './aether-agents-page.css';
 
-import { createElement as h, useEffect, useRef, type ReactNode } from 'react';
+import { createElement as h, useEffect, useRef, useState, type ReactNode } from 'react';
 
 type AKind = 'human' | 'agent' | 'system' | 'value';
 const EASE = 'cubic-bezier(0.22,1,0.36,1)';
 const KC: Record<AKind, string> = { human: '#9fbad6', agent: '#dcb683', system: '#8fb0cc', value: '#9cc4a9' };
 const KG: Record<AKind, string> = { human: '●', agent: '⬡', system: '○', value: '↑' };
 const CHAIN = ['human', 'orch', 'exec', 'sys', 'out'];
+// Logo chip per lineage node: agents carry the Aether mark, the payment API its provider.
+const LOGO: Record<string, 'AE' | string> = { orch: 'AE', research: 'AE', planning: 'AE', data: 'AE', exec: 'AE', sys: 'assets/brand/stripe.svg' };
 const STAGES: [kicker: string, title: string, body: string][] = [
   ['Instruction', 'A person asks an agent to do something.', 'One instruction. One agent. Aether records who gave it and when.'],
   ['Orchestration', 'The agent starts other agents.', 'An orchestrator creates research, planning, data, and execution agents. Aether records who created whom.'],
@@ -23,14 +26,14 @@ const STAGES: [kicker: string, title: string, body: string][] = [
 ];
 type RKind = 'human' | 'agent';
 const RL: [title: string, body: string, from: RKind, to: RKind, fromLabel: string, toLabel: string, verb: string, example: string][] = [
-  ['Person to person', 'Who works with whom.', 'human', 'human', 'Maya Chen', 'Sam Ortiz', 'reviewed', 'usr_2x8kf → usr_9q1m · reviewed refund'],
-  ['Person to agent', 'Who asked an agent to do what.', 'human', 'agent', 'Maya Chen', 'Support agent', 'asked', 'usr_2x8kf → agt_orch_01 · “refund order #5532”'],
+  ['Person to person', 'Who works with whom.', 'human', 'human', 'Sofia Marchetti', 'Sam Ortiz', 'reviewed', 'usr_2x8kf → usr_9q1m · reviewed refund'],
+  ['Person to agent', 'Who asked an agent to do what.', 'human', 'agent', 'Sofia Marchetti', 'Support agent', 'asked', 'usr_2x8kf → agt_orch_01 · “refund order #5532”'],
   ['Agent to agent', 'Which agent started or handed off to another.', 'agent', 'agent', 'Orchestrator', 'Execution agent', 'handed off', 'agt_orch_01 → agt_x_22 · scoped to payments'],
-  ['Agent to person', 'When an agent came back to a person for a decision.', 'agent', 'human', 'Execution agent', 'Maya Chen', 'checked with', 'agt_x_22 → usr_2x8kf · refund above $40 limit'],
+  ['Agent to person', 'When an agent came back to a person for a decision.', 'agent', 'human', 'Execution agent', 'Sofia Marchetti', 'checked with', 'agt_x_22 → usr_2x8kf · refund above $40 limit'],
 ];
 const RC: Record<RKind, string> = { human: '#3a6896', agent: '#a8783e' };
 const RG: Record<RKind, string> = { human: '●', agent: '⬡' };
-const STATES: [g: string, k: string, b: string, c: string][] = [['●', 'Observed', 'Something directly occurred.', '#3a6896'], ['○', 'Inferred', 'Aether derived something from evidence.', '#6b6a65'], ['↔', 'Resolved', 'Records determined to be the same entity or relationship.', '#3a6896'], ['✓', 'Authorized', 'A person or system permitted an action.', '#a8783e'], ['→', 'Executed', 'An action occurred.', '#a8783e'], ['✓', 'Verified', 'The expected effect was observed.', '#4f7a5e'], ['↑', 'Measured', 'The resulting outcome was evaluated.', '#4f7a5e']];
+const STATES: [g: string, k: string, b: string, c: string][] = [['●', 'Observed', 'Something directly occurred.', '#9fbad6'], ['○', 'Inferred', 'Aether derived something from evidence.', '#b4b2ac'], ['↔', 'Resolved', 'Records determined to be the same entity or relationship.', '#9fbad6'], ['✓', 'Authorized', 'A person or system permitted an action.', '#e0b878'], ['→', 'Executed', 'An action occurred.', '#e0b878'], ['✓', 'Verified', 'The expected effect was observed.', '#9cc4a9'], ['↑', 'Measured', 'The resulting outcome was evaluated.', '#9cc4a9']];
 
 export function AetherAgentsPage() {
   const link = useLink();
@@ -39,6 +42,21 @@ export function AetherAgentsPage() {
   const [state, setState] = useDesignState<{ stage: number; w: number; manual: boolean; rel: number; relHeld: boolean }>({ stage: 0, w: 1280, manual: false, rel: 0, relHeld: false });
   const live = useRef(state);
   live.current = state;
+  // The lineage stage is laid out at 600×470 and scaled to its frame.
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [k, setK] = useState(1);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const fit = () => {
+      if (el.clientWidth) setK(el.clientWidth / 600);
+    };
+    fit();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   useEffect(() => {
     const onR = () => setState({ w: window.innerWidth });
     const onS = () => {
@@ -81,7 +99,7 @@ export function AetherAgentsPage() {
   const st = state.stage;
   const narrow = state.w < 1000;
   const N: [id: string, label: string, raw: string, kind: AKind, p: [number, number], temp?: string][] = [
-    ['human', 'Maya Chen', 'usr_2x8kf', 'human', [300, 48]],
+    ['human', 'Sofia Marchetti', 'usr_2x8kf', 'human', [300, 48]],
     ['orch', st === 0 ? 'Agent' : 'Orchestrator', 'agt_orch_01', 'agent', [300, 148]],
     ['research', 'Research agent', 'agt_r_14', 'agent', [84, 262], 'temp'],
     ['planning', 'Planning agent', 'agt_p_03', 'agent', [228, 262], 'temp'],
@@ -96,26 +114,28 @@ export function AetherAgentsPage() {
     st === 0
       ? [['human', 'orch', 'instructs']]
       : [['human', 'orch', st >= 2 ? 'full authority' : 'instructs'], ['orch', 'research', 'spawns'], ['orch', 'planning', 'spawns'], ['orch', 'data', 'spawns'], ['orch', 'exec', st >= 2 ? 'delegated' : 'spawns'], ['exec', 'sys', st >= 2 ? 'scoped tool access' : 'calls'], ['sys', 'out', 'recorded']];
-  const edges = E.map(([a, b, lab], i) => {
+  const edges = E.map(([a, b], i) => {
     const A = by[a]![4];
     const B = by[b]![4];
     const inChain = CHAIN.includes(a) && CHAIN.includes(b);
     const dim = st >= 2 && !inChain;
     const term = st === 3 && by[b]![5] === 'temp';
-    const d = 'M' + A[0] + ' ' + (A[1] + 22) + 'L' + B[0] + ' ' + (B[1] - 22);
-    const showLab = st >= 2 && inChain && lab !== 'recorded';
-    const mx = (A[0] + B[0]) / 2;
-    const my = (A[1] + 22 + B[1] - 22) / 2;
+    const y1 = A[1] + 23;
+    const y2 = B[1] - 23;
+    const my = (y1 + y2) / 2;
+    // Vertical S-curves; the dot rides an off-canvas copy (o = 2000) so it never shows at the origin.
+    const cp = (o: number) => 'M' + (A[0] + o) + ' ' + (y1 + o) + 'C' + (A[0] + o) + ' ' + (my + o) + ' ' + (B[0] + o) + ' ' + (my + o) + ' ' + (B[0] + o) + ' ' + (y2 + o);
+    const hot = st >= 2 && inChain;
     return h(
       'g',
       { key: 'e' + st + i, opacity: dim ? 0.18 : 1, style: { transition: 'opacity 200ms ' + EASE } },
-      h('path', { d, pathLength: 1, fill: 'none', stroke: st >= 2 && inChain ? '#dcb683' : '#4a4a52', strokeWidth: st >= 2 && inChain ? 1.8 : 1.2, strokeDasharray: term ? '0.03 0.03' : '1', style: term ? {} : { animation: 'agDraw 320ms ' + EASE + ' ' + (160 + i * 50) + 'ms both' } }),
-      showLab
+      h('path', { d: cp(0), pathLength: 1, fill: 'none', stroke: hot ? '#e0b878' : 'rgba(255,255,255,0.32)', strokeWidth: hot ? 2 : 1.25, strokeLinecap: 'round', strokeDasharray: term ? '0.03 0.03' : '1', style: term ? {} : { animation: 'agDraw 320ms ' + EASE + ' ' + (160 + i * 50) + 'ms both' } }),
+      !reduce && !term && !dim && st >= 1
         ? h(
-            'g',
-            { transform: 'translate(' + (mx + (a === 'orch' ? 0 : 8)) + ',' + my + ')', style: { animation: 'agFade 200ms ' + EASE + ' 260ms both' } },
-            h('rect', { x: 0, y: -9, width: lab.length * 6.2 + 14, height: 18, rx: 9, fill: '#dcb683' }),
-            h('text', { x: 7, y: 4, fill: '#111114', style: { fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500 } }, lab),
+            'circle',
+            { cx: -2000, cy: -2000, r: 3, fill: hot ? '#e0b878' : '#cfe0f2', style: { opacity: 0 } },
+            h('animateMotion', { dur: '5.6s', begin: 0.6 + i * 0.8 + 's', repeatCount: 'indefinite', path: cp(2000), calcMode: 'spline', keyTimes: '0;1', keyPoints: '0;1', keySplines: '0.22 1 0.36 1' }),
+            h('animate', { attributeName: 'opacity', values: '0;1;1;0', keyTimes: '0;0.2;0.8;1', dur: '5.6s', begin: 0.6 + i * 0.8 + 's', repeatCount: 'indefinite' }),
           )
         : null,
     );
@@ -124,63 +144,105 @@ export function AetherAgentsPage() {
     const vis = visible(id);
     const start = by.orch![4];
     const [x, y] = vis ? p : start;
-    const w = 132;
-    const hh = 44;
+    const w = 138;
+    const hh = 46;
     const dim = st >= 2 && !CHAIN.includes(id);
     const term = st === 3 && temp;
+    const hot = st >= 2 && CHAIN.includes(id) && id !== 'human';
+    const logo = LOGO[id];
+    const chip =
+      id === 'human'
+        ? h('span', { key: 'c', style: { width: 26, height: 26, borderRadius: 999, background: '#3a6896', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, flexShrink: 0 } }, 'SM')
+        : logo
+          ? h('span', { key: 'c', style: { width: 26, height: 26, borderRadius: 8, background: 'rgba(255,255,255,0.94)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 } }, h('img', { src: logo === 'AE' ? markSrc('aether') : asset(logo), alt: '', style: { width: 16, height: 16, objectFit: 'contain' } }))
+          : h('span', { key: 'c', 'aria-hidden': true, style: { width: 26, height: 26, borderRadius: 8, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.18)', color: KC[kind], display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontSize: 13, flexShrink: 0 } }, KG[kind]);
     return h(
-      'g',
-      { key: id, style: { transform: 'translate(' + (x - w / 2) + 'px,' + (y - hh / 2) + 'px)', opacity: !vis ? 0 : dim ? (term ? 0.55 : 0.3) : 1, transition: 'transform 320ms ' + EASE + ' ' + i * 30 + 'ms, opacity 200ms ' + EASE } },
-      h('rect', { width: w, height: hh, rx: 6, fill: id === 'human' ? '#e8e6e1' : '#111114', stroke: term ? '#6b6a65' : id === 'human' ? '#e8e6e1' : '#2a2a2f', strokeDasharray: term ? '4 3' : undefined }),
-      h('text', { x: 12, y: 26, fill: id === 'human' ? '#3a6896' : KC[kind], style: { fontFamily: 'var(--font-mono)', fontSize: 12 } }, KG[kind]),
-      h('text', { x: 28, y: 19, fill: id === 'human' ? '#1a1a1e' : '#e8e6e1', style: { fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 500 } }, label),
-      h('text', { x: 28, y: 34, fill: id === 'human' ? '#6b6a65' : '#a09f99', style: { fontFamily: 'var(--font-mono)', fontSize: 10 } }, term ? 'terminated 10:07' : raw),
+      'div',
+      {
+        key: id,
+        style: {
+          position: 'absolute', left: 0, top: 0, width: w, height: hh, boxSizing: 'border-box', padding: '0 8px', display: 'flex', alignItems: 'center', gap: 7, borderRadius: 15,
+          background: id === 'human' ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.09)',
+          border: '1px ' + (term ? 'dashed' : 'solid') + ' ' + (hot ? 'rgba(224,184,120,0.7)' : 'rgba(255,255,255,' + (id === 'human' ? 0.4 : 0.18) + ')'),
+          WebkitBackdropFilter: 'blur(18px) saturate(1.5)', backdropFilter: 'blur(18px) saturate(1.5)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.2), 0 10px 26px rgba(0,0,0,0.3)',
+          transform: 'translate(' + (x - w / 2) + 'px,' + (y - hh / 2) + 'px)', opacity: !vis ? 0 : dim ? (term ? 0.55 : 0.3) : 1,
+          animation: reduce ? 'none' : 'agFloat ' + (5 + (i % 4)) + 's ease-in-out ' + -i * 1.1 + 's infinite',
+          transition: 'transform 240ms ' + EASE + ' ' + i * 20 + 'ms, opacity 200ms ' + EASE + ', border-color 200ms ' + EASE,
+        },
+      },
+      chip,
+      h(
+        'span',
+        { key: 't', style: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 } },
+        h('span', { style: { fontSize: 11.5, fontWeight: 500, color: '#f4f2ee', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, label),
+        h('span', { style: { fontFamily: 'var(--font-mono)', fontSize: 9.5, color: '#b4b2ac', whiteSpace: 'nowrap' } }, term ? 'terminated 10:07' : raw),
+      ),
     );
+  });
+  const pills = E.map(([a, b, lab], i) => {
+    const inChain = CHAIN.includes(a) && CHAIN.includes(b);
+    if (!(st >= 2 && inChain && lab !== 'recorded')) return null;
+    const A = by[a]![4];
+    const B = by[b]![4];
+    return h('span', { key: 'pl' + i, style: { position: 'absolute', left: (A[0] + B[0]) / 2 + (a === 'orch' ? 0 : 8), top: (A[1] + 23 + B[1] - 23) / 2, transform: 'translate(-50%,-50%)', whiteSpace: 'nowrap', padding: '2px 9px', borderRadius: 999, fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, color: '#f6e2bf', background: 'rgba(201,151,90,0.32)', border: '1px solid rgba(224,184,120,0.55)', WebkitBackdropFilter: 'blur(10px)', backdropFilter: 'blur(10px)', animation: 'agFade 200ms ' + EASE + ' 260ms both' } }, lab);
   });
   const hist: ReactNode =
     st === 3
       ? h(
-          'g',
-          { key: 'hist', style: { animation: 'agFade 320ms ' + EASE + ' 200ms both' } },
-          h('rect', { x: 18, y: 330, width: 290, height: 120, rx: 8, fill: 'none', stroke: '#3a3a40', strokeDasharray: '3 4' }),
-          h('text', { x: 34, y: 354, fill: '#9cc4a9', style: { fontFamily: 'var(--font-mono)', fontSize: 11 } }, '● history remains in Aether'),
-          ['10:02  instructed  usr_2x8kf → agt_orch_01', '10:03  spawned     agt_r_14, agt_p_03, agt_d_07', '10:06  tool call   agt_x_22 → req_9fa', '10:07  terminated  3 temporary agents'].map((t, i) =>
-            h('text', { key: i, x: 34, y: 378 + i * 17, fill: '#a09f99', style: { fontFamily: 'var(--font-mono)', fontSize: 10 } }, t),
+          'div',
+          { key: 'hist', style: { position: 'absolute', left: 14, top: 332, width: 340, height: 124, boxSizing: 'border-box', padding: '12px 14px', overflow: 'hidden', borderRadius: 20, background: 'rgba(255,255,255,0.06)', border: '1px dashed rgba(255,255,255,0.3)', WebkitBackdropFilter: 'blur(18px)', backdropFilter: 'blur(18px)', display: 'flex', flexDirection: 'column', gap: 4, animation: 'agFade 320ms ' + EASE + ' 200ms both' } },
+          h('span', { style: { fontFamily: 'var(--font-mono)', fontSize: 11, color: '#b3dcc0', marginBottom: 4 } }, '● history remains in Aether'),
+          ['10:02  instructed  usr_2x8kf → agt_orch_01', '10:03  spawned     agt_r_14, agt_p_03, agt_d_07', '10:06  tool call   agt_x_22 → req_9fa', '10:07  terminated  3 temporary agents'].map((tx, i) =>
+            h('span', { key: i, style: { fontFamily: 'var(--font-mono)', fontSize: 9.5, color: '#b4b2ac', whiteSpace: 'pre', overflow: 'hidden', textOverflow: 'ellipsis' } }, tx),
           ),
         )
       : null;
-  const tree = h('svg', { viewBox: '0 0 600 470', width: '100%', height: '100%', role: 'img', 'aria-label': 'Agent lineage, step ' + (st + 1) + ' of 4', style: { position: 'absolute', inset: 0, display: 'block', overflow: 'visible' } }, h('g', { key: 'E' }, edges), h('g', { key: 'N' }, nodes), hist);
+  const tree = h(
+    'div',
+    { role: 'img', 'aria-label': 'Agent lineage, step ' + (st + 1) + ' of 4', style: { position: 'absolute', left: 0, top: 0, width: 600, height: 470, transformOrigin: '0 0', transform: 'scale(' + k + ')' } },
+    h('svg', { key: 'svg', viewBox: '0 0 600 470', width: 600, height: 470, 'aria-hidden': true, style: { position: 'absolute', left: 0, top: 0, overflow: 'visible' } }, h('g', { key: 'E' }, edges)),
+    nodes,
+    pills,
+    hist,
+  );
   const ri = state.rel;
   const cur = RL[ri]!;
-  const node = (x: number, kind: RKind, label: string, k: string) =>
-    h(
+  // Relationship tiles: people get an initials avatar on a blue-tinted tile, agents the Aether mark on white glass.
+  const node = (x: number, kind: RKind, label: string, key: string) => {
+    const hu = kind === 'human';
+    const L = x - 69;
+    return h(
       'g',
-      { key: k + ri, style: { transform: 'translate(' + x + 'px, 75px)', animation: 'agFade 200ms ' + EASE + ' both' } },
-      h('circle', { r: 22, fill: kind === 'human' ? '#1a1a1e' : '#f5f4f1', stroke: RC[kind], strokeWidth: 1.5 }),
-      h('text', { y: 5, textAnchor: 'middle', fill: kind === 'human' ? '#e8e6e1' : RC[kind], style: { fontFamily: 'var(--font-mono)', fontSize: 14 } }, RG[kind]),
-      h('text', { y: 44, textAnchor: 'middle', fill: '#1a1a1e', style: { fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 500 } }, label),
+      { key: key + ri, style: { animation: 'agFade 240ms ' + EASE + ' both' } },
+      h('rect', { x: L, y: 52, width: 138, height: 46, rx: 15, fill: hu ? 'rgba(58,104,150,0.14)' : 'rgba(255,255,255,0.72)', stroke: hu ? 'rgba(58,104,150,0.4)' : 'rgba(26,26,30,0.12)', strokeWidth: 1, style: { filter: 'drop-shadow(0 6px 12px rgba(40,34,70,0.12))' } }),
+      hu ? h('circle', { cx: L + 21, cy: 75, r: 13, fill: '#3a6896' }) : h('rect', { x: L + 8, y: 62, width: 26, height: 26, rx: 8, fill: '#fff', stroke: 'rgba(26,26,30,0.1)' }),
+      hu
+        ? h('text', { x: L + 21, y: 79, textAnchor: 'middle', fill: '#fff', style: { fontFamily: 'var(--font-sans)', fontSize: 10, fontWeight: 600 } }, label.split(' ').map((w) => w[0]).join('').slice(0, 2))
+        : h('image', { href: markSrc('aether'), x: L + 13, y: 67, width: 16, height: 16 }),
+      h('text', { x: L + 41, y: 79, fill: '#1a1a1e', style: { fontFamily: 'var(--font-sans)', fontSize: 11.5, fontWeight: 500 } }, label),
     );
+  };
   const relViz = h(
     'svg',
     { viewBox: '0 0 420 150', width: '100%', height: '100%', role: 'img', 'aria-label': cur[0], style: { position: 'absolute', inset: 0, display: 'block', overflow: 'visible' } },
-    h('path', { key: 'l' + ri, d: 'M 92 75 L 318 75', pathLength: 1, fill: 'none', stroke: RC[cur[3]], strokeWidth: 1.5, strokeDasharray: '1', style: { animation: 'agDraw 320ms ' + EASE + ' 120ms both' } }),
-    h('path', { key: 'a' + ri, d: 'M 310 69 L 318 75 L 310 81', fill: 'none', stroke: RC[cur[3]], strokeWidth: 1.5, style: { animation: 'agFade 200ms ' + EASE + ' 380ms both' } }),
+    h('path', { key: 'l' + ri, d: 'M 150 75 L 270 75', pathLength: 1, fill: 'none', stroke: RC[cur[3]], strokeWidth: 1.5, strokeDasharray: '1', style: { animation: 'agDraw 320ms ' + EASE + ' 120ms both' } }),
+    h('path', { key: 'a' + ri, d: 'M 262 69 L 270 75 L 262 81', fill: 'none', stroke: RC[cur[3]], strokeWidth: 1.5, style: { animation: 'agFade 200ms ' + EASE + ' 380ms both' } }),
     h(
       'g',
       { key: 'tg' + ri, style: { animation: 'agFade 200ms ' + EASE + ' 300ms both' } },
-      h('rect', { x: 210 - (cur[6].length * 3.3 + 10), y: 54, width: cur[6].length * 6.6 + 20, height: 20, rx: 10, fill: '#f5f4f1', stroke: '#d8d6d0' }),
+      h('rect', { x: 210 - (cur[6].length * 3.3 + 10), y: 54, width: cur[6].length * 6.6 + 20, height: 20, rx: 10, fill: 'rgba(255,255,255,0.9)', stroke: 'rgba(255,255,255,0.9)' }),
       h('text', { x: 210, y: 68, textAnchor: 'middle', fill: '#4a4945', style: { fontFamily: 'var(--font-mono)', fontSize: 11 } }, cur[6]),
     ),
     reduce
       ? null
       : h(
           'circle',
-          { key: 'p' + ri, r: 3, fill: RC[cur[3]], opacity: 0 },
-          h('animateMotion', { dur: '1.8s', begin: '0.5s', repeatCount: 'indefinite', path: 'M 92 75 L 318 75' }),
+          { key: 'p' + ri, cx: -2000, cy: -2000, r: 3, fill: RC[cur[3]], style: { opacity: 0 } },
+          h('animateMotion', { dur: '2.6s', begin: '0.5s', repeatCount: 'indefinite', path: 'M 2150 2075 L 2270 2075' }),
           h('animate', { attributeName: 'opacity', values: '0;1;1;0', keyTimes: '0;0.1;0.85;1', dur: '1.8s', begin: '0.5s', repeatCount: 'indefinite' }),
         ),
-    node(60, cur[2], cur[4], 'na'),
-    node(350, cur[3], cur[5], 'nb'),
+    node(76, cur[2], cur[4], 'na'),
+    node(344, cur[3], cur[5], 'nb'),
   );
   const relEx = cur[7];
   const rels = RL.map(([t, b, from, to], i) => {
@@ -201,7 +263,7 @@ export function AetherAgentsPage() {
   const stickyStyle = narrow ? 'position: relative; order: -1;' : 'position: sticky; top: calc(50vh - 300px); margin-top: 18vh;';
   const bars = [0, 1, 2, 3].map((i) => ({ label: 'Step ' + (i + 1), go: () => setState({ stage: i, manual: true }), style: 'height: 10px; padding: 4px 0; border: 0; cursor: pointer; background: transparent; background-clip: content-box; box-sizing: border-box; border-top: 2px solid ' + (i <= st ? '#dcb683' : '#2a2a2f') + '; transition: border-color 200ms ' + EASE + ';' }));
   const asks = ['Who created whom?', 'Who instructed whom?', 'Who had authority?', 'What tools were used?', 'What happened?', 'What did the agent affect?', 'What outcome resulted?'].map((q, i) => ({ q, n: '0' + (i + 1) }));
-  const states = STATES.map(([g, k, b, c]) => ({ g, k, b, gStyle: 'font-family: var(--font-mono); font-size: 16px; color: ' + c + ';', style: 'display: flex; flex-direction: column; gap: 8px; padding: 20px; min-height: 150px; box-sizing: border-box; border-right: 1px solid #d8d6d0; border-top: 3px solid ' + c + ';' }));
+  const states = STATES.map(([g, k, b, c]) => ({ g, k, b, gStyle: 'font-family: var(--font-mono); font-size: 16px; color: ' + c + ';', style: 'display: flex; flex-direction: column; gap: 8px; padding: 20px; min-height: 150px; box-sizing: border-box; border-radius: 22px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14); color: #e8e6e1;' }));
   return (
     <div className="dc pg-aether-agents">
     <div data-page="aether-agents" style={css("min-height: 100vh; background: #f5f4f1; color: #1a1a1e; font-family: var(--font-sans);")}>
@@ -230,7 +292,7 @@ export function AetherAgentsPage() {
             </p>
           </div>
         </section>
-        <section id="lineage" data-theme="dark" style={css("background: #111114; color: #e8e6e1;")}>
+        <section id="lineage" data-theme="dark" style={css("background: radial-gradient(60% 50% at 85% 18%, rgba(58,104,150,0.42), transparent 70%), radial-gradient(50% 45% at 8% 92%, rgba(107,154,124,0.24), transparent 70%), radial-gradient(45% 40% at 92% 92%, rgba(201,151,90,0.28), transparent 70%), #111114; color: #e8e6e1;")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(56px, 8vw, 96px) 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: clamp(24px, 5vw, 72px); align-items: start;")}>
             <div style={css("display: flex; flex-direction: column;")}>
               {(steps).map((s: any, sIndex: number) => (
@@ -250,7 +312,7 @@ export function AetherAgentsPage() {
               ))}
             </div>
             <div style={css(stickyStyle)}>
-              <div style={css("border: 1px solid #2a2a2f; border-radius: 12px; background: #1a1a1e; padding: 20px; display: flex; flex-direction: column; gap: 14px;")}>
+              <div style={css("border-radius: 26px; padding: 20px; display: flex; flex-direction: column; gap: 14px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14);")}>
                 <div style={css("display: flex; justify-content: space-between; align-items: center; gap: 8px;")}>
                   <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;")}>
                     {"Agent lineage"}
@@ -259,7 +321,7 @@ export function AetherAgentsPage() {
                     {stageLabel}
                   </span>
                 </div>
-                <div style={css("position: relative; width: 100%; aspect-ratio: 600 / 470;")}>
+                <div ref={wrapRef} style={css("position: relative; width: 100%; aspect-ratio: 600 / 470;")}>
                   {tree}
                 </div>
                 <div style={css("display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px;")}>
@@ -273,7 +335,7 @@ export function AetherAgentsPage() {
             </div>
           </div>
         </section>
-        <section id="records" style={css("border-bottom: 1px solid #d8d6d0;")}>
+        <section id="records" style={css("border-bottom: 1px solid #d8d6d0; background: radial-gradient(40% 50% at 80% 25%, rgba(58,104,150,0.3), transparent 72%), radial-gradient(40% 50% at 50% 85%, rgba(107,154,124,0.32), transparent 72%), radial-gradient(35% 45% at 95% 80%, rgba(201,151,90,0.3), transparent 72%), linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%);")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(56px, 8vw, 104px) 24px; display: flex; flex-wrap: wrap; gap: clamp(24px, 4vw, 56px); align-items: flex-start;")}>
             <div style={css("flex: 1 1 300px; display: flex; flex-direction: column; gap: 14px;")}>
               <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #8a6433;")}>
@@ -289,7 +351,7 @@ export function AetherAgentsPage() {
             <ol style={css("flex: 2 1 520px; list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 8px;")}>
               {(asks).map((a: any, aIndex: number) => (
                 <Fragment key={aIndex}>
-                  <li style={css("display: flex; gap: 12px; align-items: baseline; padding: 16px 18px; border-radius: 10px; background: #fbfaf8; border: 1px solid #d8d6d0;")}>
+                  <li style={css("display: flex; gap: 12px; align-items: baseline; padding: 16px 18px; border-radius: 18px; background: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.85); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 8px 24px rgba(40,34,70,0.08);")}>
                     <span style={css("font-family: var(--font-mono); font-size: 11px; color: #a8783e;")}>
                       {a.n}
                     </span>
@@ -302,22 +364,22 @@ export function AetherAgentsPage() {
             </ol>
           </div>
         </section>
-        <section id="evidence" style={css("border-bottom: 1px solid #d8d6d0; background: #eceae5;")}>
+        <section id="evidence" data-theme="dark" style={css("border-bottom: 1px solid #d8d6d0; background: radial-gradient(60% 50% at 85% 18%, rgba(58,104,150,0.42), transparent 70%), radial-gradient(50% 45% at 8% 92%, rgba(107,154,124,0.24), transparent 70%), radial-gradient(45% 40% at 92% 92%, rgba(201,151,90,0.28), transparent 70%), #111114; color: #e8e6e1;")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(56px, 8vw, 104px) 24px; display: flex; flex-direction: column; gap: 28px;")}>
             <div style={css("display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 24px; align-items: end;")}>
               <div style={css("display: flex; flex-direction: column; gap: 12px;")}>
                 <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #4f7a5e;")}>
                   {"Evidence states"}
                 </span>
-                <h2 style={css("font-size: clamp(28px, 3.4vw, 44px); font-weight: 500; letter-spacing: -0.028em; line-height: 1.06; margin: 0;")}>
+                <h2 style={css("font-size: clamp(28px, 3.4vw, 44px); font-weight: 500; letter-spacing: -0.028em; line-height: 1.06; margin: 0; color: #e8e6e1;")}>
                   {"How Aether knows what it knows."}
                 </h2>
               </div>
-              <p style={css("font-size: 15px; line-height: 1.6; color: #6b6a65; margin: 0;")}>
+              <p style={css("font-size: 15px; line-height: 1.6; color: #a09f99; margin: 0;")}>
                 {"Everything Aether shows is labeled: did it see this happen, or work it out? The two are never mixed up."}
               </p>
             </div>
-            <div style={css("display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 0; border: 1px solid #d8d6d0; border-radius: 12px; overflow: hidden; background: #fbfaf8;")}>
+            <div style={css("display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 10px;")}>
               {(states).map((s: any, sIndex: number) => (
                 <Fragment key={sIndex}>
                   <div style={css(s.style)}>
@@ -327,7 +389,7 @@ export function AetherAgentsPage() {
                     <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase;")}>
                       {s.k}
                     </span>
-                    <span style={css("font-size: 13px; line-height: 1.5; color: #4a4945;")}>
+                    <span style={css("font-size: 13px; line-height: 1.5; color: #a09f99;")}>
                       {s.b}
                     </span>
                   </div>
@@ -336,7 +398,7 @@ export function AetherAgentsPage() {
             </div>
           </div>
         </section>
-        <section id="relationships" style={css("border-bottom: 1px solid #d8d6d0;")}>
+        <section id="relationships" style={css("border-bottom: 1px solid #d8d6d0; background: radial-gradient(40% 50% at 80% 25%, rgba(58,104,150,0.3), transparent 72%), radial-gradient(40% 50% at 50% 85%, rgba(107,154,124,0.32), transparent 72%), radial-gradient(35% 45% at 95% 80%, rgba(201,151,90,0.3), transparent 72%), linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%);")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(64px, 9vw, 120px) 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: clamp(32px, 6vw, 96px); align-items: start;")}>
             <div style={css("display: flex; flex-direction: column; gap: 16px;")}>
               <h2 style={css("font-size: clamp(30px, 3.8vw, 48px); font-weight: 500; letter-spacing: -0.03em; line-height: 1.04; margin: 0; text-wrap: balance;")}>
@@ -345,7 +407,7 @@ export function AetherAgentsPage() {
               <p style={css("font-size: 16px; line-height: 1.6; color: #6b6a65; margin: 0; max-width: 420px;")}>
                 {"Work now moves between people and AI agents in every direction. Aether keeps track of all four."}
               </p>
-              <div style={css("margin-top: 24px; border: 1px solid #d8d6d0; border-radius: 12px; background: #fbfaf8; padding: 20px; display: flex; flex-direction: column; gap: 12px; max-width: 460px;")}>
+              <div style={css("margin-top: 24px; border-radius: 26px; padding: 20px; display: flex; flex-direction: column; gap: 12px; max-width: 460px; background: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.85); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 8px 24px rgba(40,34,70,0.08);")}>
                 <div style={css("position: relative; width: 100%; aspect-ratio: 420 / 150;")}>
                   {relViz}
                 </div>

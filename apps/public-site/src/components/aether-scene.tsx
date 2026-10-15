@@ -1,11 +1,14 @@
 /**
  * Built from design/designs/Aether Scene.dc.html: the signature
  * disconnected → connected diagram. Three stories (customer, agent, value),
- * four stages each (fragmented, connected, history, lens). Story data, copy
- * and styles are verbatim from the design.
+ * four stages each (fragmented, connected, history, lens), drawn as frosted
+ * glass tiles with brand-logo chips over a glowing dark panel. Connections
+ * curve and carry slow dots (6.4s trips); tiles move in 240ms and drift 3px.
+ * Story data, copy and styles are verbatim from the design.
  */
-import { createElement as h, useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
-import { css, useDesignState, useReducedMotion } from '@site/design/runtime';
+import { createElement as h, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { asset, css, useDesignState, useReducedMotion } from '@site/design/runtime';
+import { markSrc } from '@site/components/brand-mark';
 import './aether-scene.css';
 
 type Kind = 'center' | 'system' | 'agent' | 'human' | 'org' | 'value';
@@ -31,14 +34,14 @@ export const SCENE_STORIES: Record<StoryKey, Story> = {
     close: 'Aether understands that as one connected journey rather than seven unrelated records.',
     subs: ['7 records · 7 systems · no shared identity', '1 profile · 7 relationships', '1 journey · 7 steps · 8h 29m', 'value foregrounded · credit across 4 touchpoints'],
     nodes: [
-      ['jane', 'center', 'Aether profile', 'prf_7k2m', 'Jane Smith', [300, 220], null, null, true],
+      ['jane', 'center', 'Aether profile', 'prf_7k2m', 'Sofia Marchetti', [300, 220], null, null, true],
       ['ad', 'system', 'Google Ads', 'clk_88f1', 'Ad impression', [110, 100], '18% credit', '09:01'],
       ['web', 'system', 'Web SDK', 'anon_941', 'Website visit', [300, 64], '27% credit', '09:04'],
       ['app', 'system', 'iOS SDK', 'dev_ios_2c9', 'Mobile app', [490, 100], null, '09:15'],
-      ['email', 'system', 'Klaviyo', 'evt_311', 'Email interaction', [505, 252], '31% credit', '11:43'],
-      ['agent', 'agent', 'Support agent', 'session_381', 'Agent conversation', [400, 372], '24% credit', '14:22'],
+      ['email', 'system', 'Klaviyo', 'evt_311', 'Email', [505, 252], '31% credit', '11:43'],
+      ['agent', 'agent', 'Support agent', 'session_381', 'Agent chat', [400, 372], '24% credit', '14:22'],
       ['buy', 'value', 'Stripe', 'cus_3321', 'Purchase · $149', [200, 372], '$149', '16:08'],
-      ['support', 'system', 'Zendesk', 'tkt_5521', 'Support interaction', [95, 252], null, '17:30'],
+      ['support', 'system', 'Zendesk', 'tkt_5521', 'Support ticket', [95, 252], null, '17:30'],
     ],
     conn: [['jane', 'ad', 1], ['jane', 'web', 1], ['jane', 'app'], ['jane', 'email'], ['jane', 'agent'], ['jane', 'buy'], ['jane', 'support']],
     seq: ['ad', 'web', 'app', 'email', 'agent', 'buy', 'support'],
@@ -72,7 +75,7 @@ export const SCENE_STORIES: Record<StoryKey, Story> = {
       ['camp', 'org', 'Meta Ads', 'cmp_spring', 'Spring campaign', [300, 84], '34% credit', 'Mar 04'],
       ['email', 'system', 'Klaviyo', 'msg_7731', 'Email · restock', [500, 84], '29% credit', 'Mar 09'],
       ['journey', 'system', 'Aether journey', 'jrn_44a', 'Trial → paid', [500, 226], '25% credit', 'Mar 09'],
-      ['person', 'human', 'HubSpot', 'ct_10293', 'Jane Smith', [300, 226], null, 'Mar 10'],
+      ['person', 'human', 'HubSpot', 'ct_10293', 'Sofia Marchetti', [300, 226], null, 'Mar 10'],
       ['order', 'system', 'Shopify', 'ord_5532', 'Order #5532', [100, 226], null, 'Mar 10'],
       ['val', 'center', 'Stripe', 'ch_3Nf2', '$149 revenue', [300, 370], '100% attributed', 'Mar 11'],
     ],
@@ -83,8 +86,15 @@ export const SCENE_STORIES: Record<StoryKey, Story> = {
 
 const STORY_ORDER: StoryKey[] = ['customer', 'agent', 'value'];
 const KG: Record<Kind, string> = { human: '●', agent: '⬡', system: '○', value: '↑', org: '◈', center: '●' };
+const KC: Record<Kind, string> = { human: '#9fbad6', agent: '#dcb683', system: '#8fb0cc', value: '#9cc4a9', org: '#c9b088', center: '#9fbad6' };
 const FR: [number, number][] = [[104, 92], [300, 70], [496, 100], [112, 226], [488, 232], [118, 356], [300, 374], [490, 354]];
 const CAPS = ['Your systems know pieces of the story.', 'Aether understands how those pieces belong together.', 'Then turns activity into history and journeys.', 'Explore the same reality from any perspective.'];
+const GOLD = '#e0b878';
+const BLUR = 'blur(18px) saturate(1.5)';
+// Source systems with a provider logo; Aether's own sources carry the Aether mark; the rest get their kind glyph.
+const LG: Record<string, string> = { 'Google Ads': 'googleads', 'iOS SDK': 'apple', Klaviyo: 'klaviyo', Zendesk: 'zendesk', Stripe: 'stripe', 'Stripe API': 'stripe', 'Meta Ads': 'meta', HubSpot: 'hubspot', Shopify: 'shopify' };
+const AEN = ['Web SDK', 'Aether profile', 'Aether journey', 'Support agent', 'Agent runtime'];
+const logoOf = (sys: string) => (LG[sys] ? asset('assets/brand/' + LG[sys] + '.svg') : AEN.includes(sys) ? markSrc('aether') : null);
 
 export interface AetherSceneProps {
   story?: string;
@@ -94,6 +104,7 @@ export interface AetherSceneProps {
   /** Cycle stories at the end of each run. */
   rotate?: boolean;
   controls?: boolean;
+  /** Kept for callers; the glass panel is always dark. */
   dark?: boolean;
   /** Comma list of stages to play, default "0,1,2,3". */
   stages?: string;
@@ -127,6 +138,8 @@ export function AetherScene(props: AetherSceneProps) {
   propsRef.current = props;
   const holdRef = useRef(state.hold);
   holdRef.current = state.hold;
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [k, setK] = useState(1);
 
   useEffect(() => {
     if (!props.autoplay || reduce) return;
@@ -144,30 +157,42 @@ export function AetherScene(props: AetherSceneProps) {
         }
         return { stage: L[i] ?? 0, story };
       });
-    }, props.interval ?? 2800);
+    }, props.interval ?? 4200);
     return () => clearInterval(timer);
   }, [props.autoplay, props.interval, reduce, setState]);
 
-  const dark = !!props.dark;
+  // The stage is laid out at 600×440 and scaled to the frame's width.
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const fit = () => {
+      if (el.clientWidth) setK(el.clientWidth / 600);
+    };
+    fit();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const storyKey = state.story ?? props.story ?? 'customer';
   const st: StoryKey = isStory(storyKey) ? storyKey : 'customer';
   const S = SCENE_STORIES[st];
   const stage = props.stage != null && props.stage !== '' ? Number(props.stage) : state.stage ?? list[0] ?? 0;
-  const P = dark
-    ? { card: '#1a1a1e', stroke: '#2a2a2f', fg: '#e8e6e1', sub: '#a09f99', edge: '#4a4a52', cFill: '#e8e6e1', cFg: '#1a1a1e', cSub: '#6b6a65', tagFg: '#111114' }
-    : { card: '#fbfaf8', stroke: '#d8d6d0', fg: '#1a1a1e', sub: '#6b6a65', edge: '#b9b7b0', cFill: '#1a1a1e', cFg: '#e8e6e1', cSub: '#a09f99', tagFg: '#f5f4f1' };
-  const KC: Record<Kind, string> = dark
-    ? { human: '#9fbad6', agent: '#dcb683', system: '#8fb0cc', value: '#9cc4a9', org: '#c9b088', center: '#9fbad6' }
-    : { human: '#3a6896', agent: '#a8783e', system: '#5a85a8', value: '#4f8466', org: '#7d6538', center: '#3a6896' };
 
   let fi = 0;
   const nodes: SceneNode[] = S.nodes.map(([id, kind, sys, raw, label, conn, tag, t, hideFrag]) => {
     const frag: [number, number] = hideFrag ? [300, 220] : FR[fi++] ?? [300, 220];
-    const k = S.seq.indexOf(id);
-    const time: [number, number] = k < 0 ? [300, 96] : [72 + k * 76, k % 2 ? 336 : 238];
+    const q = S.seq.indexOf(id);
+    const time: [number, number] = q < 0 ? [300, 96] : [72 + q * 76, q % 2 ? 336 : 238];
     return { id, kind, sys, raw, label, conn, tag, t, hideFrag, frag, time };
   });
-  const pos = (n: SceneNode) => (stage === 0 ? n.frag : stage === 2 ? n.time : n.conn);
+  // Keep each tile inside the 600px stage: the history layout puts the last step at x=528, where the wider center tile would overhang.
+  const pos = (n: SceneNode): [number, number] => {
+    const p = stage === 0 ? n.frag : stage === 2 ? n.time : n.conn;
+    const half = (n.kind === 'center' ? 192 : 150) / 2 + 4;
+    return [Math.min(600 - half, Math.max(half, p[0])), p[1]];
+  };
   const byId: Record<string, SceneNode> = {};
   nodes.forEach((n) => {
     byId[n.id] = n;
@@ -184,9 +209,17 @@ export function AetherScene(props: AetherSceneProps) {
     const lz = (n: SceneNode) => n.tag || n.kind === 'center';
     const hi = lensOn && lz(na) && lz(nb);
     const dim = lensOn && !hi;
-    const d = 'M' + A[0] + ' ' + A[1] + 'L' + B[0] + ' ' + B[1];
+    // Each connection bows to alternating sides so the map reads as curves, not spokes.
+    const dx = B[0] - A[0];
+    const dy = B[1] - A[1];
+    const len = Math.hypot(dx, dy) || 1;
+    const sg = (a.length + b.length + i) % 2 ? 1 : -1;
+    const bow = Math.min(70, len * 0.24) * sg;
+    const cx = (A[0] + B[0]) / 2 - (dy / len) * bow;
+    const cy = (A[1] + B[1]) / 2 + (dx / len) * bow;
+    const d = 'M' + A[0] + ' ' + A[1] + 'Q' + cx.toFixed(1) + ' ' + cy.toFixed(1) + ' ' + B[0] + ' ' + B[1];
     const delay = 220 + i * 45;
-    const stroke = hi ? (dark ? '#dcb683' : '#a8783e') : P.edge;
+    const stroke = hi ? GOLD : 'rgba(255,255,255,0.34)';
     const kids: ReactNode[] = [
       h('path', {
         key: 'p',
@@ -200,115 +233,120 @@ export function AetherScene(props: AetherSceneProps) {
         style: dashed ? { animation: 'aeFade 320ms ' + ease + ' ' + delay + 'ms both' } : { strokeDashoffset: 0, animation: 'aeDraw 320ms ' + ease + ' ' + delay + 'ms both' },
       }),
     ];
-    if (!reduce && !dashed && !dim && i < 5) {
+    if (!reduce && !dashed && !dim && i < 6) {
+      // The dot travels an offset copy of the path from off-canvas so it never sits at the origin before it starts.
+      const dS = 'M' + (A[0] + 2000) + ' ' + (A[1] + 2000) + 'Q' + (cx + 2000).toFixed(1) + ' ' + (cy + 2000).toFixed(1) + ' ' + (B[0] + 2000) + ' ' + (B[1] + 2000);
       kids.push(
         h(
           'circle',
-          { key: 'c', r: 2.6, fill: hi ? stroke : KC.human, opacity: 0 },
-          h('animateMotion', { dur: '2.8s', begin: 0.6 + i * 0.55 + 's', repeatCount: 'indefinite', path: d }),
-          h('animate', { attributeName: 'opacity', values: '0;0.9;0.9;0', keyTimes: '0;0.15;0.85;1', dur: '2.8s', begin: 0.6 + i * 0.55 + 's', repeatCount: 'indefinite' }),
+          { key: 'c', cx: -2000, cy: -2000, r: 2.8, fill: hi ? GOLD : '#cfe0f2', style: { opacity: 0 } },
+          h('animateMotion', { dur: '6.4s', begin: 0.8 + i * 0.9 + 's', repeatCount: 'indefinite', path: dS, calcMode: 'spline', keyTimes: '0;1', keyPoints: '0;1', keySplines: '0.22 1 0.36 1' }),
+          h('animate', { attributeName: 'opacity', values: '0;0.9;0.9;0', keyTimes: '0;0.2;0.8;1', dur: '6.4s', begin: 0.8 + i * 0.9 + 's', repeatCount: 'indefinite' }),
         ),
       );
+      kids.push(h('animate', { key: 'br', attributeName: 'stroke-opacity', values: '1;0.55;1', dur: 5 + (i % 3) + 's', begin: i * 0.7 + 's', repeatCount: 'indefinite' }));
     }
     return h('g', { key: st + stage + 'e' + i, opacity: dim ? 0.16 : 1, style: { transition: 'opacity 200ms ' + ease } }, kids);
   });
   const nodeEls = nodes.map((n, i) => {
     const [x, y] = pos(n);
     const isC = n.kind === 'center';
-    const w = isC ? 158 : 136;
-    const hh = isC ? 54 : 46;
+    const w = isC ? 192 : 150;
+    const hh = isC ? 62 : 52;
     const hidden = stage === 0 && n.hideFrag;
-    const dim = lensOn && !n.tag && n.kind !== 'center';
-    const fill = isC ? P.cFill : P.card;
-    const fg = isC ? P.cFg : P.fg;
-    const sub = isC ? P.cSub : P.sub;
+    const dim = lensOn && !n.tag && !isC;
     const acc = KC[n.kind];
     const title = stage === 0 ? n.sys : n.label;
+    const logo = logoOf(n.sys);
+    const hot = lensOn && n.tag;
+    const chipSz = isC ? 38 : 26;
+    const chip = logo
+      ? h('span', { key: 'c', style: { width: chipSz, height: chipSz, flexShrink: 0, borderRadius: isC ? 12 : 9, background: 'rgba(255,255,255,0.94)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.25)' } }, h('img', { src: logo, alt: '', style: { width: chipSz - 12, height: chipSz - 12, objectFit: 'contain' } }))
+      : h('span', { key: 'c', 'aria-hidden': true, style: { width: chipSz, height: chipSz, flexShrink: 0, borderRadius: 9, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.16)', color: acc, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontSize: 14 } }, KG[n.kind]);
     const kids: ReactNode[] = [
-      h('rect', { key: 'r', width: w, height: hh, rx: 6, fill, stroke: isC ? fill : lensOn && n.tag ? acc : P.stroke, strokeWidth: 1 }),
-      h('text', { key: 'g', x: 12, y: hh / 2 + 4, fill: isC ? (dark ? '#3a6896' : '#9fbad6') : acc, style: { fontFamily: 'var(--font-mono)', fontSize: 12 } }, KG[n.kind]),
-      h('text', { key: 't', x: 28, y: isC ? 23 : 20, fill: fg, style: { fontFamily: 'var(--font-sans)', fontSize: isC ? 14 : 12, fontWeight: 500, letterSpacing: '-0.01em' } }, title),
-      h('text', { key: 's', x: 28, y: isC ? 40 : 35, fill: sub, style: { fontFamily: 'var(--font-mono)', fontSize: 10 } }, n.raw),
+      chip,
+      h(
+        'span',
+        { key: 't', style: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 } },
+        h('span', { style: { fontSize: isC ? 14 : 12, fontWeight: 500, letterSpacing: '-0.01em', color: '#f4f2ee', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, title),
+        h('span', { style: { fontFamily: 'var(--font-mono)', fontSize: 10, color: isC ? '#d5d3cd' : '#b4b2ac', whiteSpace: 'nowrap' } }, n.raw),
+      ),
     ];
-    if (stage === 0 && !isC) kids.push(h('rect', { key: 'x', x: w - 16, y: 8, width: 6, height: 6, rx: 3, fill: P.edge }));
-    if (stage === 2 && n.t) kids.push(h('text', { key: 'tm', x: 0, y: -7, fill: sub, style: { fontFamily: 'var(--font-mono)', fontSize: 10 } }, n.t));
-    if (lensOn && n.tag) {
-      const tw = n.tag.length * 6.1 + 16;
-      kids.push(
-        h(
-          'g',
-          { key: 'tag', transform: 'translate(' + (w / 2 - tw / 2) + ',' + (hh + 5) + ')', style: { animation: 'aeFade 200ms ' + ease + ' 200ms both' } },
-          h('rect', { width: tw, height: 18, rx: 9, fill: dark ? '#dcb683' : '#8a6433' }),
-          h('text', { x: tw / 2, y: 12.5, textAnchor: 'middle', fill: P.tagFg, style: { fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500 } }, n.tag),
-        ),
-      );
-    }
+    if (stage === 0 && !isC) kids.push(h('span', { key: 'x', style: { position: 'absolute', right: 9, top: 9, width: 6, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.3)' } }));
+    if (stage === 2 && n.t) kids.push(h('span', { key: 'tm', style: { position: 'absolute', left: 4, top: -17, fontFamily: 'var(--font-mono)', fontSize: 10, color: '#b4b2ac' } }, n.t));
+    if (lensOn && n.tag) kids.push(h('span', { key: 'tag', style: { position: 'absolute', left: '50%', top: hh + 6, transform: 'translateX(-50%)', whiteSpace: 'nowrap', padding: '2px 9px', borderRadius: 999, fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, color: '#f6e2bf', background: 'rgba(201,151,90,0.3)', border: '1px solid rgba(224,184,120,0.55)', WebkitBackdropFilter: 'blur(10px)', backdropFilter: 'blur(10px)', animation: 'aeFade 200ms ' + ease + ' 200ms both' } }, n.tag));
     return h(
-      'g',
+      'div',
       {
         key: st + n.id,
         style: {
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width: w,
+          height: hh,
+          boxSizing: 'border-box',
+          padding: isC ? '0 14px' : '0 8px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: isC ? 10 : 8,
+          borderRadius: isC ? 20 : 15,
+          background: isC ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.09)',
+          border: '1px solid ' + (hot ? 'rgba(224,184,120,0.7)' : isC ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.17)'),
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,' + (isC ? 0.34 : 0.2) + '), 0 10px 28px rgba(0,0,0,0.32)',
+          WebkitBackdropFilter: BLUR,
+          backdropFilter: BLUR,
           transform: 'translate(' + (x - w / 2) + 'px,' + (y - hh / 2) + 'px)',
-          opacity: hidden ? 0 : dim ? 0.3 : 1,
-          transition: 'transform 320ms ' + ease + ' ' + i * 18 + 'ms, opacity 200ms ' + ease,
+          opacity: hidden ? 0 : dim ? 0.32 : 1,
+          animation: reduce ? 'none' : 'aeFloat ' + (5 + (i % 4)) + 's ease-in-out ' + -i * 1.1 + 's infinite',
+          transition: 'transform 240ms ' + ease + ' ' + i * 10 + 'ms, opacity 200ms ' + ease + ', border-color 200ms ' + ease,
         },
       },
       kids,
     );
   });
-  const axis = stage === 2 ? h('line', { key: 'ax', x1: 40, y1: 287, x2: 560, y2: 287, stroke: P.stroke, strokeWidth: 1, style: { animation: 'aeFade 320ms ' + ease + ' both' } }) : null;
-  const svg = h(
-    'svg',
-    {
-      viewBox: '0 0 600 440',
-      width: '100%',
-      height: '100%',
-      role: 'img',
-      'aria-label': S.label + ' scenario, ' + ['fragmented', 'connected', 'history', S.lens][stage] + ' view',
-      style: { display: 'block', overflow: 'visible', position: 'absolute', inset: 0 },
-    },
-    axis,
-    h('g', { key: 'E' }, edgeEls),
-    h('g', { key: 'N' }, nodeEls),
+  const axis = stage === 2 ? h('line', { key: 'ax', x1: 40, y1: 287, x2: 560, y2: 287, stroke: 'rgba(255,255,255,0.16)', strokeWidth: 1, style: { animation: 'aeFade 320ms ' + ease + ' both' } }) : null;
+  const svg = h('svg', { key: 'svg', viewBox: '0 0 600 440', width: 600, height: 440, 'aria-hidden': true, style: { position: 'absolute', left: 0, top: 0, overflow: 'visible' } }, axis, h('g', { key: 'E' }, edgeEls));
+  const stageEl = h(
+    'div',
+    { role: 'img', 'aria-label': S.label + ' scenario, ' + ['fragmented', 'connected', 'history', S.lens][stage] + ' view', style: { position: 'absolute', left: 0, top: 0, width: 600, height: 440, transformOrigin: '0 0', transform: 'scale(' + k + ')' } },
+    svg,
+    nodeEls,
   );
   const hold = (patch: { story?: StoryKey; stage?: number }) => setState({ hold: true, ...patch });
   const names = ['Fragmented', 'Connected', 'History', S.lens];
-  const acc = dark ? '#e8e6e1' : '#1a1a1e';
   const controls = !!props.controls;
-  const tabsWrap =
-    'display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: ' + (dark ? '#111114' : '#eceae5') + '; border: 1px solid ' + (dark ? '#2a2a2f' : '#d8d6d0') + ';';
-  const stories = STORY_ORDER.map((k) => {
-    const on = k === st;
+  const stories = STORY_ORDER.map((key) => {
+    const on = key === st;
     return {
-      key: k,
-      label: SCENE_STORIES[k].label,
-      g: SCENE_STORIES[k].g,
+      key,
+      label: SCENE_STORIES[key].label,
+      g: SCENE_STORIES[key].g,
       sel: on,
-      go: () => hold({ story: k, stage: 1 }),
+      go: () => hold({ story: key, stage: 1 }),
       style:
-        'font-family: inherit; display: inline-flex; gap: 6px; align-items: center; min-height: 32px; padding: 0 12px; border-radius: 7px; border: 0; cursor: pointer; font-size: 12px; font-weight: 500; transition: background-color 120ms ' +
+        'font-family: inherit; display: inline-flex; gap: 6px; align-items: center; min-height: 32px; padding: 0 14px; border-radius: 999px; border: 0; cursor: pointer; font-size: 12px; font-weight: 500; transition: background-color 120ms ' +
         ease +
         ', color 120ms ' +
         ease +
         '; ' +
-        (on ? 'background: ' + acc + '; color: ' + (dark ? '#1a1a1e' : '#f5f4f1') + ';' : 'background: transparent; color: ' + (dark ? '#a09f99' : '#6b6a65') + ';'),
+        (on ? 'background: rgba(255,255,255,0.94); color: #111114;' : 'background: transparent; color: #cfcdc7;'),
     };
   });
   const liveLabel = state.hold ? 'paused · synthetic example' : 'synthetic example';
-  const liveStyle = 'display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; color: ' + (dark ? '#a09f99' : '#6b6a65') + ';';
   const liveDot = 'width: 6px; height: 6px; border-radius: 999px; background: ' + (state.hold ? '#9c9b95' : '#6b9a7c') + ';';
-  const steps = list.map((k, i) => {
-    const on = k === stage;
+  const steps = list.map((kk, i) => {
+    const on = kk === stage;
     return {
-      key: k,
+      key: kk,
       n: '0' + (i + 1),
-      label: names[k],
+      label: names[kk],
       sel: on,
-      go: () => hold({ stage: k }),
-      bar: 'height: 2px; border-radius: 2px; width: 100%; background: ' + (on ? acc : dark ? '#2a2a2f' : '#d8d6d0') + '; transition: background-color 200ms ' + ease + ';',
+      go: () => hold({ stage: kk }),
+      bar: 'height: 3px; border-radius: 3px; width: 100%; background: ' + (on ? '#f4f2ee' : 'rgba(255,255,255,0.18)') + '; transition: background-color 200ms ' + ease + ';',
       style:
         'font-family: inherit; text-align: left; display: flex; flex-direction: column; gap: 8px; padding: 0 0 4px; background: transparent; border: 0; cursor: pointer; font-size: 12px; font-weight: 500; color: ' +
-        (on ? acc : dark ? '#a09f99' : '#6b6a65') +
+        (on ? '#f4f2ee' : '#b4b2ac') +
         '; transition: color 120ms ' +
         ease +
         ';',
@@ -316,50 +354,55 @@ export function AetherScene(props: AetherSceneProps) {
   });
   const caption = stage === 3 ? S.close : CAPS[stage];
   const sub = S.subs[stage as 0 | 1 | 2 | 3];
-  const capStyle = 'font-size: 15px; font-weight: 500; line-height: 1.4; letter-spacing: -0.01em; color: ' + acc + '; text-wrap: pretty;';
-  const subStyle = 'font-family: var(--font-mono); font-size: 11px; color: ' + (dark ? '#a09f99' : '#6b6a65') + ';';
 
   return (
     <div className="dc pg-aether-scene" style={props.style}>
-      <div style={css('display: flex; flex-direction: column; gap: 14px; width: 100%; font-family: var(--font-sans);')}>
-        {controls ? (
-          <div style={css('display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px;')}>
-            <div role="tablist" aria-label="Scenario" style={css(tabsWrap)}>
-              {stories.map((s) => (
-                <button key={s.key} type="button" role="tab" aria-selected={s.sel} onClick={s.go} style={css(s.style)}>
-                  <span aria-hidden="true" style={css('font-family: var(--font-mono);')}>
-                    {s.g}
-                  </span>
-                  {s.label}
-                </button>
-              ))}
+      <div style={css('position: relative; overflow: hidden; width: 100%; box-sizing: border-box; border-radius: 22px; background: #0d0d10; border: 1px solid rgba(255,255,255,0.08); padding: clamp(12px, 2vw, 20px); font-family: var(--font-sans); color: #e8e6e1;')}>
+        <div style={css('position: absolute; width: 70%; aspect-ratio: 1; left: -18%; top: -26%; border-radius: 999px; background: radial-gradient(closest-side, rgba(58,104,150,0.62), rgba(58,104,150,0));')} />
+        <div style={css('position: absolute; width: 62%; aspect-ratio: 1; right: -20%; top: 18%; border-radius: 999px; background: radial-gradient(closest-side, rgba(201,151,90,0.46), rgba(201,151,90,0));')} />
+        <div style={css('position: absolute; width: 66%; aspect-ratio: 1; left: 12%; bottom: -34%; border-radius: 999px; background: radial-gradient(closest-side, rgba(107,154,124,0.42), rgba(107,154,124,0));')} />
+        <div style={css('position: relative; display: flex; flex-direction: column; gap: 14px;')}>
+          {controls ? (
+            <div style={css('display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px;')}>
+              <div role="tablist" aria-label="Scenario" style={css('display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);')}>
+                {stories.map((s) => (
+                  <button key={s.key} type="button" role="tab" aria-selected={s.sel} onClick={s.go} style={css(s.style)}>
+                    <span aria-hidden="true" style={css('font-family: var(--font-mono);')}>
+                      {s.g}
+                    </span>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+              <span style={css('display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; color: #b4b2ac;')}>
+                <span style={css(liveDot)} />
+                {liveLabel}
+              </span>
             </div>
-            <span style={css(liveStyle)}>
-              <span style={css(liveDot)} />
-              {liveLabel}
-            </span>
+          ) : null}
+          <div ref={wrapRef} style={css('position: relative; width: 100%; aspect-ratio: 600 / 440;')}>
+            {stageEl}
           </div>
-        ) : null}
-        <div style={css('position: relative; width: 100%; aspect-ratio: 600 / 440;')}>{svg}</div>
-        {controls ? (
-          <>
-            <div style={css('display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px;')}>
-              {steps.map((stp) => (
-                <button key={stp.key} type="button" onClick={stp.go} aria-pressed={stp.sel} style={css(stp.style)}>
-                  <span style={css(stp.bar)} />
-                  <span style={css('display: flex; gap: 6px; align-items: baseline;')}>
-                    <span style={css('font-family: var(--font-mono); font-size: 11px; opacity: 0.7;')}>{stp.n}</span>
-                    <span>{stp.label}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-            <div style={css('display: flex; flex-direction: column; gap: 4px; min-height: 44px;')}>
-              <span style={css(capStyle)}>{caption}</span>
-              <span style={css(subStyle)}>{sub}</span>
-            </div>
-          </>
-        ) : null}
+          {controls ? (
+            <>
+              <div style={css('display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px;')}>
+                {steps.map((stp) => (
+                  <button key={stp.key} type="button" onClick={stp.go} aria-pressed={stp.sel} style={css(stp.style)}>
+                    <span style={css(stp.bar)} />
+                    <span style={css('display: flex; gap: 6px; align-items: baseline;')}>
+                      <span style={css('font-family: var(--font-mono); font-size: 11px; opacity: 0.7;')}>{stp.n}</span>
+                      <span>{stp.label}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div style={css('display: flex; flex-direction: column; gap: 4px; min-height: 44px;')}>
+                <span style={css('font-size: 15px; font-weight: 500; line-height: 1.4; letter-spacing: -0.01em; color: #f2f0ec; text-wrap: pretty;')}>{caption}</span>
+                <span style={css('font-family: var(--font-mono); font-size: 11px; color: #b4b2ac;')}>{sub}</span>
+              </div>
+            </>
+          ) : null}
+        </div>
       </div>
     </div>
   );

@@ -40,11 +40,11 @@ const H = (label: string, sub: string): Endpoint => ({ g: '●', label, sub, age
 const A = (label: string, sub: string): Endpoint => ({ g: '⬡', label, sub, agent: true });
 
 export const RELATIONSHIP_TYPES: RelType[] = [
-  { id: 'h2h', code: 'H → H', name: 'Human to human', short: 'working together', c: TONES.sage, from: H('Jane Doe', 'account owner'), to: H('Percival', 'risk analyst'), verb: 'approves together with', strength: '0.74',
-    means: 'People working together and sharing decisions across teams and companies.', example: 'Jane and Percival both approve large payment batches — 14 shared approvals in 90 days, seen across Slack and the CRM.', value: 'Shows who really makes decisions, and who each one depends on.',
+  { id: 'h2h', code: 'H → H', name: 'Human to human', short: 'working together', c: TONES.sage, from: H('Sofia Marchetti', 'account owner'), to: H('Percival', 'risk analyst'), verb: 'approves together with', strength: '0.74',
+    means: 'People working together and sharing decisions across teams and companies.', example: 'Sofia and Percival both approve large payment batches — 14 shared approvals in 90 days, seen across Slack and the CRM.', value: 'Shows who really makes decisions, and who each one depends on.',
     evidence: ['approval_recorded ×14', 'slack · shared thread', 'crm · same account'], layers: ['events', 'entities', 'graph', 'governance'] },
-  { id: 'h2a', code: 'H → A', name: 'Human to agent', short: 'handing off a task', c: TONES.cobalt, from: H('Jane Doe', 'usr_4f21a9'), to: A('Ptolemy', 'agt_2f18e'), verb: 'hands a task to', strength: '0.90',
-    means: 'A person gives a task to an AI agent and stays responsible for it.', example: 'Jane asked Ptolemy to score applications. It takes 42 actions a day, and each one traces back to what she allowed.', value: 'Every agent action stays tied to the person who allowed it.',
+  { id: 'h2a', code: 'H → A', name: 'Human to agent', short: 'handing off a task', c: TONES.cobalt, from: H('Sofia Marchetti', 'usr_4f21a9'), to: A('Ptolemy', 'agt_2f18e'), verb: 'hands a task to', strength: '0.90',
+    means: 'A person gives a task to an AI agent and stays responsible for it.', example: 'Sofia asked Ptolemy to score applications. It takes 42 actions a day, and each one traces back to what she allowed.', value: 'Every agent action stays tied to the person who allowed it.',
     evidence: ['delegation_granted', 'agent_tool_called ×42/day', 'scope: scoring.read'], layers: ['events', 'entities', 'graph', 'intelligence', 'governance'] },
   { id: 'a2a', code: 'A → A', name: 'Agent to agent', short: 'coordinating', c: TONES.ochre, from: A('Mordred', 'agt_88ce1'), to: A('Settlement agent', 'external'), verb: 'messages', strength: '0.68',
     means: 'AI agents coordinating with, relying on, and handing work to other agents.', example: 'Mordred started an unusual pattern of messages with an outside payments agent linked to a flagged group. Aether is 88% sure.', value: 'Shows patterns between machines that no one would spot in a single log.',

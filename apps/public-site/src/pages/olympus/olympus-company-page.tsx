@@ -29,7 +29,7 @@ export function OlympusCompanyPage() {
             </p>
           </div>
         </section>
-        <section data-theme="dark" style={css("background: #111114; color: #e8e6e1;")}>
+        <section data-theme="dark" style={css("background: radial-gradient(60% 50% at 85% 18%, rgba(58,104,150,0.42), transparent 70%), radial-gradient(50% 45% at 8% 92%, rgba(107,154,124,0.24), transparent 70%), radial-gradient(45% 40% at 92% 92%, rgba(201,151,90,0.26), transparent 70%), #111114; color: #e8e6e1;")}>
           <div style={css("max-width: 900px; margin: 0 auto; padding: clamp(80px, 11vw, 144px) 24px; display: flex; flex-direction: column; gap: 28px;")}>
             <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;")}>
               {"Why Olympus exists"}

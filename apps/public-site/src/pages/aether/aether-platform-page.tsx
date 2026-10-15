@@ -48,15 +48,15 @@ export function AetherPlatformPage() {
       return {
         g, name, sel: on, go: () => setState({ sel: id }),
         gStyle: 'font-family: var(--font-mono); font-size: ' + (isG ? 18 : 14) + 'px; color: ' + (on ? '#1a1a1e' : col) + ';',
-        style: 'font-family: inherit; grid-column: ' + p[0] + '; grid-row: ' + p[1] + '; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: ' + (isG ? 84 : 72) + 'px; padding: 10px 6px; border-radius: 10px; cursor: pointer; transition: background-color 120ms ' + EASE + ', border-color 120ms ' + EASE + ', color 120ms ' + EASE + '; ' + (on ? 'background: #e8e6e1; color: #1a1a1e; border: 1px solid #e8e6e1;' : 'background: ' + (isG ? '#1f1f24' : '#1a1a1e') + '; color: #e8e6e1; border: 1px solid ' + (isG ? '#4a4a52' : '#2a2a2f') + ';'),
-        hover: on ? 'background: #e8e6e1;' : 'border-color: #6b6a65;',
+        style: 'font-family: inherit; grid-column: ' + p[0] + '; grid-row: ' + p[1] + '; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: ' + (isG ? 84 : 72) + 'px; padding: 10px 6px; border-radius: 18px; cursor: pointer; ' + '-webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 6px 18px rgba(0,0,0,0.22); transition: background-color 240ms ' + EASE + ', border-color 240ms ' + EASE + ', color 240ms ' + EASE + ', box-shadow 240ms ' + EASE + '; ' + (on ? 'background: rgba(232,230,225,0.92); color: #1a1a1e; border: 1px solid #e8e6e1;' : 'background: ' + (isG ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.07)') + '; color: #e8e6e1; border: 1px solid ' + (isG ? 'rgba(255,255,255,0.26)' : 'rgba(255,255,255,0.14)') + ';'),
+        hover: on ? 'background: #e8e6e1;' : 'background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.3);',
       };
     });
   const sel = { g: c[0], name: c[1], q: c[2], plain: c[3], product: c[4], tech: c[5], stage: SN[c[7]], href: c[8], cta: 'Explore ' + c[1].toLowerCase() };
   const selChip = 'width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 18px; background: #e8e6e1; color: #1a1a1e;';
-  const groups = G.map(([id, n, name, title, body, items, col], i) => ({
+  const groups = G.map(([id, n, name, title, body, items, col]) => ({
     id, n, name, title, body,
-    bg: 'border-bottom: 1px solid #d8d6d0; background: ' + (i % 2 ? '#eceae5' : '#f5f4f1') + ';',
+    bg: 'border-bottom: 1px solid #d8d6d0;',
     kStyle: 'font-family: var(--font-mono); font-size: 12px; color: ' + col + ';',
     items: items.map((x) => {
       const f = F[x]!;
@@ -68,7 +68,7 @@ export function AetherPlatformPage() {
     <div data-page="aether-platform" style={css("min-height: 100vh; background: #f5f4f1; color: #1a1a1e; font-family: var(--font-sans);")}>
       <SiteHeader brand="aether" active="Platform" />
       <main id="main" tabIndex={-1}>
-        <section style={css("border-bottom: 1px solid #d8d6d0;")}>
+        <section style={css("background: radial-gradient(40% 50% at 80% 25%, rgba(58,104,150,0.28), transparent 72%), radial-gradient(40% 50% at 50% 85%, rgba(107,154,124,0.3), transparent 72%), linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%); border-bottom: 1px solid #d8d6d0;")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(56px, 9vw, 120px) 24px clamp(48px, 7vw, 80px); display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 32px; align-items: end;")}>
             <div style={css("display: flex; flex-direction: column; gap: 20px;")}>
               <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #3a6896;")}>
@@ -96,10 +96,10 @@ export function AetherPlatformPage() {
             </div>
           </div>
         </section>
-        <section id="map" data-theme="dark" style={css("background: #111114; color: #e8e6e1;")}>
+        <section id="map" data-theme="dark" style={css("background: radial-gradient(60% 50% at 85% 18%, rgba(58,104,150,0.42), transparent 70%), radial-gradient(50% 45% at 8% 92%, rgba(107,154,124,0.24), transparent 70%), radial-gradient(45% 40% at 92% 92%, rgba(201,151,90,0.26), transparent 70%), #111114; color: #e8e6e1;")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(56px, 8vw, 96px) 24px; display: flex; flex-wrap: wrap; gap: 24px; align-items: stretch;")}>
-            <div style={css("flex: 3 1 560px; min-width: 0; position: relative; border: 1px dashed #3a3a40; border-radius: 16px; padding: 44px 20px 20px; box-sizing: border-box;")}>
-              <span style={css("position: absolute; top: 14px; left: 20px; font-family: var(--font-mono); font-size: 11px; color: #dcb683;")}>
+            <div style={css("flex: 3 1 560px; min-width: 0; position: relative; border: 1px solid rgba(255,255,255,0.12); border-radius: 26px; padding: 48px 22px 22px; box-sizing: border-box; background: radial-gradient(60% 50% at 20% 0%, rgba(220,182,131,0.12), transparent 70%), radial-gradient(60% 60% at 90% 100%, rgba(143,176,204,0.12), transparent 70%), rgba(255,255,255,0.04); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 20px 50px rgba(0,0,0,0.3);")}>
+              <span style={css("position: absolute; top: 18px; left: 24px; font-family: var(--font-mono); font-size: 11px; color: #dcb683;")}>
                 {"◈ lenses surround the model · geography · value · risk · temporal"}
               </span>
               <div style={css("display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: repeat(5, auto); gap: 10px;")}>
@@ -115,12 +115,12 @@ export function AetherPlatformPage() {
                     </button>
                   </Fragment>
                 ))}
-                <div style={css("grid-column: 2 / 5; grid-row: 3; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 10px; border-top: 1px solid #3a3a40; border-bottom: 1px solid #3a3a40; font-family: var(--font-mono); font-size: 12px; color: #a09f99;")}>
+                <div style={css("grid-column: 2 / 5; grid-row: 3; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 10px; border-top: 1px solid rgba(255,255,255,0.14); border-bottom: 1px solid rgba(255,255,255,0.14); font-family: var(--font-mono); font-size: 12px; color: #a09f99;")}>
                   {"↔ relationships"}
                 </div>
               </div>
             </div>
-            <div style={css("flex: 2 1 340px; min-width: 0; border: 1px solid #2a2a2f; border-radius: 16px; background: #1a1a1e; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box;")}>
+            <div style={css("flex: 2 1 340px; min-width: 0; border: 1px solid rgba(255,255,255,0.14); border-radius: 26px; background: radial-gradient(70% 50% at 80% 0%, rgba(143,176,204,0.14), transparent 70%), rgba(255,255,255,0.07); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 20px 50px rgba(0,0,0,0.3); padding: 26px; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box;")}>
               <div style={css("display: flex; justify-content: space-between; align-items: center;")}>
                 <span style={css(selChip)}>
                   {sel.g}
@@ -172,7 +172,7 @@ export function AetherPlatformPage() {
         </section>
         {(groups).map((gp: any, gpIndex: number) => (
           <Fragment key={gpIndex}>
-            <section id={gp.id} style={css(gp.bg)}>
+            <section id={gp.id} style={css('background: radial-gradient(40% 50% at 80% 25%, rgba(58,104,150,0.28), transparent 72%), radial-gradient(40% 50% at 50% 85%, rgba(107,154,124,0.3), transparent 72%), linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%); ' + gp.bg)}>
               <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(56px, 8vw, 96px) 24px; display: flex; flex-wrap: wrap; gap: clamp(24px, 4vw, 56px); align-items: flex-start;")}>
                 <div style={css("flex: 1 1 300px; display: flex; flex-direction: column; gap: 12px;")}>
                   <span style={css(gp.kStyle)}>
@@ -188,7 +188,7 @@ export function AetherPlatformPage() {
                 <div style={css("display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 10px; flex: 2 1 520px; min-width: 0;")}>
                   {(gp.items).map((it: any, itIndex: number) => (
                     <Fragment key={itIndex}>
-                      <a href={link(it.href)} style={css("display: flex; flex-direction: column; gap: 8px; min-height: 170px; padding: 20px; border-radius: 12px; background: #fbfaf8; border: 1px solid #d8d6d0; text-decoration: none; color: #1a1a1e; box-sizing: border-box; transition: border-color 120ms cubic-bezier(0.22,1,0.36,1), background-color 120ms cubic-bezier(0.22,1,0.36,1);")} className="hv-356a9228">
+                      <a href={link(it.href)} style={css("display: flex; flex-direction: column; gap: 8px; min-height: 170px; padding: 20px; border-radius: 12px; background: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.85); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 8px 24px rgba(40,34,70,0.08); text-decoration: none; color: #1a1a1e; box-sizing: border-box; transition: border-color 120ms cubic-bezier(0.22,1,0.36,1), background-color 120ms cubic-bezier(0.22,1,0.36,1);")} className="hv-356a9228">
                         <span style={css("display: flex; justify-content: space-between; align-items: center;")}>
                           <span style={css(it.gStyle)}>
                             {it.g}
@@ -214,7 +214,7 @@ export function AetherPlatformPage() {
             </section>
           </Fragment>
         ))}
-        <section data-theme="dark" style={css("background: #1a1a1e; color: #e8e6e1;")}>
+        <section data-theme="dark" style={css("background: radial-gradient(60% 50% at 85% 18%, rgba(58,104,150,0.42), transparent 70%), radial-gradient(50% 45% at 8% 92%, rgba(107,154,124,0.24), transparent 70%), radial-gradient(45% 40% at 92% 92%, rgba(201,151,90,0.26), transparent 70%), #111114; color: #e8e6e1;")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(64px, 9vw, 112px) 24px; display: flex; flex-direction: column; gap: 20px; align-items: flex-start;")}>
             <h2 style={css("font-size: clamp(30px, 4.2vw, 52px); font-weight: 500; letter-spacing: -0.032em; line-height: 1.04; margin: 0; max-width: 760px; color: #e8e6e1; text-wrap: balance;")}>
               {"Connect one tool. See the puzzle pieces come together."}

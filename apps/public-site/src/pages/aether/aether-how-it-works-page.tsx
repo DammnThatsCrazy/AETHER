@@ -64,7 +64,7 @@ export function AetherHowItWorksPage() {
     <div data-page="aether-how-it-works" style={css("min-height: 100vh; background: #f5f4f1; color: #1a1a1e; font-family: var(--font-sans);")}>
       <SiteHeader brand="aether" active="Platform" />
       <main id="main" tabIndex={-1}>
-        <section style={css("border-bottom: 1px solid #d8d6d0;")}>
+        <section style={css("background: radial-gradient(40% 50% at 80% 25%, rgba(58,104,150,0.28), transparent 72%), radial-gradient(40% 50% at 50% 85%, rgba(107,154,124,0.3), transparent 72%), linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%); border-bottom: 1px solid #d8d6d0;")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(56px, 9vw, 120px) 24px clamp(40px, 6vw, 72px); display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 32px; align-items: end;")}>
             <div style={css("display: flex; flex-direction: column; gap: 20px;")}>
               <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #4f7a5e;")}>
@@ -79,7 +79,7 @@ export function AetherHowItWorksPage() {
             </p>
           </div>
         </section>
-        <section id="steps" data-theme="dark" style={css("background: #111114; color: #e8e6e1;")}>
+        <section id="steps" data-theme="dark" style={css("background: radial-gradient(60% 50% at 85% 18%, rgba(58,104,150,0.42), transparent 70%), radial-gradient(50% 45% at 8% 92%, rgba(107,154,124,0.24), transparent 70%), radial-gradient(45% 40% at 92% 92%, rgba(201,151,90,0.26), transparent 70%), #111114; color: #e8e6e1;")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(48px, 7vw, 88px) 24px; display: flex; flex-wrap: wrap; gap: clamp(24px, 4vw, 56px); align-items: stretch;")}>
             <ol style={css("flex: 1 1 340px; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px;")}>
               {(steps).map((s: any, sIndex: number) => (
@@ -106,7 +106,7 @@ export function AetherHowItWorksPage() {
                 </Fragment>
               ))}
             </ol>
-            <div style={css("flex: 1.4 1 480px; min-width: 0; border: 1px solid #2a2a2f; border-radius: 12px; background: #1a1a1e; padding: 20px; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box;")}>
+            <div style={css("flex: 1.4 1 480px; min-width: 0; border-radius: 26px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14); padding: 20px; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box;")}>
               <div style={css("display: flex; justify-content: space-between; align-items: center;")}>
                 <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;")}>
                   {"Synthetic example"}
@@ -119,7 +119,7 @@ export function AetherHowItWorksPage() {
             </div>
           </div>
         </section>
-        <section id="questions" style={css("border-bottom: 1px solid #d8d6d0;")}>
+        <section id="questions" style={css("background: radial-gradient(40% 50% at 80% 25%, rgba(58,104,150,0.28), transparent 72%), radial-gradient(40% 50% at 50% 85%, rgba(107,154,124,0.3), transparent 72%), linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%); border-bottom: 1px solid #d8d6d0;")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(56px, 8vw, 104px) 24px; display: flex; flex-wrap: wrap; gap: clamp(24px, 4vw, 56px); align-items: flex-start;")}>
             <div style={css("flex: 1 1 300px; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 96px;")}>
               <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #3a6896;")}>
@@ -148,7 +148,7 @@ export function AetherHowItWorksPage() {
             </ol>
           </div>
         </section>
-        <section id="technical" style={css("border-bottom: 1px solid #d8d6d0; background: #eceae5;")}>
+        <section id="technical" style={css("border-bottom: 1px solid #d8d6d0; background: radial-gradient(40% 50% at 80% 25%, rgba(58,104,150,0.28), transparent 72%), radial-gradient(40% 50% at 50% 85%, rgba(107,154,124,0.3), transparent 72%), linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%);")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(56px, 8vw, 104px) 24px; display: flex; flex-direction: column; gap: 24px;")}>
             <div style={css("display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 24px; align-items: end;")}>
               <div style={css("display: flex; flex-direction: column; gap: 12px;")}>
@@ -204,7 +204,7 @@ export function AetherHowItWorksPage() {
             </a>
           </div>
         </section>
-        <section>
+        <section style={css("background: radial-gradient(40% 50% at 80% 25%, rgba(58,104,150,0.28), transparent 72%), radial-gradient(40% 50% at 50% 85%, rgba(107,154,124,0.3), transparent 72%), linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%);")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(64px, 9vw, 112px) 24px; display: flex; flex-direction: column; gap: 20px; align-items: flex-start;")}>
             <h2 style={css("font-size: clamp(30px, 4.2vw, 52px); font-weight: 500; letter-spacing: -0.032em; line-height: 1.04; margin: 0; max-width: 760px; text-wrap: balance;")}>
               {"Connect one tool and watch your first customer come together."}
