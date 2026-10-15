@@ -122,7 +122,7 @@ async def _fetch_shop_account(
     try:
         async with _http_client() as client:
             response = await client.get(url, headers=headers, auth=auth)
-    except httpx.HTTPError as exc:
+    except Exception as exc:  # noqa: BLE001 - any lookup failure is retryable
         raise _ShopifyAccountFailure(AdapterStatus.RETRYABLE_ERROR, "shop_lookup_unavailable") from exc
     if response.status_code == 429:
         raise _ShopifyAccountFailure(AdapterStatus.RATE_LIMITED, "shop_lookup_rate_limited")
