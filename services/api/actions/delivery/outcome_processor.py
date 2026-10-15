@@ -26,6 +26,7 @@ from typing import Any, Awaitable, Callable, Optional
 from urllib.parse import urlparse
 
 from actions.delivery.models import ExternalOutcomeEvent, ExternalOutcomeType
+from shared.logger.logger import metrics
 
 logger = logging.getLogger("aether.delivery.outcome_processor")
 
@@ -241,7 +242,7 @@ class WebhookInboxProcessor:
                         "inbox_delivery_unbound id=%s provider=%s — skipping routing",
                         record_id, record.get("provider"),
                     )
-                    await self._inbox_repo.mark_processed(record_id, error="unbound_delivery")
+                    await self._dead_letter(record, "unbound_delivery")
                     count += 1
                     continue
 
@@ -262,7 +263,7 @@ class WebhookInboxProcessor:
                         "inbox_signature_unverified id=%s provider=%s — skipping routing",
                         record_id, record.get("provider"),
                     )
-                    await self._inbox_repo.mark_processed(record_id, error="signature_unverified")
+                    await self._dead_letter(record, "signature_unverified")
                     count += 1
                     continue
 
@@ -309,6 +310,12 @@ class WebhookInboxProcessor:
                 count += 1
 
         return count
+
+    async def _dead_letter(self, record: dict, reason: str) -> None:
+        await self._inbox_repo.mark_processed(record.get("id", ""), error=reason)
+        metrics.increment("delivery_inbox_dead_lettered_total", labels={
+            "provider": record.get("provider") or "unknown", "reason": reason,
+        })
 
     async def _verify_signature(self, inbox: dict, *, secret: Optional[str] = None) -> bool:
         """Provider-specific signature verification.

@@ -408,7 +408,7 @@ async def test_callback_for_unknown_or_ambiguous_delivery_is_dropped(world):
 # ── Round trip: outbound adapter signature → inbound callback ─────────────────
 
 
-async def _adapter_request(monkeypatch, body: dict, secret: str, delivery_id: str) -> tuple[bytes, dict]:
+async def _adapter_request(monkeypatch, body: dict, secret: str | None, delivery_id: str) -> tuple[bytes, dict]:
     """The exact bytes and headers the outbound WebhookAdapter sends."""
     import types
 
@@ -480,3 +480,37 @@ async def test_outbound_signed_callback_stale_is_rejected(world, monkeypatch):
     assert world.outcome_tenants() == []
     assert world.errors() == ["signature_unverified"]
     assert world.state(sugg) == "pending"
+
+
+# ── Dead letters and unsigned sends are counted ──────────────────────────────
+
+
+def _dead_letters(reason: str) -> int:
+    from shared.logger.logger import metrics
+
+    return metrics.get_counter(
+        "delivery_inbox_dead_lettered_total", {"provider": "webhook", "reason": reason},
+    )
+
+
+@pytest.mark.asyncio
+async def test_dead_lettered_callbacks_are_counted_by_reason(world):
+    unbound, unverified = _dead_letters("unbound_delivery"), _dead_letters("signature_unverified")
+    await world.bind(tenant="tenant-B", provider="webhook", external_id="del-B", secret="secret-B")
+    _post_callback(world, {"event_type": "rejected", "delivery_id": "del-B"}, GLOBAL_SECRET)
+    _post_callback(world, {"event_type": "rejected", "delivery_id": "del-unknown"}, "secret-B")
+    await world.drain()
+
+    assert _dead_letters("unbound_delivery") == unbound + 1
+    assert _dead_letters("signature_unverified") == unverified + 1
+
+
+@pytest.mark.asyncio
+async def test_outbound_webhook_without_a_signing_secret_is_counted(monkeypatch):
+    from shared.logger.logger import metrics
+
+    before = metrics.get_counter("delivery_webhook_unsigned_total")
+    _, headers = await _adapter_request(monkeypatch, {"delivery_id": "del-U"}, None, "del-U")
+
+    assert "X-Aether-Signature" not in headers
+    assert metrics.get_counter("delivery_webhook_unsigned_total") == before + 1
