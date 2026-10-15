@@ -21,6 +21,7 @@ from typing import Any, Optional
 from urllib.parse import urlparse
 
 from shared.logger.logger import get_logger
+from shared.security.ssrf import is_public_address
 
 from .audit_ledger import audit_ledger
 from .contracts import ActorType, PolicyDecision, PolicySeverity
@@ -43,10 +44,7 @@ _BLOCKED_HOSTS = {"localhost", "metadata.google.internal"}
 
 def _ip_is_unsafe(ip: ipaddress._BaseAddress) -> bool:
     """True if an IP must never be a webhook destination (SSRF / metadata)."""
-    return (
-        ip.is_private or ip.is_loopback or ip.is_link_local
-        or ip.is_reserved or ip.is_multicast or ip.is_unspecified
-    )
+    return not is_public_address(str(ip))
 
 
 def _resolve_host(host: str) -> list[str]:

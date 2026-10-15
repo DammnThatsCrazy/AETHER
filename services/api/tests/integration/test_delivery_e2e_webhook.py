@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 from actions.delivery.adapters.base import (
@@ -17,31 +18,15 @@ from actions.delivery.adapters.base import (
 from actions.delivery.adapters.webhook import WebhookAdapter, _check_ssrf
 
 
-def _mock_resp(status: int, body: str = "ok"):
-    resp = MagicMock()
-    resp.status = status
-    resp.headers = {}
-    resp.text = AsyncMock(return_value=body)
-    return resp
-
-
-def _make_session(resp):
-    s = MagicMock()
-    s.__aenter__ = AsyncMock(return_value=s)
-    s.__aexit__ = AsyncMock(return_value=False)
-    cm = MagicMock()
-    cm.__aenter__ = AsyncMock(return_value=resp)
-    cm.__aexit__ = AsyncMock(return_value=False)
-    s.post = MagicMock(return_value=cm)
-    return s
+def _send_returning(status: int, body: str = "ok"):
+    return patch.object(httpx.AsyncClient, "send", AsyncMock(return_value=httpx.Response(status, text=body)))
 
 
 @pytest.mark.asyncio
 async def test_webhook_success_returns_delivery_id():
-    mock_resp = _mock_resp(200)
     with patch("socket.getaddrinfo") as mock_dns:
-        mock_dns.return_value = [(2, 1, 6, "", ("203.0.113.1", 0))]  # public IP
-        with patch("aiohttp.ClientSession", return_value=_make_session(mock_resp)):
+        mock_dns.return_value = [(2, 1, 6, "", ("93.184.216.34", 0))]  # public IP
+        with _send_returning(200):
             adapter = WebhookAdapter()
             receipt = await adapter.dispatch(
                 {"title": "Alert", "body": "Something"},
@@ -84,10 +69,9 @@ async def test_webhook_requires_url():
 
 @pytest.mark.asyncio
 async def test_webhook_raises_retryable_on_5xx():
-    mock_resp = _mock_resp(503, "Service Unavailable")
     with patch("socket.getaddrinfo") as mock_dns:
-        mock_dns.return_value = [(2, 1, 6, "", ("203.0.113.1", 0))]
-        with patch("aiohttp.ClientSession", return_value=_make_session(mock_resp)):
+        mock_dns.return_value = [(2, 1, 6, "", ("93.184.216.34", 0))]
+        with _send_returning(503, "Service Unavailable"):
             adapter = WebhookAdapter()
             with pytest.raises(RetryableProviderError, match="server error"):
                 await adapter.dispatch(
