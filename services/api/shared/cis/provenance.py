@@ -121,7 +121,7 @@ class ProvenanceTracker:
     """
 
     def __init__(self) -> None:
-        self._store: dict[str, ProvenanceRecord] = {}  # in-memory: entity_id → record
+        self._store: dict[tuple[str, str], ProvenanceRecord] = {}  # (tenant_id, entity_id) → record
         self._pool: Optional[Any] = None
 
     async def _get_pool(self) -> Optional[Any]:
@@ -139,11 +139,11 @@ class ProvenanceTracker:
 
     async def record(self, rec: ProvenanceRecord) -> None:
         if self._is_local():
-            self._store[rec.entity_id] = rec
+            self._store[(rec.tenant_id, rec.entity_id)] = rec
             return
         pool = await self._get_pool()
         if pool is None:
-            self._store[rec.entity_id] = rec
+            self._store[(rec.tenant_id, rec.entity_id)] = rec
             return
         try:
             await pool.execute(
@@ -175,13 +175,12 @@ class ProvenanceTracker:
             )
         except Exception as e:
             logger.error(f"ProvenanceTracker.record failed: {e}")
-            self._store[rec.entity_id] = rec
+            self._store[(rec.tenant_id, rec.entity_id)] = rec
 
     async def get(self, entity_id: str, tenant_id: str) -> Optional[ProvenanceRecord]:
         pool = None if self._is_local() else await self._get_pool()
         if pool is None:
-            rec = self._store.get(entity_id)
-            return rec if (rec and rec.tenant_id == tenant_id) else None
+            return self._store.get((tenant_id, entity_id))
         try:
             row = await pool.fetchrow(
                 "SELECT * FROM cis_provenance_records WHERE entity_id=$1 AND tenant_id=$2",
@@ -214,8 +213,8 @@ class ProvenanceTracker:
         self, entity_id: str, tenant_id: str, score: float
     ) -> None:
         if self._is_local():
-            rec = self._store.get(entity_id)
-            if rec and rec.tenant_id == tenant_id:
+            rec = self._store.get((tenant_id, entity_id))
+            if rec:
                 rec.contamination_score = score
             return
         pool = await self._get_pool()

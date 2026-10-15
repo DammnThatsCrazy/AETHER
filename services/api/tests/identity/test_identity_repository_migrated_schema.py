@@ -335,11 +335,17 @@ class _MigratedPool:
                         )
             self.rows[table][row["id"]] = row
             return "INSERT 0 1"
-        m = re.match(r"UPDATE (\w+) SET (.*) WHERE id = \$(\d+)$", q, re.S)
+        m = re.match(
+            r"UPDATE (\w+) SET (.*) WHERE id = \$(\d+)"
+            r"(?: AND COALESCE\(tenant_id, ''\) = \$(\d+))?$",
+            q, re.S,
+        )
         if m:
             table = m.group(1)
             row_id = args[int(m.group(3)) - 1]
             row = self.rows[table][row_id]
+            if m.group(4) and (row.get("tenant_id") or "") != args[int(m.group(4)) - 1]:
+                return "UPDATE 0"
             for col, idx in re.findall(r"(\w+) = \$(\d+)", m.group(2)):
                 row[col] = self._check_bind(table, col, args[int(idx) - 1])
             return "UPDATE 1"

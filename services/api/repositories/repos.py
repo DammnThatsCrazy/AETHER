@@ -234,6 +234,16 @@ def _explicit_filter_param(data_type: Optional[str], value: Any) -> Any:
     return _jsonb_text(value)
 
 
+def _row_tenant(record: dict) -> str:
+    """The tenant a record names, in either spelling; ``""`` for none."""
+    return tenant_of(record) or ""
+
+
+def _no_rows(status: Any) -> bool:
+    """True for an asyncpg ``INSERT 0 0`` / ``UPDATE 0`` command status."""
+    return isinstance(status, str) and status.endswith(" 0")
+
+
 def _matches_filters(row: dict, filters: dict) -> bool:
     """In-memory equivalent of the SQL find_many predicate.
 
@@ -280,6 +290,10 @@ class BaseRepository(ABC):
     #: Explicit-column mode only: record key → migrated column name, for
     #: records whose historical key differs from the migration's column.
     _column_renames: dict[str, str] = {}
+    #: ``insert``/``update`` only replace a row owned by the writing tenant
+    #: (``COALESCE(tenant_id, '')`` must equal the record's tenant). ``False``
+    #: only for tables whose rows are not tenant-owned.
+    _tenant_guard: bool = True
 
     def __init__(self, table_name: str) -> None:
         self.table_name = table_name
@@ -661,25 +675,42 @@ class BaseRepository(ABC):
         )
         return [r["tenant_id"] for r in rows]
 
+    def _unavailable(self) -> ConflictError:
+        return ConflictError(f"{self.table_name} ID is unavailable in this tenant")
+
     async def insert(self, record_id: str, data: dict) -> dict:
+        """Create ``record_id`` or replace it when the stored row has the same tenant.
+
+        The tenant is read from ``tenant_id`` or ``tenantId``. A row owned by a
+        different tenant (or by none, when the record names one) is never
+        replaced: the write raises ``ConflictError`` instead.
+        """
         now = utc_now().isoformat()
         data["id"] = record_id
         data["created_at"] = now
         data["updated_at"] = now
+        tenant_id = _row_tenant(data)
 
         pool = await self._ensure_pool()
         if pool is None:
+            existing = self._store.get(record_id)
+            if self._tenant_guard and existing is not None and _row_tenant(existing) != tenant_id:
+                raise self._unavailable()
             self._store[record_id] = data
             logger.info(f"INSERT {self.table_name} id={record_id} (in-memory)")
             return data
 
         await self._ensure_table()
         if self._jsonb_mode:
-            tenant_id = data.get("tenant_id", "")
-            await pool.execute(
+            owner_check = (
+                f" WHERE COALESCE({self.table_name}.tenant_id, '') = EXCLUDED.tenant_id"
+                if self._tenant_guard else ""
+            )
+            status = await pool.execute(
                 f"""INSERT INTO {self.table_name} (id, data, tenant_id, created_at, updated_at)
                     VALUES ($1, $2::jsonb, $3, NOW(), NOW())
-                    ON CONFLICT (id) DO UPDATE SET data = $2::jsonb, updated_at = NOW()""",
+                    ON CONFLICT (id) DO UPDATE SET data = $2::jsonb, updated_at = NOW()"""
+                + owner_check,
                 record_id, json.dumps(data, default=str), tenant_id,
             )
         else:
@@ -703,12 +734,20 @@ class BaseRepository(ABC):
             update_set = ", ".join(
                 f"{c} = EXCLUDED.{c}" for c in cols if c != "id"
             )
-            await pool.execute(
+            owner_check = ""
+            if self._tenant_guard and "tenant_id" in column_types:
+                vals.append(tenant_id)
+                owner_check = (
+                    f" WHERE COALESCE({self.table_name}.tenant_id, '') = ${len(vals)}"
+                )
+            status = await pool.execute(
                 f"""INSERT INTO {self.table_name} ({col_list})
                     VALUES ({placeholders})
-                    ON CONFLICT (id) DO UPDATE SET {update_set}""",
+                    ON CONFLICT (id) DO UPDATE SET {update_set}""" + owner_check,
                 *vals,
             )
+        if _no_rows(status):
+            raise self._unavailable()
         logger.info(f"INSERT {self.table_name} id={record_id}")
         return data
 
@@ -777,20 +816,37 @@ class BaseRepository(ABC):
         return data
 
     async def update(self, record_id: str, data: dict) -> dict:
+        """Merge ``data`` into ``record_id``; only the owning tenant's row changes.
+
+        The writing tenant is the one ``data`` names, else the stored record's.
+        """
         existing = await self.find_by_id_or_fail(record_id)
-        existing.update(data)
-        existing["updated_at"] = utc_now().isoformat()
+        owner = _row_tenant(existing)
+        tenant_id = _row_tenant(data) or owner
 
         pool = await self._ensure_pool()
         if pool is None:
+            if self._tenant_guard and tenant_id != owner:
+                raise self._unavailable()
+            existing.update(data)
+            existing["updated_at"] = utc_now().isoformat()
             self._store[record_id] = existing
             logger.info(f"UPDATE {self.table_name} id={record_id} (in-memory)")
             return existing
 
+        existing.update(data)
+        existing["updated_at"] = utc_now().isoformat()
         if self._jsonb_mode:
-            await pool.execute(
-                f"UPDATE {self.table_name} SET data = $1::jsonb, updated_at = NOW() WHERE id = $2",
-                json.dumps(existing, default=str), record_id,
+            owner_check = (
+                " AND COALESCE(tenant_id, '') = $3" if self._tenant_guard else ""
+            )
+            params: list[Any] = [json.dumps(existing, default=str), record_id]
+            if self._tenant_guard:
+                params.append(tenant_id)
+            status = await pool.execute(
+                f"UPDATE {self.table_name} SET data = $1::jsonb, updated_at = NOW() "
+                f"WHERE id = $2{owner_check}",
+                *params,
             )
         else:
             column_types = await self._explicit_column_types(pool)
@@ -809,10 +865,17 @@ class BaseRepository(ABC):
                 vals.append(bound)
                 idx += 1
             vals.append(record_id)
-            await pool.execute(
-                f"UPDATE {self.table_name} SET {', '.join(set_parts)} WHERE id = ${idx}",
+            owner_check = ""
+            if self._tenant_guard and "tenant_id" in column_types:
+                vals.append(tenant_id)
+                owner_check = f" AND COALESCE(tenant_id, '') = ${idx + 1}"
+            status = await pool.execute(
+                f"UPDATE {self.table_name} SET {', '.join(set_parts)} "
+                f"WHERE id = ${idx}{owner_check}",
                 *vals,
             )
+        if _no_rows(status):
+            raise self._unavailable()
         logger.info(f"UPDATE {self.table_name} id={record_id}")
         return existing
 
@@ -1039,11 +1102,10 @@ class TenantOwnedRepository(BaseRepository):
         if not tenant_id:
             raise ValueError("upsert requires a tenant_id")
         existing = await BaseRepository.find_by_id(self, record_id)
-        owner = existing.get("tenant_id") if existing is not None else None
-        if existing is not None and owner not in (None, "", tenant_id):
-            raise ConflictError(f"{self.table_name} id {record_id!r} already exists")
+        if existing is not None and existing.get("tenant_id") != tenant_id:
+            raise self._unavailable()
         row = {**data, "tenant_id": tenant_id}
-        if owner == tenant_id:
+        if existing is not None:
             return await self.for_tenant(tenant_id).update(record_id, row)
         return await self.insert(record_id, row)
 
@@ -1073,13 +1135,11 @@ class IdentityRepository:
         return profile
 
     async def upsert_profile(self, tenant_id: str, user_id: str, data: dict) -> dict:
-        existing = await self._profiles.find_by_id(user_id)
-        if existing:
-            profile = await self._profiles.update(user_id, data)
+        row = {**data, "tenant_id": tenant_id}
+        if await self._profiles.find_by_id(user_id):
+            profile = await self._profiles.update(user_id, row)
         else:
-            profile = await self._profiles.insert(
-                user_id, {**data, "tenant_id": tenant_id}
-            )
+            profile = await self._profiles.insert(user_id, row)
 
         from shared.graph.mutation_gateway import GraphMutationGateway
         from shared.graph.mutation_intents import vertex_intent
@@ -1915,6 +1975,9 @@ class EnterpriseInquiryRepository(BaseRepository):
 
 class AdminRepository(BaseRepository):
     """Tenant management, billing, API key records."""
+    # Tenant records are platform state, not rows a tenant owns.
+    _tenant_guard = False
+
     def __init__(self) -> None:
         super().__init__("tenants")
 
@@ -1934,6 +1997,8 @@ class FirstAdminBootstrapRepository(BaseRepository):
     can resume after an interrupted write; a different request remains
     fail-closed.
     """
+
+    _tenant_guard = False
 
     def __init__(self) -> None:
         super().__init__("first_admin_bootstrap")
@@ -1990,6 +2055,9 @@ class UserRepository(BaseRepository):
     completes, at which point the pending row is deleted and a permanent user
     row is written with a UUID id.
     """
+    # A user is a global principal: an SSO re-invite moves it to another tenant.
+    _tenant_guard = False
+
     def __init__(self) -> None:
         super().__init__("users")
 
@@ -3627,6 +3695,9 @@ class DuneBronzeRepository(BaseRepository):
     creates a copy; rollback deletes by source_tag + tenant_scope.
     """
 
+    # Platform-wide Dune feed state, not tenant-owned rows.
+    _tenant_guard = False
+
     def __init__(self) -> None:
         super().__init__("dune_bronze_records")
 
@@ -3661,6 +3732,9 @@ class DuneSilverRepository(BaseRepository):
     are eligible. Silver rows are still isolated from the canonical graph.
     """
 
+    # Platform-wide Dune feed state, not tenant-owned rows.
+    _tenant_guard = False
+
     def __init__(self) -> None:
         super().__init__("dune_silver_records")
 
@@ -3693,6 +3767,9 @@ class DuneGoldRepository(BaseRepository):
     Gold records are domain-level aggregates keyed by
     (source_tag, domain, query_id, tenant_scope). Still isolated from graph.
     """
+
+    # Platform-wide Dune feed state, not tenant-owned rows.
+    _tenant_guard = False
 
     def __init__(self) -> None:
         super().__init__("dune_gold_records")
@@ -3732,6 +3809,9 @@ class DuneFeederStatsRepository(BaseRepository):
     own row (key = "feeder_stats_{scope}") so tenant admins only see their own
     rejection rate and last-ingest metadata, not another tenant's activity.
     """
+
+    # Platform-wide Dune feed state, not tenant-owned rows.
+    _tenant_guard = False
 
     def __init__(self) -> None:
         super().__init__("dune_feeder_stats")
