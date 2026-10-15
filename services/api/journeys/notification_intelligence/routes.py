@@ -99,16 +99,16 @@ def _get_lifecycle_engine() -> LifecycleEngine:
     return LifecycleEngine(repo=_notif_repo, producer=producer, graph=graph)
 
 
-def _enqueue_notification_delivery(notif: Any) -> None:
+async def _enqueue_notification_delivery(notif: Any) -> None:
     """D7: After persisting a notification, create durable DeliveryIntent + DeliveryJobs.
 
-    Called synchronously from emit_notification() so the jobs are queued
-    before the API response is returned. Errors are logged but never raised
+    Awaited by emit_notification() so the jobs are queued before the API
+    response is returned. Errors are logged but never raised
     so the API response is always returned to the caller.
     """
     from journeys.notification_intelligence.consumer import _create_notification_delivery_jobs
     try:
-        _create_notification_delivery_jobs(notif)
+        await _create_notification_delivery_jobs(notif)
     except Exception as exc:
         logger.warning(f"_enqueue_notification_delivery failed notif={getattr(notif, 'notification_id', '?')!r}: {exc}")
 
@@ -241,7 +241,7 @@ async def emit_notification(body: EmitNotificationRequest, request: Request):
     result = await _notif_repo.create(notif_dict)
 
     # D7 fix: enqueue durable delivery jobs after persisting the notification
-    _enqueue_notification_delivery(notif)
+    await _enqueue_notification_delivery(notif)
 
     metrics.increment("aether_notifications_emitted_total",
                       labels={"tenant_id": body.tenant_id,
@@ -443,7 +443,7 @@ async def annotate_notification(
     return APIResponse(data=updated).to_dict()
 
 
-@router.post("/intelligence/{notification_id}/replay")
+@router.post("/intelligence/{notification_id}/replay", status_code=202)
 async def replay_notification(notification_id: str, request: Request, tenantId: str = Query(...)):
     """Re-queue a notification for delivery by creating fresh DeliveryIntent + DeliveryJobs.
 
@@ -462,7 +462,7 @@ async def replay_notification(notification_id: str, request: Request, tenantId: 
     # D5 fix: use _create_notification_delivery_jobs() — creates durable DB records
     # instead of fire-and-forget DeliveryRouter instantiated without providers_repo.
     jobs_queued = await _create_delivery_jobs_for_replay(notif)
-    return APIResponse(data={"replayed": True, "jobs_queued": jobs_queued}, status_code=202).to_dict()
+    return APIResponse(data={"replayed": True, "jobs_queued": jobs_queued}).to_dict()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
