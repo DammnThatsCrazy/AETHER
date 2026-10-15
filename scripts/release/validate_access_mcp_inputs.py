@@ -10,7 +10,9 @@ import sys
 
 
 _DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
-_PATH_RE = re.compile(r"^/[A-Za-z0-9/_-]{1,127}$")
+# ALB caps each path pattern at 128 characters. The metadata prefix is 37,
+# leaving at most 91 characters for the configured MCP path, including '/'.
+_PATH_RE = re.compile(r"^/[A-Za-z0-9/_-]{1,90}$")
 _LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
 _AUTHORITY_RE = re.compile(rf"^(?P<host>{_LABEL}(?:\.{_LABEL})*)(?::(?P<port>[0-9]+))?$")
 
