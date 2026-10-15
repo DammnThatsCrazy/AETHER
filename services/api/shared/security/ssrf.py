@@ -55,9 +55,10 @@ import re
 import socket
 import unicodedata
 import urllib.parse
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import httpx
+if TYPE_CHECKING:
+    import httpx
 
 # Well-formed hostname: two or more ASCII labels, [a-z0-9]+hyphen, no leading/
 # trailing hyphen, no empty label. ASCII-only — closes Unicode homographs
@@ -316,6 +317,8 @@ def _pinned_request(
     body: dict[str, Any],
     allow_local: bool,
 ) -> httpx.Request:
+    import httpx
+
     address = resolve_public_addresses(url, allow_local=allow_local)[0].split("%")[0]
     logical = httpx.URL(url)
     headers = {k: v for k, v in headers.items() if k.lower() != "host"}
@@ -349,6 +352,8 @@ async def send_public_request(
     into a body-less GET. Raises :class:`UnsafeDestinationError` before any
     connection to a non-public destination.
     """
+    import httpx
+
     headers = dict(headers or {})
     body: dict[str, Any] = {"content": content, "json": json}
     async with httpx.AsyncClient(transport=transport, timeout=timeout, follow_redirects=False) as client:
