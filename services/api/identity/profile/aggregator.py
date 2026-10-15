@@ -1414,7 +1414,7 @@ class Profile360Aggregator:
 
         if ot in ("agent", "agent_config"):
             record = (await _safe("drill.agent", self._agent_configs.find_by_id(object_id))).value_or(None)
-            if record and record.get("tenant_id") in (None, "", tenant_id):
+            if record and record.get("tenant_id") == tenant_id:
                 execs = await self._scoped_find_many(
                     self._agent_execs, tenant_id=tenant_id,
                     filters={"agent_id": object_id}, limit=20,
@@ -1428,7 +1428,7 @@ class Profile360Aggregator:
 
         elif ot in ("wallet",):
             record = (await _safe("drill.wallet", self._wallets.find_by_id(object_id))).value_or(None)
-            if record and record.get("tenant_id") in (None, "", tenant_id):
+            if record and record.get("tenant_id") == tenant_id:
                 transfers = await self._transfers_for_entity(
                     record.get("owner_entity_id") or "", tenant_id, limit=20,
                 )
@@ -1461,7 +1461,8 @@ class Profile360Aggregator:
         else:
             record = None
 
-        if not record or record.get("tenant_id") not in (None, "", tenant_id):
+        # A row with no tenant belongs to no one: it never enters a tenant's drill.
+        if not record or record.get("tenant_id") != tenant_id:
             return _drill_not_found(entity_id, tenant_id, object_type, object_id)
 
         # This route is profile-scoped: the drilled object must be related to
