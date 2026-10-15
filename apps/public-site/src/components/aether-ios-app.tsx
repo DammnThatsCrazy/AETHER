@@ -6,7 +6,7 @@
  * controls, a push detail screen with an edge-swipe back gesture, an action
  * sheet, toasts and a floating glass tab bar. All data is synthetic.
  */
-import { Fragment, useEffect, useRef, type PointerEvent as ReactPointerEvent, type UIEvent } from 'react';
+import { Fragment, useEffect, useRef, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type UIEvent } from 'react';
 import { asset, css, hoverClass, useDesignState } from '@site/design/runtime';
 import './aether-ios-app.css';
 
@@ -90,14 +90,39 @@ export function AetherIosApp() {
   const tt = useRef<ReturnType<typeof setTimeout>>(undefined);
   const pt = useRef<ReturnType<typeof setTimeout>>(undefined);
   const dx0 = useRef(0);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
   useEffect(() => () => { clearTimeout(tt.current); clearTimeout(pt.current); }, []);
 
   const say = (x: string) => { clearTimeout(tt.current); setState({ toast: x }); tt.current = setTimeout(() => setState({ toast: '' }), 2200); };
   const setTab = (k: Tab) => { setState({ tab: k, p: 0 }); const el = scrollRef.current; if (el) el.scrollTop = 0; };
   const open = (key: string) => { setState({ push: key, entered: false, drag: 0, dragging: false }); clearTimeout(pt.current); pt.current = setTimeout(() => setState({ entered: true }), 30); };
   const close = () => { setState({ entered: false, dragging: false, drag: 0 }); clearTimeout(pt.current); pt.current = setTimeout(() => setState({ push: null }), 320); };
-  const openSheet = () => { setState({ sheet: true, sheetIn: false }); setTimeout(() => setState({ sheetIn: true }), 30); };
-  const closeSheet = (patch?: Partial<State>) => { setState({ sheetIn: false }); setTimeout(() => setState({ sheet: false, ...(patch ?? {}) }), 320); };
+  const openSheet = (e?: { currentTarget: HTMLElement }) => { opener.current = e?.currentTarget ?? null; setState({ sheet: true, sheetIn: false }); setTimeout(() => setState({ sheetIn: true }), 30); };
+  const closeSheet = (patch?: Partial<State>) => {
+    setState({ sheetIn: false });
+    setTimeout(() => {
+      setState({ sheet: false, ...(patch ?? {}) });
+      // Return focus to what opened the sheet, or to the card it sat in once the Review button is gone.
+      const back = opener.current;
+      if (back?.isConnected) back.focus();
+      opener.current = null;
+    }, 320);
+  };
+  // The action sheet is modal: focus moves into it, Tab stays inside it and Escape cancels.
+  useEffect(() => {
+    if (s.sheet) sheetRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
+  }, [s.sheet]);
+  const onSheetKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape') { e.preventDefault(); closeSheet(); return; }
+    if (e.key !== 'Tab') return;
+    const items = Array.from(sheetRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? []);
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (!first || !last) return;
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  };
 
   const jr = J[s.j] ?? J.ig;
   const jmax = jr.steps[0]![2];
@@ -122,7 +147,7 @@ export function AetherIosApp() {
         logoRow('hubspot', { title: 'Lifecycle → customer', sub: 'hubspot', trail: '2d' }),
         rw({ ...glyph('✓', '#9fbad6'), title: 'Approval · batch_0912', sub: 'Percival', trail: '3d' }),
       ] }];
-    tiles = [['$18.4K', 'value', '#b3dcc0', 'rels'], ['8', 'relationships', '#a9c4e0', 'rels'], ['3', 'agents', '#f0c995', 'rels'], ['2', 'journeys', '#d9b878', 'journeys']];
+    tiles = [['$18.4K', 'value', '#b3dcc0', 'value'], ['8', 'relationships', '#a9c4e0', 'rels'], ['3', 'agents', '#f0c995', 'rels'], ['2', 'journeys', '#d9b878', 'journeys']];
   } else if (tab === 'rels') {
     const F: Filter[] = ['all', 'humans', 'agents', 'syndicates'];
     const LB: Record<Filter, string> = { all: 'All', humans: 'People', agents: 'Agents', syndicates: 'Groups' };
@@ -168,7 +193,7 @@ export function AetherIosApp() {
   ];
   const actionStyle = 'font-family: inherit; color: #fff; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 6px; border-radius: 16px; cursor: pointer; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.13); transition: background-color 120ms ' + E + ';';
   const tilesGrid = GLASS + ' display: grid; grid-template-columns: repeat(' + (tOverview ? 4 : cols) + ', minmax(0, 1fr));';
-  const tileList = tiles.map(([v, k, c, to], i) => ({ v, k, go: () => { if (to) setTab(to); }, vStyle: 'font-size: 19px; font-weight: 600; letter-spacing: -0.4px; color: ' + c + ';', style: 'font-family: inherit; color: #fff; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 12px; background: transparent; border: 0; cursor: pointer; ' + (i ? 'border-left: 0.5px solid rgba(255,255,255,0.1);' : '') + ' transition: background-color 120ms ' + E + ';' }));
+  const tileList = tiles.map(([v, k, c, to], i) => ({ v, k, to, go: () => { if (to) setTab(to); }, vStyle: 'font-size: 19px; font-weight: 600; letter-spacing: -0.4px; color: ' + c + ';', style: 'font-family: inherit; color: #fff; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 12px; background: transparent; border: 0; cursor: pointer; ' + (i ? 'border-left: 0.5px solid rgba(255,255,255,0.1);' : '') + ' transition: background-color 120ms ' + E + ';' }));
   const decision = decided === 'approved' ? '✓ Reviewed by you · just now' : decided === 'declined' ? '⚑ Flagged for follow-up' : '';
   const decisionStyle = 'font-size: 14px; font-weight: 600; color: ' + (decided === 'approved' ? '#b3dcc0' : '#f0c995') + ';';
   const tabs = TB.map(([k, g, label]) => ({ g, label, sel: tab === k, go: () => setTab(k),
@@ -196,7 +221,7 @@ export function AetherIosApp() {
 
   return (
     <div className="ax-app" style={css("position: relative; overflow: hidden; width: 100%; height: 874px; color: #fff; font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif; -webkit-font-smoothing: antialiased; background: radial-gradient(120% 45% at 100% 0%, rgba(58,104,150,0.55), transparent 62%), radial-gradient(90% 40% at 0% 52%, rgba(201,151,90,0.3), transparent 62%), radial-gradient(100% 40% at 100% 100%, rgba(107,154,124,0.34), transparent 62%), #0b0b0e;")}>
-      <div style={css(underStyle)}>
+      <div style={css(underStyle)} inert={s.sheet || undefined}>
         <div ref={scrollRef} onScroll={onScroll} className="ax-scroll" style={css("position: absolute; inset: 0; overflow-y: auto; padding: 98px 16px 150px; box-sizing: border-box; display: flex; flex-direction: column; gap: 22px;")}>
           <div style={css("display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: -4px;")}>
             <span style={css("font-size: 34px; font-weight: 700; letter-spacing: 0.4px; line-height: 41px;")}>{TITLES[tab]}</span>
@@ -257,12 +282,20 @@ export function AetherIosApp() {
           ) : null}
           {tileList.length > 0 ? (
             <div style={css(tilesGrid)}>
-              {tileList.map((ti) => (
-                <button key={ti.k} type="button" onClick={ti.go} style={css(ti.style)} className={ACTIVE_TILE}>
-                  <span style={css(ti.vStyle)}>{ti.v}</span>
-                  <span style={css("font-size: 11px; color: rgba(235,235,245,0.62);")}>{ti.k}</span>
-                </button>
-              ))}
+              {tileList.map((ti) =>
+                ti.to ? (
+                  <button key={ti.k} type="button" onClick={ti.go} style={css(ti.style)} className={ACTIVE_TILE}>
+                    <span style={css(ti.vStyle)}>{ti.v}</span>
+                    <span style={css("font-size: 11px; color: rgba(235,235,245,0.62);")}>{ti.k}</span>
+                  </button>
+                ) : (
+                  // Read-only metrics (no destination tab) are not controls.
+                  <div key={ti.k} style={css(ti.style + ' cursor: default;')}>
+                    <span style={css(ti.vStyle)}>{ti.v}</span>
+                    <span style={css("font-size: 11px; color: rgba(235,235,245,0.62);")}>{ti.k}</span>
+                  </div>
+                ),
+              )}
             </div>
           ) : null}
           {tOverview ? (
@@ -325,7 +358,7 @@ export function AetherIosApp() {
         </div>
       </div>
       {d ? (
-        <div onPointerDown={dragDown} onPointerMove={dragMove} onPointerUp={dragUp} onPointerCancel={dragUp} style={css(pushStyle)}>
+        <div inert={s.sheet || undefined} onPointerDown={dragDown} onPointerMove={dragMove} onPointerUp={dragUp} onPointerCancel={dragUp} style={css(pushStyle)}>
           <div className="ax-scroll" style={css("position: absolute; inset: 0; overflow-y: auto; padding: 108px 16px 60px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px;")}>
             <div style={css("display: flex; align-items: center; gap: 14px;")}>
               <span style={css(d.avStyle)}>{d.g}</span>
@@ -380,11 +413,11 @@ export function AetherIosApp() {
       {s.sheet ? (
         <div style={css("position: absolute; inset: 0; z-index: 30;")}>
           <div onClick={() => closeSheet()} style={css(scrimStyle)} />
-          <div style={css(sheetStyle)}>
+          <div ref={sheetRef} role="alertdialog" aria-modal="true" aria-labelledby="ax-sheet-title" aria-describedby="ax-sheet-desc" onKeyDown={onSheetKey} style={css(sheetStyle)}>
             <div style={css("border-radius: 18px; background: rgba(44,44,48,0.82); -webkit-backdrop-filter: blur(30px) saturate(1.6); backdrop-filter: blur(30px) saturate(1.6); border: 1px solid rgba(255,255,255,0.12); overflow: hidden;")}>
               <div style={css("padding: 16px; text-align: center; display: flex; flex-direction: column; gap: 4px;")}>
-                <span style={css("font-size: 13px; font-weight: 600; color: rgba(235,235,245,0.7);")}>{"Mordred · syn_dxb4"}</span>
-                <span style={css("font-size: 13px; color: rgba(235,235,245,0.55);")}>{"Choose what to record. Nothing is held or blocked."}</span>
+                <span id="ax-sheet-title" style={css("font-size: 13px; font-weight: 600; color: rgba(235,235,245,0.7);")}>{"Mordred · syn_dxb4"}</span>
+                <span id="ax-sheet-desc" style={css("font-size: 13px; color: rgba(235,235,245,0.55);")}>{"Choose what to record. Nothing is held or blocked."}</span>
               </div>
               {sheetActions.map((sa) => (
                 <button key={sa.label} type="button" onClick={sa.go} style={css(sa.style)} className={ACTIVE_SHEET}>{sa.label}</button>
