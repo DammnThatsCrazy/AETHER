@@ -3345,6 +3345,18 @@ class ProvidersRepository(BaseRepository):
     async def list_for_tenant(self, tenant_id: str, limit: int = 100) -> list[dict]:
         return await self.find_many(filters={"tenant_id": tenant_id}, limit=limit)
 
+    async def find_for_tenant(self, tenant_id: str, provider_id: str) -> Optional[dict]:
+        """Return the credential record only when it belongs to ``tenant_id``.
+
+        Records without a tenant_id are never returned.
+        """
+        if not tenant_id or not provider_id:
+            return None
+        record = await self.find_by_id(provider_id)
+        if not record or record.get("tenant_id") != tenant_id:
+            return None
+        return record
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # NOTIFICATION INTELLIGENCE REPOSITORIES

@@ -606,16 +606,38 @@ def _safe_integration_config(config: dict[str, Any]) -> dict[str, Any]:
     return safe
 
 
-def _config_with_secret_ref(config: dict[str, Any]) -> dict[str, Any]:
-    import hashlib
+def _action_integration_secret_ref(tenant_id: str, config_id: str) -> str:
+    return f"action_integration:{tenant_id}:{config_id}"
 
+
+async def _config_with_secret_ref(
+    tenant_id: str,
+    config_id: str,
+    config: dict[str, Any],
+    existing_config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Move any plaintext secret into the tenant credential store.
+
+    A caller-supplied ``secret_ref`` is never kept: the only ref persisted is
+    the server-built one for this tenant and config.
+    """
     prepared = dict(config)
     nested = dict(prepared.get("config") or {})
-    for key in ("auth_secret", "secret", "api_key", "webhook_secret"):
-        secret = prepared.pop(key, None) or nested.pop(key, None)
-        if secret:
-            nested["secret_ref"] = hashlib.sha256(str(secret).encode("utf-8")).hexdigest()[:16]
-            break
+    prepared.pop("secret_ref", None)
+    nested.pop("secret_ref", None)
+    supplied = [
+        value
+        for key in ("auth_secret", "secret", "api_key", "webhook_secret")
+        for value in (prepared.pop(key, None), nested.pop(key, None))
+        if value
+    ]
+    ref = _action_integration_secret_ref(tenant_id, config_id)
+    if supplied:
+        from shared.credentials.service import credential_service
+        await credential_service.rotate(tenant_id, ref, str(supplied[0]))
+        nested["secret_ref"] = ref
+    elif (existing_config or {}).get("secret_ref") == ref:
+        nested["secret_ref"] = ref
     prepared["config"] = nested
     return prepared
 
@@ -663,6 +685,11 @@ async def _enqueue_action_delivery(
         "tenant_id": dispatch.tenant_id,
         "destination": config.default_destination if config is not None else None,
     }
+    provider_config.pop("secret_ref", None)
+    if config is not None:
+        ref = _action_integration_secret_ref(dispatch.tenant_id, config.config_id)
+        if config.config.get("secret_ref") == ref:
+            provider_config["secret_ref"] = ref
     job = DeliveryJob(
         intent_id=intent.id,
         tenant_id=dispatch.tenant_id,
@@ -913,9 +940,10 @@ async def create_action_integration(body: IntegrationConfigRequest, request: Req
         _action_targets.get(body.target_type)
     except ValueError as exc:
         raise BadRequestError(str(exc)) from exc
-    prepared = _config_with_secret_ref(body.model_dump())
+    config_id = str(uuid.uuid4())
+    prepared = await _config_with_secret_ref(tenant.tenant_id, config_id, body.model_dump())
     config = ActionIntegrationConfig(
-        config_id=str(uuid.uuid4()),
+        config_id=config_id,
         tenant_id=tenant.tenant_id,
         target_type=body.target_type,
         name=body.name,
@@ -938,7 +966,9 @@ async def update_action_integration(config_id: str, body: IntegrationConfigReque
         raise NotFoundError("action integration")
     if existing.get("target_type") != body.target_type:
         raise BadRequestError("target_type cannot be changed for an integration config")
-    prepared = _config_with_secret_ref(body.model_dump())
+    prepared = await _config_with_secret_ref(
+        tenant.tenant_id, config_id, body.model_dump(), existing.get("config")
+    )
     saved = await _integrations.update(config_id, {
         "name": body.name,
         "default_destination": body.default_destination,

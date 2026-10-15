@@ -744,16 +744,16 @@ async def test_channel(channel_id: str, request: Request):
 
 
 async def _resolve_channel_credentials(channel: dict) -> str:
-    credentials_ref = channel.get("credentials_ref", "")
     from repositories.repos import ProvidersRepository
     try:
-        providers_repo = ProvidersRepository()
-        record = await providers_repo.find_by_id(credentials_ref)
+        record = await ProvidersRepository().find_for_tenant(
+            channel.get("tenant_id") or "", channel.get("credentials_ref") or ""
+        )
         if record:
-            return record.get("api_key", credentials_ref)
+            return record.get("api_key") or ""
     except Exception:
         pass
-    return credentials_ref
+    return ""
 
 
 # ── Slack OAuth ───────────────────────────────────────────────────────────────

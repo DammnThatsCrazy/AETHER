@@ -248,3 +248,51 @@ async def test_worker_intent_completed_after_all_jobs_delivered():
 
     intent = await intent_repo.find_by_id(job["intent_id"])
     assert intent["status"] == DeliveryIntentStatus.DELIVERED.value
+
+
+def _bare_worker() -> DeliveryWorker:
+    return DeliveryWorker(
+        job_repo=DeliveryJobRepository(),
+        intent_repo=DeliveryIntentRepository(),
+        attempt_repo=DeliveryAttemptRepository(),
+        receipt_repo=ProviderReceiptRepository(),
+        resource_link_repo=ExternalResourceLinkRepository(),
+        adapter_registry=ProviderAdapterRegistry(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_worker_credential_resolves_only_within_job_tenant():
+    from repositories.repos import ProvidersRepository
+
+    providers = ProvidersRepository()
+    await providers.upsert("notif_channel:other", {"api_key": "other-token", "tenant_id": "other_tenant"})
+    await providers.upsert("notif_channel:own", {"api_key": "own-token", "tenant_id": "own_tenant"})
+    await providers.upsert("notif_channel:untagged", {"api_key": "untagged-token"})
+    worker = _bare_worker()
+
+    def job(ref: str, tenant_id: str = "own_tenant") -> dict:
+        return {"tenant_id": tenant_id, "provider_config": {"secret_ref": ref, "tenant_id": "other_tenant"}}
+
+    assert await worker._resolve_credential(job("notif_channel:other")) is None
+    assert await worker._resolve_credential(job("notif_channel:untagged")) is None
+    assert await worker._resolve_credential(job("notif_channel:own", tenant_id="")) is None
+    assert await worker._resolve_credential(job("notif_channel:own")) == "own-token"
+
+
+@pytest.mark.asyncio
+async def test_worker_credential_reads_tenant_credential_store():
+    from shared.credentials.in_memory import InMemoryCredentialBackend
+    from shared.credentials.service import credential_service
+
+    InMemoryCredentialBackend.reset()
+    ref = "action_integration:own_tenant:cfg-1"
+    await credential_service.create("own_tenant", ref, "own-jira-token")
+    worker = _bare_worker()
+    try:
+        own = {"tenant_id": "own_tenant", "provider_config": {"secret_ref": ref}}
+        other = {"tenant_id": "other_tenant", "provider_config": {"secret_ref": ref}}
+        assert await worker._resolve_credential(own) == "own-jira-token"
+        assert await worker._resolve_credential(other) is None
+    finally:
+        InMemoryCredentialBackend.reset()
