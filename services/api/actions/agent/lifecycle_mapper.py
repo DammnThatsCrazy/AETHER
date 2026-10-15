@@ -32,7 +32,7 @@ from typing import Any, Optional
 
 from repositories.repos import DelegationRepository, AgentExecutionRepository
 from shared.common.common import utc_now
-from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
+from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType, user_vertex_id
 from shared.graph.mutation_gateway import GraphMutationGateway
 from shared.graph.mutation_intents import edge_intent, vertex_intent
 from shared.logger.logger import get_logger
@@ -70,7 +70,7 @@ def _capability_vid(tenant_id: str, capability: str) -> str:
 
 
 def _user_vid(tenant_id: str, user_id: str) -> str:
-    return f"{tenant_id}:user:{user_id}"
+    return user_vertex_id(tenant_id, user_id)
 
 
 class AgentLifecycleMapper:

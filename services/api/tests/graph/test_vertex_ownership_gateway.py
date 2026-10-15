@@ -22,6 +22,7 @@ from shared.graph.graph import (  # noqa: E402
     VertexType,
     _InMemoryGraphBackend,
 )
+from shared.common.common import ConflictError  # noqa: E402
 from shared.graph.mutation_gateway import GraphMutationGateway  # noqa: E402
 from shared.graph.mutation_intents import vertex_intent  # noqa: E402
 
@@ -54,8 +55,8 @@ async def test_tenant_writer_cannot_touch_platform_vertices(mode):
     await _write(gateway, _vertex(vid, "platform", symbol="USDC"), "platform", mode)
 
     for vertex in (
-        _vertex(vid, "tenant-a", symbol="EVIL"),   # take it over
-        _vertex(vid, "platform", symbol="EVIL"),   # rewrite it as platform
+        _vertex(vid, "tenant-a", symbol="USDT"),   # change its owner
+        _vertex(vid, "platform", symbol="USDT"),   # rewrite it as platform
     ):
         with pytest.raises(VertexOwnershipError):
             await _write(gateway, vertex, "tenant-a", mode)
@@ -76,8 +77,9 @@ async def test_rejected_cross_tenant_write_leaves_no_ledger_record():
     await _write(gateway, _vertex(vid, "tenant-a", secret="a"), "tenant-a", "enforce")
     before = len(ledger._MEM_LEDGER)  # noqa: SLF001
 
-    with pytest.raises(VertexOwnershipError):
+    with pytest.raises(VertexOwnershipError) as raised:
         await _write(gateway, _vertex(vid, "tenant-b", secret="b"), "tenant-b", "enforce")
+    assert str(raised.value) == str(ConflictError())  # the same text as any conflict
     with pytest.raises(VertexOwnershipError):
         await _write(gateway, Vertex(
             vertex_type=VertexType.USER, vertex_id=vid,

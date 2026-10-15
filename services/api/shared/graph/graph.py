@@ -69,8 +69,10 @@ RESERVED_GRAPH_TENANTS = frozenset({"platform", "public"})
 class VertexOwnershipError(ConflictError):
     """A vertex write that would change, or write across, a vertex's owner."""
 
-    def __init__(self, message: str = "graph vertex id is unavailable in this tenant") -> None:
-        super().__init__(message)
+    def __init__(self, message: Optional[str] = None) -> None:
+        # By default the generic conflict text: it must not tell a caller that
+        # the vertex id exists in another tenant.
+        super().__init__(*([message] if message else []))
 
 
 def vertex_tenant(properties: Optional[dict[str, Any]]) -> Optional[str]:
@@ -82,6 +84,11 @@ def vertex_tenant(properties: Optional[dict[str, Any]]) -> Optional[str]:
     if len(named) > 1:
         raise VertexOwnershipError("vertex tenant properties disagree")
     return tenant_of(properties)
+
+
+def user_vertex_id(tenant_id: str, user_id: str) -> str:
+    """Vertex id of a tenant's user: SDK user ids are unique only inside a tenant."""
+    return f"{tenant_id}:user:{user_id}"
 
 
 def check_vertex_owner(

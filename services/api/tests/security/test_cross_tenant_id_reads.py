@@ -123,6 +123,23 @@ def test_behavioral_signals_stay_in_owning_tenant():
     assert c.get("/v1/behavioral/entity/0xwallet/signals", headers=_as(OWN)).json()["data"]["count"] == 1
 
 
+def test_restated_signal_with_one_id_is_read_per_tenant():
+    from intelligence.signals import routes
+
+    signal_id = "CHURN:0xwallet:identity-restatement"
+    for tenant in (OWN, OTHER):
+        _run(routes._signal_repo.upsert_signal({  # noqa: SLF001
+            "signal_id": signal_id, "entity_id": "0xwallet", "tenant_id": tenant,
+            "explanation": tenant,
+        }))
+    c = _client(routes.router)
+
+    for tenant in (OWN, OTHER):
+        body = c.get(f"/v1/signals/0xwallet/{signal_id}", headers=_as(tenant)).json()
+        assert body["data"]["explanation"] == tenant
+    assert c.get(f"/v1/signals/0xwallet/{signal_id}", headers=_as("third")).status_code == 404
+
+
 # ── RWA ──────────────────────────────────────────────────────────────────────
 
 
@@ -368,7 +385,7 @@ def test_profile_graph_lists_only_the_tenants_neighbours():
     from identity.identity import routes
     from repositories.repos import IdentityRepository
     from shared.cache.cache import CacheClient
-    from shared.graph.graph import Edge, EdgeType, Vertex, VertexType
+    from shared.graph.graph import Edge, EdgeType, Vertex, VertexType, user_vertex_id
 
     graph = _connected_graph()
     cache = CacheClient()
@@ -377,7 +394,9 @@ def test_profile_graph_lists_only_the_tenants_neighbours():
     _run(graph.add_vertex(Vertex(VertexType.WALLET, "0xother", {"tenantId": OTHER})))
     _run(graph.add_vertex(Vertex(VertexType.WALLET, "0xunowned", {})))
     for target in ("0xown", "0xother", "0xunowned"):
-        _run(graph.add_edge(Edge(EdgeType.OWNS_WALLET, "user-own", target, {"tenant_id": OWN})))
+        _run(graph.add_edge(Edge(
+            EdgeType.OWNS_WALLET, user_vertex_id(OWN, "user-own"), target, {"tenant_id": OWN},
+        )))
     c = _client(routes.router, overrides={get_graph: lambda: graph, get_cache: lambda: cache})
 
     assert c.get("/v1/identity/profiles/user-own/graph", headers=_as(OTHER)).status_code == 404

@@ -79,7 +79,7 @@ async def recompute_signals_for_entity(
             row.get("projection_source") == "behavior_profile_translator"
             and row.get("signal_id") not in current_generated_ids
         ):
-            await signal_repo.delete(row["signal_id"])
+            await signal_repo.delete(row["id"])
 
     return {
         "entity_id": entity_id,
