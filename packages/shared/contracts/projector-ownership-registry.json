@@ -548,6 +548,7 @@
         "contract_action",
         "settlement_finality_observed",
         "token_approval_observed",
+        "transaction",
         "transaction_confirmed",
         "transaction_confirmed_observed",
         "transaction_failed",
@@ -556,6 +557,7 @@
         "transaction_reorged_observed",
         "transaction_reverted_observed",
         "transaction_submitted",
+        "wallet",
         "wallet_connected",
         "wallet_disconnected"
       ],
@@ -565,6 +567,7 @@
         "contract_action",
         "settlement_finality_observed",
         "token_approval_observed",
+        "transaction",
         "transaction_confirmed",
         "transaction_confirmed_observed",
         "transaction_failed",
@@ -573,6 +576,7 @@
         "transaction_reorged_observed",
         "transaction_reverted_observed",
         "transaction_submitted",
+        "wallet",
         "wallet_connected",
         "wallet_disconnected"
       ],

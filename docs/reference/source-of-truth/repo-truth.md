@@ -90,3 +90,22 @@ missing required entry point (`README.md`, `VERSION`, `CHANGELOG.md`,
 `SECURITY.md`, `LICENSE`, `Makefile`), and when `VERSION` differs from
 `pyproject.toml`. Adding a root entry means editing that allowlist and this
 document in the same change.
+
+## Blueprint Adaptation
+
+The repository truth reset blueprint named paths and tooling that this
+repository covers with existing mechanisms. They are intentionally not
+duplicated, because `AGENTS.md` makes `verification / disposition` the single
+blocking PR authority and specialized workflows supplementary.
+
+| Blueprint item | Where it lives here |
+|---|---|
+| `docs/source-of-truth/`, `docs/sdks/`, `docs/connectors/`, `docs/security/` | `docs/reference/source-of-truth/`, `docs/reference/sdks/`, `docs/reference/connectors/`, `docs/reference/security/` |
+| `docs/releases/`, `docs/generated/` | `docs/operations/releases/`, `docs/_generated/` |
+| Root `contracts/` | `packages/contracts/` (policy) and `packages/shared/contracts/` (registries) |
+| `ci.yml`, `docs.yml`, `contracts.yml`, `sdk.yml`, `connectors.yml`, `release.yml`, `version-consistency.yml` | `repo-consistency.yml` (terminal authority) plus the existing specialized workflows; individual gates run through `make repo-doctor` |
+| `turbo.json`, `pnpm docs:check` and similar scripts | `pnpm-workspace.yaml` and `make` targets (`docs-check`, `repo-doctor`, `verification-disposition`) |
+| TypeScript validators under `scripts/**` | Python validators: `validate_root_layout.py`, `check_deprecated_language.py`, `bump_version.py --check`, `validate_sdk_parity.py`, `validate_contracts.py` |
+
+A new blueprint-style workflow or script needs a gap that none of these cover,
+not a matching filename.
