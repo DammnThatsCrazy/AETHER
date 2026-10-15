@@ -9,7 +9,8 @@ proves the *routes* enforce ADR-C11):
   server-side from the durable ``whe_`` registry — no tenant header — and a
   genuine generic Aether HMAC verifies end to end.
 * Unknown/revoked endpoints and unknown connectors return a uniform 404.
-* Non-comms connectors keep the legacy header route (regression guard).
+* Shopify on the legacy route resolves its tenant from the signed shop domain
+  (unique stored binding), never the header, and every denial is identical.
 """
 
 from __future__ import annotations
@@ -118,14 +119,100 @@ def test_unknown_connector_on_header_route_is_404(client):
     assert resp.status_code == 404
 
 
-def test_non_comms_connector_keeps_legacy_header_route(client):
-    """shopify passes the comms gate — it fails later on the missing tenant header,
-    proving the ADR denial is specific to comms connectors."""
+def test_shopify_legacy_route_never_asks_for_a_tenant_header(client):
+    """shopify passes the comms gate, then fails with the generic denial: the
+    tenant comes from the signed body's shop domain, never a header."""
     resp = client.post("/v1/integrations/webhooks/shopify", content=b"{}")
     assert resp.status_code == 400
     detail = resp.json().get("detail", "")
-    assert "X-Aether-Tenant-ID header is required" in detail
+    assert "X-Aether-Tenant-ID" not in detail
     assert "durable endpoint id" not in detail
+
+
+# ── Legacy route: Shopify tenant comes from the signed shop domain ────────────
+
+
+def _shopify_signed(secret: str, body: dict) -> tuple[bytes, dict]:
+    import base64
+    import hashlib
+    import hmac
+
+    raw = json.dumps(body).encode()
+    sig = base64.b64encode(hmac.new(secret.encode(), raw, hashlib.sha256).digest()).decode()
+    return raw, {"X-Shopify-Hmac-SHA256": sig, "content-type": "application/json"}
+
+
+async def _bind_shop(tenant: str, shop: str, secret: str, *, enabled: bool = True) -> None:
+    await connector_service.configure(
+        tenant, "shopify", enabled=enabled, credential=secret,
+        config={"shop_domain": shop},
+    )
+
+
+_SHOP_BODY = {"id": 1, "domain": "a-shop.myshopify.com", "topic": "order"}
+
+
+@pytest.mark.asyncio
+async def test_shopify_tenant_from_signed_shop_domain_not_header(client):
+    await _bind_shop("tenantA", "a-shop.myshopify.com", "shpss_a")
+    await _bind_shop("tenantB", "b-shop.myshopify.com", "shpss_b")
+    raw, headers = _shopify_signed("shpss_a", _SHOP_BODY)
+
+    ingest = AsyncMock(return_value={"accepted": True})
+    with patch.object(connector_service, "ingest_webhook", new=ingest):
+        resp = client.post(
+            "/v1/integrations/webhooks/shopify", content=raw,
+            headers={**headers, "X-Aether-Tenant-ID": "tenantB"},
+        )
+    assert resp.status_code == 200, resp.text
+    assert ingest.await_args.args[1] == "tenantA"
+
+
+async def _denial(client, raw: bytes, headers: dict) -> tuple[int, dict]:
+    ingest = AsyncMock(return_value={"accepted": True})
+    with patch.object(connector_service, "ingest_webhook", new=ingest):
+        resp = client.post("/v1/integrations/webhooks/shopify", content=raw, headers=headers)
+    assert ingest.await_count == 0
+    body = resp.json()
+    # Per-request correlation ids are the only fields allowed to differ.
+    for holder in (body, body.get("error") or {}):
+        holder.pop("request_id", None)
+        holder.pop("correlation_id", None)
+    return resp.status_code, body
+
+
+@pytest.mark.asyncio
+async def test_shopify_shop_bound_by_two_tenants_is_rejected(client):
+    await _bind_shop("tenantA", "a-shop.myshopify.com", "shpss_a")
+    await _bind_shop("tenantB", "a-shop.myshopify.com", "shpss_a")
+    status, _ = await _denial(client, *_shopify_signed("shpss_a", _SHOP_BODY))
+    assert status == 400
+
+
+@pytest.mark.asyncio
+async def test_legacy_route_failures_are_indistinguishable(client):
+    """Unbound shop, disabled connector, missing secret and a bad signature all
+    return the same status and body (no enabled / secret-configured oracle)."""
+    results = []
+    results.append(await _denial(client, *_shopify_signed("shpss_a", _SHOP_BODY)))  # unbound
+
+    await _bind_shop("tenantA", "a-shop.myshopify.com", "shpss_a", enabled=False)
+    results.append(await _denial(client, *_shopify_signed("shpss_a", _SHOP_BODY)))  # disabled
+
+    reset_in_memory_stores()
+    await connector_service.configure(
+        "tenantA", "shopify", enabled=True, config={"shop_domain": "a-shop.myshopify.com"},
+    )
+    results.append(await _denial(client, *_shopify_signed("shpss_a", _SHOP_BODY)))  # no secret
+
+    reset_in_memory_stores()
+    await _bind_shop("tenantA", "a-shop.myshopify.com", "shpss_a")
+    results.append(await _denial(client, *_shopify_signed("wrong", _SHOP_BODY)))  # bad signature
+
+    results.append(await _denial(client, b"{}", {"content-type": "application/json"}))  # no domain
+
+    assert len({json.dumps(r, sort_keys=True) for r in results}) == 1, results
+    assert results[0][0] == 400
 
 
 # ── ADR-C11: /comms/{connector}/{endpoint_id} resolves tenant server-side ─────
