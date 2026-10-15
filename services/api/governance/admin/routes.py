@@ -14,6 +14,10 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from config.settings import settings
+from governance.security.request_context import (
+    is_platform_operator_request,
+    require_platform_operator,
+)
 from shared.auth.auth import PlanTier, legacy_tier_to_plan, APIKeyTier
 from shared.billing.overage import OverageCalculator
 from shared.billing import stripe_client, stripe_repository
@@ -124,6 +128,7 @@ class APIKeyCreate(BaseModel):
 @router.post("/tenants")
 async def create_tenant(body: TenantCreate, request: Request):
     request.state.tenant.require_permission("admin")
+    require_platform_operator(request)
     tenant_id = str(uuid.uuid4())
     tenant = await _repo.insert(tenant_id, {
         **body.model_dump(),
@@ -135,6 +140,7 @@ async def create_tenant(body: TenantCreate, request: Request):
 @router.get("/tenants/{tenant_id}")
 async def get_tenant(tenant_id: str, request: Request):
     request.state.tenant.require_permission("admin")
+    require_platform_operator(request)
     tenant = await _repo.find_by_id_or_fail(tenant_id)
     return APIResponse(data=tenant).to_dict()
 
@@ -142,6 +148,7 @@ async def get_tenant(tenant_id: str, request: Request):
 @router.patch("/tenants/{tenant_id}")
 async def update_tenant(tenant_id: str, body: TenantUpdate, request: Request):
     request.state.tenant.require_permission("admin")
+    require_platform_operator(request)
     tenant = await _repo.update(tenant_id, body.model_dump(exclude_none=True))
     return APIResponse(data=tenant).to_dict()
 
@@ -150,6 +157,7 @@ async def update_tenant(tenant_id: str, body: TenantUpdate, request: Request):
 async def create_api_key(tenant_id: str, body: APIKeyCreate, request: Request):
     """Create a new API key for a tenant. Registers it in both the key repo and the auth cache."""
     request.state.tenant.require_permission("admin")
+    require_platform_operator(request)
     _check_api_key_rate_limit(tenant_id)
     raw_key = f"ak_{uuid.uuid4().hex[:24]}"
     hashed = hashlib.sha256(raw_key.encode()).hexdigest()
@@ -199,6 +207,7 @@ async def create_api_key(tenant_id: str, body: APIKeyCreate, request: Request):
 @router.get("/tenants/{tenant_id}/api-keys")
 async def list_api_keys(tenant_id: str, request: Request):
     request.state.tenant.require_permission("admin")
+    require_platform_operator(request)
     keys = await _key_repo.find_many(filters={"tenant_id": tenant_id})
     safe_keys = [{k: v for k, v in key.items() if k != "key_hash"} for key in keys]
     return APIResponse(data=safe_keys).to_dict()
@@ -207,6 +216,7 @@ async def list_api_keys(tenant_id: str, request: Request):
 @router.delete("/api-keys/{key_id}")
 async def revoke_api_key(key_id: str, request: Request):
     request.state.tenant.require_permission("admin")
+    require_platform_operator(request)
     await _key_repo.delete(key_id)
     return APIResponse(data={"revoked": True}).to_dict()
 
@@ -215,6 +225,7 @@ async def revoke_api_key(key_id: str, request: Request):
 async def get_billing(tenant_id: str, request: Request):
     """Return current plan, usage, quota, and overage for the billing period."""
     request.state.tenant.require_permission("billing")
+    _enforce_tenant_scope(request, tenant_id)
 
     plan_tier = _resolve_plan_tier(request)
     plan = PLAN_CATALOG[plan_tier]
@@ -275,6 +286,7 @@ async def get_billing(tenant_id: str, request: Request):
 async def get_usage_detail(tenant_id: str, request: Request):
     """Return detailed per-service usage breakdown for the current period."""
     request.state.tenant.require_permission("billing")
+    _enforce_tenant_scope(request, tenant_id)
 
     plan_tier = _resolve_plan_tier(request)
     plan = PLAN_CATALOG[plan_tier]
@@ -324,16 +336,13 @@ async def get_usage_detail(tenant_id: str, request: Request):
 
 
 def _enforce_tenant_scope(request: Request, tenant_id: str) -> None:
-    """Caller may only manage its own tenant unless it has the admin role."""
+    """Caller may only manage its own tenant unless it is a platform operator."""
     tenant = getattr(request.state, "tenant", None)
     if tenant is None:
         raise ForbiddenError("Authenticated tenant context required")
-    caller_tenant = getattr(tenant, "tenant_id", "")
-    role = getattr(tenant, "role", None)
-    role_value = getattr(role, "value", role)
-    if caller_tenant == tenant_id:
+    if getattr(tenant, "tenant_id", "") == tenant_id:
         return
-    if role_value == "admin" or tenant.has_permission("admin"):
+    if is_platform_operator_request(request):
         return
     raise ForbiddenError("Cross-tenant billing access denied")
 
@@ -481,7 +490,7 @@ async def create_overage_invoice(
             "Set STRIPE_OVERAGE_PRICE_ID to enable Stripe-charged overage."
         )
 
-    # Use the BILLED tenant's plan_tier, not the caller's. Cross-tenant admin
+    # Use the BILLED tenant's plan_tier, not the caller's. Cross-tenant operator
     # access is permitted by _enforce_tenant_scope, but overage quota and
     # pricing must reflect the target tenant.
     plan_tier = await _resolve_plan_tier_for_tenant(request, tenant_id)

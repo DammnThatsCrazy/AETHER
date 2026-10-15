@@ -33,6 +33,7 @@ from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, Field
 
 from config.settings import settings
+from governance.security.request_context import require_platform_operator
 from shared.auth.auth import PlanTier
 from shared.common.common import (
     APIResponse,
@@ -1188,6 +1189,7 @@ async def deactivate_tenant(tenant_id: str, request: Request):
     identifiers stop working on the next request. Re-activation requires
     manually setting status=active and issuing fresh credentials.
     """
+    require_platform_operator(request)
     tenant_rec = await _repo.find_by_id(tenant_id)
     if not tenant_rec:
         raise NotFoundError("tenant")
@@ -1236,6 +1238,7 @@ async def gdpr_delete_tenant(tenant_id: str, request: Request):
     Stripe cancellation → owner rows. Irreversible. Billing and security-audit
     evidence retained under policy is detached rather than erased.
     """
+    require_platform_operator(request)
     tenant_rec = await _repo.find_by_id(tenant_id)
     if not tenant_rec:
         raise NotFoundError("tenant")

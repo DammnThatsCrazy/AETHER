@@ -28,7 +28,7 @@ from shared.billing import stripe_client, stripe_repository
 from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.logger.logger import get_logger, metrics
 
-from governance.security.request_context import require_kyber_operator
+from governance.security.request_context import require_kyber_operator, require_platform_operator
 
 logger = get_logger("aether.service.billing")
 
@@ -209,6 +209,7 @@ class OverageCycleRequest(BaseModel):
 async def trigger_overage_cycle(body: OverageCycleRequest, request: Request):
     """Manually trigger the overage invoice cycle (admin only)."""
     request.state.tenant.require_permission("admin")
+    require_platform_operator(request)
     from billing.billing.cycle import run_overage_cycle
     summary = await run_overage_cycle(billing_period=body.billing_period)
     return APIResponse(data=summary).to_dict()
