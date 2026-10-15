@@ -1,0 +1,225 @@
+"""Writes keyed by a reused id never replace another tenant's row.
+
+Every test runs against the in-memory backend and, when
+``REPOSITORY_TEST_DATABASE_URL`` (or ``DATABASE_URL``) points at a database,
+against PostgreSQL, where the ownership predicate lives in SQL. Each test uses
+its own tenants and ids, so the shared database needs no truncation.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import uuid
+from types import SimpleNamespace
+
+os.environ.setdefault("AETHER_ENV", "local")
+
+import pytest  # noqa: E402
+
+import repositories.repos as repos  # noqa: E402
+from repositories.commerce_repos import ResourcesRepository  # noqa: E402
+from repositories.repos import (  # noqa: E402
+    BaseRepository,
+    BehaviorProfileRepository,
+    DelegationRepository,
+    EntityRepository,
+    EventEnvelopeRepository,
+    IdentityRepository,
+    JourneyChainRepository,
+    TenantOwnedRepository,
+    UserRepository,
+)
+from shared.common.common import ConflictError  # noqa: E402
+from shared.events.events import Topic  # noqa: E402
+
+try:
+    import asyncpg
+except ImportError:  # pragma: no cover
+    asyncpg = None  # type: ignore[assignment]
+
+PG_URL = os.getenv("REPOSITORY_TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
+
+
+@pytest.fixture(params=["inmem", "pg"])
+async def backend(request, monkeypatch):
+    """Route every repository's pool to the requested backend."""
+    pool = None
+    if request.param == "pg":
+        if asyncpg is None or not PG_URL:
+            pytest.skip("REPOSITORY_TEST_DATABASE_URL not set")
+        try:
+            pool = await asyncpg.create_pool(PG_URL, min_size=1, max_size=4)
+        except Exception as exc:  # pragma: no cover - environment-dependent
+            pytest.skip(f"postgres unavailable: {exc}")
+
+    async def _pool():
+        return pool
+
+    monkeypatch.setattr(repos, "get_pool", _pool)
+    try:
+        yield SimpleNamespace(kind=request.param, pool=pool)
+    finally:
+        if pool is not None:
+            await pool.close()
+
+
+def _ids() -> tuple[str, str, str]:
+    token = uuid.uuid4().hex[:10]
+    return f"tenant_a_{token}", f"tenant_b_{token}", token
+
+
+# ── client-chosen ids: first tenant keeps the id ─────────────────────────────
+
+
+async def test_entity_id_reused_by_another_tenant_conflicts_and_keeps_the_row(backend):
+    a, b, token = _ids()
+    entities = EntityRepository()
+    entity_id = f"acme-{token}"
+    await entities.create_entity(entity_id, a, "organization", display_name="Acme A",
+                                 metadata={"crm": "a-only"})
+
+    with pytest.raises(ConflictError) as raised:
+        await entities.create_entity(entity_id, b, "organization", display_name="Taken by B")
+    assert a not in str(raised.value) and b not in str(raised.value)
+
+    row = await entities.find_by_id(entity_id)
+    assert row["tenant_id"] == a
+    assert row["display_name"] == "Acme A" and row["metadata"] == {"crm": "a-only"}
+    assert [e["entity_id"] for e in await entities.list_by_tenant(b)] == []
+    if backend.pool is not None:
+        column = await backend.pool.fetchval("SELECT tenant_id FROM entities WHERE id = $1", entity_id)
+        assert column == a
+
+
+async def test_same_tenant_rewrite_still_replaces_its_own_row(backend):
+    a, _, token = _ids()
+    entities = EntityRepository()
+    entity_id = f"acme-{token}"
+    await entities.create_entity(entity_id, a, "organization", display_name="v1")
+    await entities.create_entity(entity_id, a, "organization", display_name="v2")
+    assert (await entities.find_by_id(entity_id))["display_name"] == "v2"
+
+
+async def test_update_cannot_move_a_row_to_another_tenant(backend):
+    a, b, token = _ids()
+    entities = EntityRepository()
+    entity_id = f"acme-{token}"
+    await entities.create_entity(entity_id, a, "organization", display_name="A")
+
+    with pytest.raises(ConflictError):
+        await entities.update(entity_id, {"tenant_id": b, "display_name": "B"})
+    with pytest.raises(ConflictError):
+        await entities.update(entity_id, {"tenantId": b, "display_name": "B"})
+    row = await entities.find_by_id(entity_id)
+    assert row["tenant_id"] == a and row["display_name"] == "A"
+
+    await entities.update(entity_id, {"display_name": "A2"})
+    assert (await entities.find_by_id(entity_id))["display_name"] == "A2"
+
+
+async def test_delegation_id_reused_by_another_tenant_conflicts(backend):
+    a, b, token = _ids()
+    delegations = DelegationRepository()
+    delegation_id = f"del-{token}"
+    await delegations.grant(delegation_id, a, "grantor-a", "grantee-a", {"actions": ["read"]})
+    with pytest.raises(ConflictError):
+        await delegations.grant(delegation_id, b, "grantor-b", "grantee-b", {"actions": ["*"]})
+    row = await delegations.find_by_id(delegation_id)
+    assert row["tenant_id"] == a and row["scope"] == {"actions": ["read"]}
+
+
+async def test_x402_resource_id_reused_by_another_tenant_conflicts(backend):
+    a, b, token = _ids()
+    resources = ResourcesRepository()
+    resource_id = f"res-{token}"
+    await resources.create({"resource_id": resource_id, "tenant_id": a, "price_usd": 5.0})
+    with pytest.raises(ConflictError):
+        await resources.create({"resource_id": resource_id, "tenant_id": b, "price_usd": 0.0})
+    row = await resources.get(resource_id)
+    assert row["tenant_id"] == a and row["price_usd"] == 5.0
+
+
+async def test_record_naming_no_tenant_cannot_replace_an_owned_row(backend):
+    a, _, token = _ids()
+    entities = EntityRepository()
+    entity_id = f"acme-{token}"
+    await entities.create_entity(entity_id, a, "organization", display_name="A")
+    with pytest.raises(ConflictError):
+        await entities.insert(entity_id, {"display_name": "unowned"})
+    assert (await entities.find_by_id(entity_id))["display_name"] == "A"
+
+
+async def test_users_table_keeps_moving_a_principal_between_tenants(backend):
+    a, b, token = _ids()
+    users = UserRepository()
+    user_id = f"user-{token}"
+    await users.insert(user_id, {"tenant_id": a, "email": f"{token}@example.com", "status": "active"})
+    await users.update(user_id, {"tenant_id": b})
+    assert (await users.find_by_id(user_id))["tenant_id"] == b
+
+
+async def test_tenant_owned_upsert_refuses_a_row_without_an_owner(backend):
+    a, _, token = _ids()
+
+    class _Registry(TenantOwnedRepository):
+        def __init__(self) -> None:
+            super().__init__("tenant_owned_write_probe")
+
+    registry = _Registry()
+    record_id = f"legacy-{token}"
+    if backend.pool is not None:
+        await registry._ensure_table()
+        await backend.pool.execute(
+            "INSERT INTO tenant_owned_write_probe (id, data, tenant_id) VALUES ($1, $2::jsonb, NULL)",
+            record_id, json.dumps({"id": record_id, "label": "legacy"}),
+        )
+    else:
+        registry._store[record_id] = {"id": record_id, "label": "legacy"}
+
+    with pytest.raises(ConflictError):
+        await registry.upsert(record_id, {"label": "adopted"}, a)
+    assert (await BaseRepository.find_by_id(registry, record_id))["label"] == "legacy"
+
+
+async def test_profile_upsert_cannot_take_over_another_tenants_profile(backend):
+    a, b, token = _ids()
+
+    class _Cache:
+        async def get_json(self, key):
+            return None
+
+        async def set_json(self, key, value, ttl=None):
+            return None
+
+        async def delete(self, key):
+            return None
+
+    from shared.graph.graph import GraphClient
+
+    identity = IdentityRepository(GraphClient(), _Cache())
+    user_id = f"user-{token}"
+    await identity.upsert_profile(a, user_id, {"email": "a@example.com"})
+    with pytest.raises(ConflictError):
+        await identity.upsert_profile(b, user_id, {"email": "b@example.com"})
+    profile = await identity.get_profile(a, user_id)
+    assert profile["email"] == "a@example.com"
+    assert await identity.get_profile(b, user_id) is None
+
+
+async def test_provenance_records_for_one_entity_coexist_across_tenants(monkeypatch):
+    from shared.cis.provenance import ProvenanceRecord, ProvenanceTracker
+
+    monkeypatch.setenv("AETHER_ENV", "local")
+    a, b, token = _ids()
+    tracker = ProvenanceTracker()
+    entity_id = f"entity-{token}"
+    for tenant, origin in ((a, "agent-a"), (b, "agent-b")):
+        await tracker.record(ProvenanceRecord(
+            entity_id=entity_id, entity_type="node", tenant_id=tenant,
+            lineage_hash="h", origin_agent_id=origin,
+        ))
+    await tracker.update_contamination_score(entity_id, b, 0.9)
+    mine = await tracker.get(entity_id, a)
+    assert mine.origin_agent_id == "agent-a" and mine.contamination_score == 0.0
+    assert (await tracker.get(entity_id, b)).contamination_score == 0.9
