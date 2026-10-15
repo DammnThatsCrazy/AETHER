@@ -325,6 +325,19 @@ def check_version_alignment() -> int:
     return 0
 
 
+# SemVer 2.0.0 (no build metadata): numeric identifiers, including numeric
+# prerelease identifiers, must not carry leading zeroes.
+_SEMVER_RE = re.compile(
+    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+    r"(?:-(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)"
+    r"(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*)?$"
+)
+
+
+def is_valid_version(version: str) -> bool:
+    return _SEMVER_RE.match(version) is not None
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -342,8 +355,7 @@ def main() -> None:
 
     new_version = sys.argv[1].lstrip("v")
 
-    # Validate format
-    if not re.match(r"^\d+\.\d+\.\d+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?$", new_version):
+    if not is_valid_version(new_version):
         print(f"ERROR: Invalid version format: {new_version}")
         print("Expected: MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-pre.N (e.g., 0.1.0-alpha.0)")
         sys.exit(1)

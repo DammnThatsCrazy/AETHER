@@ -19,7 +19,9 @@ Pod::Spec.new do |s|
   s.source_files = "packages/sdk/react-native/ios/**/*.{h,m,mm,swift}"
 
   s.dependency "React-Core"
-  s.dependency "AetherSDK", "~> #{s.version.to_s.split('.').first}.0"
+  # Pre-1.0 minors may break: allow this version up to, not including, the next minor.
+  major, minor = s.version.to_s.split('.').first(2).map(&:to_i)
+  s.dependency "AetherSDK", ">= #{s.version}", "< #{major}.#{minor + 1}.0"
 
   # install_modules_dependencies is injected by react-native-builder-bob / RN Podfile helpers.
   # Guard so `pod spec lint --quick` (no RN context) does not fail.
