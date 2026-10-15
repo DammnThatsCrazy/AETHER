@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 source_hashes:
   "services/api/value/rewards/delivery_outbox.py": "sha256:9fd28e34c6f74df4c5f77b8ed3ca0966214dfbdb3686b5f497d30f0701b44480"
-  "services/api/value/rewards/rails.py": "sha256:19bef0ee7898b64d6cfd848eb5a1c26f592c1a265c384124590af4abf6c89dad"
+  "services/api/value/rewards/rails.py": "sha256:9a7cf5eb291884604e0d6c66d6385a13d731c3d1e5085eddb530b68a8dd36725"
 ---
 
 # Reward Delivery Runbook
@@ -65,6 +65,12 @@ The SSRF/transport check runs BEFORE a durable job is written, so a blocked
 destination (private IP, plain-HTTP outside local) never becomes a job. A
 `ValueError: webhook destination rejected` at enqueue is correct hardening, not
 an outage.
+
+Delivery then connects only to an address that passed the check and never
+follows a redirect. If the host resolves to a non-public address at send time
+(DNS changed after enqueue), the attempt fails as `SSRF-blocked destination`,
+which the sender classifies as fatal, so the job dead-letters instead of
+retrying.
 
 ## Webhook signing secret could not be resolved
 

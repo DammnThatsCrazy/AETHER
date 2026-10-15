@@ -14,7 +14,7 @@ source_hashes:
   "services/api/governance/governance/routes.py": "sha256:ca87bb59cf8c61661b53d0294d6cee4f5093beb28ae32aca79cbea7a62b708f1"
   "services/api/governance/reliability/service.py": "sha256:71fe39c503316a915a02f154dececd6385e7e07ed074ddea7ddb24915551d20c"
   "services/api/governance/security/access_control.py": "sha256:3e5f52376cae80e8e109bc580939800220dde88abe18e3efea46c5f643d000ef"
-  "services/api/governance/security/policy_engine.py": "sha256:1546d352a7562f0e7c4c595e397eb3dab6f2ad94e039b2765a47373d98cec375"
+  "services/api/governance/security/policy_engine.py": "sha256:1ac65aa8233ac33ab77f342858579fd7d1fd5388dc2408d3e482bfa0e936e01b"
 ---
 
 # Security, Compliance & Governance Controls
