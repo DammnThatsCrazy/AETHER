@@ -4,7 +4,8 @@
 Machine-readable checks that the one-person-ops surfaces are wired and safe:
 flags exist and default OFF, runtime stores are reachable, the worker bridge
 fails closed outside local mode, the mutation-commit pipeline never bypasses
-approval, and the release-train source-of-truth docs exist.
+approval, the release-train source-of-truth docs exist, and production-lean
+pins the platform operator tenants that admin and diagnostics routes admit.
 
 Exit 0 = ready (all checks pass), exit 1 = not ready. ``--json`` for CI.
 """
@@ -16,6 +17,7 @@ import asyncio
 import importlib
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -49,8 +51,26 @@ OPS_MODULES = [
 ]
 
 
+PRODUCTION_TFVARS = "infra/aws/terraform/profiles/production-lean.tfvars"
+
+
 def _check(checks: list, name: str, passed: bool, detail: str = "") -> None:
     checks.append({"name": name, "passed": bool(passed), "detail": detail})
+
+
+def platform_operator_tenants(tfvars: str) -> list[str]:
+    """Non-blank ids of ``platform_operator_tenant_ids`` in tfvars text."""
+    match = re.search(r"^\s*platform_operator_tenant_ids\s*=\s*\[(.*?)\]", tfvars, re.M | re.S)
+    if not match:
+        return []
+    return [v.strip() for v in re.findall(r'"([^"]*)"', match.group(1)) if v.strip()]
+
+
+def check_platform_operator_tenants(checks: list, tfvars: str) -> None:
+    # Without operator tenants every admin and diagnostics route answers 403,
+    # so operator tooling is unusable on the first production rollout.
+    _check(checks, "platform_operator_tenants_pinned", bool(platform_operator_tenants(tfvars)),
+           f"set platform_operator_tenant_ids in {PRODUCTION_TFVARS}")
 
 
 async def run_checks() -> dict:
@@ -128,6 +148,10 @@ async def run_checks() -> dict:
     # Source-of-truth docs exist.
     missing_docs = [d for d in REQUIRED_DOCS if not (ROOT / d).exists()]
     _check(checks, "source_of_truth_docs_present", not missing_docs, str(missing_docs))
+
+    tfvars = ROOT / PRODUCTION_TFVARS
+    check_platform_operator_tenants(
+        checks, tfvars.read_text(encoding="utf-8") if tfvars.exists() else "")
 
     return {"ready": all(c["passed"] for c in checks), "checks": checks}
 
