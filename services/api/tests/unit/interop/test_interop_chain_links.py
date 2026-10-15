@@ -96,3 +96,49 @@ async def test_gateway_links_only_to_registry_chain_vertices(graph, monkeypatch)
     assert await graph.get_vertex(f"chain:{unseeded}") is None
     assert (await graph.get_vertex(SEEDED_CHAIN)).properties["tenant_id"] == "platform"
     assert counted.count("interop_chain_link_skipped") == 1
+
+
+class _Messages:
+    def __init__(self, *messages: dict) -> None:
+        self._rows = messages
+
+    async def find_one(self, filters: dict):
+        return next((m for m in self._rows if all(m.get(k) == v for k, v in filters.items())), None)
+
+
+def _message(tenant: str, message_id: str, path_id: str, **source) -> dict:
+    return {"tenant_id": tenant, "interop_message_id": message_id, "path_id": path_id,
+            "status": "delivered", "correlation_key": message_id, "source": source}
+
+
+async def test_tenant_scans_keep_public_topology_public(graph):
+    token = uuid.uuid4().hex[:8]
+    path_id = f"p-{token}"
+    observations = [{
+        "endpoint_ref": {"gateway_id": f"gw-{token}", "network_id": "base-mainnet"},
+        "source_network_id": "base-mainnet", "destination_network_id": "eth-mainnet",
+        "path_id": path_id,
+    }]
+    messages = _Messages(
+        _message("tenant-a", f"m-a-{token}", path_id, transaction_hash=f"0xa{token}"),
+        _message("tenant-b", f"m-b-{token}", path_id, application_id=f"app-{token}"),
+    )
+    projector = scan_worker.InteropGraphProjector(enabled=True, message_repo=messages)
+
+    for tenant in ("tenant-a", "tenant-b"):
+        result = await projector.project(
+            tenant, observations, [{"interop_message_id": f"m-{tenant[-1]}-{token}"}],
+            provider={"provider_id": f"provider-{token}"},
+        )
+        assert result.graph_projection_status == "persisted", result
+
+    for vid in (f"interop_provider:provider-{token}", f"interop_gateway:gw-{token}",
+                f"interop_path:{path_id}"):
+        assert (await graph.get_vertex(vid)).properties["tenant_id"] == "public"
+    # A tenant message never mints a public application vertex.
+    assert await graph.get_vertex(f"interop_application:app-{token}") is None
+
+    sent = await graph.get_edges(f"interop_path:{path_id}", EdgeType.SENT_VIA_PATH, "in")
+    assert [(e.from_vertex_id, e.properties["tenant_id"]) for e in sent] == [
+        (f"wallet:0xa{token}", "tenant-a"),
+    ]
