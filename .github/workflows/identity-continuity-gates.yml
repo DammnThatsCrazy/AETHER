@@ -563,7 +563,7 @@ jobs:
           done
           if [ -n "$failed" ]; then
             echo "VERDICT: FAIL — one or more gates failed. See logs above."
-            echo "Action: fix the failing gate before promotion to production-lean."
+            echo "Action: fix the failing gate before promotion to production."
             echo "This does NOT block merge — but staging proof pack must be green before release-gate."
             exit 1
           fi

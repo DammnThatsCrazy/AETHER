@@ -24,7 +24,7 @@ commercial_stage: founding_tenant
 # Controlled first-customer production on the cost-optimized lean profile.
 production_mode: controlled
 environment: production
-deployment_profile: production-lean
+deployment_profile: production
 
 # One of: not_started | readiness_in_progress | ready_for_external_assessment |
 #         assessment_in_progress | report_received

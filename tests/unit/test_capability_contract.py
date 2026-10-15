@@ -28,8 +28,8 @@ from tenancy.capabilities.schema import (  # noqa: E402
 
 
 def test_release_surface_production_lean():
-    s = resolve_release_surface("production-lean")
-    assert s["deployment_profile"] == "production-lean"
+    s = resolve_release_surface("production")
+    assert s["deployment_profile"] == "production"
     assert s["release_class"] == "production"
     assert "/v1/profile360" in s["enabled_route_prefixes"]
     assert "stablecoin" in s["excluded_domains"]
@@ -37,7 +37,7 @@ def test_release_surface_production_lean():
 
 
 def test_release_surface_non_founding_profile_has_no_manifest_narrowing():
-    s = resolve_release_surface("production-scale")
+    s = resolve_release_surface("staging")
     assert s["excluded_domains"] == []
     assert s["enabled_route_prefixes"] == []
     # A real profile still resolves its class.
@@ -58,7 +58,7 @@ def test_capabilities_response_schema_roundtrips():
     r = CapabilitiesResponse(
         tenant_id="t",
         release=ReleaseCapabilities(
-            deployment_profile="production-lean",
+            deployment_profile="production",
             environment="production",
             release_class="production",
             enforcement=EnforcementState(

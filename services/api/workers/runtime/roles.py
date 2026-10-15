@@ -50,7 +50,7 @@ WORKER_ROLES: frozenset[str] = frozenset(
 # roles in one process. They are a packing decision, not a new kind of work —
 # every member role keeps its own queue, consumer group, DLQ, retry policy,
 # metrics label and independent failure/restart behaviour; only the process
-# boundary is shared. ``production-lean`` trades 8 dedicated worker tasks for
+# boundary is shared. ``production`` trades 8 dedicated worker tasks for
 # one "lean-worker" task without collapsing the logical topology, which is why
 # this maps to a *set* of roles rather than to a merged pseudo-role.
 #

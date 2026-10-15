@@ -10,7 +10,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUIRED_JOURNEYS = {"tenant_activation", "first_graph", "first_insight", "investigation", "recovery"}
-DEPLOYABLE_PROFILES = {"staging", "production-lean", "production-scale", "enterprise-isolated"}
+DEPLOYABLE_PROFILES = {"staging", "production"}
 
 
 def validate_fallback_registry(registry: dict, root: Path = ROOT) -> list[str]:

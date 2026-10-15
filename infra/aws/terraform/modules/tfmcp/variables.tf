@@ -160,7 +160,7 @@ variable "terraform_state_bucket" {
 
 variable "terraform_state_key" {
   type        = string
-  description = "S3 key for the Terraform state file (e.g. profiles/production-lean/terraform.tfstate)."
+  description = "S3 key for the Terraform state file (e.g. profiles/production/terraform.tfstate)."
   default     = ""
 }
 
@@ -179,5 +179,5 @@ variable "terraform_state_kms_key_arn" {
 variable "deployment_profile" {
   type        = string
   description = "Deployment profile name — passed into the container as TF_VAR_deployment_profile."
-  default     = "production-lean"
+  default     = "production"
 }

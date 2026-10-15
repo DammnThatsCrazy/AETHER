@@ -3,10 +3,10 @@
   "terraform_version": "1.9.8",
   "variables": {
     "deployment_profile": {
-      "value": "demo"
+      "value": "production"
     },
     "environment": {
-      "value": "demo"
+      "value": "production"
     },
     "network_egress_mode": {
       "value": "public_ip"
@@ -26,7 +26,7 @@
           "provider_name": "registry.terraform.io/hashicorp/aws",
           "schema_version": 0,
           "values": {
-            "bucket": "aether-staging-aether-static"
+            "bucket": "aether-production-aether-static"
           },
           "index": "aether"
         },
@@ -51,7 +51,7 @@
           "provider_name": "registry.terraform.io/hashicorp/aws",
           "schema_version": 0,
           "values": {
-            "bucket": "aether-staging-aether-static"
+            "bucket": "aether-production-aether-static"
           },
           "index": "aether"
         },
@@ -63,7 +63,7 @@
           "provider_name": "registry.terraform.io/hashicorp/aws",
           "schema_version": 0,
           "values": {
-            "name": "/aether/staging/AETHER_STATIC_BUCKET",
+            "name": "/aether/production/AETHER_STATIC_BUCKET",
             "type": "String",
             "tier": "Standard"
           },
@@ -77,7 +77,7 @@
           "provider_name": "registry.terraform.io/hashicorp/aws",
           "schema_version": 0,
           "values": {
-            "bucket": "aether-staging-kyber-static"
+            "bucket": "aether-production-kyber-static"
           },
           "index": "kyber"
         },
@@ -102,7 +102,7 @@
           "provider_name": "registry.terraform.io/hashicorp/aws",
           "schema_version": 0,
           "values": {
-            "bucket": "aether-staging-kyber-static"
+            "bucket": "aether-production-kyber-static"
           },
           "index": "kyber"
         },
@@ -114,7 +114,7 @@
           "provider_name": "registry.terraform.io/hashicorp/aws",
           "schema_version": 0,
           "values": {
-            "name": "/aether/staging/KYBER_STATIC_BUCKET",
+            "name": "/aether/production/KYBER_STATIC_BUCKET",
             "type": "String",
             "tier": "Standard"
           },
@@ -128,7 +128,7 @@
           "provider_name": "registry.terraform.io/hashicorp/aws",
           "schema_version": 0,
           "values": {
-            "name": "aether-staging-credential-kms"
+            "name": "aether-production-credential-kms"
           }
         }
       ],
@@ -457,7 +457,7 @@
               "provider_name": "registry.terraform.io/hashicorp/aws",
               "schema_version": 0,
               "values": {
-                "name": "aether-staging"
+                "name": "aether-production"
               }
             },
             {
@@ -472,23 +472,6 @@
               }
             },
             {
-              "address": "module.ecs.aws_ecs_task_definition.backend",
-              "mode": "managed",
-              "type": "aws_ecs_task_definition",
-              "name": "backend",
-              "provider_name": "registry.terraform.io/hashicorp/aws",
-              "schema_version": 0,
-              "values": {
-                "family": "aether-staging-backend",
-                "cpu": "1024",
-                "memory": "2048",
-                "requires_compatibilities": [
-                  "FARGATE"
-                ],
-                "network_mode": "awsvpc"
-              }
-            },
-            {
               "address": "module.ecs.aws_ecs_service.backend",
               "mode": "managed",
               "type": "aws_ecs_service",
@@ -496,7 +479,7 @@
               "provider_name": "registry.terraform.io/hashicorp/aws",
               "schema_version": 0,
               "values": {
-                "name": "aether-staging-backend",
+                "name": "aether-production-backend",
                 "desired_count": 1,
                 "enable_execute_command": false
               }
@@ -509,9 +492,9 @@
               "provider_name": "registry.terraform.io/hashicorp/aws",
               "schema_version": 0,
               "values": {
-                "family": "aether-staging-lean-worker",
-                "cpu": "1024",
-                "memory": "4096",
+                "family": "aether-production-lean-worker",
+                "cpu": "2048",
+                "memory": "8192",
                 "requires_compatibilities": [
                   "FARGATE"
                 ],
@@ -527,7 +510,7 @@
               "provider_name": "registry.terraform.io/hashicorp/aws",
               "schema_version": 0,
               "values": {
-                "name": "aether-staging-lean-worker",
+                "name": "aether-production-lean-worker",
                 "desired_count": 1,
                 "enable_execute_command": false
               },
@@ -976,7 +959,7 @@
               "provider_name": "registry.terraform.io/hashicorp/aws",
               "schema_version": 0,
               "values": {
-                "name": "alias/aether-staging-provider-credentials"
+                "name": "alias/aether-production-provider-credentials"
               }
             }
           ]
@@ -997,7 +980,7 @@
         ],
         "before": null,
         "after": {
-          "bucket": "aether-staging-aether-static"
+          "bucket": "aether-production-aether-static"
         },
         "after_unknown": {
           "arn": true,
@@ -1020,7 +1003,7 @@
         ],
         "before": null,
         "after": {
-          "bucket": "aether-staging-kyber-static"
+          "bucket": "aether-production-kyber-static"
         },
         "after_unknown": {
           "arn": true,
@@ -1091,7 +1074,7 @@
         ],
         "before": null,
         "after": {
-          "bucket": "aether-staging-aether-static"
+          "bucket": "aether-production-aether-static"
         },
         "after_unknown": {
           "arn": true,
@@ -1114,7 +1097,7 @@
         ],
         "before": null,
         "after": {
-          "bucket": "aether-staging-kyber-static"
+          "bucket": "aether-production-kyber-static"
         },
         "after_unknown": {
           "arn": true,
@@ -1137,7 +1120,7 @@
         ],
         "before": null,
         "after": {
-          "name": "/aether/staging/AETHER_STATIC_BUCKET",
+          "name": "/aether/production/AETHER_STATIC_BUCKET",
           "type": "String",
           "tier": "Standard"
         },
@@ -1162,7 +1145,7 @@
         ],
         "before": null,
         "after": {
-          "name": "/aether/staging/KYBER_STATIC_BUCKET",
+          "name": "/aether/production/KYBER_STATIC_BUCKET",
           "type": "String",
           "tier": "Standard"
         },
@@ -1791,7 +1774,7 @@
         ],
         "before": null,
         "after": {
-          "name": "aether-staging"
+          "name": "aether-production"
         },
         "after_unknown": {
           "arn": true,
@@ -1814,7 +1797,7 @@
         ],
         "before": null,
         "after": {
-          "name": "aether-staging-backend",
+          "name": "aether-production-backend",
           "desired_count": 1,
           "enable_execute_command": false
         },
@@ -1839,7 +1822,7 @@
         ],
         "before": null,
         "after": {
-          "name": "aether-staging-lean-worker",
+          "name": "aether-production-lean-worker",
           "desired_count": 1,
           "enable_execute_command": false
         },
@@ -1854,35 +1837,6 @@
       "index": "lean-worker"
     },
     {
-      "address": "module.ecs.aws_ecs_task_definition.backend",
-      "mode": "managed",
-      "type": "aws_ecs_task_definition",
-      "name": "backend",
-      "provider_name": "registry.terraform.io/hashicorp/aws",
-      "change": {
-        "actions": [
-          "create"
-        ],
-        "before": null,
-        "after": {
-          "family": "aether-staging-backend",
-          "cpu": "1024",
-          "memory": "2048",
-          "requires_compatibilities": [
-            "FARGATE"
-          ],
-          "network_mode": "awsvpc"
-        },
-        "after_unknown": {
-          "arn": true,
-          "id": true
-        },
-        "before_sensitive": false,
-        "after_sensitive": {}
-      },
-      "module_address": "module.ecs"
-    },
-    {
       "address": "module.ecs.aws_ecs_task_definition.runtime_role[\"lean-worker\"]",
       "mode": "managed",
       "type": "aws_ecs_task_definition",
@@ -1894,9 +1848,9 @@
         ],
         "before": null,
         "after": {
-          "family": "aether-staging-lean-worker",
-          "cpu": "1024",
-          "memory": "4096",
+          "family": "aether-production-lean-worker",
+          "cpu": "2048",
+          "memory": "8192",
           "requires_compatibilities": [
             "FARGATE"
           ],
@@ -2766,7 +2720,7 @@
         ],
         "before": null,
         "after": {
-          "name": "alias/aether-staging-provider-credentials"
+          "name": "alias/aether-production-provider-credentials"
         },
         "after_unknown": {
           "arn": true,
@@ -2790,7 +2744,7 @@
         ],
         "before": null,
         "after": {
-          "name": "aether-staging-credential-kms"
+          "name": "aether-production-credential-kms"
         },
         "after_unknown": {
           "id": true,

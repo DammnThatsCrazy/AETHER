@@ -3,7 +3,7 @@
   "terraform_version": "1.9.8",
   "variables": {
     "deployment_profile": {
-      "value": "production-lean"
+      "value": "production"
     },
     "environment": {
       "value": "production"
@@ -249,36 +249,6 @@
               "values": {
                 "instance_class": "db.serverless",
                 "engine": "aurora-postgresql"
-              }
-            }
-          ]
-        },
-        {
-          "address": "module.cache",
-          "resources": [
-            {
-              "address": "module.cache.aws_elasticache_replication_group.this",
-              "mode": "managed",
-              "type": "aws_elasticache_replication_group",
-              "name": "this",
-              "provider_name": "registry.terraform.io/hashicorp/aws",
-              "schema_version": 0,
-              "values": {
-                "replication_group_id": "aether-cache",
-                "node_type": "cache.t4g.micro",
-                "num_cache_clusters": 1,
-                "engine": "redis"
-              }
-            },
-            {
-              "address": "module.cache.aws_elasticache_subnet_group.this",
-              "mode": "managed",
-              "type": "aws_elasticache_subnet_group",
-              "name": "this",
-              "provider_name": "registry.terraform.io/hashicorp/aws",
-              "schema_version": 0,
-              "values": {
-                "name": "aether-cache-subnets"
               }
             }
           ]
@@ -763,6 +733,30 @@
                 "name": "aether/byok_key"
               },
               "index": "byok_key"
+            },
+            {
+              "address": "module.secrets.aws_secretsmanager_secret.this[\"extraction-canary-seed\"]",
+              "mode": "managed",
+              "type": "aws_secretsmanager_secret",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "name": "aether/extraction-canary-seed"
+              },
+              "index": "extraction-canary-seed"
+            },
+            {
+              "address": "module.secrets.aws_secretsmanager_secret.this[\"sdk-config-secret\"]",
+              "mode": "managed",
+              "type": "aws_secretsmanager_secret",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "name": "aether/sdk-config-secret"
+              },
+              "index": "sdk-config-secret"
             },
             {
               "address": "module.secrets.aws_secretsmanager_secret_rotation.this[\"jwt_secret\"]",
@@ -1422,55 +1416,6 @@
         "after_sensitive": {}
       },
       "module_address": "module.aurora"
-    },
-    {
-      "address": "module.cache.aws_elasticache_replication_group.this",
-      "mode": "managed",
-      "type": "aws_elasticache_replication_group",
-      "name": "this",
-      "provider_name": "registry.terraform.io/hashicorp/aws",
-      "change": {
-        "actions": [
-          "create"
-        ],
-        "before": null,
-        "after": {
-          "replication_group_id": "aether-cache",
-          "node_type": "cache.t4g.micro",
-          "num_cache_clusters": 1,
-          "engine": "redis"
-        },
-        "after_unknown": {
-          "arn": true,
-          "id": true
-        },
-        "before_sensitive": false,
-        "after_sensitive": {}
-      },
-      "module_address": "module.cache"
-    },
-    {
-      "address": "module.cache.aws_elasticache_subnet_group.this",
-      "mode": "managed",
-      "type": "aws_elasticache_subnet_group",
-      "name": "this",
-      "provider_name": "registry.terraform.io/hashicorp/aws",
-      "change": {
-        "actions": [
-          "create"
-        ],
-        "before": null,
-        "after": {
-          "name": "aether-cache-subnets"
-        },
-        "after_unknown": {
-          "arn": true,
-          "id": true
-        },
-        "before_sensitive": false,
-        "after_sensitive": {}
-      },
-      "module_address": "module.cache"
     },
     {
       "address": "module.dynamodb_cache.aws_dynamodb_table.cache",
@@ -2373,6 +2318,54 @@
       },
       "module_address": "module.secrets",
       "index": "jwt_secret"
+    },
+    {
+      "address": "module.secrets.aws_secretsmanager_secret.this[\"extraction-canary-seed\"]",
+      "mode": "managed",
+      "type": "aws_secretsmanager_secret",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "aether/extraction-canary-seed"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.secrets",
+      "index": "extraction-canary-seed"
+    },
+    {
+      "address": "module.secrets.aws_secretsmanager_secret.this[\"sdk-config-secret\"]",
+      "mode": "managed",
+      "type": "aws_secretsmanager_secret",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "aether/sdk-config-secret"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.secrets",
+      "index": "sdk-config-secret"
     },
     {
       "address": "module.secrets.aws_secretsmanager_secret_rotation.this[\"jwt_secret\"]",

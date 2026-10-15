@@ -3,7 +3,7 @@
   "terraform_version": "1.9.8",
   "variables": {
     "deployment_profile": {
-      "value": "production-lean"
+      "value": "production"
     },
     "environment": {
       "value": "production"
@@ -179,6 +179,76 @@
               "schema_version": 0,
               "values": {
                 "port": 80
+              }
+            }
+          ]
+        },
+        {
+          "address": "module.aurora",
+          "resources": [
+            {
+              "address": "module.aurora.aws_kms_key.aurora",
+              "mode": "managed",
+              "type": "aws_kms_key",
+              "name": "aurora",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "enable_key_rotation": true
+              }
+            },
+            {
+              "address": "module.aurora.aws_db_subnet_group.aurora",
+              "mode": "managed",
+              "type": "aws_db_subnet_group",
+              "name": "aurora",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "name": "aether-aurora"
+              }
+            },
+            {
+              "address": "module.aurora.aws_rds_cluster_parameter_group.this",
+              "mode": "managed",
+              "type": "aws_rds_cluster_parameter_group",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "family": "aurora-postgresql16"
+              }
+            },
+            {
+              "address": "module.aurora.aws_rds_cluster.this",
+              "mode": "managed",
+              "type": "aws_rds_cluster",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "engine": "aurora-postgresql",
+                "engine_mode": "provisioned",
+                "engine_version": "16.8",
+                "storage_encrypted": true,
+                "serverlessv2_scaling_configuration": [
+                  {
+                    "min_capacity": 0.5,
+                    "max_capacity": 4
+                  }
+                ]
+              }
+            },
+            {
+              "address": "module.aurora.aws_rds_cluster_instance.writer",
+              "mode": "managed",
+              "type": "aws_rds_cluster_instance",
+              "name": "writer",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "instance_class": "db.serverless",
+                "engine": "aurora-postgresql"
               }
             }
           ]
@@ -462,6 +532,34 @@
                 "enable_execute_command": false
               },
               "index": "lean-worker"
+            }
+          ]
+        },
+        {
+          "address": "module.graph_store",
+          "resources": [
+            {
+              "address": "module.graph_store.aws_neptune_cluster.this",
+              "mode": "managed",
+              "type": "aws_neptune_cluster",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "cluster_identifier": "aether-graph"
+              }
+            },
+            {
+              "address": "module.graph_store.aws_neptune_cluster_instance.this",
+              "mode": "managed",
+              "type": "aws_neptune_cluster_instance",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "identifier": "aether-graph-1",
+                "instance_class": "db.t4g.medium"
+              }
             }
           ]
         },
@@ -1199,6 +1297,131 @@
       "module_address": "module.alb"
     },
     {
+      "address": "module.aurora.aws_db_subnet_group.aurora",
+      "mode": "managed",
+      "type": "aws_db_subnet_group",
+      "name": "aurora",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "aether-aurora"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.aurora"
+    },
+    {
+      "address": "module.aurora.aws_kms_key.aurora",
+      "mode": "managed",
+      "type": "aws_kms_key",
+      "name": "aurora",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "enable_key_rotation": true
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.aurora"
+    },
+    {
+      "address": "module.aurora.aws_rds_cluster.this",
+      "mode": "managed",
+      "type": "aws_rds_cluster",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "engine": "aurora-postgresql",
+          "engine_mode": "provisioned",
+          "engine_version": "16.8",
+          "storage_encrypted": true,
+          "serverlessv2_scaling_configuration": [
+            {
+              "min_capacity": 0.5,
+              "max_capacity": 4
+            }
+          ]
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.aurora"
+    },
+    {
+      "address": "module.aurora.aws_rds_cluster_instance.writer",
+      "mode": "managed",
+      "type": "aws_rds_cluster_instance",
+      "name": "writer",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "instance_class": "db.serverless",
+          "engine": "aurora-postgresql"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.aurora"
+    },
+    {
+      "address": "module.aurora.aws_rds_cluster_parameter_group.this",
+      "mode": "managed",
+      "type": "aws_rds_cluster_parameter_group",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "family": "aurora-postgresql16"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.aurora"
+    },
+    {
       "address": "module.dynamodb_cache.aws_dynamodb_table.cache",
       "mode": "managed",
       "type": "aws_dynamodb_table",
@@ -1716,6 +1939,53 @@
       },
       "module_address": "module.ecs",
       "index": "lean-worker"
+    },
+    {
+      "address": "module.graph_store.aws_neptune_cluster.this",
+      "mode": "managed",
+      "type": "aws_neptune_cluster",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "cluster_identifier": "aether-graph"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.graph_store"
+    },
+    {
+      "address": "module.graph_store.aws_neptune_cluster_instance.this",
+      "mode": "managed",
+      "type": "aws_neptune_cluster_instance",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "identifier": "aether-graph-1",
+          "instance_class": "db.t4g.medium"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.graph_store"
     },
     {
       "address": "module.monitoring.aws_cloudwatch_dashboard.main",

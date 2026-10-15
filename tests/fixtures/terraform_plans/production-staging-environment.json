@@ -3,10 +3,10 @@
   "terraform_version": "1.9.8",
   "variables": {
     "deployment_profile": {
-      "value": "production-lean"
+      "value": "production"
     },
     "environment": {
-      "value": "production"
+      "value": "staging"
     },
     "network_egress_mode": {
       "value": "public_ip"
@@ -128,7 +128,7 @@
           "provider_name": "registry.terraform.io/hashicorp/aws",
           "schema_version": 0,
           "values": {
-            "name": "aether-production-credential-kms"
+            "name": "aether-staging-credential-kms"
           }
         }
       ],
@@ -532,49 +532,6 @@
                 "enable_execute_command": false
               },
               "index": "lean-worker"
-            }
-          ]
-        },
-        {
-          "address": "module.elasticache",
-          "resources": [
-            {
-              "address": "module.elasticache.aws_elasticache_subnet_group.this[0]",
-              "mode": "managed",
-              "type": "aws_elasticache_subnet_group",
-              "name": "this",
-              "provider_name": "registry.terraform.io/hashicorp/aws",
-              "schema_version": 0,
-              "values": {
-                "name": "aether-redis"
-              },
-              "index": 0
-            },
-            {
-              "address": "module.elasticache.aws_elasticache_parameter_group.this[0]",
-              "mode": "managed",
-              "type": "aws_elasticache_parameter_group",
-              "name": "this",
-              "provider_name": "registry.terraform.io/hashicorp/aws",
-              "schema_version": 0,
-              "values": {
-                "family": "redis7"
-              },
-              "index": 0
-            },
-            {
-              "address": "module.elasticache.aws_elasticache_replication_group.this[0]",
-              "mode": "managed",
-              "type": "aws_elasticache_replication_group",
-              "name": "this",
-              "provider_name": "registry.terraform.io/hashicorp/aws",
-              "schema_version": 0,
-              "values": {
-                "replication_group_id": "aether-production-redis",
-                "node_type": "cache.t4g.micro",
-                "num_cache_clusters": 2
-              },
-              "index": 0
             }
           ]
         },
@@ -1019,7 +976,7 @@
               "provider_name": "registry.terraform.io/hashicorp/aws",
               "schema_version": 0,
               "values": {
-                "name": "alias/aether-production-provider-credentials"
+                "name": "alias/aether-staging-provider-credentials"
               }
             }
           ]
@@ -1956,80 +1913,6 @@
       "index": "lean-worker"
     },
     {
-      "address": "module.elasticache.aws_elasticache_parameter_group.this[0]",
-      "mode": "managed",
-      "type": "aws_elasticache_parameter_group",
-      "name": "this",
-      "provider_name": "registry.terraform.io/hashicorp/aws",
-      "change": {
-        "actions": [
-          "create"
-        ],
-        "before": null,
-        "after": {
-          "family": "redis7"
-        },
-        "after_unknown": {
-          "arn": true,
-          "id": true
-        },
-        "before_sensitive": false,
-        "after_sensitive": {}
-      },
-      "module_address": "module.elasticache",
-      "index": 0
-    },
-    {
-      "address": "module.elasticache.aws_elasticache_replication_group.this[0]",
-      "mode": "managed",
-      "type": "aws_elasticache_replication_group",
-      "name": "this",
-      "provider_name": "registry.terraform.io/hashicorp/aws",
-      "change": {
-        "actions": [
-          "create"
-        ],
-        "before": null,
-        "after": {
-          "replication_group_id": "aether-production-redis",
-          "node_type": "cache.t4g.micro",
-          "num_cache_clusters": 2
-        },
-        "after_unknown": {
-          "arn": true,
-          "id": true
-        },
-        "before_sensitive": false,
-        "after_sensitive": {}
-      },
-      "module_address": "module.elasticache",
-      "index": 0
-    },
-    {
-      "address": "module.elasticache.aws_elasticache_subnet_group.this[0]",
-      "mode": "managed",
-      "type": "aws_elasticache_subnet_group",
-      "name": "this",
-      "provider_name": "registry.terraform.io/hashicorp/aws",
-      "change": {
-        "actions": [
-          "create"
-        ],
-        "before": null,
-        "after": {
-          "name": "aether-redis"
-        },
-        "after_unknown": {
-          "arn": true,
-          "id": true
-        },
-        "before_sensitive": false,
-        "after_sensitive": {}
-      },
-      "module_address": "module.elasticache",
-      "index": 0
-    },
-    {
       "address": "module.monitoring.aws_cloudwatch_dashboard.main",
       "mode": "managed",
       "type": "aws_cloudwatch_dashboard",
@@ -2883,7 +2766,7 @@
         ],
         "before": null,
         "after": {
-          "name": "alias/aether-production-provider-credentials"
+          "name": "alias/aether-staging-provider-credentials"
         },
         "after_unknown": {
           "arn": true,
@@ -2907,7 +2790,7 @@
         ],
         "before": null,
         "after": {
-          "name": "aether-production-credential-kms"
+          "name": "aether-staging-credential-kms"
         },
         "after_unknown": {
           "id": true,

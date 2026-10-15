@@ -86,31 +86,19 @@ def detail_for(result: dict, check: str) -> str:
 # Valid plans pass
 # ---------------------------------------------------------------------------
 
-def test_valid_production_lean_plan_passes(tmp_path):
-    code, result, _ = run("production-lean", "production-lean-valid.json", tmp_path)
-    assert code == 0, f"valid lean plan rejected: {failed_checks(result)}"
+def test_valid_production_plan_passes(tmp_path):
+    code, result, _ = run("production", "production-valid.json", tmp_path)
+    assert code == 0, f"valid production plan rejected: {failed_checks(result)}"
     assert result["passed"] is True
     assert result["checks_failed"] == 0
     # A gate that runs two checks and passes proves nothing; assert it did work.
     assert result["checks_total"] > 40
 
 
-def test_valid_production_scale_plan_passes(tmp_path):
-    """Scale legitimately buys MSK, Neptune, ElastiCache, NAT and dedicated ML."""
-    code, result, inventory = run(
-        "production-scale", "production-scale-valid.json", tmp_path)
-    assert code == 0, f"valid scale plan rejected: {failed_checks(result)}"
-    summary = inventory["canonical_summary"]
-    for key in ("msk", "neptune", "elasticache", "dedicated_ml_service"):
-        assert summary[key]["count"] > 0, f"{key} should be present in a scale plan"
-    assert summary["legacy_rds"]["count"] == 0
-    assert summary["prometheus_grafana_servers"]["count"] == 0
-
-
 def test_service_cardinality_accepts_only_the_explicit_access_mcp_service():
     runtime = {
         "profiles": {
-            "production-lean": {
+            "production": {
                 "services": {"api": {}, "lean-worker": {}},
                 "remote_ml": False,
                 "execution_mode": "consolidated",
@@ -131,7 +119,7 @@ def test_service_cardinality_accepts_only_the_explicit_access_mcp_service():
         ]
         plan = {"variables": {"enable_access_mcp": {"value": enabled}}}
         MODULE.check_service_cardinality(
-            reporter, results, "production-lean", runtime, resources, plan,
+            reporter, results, "production", runtime, resources, plan,
         )
         return reporter, results
 
@@ -371,7 +359,7 @@ def test_valid_pilot_staging_plan_runs_the_lifecycle_tripwires(tmp_path):
 
 def test_pilot_lane_is_rejected_for_non_staging_profile(tmp_path):
     code, result, _ = run(
-        "production-lean", "production-lean-valid.json", tmp_path,
+        "production", "production-valid.json", tmp_path,
         deployment_lane="pilot")
     assert code == 1
     assert "pilot.profile" in failed_checks(result)
@@ -427,36 +415,20 @@ def test_a_staging_plan_without_a_wake_sleep_budget_still_fails(tmp_path, monkey
     assert "forbidden.always_on_staging_compute" in failed_checks(result)
 
 
-def test_valid_enterprise_isolated_plan_passes(tmp_path):
-    """The fourth cloud profile was contracted but never exercised by a plan.
-
-    enterprise-isolated declares its own cost_policy (ha_nat egress, three NAT
-    gateways, the heavy backends permitted contractually) and had no fixture at
-    all, so nothing proved the gate could even run against it.
-    """
-    code, result, inventory = run(
-        "enterprise-isolated", "enterprise-isolated-valid.json", tmp_path)
-    assert code == 0, f"valid enterprise plan rejected: {failed_checks(result)}"
-    nat = next(i for i in result["results"] if i["check"] == "network_egress_mode")
-    assert nat["observed"] == 3 and nat["mode"] == "ha_nat"
-    assert inventory["canonical_summary"]["frontend_ecs_services"]["count"] == 0
-    assert inventory["canonical_summary"]["legacy_rds"]["count"] == 0
-
-
 # ---------------------------------------------------------------------------
 # A forbidden TYPE is forbidden wherever it appears
 # ---------------------------------------------------------------------------
 
 FORBIDDEN_RELOCATIONS = [
-    ("elasticache", "production-lean-elasticache-relocated.json",
+    ("elasticache", "production-elasticache-relocated.json",
      "module.cache.aws_elasticache_replication_group.this"),
-    ("msk", "production-lean-msk-relocated.json",
+    ("msk", "production-msk-relocated.json",
      "module.event_bus.aws_msk_cluster.kafka"),
-    ("neptune", "production-lean-neptune-relocated.json",
+    ("neptune", "production-neptune-relocated.json",
      "module.graph_store.aws_neptune_cluster.this"),
-    ("legacy_rds", "production-lean-legacy-rds-relocated.json",
+    ("legacy_rds", "production-legacy-rds-relocated.json",
      "module.database.aws_db_instance.postgres"),
-    ("nat_gateway_unless_explicit", "production-lean-nat-relocated.json",
+    ("nat_gateway_unless_explicit", "production-nat-relocated.json",
      "module.egress.aws_nat_gateway.this"),
 ]
 
@@ -473,7 +445,7 @@ def test_forbidden_service_at_a_non_canonical_address_still_fails(
     product, the identical bill and the identical violation as
     `module.elasticache.aws_elasticache_replication_group`.
     """
-    code, result, inventory = run("production-lean", fixture, tmp_path)
+    code, result, inventory = run("production", fixture, tmp_path)
     assert code == 1, f"a relocated {key} passed the gate: {result['passed']}"
     assert f"forbidden.{key}" in failed_checks(result)
     detail = detail_for(result, f"forbidden.{key}")
@@ -489,7 +461,7 @@ def test_forbidden_service_at_a_non_canonical_address_still_fails(
 def test_a_relocated_forbidden_resource_is_never_only_a_warning(
         key, fixture, address, tmp_path):
     """It must not land in the warning bucket that never fails the gate."""
-    _, result, inventory = run("production-lean", fixture, tmp_path)
+    _, result, inventory = run("production", fixture, tmp_path)
     warned = next(i for i in result["results"]
                   if i["check"] == "fail_closed.unmatched_instances")
     assert address not in (warned.get("addresses") or [])
@@ -504,7 +476,7 @@ def test_cost_free_accessories_stay_scoped_to_their_module(tmp_path):
     the product it accompanies (`aws_db_instance`) is what is caught anywhere.
     """
     _, result, inventory = run(
-        "production-lean", "production-lean-legacy-rds-relocated.json", tmp_path)
+        "production", "production-legacy-rds-relocated.json", tmp_path)
     aurora = next(r for r in inventory["resources"]
                   if r["address"] == "module.aurora.aws_db_subnet_group.aurora")
     assert aurora["canonical_keys"] == []
@@ -528,7 +500,7 @@ def test_unscoped_types_are_derived_from_the_price_book_not_hand_listed():
 
 def test_an_expensive_forbidden_type_at_an_uncovered_address_fails_closed(tmp_path):
     """A forbidden type that dodges every name prefix is a failure, not a warning."""
-    plan = json.loads((FIXTURES / "production-lean-valid.json").read_text())
+    plan = json.loads((FIXTURES / "production-valid.json").read_text())
     plan["resource_changes"].append({
         "address": "module.tooling.aws_instance.bastion", "mode": "managed",
         "type": "aws_instance", "name": "bastion",
@@ -539,7 +511,7 @@ def test_an_expensive_forbidden_type_at_an_uncovered_address_fails_closed(tmp_pa
     path = tmp_path / "bastion.json"
     path.write_text(json.dumps(plan))
     out = tmp_path / "out"
-    code = MODULE.check(["--profile", "production-lean", "--plan-json", str(path),
+    code = MODULE.check(["--profile", "production", "--plan-json", str(path),
                          "--out-dir", str(out)])
     result = json.loads((out / "profile-policy-result.json").read_text())
     assert code == 1
@@ -554,7 +526,7 @@ def test_an_expensive_forbidden_type_at_an_uncovered_address_fails_closed(tmp_pa
 
 def test_lean_with_msk_fails_on_msk(tmp_path):
     code, result, inventory = run(
-        "production-lean", "production-lean-msk.json", tmp_path)
+        "production", "production-msk.json", tmp_path)
     assert code == 1
     assert "forbidden.msk" in failed_checks(result)
     assert "aws_msk_cluster" in json.dumps(inventory["canonical_summary"]["msk"])
@@ -563,7 +535,7 @@ def test_lean_with_msk_fails_on_msk(tmp_path):
 
 
 def test_lean_with_neptune_fails_on_neptune(tmp_path):
-    code, result, _ = run("production-lean", "production-lean-neptune.json", tmp_path)
+    code, result, _ = run("production", "production-neptune.json", tmp_path)
     assert code == 1
     assert failed_checks(result) == {"forbidden.neptune"}
     assert "neptune" in detail_for(result, "forbidden.neptune")
@@ -571,14 +543,14 @@ def test_lean_with_neptune_fails_on_neptune(tmp_path):
 
 def test_lean_with_elasticache_fails_on_elasticache(tmp_path):
     code, result, _ = run(
-        "production-lean", "production-lean-elasticache.json", tmp_path)
+        "production", "production-elasticache.json", tmp_path)
     assert code == 1
     assert failed_checks(result) == {"forbidden.elasticache"}
 
 
 def test_lean_with_legacy_rds_fails_on_legacy_rds(tmp_path):
     code, result, _ = run(
-        "production-lean", "production-lean-legacy-rds.json", tmp_path)
+        "production", "production-legacy-rds.json", tmp_path)
     assert code == 1
     assert failed_checks(result) == {"forbidden.legacy_rds", "lean_exclusion.legacy_rds"}
     assert "Aurora Serverless v2" in detail_for(result, "lean_exclusion.legacy_rds")
@@ -586,7 +558,7 @@ def test_lean_with_legacy_rds_fails_on_legacy_rds(tmp_path):
 
 def test_lean_with_nat_gateway_fails_on_nat_and_egress_mode(tmp_path):
     code, result, _ = run(
-        "production-lean", "production-lean-nat-gateway.json", tmp_path)
+        "production", "production-nat-gateway.json", tmp_path)
     assert code == 1
     assert failed_checks(result) == {
         "forbidden.nat_gateway_unless_explicit", "network_egress_mode"}
@@ -597,7 +569,7 @@ def test_lean_with_nat_gateway_fails_on_nat_and_egress_mode(tmp_path):
 
 def test_lean_with_dedicated_ml_fails_on_dedicated_ml(tmp_path):
     code, result, inventory = run(
-        "production-lean", "production-lean-dedicated-ml.json", tmp_path)
+        "production", "production-dedicated-ml.json", tmp_path)
     assert code == 1
     assert "forbidden.dedicated_ml_service" in failed_checks(result)
     assert "lean_exclusion.dedicated_ml_service" in failed_checks(result)
@@ -609,16 +581,16 @@ def test_lean_with_dedicated_ml_fails_on_dedicated_ml(tmp_path):
 
 def test_lean_with_frontend_ecs_fails_on_frontend_ecs(tmp_path):
     code, result, _ = run(
-        "production-lean", "production-lean-frontend-ecs.json", tmp_path)
+        "production", "production-frontend-ecs.json", tmp_path)
     assert code == 1
     assert "forbidden.frontend_ecs_services" in failed_checks(result)
     assert "S3 origins" in detail_for(result, "lean_exclusion.frontend_ecs_services")
 
 
 def test_lean_plan_declaring_staging_environment_fails(tmp_path):
-    """A production-lean plan provisions no staging-environment resources."""
+    """A production plan provisions no staging-environment resources."""
     code, result, _ = run(
-        "production-lean", "production-lean-staging-environment.json", tmp_path)
+        "production", "production-staging-environment.json", tmp_path)
     assert code == 1
     assert failed_checks(result) == {"forbidden.always_on_staging_compute"}
     assert "var.environment" in detail_for(result, "forbidden.always_on_staging_compute")
@@ -630,7 +602,7 @@ def test_lean_plan_declaring_staging_environment_fails(tmp_path):
 
 def test_lean_missing_aurora_fails_required_keys(tmp_path):
     code, result, _ = run(
-        "production-lean", "production-lean-missing-aurora.json", tmp_path)
+        "production", "production-missing-aurora.json", tmp_path)
     assert code == 1
     assert failed_checks(result) == {
         "required.aurora_serverless_v2", "required.postgres_graph"}
@@ -646,7 +618,7 @@ def test_eight_dedicated_worker_services_fails_cardinality(tmp_path):
     service count has to be checked against config/runtime_deployment.yaml.
     """
     code, result, _ = run(
-        "production-lean", "production-lean-eight-worker-services.json", tmp_path)
+        "production", "production-eight-worker-services.json", tmp_path)
     assert code == 1
     assert failed_checks(result) == {"cardinality.ecs_services"}
     detail = detail_for(result, "cardinality.ecs_services")
@@ -656,8 +628,8 @@ def test_eight_dedicated_worker_services_fails_cardinality(tmp_path):
 
 def test_expected_service_count_tracks_the_canonical_matrix(tmp_path):
     """The expectation is derived from the matrix, never hardcoded here."""
-    _, result, _ = run("production-lean", "production-lean-valid.json", tmp_path)
-    entry = RUNTIME["profiles"]["production-lean"]
+    _, result, _ = run("production", "production-valid.json", tmp_path)
+    entry = RUNTIME["profiles"]["production"]
     units = entry.get("services") or entry.get("roles") or {}
     expected = len(units) + (1 if entry.get("remote_ml") else 0)
     check = next(i for i in result["results"] if i["check"] == "cardinality.ecs_services")
@@ -674,7 +646,7 @@ def test_additional_rules_are_evaluated_on_their_own_matches(tmp_path):
     two ECS services satisfied the key while the registry matcher matched
     nothing at all — the sub-rule was decorative.
     """
-    plan = json.loads((FIXTURES / "production-lean-valid.json").read_text())
+    plan = json.loads((FIXTURES / "production-valid.json").read_text())
     plan["resource_changes"] = [
         c for c in plan["resource_changes"] if c["type"] != "aws_ecr_repository"]
     for module in plan["planned_values"]["root_module"]["child_modules"]:
@@ -683,7 +655,7 @@ def test_additional_rules_are_evaluated_on_their_own_matches(tmp_path):
     path = tmp_path / "no-ecr.json"
     path.write_text(json.dumps(plan))
     out = tmp_path / "out"
-    code = MODULE.check(["--profile", "production-lean", "--plan-json", str(path),
+    code = MODULE.check(["--profile", "production", "--plan-json", str(path),
                          "--out-dir", str(out)])
     result = json.loads((out / "profile-policy-result.json").read_text())
     inventory = json.loads((out / "profile-resource-inventory.json").read_text())
@@ -704,7 +676,7 @@ def test_the_valid_fixture_contains_the_registry_the_real_root_instantiates(tmp_
     `main.tf` instantiates module "ecr" unconditionally, so a "valid" plan that
     omitted it was unrepresentative in the one place the sub-rule looks.
     """
-    _, result, inventory = run("production-lean", "production-lean-valid.json", tmp_path)
+    _, result, inventory = run("production", "production-valid.json", tmp_path)
     repos = [r for r in inventory["resources"] if r["type"] == "aws_ecr_repository"]
     assert len(repos) == 4, "the four repositories modules/ecr declares"
     assert all(r["module_address"] == "module.ecr" for r in repos)
@@ -727,7 +699,7 @@ def test_a_zero_cardinality_sub_rule_is_not_absorbed_by_its_parent(tmp_path):
     Merged counting let an edge resource inflate the parent's count instead of
     breaking its own rule, so the two failures were indistinguishable.
     """
-    plan = json.loads((FIXTURES / "production-lean-valid.json").read_text())
+    plan = json.loads((FIXTURES / "production-valid.json").read_text())
     plan["resource_changes"].append({
         "address": "aws_route53_zone.public", "mode": "managed",
         "type": "aws_route53_zone", "name": "public", "module_address": "",
@@ -737,7 +709,7 @@ def test_a_zero_cardinality_sub_rule_is_not_absorbed_by_its_parent(tmp_path):
     path = tmp_path / "with-zone.json"
     path.write_text(json.dumps(plan))
     out = tmp_path / "out"
-    code = MODULE.check(["--profile", "production-lean", "--plan-json", str(path),
+    code = MODULE.check(["--profile", "production", "--plan-json", str(path),
                          "--out-dir", str(out)])
     result = json.loads((out / "profile-policy-result.json").read_text())
     assert code == 1
@@ -749,7 +721,7 @@ def test_a_zero_cardinality_sub_rule_is_not_absorbed_by_its_parent(tmp_path):
 
 def test_lean_requires_static_frontends(tmp_path):
     _, result, inventory = run(
-        "production-lean", "production-lean-valid.json", tmp_path)
+        "production", "production-valid.json", tmp_path)
     check = next(i for i in result["results"] if i["check"] == "static_frontends")
     assert check["status"] == "pass"
     assert inventory["canonical_summary"]["cloudfront_s3_frontends"]["count"] == 8
@@ -762,7 +734,7 @@ def test_lean_requires_static_frontends(tmp_path):
 def test_destroying_a_forbidden_resource_is_not_a_violation(tmp_path):
     """A plan that DELETES MSK is the fix, not the breach."""
     code, result, inventory = run(
-        "production-lean", "production-lean-destroying-msk.json", tmp_path)
+        "production", "production-destroying-msk.json", tmp_path)
     assert code == 0, f"a destroy-only MSK plan was rejected: {failed_checks(result)}"
 
     # The resources are still inventoried, still mapped, and still visibly leaving.
@@ -778,7 +750,7 @@ def test_destroying_a_forbidden_resource_is_not_a_violation(tmp_path):
 
 def test_retained_and_replaced_resources_still_count(tmp_path):
     """`no-op`, `update` and replace all leave the resource existing."""
-    base = json.loads((FIXTURES / "production-lean-msk.json").read_text())
+    base = json.loads((FIXTURES / "production-msk.json").read_text())
 
     for actions in (["no-op"], ["update"], ["delete", "create"], ["create", "delete"]):
         plan = copy.deepcopy(base)
@@ -788,7 +760,7 @@ def test_retained_and_replaced_resources_still_count(tmp_path):
         path = tmp_path / f"plan-{'-'.join(actions)}.json"
         path.write_text(json.dumps(plan))
         out = tmp_path / f"out-{'-'.join(actions)}"
-        code = MODULE.check(["--profile", "production-lean",
+        code = MODULE.check(["--profile", "production",
                              "--plan-json", str(path), "--out-dir", str(out)])
         result = json.loads((out / "profile-policy-result.json").read_text())
         assert code == 1, f"actions {actions} should still count as present"
@@ -802,7 +774,7 @@ def test_retained_and_replaced_resources_still_count(tmp_path):
 def test_unmapped_expensive_type_fails_closed(tmp_path):
     """Silence must never read as success."""
     code, result, inventory = run(
-        "production-lean", "production-lean-unmatched-expensive-type.json", tmp_path)
+        "production", "production-unmatched-expensive-type.json", tmp_path)
     assert code == 1
     failures = failed_checks(result)
     # From the curated list. This fixture also carries a module.ecr repository,
@@ -851,7 +823,7 @@ def test_canonical_key_without_a_matcher_fails_closed(tmp_path, monkeypatch):
         return doc
 
     monkeypatch.setattr(MODULE, "load_yaml", fake)
-    code, result, _ = run("production-lean", "production-lean-valid.json", tmp_path)
+    code, result, _ = run("production", "production-valid.json", tmp_path)
     assert code == 1
     assert "contract_coverage.forbidden_resources.msk" in failed_checks(result)
     detail = detail_for(result, "contract_coverage.forbidden_resources.msk")
@@ -860,7 +832,7 @@ def test_canonical_key_without_a_matcher_fails_closed(tmp_path, monkeypatch):
 
 def test_every_declared_canonical_key_has_a_matcher_today(tmp_path):
     """The fail-closed rule above must not be firing on the real config."""
-    _, result, _ = run("production-lean", "production-lean-valid.json", tmp_path)
+    _, result, _ = run("production", "production-valid.json", tmp_path)
     assert not [
         item for item in result["violations"]
         if item["check"].startswith("contract_coverage.")
@@ -870,7 +842,7 @@ def test_every_declared_canonical_key_has_a_matcher_today(tmp_path):
 def test_unsized_ecs_service_fails_closed(tmp_path):
     """An unsized always-on task must not travel downstream as a zero."""
     code, result, _ = run(
-        "production-lean", "production-lean-unsized-ecs-service.json", tmp_path)
+        "production", "production-unsized-ecs-service.json", tmp_path)
     assert code == 1
     assert failed_checks(result) == {"fargate_sizing"}
     detail = detail_for(result, "fargate_sizing")
@@ -880,7 +852,7 @@ def test_unsized_ecs_service_fails_closed(tmp_path):
 def test_sizing_is_not_guessed_from_an_unrelated_task_definition(tmp_path):
     """With a task definition missing, the gate fails rather than mis-sizing."""
     _, _, inventory = run(
-        "production-lean", "production-lean-unsized-ecs-service.json", tmp_path)
+        "production", "production-unsized-ecs-service.json", tmp_path)
     backend = next(
         r for r in inventory["resources"]
         if r["address"] == "module.ecs.aws_ecs_service.backend")
@@ -893,7 +865,7 @@ def test_sizing_is_not_guessed_from_an_unrelated_task_definition(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_task_definition_sizing_is_resolved_onto_the_service(tmp_path):
-    _, _, inventory = run("production-lean", "production-lean-valid.json", tmp_path)
+    _, _, inventory = run("production", "production-valid.json", tmp_path)
     services = {
         r["address"]: r for r in inventory["resources"]
         if r["type"] == "aws_ecs_service"
@@ -920,7 +892,7 @@ def test_task_definition_sizing_is_resolved_onto_the_service(tmp_path):
 
 def test_consolidated_worker_service_gets_its_own_task_definition_sizing(tmp_path):
     """for_each keyed services must pair with the matching task definition."""
-    _, _, inventory = run("production-lean", "production-lean-valid.json", tmp_path)
+    _, _, inventory = run("production", "production-valid.json", tmp_path)
     by_address = {r["address"]: r for r in inventory["resources"]}
     service = by_address['module.ecs.aws_ecs_service.runtime_role["lean-worker"]']
     task_def = by_address[
@@ -934,7 +906,7 @@ def test_consolidated_worker_service_gets_its_own_task_definition_sizing(tmp_pat
 
 def test_inventory_is_priceable_by_the_real_cost_model(tmp_path):
     """Every ECS service must price, or the cost gate hard-errors on all of them."""
-    _, _, inventory = run("production-lean", "production-lean-valid.json", tmp_path)
+    _, _, inventory = run("production", "production-valid.json", tmp_path)
     model = COST.build_cost_model(inventory, PRICE_BOOK, 730.0)
 
     services = {
@@ -963,7 +935,7 @@ def test_inventory_is_priceable_by_the_real_cost_model(tmp_path):
 def test_staging_is_exercised_end_to_end_offline(fixture, tmp_path):
     """The staging path had one caller: a credentialed workflow that never ran.
 
-    `ci-check` only ever runs PLAN_PROFILE=production-lean and
+    `ci-check` only ever runs PLAN_PROFILE=production and
     staging-lifecycle.yml needs AWS credentials, so nothing offline ever scored
     a staging plan against the staging budget — which is how a budget that no
     plan could satisfy survived. This runs the whole path: plan gate, then cost
@@ -1004,11 +976,11 @@ def test_an_awake_staging_environment_costs_more_than_a_sleeping_one(tmp_path):
 
 def test_cost_model_cli_consumes_the_emitted_inventory(tmp_path):
     """End-to-end: the artifact this gate writes is the one the cost gate reads."""
-    run("production-lean", "production-lean-valid.json", tmp_path)
+    run("production", "production-valid.json", tmp_path)
     inventory_path = tmp_path / MODULE.INVENTORY_JSON
     proc = subprocess.run(
         [sys.executable, "scripts/release/check_cost_model.py",
-         "--profile", "production-lean", "--inventory", str(inventory_path),
+         "--profile", "production", "--inventory", str(inventory_path),
          "--out-dir", str(tmp_path / "cost")],
         cwd=ROOT, capture_output=True, text=True,
     )
@@ -1025,10 +997,10 @@ def test_cost_model_cli_consumes_the_emitted_inventory(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_inventory_matches_the_pinned_schema(tmp_path):
-    _, _, inventory = run("production-lean", "production-lean-valid.json", tmp_path)
+    _, _, inventory = run("production", "production-valid.json", tmp_path)
 
     assert inventory["schema_version"] == 1
-    assert inventory["profile"] == "production-lean"
+    assert inventory["profile"] == "production"
     assert inventory["terraform_version"] == "1.9.8"
     assert isinstance(inventory["resources"], list) and inventory["resources"]
     assert isinstance(inventory["canonical_summary"], dict)
@@ -1049,7 +1021,7 @@ def test_inventory_matches_the_pinned_schema(tmp_path):
 
 def test_inventory_carries_indexed_module_addresses(tmp_path):
     """Module addresses must resolve in full, indices included."""
-    _, _, inventory = run("production-lean", "production-lean-msk.json", tmp_path)
+    _, _, inventory = run("production", "production-msk.json", tmp_path)
     msk = next(r for r in inventory["resources"] if r["type"] == "aws_msk_cluster")
     assert msk["module_address"] == "module.msk"
     assert msk["address"] == "module.msk.aws_msk_cluster.this[0]"
@@ -1059,7 +1031,7 @@ def test_inventory_carries_indexed_module_addresses(tmp_path):
 
 
 def test_all_four_reports_are_written(tmp_path):
-    run("production-lean", "production-lean-valid.json", tmp_path)
+    run("production", "production-valid.json", tmp_path)
     for name in ("profile-resource-inventory.json", "profile-resource-inventory.md",
                  "profile-policy-result.json", "profile-policy-result.md"):
         path = tmp_path / name
@@ -1073,8 +1045,8 @@ def test_inventory_defaults_to_the_artifacts_directory(tmp_path, monkeypatch):
     """Two workflows and the cost model read this exact relative path."""
     monkeypatch.setattr(MODULE, "repo_root", lambda: tmp_path)
     code = MODULE.check([
-        "--profile", "production-lean",
-        "--plan-json", str(FIXTURES / "production-lean-valid.json"),
+        "--profile", "production",
+        "--plan-json", str(FIXTURES / "production-valid.json"),
     ])
     assert code == 0
     assert (tmp_path / ".artifacts" / "profile-resource-inventory.json").exists()
@@ -1088,34 +1060,34 @@ def test_inventory_defaults_to_the_artifacts_directory(tmp_path, monkeypatch):
 
 def test_unknown_profile_is_a_usage_error(tmp_path):
     code = MODULE.check(["--profile", "not-a-profile",
-                         "--plan-json", str(FIXTURES / "production-lean-valid.json"),
+                         "--plan-json", str(FIXTURES / "production-valid.json"),
                          "--out-dir", str(tmp_path)])
     assert code == MODULE.EXIT_USAGE
 
 
 def test_missing_plan_is_a_usage_error(tmp_path):
-    code = MODULE.check(["--profile", "production-lean",
+    code = MODULE.check(["--profile", "production",
                          "--plan-json", str(tmp_path / "absent.json"),
                          "--out-dir", str(tmp_path)])
     assert code == MODULE.EXIT_USAGE
 
 
 def test_profile_without_a_cost_policy_is_a_usage_error(tmp_path):
-    """Local is a real profile with no cost_policy: nothing to enforce."""
-    assert "cost_policy" not in PROFILES["profiles"]["local"]
+    """A profile the matrix does not declare has no cost_policy: nothing to enforce."""
+    assert "local" not in PROFILES["profiles"]
     code = MODULE.check(["--profile", "local",
-                         "--plan-json", str(FIXTURES / "production-lean-valid.json"),
+                         "--plan-json", str(FIXTURES / "production-valid.json"),
                          "--out-dir", str(tmp_path)])
     assert code == MODULE.EXIT_USAGE
 
 
 def test_unsupported_plan_format_version_is_a_usage_error(tmp_path):
     """Refuse to guess at a document shape rather than under-report."""
-    plan = json.loads((FIXTURES / "production-lean-valid.json").read_text())
+    plan = json.loads((FIXTURES / "production-valid.json").read_text())
     plan["format_version"] = "99.0"
     path = tmp_path / "future.json"
     path.write_text(json.dumps(plan))
-    code = MODULE.check(["--profile", "production-lean", "--plan-json", str(path),
+    code = MODULE.check(["--profile", "production", "--plan-json", str(path),
                          "--out-dir", str(tmp_path)])
     assert code == MODULE.EXIT_USAGE
 
@@ -1124,7 +1096,7 @@ def test_a_non_plan_json_document_is_a_usage_error(tmp_path):
     path = tmp_path / "state.json"
     path.write_text(json.dumps({"format_version": "1.2", "terraform_version": "1.9.8",
                                 "values": {}}))
-    code = MODULE.check(["--profile", "production-lean", "--plan-json", str(path),
+    code = MODULE.check(["--profile", "production", "--plan-json", str(path),
                          "--out-dir", str(tmp_path)])
     assert code == MODULE.EXIT_USAGE
 
@@ -1296,7 +1268,7 @@ def test_staging_autoscaling_capacity_contract_rejects_incomplete_or_unsafe_shap
 
 def test_data_sources_are_not_inventoried(tmp_path):
     """A data source provisions nothing and must not be counted or priced."""
-    plan = json.loads((FIXTURES / "production-lean-valid.json").read_text())
+    plan = json.loads((FIXTURES / "production-valid.json").read_text())
     plan["resource_changes"].append({
         "address": "data.aws_caller_identity.current", "mode": "data",
         "type": "aws_caller_identity", "name": "current",
@@ -1305,7 +1277,7 @@ def test_data_sources_are_not_inventoried(tmp_path):
     path = tmp_path / "with-data.json"
     path.write_text(json.dumps(plan))
     out = tmp_path / "out"
-    code = MODULE.check(["--profile", "production-lean", "--plan-json", str(path),
+    code = MODULE.check(["--profile", "production", "--plan-json", str(path),
                          "--out-dir", str(out)])
     assert code == 0
     inventory = json.loads((out / "profile-resource-inventory.json").read_text())
@@ -1314,13 +1286,13 @@ def test_data_sources_are_not_inventoried(tmp_path):
 
 def test_resources_absent_from_resource_changes_are_still_counted(tmp_path):
     """An unchanged resource is missing from resource_changes but still exists."""
-    plan = json.loads((FIXTURES / "production-lean-valid.json").read_text())
+    plan = json.loads((FIXTURES / "production-valid.json").read_text())
     plan["resource_changes"] = [
         c for c in plan["resource_changes"] if c["type"] != "aws_rds_cluster"]
     path = tmp_path / "unchanged-aurora.json"
     path.write_text(json.dumps(plan))
     out = tmp_path / "out"
-    code = MODULE.check(["--profile", "production-lean", "--plan-json", str(path),
+    code = MODULE.check(["--profile", "production", "--plan-json", str(path),
                          "--out-dir", str(out)])
     inventory = json.loads((out / "profile-resource-inventory.json").read_text())
     cluster = next(r for r in inventory["resources"] if r["type"] == "aws_rds_cluster")
@@ -1371,19 +1343,8 @@ def test_network_egress_counts_the_type_the_contract_names(tmp_path, monkeypatch
         return doc
 
     monkeypatch.setattr(MODULE, "load_yaml", fake)
-    code, result, _ = run("production-lean", "production-lean-valid.json", tmp_path)
+    code, result, _ = run("production", "production-valid.json", tmp_path)
     assert code == 1
     assert "network_egress_mode" in failed_checks(result)
     assert "expected_by_profile_resource_type" in detail_for(result, "network_egress_mode")
 
-
-def test_scale_and_enterprise_nat_expectations_are_counted_in_gateways(tmp_path):
-    """One NAT gateway plus its EIP is one NAT gateway, not two."""
-    for profile, fixture, expected in (
-        ("production-scale", "production-scale-valid.json", 1),
-        ("enterprise-isolated", "enterprise-isolated-valid.json", 3),
-    ):
-        code, result, _ = run(profile, fixture, tmp_path / profile)
-        assert code == 0, failed_checks(result)
-        row = next(i for i in result["results"] if i["check"] == "network_egress_mode")
-        assert row["observed"] == expected, profile

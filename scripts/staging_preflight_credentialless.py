@@ -150,7 +150,7 @@ def check_workers_register() -> CheckResult:
         return failed("workers-register", f"worker roles not fully mapped: {sorted(worker_roles - mapped)}")
     deploy = yaml.safe_load(RUNTIME_DEPLOY.read_text(encoding="utf-8")) or {}
     deployable = worker_roles | {"api"}
-    for prof in ("staging", "production-lean"):
+    for prof in ("staging", "production"):
         services = ((deploy.get("profiles") or {}).get(prof) or {}).get("services") or {}
         owned = [role for cfg in services.values() for role in ((cfg or {}).get("roles") or [])]
         # Set equality alone would accept a role claimed by two services, which

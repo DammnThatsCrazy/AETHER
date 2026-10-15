@@ -60,7 +60,7 @@ module "vpc" {
   vpc_cidr           = var.vpc_cidr
   availability_zones = slice(data.aws_availability_zones.available.names, 0, 3)
 
-  # "none" for staging/production-lean: tasks egress via a public IP on the
+  # "none" for staging/production: tasks egress via a public IP on the
   # task ENI, so the profile pays for no NAT Gateway or EIP at all.
   nat_mode = local.nat_mode
 
@@ -237,7 +237,7 @@ module "aurora" {
 # destroyed by Terraform.
 
 # ---------------------------------------------------------------------------
-# 4b. ElastiCache Redis — production-scale / enterprise-isolated only.
+# 4b. ElastiCache Redis — not provisioned by either profile (enable_elasticache is false).
 # The cost-capped profiles cache in DynamoDB (4b-E1) and provision nothing
 # here; local.cache_backend tells the running task which one is authoritative.
 # ---------------------------------------------------------------------------
@@ -267,7 +267,7 @@ module "dynamodb_cache" {
 }
 
 # ---------------------------------------------------------------------------
-# 4c. MSK Kafka — production-scale / enterprise-isolated only.
+# 4c. MSK Kafka — not provisioned by either profile (enable_msk is false).
 # The cost-capped profiles publish through SNS→SQS (4c-E1); local.event_broker
 # tells the running task which broker is authoritative.
 # ---------------------------------------------------------------------------
@@ -299,7 +299,7 @@ module "sqs" {
 }
 
 # ---------------------------------------------------------------------------
-# 4d. Neptune (Graph DB) — production-scale / enterprise-isolated only.
+# 4d. Neptune (Graph DB) — not provisioned by either profile (enable_neptune is false).
 # The cost-capped profiles keep the graph in Aurora Postgres; see
 # local.graph_backend.
 # ---------------------------------------------------------------------------
@@ -370,8 +370,8 @@ locals {
   # modules/monitoring gates each alarm with
   # `count = var.enable_x && var.x_id != "" ? 1 : 0`, and a resource attribute
   # is unknown until apply — feeding one in makes the count unplannable and
-  # `terraform plan` fails outright on the first apply of a scale/enterprise
-  # workspace. Each string below reproduces the identifier its module
+  # `terraform plan` fails outright on the first apply of a workspace
+  # that enables one of these stores. Each string below reproduces the identifier its module
   # configures, so the value is known at plan and equal to the real one.
   # Keep in sync with modules/{elasticache,msk,neptune}/main.tf.
   elasticache_replication_group_id = local.enable_elasticache ? "${lower(var.project)}-${var.environment}-redis" : ""
@@ -1037,10 +1037,14 @@ resource "aws_amplify_app" "frontend_preview" {
   description = "Development web app: per-PR previews of the Aether app (branches pr-<N>, managed by frontend-preview.yml)"
   platform    = "WEB"
 
+  # The same single-page-app rewrite the other client-routed apps use. A bare
+  # "/<*>" 404-200 rule does not apply to branches uploaded by deployment: a
+  # deep link such as /callback (the Auth0 redirect) was answered with a 301 to
+  # /callback/ and then a 404, so sign-in could not complete on a preview.
   custom_rule {
-    source = "/<*>"
+    source = local.spa_route_pattern
     target = "/index.html"
-    status = "404-200"
+    status = "200"
   }
 
   tags = {

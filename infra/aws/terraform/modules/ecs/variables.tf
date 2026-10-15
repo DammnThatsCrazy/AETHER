@@ -311,7 +311,7 @@ variable "stripe_portal_return_url" {
 # defaults on purpose. They come from the api service in the schema-v2runtime
 # matrix via the root's local.api_* values, and a default here would be a
 # second source of truth for a number the matrix already states — exactly the
-# divergence that let a production-scale plan run a lean-sized API.
+# divergence that let one plan run a differently sized API than the one reviewed.
 
 variable "backend_cpu" {
   type        = number

@@ -3,7 +3,7 @@
   "terraform_version": "1.9.8",
   "variables": {
     "deployment_profile": {
-      "value": "production-lean"
+      "value": "production"
     },
     "environment": {
       "value": "production"
@@ -119,23 +119,6 @@
             "tier": "Standard"
           },
           "index": "kyber"
-        },
-        {
-          "address": "aws_opensearch_domain.analytics",
-          "mode": "managed",
-          "type": "aws_opensearch_domain",
-          "name": "analytics",
-          "provider_name": "registry.terraform.io/hashicorp/aws",
-          "schema_version": 0,
-          "values": {
-            "domain_name": "aether-analytics",
-            "cluster_config": [
-              {
-                "instance_type": "r6g.large.search",
-                "instance_count": 3
-              }
-            ]
-          }
         },
         {
           "address": "aws_iam_role_policy.credential_kms",
@@ -359,7 +342,8 @@
               "provider_name": "registry.terraform.io/hashicorp/aws",
               "schema_version": 0,
               "values": {
-                "name": "aether-backend"
+                "name": "aether-backend",
+                "image_tag_mutability": "IMMUTABLE"
               },
               "index": "aether-backend"
             },
@@ -456,7 +440,8 @@
               "provider_name": "registry.terraform.io/hashicorp/aws",
               "schema_version": 0,
               "values": {
-                "enable_key_rotation": true
+                "enable_key_rotation": true,
+                "deletion_window_in_days": 30
               }
             }
           ]
@@ -694,6 +679,59 @@
               "values": {
                 "comparison_operator": "GreaterThanThreshold",
                 "threshold": 1
+              },
+              "index": 0
+            }
+          ]
+        },
+        {
+          "address": "module.neptune",
+          "resources": [
+            {
+              "address": "module.neptune.aws_kms_key.neptune[0]",
+              "mode": "managed",
+              "type": "aws_kms_key",
+              "name": "neptune",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "enable_key_rotation": true
+              },
+              "index": 0
+            },
+            {
+              "address": "module.neptune.aws_neptune_subnet_group.this[0]",
+              "mode": "managed",
+              "type": "aws_neptune_subnet_group",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "name": "aether-neptune"
+              },
+              "index": 0
+            },
+            {
+              "address": "module.neptune.aws_neptune_cluster.this[0]",
+              "mode": "managed",
+              "type": "aws_neptune_cluster",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "cluster_identifier": "aether-production-neptune"
+              },
+              "index": 0
+            },
+            {
+              "address": "module.neptune.aws_neptune_cluster_instance.this[0]",
+              "mode": "managed",
+              "type": "aws_neptune_cluster_instance",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "instance_class": "db.r6g.large"
               },
               "index": 0
             }
@@ -1000,34 +1038,6 @@
     }
   },
   "resource_changes": [
-    {
-      "address": "aws_opensearch_domain.analytics",
-      "mode": "managed",
-      "type": "aws_opensearch_domain",
-      "name": "analytics",
-      "provider_name": "registry.terraform.io/hashicorp/aws",
-      "change": {
-        "actions": [
-          "create"
-        ],
-        "before": null,
-        "after": {
-          "domain_name": "aether-analytics",
-          "cluster_config": [
-            {
-              "instance_type": "r6g.large.search",
-              "instance_count": 3
-            }
-          ]
-        },
-        "after_unknown": {
-          "arn": true,
-          "id": true
-        },
-        "before_sensitive": false,
-        "after_sensitive": {}
-      }
-    },
     {
       "address": "aws_s3_bucket.static_frontend[\"aether\"]",
       "mode": "managed",
@@ -1593,7 +1603,8 @@
         ],
         "before": null,
         "after": {
-          "name": "aether-backend"
+          "name": "aether-backend",
+          "image_tag_mutability": "IMMUTABLE"
         },
         "after_unknown": {
           "arn": true,
@@ -1786,7 +1797,8 @@
         ],
         "before": null,
         "after": {
-          "enable_key_rotation": true
+          "enable_key_rotation": true,
+          "deletion_window_in_days": 30
         },
         "after_unknown": {
           "arn": true,
@@ -2240,6 +2252,102 @@
         "after_sensitive": {}
       },
       "module_address": "module.monitoring"
+    },
+    {
+      "address": "module.neptune.aws_kms_key.neptune[0]",
+      "mode": "managed",
+      "type": "aws_kms_key",
+      "name": "neptune",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "enable_key_rotation": true
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.neptune",
+      "index": 0
+    },
+    {
+      "address": "module.neptune.aws_neptune_cluster.this[0]",
+      "mode": "managed",
+      "type": "aws_neptune_cluster",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "cluster_identifier": "aether-production-neptune"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.neptune",
+      "index": 0
+    },
+    {
+      "address": "module.neptune.aws_neptune_cluster_instance.this[0]",
+      "mode": "managed",
+      "type": "aws_neptune_cluster_instance",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "instance_class": "db.r6g.large"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.neptune",
+      "index": 0
+    },
+    {
+      "address": "module.neptune.aws_neptune_subnet_group.this[0]",
+      "mode": "managed",
+      "type": "aws_neptune_subnet_group",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "aether-neptune"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.neptune",
+      "index": 0
     },
     {
       "address": "module.secrets.aws_kms_alias.secrets",

@@ -43,7 +43,7 @@ PRECISION
   config/aws_price_book.yaml.
 
 Usage:
-  python scripts/release/check_cost_model.py --profile production-lean \\
+  python scripts/release/check_cost_model.py --profile production \\
       --inventory .artifacts/profile-resource-inventory.json
   python scripts/release/check_cost_model.py --profile staging \\
       --inventory inv.json --out-dir .artifacts/cost --fail-on-target
@@ -689,7 +689,7 @@ def build_cost_model(
 def resolve_budget(budget: dict[str, Any], price_book: dict[str, Any]) -> dict[str, Any]:
     """Normalise the two budget dialects into one comparison contract.
 
-    `fixed` mode (production-lean): the gate is the plan-determined fixed
+    `fixed` mode (production): the gate is the plan-determined fixed
     baseline, because that is the only figure the plan actually fixes.
     `total` mode (staging, wake/sleep): the gate is fixed + expected variable,
     because the profile is budgeted on what it spends in a month, not on what it

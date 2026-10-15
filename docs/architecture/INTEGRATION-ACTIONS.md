@@ -14,7 +14,7 @@ estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
   "services/api/intelligence/intelligence/decision_models.py": "sha256:95d33e7eee251e14114ba3f538f78f32ffe2d1e3cdb9c122ddec7b80086e8e25"
-  "services/api/intelligence/intelligence/routes.py": "sha256:46f4df5f21914056a91810cb1c0a490183ed144e99a9568b8aedf170f3b05e29"
+  "services/api/intelligence/intelligence/routes.py": "sha256:355eb639eb8cf03f9a79903ae67b1665b688e2fc095536e8d8bd44b2c06fcc18"
 ---
 # Integration Actions
 

@@ -3,7 +3,7 @@
   "terraform_version": "1.9.8",
   "variables": {
     "deployment_profile": {
-      "value": "production-lean"
+      "value": "production"
     },
     "environment": {
       "value": "production"
@@ -249,36 +249,6 @@
               "values": {
                 "instance_class": "db.serverless",
                 "engine": "aurora-postgresql"
-              }
-            }
-          ]
-        },
-        {
-          "address": "module.database",
-          "resources": [
-            {
-              "address": "module.database.aws_db_instance.postgres",
-              "mode": "managed",
-              "type": "aws_db_instance",
-              "name": "postgres",
-              "provider_name": "registry.terraform.io/hashicorp/aws",
-              "schema_version": 0,
-              "values": {
-                "identifier": "aether-legacy",
-                "instance_class": "db.t4g.micro",
-                "engine": "postgres",
-                "allocated_storage": 20
-              }
-            },
-            {
-              "address": "module.database.aws_db_subnet_group.postgres",
-              "mode": "managed",
-              "type": "aws_db_subnet_group",
-              "name": "postgres",
-              "provider_name": "registry.terraform.io/hashicorp/aws",
-              "schema_version": 0,
-              "values": {
-                "name": "aether-legacy-subnets"
               }
             }
           ]
@@ -709,6 +679,50 @@
               "values": {
                 "comparison_operator": "GreaterThanThreshold",
                 "threshold": 1
+              },
+              "index": 0
+            }
+          ]
+        },
+        {
+          "address": "module.rds",
+          "resources": [
+            {
+              "address": "module.rds.aws_db_subnet_group.this[0]",
+              "mode": "managed",
+              "type": "aws_db_subnet_group",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "name": "aether-rds"
+              },
+              "index": 0
+            },
+            {
+              "address": "module.rds.aws_db_parameter_group.this[0]",
+              "mode": "managed",
+              "type": "aws_db_parameter_group",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "family": "postgres16"
+              },
+              "index": 0
+            },
+            {
+              "address": "module.rds.aws_db_instance.this[0]",
+              "mode": "managed",
+              "type": "aws_db_instance",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "instance_class": "db.t4g.medium",
+                "engine": "postgres",
+                "allocated_storage": 100,
+                "multi_az": false
               },
               "index": 0
             }
@@ -1422,55 +1436,6 @@
         "after_sensitive": {}
       },
       "module_address": "module.aurora"
-    },
-    {
-      "address": "module.database.aws_db_instance.postgres",
-      "mode": "managed",
-      "type": "aws_db_instance",
-      "name": "postgres",
-      "provider_name": "registry.terraform.io/hashicorp/aws",
-      "change": {
-        "actions": [
-          "create"
-        ],
-        "before": null,
-        "after": {
-          "identifier": "aether-legacy",
-          "instance_class": "db.t4g.micro",
-          "engine": "postgres",
-          "allocated_storage": 20
-        },
-        "after_unknown": {
-          "arn": true,
-          "id": true
-        },
-        "before_sensitive": false,
-        "after_sensitive": {}
-      },
-      "module_address": "module.database"
-    },
-    {
-      "address": "module.database.aws_db_subnet_group.postgres",
-      "mode": "managed",
-      "type": "aws_db_subnet_group",
-      "name": "postgres",
-      "provider_name": "registry.terraform.io/hashicorp/aws",
-      "change": {
-        "actions": [
-          "create"
-        ],
-        "before": null,
-        "after": {
-          "name": "aether-legacy-subnets"
-        },
-        "after_unknown": {
-          "arn": true,
-          "id": true
-        },
-        "before_sensitive": false,
-        "after_sensitive": {}
-      },
-      "module_address": "module.database"
     },
     {
       "address": "module.dynamodb_cache.aws_dynamodb_table.cache",
@@ -2278,6 +2243,81 @@
         "after_sensitive": {}
       },
       "module_address": "module.monitoring"
+    },
+    {
+      "address": "module.rds.aws_db_instance.this[0]",
+      "mode": "managed",
+      "type": "aws_db_instance",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "instance_class": "db.t4g.medium",
+          "engine": "postgres",
+          "allocated_storage": 100,
+          "multi_az": false
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.rds",
+      "index": 0
+    },
+    {
+      "address": "module.rds.aws_db_parameter_group.this[0]",
+      "mode": "managed",
+      "type": "aws_db_parameter_group",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "family": "postgres16"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.rds",
+      "index": 0
+    },
+    {
+      "address": "module.rds.aws_db_subnet_group.this[0]",
+      "mode": "managed",
+      "type": "aws_db_subnet_group",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "aether-rds"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.rds",
+      "index": 0
     },
     {
       "address": "module.secrets.aws_kms_alias.secrets",

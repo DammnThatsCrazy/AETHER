@@ -61,7 +61,7 @@ Pick a **deployment profile** before you start — it decides cost and shape:
 | Profile | Use for | Cache / Events / Graph | NAT |
 |---|---|---|---|
 | `staging` | Release rehearsal, cost-capped, sleeps when idle | DynamoDB / SQS / Postgres | none (public IP) |
-| `production-lean` | Founding-tenant production, bounded bill | DynamoDB / SQS / Postgres | none (public IP) |
+| `production` | Founding-tenant production, bounded bill | DynamoDB / SQS / Postgres | none (public IP) |
 | `production-scale` | Scaled production | ElastiCache / MSK / Neptune | 1 NAT |
 | `enterprise-isolated` | Isolated enterprise | ElastiCache / MSK / Neptune | 1 NAT per AZ |
 
@@ -152,7 +152,7 @@ Record the bucket and table names — they become the `TF_STATE_BUCKET` and
    policy simulation before any mutation. State access is a separate contract
    in `config/terraform_state_access_policy.yaml`.
 
-> **Note — production-class name collisions.** `production-lean`,
+> **Note — production-class name collisions.** `production`,
 > `production-scale`, and `enterprise-isolated` all inherit `environment =
 > production` and therefore generate identical resource names. Separate state
 > keys keep their *state* apart but not their *names*. Two production-class

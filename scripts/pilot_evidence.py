@@ -189,7 +189,7 @@ def build_evidence(manifest_path: Path) -> dict:
             "repo": {"commit": _git("rev-parse", "HEAD"),
                      "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
                      "dirty": bool(_git("status", "--porcelain"))},
-            "deployment_profile": "production-lean",
+            "deployment_profile": "production",
             "migration": _migration_heads(),
         },
         "feature_flags": list(manifest.get("enabled_features", [])),

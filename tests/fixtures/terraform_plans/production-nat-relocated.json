@@ -3,7 +3,7 @@
   "terraform_version": "1.9.8",
   "variables": {
     "deployment_profile": {
-      "value": "production-lean"
+      "value": "production"
     },
     "environment": {
       "value": "production"
@@ -536,6 +536,33 @@
           ]
         },
         {
+          "address": "module.egress",
+          "resources": [
+            {
+              "address": "module.egress.aws_nat_gateway.this",
+              "mode": "managed",
+              "type": "aws_nat_gateway",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "connectivity_type": "public"
+              }
+            },
+            {
+              "address": "module.egress.aws_eip.nat",
+              "mode": "managed",
+              "type": "aws_eip",
+              "name": "nat",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": {
+                "domain": "vpc"
+              }
+            }
+          ]
+        },
+        {
           "address": "module.monitoring",
           "resources": [
             {
@@ -733,30 +760,6 @@
                 "name": "aether/byok_key"
               },
               "index": "byok_key"
-            },
-            {
-              "address": "module.secrets.aws_secretsmanager_secret.this[\"extraction-canary-seed\"]",
-              "mode": "managed",
-              "type": "aws_secretsmanager_secret",
-              "name": "this",
-              "provider_name": "registry.terraform.io/hashicorp/aws",
-              "schema_version": 0,
-              "values": {
-                "name": "aether/extraction-canary-seed"
-              },
-              "index": "extraction-canary-seed"
-            },
-            {
-              "address": "module.secrets.aws_secretsmanager_secret.this[\"sdk-config-secret\"]",
-              "mode": "managed",
-              "type": "aws_secretsmanager_secret",
-              "name": "this",
-              "provider_name": "registry.terraform.io/hashicorp/aws",
-              "schema_version": 0,
-              "values": {
-                "name": "aether/sdk-config-secret"
-              },
-              "index": "sdk-config-secret"
             },
             {
               "address": "module.secrets.aws_secretsmanager_secret_rotation.this[\"jwt_secret\"]",
@@ -1937,6 +1940,52 @@
       "index": "lean-worker"
     },
     {
+      "address": "module.egress.aws_eip.nat",
+      "mode": "managed",
+      "type": "aws_eip",
+      "name": "nat",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "domain": "vpc"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.egress"
+    },
+    {
+      "address": "module.egress.aws_nat_gateway.this",
+      "mode": "managed",
+      "type": "aws_nat_gateway",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "connectivity_type": "public"
+        },
+        "after_unknown": {
+          "arn": true,
+          "id": true
+        },
+        "before_sensitive": false,
+        "after_sensitive": {}
+      },
+      "module_address": "module.egress"
+    },
+    {
       "address": "module.monitoring.aws_cloudwatch_dashboard.main",
       "mode": "managed",
       "type": "aws_cloudwatch_dashboard",
@@ -2318,54 +2367,6 @@
       },
       "module_address": "module.secrets",
       "index": "jwt_secret"
-    },
-    {
-      "address": "module.secrets.aws_secretsmanager_secret.this[\"extraction-canary-seed\"]",
-      "mode": "managed",
-      "type": "aws_secretsmanager_secret",
-      "name": "this",
-      "provider_name": "registry.terraform.io/hashicorp/aws",
-      "change": {
-        "actions": [
-          "create"
-        ],
-        "before": null,
-        "after": {
-          "name": "aether/extraction-canary-seed"
-        },
-        "after_unknown": {
-          "arn": true,
-          "id": true
-        },
-        "before_sensitive": false,
-        "after_sensitive": {}
-      },
-      "module_address": "module.secrets",
-      "index": "extraction-canary-seed"
-    },
-    {
-      "address": "module.secrets.aws_secretsmanager_secret.this[\"sdk-config-secret\"]",
-      "mode": "managed",
-      "type": "aws_secretsmanager_secret",
-      "name": "this",
-      "provider_name": "registry.terraform.io/hashicorp/aws",
-      "change": {
-        "actions": [
-          "create"
-        ],
-        "before": null,
-        "after": {
-          "name": "aether/sdk-config-secret"
-        },
-        "after_unknown": {
-          "arn": true,
-          "id": true
-        },
-        "before_sensitive": false,
-        "after_sensitive": {}
-      },
-      "module_address": "module.secrets",
-      "index": "sdk-config-secret"
     },
     {
       "address": "module.secrets.aws_secretsmanager_secret_rotation.this[\"jwt_secret\"]",

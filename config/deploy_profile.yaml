@@ -80,7 +80,7 @@ capabilities:
     status: optional
     local: {compose_service: clickhouse}
     cloud: {inline_ref: "enable_clickhouse flag in profiles.tf"}
-    gap: "ClickHouse is FORBIDDEN in production-lean by cost policy; postgres serves analytics there. No dedicated Terraform module yet (flagged only)."
+    gap: "ClickHouse is FORBIDDEN in production by cost policy; postgres serves analytics there. No dedicated Terraform module yet (flagged only)."
 
   - id: graph
     status: present

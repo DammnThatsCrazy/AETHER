@@ -377,7 +377,7 @@ def test_the_bundle_section_separates_the_claim_from_the_verification(tmp_path):
 
 def _inventory(path: Path, **extra) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    body = {"schema_version": 1, "profile": "production-lean", "resources": []}
+    body = {"schema_version": 1, "profile": "production", "resources": []}
     body.update(extra)
     path.write_text(json.dumps(body), encoding="utf-8")
 
@@ -385,7 +385,7 @@ def _inventory(path: Path, **extra) -> None:
 def test_a_fixture_derived_inventory_is_refused_as_cost_input(tmp_path, monkeypatch):
     monkeypatch.setattr(collect_evidence, "repo_root", lambda: tmp_path)
     _inventory(tmp_path / collect_evidence.COST_INVENTORY,
-               generated_from="tests/fixtures/terraform_plans/production-lean-valid.json",
+               generated_from="tests/fixtures/terraform_plans/production-valid.json",
                synthetic_input="tests/fixtures")
     reason = collect_evidence.synthetic_inventory_reason()
     assert reason and "test fixture" in reason
@@ -417,7 +417,7 @@ def test_the_bundle_records_a_guarded_check_as_unverifiable_never_as_a_pass(
     """
     monkeypatch.setattr(collect_evidence, "repo_root", lambda: tmp_path)
     _inventory(tmp_path / collect_evidence.COST_INVENTORY,
-               generated_from="tests/fixtures/terraform_plans/production-lean-valid.json",
+               generated_from="tests/fixtures/terraform_plans/production-valid.json",
                synthetic_input="fixture")
     ran: list[str] = []
     monkeypatch.setattr(collect_evidence, "_run",

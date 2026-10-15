@@ -6,7 +6,7 @@ feature_id: deployment-terraform-profiles
 title: Deployment Terraform Profiles
 owning_system: aether
 summary: >-
-  Per-profile Terraform + application bindings that make production-lean
+  Per-profile Terraform + application bindings that make production
   selectable and enforce the cost policy. Infrastructure-turnkey: the plan is
   complete and policy-validated in-repo; applying it needs an AWS account.
 
@@ -23,7 +23,7 @@ scope:
   excluded:
     - applied cloud infrastructure (requires an AWS account)
   deferred: []
-  release_profile_applicability: [staging, production-lean, production-scale]
+  release_profile_applicability: [staging, production, production-scale]
 
 repository_ceiling:
   type: INFRASTRUCTURE_TURNKEY
@@ -86,7 +86,7 @@ activation:
       required_action: Apply the plan against a real AWS account for the target profile.
       source_code_change_expected: false
       affected_environments: [staging, production, scale]
-      affected_release_profiles: [staging, production-lean, production-scale]
+      affected_release_profiles: [staging, production, production-scale]
       evidence_required: credentialed apply artifact (real account id + region + captured_at)
     - type: ACCOUNT_WAITING
       description: An AWS account/organization must be available.
@@ -94,7 +94,7 @@ activation:
       required_action: Provision an AWS account and bind credentials.
       source_code_change_expected: false
       affected_environments: [staging, production, scale]
-      affected_release_profiles: [staging, production-lean, production-scale]
+      affected_release_profiles: [staging, production, production-scale]
       evidence_required: account id bound to the deployment pipeline
 
 dependencies:
@@ -152,8 +152,8 @@ release_profiles:
     business_gate: false
   pilot:
     participation: not_in_release
-    note: Pilot rides the production-lean infrastructure profile.
-  production-lean:
+    note: Pilot rides the production infrastructure profile.
+  production:
     participation: required
     implementation_floor: TURNKEY
     productionization_required: true

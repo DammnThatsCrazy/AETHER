@@ -25,12 +25,12 @@
 #
 # Usage:
 #   cd "$(git rev-parse --show-toplevel)"
-#   ./scripts/deploy/go_live.sh [--profile production-lean] [--region us-east-1]
+#   ./scripts/deploy/go_live.sh [--profile production] [--region us-east-1]
 # =============================================================================
 set -euo pipefail
 
 # ─── Defaults ────────────────────────────────────────────────────────────────
-PROFILE="${PROFILE:-production-lean}"
+PROFILE="${PROFILE:-production}"
 REGION="${AWS_REGION:-us-east-1}"
 DOMAIN="olympuslabsml.com"
 API_DOMAIN="api.${DOMAIN}"

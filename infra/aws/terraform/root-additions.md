@@ -80,7 +80,7 @@ variable "aether_repo_ref" {
 
 variable "enable_tfmcp_in_lean" {
   type        = bool
-  description = "Opt-in flag to deploy tfmcp in the production-lean profile. Off by default — lean stays lean unless you explicitly want operator tooling."
+  description = "Opt-in flag to deploy tfmcp in the production profile. Off by default — lean stays lean unless you explicitly want operator tooling."
   default     = false
 }
 
@@ -158,7 +158,7 @@ module "tfmcp" {
 }
 ```
 
-## profiles/production-lean.tfvars — opt in
+## profiles/production.tfvars — opt in
 
 ```hcl
 enable_tfmcp_in_lean = true

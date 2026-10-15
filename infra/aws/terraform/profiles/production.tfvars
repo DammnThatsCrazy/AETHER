@@ -1,6 +1,6 @@
 # ============================================================================
-# AETHER — production-lean deployment profile (founding-tenant target)
-# Apply: terraform apply -var-file=profiles/production-lean.tfvars
+# AETHER — production deployment profile (founding-tenant target)
+# Apply: terraform apply -var-file=profiles/production.tfvars
 #
 # First customer / early controlled production. Forbidden resources (MSK,
 # ElastiCache, Neptune, ClickHouse, dedicated ML, frontend ECS, legacy RDS,
@@ -8,7 +8,7 @@
 # provisioned — see config/deployment_profiles.yaml and profiles.tf.
 # ============================================================================
 
-deployment_profile = "production-lean"
+deployment_profile = "production"
 
 # Production owns the canonical public web surfaces after staging evidence is
 # complete. DNS delegation/verification remains an explicit rollout step.
@@ -37,7 +37,7 @@ log_retention_days = 3
 # tfmcp — Terraform MCP Server (opt-in)
 # ============================================================================
 # Set enable_tfmcp_in_lean = true to deploy the tfmcp MCP server on the
-# production-lean profile. Required before applying:
+# production profile. Required before applying:
 #   1. Build and push the image: ./AWS\ Deployment/aether-aws/build-tfmcp.sh
 #   2. Pin the digest below (sha256:...)
 #   3. Run the reviewed promotion workflow (.github/workflows/terraform-promote.yml)

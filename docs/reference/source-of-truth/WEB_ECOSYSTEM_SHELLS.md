@@ -74,7 +74,7 @@ build status for each surface.
 The public web provisioning path is now part of the AWS deployment contract.
 The public hosts are `www`, `aether`, `docs`, `app`, and `status`: under
 `staging.olympuslabsml.com` on staging and under `olympuslabsml.com` for
-`production-lean`, which exports the association CNAME targets for the
+`production`, which exports the association CNAME targets for the
 authoritative DNS.
 
 - **Staging runs one Amplify application**, `AETHER-staging-web` (key

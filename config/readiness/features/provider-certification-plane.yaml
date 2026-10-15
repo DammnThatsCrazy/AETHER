@@ -88,7 +88,7 @@ activation:
     affected_release_profiles:
     - staging
     - pilot
-    - production-lean
+    - production
     - production-scale
     evidence_required: captured live provider run
 dependencies:
@@ -147,7 +147,7 @@ release_profiles:
     productionization_required: true
     environment_gate: pilot
     business_gate: false
-  production-lean:
+  production:
     participation: required
     implementation_floor: TURNKEY
     productionization_required: true

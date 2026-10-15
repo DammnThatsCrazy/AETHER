@@ -25,7 +25,8 @@ which references every other release facet by key:
   * every `control_evidence` resolves to a controls[].id or gate_conditions[].id
     in config/deployment_readiness.yaml;
   * per-profile `states` cover exactly the declared profiles (each a real key
-    of config/deployment_profiles.yaml) with enum values only, a deploy_profile
+    of config/deployment_profiles.yaml, or the local development environment)
+    with enum values only, a deploy_profile
     `gap` capability never claims an enabled state, and required_enabled always
     carries control evidence.
 
@@ -57,6 +58,9 @@ ROUTE_REGISTRY = ROOT / "config" / "route_registry.yaml"
 FOUNDING_RELEASE = ROOT / "config" / "founding_tenant_release.yaml"
 DEPLOYMENT_READINESS = ROOT / "config" / "deployment_readiness.yaml"
 DEPLOYMENT_PROFILES = ROOT / "config" / "deployment_profiles.yaml"
+
+# Non-deployment environments the capability matrix may take a position on.
+LOCAL_ENVIRONMENTS = frozenset({"local"})
 
 # Per-profile capability disposition enum for capability_matrix.yaml `states`.
 CAPABILITY_STATES = (
@@ -163,7 +167,10 @@ def _join_facets() -> dict:
             {c.get("id") for c in (readiness.get("controls") or [])}
             | {c.get("id") for c in (readiness.get("gate_conditions") or [])}
         ) - {None},
-        "profiles": set((profiles.get("profiles") or {}).keys()),
+        # The matrix also takes a position on local development, which is an
+        # environment but not a deployment profile (the matrix declares only
+        # staging and production), so it is admitted explicitly here.
+        "profiles": set((profiles.get("profiles") or {}).keys()) | LOCAL_ENVIRONMENTS,
     }
 
 

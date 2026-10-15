@@ -130,7 +130,7 @@ def _iam_manifest() -> tuple[dict, tuple]:
 def load_requirements_from_mapping(manifest: dict) -> tuple:
     """Use the production parser without creating a second parser in tests."""
 
-    path = ROOT / "tests/fixtures/terraform_plans/production-lean-valid.json"
+    path = ROOT / "tests/fixtures/terraform_plans/production-valid.json"
     del path  # keep the helper visibly independent from cloud or fixture state
     from scripts.release.compare_effective_iam import IamRequirement
 

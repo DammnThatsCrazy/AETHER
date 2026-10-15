@@ -23,9 +23,9 @@ reviewed_source_commits:
   - commit: "609a3ad37"
     reason: "Reviewed the optional session_required guard on the SSO callback. This page now explains its CLI-only fail-closed behavior while preserving browser sign-in and first-admin bootstrap behavior."
 source_hashes:
-  ".github/workflows/infrastructure.yml": "sha256:5c1138601e7f849d2a1b6649957c32607fc1aacd25667bf910de280a4db4db0c"
+  ".github/workflows/infrastructure.yml": "sha256:0b75f5f3df587ea210008ef2bd79babf74c832dd6746a5a218411dae3a90d5ad"
   ".github/workflows/staging-lifecycle.yml": "sha256:ab0d86125cd2be277ba7e0a40a4dbc9fdd5db1480ff1c7cb816adf4874a55ae9"
-  ".github/workflows/terraform-promote.yml": "sha256:dc7242423f1931ba0d93019d701beed0a669458e4124db8baba46d074becd0ad"
+  ".github/workflows/terraform-promote.yml": "sha256:804e3b437274475d5125b4dbf6c3988ff9387909af73a5aeb5690713cf310adf"
   "infra/aws/terraform/modules/ecs/main.tf": "sha256:b639e5e6742dd68587e00123e3ed7cc2d2c8679a6bedc23d3967891a9d0db1a5"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"

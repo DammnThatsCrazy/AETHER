@@ -104,7 +104,7 @@ OUTPUTS (written to --out-dir, default `.artifacts/`)
 
 Usage:
   python scripts/release/check_terraform_plan_policy.py \\
-      --profile production-lean --plan-json path/to/plan.json
+      --profile production --plan-json path/to/plan.json
   python scripts/release/check_terraform_plan_policy.py \\
       --profile staging --plan-json plan.json --out-dir .artifacts/staging
 

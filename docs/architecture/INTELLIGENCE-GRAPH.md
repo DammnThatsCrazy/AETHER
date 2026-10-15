@@ -54,7 +54,7 @@ source_hashes:
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
   "services/api/repositories/repos.py": "sha256:4763340370ea7ef9e43d91b1156def3188a83114efa832e0a289f267957206e6"
-  "services/api/shared/graph/": "sha256:fde19e372f598d92ceb7e58bea28934d379495dfbd46aab44253efd7ec2119fd"
+  "services/api/shared/graph/": "sha256:2d13450f7cd08908bf73466bfbbe8200b1d49225f54431173f12ce1e89a31d03"
   "services/api/value/x402/economic_mutations.py": "sha256:bdd180a936e048840636f221fdee3b142c0babab5d8e2bcc59b4a51983198f51"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
   "services/api/workers/profile360_workers/workers.py": "sha256:0c79f5ee2cc03eb0ae92d8690a8622b8ebaea245dc047c7643107fe909d7170a"
@@ -71,7 +71,7 @@ The Unified On-Chain Intelligence Graph extends the Aether platform with an 8-la
 - **Graph-native** — 6 new node types, 19 new edge types layered onto the existing Identity Graph
 - **Governed writes** — active on-chain action graph writes use `GraphMutationGateway`; legacy identity resolution graph mutations are retired and the `/v1/resolution/*` routes are removed
 
-> **Infrastructure:** `GraphClient` auto-selects a backend at `connect()`: Neptune (via gremlinpython) when `NEPTUNE_ENDPOINT` is set; in-memory in `AETHER_ENV=local`; otherwise, in a non-local environment with no Neptune endpoint and `GRAPH_BACKEND=postgres` (the staging / production-lean default), the Postgres backend — `_PostgresGraphBackend` over the `graph_vertices` / `graph_edges` tables, whose observable semantics match the in-memory backend. A non-local environment with no usable backend (no Neptune, and no database pool for the declared Postgres backend) still fails closed with `RuntimeError`.
+> **Infrastructure:** `GraphClient` auto-selects a backend at `connect()`: Neptune (via gremlinpython) when `NEPTUNE_ENDPOINT` is set; in-memory in `AETHER_ENV=local`; otherwise, in a non-local environment with no Neptune endpoint and `GRAPH_BACKEND=postgres` (the staging / production default), the Postgres backend — `_PostgresGraphBackend` over the `graph_vertices` / `graph_edges` tables, whose observable semantics match the in-memory backend. A non-local environment with no usable backend (no Neptune, and no database pool for the declared Postgres backend) still fails closed with `RuntimeError`.
 
 Tenant-scoped erasure is a first-class graph operation. The cleanup path uses
 `GraphClient.delete_tenant_data(tenant_id)` and resolves both the canonical

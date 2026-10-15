@@ -1325,7 +1325,7 @@ _PG_GRAPH_SCHEMA_LOCK_KEY = 0x67726170  # "grap"
 class _PostgresGraphBackend:
     """Durable graph over Postgres for profiles that declare ``graph: postgres``.
 
-    The staging and production-lean deployment profiles declare ``graph:
+    The staging and production deployment profiles declare ``graph:
     postgres`` but run no Neptune cluster. Before this backend existed,
     :meth:`GraphClient.connect` fail-closed with a ``RuntimeError`` in exactly
     those profiles — the declared backend was never implemented. This backend
@@ -2365,7 +2365,7 @@ class GraphClient:
             logger.info("GraphClient connected (in-memory, local mode)")
         elif _graph_backend() == "postgres":
             # Non-local profiles that declare ``graph: postgres`` (staging /
-            # production-lean) and run no Neptune cluster. ``get_pool`` itself
+            # production) and run no Neptune cluster. ``get_pool`` itself
             # fail-closes with a RuntimeError when DATABASE_URL is unset in a
             # non-local environment, so a misconfigured deployment never boots a
             # graph client silently.

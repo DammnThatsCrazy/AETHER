@@ -11,16 +11,16 @@ canonical_owner: platform@aether
 estimated_read_minutes: 16
 toc_depth: 3
 source_hashes:
-  "config/aws_price_book.yaml": "sha256:b449237c5d4b11622f0f35278b3f5a22a17b39b1cea74a53596b6af94ba2d3dc"
-  "config/cost_exceptions.yaml": "sha256:029e003d3340de68c683a2f212edd3ceb13b6de01e5f6e70ddd44bdecda78ce2"
-  "config/deployment_profiles.yaml": "sha256:77d37f2c71472b5d644da32636bb68948263250739b62b621502cdfb09797475"
-  "config/runtime_deployment.yaml": "sha256:ba7bd71d79e605a88076b6ea745582dce9c4bff38442ebd5d327cfee9bbf7284"
-  "config/terraform_resource_contracts.yaml": "sha256:1f08c04dae8931f845c7918328504f748a9f643bc806670a32b644eb8231baca"
-  "infra/aws/terraform/profiles.tf": "sha256:c197af7ebf1556be22a70dbf05c4ba85f5f93a2dd322dc39a42442f27226a89d"
-  "scripts/release/check_cost_model.py": "sha256:b80c15e6d0ceee9a161ad4259c82284469da10a395ac08c3b0e26f0c44e95aa7"
-  "scripts/release/check_cost_policy.py": "sha256:2e547cdb3ce200a9f067b2a930a54ca622f29952fe4138693d942ddc1ec54e12"
-  "scripts/release/check_cost_policy_terraform.py": "sha256:d43ff5de7727dda5ab8ca23785898accdc7bbcf2f82f4303d0f392b1e81cc4fb"
-  "scripts/release/check_terraform_plan_policy.py": "sha256:546fa8186fa9b006342e6db74635d5cd1cd28261f0d86ee22033aa1bdb1dd07d"
+  "config/aws_price_book.yaml": "sha256:428e6099d0a5d2d985c8675b6f382a30403ef9690464f75dff192cc60199ba19"
+  "config/cost_exceptions.yaml": "sha256:de8e6133251fea495e15437cf890bdbdea491ff41422dc48a1b7d925a09c72da"
+  "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
+  "config/runtime_deployment.yaml": "sha256:cd65f4902ed9062c2526bd9b83b99e2c0ecc58f012a3fa1c90ba9660b874a332"
+  "config/terraform_resource_contracts.yaml": "sha256:b1414be3c53b0309d484b8029aadf336618bd88d94d31de72ed0f54865493d59"
+  "infra/aws/terraform/profiles.tf": "sha256:da63e1f50e4030924713679445e3c365883a23821ac78df83bebe14436c67f60"
+  "scripts/release/check_cost_model.py": "sha256:e406557fe672b5af7c7cc3dc3ce83220813f19c84ba70791b0facc89e5e40717"
+  "scripts/release/check_cost_policy.py": "sha256:1fd906153be98a14c66a4abcf176a8ecd7259b9af4945bd14e9af50305654916"
+  "scripts/release/check_cost_policy_terraform.py": "sha256:d5dcbd7547d76dad5c46ea611d282c2652970a60aa9d420eb2b80641a0fa0469"
+  "scripts/release/check_terraform_plan_policy.py": "sha256:65fd84d8350eb6cc329d68dd837bfed2283117c3579aefbbb6687699218a0c40"
 ---
 
 # Cost Optimization
@@ -55,10 +55,8 @@ before-state representation, and existing non-scaling settings are preserved.
 
 | Profile | Mode | Target | Hard ceiling | Basis |
 |---|---|---|---|---|
-| `production-lean` | fixed baseline, 730 h/month | USD 150.00 | USD 200.00 | `target_fixed_monthly` / `hard_fixed_monthly` |
+| `production` | fixed baseline, 730 h/month | USD 150.00 | USD 200.00 | `target_fixed_monthly` / `hard_fixed_monthly` |
 | `staging` | wake/sleep, 40 awake h/month | USD 25.00 | USD 50.00 | `target_monthly_spend` / `hard_monthly_spend` |
-| `production-scale` | none | — | — | `cost_capped: false` |
-| `enterprise-isolated` | none | — | — | `cost_capped: false`; recovered contractually |
 
 Exceeding the **target** emits a warning and the gate passes. Exceeding the
 **hard ceiling** fails the release unless an active, unexpired, non-blanket
@@ -93,15 +91,15 @@ and the distinction is load-bearing:
 Only the fixed baseline is gated. The usage band is always reported alongside
 it so nobody mistakes the baseline for the bill.
 
-## Modelled production-lean cost
+## Modelled production cost
 
-Produced by `scripts/release/check_cost_model.py --profile production-lean`
+Produced by `scripts/release/check_cost_model.py --profile production`
 against the canonical inventory that
 `scripts/release/check_terraform_plan_policy.py` emits. Result: **PASS with a
 target warning.**
 
 **Read the provenance of that inventory before quoting the number.** It is
-derived from `tests/fixtures/terraform_plans/production-lean-valid.json`, a
+derived from `tests/fixtures/terraform_plans/production-valid.json`, a
 committed fixture written by hand to match the shape this Terraform root
 produces. It is **not** the output of a credentialed `terraform show -json`
 against real state, because no such plan has ever been produced — this
@@ -127,7 +125,7 @@ The optional customer Access Kit MCP service is not part of this baseline. Its
 Fargate task is priced by the same plan-derived CPU, memory, and desired-count
 formula. At the default two 0.25-vCPU / 0.5-GiB tasks, the fixed service adds
 about USD 18.02/month; the dedicated ECR repository adds about USD 0.50/month.
-That makes the production-lean fixed projection approximately USD 207.45/month
+That makes the production fixed projection approximately USD 207.45/month
 before variable ALB and log costs, above the USD 200 hard ceiling. The normal
 cost gate rejects this plan unless a valid, time-bounded cost exception is
 active. The MCP service remains opt-in and the base profile remains unchanged.
@@ -169,7 +167,7 @@ a chatty debug logger can out-cost the load balancer. `log_retention_days` is
 
 ## The $150 target deviation — accepted
 
-`production-lean` sits at **USD 188.93/month fixed, which is USD 38.93 over the
+`production` sits at **USD 188.93/month fixed, which is USD 38.93 over the
 USD 150 target and USD 11.07 under the USD 200 hard ceiling.** The gate emits
 `⚠ fixed cost USD 188.93/mo exceeds the target USD 150.00/mo (under the 200.00
 ceiling)` and passes.
@@ -195,7 +193,7 @@ and clear the target outright.
 Rejected. Aurora Serverless v2 has permitted a `min_capacity` of 0 since late
 2024, and `profiles/staging.tfvars` already uses `aurora_min_acu = 0` — staging
 is a correctness environment and a cold start there costs nothing but a slower
-rehearsal. `production-lean` serves a live founding tenant. Scale-from-zero
+rehearsal. `production` serves a live founding tenant. Scale-from-zero
 resume is a latency event on the first request after an idle window, and a
 founding tenant's traffic is exactly the shape (low volume, irregular, human-
 driven) that maximises how often that window is hit. Paying USD 43.80/month for
@@ -215,7 +213,7 @@ Rejected. `lean-worker` is one task hosting eight logical roles —
 replaces eight dedicated tasks that between them held 4096 CPU units and
 8192 MiB. Memory, not CPU, is the binding constraint: eight roles' database
 pools, SQS receive buffers and per-role consumer state now share one heap, and
-because `production-lean` runs `remote_ml: false`, the semantic classifier runs
+because `production` runs `remote_ml: false`, the semantic classifier runs
 **in-process** in this task as a resident model rather than a request-scoped
 allocation. 4 GiB fits the arithmetic and leaves nothing for it.
 
@@ -230,7 +228,7 @@ This lever was considered and declined. It is not an open action item.
 
 The USD 188.93 figure is a modelled projection from a pinned price book against
 a plan inventory. It is not an observed bill. No AWS invoice for this profile
-exists. The `production-lean` readiness scorecard reports
+exists. The `production` readiness scorecard reports
 `LEAN-COST-CEILING` as built-but-unproven for exactly this reason, and
 `COND-COST-OBSERVED-7D` and `COND-COST-RECONCILED` remain unmet.
 
@@ -239,27 +237,27 @@ exists. The `production-lean` readiness scorecard reports
 Shape only — what each profile is contracted to provision. Cardinalities are
 the ones `config/terraform_resource_contracts.yaml` asserts against the plan.
 
-| Resource class | staging | production-lean | production-scale | enterprise-isolated |
-|---|---|---|---|---|
-| S3 static SPA origins + SSM pointers | 8 | 8 | 8 | 8 |
-| Application Load Balancer | ≥1 | ≥1 | ≥1 | ≥1 |
-| ECS services | 2 | 2 | 9 | 9 |
-| Aurora Serverless v2 cluster | ≥1 | ≥1 | ≥1 | ≥1 |
-| SNS topic + SQS queues + DLQs | ≥1 | ≥1 | ≥1 | ≥1 |
-| DynamoDB cache table | 1 | 1 | 1 | 1 |
-| S3 log/object lake | ≥1 | ≥1 | ≥1 | ≥1 |
-| KMS keys + Secrets Manager | ≥1 | ≥1 | ≥1 | ≥1 |
-| CloudWatch alarms + dashboard | ≥1 | ≥1 | ≥1 | ≥1 |
-| **NAT Gateways** | **0** | **0** | **1** | **3** |
-| **Elastic IPs** | **0** | **0** | 1 | 3 |
-| MSK Kafka | 0 | 0 | permitted | permitted |
-| ElastiCache Redis | 0 | 0 | permitted | permitted |
-| Neptune | 0 | 0 | permitted | permitted |
-| ClickHouse | 0 | 0 | permitted (unimplemented) | permitted (unimplemented) |
-| Dedicated ML ECS service | 0 | 0 | present | present |
-| Frontend ECS services | **0** | **0** | **0** | **0** |
-| Legacy RDS instance | **0** | **0** | **0** | **0** |
-| Self-managed Prometheus/Grafana | **0** | **0** | **0** | **0** |
+| Resource class | staging | production |
+| --- | --- | --- |
+| S3 static SPA origins + SSM pointers | 8 | 8 |
+| Application Load Balancer | ≥1 | ≥1 |
+| ECS services | 2 | 2 |
+| Aurora Serverless v2 cluster | ≥1 | ≥1 |
+| SNS topic + SQS queues + DLQs | ≥1 | ≥1 |
+| DynamoDB cache table | 1 | 1 |
+| S3 log/object lake | ≥1 | ≥1 |
+| KMS keys + Secrets Manager | ≥1 | ≥1 |
+| CloudWatch alarms + dashboard | ≥1 | ≥1 |
+| **NAT Gateways** | **0** | **0** |
+| **Elastic IPs** | **0** | **0** |
+| MSK Kafka | 0 | 0 |
+| ElastiCache Redis | 0 | 0 |
+| Neptune | 0 | 0 |
+| ClickHouse | 0 | 0 |
+| Dedicated ML ECS service | 0 | 0 |
+| Frontend ECS services | **0** | **0** |
+| Legacy RDS instance | **0** | **0** |
+| Self-managed Prometheus/Grafana | **0** | **0** |
 
 `frontend_ecs_services`, `legacy_rds` and `prometheus_grafana_servers` are zero
 at *every* profile. Their Terraform gates are the literal `false`, not a
@@ -391,13 +389,13 @@ The schema is built so exceptions cannot rot:
 2. There is no "permanent", "indefinite" or "until further notice" state. The
    schema has no field for it.
 3. `max_duration_days` caps a single grant: 90 days by default, **30 days for
-   `production-lean`**.
-4. A `production-lean` exception may not be blanket-scoped. It must name the
+   `production`**.
+4. A `production` exception may not be blanket-scoped. It must name the
    resources it covers and put a number on the overage. An entry with
    `affected_resources: [all]` (or `*`, `any`, `everything`, `all_resources`,
    or empty) is rejected outright.
 5. `max_estimated_amount` bounds the grant: USD 500 by default, **USD 100 for
-   `production-lean`**.
+   `production`**.
 6. `owner` and `approver` must be different people — no self-approval.
 
 A grant raises the effective ceiling by `estimated_amount` and *only* by that
@@ -422,7 +420,7 @@ Post-deployment cost observation is externally blocked and is tracked as
 `COND-COST-OBSERVED-7D` and `COND-COST-RECONCILED` in
 `config/deployment_readiness.yaml`, with the standing exception
 `DR-EX-NO-BILLING-HISTORY`. Provisioning an AWS Budget with an alert threshold
-should be part of the same change that first applies `production-lean`; it
+should be part of the same change that first applies `production`; it
 cannot be validated from here.
 
 The operational alarms that *do* exist are correctness alarms with cost
@@ -444,9 +442,10 @@ side-effects, not budget alarms: `aurora_max_acu` (Aurora at ceiling ACU for
 
 ## Scale-promotion triggers
 
-`production-scale` is `cost_capped: false`. Promotion buys capacity, so the
+Production grows by variable changes, not by a new profile; growth beyond the
+lean ceiling needs a time-bounded cost exception or a raised ceiling. Growth buys capacity, so the
 question is never "is this cheaper" — it is "has the traffic that justifies
-this arrived". Promote when the founding-tenant deployment shows a sustained,
+this arrived". Grow production when the founding-tenant deployment shows a sustained,
 observed condition, not a projected one:
 
 | Signal | Threshold | What it means |
@@ -459,13 +458,11 @@ observed condition, not a projected one:
 | Analytics workload | Aggregate queries dominating database load | ClickHouse becomes justified — note it is a selector only today and no module exists. |
 | Egress posture | A compliance or customer requirement for private task subnets | `network_egress_mode = single_nat` or `ha_nat`. On a cost-capped profile this is the explicit opt-in the `nat_gateway_unless_explicit` policy requires and must be reviewed as a cost-policy exception. |
 
-Promotion is a Terraform profile change and goes through
-`.github/workflows/terraform-promote.yml` like any other. Note that
-`production-lean`, `production-scale` and `enterprise-isolated` all inherit
-`environment = "production"` and collide on resource names — see
-[AWS Lean Production](AWS-LEAN-PRODUCTION.md#profile-name-collision) before
-planning any promotion. They need separate AWS accounts, not just separate
-state keys.
+Growth is a reviewed Terraform variable change and goes through
+`.github/workflows/terraform-promote.yml` like any other. A separate dedicated
+customer deployment would reuse production's resource names and so needs its
+own AWS account — see
+[AWS Lean Production](AWS-LEAN-PRODUCTION.md#profile-name-collision).
 
 ## Running the gates
 
@@ -478,16 +475,16 @@ make validate-cost-policy-terraform
 
 # Shape — a real plan realises it (emits .artifacts/profile-resource-inventory.json)
 python scripts/release/check_terraform_plan_policy.py \
-  --profile production-lean --plan-json plan.json
+  --profile production --plan-json plan.json
 
 # Magnitude — price the inventory against the budget
 python scripts/release/check_cost_model.py \
-  --profile production-lean \
+  --profile production \
   --inventory .artifacts/profile-resource-inventory.json \
-  --out-dir .artifacts/cost-production-lean
+  --out-dir .artifacts/cost-production
 
 # Magnitude — treat a target breach as fatal instead of a warning
-python scripts/release/check_cost_model.py --profile production-lean \
+python scripts/release/check_cost_model.py --profile production \
   --inventory .artifacts/profile-resource-inventory.json --fail-on-target
 ```
 
@@ -498,5 +495,5 @@ deviation above in force, it would fail every run.
 
 - [AWS Lean Production](AWS-LEAN-PRODUCTION.md) — the topology these numbers price
 - [Staging Wake/Sleep](STAGING-WAKE-SLEEP.md) — the 40-awake-hours budget model
-- [Deployment Profiles](../architecture/DEPLOYMENT-PROFILES.md) — the full eight-profile matrix
+- [Deployment Profiles](../architecture/DEPLOYMENT-PROFILES.md) — the full two-profile matrix
 - [Release Evidence](RELEASE-EVIDENCE.md) — where cost evidence lands in the bundle

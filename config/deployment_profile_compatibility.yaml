@@ -3,13 +3,7 @@ profiles:
   staging:
     require_https: true
     allow_placeholder_endpoints: false
-  production-lean:
-    require_https: true
-    allow_placeholder_endpoints: false
-  production-scale:
-    require_https: true
-    allow_placeholder_endpoints: false
-  enterprise-isolated:
+  production:
     require_https: true
     allow_placeholder_endpoints: false
 required_frontend_fields:

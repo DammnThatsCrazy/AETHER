@@ -289,7 +289,7 @@ origins; server-to-server clients can omit `Origin`. It rejects wildcards and
 invalid host/origin headers. `GET /healthz` is process liveness; `GET /readyz`
 checks configuration but does not claim live Aether API reachability or tenant
 readiness. The dedicated AWS Terraform service is opt-in, deploys only to the
-`production-scale` profile that canonically owns the globally named ECR
+`production` profile that canonically owns the globally named ECR
 repository, uses an immutable image digest, and is routed separately from the
 privileged operator `tfmcp` service. The customer MCP task role has no workload
 AWS permissions. A local emulated `linux/amd64` image build and container

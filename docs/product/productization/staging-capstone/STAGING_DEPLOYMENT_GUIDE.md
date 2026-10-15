@@ -15,9 +15,9 @@ canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 2
 source_hashes:
-  "config/deployment_profiles.yaml": "sha256:77d37f2c71472b5d644da32636bb68948263250739b62b621502cdfb09797475"
-  "config/runtime_deployment.yaml": "sha256:ba7bd71d79e605a88076b6ea745582dce9c4bff38442ebd5d327cfee9bbf7284"
-  "scripts/lib/preflight_dynamodb.py": "sha256:412fa322a11832da710b26c2834a9d7f57a02e0b5451ea4336e7a599de1e41f9"
+  "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
+  "config/runtime_deployment.yaml": "sha256:cd65f4902ed9062c2526bd9b83b99e2c0ecc58f012a3fa1c90ba9660b874a332"
+  "scripts/lib/preflight_dynamodb.py": "sha256:fb2c96646af2b24fc6add4b9463ce3ed19a8ae7ff77161be41eb464cb61ffa15"
   "scripts/staging_preflight.py": "sha256:d18e7929deaedc6ad3ecf261d6cde3d3e59136f49515642dfc87b8e8f7026e28"
 ---
 

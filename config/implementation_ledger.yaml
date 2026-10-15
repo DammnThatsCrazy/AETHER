@@ -53,13 +53,13 @@ items:
     last_verified_commit: null
 
   - id: FT-COST-POLICY-DATA
-    title: Canonical production-lean cost policy (forbidden expensive resources)
+    title: Canonical production cost policy (forbidden expensive resources)
     domain: cost
     severity: P0
     release_class: founding_tenant_release_blocker
-    customer_impact: Fixes the target that production-lean must exclude MSK/Neptune/ElastiCache/ClickHouse/dedicated-ML/frontend-ECS/NAT.
+    customer_impact: Fixes the target that production must exclude MSK/Neptune/ElastiCache/ClickHouse/dedicated-ML/frontend-ECS/NAT.
     current_behavior: Cost levers existed in Terraform but no single canonical forbidden-resource policy.
-    required_behavior: deployment_profiles.yaml declares production-lean forbidden + required resources; a validator enforces well-formedness.
+    required_behavior: deployment_profiles.yaml declares production forbidden + required resources; a validator enforces well-formedness.
     affected_paths: [config/deployment_profiles.yaml, scripts/release/check_cost_policy.py]
     tests_required: [make validate-cost-policy]
     evidence_required: [cost policy validation output]
@@ -333,12 +333,12 @@ items:
     domain: cost
     severity: P0
     release_class: founding_tenant_release_blocker
-    customer_impact: A production-lean plan structurally cannot contain the resources its own cost policy forbids; the saving is a property of the graph rather than a claim in a doc.
+    customer_impact: A production plan structurally cannot contain the resources its own cost policy forbids; the saving is a property of the graph rather than a claim in a doc.
     current_behavior: >
       Implemented in 318eea8. profiles.tf previously defined nine `enable_*`
       locals referenced by nothing outside the test file while main.tf
       instantiated module.rds / module.elasticache / module.msk /
-      module.neptune unconditionally, so a production-lean plan provisioned
+      module.neptune unconditionally, so a production plan provisioned
       every resource the policy forbids and local.lean / local.staging were
       dead. Those locals are now wired into module `count` and module inputs:
       normalized locals were introduced first, every consumer of
@@ -359,7 +359,7 @@ items:
       destroy-safety procedure and the one-time private-route migration hazard
       that `moved` cannot express.
     required_behavior: >
-      `deployment_profile` selects real module cardinality. production-lean and
+      `deployment_profile` selects real module cardinality. production and
       staging plan zero NAT gateways and none of MSK, ElastiCache, Neptune,
       legacy RDS, dedicated ML or frontend ECS. Assertions read the planned
       module graph (`length(module.msk) == 0` and friends), never the locals
@@ -383,7 +383,7 @@ items:
       - tests/unit/test_terraform_resource_contracts.py
     evidence_required:
       - "terraform validate: Success, configuration is valid"
-      - "terraform test: 5 run blocks over 4 profiles (staging, staging_asleep, production-lean, production-scale, enterprise-isolated) — 5 passed, 0 failed"
+      - "terraform test: 5 run blocks over 4 profiles (staging, staging_asleep, production, production-scale, enterprise-isolated) — 5 passed, 0 failed"
       - "mutation proof: forcing count = 1 fails with 'module.msk is tuple with 1 element'"
     docs_required:
       - docs/architecture/DEPLOYMENT-PROFILES.md
@@ -439,7 +439,7 @@ items:
       - "make test-plan-policy (tests/unit/test_terraform_plan_policy.py + tests/unit/test_terraform_resource_contracts.py)"
       - "make validate-terraform-profile-policy against the committed lean fixture"
     evidence_required:
-      - "check_terraform_plan_policy.py --profile production-lean: PASS — 54 checks passed"
+      - "check_terraform_plan_policy.py --profile production: PASS — 54 checks passed"
       - ".artifacts/profile-resource-inventory.json + profile-policy-result.json emitted from the plan"
       - "eleven mutation fixtures, each of which the gate rejects"
     docs_required:
@@ -458,7 +458,7 @@ items:
     release_class: founding_tenant_release_blocker
     customer_impact: The largest single line of the lean bill (Fargate) drops by roughly two thirds without giving up per-role queues, DLQs or restart isolation.
     current_behavior: >
-      Implemented in 367f93a. production-lean and staging ran 10 always-on
+      Implemented in 367f93a. production and staging ran 10 always-on
       Fargate tasks (api x2 plus eight dedicated worker services); they now run
       2 — one api task and one lean-worker task hosting all eight logical roles.
       production-scale and enterprise-isolated stay dedicated. Consolidation
@@ -568,7 +568,7 @@ items:
       - "make test-cost-model (tests/unit/test_cost_model.py)"
       - "make validate-cost-model against the committed lean plan fixture"
     evidence_required:
-      - "check_cost_model.py --profile production-lean: PASS — 6 checks passed"
+      - "check_cost_model.py --profile production: PASS — 6 checks passed"
       - "fixed USD 184.13/mo separated from usage-variable USD 107.22/mo (expected scenario); 17 fixed, 15 usage-variable, 29 zero-cost resources all resolved"
       - "warning recorded: fixed cost exceeds the USD 150.00 target, under the USD 200.00 ceiling"
       - docs/reference/reports/cost/cost-report.json
@@ -589,7 +589,7 @@ items:
     customer_impact: No push, schedule or path trigger can change production infrastructure; an apply consumes a specific reviewed plan or it does not run.
     current_behavior: >
       Implemented in 2c290c8. infrastructure.yml previously carried an
-      apply-production-lean job that applied production on every push to main
+      apply-production job that applied production on every push to main
       and re-planned with -auto-approve rather than consuming the reviewed
       artifact. That job is deleted; infrastructure.yml is plan-and-validate
       only, and terraform-promote.yml is the sole apply path. A reviewed plan
@@ -694,72 +694,47 @@ items:
     last_verified_commit: null
 
   - id: FT-9-EPHEMERAL-PROFILES
-    title: Ephemeral profiles (demo, preview) — same-root selectable, cost-capped, TTL-enforced
+    title: Retired demo/preview profiles — staging keeps the fail-closed TTL lease guard
     domain: cost
     severity: P2
     release_class: general_availability_blocker
-    customer_impact: Sales demos and PR preview environments are described by the profile matrix and provisionable from the same Terraform selector as the cloud profiles, under a declared fixed budget and a fail-closed auto-expiry guard.
+    customer_impact: The profile matrix is two profiles (staging, production). Staging, the one environment that must not run forever, keeps a fail-closed TTL lease so a forgotten wake cannot accrue cost.
     current_behavior: >
-      Complete. config/deployment_profiles.yaml declares demo (class demo,
-      cost_capped, ttl_cleanup_required) and preview (class preview,
-      cost_capped, ttl_cleanup_required, must auto-expire, forbids dedicated
-      VPC/ALB/Aurora/Neptune and run-forever), each with a cost_policy
-      (shared-foundation required_resources, heavy-dedicated forbidden) and a
-      FIXED budget (target 150 / hard 220 USD/mo) validated by the
-      validate-ephemeral-budget gate against the committed demo-valid /
-      preview-valid fixtures (~USD 145.60/mo fixed baseline). The Terraform
-      root selects them: variables.tf accepts demo/preview, profiles.tf adds
-      the demo/preview/ephemeral locals with a public_ip egress default,
-      profiles/demo.tfvars and preview.tfvars pin aurora_min_acu 0, and the
-      plan-policy / cost-model gates price both. Consolidated runtime
-      topologies exist in config/runtime_deployment.yaml (api + lean-worker
-      hosting the eight worker roles). Auto-expiry is enforced, not declared:
-      an SSM lease at /aether/{profile}/{env}/lifecycle/expires-at is written
-      by ephemeral_env.py provision, checked hourly by
-      .github/workflows/ephemeral-ttl-guard.yml over the demo/preview matrix
-      (fail-closed — missing/unreadable/expired lease ends the run red), and
-      torn down by ephemeral_env.py teardown (scale-to-zero + floor-zeroing +
-      lease removal). check_profile_parity restates the invariant as selectable
-      = cloud ∪ ephemeral, and profile_doctor advances demo/preview to
-      credential_waiting once the lifecycle is realized.
+      The demo and preview profiles, their tfvars, fixtures, the
+      ephemeral_env.py provision/teardown script and the ephemeral-ttl-guard
+      workflow were retired when config/deployment_profiles.yaml was
+      consolidated to staging and production. What remains is the shared
+      lease logic in scripts/release/ephemeral_ttl_guard.py (an SSM lease at
+      /aether/{profile}/{env}/lifecycle/expires-at; a missing, unreadable,
+      malformed or expired lease is treated as expired), which
+      scripts/staging_state_machine.py and staging-ttl-guard.yml use for
+      staging. check_profile_parity pins the Terraform-selectable set to the
+      canonical profiles, and profile_doctor reports both profiles at
+      credential_waiting until an AWS account is attached.
     required_behavior: >
-      demo and preview provisionable from the same profile selector as the
-      cloud profiles, on shared foundation rather than dedicated
-      infrastructure, with auto-expiry and TTL cleanup enforced by automation
-      rather than by convention. (Met.)
+      Any environment that must not run forever is bounded by an enforced,
+      fail-closed lease rather than by convention. (Met for staging.)
     affected_paths:
       - config/deployment_profiles.yaml
       - config/runtime_deployment.yaml
       - config/terraform_resource_contracts.yaml
       - infra/aws/terraform/variables.tf
       - infra/aws/terraform/profiles.tf
-      - infra/aws/terraform/profiles/demo.tfvars
-      - infra/aws/terraform/profiles/preview.tfvars
       - infra/aws/terraform/tests/profile_plan.tftest.hcl
       - scripts/release/ephemeral_ttl_guard.py
-      - scripts/release/ephemeral_env.py
-      - .github/workflows/ephemeral-ttl-guard.yml
       - scripts/release/check_profile_parity.py
       - scripts/release/profile_doctor.py
-      - tests/unit/test_frontend_data_truth.py
-      - apps/demo/src/lib/env.ts
     tests_required:
       - tests/unit/test_ephemeral_ttl_guard.py
       - tests/unit/test_profile_parity.py
       - tests/unit/test_profile_doctor.py
       - tests/unit/test_cost_model.py
-      - tests/unit/test_frontend_data_truth.py
-      - tests/unit/test_validate_frontend_data_truth.py
-      - "make validate-profile-config validate-cost-policy validate-cost-policy-terraform validate-profile-parity validate-ephemeral-budget test-ephemeral-lifecycle"
+      - "make validate-profile-config validate-cost-policy validate-cost-policy-terraform validate-profile-parity test-ttl-guard"
       - "terraform test -filter=tests/profile_plan.tftest.hcl"
     evidence_required:
-      - "check_profile_config.py accepts the two ephemeral profiles as policy data"
-      - "frontend data-truth validation for the API-backed demo"
-      - "validate-ephemeral-budget prices demo-valid/preview-valid fixtures within their FIXED budgets"
-      - "terraform test runs demo_profile_plan/preview_profile_plan (10 run blocks pass)"
-      - "check_profile_parity asserts selectable == cloud ∪ ephemeral across VALID_PROFILES, tfvars, variables.tf, runtime"
-      - "profile_doctor --all reports demo/preview at credential_waiting"
-      - "ephemeral TTL guard structural check passes (workflow exists, matrix covers demo/preview, lease-path format pinned)"
+      - "check_profile_parity asserts the selectable set equals the canonical profiles across VALID_PROFILES, tfvars, variables.tf, runtime"
+      - "profile_doctor --all reports both profiles at credential_waiting"
+      - "TTL guard structural check passes (lease-path format pinned)"
     docs_required:
       - docs/architecture/DEPLOYMENT-PROFILES.md
     owner: platform
@@ -787,7 +762,7 @@ items:
       any temp or scratchpad directory), which is what stops a synthetic plan or
       a hand-written JSON file from buying external-verification credit.
       CURRENT MEASURED RESULT, run at this working tree — overall 100/100
-      code-complete and 20/100 externally-verified; production-lean 100/100 and
+      code-complete and 20/100 externally-verified; production 100/100 and
       20/100; staging 75/100 and 0/100; 19 controls built but unproven;
       1 of 17 hard gate conditions met; deployment_ready: false.
     required_behavior: >
@@ -808,7 +783,7 @@ items:
       - release-evidence/ bundle with a checksummed manifest (ABSENT — COND-BUNDLE-CHECKSUM unmet)
       - release-evidence/terraform/lean-plan-provenance.json (credentialed lean plan — ABSENT)
       - release-evidence/terraform/promotion-provenance.json (a real reviewed apply — ABSENT)
-      - "seven days of observed AWS billing for production-lean (ABSENT — COND-COST-OBSERVED-7D, COND-COST-RECONCILED unmet)"
+      - "seven days of observed AWS billing for production (ABSENT — COND-COST-OBSERVED-7D, COND-COST-RECONCILED unmet)"
     docs_required:
       - docs/operations/RELEASE-EVIDENCE.md
       - docs/architecture/DEPLOYMENT-PROFILES.md

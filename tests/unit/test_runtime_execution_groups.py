@@ -1,6 +1,6 @@
 """Consolidated ``lean-worker`` execution group — behavioural guarantees.
 
-``production-lean`` packs all eight logical worker roles into one task instead
+``production`` packs all eight logical worker roles into one task instead
 of eight. These tests exist to prove that packing changed the *process
 boundary* and nothing else: every logical role must keep its own queue,
 consumer group, backpressure envelope, DLQ, retry policy, metrics label and
@@ -128,7 +128,7 @@ class _MetricsRecorder:
         return [labels for metric, labels in self.calls if metric == name]
 
 
-# The per-role queue map production-lean actually supplies.
+# The per-role queue map production actually supplies.
 #
 # This used to carry five entries with a comment claiming it mirrored
 # modules/sqs/main.tf. It did not. Terraform's var.consumer_role_queues default
@@ -602,7 +602,7 @@ def test_semantic_worker_group_no_longer_falls_back_to_the_default_group():
 
 
 def test_dedicated_role_still_produces_exactly_one_runner(monkeypatch):
-    """production-scale / enterprise-isolated behaviour must be unchanged."""
+    """A dedicated (one task per role) topology must behave as before."""
     monkeypatch.setenv("SQS_QUEUE_URL", "https://sqs.test/only")
     for role in ("stream-worker", "identity-worker", "graph-writer",
                  "measurement-worker", "semantic-worker"):

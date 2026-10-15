@@ -9,8 +9,8 @@ A release profile is only as ready as its weakest **required** capability. The d
 | Local development | BLOCKED_BY_CODE | 32 | 75% | n/a | 50% | 100% | 100% | 100% |
 | Staging | BLOCKED_BY_CODE | 24 | 91.7% | 91.7% | 62.5% | 0% | 100% | 100% |
 | Pilot | READY_TO_ACTIVATE | 3 | 100% | 100% | 33.3% | 0% | 100% | 100% |
-| Production (lean) | BLOCKED_BY_CODE | 23 | 43.5% | 91.3% | 65.2% | 0% | 100% | 100% |
-| Production (scale) | BLOCKED_BY_CODE | 22 | 40.9% | 90.9% | 68.2% | 0% | 100% | 100% |
+| Production | BLOCKED_BY_CODE | 23 | 43.5% | 91.3% | 65.2% | 0% | 100% | 100% |
+| Production (at scale) | BLOCKED_BY_CODE | 22 | 40.9% | 90.9% | 68.2% | 0% | 100% | 100% |
 
 ## Local development (`local`) — BLOCKED_BY_CODE
 
@@ -211,7 +211,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - smart-contracts-rewards: AUDIT_WAITING: Smart Contracts & Rewards activation waits on an external audit condition. (owner: external-auditor)
 - stablecoin-intelligence: LIVE_DATA_WAITING: Stablecoin Intelligence activation waits on an external live data condition. (owner: tenant / provider)
 
-## Production (lean) (`production-lean`) — BLOCKED_BY_CODE
+## Production (`production`) — BLOCKED_BY_CODE
 
 - `backend-api`: BLOCKED_BY_CODE
 - `campaign-intelligence`: READY_TO_VALIDATE
@@ -268,7 +268,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - scale-readiness: INFRASTRUCTURE_WAITING: Scale Readiness activation waits on an external infra condition. (owner: platform-ops)
 - semantic-intelligence: CREDENTIAL_WAITING: Semantic Intelligence activation waits on an external credential condition. (owner: tenant / platform-ops)
 
-## Production (scale) (`production-scale`) — BLOCKED_BY_CODE
+## Production (at scale) (`production-scale`) — BLOCKED_BY_CODE
 
 - `backend-api`: BLOCKED_BY_CODE
 - `campaign-intelligence`: READY_TO_VALIDATE
