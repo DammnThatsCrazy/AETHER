@@ -91,8 +91,6 @@ class FacilitatorRegistry:
         self._store = get_commerce_store()
 
     async def register(self, tenant_id: str, facilitator: Facilitator) -> Facilitator:
-        if tenant_id and tenant_id not in facilitator.approved_by_tenants:
-            facilitator.approved_by_tenants.append(tenant_id)
         result = await self._store.put_facilitator(tenant_id, facilitator)
         logger.info(f"Facilitator registered: {facilitator.facilitator_id} for tenant={tenant_id}")
         return result

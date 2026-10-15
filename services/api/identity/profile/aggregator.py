@@ -1265,7 +1265,7 @@ class Profile360Aggregator:
                                    filters={"grantor_entity_id": entity_id}, limit=200),
             self._scoped_find_many(self._delegations, tenant_id=tenant_id,
                                    filters={"grantee_entity_id": entity_id}, limit=200),
-            _safe("summary.behavior", self._behavior.find_by_id(entity_id)),
+            _safe("summary.behavior", self._behavior.find_for_entity(tenant_id, entity_id)),
             self._scoped_find_many(self._journeys, tenant_id=tenant_id,
                                    filters={"entity_id": entity_id}, limit=50),
             self._scoped_find_many(self._agent_execs, tenant_id=tenant_id,
@@ -1447,7 +1447,10 @@ class Profile360Aggregator:
             record = (await _safe("drill.entity", self._entities.find_by_id(object_id))).value_or(None)
 
         elif ot in ("journey", "journey_chain", "chain"):
-            record = (await _safe("drill.journey", self._journeys.find_by_id(object_id))).value_or(None)
+            chain = (await _safe(
+                "drill.journey", self._journeys.find_for_entity(tenant_id, entity_id),
+            )).value_or(None)
+            record = chain if chain and object_id in (chain.get("chain_id"), chain.get("id")) else None
 
         elif ot in ("payment_intent", "intent"):
             record = (await _safe("drill.intent", self._intents.find_by_id(object_id))).value_or(None)
@@ -1592,7 +1595,7 @@ class Profile360Aggregator:
         """Profile quality scorecard: completeness, freshness, confidence, readiness."""
         results = await asyncio.gather(
             _safe("quality.entity", self._entities.find_by_id(entity_id)),
-            _safe("quality.behavior", self._behavior.find_by_id(entity_id)),
+            _safe("quality.behavior", self._behavior.find_for_entity(tenant_id, entity_id)),
             self._scoped_find_many(self._wallets, tenant_id=tenant_id,
                                    filters={"owner_entity_id": entity_id}, limit=10),
             self._transfers_for_entity(entity_id, tenant_id, limit=10),
@@ -1671,7 +1674,7 @@ class Profile360Aggregator:
         """Per-dimension data freshness: sources, last update, stale status, warnings."""
         results = await asyncio.gather(
             _safe("freshness.entity", self._entities.find_by_id(entity_id)),
-            _safe("freshness.behavior", self._behavior.find_by_id(entity_id)),
+            _safe("freshness.behavior", self._behavior.find_for_entity(tenant_id, entity_id)),
             self._scoped_find_many(self._wallets, tenant_id=tenant_id,
                                    filters={"owner_entity_id": entity_id}, limit=10),
             self._transfers_for_entity(entity_id, tenant_id, limit=10),

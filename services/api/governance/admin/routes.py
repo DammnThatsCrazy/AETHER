@@ -1108,7 +1108,10 @@ async def operator_agentic_agent_detail(agent_id: str, request: Request):
     config = await _op_agent_configs.find_by_id(agent_id)
     if config is None:
         raise NotFoundError("Agent")
-    behavior = await _op_behavior_profiles.find_by_id(agent_id)
+    behavior = (
+        await _op_behavior_profiles.find_for_entity(config["tenant_id"], agent_id)
+        if config.get("tenant_id") else None
+    )
     intents = await _op_payment_intents.find_many(filters={"agent_id": agent_id}, limit=100)
     settlements = await _op_settlements.find_many(filters={"agent_id": agent_id}, limit=100)
     delegations_received = await _op_delegations.find_many(

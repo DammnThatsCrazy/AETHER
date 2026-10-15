@@ -33,9 +33,9 @@ logger = get_logger("aether.profile360.workers")
 # automation_ratio / decision_latency snapshots; the persisted snapshot row
 # is the source of truth for clients.
 
-_action_counts: dict[str, Counter] = defaultdict(Counter)
-_last_event_at: dict[str, datetime] = {}
-_session_chain: dict[str, list[str]] = defaultdict(list)
+_action_counts: dict[tuple[str, str], Counter] = defaultdict(Counter)
+_last_event_at: dict[tuple[str, str], datetime] = {}
+_session_chain: dict[tuple[str, str], list[str]] = defaultdict(list)
 
 
 def _entity_from_event(event: Event) -> Optional[str]:
@@ -78,15 +78,16 @@ class BehaviorScorer:
         if not entity_id or not event.tenant_id:
             return
         kind = _actor_kind(event)
-        _action_counts[entity_id][kind] += 1
-        _action_counts[entity_id]["total"] += 1
+        key = (event.tenant_id, entity_id)
+        _action_counts[key][kind] += 1
+        _action_counts[key]["total"] += 1
 
         now = datetime.now(timezone.utc)
-        prev = _last_event_at.get(entity_id)
+        prev = _last_event_at.get(key)
         latency_ms = int((now - prev).total_seconds() * 1000) if prev else 0
-        _last_event_at[entity_id] = now
+        _last_event_at[key] = now
 
-        c = _action_counts[entity_id]
+        c = _action_counts[key]
         total = c["total"] or 1
         automation_ratio = c["agent"] / total
 
@@ -114,7 +115,7 @@ class RiskScorer:
         if not entity_id or not event.tenant_id:
             return
 
-        existing = await self._repo.find_by_id(entity_id) or {}
+        existing = await self._repo.find_for_entity(event.tenant_id, entity_id) or {}
         current = float(existing.get("risk_score") or 0.0)
         bump = 0.05 if event.topic == Topic.AGENT_EXECUTION_FAILED else 0.0
         if event.topic == Topic.DELEGATION_REJECTED:
@@ -163,7 +164,7 @@ class IntentInferrer:
             if any(w in text for w in words):
                 intent = label
                 break
-        existing = await self._repo.find_by_id(entity_id) or {}
+        existing = await self._repo.find_for_entity(event.tenant_id, entity_id) or {}
         await self._repo.upsert_snapshot(
             entity_id=entity_id,
             tenant_id=event.tenant_id,
@@ -195,11 +196,11 @@ class JourneyChainLinker:
         if not entity_id or not event.tenant_id:
             return
         session_id = (event.payload or {}).get("session_id") or event.event_id
-        chain = _session_chain[entity_id]
+        chain = _session_chain[(event.tenant_id, entity_id)]
         if session_id not in chain:
             chain.append(session_id)
 
-        chain_id = f"chain:{entity_id}"
+        chain_id = f"journey_chain:{event.tenant_id}:{entity_id}"
         await self._repo.upsert_chain(
             chain_id=chain_id,
             entity_id=entity_id,
@@ -350,7 +351,7 @@ class AnomalyFlagger:
         entity_id = _entity_from_event(event)
         if not entity_id or not event.tenant_id:
             return
-        existing = await self._repo.find_by_id(entity_id) or {}
+        existing = await self._repo.find_for_entity(event.tenant_id, entity_id) or {}
         latency = int(existing.get("decision_latency_ms") or 0)
         flags = list(existing.get("anomaly_flags") or [])
         # Heuristic threshold; replaceable by ML.
@@ -416,7 +417,7 @@ class FraudSummaryProjector:
         risk_score = float(latest.get("risk_score") or 0.0)
         fraud_risk_tier = latest.get("risk_tier") or "unknown"
 
-        existing = await self._behavior.find_by_id(entity_id) or {}
+        existing = await self._behavior.find_for_entity(event.tenant_id, entity_id) or {}
         now = datetime.now(timezone.utc)
 
         await self._behavior.upsert_snapshot(

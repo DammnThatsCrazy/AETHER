@@ -136,7 +136,6 @@ class Facilitator(BaseModel):
     # Environments this facilitator serves (sandbox|live). LOCAL-mode seeds are
     # sandbox-only; external facilitators declare the environments they cover.
     supported_environments: list[str] = Field(default_factory=lambda: ["sandbox"])
-    approved_by_tenants: list[str] = Field(default_factory=list)
     # Credential slot name (in the credential authority, domain x402) that holds
     # this facilitator's API key; None for the internal LOCAL facilitator.
     credential_slot: Optional[str] = None

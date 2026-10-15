@@ -72,7 +72,7 @@ class AgentProfile360EconomicComposer:
         economic_identity = await self._economic_identities.find_for_agent(agent_id, tenant_id)
         executions = await self._executions.list_for_agent(agent_id, tenant_id, limit=limit)
         active_delegations = await self._delegations.active_for(agent_id, tenant_id)
-        behavior = await self._behavior_profiles.find_by_id(agent_id)
+        behavior = await self._behavior_profiles.find_for_entity(tenant_id, agent_id)
 
         provider_counts = Counter(i.get("provider", "") for i in intents)
         protocol_counts = Counter(i.get("protocol", "") for i in intents)

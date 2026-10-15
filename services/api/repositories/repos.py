@@ -1249,6 +1249,13 @@ def _tenant_scoped_digest(prefix: str, tenant_id: str, natural_id: str) -> str:
     return f"{prefix}_{digest[:32]}"
 
 
+def tenant_record_id(tenant_id: str, natural_id: str) -> str:
+    """Row id for a record whose natural id is unique only inside one tenant."""
+    if not tenant_id:
+        raise ValueError("a tenant-scoped record id requires a tenant_id")
+    return f"{tenant_id}:{natural_id}"
+
+
 def analytics_event_record_id(tenant_id: str, event_id: str) -> str:
     """Deterministic, tenant-scoped ``events`` row id for an SDK event."""
     return _tenant_scoped_digest("evt", tenant_id, event_id)
@@ -2901,11 +2908,16 @@ class BehaviorProfileRepository(BaseRepository):
     """Derived behavior snapshots: automation_ratio, decision_latency, etc.
 
     Recomputed by the BehaviorScorer / RiskScorer / IntentInferrer workers.
-    Profile 360 endpoints read the latest snapshot per entity.
+    Profile 360 endpoints read the latest snapshot per entity. One row per
+    (tenant, entity), keyed ``{tenant_id}:{entity_id}``.
     """
 
     def __init__(self) -> None:
         super().__init__("behavior_profiles")
+
+    async def find_for_entity(self, tenant_id: str, entity_id: str) -> Optional[dict]:
+        row = await self.find_by_id(tenant_record_id(tenant_id, entity_id))
+        return row if row is not None and row.get("tenant_id") == tenant_id else None
 
     async def upsert_snapshot(
         self,
@@ -2939,18 +2951,24 @@ class BehaviorProfileRepository(BaseRepository):
             "fraud_summary": fraud_summary or {},
             "computed_at": utc_now().isoformat(),
         }
-        # One row per entity (latest snapshot wins). Use entity_id as key.
-        existing = await self.find_by_id(entity_id)
-        if existing:
-            return await self.update(entity_id, snapshot)
-        return await self.insert(entity_id, snapshot)
+        record_id = tenant_record_id(tenant_id, entity_id)
+        if await self.find_by_id(record_id):
+            return await self.update(record_id, snapshot)
+        return await self.insert(record_id, snapshot)
 
 
 class JourneyChainRepository(BaseRepository):
-    """Cross-journey memory: link multiple journeys for one entity over time."""
+    """Cross-journey memory: link multiple journeys for one entity over time.
+
+    One chain per (tenant, entity), keyed ``{tenant_id}:{entity_id}``.
+    """
 
     def __init__(self) -> None:
         super().__init__("journey_chains")
+
+    async def find_for_entity(self, tenant_id: str, entity_id: str) -> Optional[dict]:
+        row = await self.find_by_id(tenant_record_id(tenant_id, entity_id))
+        return row if row is not None and row.get("tenant_id") == tenant_id else None
 
     async def upsert_chain(
         self,
@@ -2975,10 +2993,10 @@ class JourneyChainRepository(BaseRepository):
             "spans_last_seen_at": spans_last_seen_at,
             "historical_context": historical_context or {},
         }
-        existing = await self.find_by_id(chain_id)
-        if existing:
-            return await self.update(chain_id, record)
-        return await self.insert(chain_id, record)
+        record_id = tenant_record_id(tenant_id, entity_id)
+        if await self.find_by_id(record_id):
+            return await self.update(record_id, record)
+        return await self.insert(record_id, record)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -3362,13 +3380,21 @@ class EventReplayRepository(BaseRepository):
 
 
 class EventEnvelopeRepository(BaseRepository):
-    """Durable store for ingested EventPipelineEnvelopes available for replay."""
+    """Durable store for ingested EventPipelineEnvelopes available for replay.
+
+    Envelope ids are client-chosen, so a row is keyed ``{tenantId}:{id}`` and
+    keeps the envelope's own id in ``envelope_id``.
+    """
 
     def __init__(self) -> None:
         super().__init__("event_envelopes")
 
     async def create(self, envelope: dict) -> dict:
-        return await self.insert(envelope["id"], envelope)
+        tenant_id = envelope.get("tenantId") or envelope.get("tenant_id") or ""
+        return await self.insert(
+            tenant_record_id(tenant_id, envelope["id"]),
+            {**envelope, "tenant_id": tenant_id, "envelope_id": envelope["id"]},
+        )
 
     async def list_replayable(
         self,
