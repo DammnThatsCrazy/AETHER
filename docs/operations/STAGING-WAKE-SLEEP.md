@@ -46,7 +46,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:bd527b2194600610b7a3ebd602b4abbaa03b67e43bf295f0d368b5e0575d956e"
+  ".github/workflows/amplify-status-production.yml": "sha256:552a549e6f681c8052495a269211d0ff883686349b025b7d9b1b34525f8f4b14"
   ".github/workflows/deploy.yml": "sha256:e9555bd68e7a994e984fd012fa290540c89e078775e4f6da8c3f5b82ed539238"
   ".github/workflows/pilot-staging.yml": "sha256:62ec13ff1a6f2869aa42a8b2e87c3d49412a33010c5fe8a875baee42cb29cef5"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
@@ -69,7 +69,7 @@ source_hashes:
   "infra/aws/terraform/profiles/staging.tfvars": "sha256:34b4d565d79a786e532b9cda5295cc745e1840b7f241abf1f0608772f2a18181"
   "infra/aws/terraform/variables.tf": "sha256:5eed310106c5621fc91dc3961c3e2194a03c6d0181fa494df5ad376112638cdb"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:fdf5d317787370ad80fcd5653fe3497f1cf0fef4f91ff2abfdcabdc63722d23b"
+  "scripts/release/check_amplify_app_contract.py": "sha256:b8ce2e914ba4878098b41c3bdfcf1ec5f0163876578610af5a5362004bc7bdfa"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
   "scripts/release/check_staging_lane_contract.py": "sha256:385a5e2316e8c38d33e10119f996854af3a7f3bc9034ca3b3545829638c8122d"
@@ -531,8 +531,10 @@ its mappings (every host to `main`) before release. The app has one branch,
 production-status check covers the branch's settings and job. Squarespace
 remains authoritative.
 A repository-backed status app is updated in place on later runs; it is never
-treated as a staging ECS or Terraform mutation. Since Amplify can auto-start
-the branch build for the pushed SHA, the workflow reuses an active exact-SHA
+treated as a staging ECS or Terraform mutation. The workflow binds `main`
+with auto-build off, so only its gated release publishes a push. Since a job can
+still be active (started from the console, or by an earlier auto-build), the
+workflow reuses an active exact-SHA
 job that started after it applied the build settings, waits for every other
 active job (including an earlier auto-build with the previous settings) to
 clear, and starts a release only when no matching job exists.

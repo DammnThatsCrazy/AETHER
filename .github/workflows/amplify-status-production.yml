@@ -85,9 +85,13 @@ jobs:
       contents: read
       id-token: write
     steps:
+      # Only the control scripts (the contract checker) come from this
+      # checkout; Amplify builds the release from the repository. Use the
+      # workflow's own revision so a dispatch of an older SHA still runs the
+      # current checker.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.expected_commit_sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -142,6 +146,21 @@ jobs:
           }
           printf 'app_id=%s\n' "${app_ids[0]}" >> "$GITHUB_OUTPUT"
           printf 'expected_commit_sha=%s\n' "$EXPECTED_COMMIT_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the release commit is on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_COMMIT_SHA: ${{ steps.inputs.outputs.expected_commit_sha }}
+        run: |
+          set -euo pipefail
+          # A dispatched SHA can carry a successful integration check from
+          # before main was rewritten; only a commit still on main may ship.
+          # The compare endpoint needs only contents: read.
+          comparison="$(gh api "repos/$GITHUB_REPOSITORY/compare/$EXPECTED_COMMIT_SHA...main" --jq .status)"
+          case "$comparison" in
+            identical|ahead) echo "$EXPECTED_COMMIT_SHA is on main." ;;
+            *) echo "::error::$EXPECTED_COMMIT_SHA is not on main (compare status: ${comparison:-unknown})"; exit 1 ;;
+          esac
 
       - name: Assess status app state before repository binding
         id: state
@@ -294,13 +313,16 @@ jobs:
             --build-spec "$(cat "$web_build_spec")" \
             --environment-variables "file://$web_environment" \
             --custom-rules "file://$web_rules" \
-            --enable-branch-auto-build \
+            --no-enable-branch-auto-build \
             >/dev/null
           branch_args=(
             --app-id "$APP_ID"
             --branch-name main
             --stage PRODUCTION
-            --enable-auto-build
+            # No auto-build: every host serves main, so a push must not go live
+            # before the integration authority passes; the release step below
+            # starts the commit-pinned job.
+            --no-enable-auto-build
             --environment-variables "file://$web_environment"
           )
           if aws amplify get-branch --app-id "$APP_ID" --branch-name main >/dev/null 2>&1; then
@@ -351,6 +373,7 @@ jobs:
           APP_ID: ${{ steps.inputs.outputs.app_id }}
           EXPECTED_COMMIT_SHA: ${{ steps.inputs.outputs.expected_commit_sha }}
           BOUND_AT: ${{ steps.bind.outputs.bound_at }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           # Repository-bound Amplify apps can auto-start a release for the push
@@ -392,6 +415,15 @@ jobs:
                 continue
               fi
 
+              # A RELEASE job builds the branch's latest commit. Start one only
+              # while main is still the gated commit: if main moved on, the
+              # newer commit's own run releases it, and an older SHA (a
+              # rollback) cannot be released this way.
+              main_head="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"
+              if [ "$main_head" != "$EXPECTED_COMMIT_SHA" ]; then
+                echo "::error::main is at ${main_head}, not ${EXPECTED_COMMIT_SHA}; a RELEASE job would build ${main_head}, so this run will not start one" >&2
+                return 1
+              fi
               start_output="$(mktemp)"
               if aws amplify start-job \
                 --app-id "$APP_ID" \
