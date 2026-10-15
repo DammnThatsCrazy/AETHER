@@ -29,13 +29,16 @@ DNS = {
     "b.example": ["8.8.8.8"],
     "internal.example": ["10.0.0.5"],
     "mixed.example": ["93.184.216.34", "100.64.0.1"],
+    "multi.example": ["93.184.216.34", "8.8.8.8", "2001:4860:4860::8888"],
 }
 
 
 def _resolver(host, *args, **kwargs):
     if host not in DNS:
         raise socket.gaierror(f"unknown host {host}")
-    return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, 443)) for ip in DNS[host]]
+    return [
+        (socket.AF_INET6 if ":" in ip else socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, 443)) for ip in DNS[host]
+    ]
 
 
 @pytest.fixture(autouse=True)
@@ -120,6 +123,58 @@ def test_fetch_stops_after_three_redirects():
     assert len(seen) == 4
 
 
+@pytest.mark.parametrize("failure", [httpx.ConnectError("refused"), httpx.ConnectTimeout("timed out")])
+def test_fetch_tries_next_validated_address_on_connect_failure(failure):
+    seen: list[str] = []
+
+    def handler(request):
+        seen.append(request.url.host)
+        if request.url.host == "93.184.216.34":
+            raise failure
+        return httpx.Response(200)
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        resp, _ = fetch_public(client, "https://multi.example/")
+    assert resp.status_code == 200
+    assert seen == ["93.184.216.34", "8.8.8.8"]
+
+
+def test_fetch_raises_last_connect_failure_when_every_address_fails():
+    seen: list[str] = []
+
+    def handler(request):
+        seen.append(request.url.host)
+        raise httpx.ConnectError(f"refused {request.url.host}")
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client, \
+         pytest.raises(httpx.ConnectError, match="2001:4860:4860::8888"):
+        fetch_public(client, "https://multi.example/")
+    assert seen == ["93.184.216.34", "8.8.8.8", "2001:4860:4860::8888"]
+
+
+def test_fetch_does_not_retry_after_a_read_failure():
+    seen: list[str] = []
+
+    def handler(request):
+        seen.append(request.url.host)
+        raise httpx.ReadTimeout("no response")
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client, pytest.raises(httpx.ReadTimeout):
+        fetch_public(client, "https://multi.example/")
+    assert seen == ["93.184.216.34"]
+
+
+def test_fetch_drops_credentials_on_same_host_scheme_downgrade():
+    seen: list[httpx.Request] = []
+    responses = [httpx.Response(302, headers={"location": "http://a.example/next"}), httpx.Response(200)]
+    with _client(responses, seen) as client:
+        fetch_public(client, "https://a.example/", headers={"Authorization": "t", "Cookie": "c=1", "X-Trace": "x"})
+    assert seen[1].url.scheme == "http"
+    assert "authorization" not in seen[1].headers
+    assert "cookie" not in seen[1].headers
+    assert seen[1].headers["x-trace"] == "x"
+
+
 def _task(worker_type, payload):
     return AgentTask(worker_type=worker_type, priority=TaskPriority.MEDIUM, payload=payload)
 
@@ -139,7 +194,7 @@ def test_web_crawler_rejects_non_public_destination(no_connection, url):
     no_connection.assert_not_called()
 
 
-@pytest.mark.parametrize("domain", ["internal.example", "127.0.0.1", "evil.example@10.0.0.5"])
+@pytest.mark.parametrize("domain", ["internal.example", "127.0.0.1", "name.example@10.0.0.5"])
 def test_api_scanner_rejects_non_public_destination(no_connection, domain):
     result = ApiScannerWorker(MagicMock())._execute(_task(WorkerType.API_SCANNER, {"target_domain": domain}))
     assert result.success is False
@@ -147,7 +202,7 @@ def test_api_scanner_rejects_non_public_destination(no_connection, domain):
     no_connection.assert_not_called()
 
 
-@pytest.mark.parametrize("domain", ["internal.example", "169.254.169.254", "evil.example@10.0.0.5"])
+@pytest.mark.parametrize("domain", ["internal.example", "169.254.169.254", "name.example@10.0.0.5"])
 def test_competitor_tracker_rejects_non_public_destination(no_connection, domain):
     from workers.discovery.competitor_tracker import CompetitorTrackerWorker
 
