@@ -478,7 +478,8 @@ def test_outcome_webhook_updates_only_the_linked_suggestion(monkeypatch):
     from config.settings import settings
     from intelligence.suggestions.repository import SuggestionRepository
     from repositories.delivery_repos import (
-        ExternalOutcomeEventRepository, ExternalResourceLinkRepository, WebhookInboxRepository,
+        DeliveryJobRepository, ExternalOutcomeEventRepository, ExternalResourceLinkRepository,
+        ProviderReceiptRepository, WebhookInboxRepository,
     )
 
     secret = "jira-test-secret"
@@ -486,14 +487,21 @@ def test_outcome_webhook_updates_only_the_linked_suggestion(monkeypatch):
     suggestions = SuggestionRepository()
     _run(suggestions.insert("sugg-own", {"id": "sugg-own", "tenant_id": OWN, "outcome_state": "pending"}))
     _run(suggestions.insert("sugg-other", {"id": "sugg-other", "tenant_id": OTHER, "outcome_state": "pending"}))
+    _run(DeliveryJobRepository().insert("j1", {
+        "id": "j1", "tenant_id": OWN, "provider_config": {"base_url": "https://own.atlassian.net"},
+    }))
+    _run(ProviderReceiptRepository().insert("r1", {"id": "r1", "tenant_id": OWN, "job_id": "j1"}))
     links = ExternalResourceLinkRepository()
     _run(links.insert("l1", {
         "id": "l1", "provider": "jira", "external_id": "OWN-1", "tenant_id": OWN,
-        "resource_type": "suggestion", "resource_id": "sugg-own",
+        "receipt_id": "r1", "resource_type": "suggestion", "resource_id": "sugg-own",
     }))
     body = json.dumps({
         "webhookEvent": "jira:issue_updated",
-        "issue": {"key": "OWN-1", "fields": {"status": {"name": "Done"}}},
+        "issue": {
+            "key": "OWN-1", "self": "https://own.atlassian.net/rest/api/2/issue/1",
+            "fields": {"status": {"name": "Done"}},
+        },
         "suggestion_id": "sugg-other",
     })
     inbox = WebhookInboxRepository()

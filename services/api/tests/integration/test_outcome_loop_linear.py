@@ -10,6 +10,7 @@ Simulates:
 from __future__ import annotations
 
 import json
+import time
 import uuid
 
 import pytest
@@ -130,6 +131,7 @@ async def test_linear_status_changed_outcome_loop():
     # Linear webhook payload: issue status update
     linear_payload = {
         "type": "Issue",
+        "webhookTimestamp": int(time.time() * 1000),
         "action": "update",
         "data": {
             "id": "lin-uuid-001",
@@ -218,6 +220,7 @@ async def test_linear_remove_action_becomes_cancelled():
 
     linear_payload = {
         "type": "Issue",
+        "webhookTimestamp": int(time.time() * 1000),
         "action": "remove",
         "data": {"id": issue_id, "identifier": "ENG-99"},
     }
@@ -283,6 +286,7 @@ async def test_linear_loop_prevention_same_state():
 
     linear_payload = {
         "type": "Issue",
+        "webhookTimestamp": int(time.time() * 1000),
         "action": "update",
         "data": {
             "identifier": issue_id,
