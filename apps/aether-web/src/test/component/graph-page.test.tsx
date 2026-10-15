@@ -49,6 +49,8 @@ vi.mock('@aether-app/features/graph/use-graph-data', () => ({
     nodes: [
       { id: 'node-X', kind: 'human', label: 'Xander', trustScore: 0.9, riskScore: 0.1, metadata: {} },
       { id: 'node-Y', kind: 'agent', label: 'Ybot', trustScore: 0.7, riskScore: 0.2, metadata: {} },
+      { id: 'listing-1', kind: 'AgentMarketplaceListing', label: 'Marketplace listing', metadata: { assertion: 'tenant_declared', source_namespace: 'xai.marketplace', listing_ref: 'listing-ref-1' } },
+      { id: 'run-1', kind: 'AgentExecutionRun', label: 'Observed run', metadata: { evidence_status: 'source_reported', correlation_basis: 'source_reported' } },
     ],
     edges: [{ id: 'e1', source: 'node-X', target: 'node-Y', relationType: 'CONNECTS', interactionClass: 'H2A', weight: 0.85, metadata: {} }],
     clusters: [{ id: 'clu-1', label: 'Cluster clu-1', nodeIds: ['node-X', 'node-Y'], size: 2 }],
@@ -71,6 +73,12 @@ vi.mock('@aether-app/components/graph/graph-canvas', () => ({
       <button onClick={() => onSelectNode({ id: 'node-Y', kind: 'agent', label: 'Ybot', trustScore: 0.7, riskScore: 0.2, metadata: {} })}>
         Select node-Y
       </button>
+      <button onClick={() => onSelectNode({ id: 'listing-1', kind: 'AgentMarketplaceListing', label: 'Marketplace listing', metadata: { assertion: 'tenant_declared', source_namespace: 'xai.marketplace', listing_ref: 'listing-ref-1' } })}>
+        Select marketplace listing
+      </button>
+      <button onClick={() => onSelectNode({ id: 'run-1', kind: 'AgentExecutionRun', label: 'Observed run', metadata: { evidence_status: 'source_reported', correlation_basis: 'source_reported' } })}>
+        Select observed run
+      </button>
     </div>
   ),
 }));
@@ -90,6 +98,18 @@ describe('GraphPage — path API integration', () => {
     renderWithRouter();
     expect(await screen.findByText('Entity Graph')).toBeInTheDocument();
     expect(screen.getByTestId('graph-canvas')).toBeInTheDocument();
+  });
+
+  it('labels marketplace and run records with their evidence authority in the inspector', async () => {
+    renderWithRouter();
+    fireEvent.click(await screen.findByText('Select marketplace listing'));
+    expect(screen.getByText('Tenant declared')).toBeInTheDocument();
+    expect(screen.getAllByText('xai.marketplace').length).toBeGreaterThan(0);
+    expect(screen.getByText(/has not independently fetched or verified/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Select observed run'));
+    expect(screen.getByText('Source reported')).toBeInTheDocument();
+    expect(screen.getByText(/bounded run correlation/)).toBeInTheDocument();
   });
 
   it('calls paths API (not local BFS) when two nodes selected in path mode', async () => {

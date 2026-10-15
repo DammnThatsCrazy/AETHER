@@ -278,6 +278,41 @@ class GraphMutationGateway:
             intent, record, fact_payload, violations, started
         )
 
+    async def ensure_shadow_record(self, intent: MutationIntent) -> MutationOutcome:
+        """Record a mutation whose shadow projection is already present.
+
+        This is a recovery hook for callers that can prove a prior shadow write
+        reached the graph but whose best-effort ledger append failed. It never
+        projects the intent, so it must not be used as a general write API.
+        """
+        started = time.monotonic()
+        self._check_shape(intent)
+        if intent.edge is not None:
+            intent.edge = self._canonical_edge(intent)
+        violations = self._validate(intent)
+        record, fact_payload = self._build_record(intent)
+        append = await self._ledger_repo().append(record, fact_payload=fact_payload)
+        outcome = MutationOutcome(
+            mode="shadow",
+            applied=True,
+            mutation_id=append.mutation_id,
+            deduplicated=not append.inserted,
+            ledger_recorded=append.inserted,
+            violations=violations,
+            record=record,
+            before_version_id=append.before_version_id,
+            after_version_id=append.after_version_id,
+        )
+        if append.inserted:
+            await self._emit_event(record)
+        self._meter(
+            intent,
+            "shadow",
+            "applied" if append.inserted else "deduplicated",
+            started,
+        )
+        return outcome
+
     # ── Mode paths ──────────────────────────────────────────────────────────
 
     async def _apply_shadow(
@@ -300,6 +335,10 @@ class GraphMutationGateway:
         )
         try:
             append = await self._ledger_repo().append(record, fact_payload=fact_payload)
+            # A tenant-scoped idempotency conflict may resolve to an earlier
+            # mutation id. Expose the identity of the durable row so callers
+            # can verify its provenance/rights ancestry.
+            outcome.mutation_id = append.mutation_id
             outcome.ledger_recorded = append.inserted
             outcome.deduplicated = not append.inserted
             outcome.before_version_id = append.before_version_id

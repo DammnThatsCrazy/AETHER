@@ -3,6 +3,11 @@ output "aether_client_id" {
   value       = auth0_client.aether.client_id
 }
 
+output "aether_cli_client_id" {
+  description = "Public Auth0 Native client ID for the Aether CLI device-authorization flow"
+  value       = auth0_client.aether_cli.client_id
+}
+
 output "kyber_client_id" {
   description = "Auth0 client ID for the Kyber SPA — use as VITE_AUTH0_CLIENT_ID build arg"
   value       = auth0_client.kyber.client_id
@@ -22,4 +27,19 @@ output "social_connections_enabled" {
 output "api_audience" {
   description = "API resource server audience — use as VITE_AUTH0_AUDIENCE build arg"
   value       = auth0_resource_server.api.identifier
+}
+
+output "aether_social_connections" {
+  description = "Auth0 connection name per social provider for the Aether SPA's sign-in buttons; empty when social connections are off"
+  value = var.enable_social_connections ? {
+    google    = auth0_connection.google[0].name
+    apple     = auth0_connection.apple[0].name
+    microsoft = auth0_connection.microsoft[0].name
+    slack     = auth0_connection.slack[0].name
+  } : {}
+}
+
+output "access_mcp_resource_uri" {
+  description = "Exact delegated MCP OAuth audience; empty when the customer MCP service is disabled."
+  value       = try(auth0_resource_server.access_mcp[0].identifier, "")
 }

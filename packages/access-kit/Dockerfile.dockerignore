@@ -1,0 +1,21 @@
+**
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!.npmrc
+!packages/
+!packages/*/
+!packages/*/package.json
+!packages/access-kit/**
+
+# The local worktree may contain large Terraform providers and plan fixtures.
+# These are not part of the runtime image and must not enter the build context.
+**/.terraform/
+**/.terraform/**
+**/profile-test-data/
+**/profile-test-data/**
+**/node_modules/
+**/node_modules/**
+.git/
+.env
+.env.*

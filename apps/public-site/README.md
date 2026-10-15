@@ -9,8 +9,11 @@ One Vite + React app for both public sites:
 
 `src/site/site.ts` picks the site from the hostname. A build-time `VITE_SITE`
 wins, then `?site=olympus|aether`, so one preview domain can show either site.
-Production builds each site separately (`VITE_SITE=olympus` for `www`) because
-each build prerenders its own pages.
+Production has one build: the `main` branch of `AETHER-production-web` serves
+every host and leaves `VITE_SITE` unset, so each host picks its site at runtime.
+That build prerenders the Aether pages only, so `www` serves Aether's
+prerendered HTML, titles and sitemap until the app renders the Olympus pages in
+the browser (crawlers and link previews that don't run JavaScript see Aether's).
 
 Links between the two sites are absolute. `VITE_SITE_OLYMPUS_URL` and
 `VITE_SITE_AETHER_URL` set their origins; without them a staging host links to

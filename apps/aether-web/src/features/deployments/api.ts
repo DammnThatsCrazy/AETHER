@@ -31,6 +31,7 @@ export const agentDeploymentSchema = z.object({
   id: z.string(),
   tenant_id: z.string(),
   agent_id: z.string(),
+  agent_source_namespace: z.string().nullish(),
   display_name: z.string(),
   description: z.string().nullish(),
   external_platform: z.enum(externalPlatforms),
@@ -54,6 +55,22 @@ export const agentDeploymentSchema = z.object({
 }).passthrough();
 
 export type AgentDeploymentRecord = z.infer<typeof agentDeploymentSchema>;
+
+export const agentDeploymentIdentityBindingSchema = z.object({
+  status: z.enum(['matched', 'unresolved', 'ambiguous', 'unavailable']),
+  tenant_id: z.string().optional(),
+  deployment_id: z.string().optional(),
+  source_namespace: z.string().nullish(),
+  source_agent_ref: z.string().nullish(),
+  canonical_agent_entity_id: z.string().optional(),
+  binding_authority: z.string().optional(),
+  bound_by: z.string().optional(),
+  bound_at: z.string().optional(),
+  graph_projection_status: z.string().optional(),
+  reason: z.string().optional(),
+}).passthrough();
+
+export type AgentDeploymentIdentityBindingRecord = z.infer<typeof agentDeploymentIdentityBindingSchema>;
 
 // Tolerant list shape: bare array or { deployments: [...] }.
 const deploymentListSchema = z.union([
@@ -96,6 +113,7 @@ const activityListSchema = z.union([
 export interface DeploymentListParams {
   readonly status?: string;
   readonly platform?: string;
+  readonly agent_id?: string;
 }
 
 export interface DeploymentListResult {
@@ -107,7 +125,7 @@ export interface DeploymentListResult {
 export async function fetchAgentDeployments(params?: DeploymentListParams): Promise<DeploymentListResult> {
   try {
     const r = await restClient.get(
-      `/v1/agent/deployments${buildQS({ status: params?.status, platform: params?.platform })}`,
+      `/v1/agent/deployments${buildQS({ status: params?.status, platform: params?.platform, agent_id: params?.agent_id })}`,
       wrap(deploymentListSchema),
     );
     const deployments = Array.isArray(r.data) ? r.data : r.data.deployments;
@@ -123,6 +141,25 @@ export async function fetchAgentDeployments(params?: DeploymentListParams): Prom
 export function fetchAgentDeployment(id: string): Promise<AgentDeploymentRecord> {
   return restClient
     .get(`/v1/agent/deployments/${encodeURIComponent(id)}`, wrap(agentDeploymentSchema))
+    .then(r => r.data);
+}
+
+export function fetchAgentDeploymentIdentityBinding(id: string): Promise<AgentDeploymentIdentityBindingRecord> {
+  return restClient
+    .get(`/v1/agent/deployments/${encodeURIComponent(id)}/identity-binding`, wrap(agentDeploymentIdentityBindingSchema))
+    .then(r => r.data);
+}
+
+export function bindAgentDeploymentIdentity(
+  id: string,
+  canonicalAgentEntityId: string,
+): Promise<AgentDeploymentIdentityBindingRecord> {
+  return restClient
+    .put(
+      `/v1/agent/deployments/${encodeURIComponent(id)}/identity-binding`,
+      wrap(agentDeploymentIdentityBindingSchema),
+      { canonical_agent_entity_id: canonicalAgentEntityId },
+    )
     .then(r => r.data);
 }
 
@@ -146,6 +183,7 @@ export function fetchAgentDeploymentActivity(id: string): Promise<AgentDeploymen
 export interface CreateAgentDeploymentInput {
   readonly display_name: string;
   readonly agent_id: string;
+  readonly agent_source_namespace?: string;
   readonly external_platform: ExternalPlatform;
   readonly environment: AgentDeploymentEnvironment;
   readonly consent_mode: AgentDeploymentConsentMode;

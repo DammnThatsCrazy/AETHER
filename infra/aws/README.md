@@ -27,7 +27,7 @@ Note the sha256 digest output — pin it in your profile tfvars.
 
 ### Step 2 — Pin the image digest
 
-In `profiles/production-lean.tfvars` (or the profile you're targeting):
+In `profiles/production.tfvars` (or the profile you're targeting):
 
 ```hcl
 enable_tfmcp_in_lean = true
@@ -51,12 +51,12 @@ terraform init
 
 # Production-lean: pass only the lean tfvars — not staging + lean
 terraform plan \
-  -var-file=profiles/production-lean.tfvars \
+  -var-file=profiles/production.tfvars \
   -out=tfplan
 ```
 
 Then dispatch the promotion workflow (`action: plan` first, then `action: apply`
-with the approved plan checksum) for the `production-lean` profile.
+with the approved plan checksum) for the `production` profile.
 
 > **Pre-apply note for first-time tfmcp deployment.** The module references
 > `var.terraform_state_bucket`, `var.terraform_lock_table`, and
@@ -115,7 +115,7 @@ The ALB target group health check hits `GET /` on port 8080 expecting 200. If tf
 | Profile | tfmcp? |
 |---|---|
 | staging | No |
-| production-lean | Opt-in (`enable_tfmcp_in_lean = true`) |
+| production | Opt-in (`enable_tfmcp_in_lean = true`) |
 | production-scale | Yes (default) |
 | enterprise-isolated | Yes (default) |
 
@@ -124,7 +124,7 @@ The ALB target group health check hits `GET /` on port 8080 expecting 200. If tf
 One Fargate task at 512 CPU / 1024 MiB: ~$7–15/month depending on region and
 Fargate pricing. No NAT Gateway (public_ip egress, same as staging/lean).
 
-> The production-lean profile's cost model and budget ceiling are tracked in
+> The production profile's cost model and budget ceiling are tracked in
 > [`config/deployment_profiles.yaml`](../config/deployment_profiles.yaml). If
 > you enable tfmcp in lean, re-run the cost model (`scripts/release/check_cost_model.py`)
 > and confirm the total stays within the profile's budget before applying.

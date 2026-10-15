@@ -33,6 +33,8 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
+internal const val SDK_BATCH_PATH = "/v1/batch"
+
 // =============================================================================
 // CONFIGURATION
 // =============================================================================
@@ -2036,6 +2038,12 @@ object Aether : DefaultLifecycleObserver {
         sendBatchWithRetry(batch, cfg, retryCount = 0)
     }
 
+    /** Build the stable /v1/batch wire envelope used by both queue send modes. */
+    internal fun batchPayload(batch: List<JSONObject>, sentAt: String): JSONObject = JSONObject().apply {
+        put("batch", JSONArray(batch))
+        put("sentAt", sentAt)
+    }
+
     /**
      * Durable ack-mode batch sender. Unlike the legacy delete-before-ack path,
      * the batch is NOT removed from the queue before the request completes. A
@@ -2053,7 +2061,7 @@ object Aether : DefaultLifecycleObserver {
     ): Unit = withContext(Dispatchers.IO) {
         val maxRetries = 3
         try {
-            val url = URL("${cfg.endpoint}/v1/batch")
+            val url = URL("${cfg.endpoint}$SDK_BATCH_PATH")
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
             connection.setRequestProperty("Content-Type", "application/json")
@@ -2063,10 +2071,7 @@ object Aether : DefaultLifecycleObserver {
             connection.connectTimeout = 10000
             connection.readTimeout = 10000
 
-            val payload = JSONObject().apply {
-                put("batch", JSONArray(batch))
-                put("sentAt", dateFormat.format(Date()))
-            }
+            val payload = batchPayload(batch, dateFormat.format(Date()))
 
             val sendStart = System.currentTimeMillis()
             connection.outputStream.use { it.write(payload.toString().toByteArray()) }
@@ -2134,7 +2139,7 @@ object Aether : DefaultLifecycleObserver {
     ): Unit = withContext(Dispatchers.IO) {
         val maxRetries = 3
         try {
-            val url = URL("${cfg.endpoint}/v1/batch")
+            val url = URL("${cfg.endpoint}$SDK_BATCH_PATH")
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
             connection.setRequestProperty("Content-Type", "application/json")
@@ -2144,10 +2149,7 @@ object Aether : DefaultLifecycleObserver {
             connection.connectTimeout = 10000
             connection.readTimeout = 10000
 
-            val payload = JSONObject().apply {
-                put("batch", JSONArray(batch))
-                put("sentAt", dateFormat.format(Date()))
-            }
+            val payload = batchPayload(batch, dateFormat.format(Date()))
 
             val sendStart = System.currentTimeMillis()
             connection.outputStream.use { it.write(payload.toString().toByteArray()) }

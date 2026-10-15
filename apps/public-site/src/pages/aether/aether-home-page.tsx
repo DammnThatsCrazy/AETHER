@@ -2,12 +2,12 @@
  * Built from design/designs/Aether Home.dc.html (copy, layout and styles verbatim).
  */
 import { Fragment } from 'react';
-import { asset, css, portalLabel, useDesignState, useLink } from '@site/design/runtime';
+import { asset, css, hoverClass, portalLabel, useDesignState, useLink } from '@site/design/runtime';
 import { markSrc } from '@site/components/brand-mark';
 import { usePageMeta } from '@site/design/page-meta';
 import { AetherScene } from '@site/components/aether-scene';
+import { AetherIosApp } from '@site/components/aether-ios-app';
 import { IOSDevice } from '@site/components/ios-device';
-import { Profile360 } from '@site/components/profile-360';
 import { SiteFooter } from '@site/components/site-footer';
 import { SiteHeader } from '@site/components/site-header';
 import { CONNECT_CONNECTORS } from './aether-connect';
@@ -53,6 +53,9 @@ const APPS: [g: string, title: string, body: string, c: string, href: string][] 
   ['▲', 'Risk and trust', 'How risk emerges from relationships — evidence separate from inference.', '#e09a8f', 'Aether Applications.dc.html#risk'],
   ['◉', 'Operations', 'What is happening now, and how it compares to before.', '#c9b088', 'Aether Applications.dc.html#operations'],
 ];
+
+// Logos in the works-with strip under the stats.
+const WORKS_WITH: [logo: string, name: string][] = [['stripe', 'Stripe'], ['shopify', 'Shopify'], ['hubspot', 'HubSpot'], ['salesforce', 'Salesforce'], ['klaviyo', 'Klaviyo'], ['segment', 'Segment'], ['zendesk', 'Zendesk'], ['intercom', 'Intercom'], ['slack', 'Slack'], ['posthog', 'PostHog'], ['googleanalytics', 'Google Analytics'], ['meta', 'Meta']];
 
 export function AetherHomePage() {
   const link = useLink();
@@ -152,7 +155,7 @@ export function AetherHomePage() {
                 </a>
               </div>
             </div>
-            <div style={css("min-width: 0; background: #eceae5; border: 1px solid #d8d6d0; border-radius: 12px; padding: 20px;")}>
+            <div style={css("min-width: 0;")}>
               <AetherScene autoplay={true} rotate={true} controls={true} story="customer" />
             </div>
           </div>
@@ -190,6 +193,26 @@ export function AetherHomePage() {
                   {"SDKs for web and mobile"}
                 </span>
               </div>
+            </div>
+          </div>
+          <div style={css("border-top: 1px solid #d8d6d0;")}>
+            <div style={css("max-width: 1200px; margin: 0 auto; padding: 18px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px;")}>
+              <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;")}>
+                {"Works with"}
+              </span>
+              <span style={css("display: flex; flex-wrap: wrap; gap: 8px;")}>
+                {WORKS_WITH.map(([k, name]) => (
+                  <span key={k} style={css("width: 36px; height: 36px; border-radius: 11px; background: #fff; border: 1px solid #e2e0da; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;")}>
+                    <img src={asset('assets/brand/' + k + '.svg')} alt={name} title={name} style={css("width: 20px; height: 20px; object-fit: contain;")} />
+                  </span>
+                ))}
+              </span>
+              <a href={link("Aether Connect.dc.html")} style={css("display: inline-flex; gap: 6px; font-size: 13px; font-weight: 500; color: #1a1a1e; text-decoration: none; margin-left: auto;")} className="hv-cc8e330e">
+                {"All connectors"}
+                <span style={css("font-family: var(--font-mono);")}>
+                  {"→"}
+                </span>
+              </a>
             </div>
           </div>
         </section>
@@ -363,13 +386,15 @@ export function AetherHomePage() {
         </section>
         <section id="product" style={css("border-bottom: 1px solid #d8d6d0; background: #eceae5;")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(64px, 9vw, 112px) 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: clamp(32px, 5vw, 64px); align-items: center;")}>
-            <div style={css("min-width: 0; display: flex; justify-content: center; align-items: flex-start;")}>
-              <div style={css("zoom: 0.8; flex-shrink: 0; width: 402px; height: 874px;")}>
-                <IOSDevice dark={true} style={css("display: block; width: 402px; height: 874px;")}>
-                  <div style={css("padding-top: 54px; background: #000; min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column;")}>
-                    <Profile360 ios={true} style={css("flex: 1; display: flex; flex-direction: column;")} />
-                  </div>
-                </IOSDevice>
+            <div style={css("position: relative; overflow: hidden; min-width: 0; min-height: 760px; border-radius: 28px; border: 1px solid #d8d6d0; background: linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%); display: flex; justify-content: center; align-items: center;")}>
+              <div style={css("position: relative; width: 320px; height: 694px; flex-shrink: 0; transform: perspective(2200px) rotateX(7deg) rotateY(-16deg) rotateZ(-5deg); filter: drop-shadow(0 40px 50px rgba(40,34,70,0.28));")}>
+                <div style={css("transform: scale(0.796); transform-origin: 0 0; width: 402px; height: 874px;")}>
+                  <IOSDevice dark={true} style={css("display: block; width: 402px; height: 874px;")}>
+                    <div style={css("background: #0b0b0e; height: 874px;")}>
+                      <AetherIosApp />
+                    </div>
+                  </IOSDevice>
+                </div>
               </div>
             </div>
             <div style={css("display: flex; flex-direction: column; gap: 16px;")}>
@@ -403,7 +428,7 @@ export function AetherHomePage() {
             </div>
           </div>
         </section>
-        <section id="applications" data-theme="dark" style={css("background: #1a1a1e; color: #e8e6e1;")}>
+        <section id="applications" data-theme="dark" style={css("background: radial-gradient(60% 50% at 88% 28%, rgba(58,104,150,0.38), transparent 70%), radial-gradient(50% 45% at 72% 92%, rgba(201,151,90,0.22), transparent 70%), radial-gradient(45% 40% at 8% 60%, rgba(107,154,124,0.18), transparent 70%), #141418; color: #e8e6e1;")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(64px, 9vw, 112px) 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: clamp(32px, 5vw, 72px); align-items: start;")}>
             <div style={css("display: flex; flex-direction: column; gap: 16px;")}>
               <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;")}>
@@ -415,48 +440,40 @@ export function AetherHomePage() {
               <p style={css("font-size: 15px; line-height: 1.6; color: #a09f99; margin: 0; max-width: 440px;")}>
                 {"Not separate products — the same Aether, pointed at different questions."}
               </p>
-              <div style={css("display: flex; flex-direction: column; align-items: center; gap: 0; margin-top: 16px; padding: 24px; border: 1px solid #2a2a2f; border-radius: 12px; background: #111114; font-family: var(--font-mono); font-size: 13px; max-width: 360px; box-sizing: border-box;")}>
-                <span style={css("display: flex; gap: 8px;")}>
-                  <span style={css("padding: 6px 10px; border: 1px solid #2a2a2f; border-radius: 6px; color: #9fbad6;")}>
+              <div style={css("position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; margin-top: 16px; padding: 28px 24px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.1); background: radial-gradient(70% 50% at 20% 0%, rgba(58,104,150,0.5), transparent 70%), radial-gradient(60% 45% at 90% 55%, rgba(201,151,90,0.3), transparent 70%), radial-gradient(70% 40% at 30% 100%, rgba(107,154,124,0.32), transparent 70%), #0d0d10; font-family: var(--font-mono); font-size: 13px; max-width: 380px; box-sizing: border-box;")}>
+                <span style={css("width: 100%; display: flex; justify-content: space-between; gap: 8px;")}>
+                  <span style={css("padding: 8px 14px; border-radius: 14px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 8px 20px rgba(0,0,0,0.28); color: #bcd2ea; animation: axFloat 5s ease-in-out 0s infinite;")}>
                     {"● people"}
                   </span>
-                  <span style={css("padding: 6px 10px; border: 1px solid #2a2a2f; border-radius: 6px; color: #dcb683;")}>
+                  <span style={css("padding: 8px 14px; border-radius: 14px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 8px 20px rgba(0,0,0,0.28); color: #f0cc99; animation: axFloat 6s ease-in-out -1.3s infinite;")}>
                     {"⬡ agents"}
                   </span>
-                  <span style={css("padding: 6px 10px; border: 1px solid #2a2a2f; border-radius: 6px; color: #8fb0cc;")}>
+                  <span style={css("padding: 8px 14px; border-radius: 14px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 8px 20px rgba(0,0,0,0.28); color: #a9c8e0; animation: axFloat 7s ease-in-out -2.6s infinite;")}>
                     {"○ systems"}
                   </span>
                 </span>
-                <span style={css("color: #6b6a65; padding: 6px 0;")}>
-                  {"↓"}
-                </span>
-                <span style={css("padding: 6px 10px; border: 1px solid #3a3a40; border-radius: 6px; color: #e8e6e1;")}>
+                <svg width="100%" height="44" viewBox="0 0 300 44" preserveAspectRatio="none" aria-hidden="true" style={css("display: block;")}><g fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.25" strokeDasharray="3 5" strokeLinecap="round"><path d="M52 2C52 26 150 18 150 42" className="ax-flow-36" /><path d="M150 2C146 22 154 22 150 42" className="ax-flow-42" /><path d="M248 2C248 26 150 18 150 42" className="ax-flow-39" /></g></svg>
+                <span style={css("padding: 8px 14px; border-radius: 14px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 8px 20px rgba(0,0,0,0.28); color: #f4f2ee; animation: axFloat 5s ease-in-out -3.9s infinite; background: rgba(255,255,255,0.16); border-color: rgba(255,255,255,0.32);")}>
                   {"↔ relationships"}
                 </span>
-                <span style={css("color: #6b6a65; padding: 6px 0;")}>
-                  {"↓"}
-                </span>
-                <span style={css("padding: 6px 10px; border: 1px solid #2a2a2f; border-radius: 6px; color: #a09f99;")}>
+                <svg width="60" height="40" viewBox="0 0 60 40" aria-hidden="true" style={css("display: block;")}><path d="M30 2C12 14 48 26 30 38" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.25" strokeDasharray="3 5" strokeLinecap="round" className="ax-flow-4" /></svg>
+                <span style={css("padding: 8px 14px; border-radius: 14px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 8px 20px rgba(0,0,0,0.28); color: #d1d0ca; animation: axFloat 6s ease-in-out -5.2s infinite;")}>
                   {"◉ activity"}
                 </span>
-                <span style={css("color: #6b6a65; padding: 6px 0;")}>
-                  {"↓"}
-                </span>
-                <span style={css("padding: 6px 10px; border: 1px solid #2a2a2f; border-radius: 6px; color: #9cc4a9;")}>
+                <svg width="60" height="40" viewBox="0 0 60 40" aria-hidden="true" style={css("display: block;")}><path d="M30 2C48 14 12 26 30 38" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.25" strokeDasharray="3 5" strokeLinecap="round" className="ax-flow-4" /></svg>
+                <span style={css("padding: 8px 14px; border-radius: 14px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 8px 20px rgba(0,0,0,0.28); color: #b3dcc0; animation: axFloat 7s ease-in-out -6.5s infinite;")}>
                   {"↑ value"}
                 </span>
-                <span style={css("color: #6b6a65; padding: 6px 0;")}>
-                  {"↓"}
-                </span>
-                <span style={css("padding: 6px 12px; border-radius: 6px; background: #e8e6e1; color: #1a1a1e;")}>
+                <svg width="60" height="40" viewBox="0 0 60 40" aria-hidden="true" style={css("display: block;")}><path d="M30 2C12 14 48 26 30 38" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.25" strokeDasharray="3 5" strokeLinecap="round" className="ax-flow-4" /></svg>
+                <span style={css("padding: 8px 16px; border-radius: 14px; background: rgba(255,255,255,0.92); color: #1a1a1e; box-shadow: 0 8px 24px rgba(0,0,0,0.35); animation: axFloat 6s ease-in-out -2s infinite;")}>
                   {"✓ outcomes"}
                 </span>
               </div>
             </div>
-            <div style={css("display: flex; flex-direction: column; border-top: 1px solid #2a2a2f;")}>
+            <div style={css("display: flex; flex-direction: column; gap: 10px;")}>
               {(apps).map((a: any, aIndex: number) => (
                 <Fragment key={aIndex}>
-                  <a href={link(a.href)} style={css("display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 14px; align-items: baseline; padding: 20px 4px; border-bottom: 1px solid #2a2a2f; text-decoration: none; color: #e8e6e1; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1);")} className="hv-51ea9421">
+                  <a href={link(a.href)} style={css("display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 14px; align-items: baseline; padding: 18px 20px; border-radius: 18px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12); text-decoration: none; color: #e8e6e1; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1), border-color 120ms cubic-bezier(0.22,1,0.36,1);")} className={hoverClass("background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.26); color: #e8e6e1;")}>
                     <span style={css(a.gStyle)}>
                       {a.g}
                     </span>

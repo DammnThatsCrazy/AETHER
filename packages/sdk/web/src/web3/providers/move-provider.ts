@@ -33,7 +33,6 @@ export class MoveProvider extends BaseVMProvider {
   readonly defaultChainId: string = 'sui:mainnet';
 
   private provider: SuiWalletProvider | null = null;
-  private network: string = 'sui:mainnet';
 
   constructor(callbacks: ProviderCallbacks) {
     super(callbacks);
@@ -71,29 +70,10 @@ export class MoveProvider extends BaseVMProvider {
   }
 
   protected async monitorTransaction(digest: string): Promise<void> {
-    let attempts = 0;
-    const check = async (): Promise<void> => {
-      try {
-        const response = await fetch('https://fullnode.mainnet.sui.io', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0', id: 1, method: 'sui_getTransactionBlock',
-            params: [digest, { showEffects: true }],
-          }),
-        });
-        const result = await response.json();
-        if (result?.result?.effects?.status) {
-          const status = result.result.effects.status.status === 'success' ? 'confirmed' : 'failed';
-          this.callbacks.onTransaction(digest, {
-            txHash: digest, chainId: this.network, vm: 'movevm', status,
-            gasUsed: result.result.effects.gasUsed,
-          });
-          return;
-        }
-        if (++attempts < 30) setTimeout(check, 3000);
-      } catch { /* RPC error */ }
-    };
-    setTimeout(check, 2000);
+    // Keep this SDK observation-only. Sui JSON-RPC is deprecated and disabled
+    // on Mainnet; the backend verifies the digest through a configured Sui
+    // GraphQL provider and is the only layer allowed to update execution status.
+    void digest;
   }
 
   // ---------------------------------------------------------------------------

@@ -11,19 +11,19 @@ for `environments/`.
 Nearly every cost-relevant decision in this root is made by one variable:
 
 ```hcl
-deployment_profile = "staging" | "production-lean" | "production-scale" | "enterprise-isolated"
+deployment_profile = "staging" | "production" | "production-scale" | "enterprise-isolated"
 ```
 
 `profiles.tf` turns that into `enable_*` locals and backend selectors, and
 `main.tf` wires those into module `count` and module inputs. A profile is not
-documentation — a `production-lean` plan structurally cannot contain a
+documentation — a `production` plan structurally cannot contain a
 forbidden resource.
 
 The canonical policy data lives in `config/deployment_profiles.yaml`;
 `config/terraform_resource_contracts.yaml` maps each policy key to the module
 address and cardinality a conforming plan must show.
 
-| | staging | production-lean | production-scale | enterprise-isolated |
+| | staging | production | production-scale | enterprise-isolated |
 |---|---|---|---|---|
 | Database | Aurora Serverless v2 | Aurora Serverless v2 | Aurora Serverless v2 | Aurora Serverless v2 |
 | Cache | DynamoDB | DynamoDB | ElastiCache Redis | ElastiCache Redis |
@@ -39,7 +39,7 @@ Apply a profile with its checked-in variable file:
 
 ```bash
 cd "infra/aws/terraform"
-terraform plan -var-file=profiles/production-lean.tfvars -out=tfplan
+terraform plan -var-file=profiles/production.tfvars -out=tfplan
 ```
 
 ### Network egress
@@ -75,7 +75,7 @@ instantiates no module block for it, so `vpc_endpoints` provisions no endpoints
 and behaves exactly like `none`. No profile or workflow sets either value.
 
 Omit the variable to take the profile default. `nat_gateway_unless_explicit` is
-a forbidden resource for `production-lean`; **setting this variable to a NAT
+a forbidden resource for `production`; **setting this variable to a NAT
 mode on a cost-capped profile is that explicit opt-in**, and must be reviewed
 as a cost-policy exception.
 
@@ -87,7 +87,7 @@ services is a per-profile decision recorded as `execution_mode`:
 
 | Profile | `execution_mode` | Non-`api` ECS services |
 |---|---|---|
-| `production-lean` | `consolidated` | **one** — `lean-worker`, whose single task hosts all eight worker roles |
+| `production` | `consolidated` | **one** — `lean-worker`, whose single task hosts all eight worker roles |
 | `staging` | `consolidated` | **one** — same shape, so staging rehearses lean's packing |
 | `production-scale` | `dedicated` | **eight** — one service per worker role |
 | `enterprise-isolated` | `dedicated` | **eight** — one service per worker role |
@@ -224,7 +224,7 @@ $EDITOR terraform.tfvars
 
 terraform init
 
-terraform plan -var-file=profiles/production-lean.tfvars -out=tfplan
+terraform plan -var-file=profiles/production.tfvars -out=tfplan
 terraform apply tfplan
 ```
 
@@ -408,3 +408,11 @@ directory, and the live variable surface is `variables.tf` plus
   credential in every plan artifact. The `auth0` provider reads `AUTH0_DOMAIN`,
   `AUTH0_CLIENT_ID` and `AUTH0_CLIENT_SECRET` from the runner's environment
   instead; `TF_VAR_auth0_*` names are no longer read by anything.
+- The Auth0 module also provisions the Aether CLI as a public Native client for
+  Device Authorization. It has no client secret, receives an API audience grant
+  and the existing database connection association, and exposes
+  `aether_cli_auth0_client_id` as a non-secret root output. The CLI uses that
+  output with the Auth0 domain and API audience, then stores only the resulting
+  revocable Aether session in the user's OS credential store. Apply this Auth0
+  change through the normal reviewed Terraform plan/apply workflow before
+  enabling customer CLI login.

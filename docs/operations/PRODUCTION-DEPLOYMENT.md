@@ -19,7 +19,7 @@ an AWS reference (`infra/aws/terraform/`,
 contract below is what production needs regardless.
 
 On AWS, the shape of production is decided by one variable. `deployment_profile`
-selects `production-lean`, `production-scale` or `enterprise-isolated`, and it
+selects `staging` or `production`, and it
 drives the real Terraform resource graph and the runtime topology — see
 [Deployment Profiles](../architecture/DEPLOYMENT-PROFILES.md) and, for the founding-tenant
 profile in depth, [AWS Lean Production](AWS-LEAN-PRODUCTION.md).
@@ -50,9 +50,9 @@ profile in depth, [AWS Lean Production](AWS-LEAN-PRODUCTION.md).
   are rejected in a deployed profile.
 - The remaining backends are **profile selectors**, not a fixed list:
 
-| Dimension | `production-lean` | `production-scale` / `enterprise-isolated` |
+| Dimension | `production` today | Where it grows (variable change) |
 |---|---|---|
-| database | Aurora Serverless v2 Postgres | Aurora Serverless v2 Postgres |
+| database | Aurora Serverless v2 Postgres | same, higher ACU ceiling |
 | cache | DynamoDB | ElastiCache Redis |
 | event bus | SNS → SQS | MSK Kafka |
 | graph | Aurora Postgres | Neptune |
@@ -68,12 +68,12 @@ profile in depth, [AWS Lean Production](AWS-LEAN-PRODUCTION.md).
 
 ### Runtime processes
 
-The deployable unit is a service, not a role. `production-lean` runs **two**
+The deployable unit is a service, not a role. `production` runs **two**
 always-on tasks — `api`, and one `lean-worker` task hosting all eight worker
 roles — rather than one task per role. Consolidation moves the process boundary
 only: each role keeps its own queue, consumer group, DLQ, retry policy,
-backpressure budget and metrics label. `production-scale` and
-`enterprise-isolated` run one service per role instead. The canonical matrix is
+backpressure budget and metrics label. A dedicated-mode
+deployment (none today) would run one service per role instead. The canonical matrix is
 `config/runtime_deployment.yaml`.
 
 ## Sequence

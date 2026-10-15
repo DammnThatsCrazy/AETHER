@@ -22,7 +22,7 @@ def validate(data: dict, expected_sha: str | None = None) -> None:
         raise ValueError(f"manifest missing fields: {sorted(missing)}")
     if expected_sha and data["commit_sha"] != expected_sha:
         raise ValueError("manifest commit does not match approved commit")
-    if data["profile"] not in {"staging", "production-lean", "production-scale", "enterprise-isolated"}:
+    if data["profile"] not in {"staging", "production"}:
         raise ValueError("invalid deployment profile")
     artifacts = data["artifacts"]
     for name in ("backend_image", "aether_spa", "kyber_spa", "migration_package", "configuration"):

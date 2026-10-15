@@ -27,7 +27,7 @@ infra/aws/terraform/
 ```
 
 It is **profile-driven** — one AWS account, one region, one VPC, selected by a
-single `deployment_profile` variable (`staging` | `production-lean` |
+single `deployment_profile` variable (`staging` | `production` |
 `production-scale` | `enterprise-isolated`, plus the `demo` / `preview`
 ephemeral profiles). The live variable surface is `../variables.tf` plus
 `../profiles/*.tfvars`.

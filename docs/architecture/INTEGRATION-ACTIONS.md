@@ -14,7 +14,7 @@ estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
   "services/api/intelligence/intelligence/decision_models.py": "sha256:95d33e7eee251e14114ba3f538f78f32ffe2d1e3cdb9c122ddec7b80086e8e25"
-  "services/api/intelligence/intelligence/routes.py": "sha256:46f4df5f21914056a91810cb1c0a490183ed144e99a9568b8aedf170f3b05e29"
+  "services/api/intelligence/intelligence/routes.py": "sha256:355eb639eb8cf03f9a79903ae67b1665b688e2fc095536e8d8bd44b2c06fcc18"
 ---
 # Integration Actions
 
@@ -56,7 +56,7 @@ Integration deliveries and premium connector usage should emit usage metering ev
 
 Reliability, SRE, incident response, SLOs, runbooks, and tenant-safe system
 status are documented in [Reliability Operations](../operations/RELIABILITY-OPERATIONS.md) and
-related docs ([Incident Response](../operations/INCIDENT-RESPONSE.md),
+related docs ([Incident Response](../operations/incident-response.md),
 [SLO Tracking](../operations/SLO-TRACKING.md), [SRE Runbooks](../operations/SRE-RUNBOOKS.md),
 [Tenant System Status](../operations/TENANT-STATUS.md), [Pipeline Health](../operations/PIPELINE-HEALTH.md),
 [Queue & Worker Health](../operations/QUEUE-WORKER-HEALTH.md), [Postmortems](../operations/POSTMORTEMS.md)).

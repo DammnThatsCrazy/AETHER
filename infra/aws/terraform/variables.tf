@@ -5,14 +5,14 @@
 variable "deployment_profile" {
   type        = string
   description = "Aether deployment profile driving cost/resource toggles (see config/deployment_profiles.yaml)."
-  default     = "production-lean"
+  default     = "production"
 
   validation {
     condition = contains(
-      ["staging", "production-lean", "production-scale", "enterprise-isolated", "demo", "preview"],
+      ["staging", "production"],
       var.deployment_profile,
     )
-    error_message = "Invalid Aether deployment profile."
+    error_message = "deployment_profile must be staging or production."
   }
 }
 
@@ -30,8 +30,8 @@ variable "deployment_lane" {
 }
 
 # Backend releases are always pinned to an immutable digest. The optional ML
-# digest is profile-gated below because staging and production-lean run ML
-# inline and do not provision a dedicated ML image.
+# digest is unused today because staging and production run ML inline and do
+# not provision a dedicated ML image.
 variable "backend_image_digest" {
   type        = string
   description = "Immutable backend image digest selected by the release manifest"
@@ -43,28 +43,140 @@ variable "backend_image_digest" {
 
 variable "ml_image_digest" {
   type        = string
-  description = "Immutable ML serving digest; optional when the selected profile runs ML inline"
+  description = "Immutable ML serving digest; empty while both profiles run ML inline"
   default     = ""
   validation {
-    condition = var.ml_image_digest != "" ? can(regex("^sha256:[0-9a-f]{64}$", var.ml_image_digest)) : contains(
-      ["staging", "production-lean", "demo", "preview"],
-      var.deployment_profile,
+    condition     = var.ml_image_digest == "" || can(regex("^sha256:[0-9a-f]{64}$", var.ml_image_digest))
+    error_message = "ml_image_digest must be empty or an immutable sha256 digest."
+  }
+}
+
+variable "enable_access_mcp_repository" {
+  type        = bool
+  description = "Opt in to the dedicated aether-access-mcp ECR repository. Provision this first, then publish an immutable image before enabling the service."
+  default     = false
+  validation {
+    condition = !var.enable_access_mcp_repository || (
+      var.deployment_profile == "production" &&
+      var.environment == "production"
     )
-    error_message = "ml_image_digest is required for production-scale and enterprise-isolated profiles and must be an immutable sha256 digest when provided."
+    error_message = "The globally named aether-access-mcp ECR repository has one persistent owner: deployment_profile=production and environment=production."
+  }
+}
+
+variable "enable_access_mcp" {
+  type        = bool
+  description = "Opt in to the customer-facing Access Kit MCP ECS service and ALB route. Requires the dedicated image repository and an immutable image digest."
+  default     = false
+  validation {
+    condition = !var.enable_access_mcp || (
+      var.enable_access_mcp_repository &&
+      var.deployment_profile == "production" &&
+      var.environment == "production" &&
+      can(regex("^sha256:[0-9a-f]{64}$", var.access_mcp_image_digest))
+    )
+    error_message = "enable_access_mcp requires enable_access_mcp_repository=true, deployment_profile=production, environment=production, and an immutable access_mcp_image_digest."
+  }
+}
+
+variable "enable_access_mcp_oauth" {
+  type        = bool
+  description = "Opt in to the dedicated Auth0 delegated-read resource and MCP OAuth discovery. Requires reviewed Auth0 client onboarding."
+  default     = false
+  validation {
+    condition     = !var.enable_access_mcp_oauth || (var.enable_access_mcp && var.auth0_domain != "")
+    error_message = "enable_access_mcp_oauth requires the customer MCP service and an Auth0 domain."
+  }
+}
+
+variable "enable_access_continuations" {
+  type        = bool
+  description = "Opt in to the existing tenant continuation authority on the API task for bounded Access Kit create/get calls. Defaults off."
+  default     = false
+}
+
+variable "access_mcp_image_digest" {
+  type        = string
+  description = "Immutable sha256 digest of the image in the aether-access-mcp ECR repository; required only when enable_access_mcp is true."
+  default     = ""
+  validation {
+    condition     = var.access_mcp_image_digest == "" || can(regex("^sha256:[0-9a-f]{64}$", var.access_mcp_image_digest))
+    error_message = "access_mcp_image_digest must be empty or an immutable sha256 digest."
+  }
+}
+
+variable "access_mcp_path" {
+  type        = string
+  description = "HTTP path routed from the API hostname to the Access Kit MCP service."
+  default     = "/v1/access/mcp"
+  validation {
+    condition = (
+      can(regex("^/[A-Za-z0-9/_-]{1,90}$", var.access_mcp_path)) &&
+      !startswith(var.access_mcp_path, "//") &&
+      !startswith(lower(var.access_mcp_path), "/mcp") &&
+      !endswith(var.access_mcp_path, "/") &&
+      !strcontains(var.access_mcp_path, "//")
+    )
+    error_message = "access_mcp_path must be a bounded absolute path of letters, numbers, underscores, slashes, or hyphens without a trailing or repeated slash, and must not overlap the reserved /mcp* tfmcp route."
+  }
+}
+
+variable "access_mcp_desired_count" {
+  type        = number
+  description = "Fixed number of customer Access Kit MCP Fargate tasks. The deployment has no autoscaling and caps this at four tasks."
+  default     = 2
+  validation {
+    condition     = var.access_mcp_desired_count >= 1 && var.access_mcp_desired_count <= 4 && floor(var.access_mcp_desired_count) == var.access_mcp_desired_count
+    error_message = "access_mcp_desired_count must be an integer between 1 and 4."
+  }
+}
+
+variable "access_mcp_allowed_origins" {
+  type        = list(string)
+  description = "Optional exact HTTPS origins permitted by the Access Kit MCP CORS/Origin guard. Empty allows server-to-server requests without Origin and rejects browser Origins."
+  default     = []
+  validation {
+    condition = alltrue([
+      for origin in var.access_mcp_allowed_origins :
+      try(
+        can(regex("^https://[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*(:[0-9]{1,5})?$", origin)) &&
+        length(regex("^https://([^:/?#]+)", origin)[0]) <= 253 &&
+        (
+          can(regex("^https://[0-9.]+(:[0-9]+)?$", origin)) ? (
+            length(split(".", regex("^https://([0-9.]+)", origin)[0])) == 4 &&
+            alltrue([
+              for octet in split(".", regex("^https://([0-9.]+)", origin)[0]) :
+              try(
+                can(regex("^(0|[1-9][0-9]{0,2})$", octet)) && tonumber(octet) <= 255,
+                false,
+              )
+            ])
+          ) : true
+        ) &&
+        (
+          can(regex(":([0-9]+)$", origin)) ? (
+            tonumber(regex(":([0-9]+)$", origin)[0]) >= 1 &&
+            tonumber(regex(":([0-9]+)$", origin)[0]) <= 65535
+          ) : true
+        ),
+        false,
+      )
+    ])
+    error_message = "access_mcp_allowed_origins must contain exact HTTPS origins with valid DNS/IPv4 hosts and optional ports from 1 through 65535; credentials, paths, query strings, fragments, malformed hosts, and IPv6 literals are not accepted."
   }
 }
 
 variable "environment" {
   type        = string
-  description = "Deployment environment (production, staging, dev, demo, preview)"
+  description = "Deployment environment (production or staging)"
   default     = "production"
 
   validation {
     condition = contains(
-      ["production", "staging", "dev", "demo", "preview"],
+      ["production", "staging"],
       var.environment,
     )
-    error_message = "environment must be one of: production, staging, dev, demo, preview."
+    error_message = "environment must be one of: production, staging."
   }
 }
 
@@ -125,23 +237,27 @@ variable "ecr_repository_encryption_types" {
   validation {
     condition = alltrue([
       for repository, encryption_type in var.ecr_repository_encryption_types :
-      contains(["aether-backend", "aether-ml-serving", "aether-kyber", "aether-aether"], repository) && contains(["KMS", "AES256"], encryption_type)
+      contains(["aether-backend", "aether-ml-serving", "aether-kyber", "aether-aether", "aether-access-mcp"], repository) &&
+      contains(["KMS", "AES256"], encryption_type) &&
+      (repository != "aether-access-mcp" || encryption_type == "KMS")
     ])
-    error_message = "ECR encryption overrides must target a reviewed repository and use KMS or AES256."
+    error_message = "ECR overrides must target a reviewed repository; aether-access-mcp must use KMS encryption."
   }
 }
 
 variable "ecr_repository_tag_mutabilities" {
   type        = map(string)
   default     = {}
-  description = "Optional per-repository ECR tag mutability overrides. Defaults to MUTABLE."
+  description = "Optional per-repository ECR tag mutability overrides. Existing repositories default to MUTABLE; aether-access-mcp is immutable."
 
   validation {
     condition = alltrue([
       for repository, mutability in var.ecr_repository_tag_mutabilities :
-      contains(["aether-backend", "aether-ml-serving", "aether-kyber", "aether-aether"], repository) && contains(["MUTABLE", "IMMUTABLE"], mutability)
+      contains(["aether-backend", "aether-ml-serving", "aether-kyber", "aether-aether", "aether-access-mcp"], repository) &&
+      contains(["MUTABLE", "IMMUTABLE"], mutability) &&
+      (repository != "aether-access-mcp" || mutability == "IMMUTABLE")
     ])
-    error_message = "ECR mutability overrides must target a reviewed repository and use MUTABLE or IMMUTABLE."
+    error_message = "ECR mutability overrides must target a reviewed repository; aether-access-mcp tags must remain immutable."
   }
 }
 
@@ -162,9 +278,8 @@ variable "network_egress_mode" {
   type        = string
   description = <<-EOT
     Outbound egress topology for ECS tasks. null = use the deployment profile
-    default (staging and production-lean: public_ip; production-scale:
-    single_nat; enterprise-isolated: ha_nat). Setting this to a NAT mode on a
-    cost-capped profile is the explicit opt-in that the
+    default (staging and production: public_ip). Setting this to a NAT mode is
+    the explicit opt-in that the
     `nat_gateway_unless_explicit` policy in config/deployment_profiles.yaml
     requires. vpc_endpoints and none both provision zero NAT Gateways.
   EOT
@@ -327,8 +442,8 @@ variable "msk_broker_volume_size" {
 # ecs_backend_memory / ecs_backend_min_capacity / ecs_backend_max_capacity
 # variables were a second, silently divergent source of truth for the same four
 # numbers: their defaults (1024/2048/1/10) disagreed with the matrix's
-# production-scale api (2048/4096/3/12) and no tfvars file set them, so a scale
-# apply quietly ran the reviewed capacity of a lean one. Only the ML serving
+# old larger api sizing and no tfvars file set them, so an apply quietly ran a
+# different capacity than the one reviewed. Only the ML serving
 # task, which the matrix does not describe, is still sized by variable.
 
 variable "ecs_ml_cpu" {
@@ -458,6 +573,12 @@ variable "auth0_domain" {
 variable "aether_app_url" {
   type        = string
   description = "Public URL of the Aether customer app (e.g. https://app.olympuslabsml.com)"
+
+  validation {
+    # Auth0 callback/logout URLs and the SPA's redirect URIs append paths to it.
+    condition     = !endswith(var.aether_app_url, "/")
+    error_message = "aether_app_url must not end with a slash."
+  }
 }
 
 variable "kyber_app_url" {

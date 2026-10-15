@@ -14,7 +14,7 @@ source_hashes:
   "services/api/identity/identity/graph_reconciliation.py": "sha256:5a3635cc5fd3efc2abf2f1c55687dfc4e4e396cd4af7671f3531598dd9d7a29a"
   "services/api/identity/identity/reconciliation_routes.py": "sha256:3fee3e01149f08645f47338505621c3c2f890d2f51ea02ae9388c8505371259c"
   "services/api/identity/identity/redirects.py": "sha256:1944d336dd223513fe98d4b145856fa03a19ff1f2b3475e1dc95f7f597d72ae0"
-  "services/api/identity/identity/resolver.py": "sha256:8207a57e1190d7126cadf4b7e2d9e364bd22538dfa69d1a0cd04305620ae20db"
+  "services/api/identity/identity/resolver.py": "sha256:94f75e17e50fddfa2892e5737473f0a014fb4d868eb2e7441438389650656197"
 ---
 
 # Runbook — Identity Repair
@@ -114,6 +114,26 @@ those aliases against retained source events and use an audited reprocess or
 operator split if prior case-folding or cross-chain collisions affected entity
 ownership. Do not manually edit wallet hashes or attach wallets based on address
 text alone.
+
+### A wallet remains observed after a user signs an ownership challenge
+
+Confirm identity resolution is enabled and the server returned a challenge for
+the same tenant, anonymous subject, wallet address, and chain namespace that
+the caller submits at verification. The challenge expires after five minutes
+and can be consumed once. Current identity-link consent is evaluated again at
+verification, so a withdrawn or unavailable receipt prevents evidence issuance.
+EVM proofs must be EIP-191 `personal_sign`; Solana proofs must be a standard
+Base64 Ed25519 signature over the exact message bytes. Client verification
+booleans are ignored, and Sui transaction execution evidence is not a wallet
+ownership proof.
+
+If verification returned `verified`, inspect the tenant-scoped challenge and
+evidence status, then the corresponding identity replay job. A wallet replay
+requires its chain namespace and exact consented anonymous subject. An active
+wallet-address suppression or a contradictory deterministic identifier can
+prevent a merge or leave a candidate for review. Never edit a verified alias
+manually; resolve the consent, suppression or conflict condition and start a
+new challenge when needed.
 
 ### A merged entity's profile/reads resolve to the wrong survivor
 Check the redirect chain. `resolve_entity_redirect(repo, tenant_id, entity_id)`

@@ -1,6 +1,6 @@
 """DynamoDB cache check for the staging preflight gate.
 
-The staging and production-lean profiles use the Terraform-managed DynamoDB
+The staging and production profiles use the Terraform-managed DynamoDB
 cache table instead of Redis. This check verifies the selected table is
 reachable, active, and has the single ``cache_key`` hash key expected by the
 runtime cache and durable-store adapters.

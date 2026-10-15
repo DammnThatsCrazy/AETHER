@@ -1,0 +1,135 @@
+name: Publish Access Kit CLI and MCP
+
+# Validation is available as a dry run. Public publication requires an
+# explicit non-dry run from main and a preconfigured npm-production
+# environment with at least one required reviewer.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Validate and pack without publishing to npm
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-access-kit
+  cancel-in-progress: false
+
+jobs:
+  validate-package:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.package.outputs.version }}
+      tag: ${{ steps.package.outputs.tag }}
+      tarball: ${{ steps.package.outputs.tarball }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.4.2
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install the locked Access Kit dependency graph
+        run: pnpm install --frozen-lockfile --filter @aether/access-kit...
+
+      - name: Verify package contract and create release tarball
+        id: package
+        run: |
+          set -euo pipefail
+          pnpm --filter @aether/access-kit test
+          mkdir -p "$RUNNER_TEMP/access-kit-package"
+          tarball="$(npm pack ./packages/access-kit --pack-destination "$RUNNER_TEMP/access-kit-package")"
+          version="$(node -p "require('./packages/access-kit/package.json').version")"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+            echo '::error::Access Kit version must be valid semver before release.'
+            exit 1
+          fi
+          tag=latest
+          if [[ "$version" == *-* ]]; then
+            tag="${version#*-}"
+            tag="${tag%%.*}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve the exact reviewed npm tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: access-kit-npm-${{ steps.package.outputs.version }}
+          path: ${{ runner.temp }}/access-kit-package/${{ steps.package.outputs.tarball }}
+          if-no-files-found: error
+
+  require-npm-release-reviewers:
+    if: github.ref == 'refs/heads/main' && !inputs.dry_run
+    needs: validate-package
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Require configured npm-production reviewers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if ! environment_json="$(gh api "repos/${GITHUB_REPOSITORY}/environments/npm-production")"; then
+            echo '::error::Create npm-production and configure at least one required reviewer before publishing.'
+            exit 1
+          fi
+          if ! jq -e 'any(.protection_rules[]?; .type == "required_reviewers" and (.reviewers | length > 0))' <<<"$environment_json" >/dev/null; then
+            echo '::error::npm-production must have at least one required reviewer; a named environment alone is not an approval gate.'
+            exit 1
+          fi
+
+  publish-package:
+    if: github.ref == 'refs/heads/main' && !inputs.dry_run
+    needs: [validate-package, require-npm-release-reviewers]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: npm-production
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: access-kit-npm-${{ needs.validate-package.outputs.version }}
+          path: ${{ runner.temp }}/access-kit-package
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Publish the reviewed package tarball
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TAG: ${{ needs.validate-package.outputs.tag }}
+          TARBALL: ${{ needs.validate-package.outputs.tarball }}
+        run: npm publish "$RUNNER_TEMP/access-kit-package/$TARBALL" --access public --tag "$NPM_TAG"
+
+      - name: Record release disposition
+        env:
+          PACKAGE_VERSION: ${{ needs.validate-package.outputs.version }}
+          PACKAGE_TAG: ${{ needs.validate-package.outputs.tag }}
+        run: |
+          {
+            echo '### Access Kit npm release'
+            echo "- Version: @aether/access-kit@$PACKAGE_VERSION"
+            echo "- npm tag: $PACKAGE_TAG"
+            echo '- Disposition: published to the public npm registry.'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -21,9 +21,9 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
 from fastapi import APIRouter, Query, Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
-from shared.common.common import APIResponse, ForbiddenError, NotFoundError
+from shared.common.common import APIResponse, BadRequestError, ForbiddenError, NotFoundError
 from shared.logger.logger import get_logger, metrics
 from repositories.repos import (
     NotificationIntelligenceRepository,
@@ -1047,10 +1047,20 @@ async def telegram_callback(request: Request):
 # ═══════════════════════════════════════════════════════════════════════════
 
 class _WebhookConfig(BaseModel):
-    url: str
-    events: list[str]
-    secret: Optional[str] = None
-    active: bool = True
+    model_config = ConfigDict(extra="forbid")
+
+    url: str = Field(min_length=1, max_length=2048)
+    events: list[str] = Field(min_length=1, max_length=16)
+    secret: Optional[SecretStr] = Field(default=None, min_length=16, max_length=256)
+
+    @field_validator("events")
+    @classmethod
+    def only_access_interaction_events(cls, value: list[str]) -> list[str]:
+        from journeys.notification_intelligence.delivery_outbox import ACCESS_INTERACTION_EVENT_TYPES
+
+        if len(value) != len(set(value)) or any(event not in ACCESS_INTERACTION_EVENT_TYPES for event in value):
+            raise ValueError("events must be unique supported Access Kit interaction event types")
+        return value
 
 
 class _AlertRule(BaseModel):
@@ -1062,27 +1072,74 @@ class _AlertRule(BaseModel):
 
 @router.post("/webhooks")
 async def create_webhook(body: _WebhookConfig, request: Request):
-    from repositories.repos import WebhookRepository
+    from repositories.repos import ProvidersRepository, WebhookRepository
+    from journeys.notification_intelligence.customer_webhook_delivery import (
+        CustomerWebhookSecretStore,
+        WebhookPolicyError,
+        redact_webhook_record,
+        resolve_safe_destination,
+    )
+
     request.state.tenant.require_permission("write")
+    try:
+        resolve_safe_destination(body.url.strip())
+    except WebhookPolicyError as exc:
+        raise BadRequestError("Webhook URL must resolve to a public HTTPS destination") from exc
+
     wh_id = str(uuid.uuid4())
+    tenant_id = request.state.tenant.tenant_id
+    secret = body.secret.get_secret_value() if body.secret else secrets.token_urlsafe(32)
+    secret_record = await CustomerWebhookSecretStore(ProvidersRepository()).store(
+        tenant_id, wh_id, secret,
+    )
     wh_repo = WebhookRepository()
-    webhook = await wh_repo.insert(wh_id, {
-        "tenant_id": request.state.tenant.tenant_id, **body.model_dump()
-    })
-    return APIResponse(data=webhook).to_dict()
+    try:
+        webhook = await wh_repo.insert(wh_id, {
+            "tenant_id": tenant_id,
+            "url": body.url.strip(),
+            "events": list(body.events),
+            "active": False,
+            "status": "pending_test",
+            "verification_status": "pending",
+            "secret_ref": secret_record["secret_ref"],
+            "secret_hash": secret_record["secret_hash"],
+            "secret_configured": True,
+        })
+    except Exception:
+        await ProvidersRepository().delete(secret_record["secret_ref"])
+        raise
+    return APIResponse(data={
+        **redact_webhook_record(webhook),
+        "secret": secret,
+    }).to_dict()
 
 
 @router.get("/webhooks")
-async def list_webhooks(request: Request):
+async def list_webhooks(request: Request, limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0, le=1000)):
     from repositories.repos import WebhookRepository
+    from journeys.notification_intelligence.customer_webhook_delivery import redact_webhook_record
+
+    request.state.tenant.require_permission("read")
     wh_repo = WebhookRepository()
-    hooks = await wh_repo.find_many(filters={"tenant_id": request.state.tenant.tenant_id})
-    return APIResponse(data=hooks).to_dict()
+    all_hooks = await wh_repo.find_many(
+        filters={"tenant_id": request.state.tenant.tenant_id}, limit=500,
+        sort_by="created_at", sort_order="desc",
+    )
+    hooks = all_hooks[offset:offset + limit]
+    return APIResponse(data={
+        "webhooks": [redact_webhook_record(hook) for hook in hooks],
+        "pagination": {
+            "limit": limit,
+            "offset": offset,
+            "total": len(all_hooks),
+            "has_more": offset + len(hooks) < len(all_hooks),
+        },
+    }).to_dict()
 
 
 @router.delete("/webhooks/{webhook_id}")
 async def delete_webhook(webhook_id: str, request: Request):
-    from repositories.repos import WebhookRepository
+    from repositories.repos import ProvidersRepository, WebhookRepository
     from shared.common.common import ForbiddenError, NotFoundError
     request.state.tenant.require_permission("write")
     wh_repo = WebhookRepository()
@@ -1091,54 +1148,171 @@ async def delete_webhook(webhook_id: str, request: Request):
         raise NotFoundError("Webhook")
     if webhook.get("tenant_id") != request.state.tenant.tenant_id:
         raise ForbiddenError("Webhook belongs to a different tenant")
+    if webhook.get("secret_ref"):
+        await ProvidersRepository().delete(str(webhook["secret_ref"]))
     await wh_repo.delete(webhook_id)
     return APIResponse(data={"deleted": True}).to_dict()
 
 
 @router.post("/webhooks/{webhook_id}/test")
 async def test_webhook(webhook_id: str, request: Request):
-    """Send a test payload to a configured webhook (migrated from the retired legacy
-    notification router). Unlike the legacy handler this fails closed on SSRF: the
-    target URL is checked against private/loopback ranges before any request."""
-    import time
-
-    from repositories.repos import WebhookRepository
+    """Send a signed test event through the pinned, bounded customer delivery service."""
+    from repositories.repos import ProvidersRepository, WebhookRepository
     from shared.common.common import ForbiddenError, NotFoundError
-    from actions.delivery.adapters.base import SSRFBlockedError
-    from actions.delivery.adapters.webhook import _check_ssrf
+    from journeys.notification_intelligence.customer_webhook_delivery import (
+        CustomerWebhookDeliveryService,
+        CustomerWebhookSecretStore,
+        WebhookPolicyError,
+        redact_webhook_record,
+    )
 
-    request.state.tenant.require_permission("read")
+    request.state.tenant.require_permission("write")
     wh_repo = WebhookRepository()
     webhook = await wh_repo.find_by_id(webhook_id)
     if not webhook:
         raise NotFoundError("Webhook")
     if webhook.get("tenant_id") != request.state.tenant.tenant_id:
         raise ForbiddenError("Webhook belongs to a different tenant")
-    url = webhook.get("url", "")
-    try:
-        _check_ssrf(url)
-    except SSRFBlockedError as exc:
-        return APIResponse(data={"success": False, "error": f"blocked: {exc}", "latency_ms": 0}).to_dict()
+    provider_repo = ProvidersRepository()
+    secret_store = CustomerWebhookSecretStore(provider_repo)
+    secret_ref = webhook.get("secret_ref")
+    if not isinstance(secret_ref, str) or not secret_ref:
+        # Migrate a legacy plaintext config once, then clear the old field.
+        legacy_secret = webhook.get("secret")
+        if not isinstance(legacy_secret, str) or not legacy_secret:
+            raise BadRequestError("Webhook signing secret is not configured")
+        stored = await secret_store.store(
+            request.state.tenant.tenant_id, webhook_id, legacy_secret,
+        )
+        secret_ref = stored["secret_ref"]
+        webhook = await wh_repo.update(webhook_id, {
+            "secret": None,
+            "secret_ref": secret_ref,
+            "secret_hash": stored["secret_hash"],
+            "secret_configured": True,
+        })
 
-    import httpx
-
-    start = time.monotonic()
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(
-                url,
-                json={"event": "test", "source": "aether"},
-                headers={"X-Aether-Event": "test"},
-            )
-        latency_ms = int((time.monotonic() - start) * 1000)
-        return APIResponse(data={
-            "success": resp.status_code < 400,
-            "status_code": resp.status_code,
-            "latency_ms": latency_ms,
-        }).to_dict()
-    except httpx.RequestError as exc:
-        latency_ms = int((time.monotonic() - start) * 1000)
-        return APIResponse(data={"success": False, "error": str(exc), "latency_ms": latency_ms}).to_dict()
+        secret = await secret_store.resolve(request.state.tenant.tenant_id, secret_ref)
+        outcome = await CustomerWebhookDeliveryService().test(
+            tenant_id=request.state.tenant.tenant_id,
+            webhook_id=webhook_id,
+            url=str(webhook.get("url", "")),
+            secret=secret,
+        )
+    except WebhookPolicyError as exc:
+        outcome = None
+        failure = f"blocked: {exc}"
+    else:
+        failure = outcome.error
+
+    success = bool(outcome and outcome.success)
+    updated = await wh_repo.update(webhook_id, {
+        "active": success,
+        "status": "active" if success else "test_failed",
+        "verification_status": "verified" if success else "failed",
+        "last_test": {
+            "success": success,
+            "status": outcome.status if outcome else "blocked",
+            "status_code": outcome.status_code if outcome else None,
+            "latency_ms": outcome.latency_ms if outcome else 0,
+            "tested_at": _utc_now(),
+        },
+    })
+    data = {
+        "status": outcome.status if outcome else "blocked",
+        "success": success,
+        "webhook_id": webhook_id,
+        "tenant_id": request.state.tenant.tenant_id,
+        "idempotency_key": outcome.idempotency_key if outcome else "",
+        "attempts": outcome.attempts if outcome else 0,
+        "status_code": outcome.status_code if outcome else None,
+        "latency_ms": outcome.latency_ms if outcome else 0,
+        "error": failure,
+        "attempt_id": outcome.attempt_id if outcome else None,
+        "webhook": redact_webhook_record(updated),
+    }
+    return APIResponse(data=data).to_dict()
+
+
+@router.post("/webhooks/{webhook_id}/rotate-secret")
+async def rotate_webhook_secret(webhook_id: str, request: Request):
+    from repositories.repos import ProvidersRepository, WebhookRepository
+    from journeys.notification_intelligence.customer_webhook_delivery import (
+        CustomerWebhookSecretStore,
+        redact_webhook_record,
+    )
+
+    request.state.tenant.require_permission("write")
+    repo = WebhookRepository()
+    webhook = await repo.find_by_id(webhook_id)
+    if not webhook:
+        raise NotFoundError("Webhook")
+    if webhook.get("tenant_id") != request.state.tenant.tenant_id:
+        raise ForbiddenError("Webhook belongs to a different tenant")
+    # Stop new dispatch before replacing the vault value. If secret storage or
+    # the following record update fails, the old endpoint must remain paused.
+    await repo.update(webhook_id, {
+        "active": False,
+        "status": "pending_test",
+        "verification_status": "pending",
+    })
+    secret = secrets.token_urlsafe(32)
+    stored = await CustomerWebhookSecretStore(ProvidersRepository()).store(
+        request.state.tenant.tenant_id, webhook_id, secret,
+    )
+    updated = await repo.update(webhook_id, {
+        "secret": None,
+        "secret_ref": stored["secret_ref"],
+        "secret_hash": stored["secret_hash"],
+        "secret_configured": True,
+        "active": False,
+        "status": "pending_test",
+        "verification_status": "pending",
+    })
+    return APIResponse(data={
+        **redact_webhook_record(updated),
+        "secret": secret,
+    }).to_dict()
+
+
+@router.get("/webhooks/{webhook_id}/deliveries")
+async def list_webhook_deliveries(
+    webhook_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=100),
+):
+    from repositories.repos import WebhookRepository
+    from journeys.notification_intelligence.delivery_outbox import get_delivery_outbox_repository
+
+    request.state.tenant.require_permission("read")
+    tenant_id = request.state.tenant.tenant_id
+    webhook = await WebhookRepository().find_by_id(webhook_id)
+    if not webhook:
+        raise NotFoundError("Webhook")
+    if webhook.get("tenant_id") != tenant_id:
+        raise ForbiddenError("Webhook belongs to a different tenant")
+    rows = await get_delivery_outbox_repository().find_many(
+        filters={"tenant_id": tenant_id, "channel": f"customer_webhook:{webhook_id}"},
+        limit=limit, sort_by="created_at", sort_order="desc",
+    )
+    deliveries = []
+    for row in rows:
+        event = row.get("notification") or {}
+        delivery = row.get("delivery") or {}
+        deliveries.append({
+            "delivery_id": row.get("id"),
+            "event_id": event.get("id"),
+            "event_type": event.get("type"),
+            "created_at": row.get("created_at"),
+            "status": row.get("status"),
+            "attempts": row.get("attempts", 0),
+            "last_status": delivery.get("status"),
+            "status_code": delivery.get("status_code"),
+            "latency_ms": delivery.get("latency_ms"),
+            "error": delivery.get("error"),
+        })
+    return APIResponse(data={"items": deliveries, "count": len(deliveries)}).to_dict()
 
 
 @router.post("/alerts")

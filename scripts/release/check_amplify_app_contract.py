@@ -9,9 +9,8 @@ otherwise easy to miss explicit:
   use ``main`` as a development branch, and have a successful job for the
   reviewed commit; and
 * the production web app must be connected to this repository, keep its
-  ``main`` (Aether) and ``production-olympus`` (Olympus Labs) branches in
-  ``PRODUCTION`` stage with successful jobs for the same reviewed commit, and
-  map each production host to the branch that builds its site.
+  single ``main`` branch in ``PRODUCTION`` stage with a successful job for the
+  same reviewed commit, and map every production host to ``main``.
 """
 
 from __future__ import annotations
@@ -93,13 +92,11 @@ STAGING_HOSTS: dict[str, tuple[str, ...]] = {
 # under /app and serves every production host.
 PRODUCTION_WEB_APP = "AETHER-production-web"
 PRODUCTION_HOSTS = ("www", "aether", "docs", "status", "app")
-# The Olympus Labs site (www) is a separate build of the same commit: its pages
-# are prerendered for that site. The production workflow mirrors each released
-# main commit to this branch and releases it there.
-PRODUCTION_OLYMPUS_BRANCH = "production-olympus"
 # The staging profile's web apps build from the persistent staging branch.
 STAGING_BRANCH = "staging"
-PRODUCTION_HOST_BRANCHES = {prefix: (PRODUCTION_OLYMPUS_BRANCH if prefix == "www" else "main") for prefix in PRODUCTION_HOSTS}
+# One branch builds the unified site for every host; the site picks Olympus
+# Labs or Aether from the hostname at runtime.
+PRODUCTION_BRANCH = "main"
 # Until the production backend exists the site is pilot-only and its contact
 # form posts to the always-on lead intake (infra/aws/lead-intake, stack
 # aether-production-lead-intake, output LeadUrl).
@@ -114,7 +111,6 @@ PRODUCTION_WEB_ENVIRONMENT = {
     "VITE_SITE_OLYMPUS_URL": "https://www.olympuslabsml.com",
     "VITE_PUBLISH_PRICES": "true",
 }
-PRODUCTION_OLYMPUS_ENVIRONMENT = {**PRODUCTION_WEB_ENVIRONMENT, "VITE_SITE": "olympus"}
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 AwsCall = Callable[[list[str]], Mapping[str, Any]]
 DnsResolver = Callable[[str], str]
@@ -458,6 +454,35 @@ def _staging_host_errors(
             first_errors = owner_errors
     return first_errors or [f"no Amplify app serves the staging {prefix} host"]
 
+def _production_branch_errors(app: Mapping[str, Any], app_id: str, client: AwsCall) -> list[str]:
+    """Production has exactly one branch, main, and main carries no build-time
+    site override: VITE_SITE would outrank the hostname and render one site on
+    every host. Builds inherit the app's environment too, so check both."""
+    errors: list[str] = []
+    if app.get("enableBranchAutoBuild") is not False:
+        errors.append(
+            f"Amplify app {PRODUCTION_WEB_APP} must not auto-build branches; the workflow releases main"
+        )
+    if "VITE_SITE" in _mapping(app.get("environmentVariables")):
+        errors.append(f"Amplify app {PRODUCTION_WEB_APP} sets VITE_SITE; the site must come from the hostname")
+    try:
+        listed = client(["amplify", "list-branches", "--app-id", app_id, "--max-results", "50"])
+    except RuntimeError as exc:
+        return [f"Amplify app {PRODUCTION_WEB_APP} branches could not be listed: {exc}"]
+    branches = [b for b in listed.get("branches", []) if isinstance(b, Mapping)]
+    names = sorted(str(b.get("branchName")) for b in branches)
+    if names != [PRODUCTION_BRANCH]:
+        errors.append(
+            f"Amplify app {PRODUCTION_WEB_APP} must have only the {PRODUCTION_BRANCH} branch; found {', '.join(names) or 'none'}"
+        )
+    for branch in branches:
+        if branch.get("branchName") == PRODUCTION_BRANCH and "VITE_SITE" in _mapping(branch.get("environmentVariables")):
+            errors.append(
+                f"Amplify app {PRODUCTION_WEB_APP} {PRODUCTION_BRANCH} branch sets VITE_SITE; the site must come from the hostname"
+            )
+    return errors
+
+
 def contract_errors(
     *,
     mode: str,
@@ -519,46 +544,43 @@ def contract_errors(
             for prefix, owners in STAGING_HOSTS.items():
                 errors.extend(_staging_host_errors(prefix, owners, apps, dns_resolver, client))
     elif mode == "production-status":
-        # Production runs one web app for every host: main builds the Aether
-        # site (status, aether, docs, app) and production-olympus the Olympus
-        # Labs site (www), both from the reviewed commit. Check each branch's
-        # settings and job once (on status and www), then the remaining hosts.
+        # Production runs one web app and one branch for every host. Check the
+        # branch's settings and job once (on status), then the other hosts.
         production_app = apps.get(PRODUCTION_WEB_APP)
-        for branch_name, host, environment, auto_build in (
-            ("main", "status", PRODUCTION_WEB_ENVIRONMENT, True),
-            (PRODUCTION_OLYMPUS_BRANCH, "www", PRODUCTION_OLYMPUS_ENVIRONMENT, False),
-        ):
-            errors.extend(
-                _check_app(
-                    name=PRODUCTION_WEB_APP,
-                    app=production_app,
-                    branch_stage="PRODUCTION",
-                    expected_commit=expected_commit,
-                    subdomain_prefix=host,
-                    branch_name=branch_name,
-                    auto_build=auto_build,
-                    expected_branch_environment=environment,
-                    domain_name=PRODUCTION_DOMAIN,
-                    wait_for_current_job=wait_for_current_job,
-                    job_timeout_seconds=job_timeout_seconds,
-                    job_poll_seconds=job_poll_seconds,
-                    sleeper=sleeper,
-                    clock=clock,
-                    client=client,
-                    dns_resolver=dns_resolver,
-                )
+        errors.extend(
+            _check_app(
+                name=PRODUCTION_WEB_APP,
+                app=production_app,
+                branch_stage="PRODUCTION",
+                expected_commit=expected_commit,
+                subdomain_prefix="status",
+                branch_name=PRODUCTION_BRANCH,
+                # The workflow releases main only after the integration
+                # authority passes; an auto-build on push would go live first.
+                auto_build=False,
+                expected_branch_environment=PRODUCTION_WEB_ENVIRONMENT,
+                domain_name=PRODUCTION_DOMAIN,
+                wait_for_current_job=wait_for_current_job,
+                job_timeout_seconds=job_timeout_seconds,
+                job_poll_seconds=job_poll_seconds,
+                sleeper=sleeper,
+                clock=clock,
+                client=client,
+                dns_resolver=dns_resolver,
             )
+        )
         production_app_id = production_app.get("appId") if production_app is not None else None
         if isinstance(production_app_id, str) and production_app_id:
+            errors.extend(_production_branch_errors(_mapping(production_app), production_app_id, client))
             for prefix in PRODUCTION_HOSTS:
-                if prefix in ("status", "www"):
+                if prefix == "status":
                     continue
                 errors.extend(
                     _domain_errors(
                         name=PRODUCTION_WEB_APP,
                         app_id=production_app_id,
                         subdomain_prefix=prefix,
-                        branch_name=PRODUCTION_HOST_BRANCHES[prefix],
+                        branch_name=PRODUCTION_BRANCH,
                         domain_name=PRODUCTION_DOMAIN,
                         dns_resolver=dns_resolver,
                         client=client,

@@ -28,6 +28,7 @@ from .contracts import (
     sanitize_metadata,
 )
 from .repositories import SecurityAuditEventRepository
+from .request_context import current_request
 
 logger = get_logger("aether.security.audit_ledger")
 
@@ -60,11 +61,15 @@ def _canonical_fields(event: SecurityAuditEvent, *, include_detail: bool = True)
     }
     if include_detail:
         # v2: persisted "what / from where" detail is part of the tamper-evident
-        # record, so editing metadata/ip_address/user_agent breaks verify_chain().
+        # record, so editing metadata/ip_address/user_agent/correlation_id breaks
+        # verify_chain(). Omit the optional correlation key when absent so
+        # historical v2 hashes retain their original canonical shape.
         # metadata is already secret-sanitized at record() time.
         payload["metadata"] = event.metadata
         payload["ip_address"] = event.ip_address
         payload["user_agent"] = event.user_agent
+        if event.correlation_id is not None:
+            payload["correlation_id"] = event.correlation_id
     return payload
 
 
@@ -72,6 +77,32 @@ def compute_integrity_hash(event: SecurityAuditEvent, prev_hash: str = "", *, in
     return hash_chain.compute_integrity_hash(
         _canonical_fields(event, include_detail=include_detail), prev_hash
     )
+
+
+def _current_tenant_request_correlation_id(tenant_id: Optional[str]) -> Optional[str]:
+    """Read the current request id only when its authenticated tenant matches."""
+    if not tenant_id:
+        return None
+    request = current_request()
+    if request is None:
+        return None
+    state = getattr(request, "state", None)
+    tenant = getattr(state, "tenant", None)
+    context = getattr(state, "context", None)
+    if (
+        getattr(tenant, "tenant_id", None) != tenant_id
+        or getattr(context, "tenant_id", None) != tenant_id
+    ):
+        return None
+    correlation_id = getattr(context, "correlation_id", None)
+    if (
+        not isinstance(correlation_id, str)
+        or not correlation_id
+        or len(correlation_id) > 128
+        or not correlation_id.isprintable()
+    ):
+        return None
+    return correlation_id
 
 
 class AuditLedger:
@@ -106,6 +137,7 @@ class AuditLedger:
             action=action,
             outcome=outcome,
             policy_decision_id=policy_decision_id,
+            correlation_id=_current_tenant_request_correlation_id(tenant_id),
             ip_address=ip_address,
             user_agent=user_agent,
             metadata=sanitize_metadata(metadata),
@@ -118,6 +150,11 @@ class AuditLedger:
         _TENANT_SEQ[chain_key] = seq
 
         record = event.model_dump()
+        if event.correlation_id is None:
+            # Keep uncorrelated rows byte-shape compatible with records written
+            # before this optional field existed. Pydantic still defaults the
+            # field to None when those rows are read back.
+            record.pop("correlation_id", None)
         record["_chain_seq"] = seq
         await self._repo.insert(event.audit_event_id, record)
         logger.info(

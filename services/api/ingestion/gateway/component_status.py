@@ -588,7 +588,7 @@ _INLINE_FRESHNESS_SLA_THRESHOLD = 0.10  # mirrors serving.src.api /ready
 
 
 def _inline_serving_signal(models: list) -> dict[str, Any]:
-    """Inline profiles (staging, demo, production-lean) serve predictions
+    """Inline profiles (staging, demo, production) serve predictions
     in-process, so there is no ML_SERVING_URL. Report what the inline server's
     own readiness probe would: required models loaded (staging/production) and
     the freshness SLA — never merely that the package imports."""

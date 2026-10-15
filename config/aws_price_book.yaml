@@ -225,7 +225,7 @@ fixed_resources:
     # $0.045/h = ~$32.85/month per gateway, per AZ. Data processing is a further
     # $0.045/GB and is modelled as usage-variable under `nat_gateway_processing`.
     # This single line is why `nat_gateway_unless_explicit` is a forbidden
-    # resource for production-lean: two AZs of NAT is a third of the budget.
+    # resource for production: two AZs of NAT is a third of the budget.
     notes: Hourly charge only; per-GB processing is priced separately.
 
   aws_eip:

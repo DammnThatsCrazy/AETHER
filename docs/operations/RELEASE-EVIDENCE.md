@@ -154,7 +154,7 @@ evidence that a plan applied, a bill arrived, or a rollback restored service.
 | Scorecard | Code-complete | Externally verified | Max attainable here | Gate (on externally verified) |
 |---|---|---|---|---|
 | overall | 60 / 100 | **0 / 100** | 20 | 90 |
-| `production-lean` | 45 / 100 | **0 / 100** | 20 | 92 |
+| `production` | 45 / 100 | **0 / 100** | 20 | 92 |
 | `staging` | 75 / 100 | **0 / 100** | 10 | 95 |
 
 **Externally verified is zero, and that is the correct reading.** An earlier

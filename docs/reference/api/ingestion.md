@@ -21,8 +21,20 @@ in the same batch as everything else.
 
 ## Authentication
 
-`Authorization: Bearer <write_key>` (or `X-API-Key: <write_key>`). The key
-must carry `write` permission — see [Authentication](authentication.md).
+Use one of the supported credential forms:
+
+- A server-side secret write key: `Authorization: Bearer <write_key>` (or
+  `X-API-Key: <write_key>`). The key must carry `write` permission — see
+  [Authentication](authentication.md).
+- A site-bound publishable key: `Authorization: Bearer <publishable_key>` and
+  `X-Aether-Site: <bound_site_id>`. Publishable keys are restricted to ingestion
+  routes and the public-safe SDK manifest. On this route, the site header is
+  required and must match a site bound to that key; missing or mismatched sites
+  are rejected. A publishable key also needs the route's `ingest` permission
+  and the handler's `write` permission.
+
+The API resolves the tenant from the credential. Do not send a tenant ID to
+select scope. Do not use publishable keys for reads or other API routes.
 
 ## Request
 
@@ -31,6 +43,10 @@ POST /v1/batch HTTP/1.1
 Authorization: Bearer <write_key>
 Content-Type: application/json
 ```
+
+For a publishable key, add `X-Aether-Site: <bound_site_id>` to the request.
+Do not include `X-Tenant-ID`; tenant and site scope come from the authenticated
+credential and its server-side binding.
 
 ```json
 {

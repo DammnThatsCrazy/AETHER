@@ -110,6 +110,48 @@ def commerce_ledger_operation_link(record: dict[str, Any]) -> EconomicOperationL
             link_ref_id
         for link_ref_id, payment in payment_refs
     }
+    settlements = record.get("settlementObservations")
+    if not isinstance(settlements, list):
+        settlements = list((record.get("settlements") or {}).values())
+    settlement_refs: list[tuple[str, dict[str, Any]]] = []
+    unresolved_settlement_reference = False
+    for index, settlement in enumerate(settlements):
+        if not isinstance(settlement, dict):
+            raise ValueError("each settlement observation must be an object")
+        provider = _required(settlement.get("provider"), "settlement.provider")
+        settlement_id = _required(
+            settlement.get("providerSettlementId"), "settlement.providerSettlementId"
+        )
+        link_ref_id = f"settlement-{index}"
+        settlement_refs.append((link_ref_id, settlement))
+        refs.append(
+            EconomicOperationRecordRef(
+                link_ref_id=link_ref_id,
+                source_authority=provider,
+                record_type="provider_settlement",
+                record_id=settlement_id,
+                role="settlement",
+                evidence=[EvidenceRef(
+                    id=settlement_id,
+                    type="transaction",
+                    source=provider,
+                )],
+                occurred_at=settlement.get("occurredAt"),
+                observed_at=settlement.get("observedAt"),
+            )
+        )
+        payment_refs_for_settlement = settlement.get("settlesPaymentRefs") or []
+        if not isinstance(payment_refs_for_settlement, list):
+            raise ValueError("settlesPaymentRefs must be a list")
+        if not payment_refs_for_settlement or any(
+            not isinstance(payment_ref, dict)
+            or (
+                str(payment_ref.get("provider") or ""),
+                str(payment_ref.get("providerPaymentId") or ""),
+            ) not in payment_link_refs
+            for payment_ref in payment_refs_for_settlement
+        ):
+            unresolved_settlement_reference = True
     adjustments = record.get("adjustmentObservations")
     if not isinstance(adjustments, list):
         adjustments = list((record.get("adjustments") or {}).values())
@@ -148,9 +190,11 @@ def commerce_ledger_operation_link(record: dict[str, Any]) -> EconomicOperationL
         "amount_conflict": "conflict",
         "multiple_payments": "conflict",
     }.get(source_state, "unresolved")
+    if state == "linked" and unresolved_settlement_reference:
+        state = "partial"
 
     relations: list[EconomicOperationRelation] = []
-    if state == "linked" and order_ref_id is not None:
+    if source_state == "matched" and order_ref_id is not None:
         for payment_ref_id, payment in payment_refs:
             if payment.get("status") == "completed":
                 relations.append(
@@ -177,6 +221,37 @@ def commerce_ledger_operation_link(record: dict[str, Any]) -> EconomicOperationL
                     to_link_ref_id=payment_ref_id,
                     source_authority=str(adjustment.get("provider")),
                     evidence=refund_record.evidence,
+                )
+            )
+
+    for settlement_ref_id, settlement in settlement_refs:
+        payment_refs_for_settlement = settlement.get("settlesPaymentRefs") or []
+        for payment_ref in payment_refs_for_settlement:
+            if not isinstance(payment_ref, dict):
+                continue
+            payment_ref_id = payment_link_refs.get((
+                str(payment_ref.get("provider") or ""),
+                str(payment_ref.get("providerPaymentId") or ""),
+            ))
+            if payment_ref_id is None:
+                continue
+            settlement_record = next(
+                row for row in refs if row.link_ref_id == settlement_ref_id
+            )
+            relations.append(
+                EconomicOperationRelation(
+                    from_link_ref_id=payment_ref_id,
+                    relation=(
+                        "settled_by"
+                        if settlement.get("status") == "settled"
+                        else "has_settlement_event"
+                    ),
+                    to_link_ref_id=settlement_ref_id,
+                    source_authority=str(settlement.get("provider")),
+                    evidence=[
+                        settlement_record.evidence[0],
+                        *next(row for row in refs if row.link_ref_id == payment_ref_id).evidence,
+                    ],
                 )
             )
 

@@ -18,10 +18,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import Reporter, load_yaml, main_guard  # noqa: E402
 
-CANONICAL_PROFILES = [
-    "local", "local-full", "demo",
-    "preview", "staging", "production-lean", "production-scale", "enterprise-isolated",
-]
+CANONICAL_PROFILES = ["staging", "production"]
 BACKEND_DIMS = ["database", "cache", "event", "graph", "analytics", "object", "ml"]
 
 # The founding-tenant posture must never assert these — they require external
@@ -33,19 +30,18 @@ ALLOWED_STAGES = {
 }
 
 
-CANONICAL_ENVIRONMENTS = ["local", "preview", "staging", "pilot-prod", "production"]
-PRODUCTION_POSTURES = {"lean", "scale", "isolated"}
+CANONICAL_ENVIRONMENTS = ["staging", "production"]
 
 
 def _check_canonical_environments(r, data: dict, profiles: dict) -> None:
-    """The five target environments map onto the existing profiles, without renames."""
+    """The two environments (staging, production) map onto the two profiles."""
     envs = data.get("canonical_environments")
     if not isinstance(envs, dict):
         r.fail("canonical_environments block missing")
         return
     r.require(
         list(envs) == CANONICAL_ENVIRONMENTS,
-        "canonical environments are exactly local, preview, staging, pilot-prod, production",
+        "canonical environments are exactly staging and production",
         f"canonical environments must be {CANONICAL_ENVIRONMENTS}, got {list(envs)}",
     )
     unmapped = list(data.get("unmapped_profiles") or [])
@@ -81,35 +77,11 @@ def _check_canonical_environments(r, data: dict, profiles: dict) -> None:
     )
 
     production = envs.get("production") or {}
-    postures = production.get("postures") or {}
     r.require(
-        set(postures) == PRODUCTION_POSTURES
-        and sorted(postures.values()) == sorted(production.get("profiles") or []),
-        "production postures lean, scale, isolated map to exactly its profiles",
-        f"production postures {postures} do not match profiles {production.get('profiles')}",
+        list(production.get("profiles") or []) == ["production"],
+        "production environment maps to exactly the production profile",
+        f"production environment must map to [production], got {production.get('profiles')}",
     )
-
-    pilot_prod = envs.get("pilot-prod") or {}
-    if pilot_prod.get("profiles"):
-        # Defined: must carry approvals and a rollback source, and must not alias
-        # staging (the staging `pilot` lane is staging) or a production profile.
-        r.require(
-            bool(pilot_prod.get("approvals")) and bool(pilot_prod.get("rollback_source")),
-            "pilot-prod declares approvals and rollback_source",
-            "pilot-prod is defined without approvals and rollback_source",
-        )
-        r.require(
-            not set(pilot_prod["profiles"]) & set((staging.get("profiles") or [])
-                                                 + (production.get("profiles") or [])),
-            "pilot-prod does not alias a staging or production profile",
-            "pilot-prod must not reuse a staging or production profile",
-        )
-    else:
-        r.require(
-            pilot_prod.get("status") == "undefined",
-            "pilot-prod is explicitly undefined (no profile or state namespace yet)",
-            "pilot-prod has no profiles and must say `status: undefined`",
-        )
 
 
 def check() -> int:
@@ -129,7 +101,7 @@ def check() -> int:
     # matrix must be added here first (missing), and a profile removed from the
     # matrix must be removed here too (extra) — otherwise the canonical set
     # drifts one profile at a time with every check passing. This is the guard
-    # that keeps the documented "eight profiles" claim truthful.
+    # that keeps the documented "two profiles" claim truthful.
     canonical_set = set(CANONICAL_PROFILES)
     declared_set = set(profiles)
     r.require(

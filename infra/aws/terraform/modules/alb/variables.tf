@@ -38,6 +38,18 @@ variable "enable_dedicated_ml" {
   default     = false
 }
 
+variable "enable_access_mcp" {
+  type        = bool
+  description = "Create the customer-facing Access Kit MCP target group and dedicated path route."
+  default     = false
+}
+
+variable "access_mcp_path" {
+  type        = string
+  description = "Exact HTTP path mounted by the Access Kit MCP service."
+  default     = "/v1/access/mcp"
+}
+
 variable "staging_listener_target_group_arn" {
   type        = string
   description = "Maintenance target group ARN during a reviewed staging backend replacement transition"

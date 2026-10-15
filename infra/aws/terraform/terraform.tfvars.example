@@ -6,8 +6,8 @@
 
 # Core
 # deployment_profile drives cost/resource toggles (see profiles/*.tfvars).
-# One of: staging | production-lean | production-scale | enterprise-isolated.
-deployment_profile = "production-lean"
+# One of: staging | production.
+deployment_profile = "production"
 environment        = "production"
 aws_region         = "us-east-1"
 project            = "AETHER"

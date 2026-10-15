@@ -19,7 +19,13 @@ class IdentityResolveRequest(BaseModel):
     email: Optional[str] = None            # normalized + hashed by resolver
     phone: Optional[str] = None            # normalized + hashed by resolver
     wallet_address: Optional[str] = None
-    wallet_signature_verified: bool = False
+    wallet_signature_verified: bool = Field(
+        default=False,
+        description=(
+            "Deprecated untrusted client hint. It is ignored for identity proof; "
+            "wallet verification must be established by a server-owned proof flow."
+        ),
+    )
     external_id: Optional[str] = None
     agent_id: Optional[str] = None
     org_id: Optional[str] = None
@@ -51,6 +57,19 @@ class IdentityResolveResponse(BaseModel):
     blocked_reason: Optional[str] = None
     audit_id: Optional[str] = None
     is_new_entity: bool = False
+
+
+class WalletVerificationChallengeRequest(BaseModel):
+    """Issue a proof tied to one consented anonymous identity subject."""
+
+    anonymous_id: str = Field(..., min_length=1, max_length=512)
+    wallet_address: str = Field(..., min_length=1, max_length=512)
+    chain_namespace: str = Field(..., min_length=1, max_length=128)
+
+
+class WalletVerificationSignatureRequest(WalletVerificationChallengeRequest):
+    challenge_id: str = Field(..., min_length=1, max_length=128)
+    signature: str = Field(..., min_length=1, max_length=1024)
 
 
 # ── Entity ────────────────────────────────────────────────────────────────────

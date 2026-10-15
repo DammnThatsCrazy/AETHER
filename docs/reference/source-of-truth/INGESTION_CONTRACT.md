@@ -14,6 +14,11 @@ source_files:
   - services/api/ingestion/ingestion/outbox_relay.py
   - services/api/intelligence/analytics/routes.py
   - services/api/repositories/repos.py
+  - services/api/ingestion/ingestion/replay.py
+  - services/api/ingestion/ingestion/replay_routes.py
+  - services/api/ingestion/ingestion/adapters/replay.py
+  - services/api/ingestion/ingestion/workers.py
+  - services/api/shared/temporal/instant.py
 ---
 # Ingestion Contract
 
@@ -108,6 +113,21 @@ services/api/ingestion/ingestion/batch.py
 From there events flow into Kafka (`aether.sdk.events.validated`) and into
 Bronze/Silver/Gold lake tiers via ingestion workers.
 
+## Operator replay of durable Bronze events
+
+Kyber's operator-only replay route reads stored Bronze SDK events. It defaults
+to a dry run; live publishing also requires the replay feature flag and an
+explicit local in-memory runtime. Occurrence-window bounds must be timezone
+aware and ordered. The runner compares offsets as UTC instants, treats legacy
+naive Bronze timestamps as UTC through the shared temporal kernel for selection,
+and excludes missing or malformed occurrence times from a bounded replay.
+Selection normalization does not rewrite the stored event: replay preserves its
+event ID and original occurrence timestamp while assigning fresh delivery time
+and replay provenance. The Bronze writer skips the replay source because the
+original durable row already exists. The process-local run journal is not a
+durable idempotency boundary, so hosted replay and exactly-once delivery remain
+disabled until a durable replay identity and consumer idempotency boundary exist.
+
 ## Deprecated aliases (server-to-server only, not for SDKs)
 
 ```
@@ -124,6 +144,16 @@ SDKs **must** use `/v1/batch`. These aliases are retained for internal tools onl
   (1s → 2s → 4s, cap 30s).
 - Native: in-memory queue with coroutine/async flush on lifecycle events.
 - RN: delegates to native.
+
+## Batch response correlation
+
+`POST /v1/batch` returns the accepted/duplicate/rejected event results and may
+include the server request ID, usage event/evidence IDs, and persisted audit
+event ID. `consentReceiptIds` lists only real tenant-scoped consent receipts
+used to admit accepted observations. The same receipt references are stored on
+the accepted observation and copied into the batch audit metadata. A reference
+is omitted when its owning authority did not return a durable record; ingestion
+does not invent authorization decisions, usage, audit rows, or receipts.
 
 ## Schema version
 

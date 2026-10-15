@@ -15,6 +15,9 @@ intentionally additive and mirrors ``decision_evidence.py``'s repository shape.
 
 from __future__ import annotations
 
+import asyncio
+import json
+from weakref import WeakKeyDictionary
 from typing import Optional
 
 from shared.common.common import utc_now
@@ -30,6 +33,18 @@ EVIDENCE_TABLE = "identity_verification_evidence"
 
 # Challenge states that are still "live" (may still be validated/consumed).
 _ACTIVE_CHALLENGE_STATES = {"issued", "validated"}
+_CONSUME_LOCKS: WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock] = (
+    WeakKeyDictionary()
+)
+
+
+def _consume_lock() -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    lock = _CONSUME_LOCKS.get(loop)
+    if lock is None:
+        lock = asyncio.Lock()
+        _CONSUME_LOCKS[loop] = lock
+    return lock
 
 
 class VerificationChallengeRepository(_ScopedRepo):
@@ -82,19 +97,38 @@ class VerificationChallengeRepository(_ScopedRepo):
     ) -> Optional[dict]:
         """Guarded one-time consume of a validated challenge.
 
-        Re-reads the row and, only if it is currently ``validated``, transitions
-        it to ``consumed`` and stamps ``consumed_at``. A row in any other state
-        (already consumed / expired / locked / issued) yields ``None``. This is
-        best-effort atomic under the in-memory / JSONB backend — there is no
-        row-level lock, so concurrent callers rely on the read-check-write here.
+        PostgreSQL performs the state check and transition in one conditional
+        UPDATE. Local storage serializes competing consumers on the event loop.
+        A row in any other state (already consumed / expired / locked / issued)
+        yields ``None``.
         """
-        record = await self.get_for_tenant(tenant_id, challenge_id)
-        if record is None or record.get("state") != "validated":
-            return None
-        return await self.update(
-            challenge_id,
-            {"state": "consumed", "consumed_at": utc_now().isoformat()},
-        )
+        now = utc_now().isoformat()
+        pool = await self._ensure_pool()
+        if pool is not None:
+            await self._ensure_table()
+            row = await pool.fetchrow(
+                f"""UPDATE {self.table_name}
+                    SET data = data || $1::jsonb, updated_at = NOW()
+                    WHERE id = $2 AND tenant_id = $3
+                      AND data->>'state' = 'validated'
+                    RETURNING data""",
+                json.dumps({"state": "consumed", "consumed_at": now}),
+                challenge_id,
+                tenant_id,
+            )
+            if row is None:
+                return None
+            data = row["data"]
+            return json.loads(data) if isinstance(data, str) else dict(data)
+
+        async with _consume_lock():
+            record = await self.get_for_tenant(tenant_id, challenge_id)
+            if record is None or record.get("state") != "validated":
+                return None
+            return await self.update(
+                challenge_id,
+                {"state": "consumed", "consumed_at": now},
+            )
 
 
 class VerificationEvidenceRepository(_ScopedRepo):

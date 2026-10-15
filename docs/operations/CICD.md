@@ -25,12 +25,15 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
+reviewed_source_commits:
+  - commit: "c71ebc5cb"
+    reason: "Reviewed Access Kit container workflow cadence: pull requests build on ready_for_review, with explicit dispatch and Development/main push lanes for targeted or post-landing builds; no staging wake or deployment is added."
 source_hashes:
-  ".github/workflows/": "sha256:101015e8b388b6381dac8cba47efb4aa5c85a8c105e9f58f79f5935f17fd618a"
-  "config/delivery_workflow_authority.yaml": "sha256:7a23c16f192c2fcd9d742f25a447ac7a1d85659bdc51a303a1c61765a64332d6"
+  ".github/workflows/": "sha256:ce86b403f11cf90a6b545e5b2bad54ddaf9c4d6aba37c0741b6c2c8f2ab0a58b"
+  "config/delivery_workflow_authority.yaml": "sha256:f9f6f8d8892aefe2b04ef6f2adbc95e5d514efbca7d8a833cf141a1ed17e7038"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
-  "infra/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
+  "infra/aws/terraform/modules/ecr/main.tf": "sha256:f880cb8a6a4dfec313b115d89e6714906dcfcf3dc1cd4496945d7e86814d6407"
   "infra/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:f872d926ac84a0bf3c473a69b9362d7bb72d3e36d0fa91ea2febc1f5b63d66e1"
   "infra/cicd/aether-cicd/README.md": "sha256:36a2b231349b26f17f945f32a223d35f482acc9fd82ccbcde4a728b1fa9e05a9"
@@ -324,7 +327,7 @@ own environment:
 
 | Gate | Branch | Web app | Backend |
 |------|--------|---------|---------|
-| Development | `Development` | Aether Development | shares the staging backend, data and wake/sleep |
+| Development | `Development` | Aether Development (`AETHER-development-web`) | `development-web.yml` uploads the built web app to the Amplify `development` branch; shares the staging backend, data and wake/sleep |
 | Staging | `staging` | Aether Staging (`AETHER-staging-web`) | `deploy.yml` / `staging-lifecycle.yml` deliver from `staging` |
 | Production | `main` | Aether Production (`AETHER-production-web`) | promoted explicitly (`deploy.yml` dispatch with an approved immutable build) |
 
@@ -337,6 +340,17 @@ backend delivery stays a deliberate, approved promotion. Push-time verification
 infrastructure plan and production-equivalent CI) runs on all three branches so
 each gate has its own evidence; `repo-health`, whose integration authority gates
 delivery, runs on `staging` and `main`.
+
+`development-web.yml` builds the persistent Aether web app on the GitHub runner
+for changes to the Development branch's web app, shared SDK, root package
+manifests, or that workflow, then
+uploads the artifact to the `development` branch of `AETHER-development-web`.
+It reuses the staging app's public API and Auth0 build settings while setting
+Development-specific redirect and logout URIs. The job skips when
+`FRONTEND_PREVIEW_ROLE_ARN` is not configured; when armed, the IAM role is
+scoped by `config/staging_frontend_preview_iam_policy.yaml`. The Development
+app shares staging API, data and wake/sleep, so it is a persistent frontend
+environment rather than an isolated backend deployment.
 
 Staging authority gates (`deploy.yml`, `staging-lifecycle.yml`,
 `pilot-staging.yml`, `staging-business-hours.yml`) require the source to be a
@@ -421,6 +435,37 @@ enforced by any workflow in `.github/workflows/`.
 - SDK artefacts staged for release (see SDK Release below)
 - Gate: **all builds succeed, images < 500 MB compressed**
 
+The customer-facing Access Kit MCP image follows its own opt-in release path:
+after Terraform provisions the dedicated immutable ECR repository in the
+canonical `production` state, a clean reviewed commit is built as
+`linux/amd64` and pushed by
+`infra/aws/terraform/scripts/publish_access_mcp_image.sh`. The publisher checks
+the repository's encryption, tag immutability, and scan-on-push settings,
+waits for a completed scan with zero HIGH/CRITICAL findings, and returns the
+immutable image digest. The plan and apply jobs recheck that digest and scan
+state before proceeding. A separate hosted workflow runs on the PR
+`ready_for_review` event, builds the clean `linux/amd64` image, and smoke-checks
+health, readiness, and the headless CLI without AWS credentials. It does not
+publish an image, apply Terraform, or start an ECS task. The reviewed Terraform
+promotion then pins that digest in the customer Fargate task. This image is
+separate from the backend release image and the privileged `tfmcp` image;
+merging a PR into `Development` does not wake or deploy staging. The workflow
+also exposes plan-only switches for delegated MCP OAuth and the existing
+continuation API. OAuth plans add a KMS-backed service assertion secret for
+API/MCP tasks; continuation plans inject an API feature flag. Neither switch
+changes an apply dispatch after its saved binary plan is reviewed. The workflow
+also supports an explicit `workflow_dispatch` for a targeted rerun after a
+material fix, and runs on pushes to `Development` or `main` after landing.
+
+The separate `Publish Access Kit CLI and MCP` workflow runs a package check and
+preserves the exact npm tarball before publication. Public npm publishing is a
+manual main-branch action and fails closed unless `npm-production` has at least
+one required reviewer. The image publisher applies the same required-reviewer
+check to the `production` environment before it can request AWS OIDC
+credentials. Neither environment is currently configured in the repository;
+the respective release paths remain blocked until release owners configure
+reviewers and their environment-scoped credentials.
+
 ### 7. E2E tests
 
 - Playwright test suite against a freshly deployed ephemeral environment
@@ -499,10 +544,9 @@ configuration. Staging has one app, `AETHER-staging-web` (key `aether-marketing`
 `apps/public-site` with the product under `/app`), which holds the `aether`,
 `www`, `docs`, `status` and `app` hosts. Production also has one app, `AETHER-production-web`, which holds the same five
 hosts under `olympuslabsml.com` (Squarespace DNS) and is deployed by
-`amplify-status-production.yml`. It has two branches built from the same main
-commit: `main` (the Aether site) serves `aether`, `docs`, `status` and `app`,
-and `production-olympus` (the Olympus Labs site, `VITE_SITE=olympus`) serves
-`www`. Each build prerenders its site's pages with their search and
+`amplify-status-production.yml`. It has one branch, `main`, which builds the
+unified site for every host; the site picks Olympus Labs or Aether from the
+hostname at runtime. The build prerenders the Aether site's pages with their search and
 link-preview metadata, `sitemap.xml` and `robots.txt`. Until the production backend exists that app
 builds the site pilot-only (`VITE_PILOT_ONLY=true`): its rules send `/app` and
 the sign-in paths to a pilot request, and its contact form posts to the
@@ -510,7 +554,10 @@ always-on lead intake (`VITE_LEAD_URL`; see AWS-DEPLOYMENT.md, "Production lead
 intake").
 The protected tenant and Kyber artifacts remain part of the immutable release.
 The canonical `deploy.yml` workflow publishes lane-selected SPA artifacts to
-their private S3 origins; the staging rehearsal verifies those origins against
+their private S3 origins. The tenant SPA is built with its Auth0 redirect and
+logout URIs under `TF_AETHER_APP_URL` (the app URL Terraform registers with
+Auth0), and the build fails if that secret is missing rather than shipping a
+bundle that cannot start. The staging rehearsal verifies those origins against
 the exact release bytes without publishing them a second time. This keeps
 Kyber internal and prevents a public marketing build from being mistaken for
 an operator deployment.
@@ -526,15 +573,15 @@ and release preflights.
 |---|---|---|---|
 | `deploy.yml` | push to `staging`; `workflow_dispatch` for staging or production | Builds the release once and deploys to staging on push or explicit staging dispatch; a staging dispatch may select `delivery_mode=build-only` to publish the verified immutable artifact without touching ECS, which breaks the asleep-staging/release circular dependency. The pilot full-rehearsal wrapper uses that build-only path when no approved release inputs were supplied. After wake, `staging-lifecycle.yml` dispatches this workflow with the exact source run ID and manifest checksum; this workflow accepts only a successful immutable build for the exact current staging SHA, acquires that artifact without rebuilding, runs its packaged migration, rolls every lane-selected ECS service, publishes the matching SPA artifacts, and uploads deployment evidence. The rehearsal consumes that evidence and verifies the live image, migration readiness, and static-origin bytes without repeating delivery mutations. Because the durable pilot admin key is created only after the new task is live, build-only skips `STAGING_ADMIN_API_KEY` validation; live staging delivery and the full rehearsal still validate the key before mutation. Staging dispatch reuses the successful merged-staging integration authority for the exact SHA (the `Main integration authority` check, which also runs for `staging` pushes) (queried by check name, so the extra check runs that staging dispatches add to that SHA cannot push it off the first API page) and safely reuses an already-published immutable backend tag, including a concurrent-publish race with bounded ECR visibility retries. Production promotion is manual and takes the staged run ID plus the approved `release.json` checksum; build-only is rejected for production. Before staging mutation, the deploy job verifies the currently registered task definitions already match the requested full/pilot lane, then registers one immutable task-definition revision per declared service. The staging path validates `config/staging_application_delivery_iam_policy.yaml` before assuming the deploy role and uses the reviewed `TF_DOMAIN_NAME` fallback when no `ALB_DNS_NAME` repository variable exists. **Not armed without `AWS_DEPLOY_ROLE_ARN` in the selected target environment:** the armed guard and deployment job bind to the same target environment, and when the role is absent the build/deploy jobs skip while `delivery-not-armed` reports that nothing was built or deployed — that is NOT a claim that a release exists. The moment the role is wired, delivery runs exactly as before. | no |
 | `frontend-preview.yml` | `pull_request` (`ready_for_review` only); `workflow_dispatch` with a PR number; push to `main`; hourly schedule | Per-PR previews of the Aether app. When a same-repository pull request is marked ready for review, or when a team member dispatches it with a pull request number, it builds `apps/aether-web` with the staging app's public `VITE_*` settings, deploys it to branch `pr-<N>` of the unconnected preview Amplify app, and links `https://pr-<N>.<preview domain>` on the pull request. Fork pull requests are never deployed (no OIDC token, and the head repository must be this one). Each push to `main` and an hourly sweep delete the previews of closed or merged pull requests. It assumes `vars.FRONTEND_PREVIEW_ROLE_ARN`, scoped by `config/staging_frontend_preview_iam_policy.yaml` to the preview app's `pr-*` branches; until that variable is set, every job skips with a notice. It finds the preview and staging apps by their Terraform names; the build settings come from the staging web app (`AETHER-staging-web`) or, before its first rollout, the product app it replaces. See [Preview Environments](PREVIEW-ENVIRONMENTS.md). | no |
-| `amplify-status-production.yml` | push to `main`; `workflow_dispatch` | Waits for the exact main integration authority, binds the production web app (`AETHER-production-web`, the former `aether-status` app) to the repository with the unified-site build (product under `/app`), production settings and routing rules, and deploys the exact main SHA to its two `PRODUCTION` branches: `main` (the Aether site) and `production-olympus` (the Olympus Labs site, `VITE_SITE=olympus`, no auto-build). It first checks the SHA is on `main` and force-pushes it to the `production-olympus` Git branch, a mirror only this workflow writes (the deploy job holds `contents: write` for that push). It verifies that `www` maps once to `production-olympus` and `aether`, `docs`, `status` and `app` each map once to `main`. Its catch-all rule is a `404-200` rewrite to `/index.html`, so prerendered page files (`/platform` → `platform.html`) are served as files. The workflow performs a read-only state assessment before binding: a clean, unbound historical app (no branches and no domain mappings) gets a one-time repository bootstrap and stops before release, while any remaining legacy branch or live mapping fails closed for reviewed administrative cleanup. The administrator then restores the canonical `status -> main` domain mapping and dispatches the workflow again. Repository-backed runs never delete branches or call `UpdateDomainAssociation`; they verify the AVAILABLE association maps each host exactly once to its branch, deploy the exact commit to both branches, and verify the live CNAME target. Because repository auto-build can already have an active job for the pushed SHA, the workflow reuses that exact-commit job only if it started after the bind step applied the build settings (a job reads its environment variables when it starts, so an earlier auto-build would ship the previous settings). It waits out every other active branch job and starts a release only when needed. Squarespace remains authoritative. | no |
+| `development-web.yml` | push to `Development` that touches the app or its shared packages; `workflow_dispatch` | Builds the Aether app on the runner and deploys it to branch `development` of the `AETHER-development-web` Amplify app (the repository-less app that also holds the PR previews). It runs only from `Development`, reads the staging web app's public `VITE_*` build settings, points the sign-in redirect at the development URL, and uses the preview role (`vars.FRONTEND_PREVIEW_ROLE_ARN`), which is scoped to that app's `pr-*` and `development` branches. No Amplify build runs and no GitHub token is needed. Skips with a notice until the role variable is set. Like the previews it calls the staging API, so staging must be awake for more than the shell to work. | no |
+| `amplify-status-production.yml` | push to `main`; `workflow_dispatch` | Waits for the exact main integration authority, confirms (read-only, via the compare API) that the commit is still on `main`, binds the production web app (`AETHER-production-web`, the former `aether-status` app) to the repository with the unified-site build (product under `/app`), production settings and routing rules, and deploys the exact main SHA to its single `PRODUCTION` branch, `main`, which builds the unified site for every host. It verifies that `www`, `aether`, `docs`, `status` and `app` each map once to `main`. Its catch-all rule is a `404-200` rewrite to `/index.html`, so prerendered page files (`/platform` → `platform.html`) are served as files. The workflow performs a read-only state assessment before binding: a clean, unbound historical app (no branches and no domain mappings) gets a one-time repository bootstrap and stops before release, while any remaining legacy branch or live mapping fails closed for reviewed administrative cleanup. The administrator then restores the canonical `status -> main` domain mapping and dispatches the workflow again. Repository-backed runs never delete branches or call `UpdateDomainAssociation`; they verify the AVAILABLE association maps each host exactly once to its branch, deploy the exact commit to both branches, and verify the live CNAME target. It binds `main` with auto-build off, so a push is published only by this gated release, which starts only while `main` is still the gated commit (a `RELEASE` job builds the branch's head, so an older dispatched SHA fails rather than shipping a newer, ungated head); its contract checker runs from the workflow's own revision, never by an Amplify build that runs before the integration authority passes. Because a job can still be active for the pushed SHA (started from the console, or by an earlier auto-build), the workflow reuses that exact-commit job only if it started after the bind step applied the build settings (a job reads its environment variables when it starts, so an earlier auto-build would ship the previous settings). It waits out every other active branch job and starts a release only when needed. Squarespace remains authoritative. | no |
 | `infrastructure.yml` | PR finalization (`ready_for_review`) / push to `Development`, `staging` or `main` / dispatch on `infra/aws/**` | Provider-mocked configuration plan for all six selectable profiles (four cloud + demo/preview ephemeral); OIDC remote plan per cloud profile when the shared credential set exists (the ML image digest is additionally required only by production-scale and enterprise-isolated); ephemeral-class is deliberately excluded from remote-plan; plan-policy and cost-model validation of the resulting plan JSON. | **no — never** |
-| `terraform-promote.yml` | `workflow_dispatch` only | Produces a reviewed, checksum-bound binary plan, and applies exactly that plan. After a staging apply it rebuilds, at the reviewed commit, any Amplify app whose build spec or build variables the plan changed. Backend digests are always required; ML digests are required only for production-scale and enterprise-isolated, and are optional for staging, production-lean, demo, and preview when remote ML is disabled. | **yes — the only path** |
+| `terraform-promote.yml` | `workflow_dispatch` only | Produces a reviewed, checksum-bound binary plan, and applies exactly that plan. After a staging apply it rebuilds, at the reviewed commit, any Amplify app whose build spec or build variables the plan changed. Backend digests are always required; ML digests are required only for production-scale and enterprise-isolated, and are optional for staging, production, demo, and preview when remote ML is disabled. | **yes — the only path** |
 | `reconcile-staging-plan-role.yml` | `workflow_dispatch` only | Confirmation-gated, exact-main reconciliation for the externally managed `AetherStagingPlan` inline read-only policy. It uses the dedicated `AWS_STAGING_PLAN_RECONCILE_ROLE_ARN` bootstrap role only for the exact policy update, then switches to `AetherStagingPlan` for effective coverage including Terraform state access. It does not read secret values or apply Terraform. | no |
 | `staging-lifecycle.yml` | `workflow_dispatch` | Wake / validate / sleep / full rehearsal. Dispatches `terraform-promote.yml` for every infrastructure mutation and independently re-verifies the reviewed plan first. Each handoff uses the exact run URL returned by GitHub and fails closed if no run ID is returned; it never guesses from a concurrent-run watermark. After a successful wake, a full rehearsal dispatches canonical `deploy.yml` with the exact immutable source run and manifest checksum, waits for that exact delivery run, and consumes its deployment evidence. The delivery authority—not Terraform—runs migrations, updates ECS services, and publishes the lane-selected private SPA origins. Rehearsal verifies the live image, delivery evidence, migration/readiness result, and static-origin bytes without repeating delivery mutations; it revalidates the awake lease before admin/tenant smoke mutations, provisions a disposable provider connection, runs ten live identity-continuity API scenarios plus fixture-backed and authenticated live UI evidence, and emits redacted scenario transcripts and a proof pack. Cleanup removes the run-scoped provider credential and tenants; tenant erasure also deletes their scenario evidence rows after the workflow captures artifacts. Dispatching jobs retain `actions: write` and check out the workspace before invoking `gh`; read-only jobs cannot perform the handoff. `plan-wake` is plan-only and requires only the Terraform plan credentials; lifecycle credentials are required for inspection, wake, or sleep actions. | no (delegates) |
 | `staging-state-reconcile.yml` | `workflow_dispatch` with explicit staging import confirmation | Reconciliation for an existing staging target group and/or the four reviewed Terraform ECR repositories. Requires an approved immutable backend digest, `IMPORT-STAGING`, exact target/repository validation, the reviewed staging ECR KMS key for KMS-encrypted repositories, all required root-module URL/certificate/alert inputs, and the Auth0 provider environment used by ordinary remote plans; those credentials remain runner environment variables and never enter Terraform state or plan variables. If a repository exists at one unambiguous legacy staging address, the workflow validates all import prerequisites and every candidate status before adopting it with a state-only move to the canonical module address; it records the complete adoption set before moving anything, rejects tainted or otherwise non-managed legacy instances, treats an already-canonical healthy entry as a verified retry no-op, and fails closed on ambiguous duplicate ownership or demo/preview ownership. It also has a separate, confirmation-gated `untaint_ecr_repository_names` path for repositories already at the canonical staging address whose reviewed before/after attributes are identical but were left tainted by an interrupted replacement; that path verifies the live repository against the Terraform-managed KMS key in staging state, uses Terraform's top-level `untaint` command, and always requires a fresh reviewed plan. An explicitly confirmed `migrate_legacy_secret_kms=true` with `MIGRATE-STAGING-SECRETS` re-encrypts an allowed legacy AWS-managed-key secret under the reviewed staging CMK by metadata-only API calls; it never reads or changes plaintext. Aurora and DynamoDB monitoring are enabled with static profile decisions, so an unrelated state import never derives Terraform resource cardinality from unresolved resource IDs. Temporary local state snapshots are removed in one exit cleanup path. A fresh reviewed plan is required after any state change. The pre-existing `aether-backend` repository is intentionally immutable AES-256 because ECR encryption cannot be changed after creation; the other staging repositories remain KMS-encrypted. It never deletes or applies infrastructure. | no (state reconciliation only) |
 | `staging-ttl-guard.yml` | hourly schedule; dispatch | Enforces the staging awake lease. Runs no Terraform at all; it can scale ECS to zero and clamp both ECS autoscaling bounds (`MinCapacity` and `MaxCapacity`) to zero for staging targets, which can only reduce running compute. **Not armed without `AWS_STAGING_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or enforce the TTL, reports it is a NO-OP and exits green — staging may still be running and will NOT be guarded; that is NOT a claim that staging is asleep. The moment the role is wired it enforces exactly as before, fail-closed in both directions. | no |
 | `staging-business-hours.yml` | weekday schedule (08:15 and 17:00 New York time); dispatch | Keeps staging awake during New York business hours for demos. Runs no Terraform and holds no AWS credentials: it dispatches `staging-lifecycle.yml` `plan-wake`, then `apply-wake` with that run's reviewed `plan_run_id`/`plan_checksum`, in the morning, and `apply-sleep` in the evening, so every lifecycle and `terraform-promote.yml` check still applies. One cron per New York UTC offset; only the matching one acts. Manual `transition=wake`/`sleep` covers out-of-hours demos. While the repository variable `STAGING_WAKE_HOLD` is `true`, the scheduled wake is skipped (sleep and manual wake are never held). | no (delegates) |
-| `ephemeral-ttl-guard.yml` | hourly schedule; dispatch | Fail-closed TTL guard for the demo/preview ephemeral profiles. Reads the SSM lease at `/aether/{profile}/{env}/lifecycle/expires-at` (written by `ephemeral_env.py provision`) and ends the run red when the lease is missing or expired; enforcement is the operator-run `ephemeral_env.py teardown` (scale-to-zero + floor-zeroing + lease removal). Runs no Terraform. **Not armed without `AWS_EPHEMERAL_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or trip the TTL, reports it is a NO-OP and exits green — demo/preview environments may still be running and will NOT be guarded; that is NOT a claim that demo/preview are asleep. The moment the role is wired it enforces exactly as before, fail-closed. | no |
 
 | `repo-consistency.yml` | PR finalization (`ready_for_review`) / push to `Development`, `staging` or `main` | Classifies changed paths with the verification router, builds the Impact Graph-selected workspaces in dependency order, binds the selected workspace archive and any selected backend image into one immutable candidate, verifies and materializes that candidate in the consumer job (the backend image archive is kept for one day, because only that in-run consumer reads it), executes the universal and affected verification checks, and publishes the single blocking `verification / disposition` evidence. Draft pushes do not start this workflow. The broad `make ci-check` job is intentionally absent from the PR path after the completed selection observation window. | no |
 | `identity-continuity-gates.yml` | PR finalization (`ready_for_review`); `workflow_dispatch` | Runs supplementary identity contract, routing, merge-safety, split, projection, UX, and proof-pack checks. It installs the Python test environment for pytest gates and builds proof contracts, fixtures, runner, and reporting packages in dependency order. Gate 7 uploads its proof report. These results inform promotion and release review but are not required merge checks and do not replace `verification / disposition`. | no |
@@ -573,7 +620,7 @@ or requiring mutation credentials.
 
 ### Infrastructure planning is not applying
 
-`infrastructure.yml` **never applies Terraform.** The `apply-production-lean`
+`infrastructure.yml` **never applies Terraform.** The `apply-production`
 job that auto-applied on every push to `main` has been **deleted**. What is left
 on the `main` branch path is `require-production-credentials`, which gates
 **promotability**: a commit is only dispatchable for promotion if its
@@ -620,8 +667,7 @@ validity window. The policy and cost validators are re-run at the reviewed
 commit, because the reports in the artifact are evidence, not proof.
 
 Approval is intended to be per profile: the apply job binds to
-`staging-terraform`, `production-lean-terraform`, `production-scale-terraform`
-or `enterprise-terraform`, so staging cannot borrow production's reviewers.
+`staging-terraform` or `production-lean-terraform`, so staging cannot borrow production's reviewers.
 The live repository currently defines only `staging` and `staging-terraform`,
 with no protection rules; the non-staging environments and their credentials
 must be provisioned before those profiles can be promoted. An empty environment
@@ -692,7 +738,7 @@ published-image runtime validation, before a release job consumes runner time.
 
 ```bash
 make deployment-profile-gate      # every profile gate that needs no AWS credentials
-make resolved-feature-flags        # explicit staging and production-lean flag manifests
+make resolved-feature-flags        # explicit staging and production flag manifests
 make deployment-readiness-score   # three-column readiness scorecard
 make collect-deployment-evidence  # materialise release-evidence/ + checksum
 ```

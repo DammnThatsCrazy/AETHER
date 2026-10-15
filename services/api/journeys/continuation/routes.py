@@ -109,7 +109,7 @@ def _build_context(inp: ContinuationInput, principal_id: str, tenant_id: str) ->
 async def create_continuation(
     request: Request,
     payload: ContinuationInput,
-    idempotency_key: Optional[str] = Query(default=None),
+    idempotency_key: Optional[str] = Query(default=None, min_length=1, max_length=128),
 ) -> APIResponse:
     tenant = _tenant(request, "write")
     principal = _principal(tenant)
@@ -130,6 +130,7 @@ async def create_continuation(
         resource_kind="continuation",
         resource_id=result.get("id"),
         revision=str(result.get("state_revision", 0)),
+        source_event_id=f"continuation:create:{result['id']}",
     )
     return APIResponse(data=result)
 

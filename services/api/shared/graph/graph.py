@@ -59,6 +59,20 @@ def tenant_of(properties: Optional[dict[str, Any]]) -> Optional[str]:
             return str(value)
     return None
 
+
+def _is_revoked_marker(value: Any) -> bool:
+    """Normalize common JSON/Gremlin representations of the revoke flag."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    # Neptune's current Gremlin serializer writes Python booleans as strings.
+    # Keep the false spellings accepted by its tenant-edge traversal aligned
+    # with in-memory and Postgres reads.
+    if isinstance(value, str):
+        return value not in {"", "false", "False", "0"}
+    return bool(value)
+
 # Optional gremlinpython import
 try:
     from gremlin_python.driver.driver_remote_connection import DriverRemoteConnection
@@ -111,6 +125,8 @@ class VertexType:
 
     # Intelligence Graph — Actor nodes
     AGENT = "Agent"
+    AGENT_TEMPLATE = "AgentTemplate"       # Source-scoped marketplace template, not an Agent identity
+    AGENT_MARKETPLACE_LISTING = "AgentMarketplaceListing"  # Tenant-declared listing evidence
     SERVICE = "Service"
     CONTRACT = "Contract"
     PROTOCOL = "Protocol"
@@ -131,6 +147,7 @@ class VertexType:
     RECOMMENDATION = "Recommendation"
     DECISION_RECORD = "DecisionRecord"
     OUTCOME_OBSERVATION = "OutcomeObservation"
+    AGENT_EXECUTION_RUN = "AgentExecutionRun"  # Bounded run correlation for observed external deployments
     PLAYBOOK_RUN = "PlaybookRun"
 
     # Web3 Coverage — Registry-native graph objects
@@ -403,6 +420,8 @@ class EdgeType:
 
     # Intelligence Graph — Action tracking
     PERFORMED_ACTION = "PERFORMED_ACTION"  # Agent → ActionRecord
+    REFERENCES_DELEGATION_RECORD = "REFERENCES_DELEGATION_RECORD"  # ActionRecord → canonical Delegation, correlation only
+    CORRELATED_WITH_ECONOMIC_RECORD = "CORRELATED_WITH_ECONOMIC_RECORD"  # ActionRecord → PaymentIntent|SettlementEvent
 
     # Decision & Outcome Intelligence OODA loop
     HAS_RECOMMENDATION = "HAS_RECOMMENDATION"
@@ -546,6 +565,7 @@ class EdgeType:
     ACTED_FOR = "ACTED_FOR"                          # Agent → User/Entity (acting on behalf of)
 
     # ── Agent Lifecycle — Task control-flow edges (additive) ──────────────
+    RUN_CONTAINS_TASK = "RUN_CONTAINS_TASK"        # Observed AgentExecutionRun → source-scoped Task
     CREATED_TASK = "CREATED_TASK"                    # Agent/User → Task
     DECOMPOSED_INTO = "DECOMPOSED_INTO"              # Task → Task (subtask decomposition)
     STARTED_TASK = "STARTED_TASK"                    # Agent → Task
@@ -611,6 +631,7 @@ class EdgeType:
     # ── Entity → Entity (universal relationship graph) ────────────────
     CO_INVESTS_WITH = "CO_INVESTS_WITH"             # Entity → Entity (shared investment position)
     LISTED_ON = "LISTED_ON"                         # Brand/Product → Marketplace or Exchange
+    LISTS_AGENT_TEMPLATE = "LISTS_AGENT_TEMPLATE"   # Marketplace listing → source-scoped template version
     DISTRIBUTES_VIA = "DISTRIBUTES_VIA"             # Entity → Channel/Platform (distribution)
     CONTENT_ON = "CONTENT_ON"                       # Entity → MediaEntity/Platform (presence)
     COMPETES_WITH = "COMPETES_WITH"                 # Entity → Entity (competitive relationship)
@@ -1031,7 +1052,7 @@ class _InMemoryGraphBackend:
                     edge.properties.get("tenant_id")
                 ) != str(tenant_id):
                     continue
-                if not edge.properties.get("revoked"):
+                if not _is_revoked_marker(edge.properties.get("revoked")):
                     edge.properties["revoked"] = True
                     edge.properties["revoked_at"] = revoked_at
                     edge.properties["revoke_reason"] = reason
@@ -1040,6 +1061,14 @@ class _InMemoryGraphBackend:
 
     async def get_vertex(self, vertex_id: str) -> Optional[Vertex]:
         return self._vertices.get(vertex_id)
+
+    async def get_vertex_for_tenant(
+        self, tenant_id: str, vertex_id: str,
+    ) -> Optional[Vertex]:
+        if not tenant_id or not vertex_id:
+            return None
+        vertex = self._vertices.get(vertex_id)
+        return vertex if vertex and tenant_of(vertex.properties) == str(tenant_id) else None
 
     async def delete_vertex_if_orphaned(
         self,
@@ -1064,7 +1093,7 @@ class _InMemoryGraphBackend:
             for edge in self._edges
             if edge.from_vertex_id == vertex_id or edge.to_vertex_id == vertex_id
         ]
-        if any(not (edge.properties or {}).get("revoked") for edge in incident):
+        if any(not _is_revoked_marker((edge.properties or {}).get("revoked")) for edge in incident):
             return False, "active_reference"
         if any(
             str((edge.properties or {}).get("import_commit_id")) != str(import_commit_id)
@@ -1088,7 +1117,7 @@ class _InMemoryGraphBackend:
     ) -> list[Vertex]:
         results: list[Vertex] = []
         for edge in self._edges:
-            if not include_revoked and edge.properties.get("revoked"):
+            if not include_revoked and _is_revoked_marker(edge.properties.get("revoked")):
                 continue
             if direction in ("out", "both") and edge.from_vertex_id == vertex_id:
                 if edge_type is None or edge.edge_type == edge_type:
@@ -1111,7 +1140,7 @@ class _InMemoryGraphBackend:
     ) -> list["Edge"]:
         results: list[Edge] = []
         for edge in self._edges:
-            if not include_revoked and edge.properties.get("revoked"):
+            if not include_revoked and _is_revoked_marker(edge.properties.get("revoked")):
                 continue
             touches = False
             if direction == "out" and edge.from_vertex_id == vertex_id:
@@ -1125,6 +1154,31 @@ class _InMemoryGraphBackend:
             if touches and (edge_type is None or edge.edge_type == edge_type):
                 results.append(edge)
         return results
+
+    async def get_edges_for_tenant(
+        self,
+        tenant_id: str,
+        limit: int = 1000,
+        *,
+        edge_types: Optional[list[str]] = None,
+        include_revoked: bool = False,
+    ) -> tuple[list["Edge"], bool]:
+        if not tenant_id:
+            return [], False
+        allowed = set(edge_types) if edge_types is not None else None
+        cap = max(1, min(int(limit), 10_000))
+        matched: list[Edge] = []
+        for edge in self._edges:
+            if tenant_of(edge.properties) != str(tenant_id):
+                continue
+            if allowed is not None and edge.edge_type not in allowed:
+                continue
+            if not include_revoked and _is_revoked_marker(edge.properties.get("revoked")):
+                continue
+            matched.append(edge)
+            if len(matched) > cap:
+                return matched[:cap], True
+        return matched, False
 
     async def get_all_vertices(self, limit: int = 1000) -> list["Vertex"]:
         return list(self._vertices.values())[:limit]
@@ -1271,7 +1325,7 @@ _PG_GRAPH_SCHEMA_LOCK_KEY = 0x67726170  # "grap"
 class _PostgresGraphBackend:
     """Durable graph over Postgres for profiles that declare ``graph: postgres``.
 
-    The staging and production-lean deployment profiles declare ``graph:
+    The staging and production deployment profiles declare ``graph:
     postgres`` but run no Neptune cluster. Before this backend existed,
     :meth:`GraphClient.connect` fail-closed with a ``RuntimeError`` in exactly
     those profiles — the declared backend was never implemented. This backend
@@ -1406,7 +1460,7 @@ class _PostgresGraphBackend:
                 tenant_of(props),
                 self._dump(props),
                 edge.created_at,
-                bool(props.get("revoked")),
+                _is_revoked_marker(props.get("revoked")),
                 props.get("revoked_at"),
                 props.get("revoke_reason"),
                 str(idem) if idem is not None else None,
@@ -1500,6 +1554,18 @@ class _PostgresGraphBackend:
             )
         return self._vertex_from_row(row) if row else None
 
+    async def get_vertex_for_tenant(
+        self, tenant_id: str, vertex_id: str,
+    ) -> Optional[Vertex]:
+        if not tenant_id or not vertex_id:
+            return None
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM graph_vertices WHERE vertex_id = $1 AND tenant_id = $2",
+                vertex_id, str(tenant_id),
+            )
+        return self._vertex_from_row(row) if row else None
+
     async def _neighbors_one_direction(
         self,
         conn: Any,
@@ -1575,6 +1641,36 @@ class _PostgresGraphBackend:
                 *params,
             )
         return [self._edge_from_row(r) for r in rows]
+
+    async def get_edges_for_tenant(
+        self,
+        tenant_id: str,
+        limit: int = 1000,
+        *,
+        edge_types: Optional[list[str]] = None,
+        include_revoked: bool = False,
+    ) -> tuple[list[Edge], bool]:
+        if not tenant_id:
+            return [], False
+        cap = max(1, min(int(limit), 10_000))
+        conditions = ["tenant_id = $1"]
+        params: list[Any] = [str(tenant_id)]
+        if edge_types is not None:
+            if not edge_types:
+                return [], False
+            params.append(sorted(set(edge_types)))
+            conditions.append(f"edge_type = ANY(${len(params)}::text[])")
+        if not include_revoked:
+            conditions.append("revoked = FALSE")
+        params.append(cap + 1)
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                f"SELECT * FROM graph_edges WHERE {' AND '.join(conditions)} "
+                f"ORDER BY edge_id LIMIT ${len(params)}",
+                *params,
+            )
+        truncated = len(rows) > cap
+        return [self._edge_from_row(row) for row in rows[:cap]], truncated
 
     async def get_all_vertices(self, limit: int = 1000) -> list[Vertex]:
         async with self._pool.acquire() as conn:
@@ -1824,6 +1920,39 @@ class _NeptuneGraphBackend:
             logger.error(f"Neptune get_vertex error for {vertex_id}: {e}")
             return None
 
+    async def get_vertex_for_tenant(
+        self, tenant_id: str, vertex_id: str,
+    ) -> Optional[Vertex]:
+        if not tenant_id or not vertex_id:
+            return None
+        g = await self._ensure_connected()
+        try:
+            result = (
+                g.V(vertex_id)
+                .or_(
+                    __.has(TENANT_PROPERTY, str(tenant_id)),
+                    __.has("tenant_id", str(tenant_id)),
+                )
+                .valueMap(True)
+                .toList()
+            )
+            if not result:
+                return None
+            value = result[0]
+            return Vertex(
+                vertex_type=str(value.get(T.label, "unknown")),
+                vertex_id=str(value.get(T.id, vertex_id)),
+                properties={
+                    k: v[0] if isinstance(v, list) and len(v) == 1 else v
+                    for k, v in value.items()
+                    if k not in (T.id, T.label)
+                },
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Neptune tenant-scoped vertex read failed for {vertex_id}"
+            ) from exc
+
     async def delete_vertex_if_orphaned(
         self,
         vertex_id: str,
@@ -2001,6 +2130,71 @@ class _NeptuneGraphBackend:
             logger.error(f"Neptune get_edges error for {vertex_id}: {e}")
         return results
 
+    async def get_edges_for_tenant(
+        self,
+        tenant_id: str,
+        limit: int = 1000,
+        *,
+        edge_types: Optional[list[str]] = None,
+        include_revoked: bool = False,
+    ) -> tuple[list["Edge"], bool]:
+        if not tenant_id:
+            return [], False
+        cap = max(1, min(int(limit), 10_000))
+        g = await self._ensure_connected()
+        try:
+            traversal = g.E().or_(
+                __.has(TENANT_PROPERTY, str(tenant_id)),
+                __.has("tenant_id", str(tenant_id)),
+            )
+            if edge_types is not None:
+                if not edge_types:
+                    return [], False
+                traversal = traversal.hasLabel(*sorted(set(edge_types)))
+            if not include_revoked:
+                # Match the in-memory/Postgres contract: explicit false is
+                # active; only a truthy revoked marker is excluded.
+                traversal = traversal.or_(
+                    __.hasNot("revoked"),
+                    __.has("revoked", False),
+                    __.has("revoked", 0),
+                    __.has("revoked", "false"),
+                    __.has("revoked", "False"),
+                    __.has("revoked", "0"),
+                    __.has("revoked", ""),
+                )
+            edge_maps = (
+                traversal.limit(cap + 1)
+                .project("lbl", "props", "from_id", "to_id")
+                .by(T.label)
+                .by(__.valueMap())
+                .by(__.outV().id())
+                .by(__.inV().id())
+                .toList()
+            )
+            truncated = len(edge_maps) > cap
+            result: list[Edge] = []
+            for item in edge_maps[:cap]:
+                raw = item.get("props", {})
+                props = {
+                    key: value[0] if isinstance(value, list) and len(value) == 1 else value
+                    for key, value in raw.items()
+                }
+                revoked_value = props.get("revoked")
+                if revoked_value is not None:
+                    props["revoked"] = _is_revoked_marker(revoked_value)
+                created = str(props.pop("created_at", ""))
+                result.append(Edge(
+                    edge_type=str(item["lbl"]),
+                    from_vertex_id=str(item["from_id"]),
+                    to_vertex_id=str(item["to_id"]),
+                    properties=props,
+                    created_at=created,
+                ))
+            return result, truncated
+        except Exception as exc:
+            raise RuntimeError("Neptune tenant-scoped edge read failed") from exc
+
     async def get_all_vertices(self, limit: int = 1000) -> list["Vertex"]:
         g = await self._ensure_connected()
         results: list[Vertex] = []
@@ -2171,7 +2365,7 @@ class GraphClient:
             logger.info("GraphClient connected (in-memory, local mode)")
         elif _graph_backend() == "postgres":
             # Non-local profiles that declare ``graph: postgres`` (staging /
-            # production-lean) and run no Neptune cluster. ``get_pool`` itself
+            # production) and run no Neptune cluster. ``get_pool`` itself
             # fail-closes with a RuntimeError when DATABASE_URL is unset in a
             # non-local environment, so a misconfigured deployment never boots a
             # graph client silently.
@@ -2247,6 +2441,18 @@ class GraphClient:
         if self._backend is None:
             await self.connect()
         return await self._backend.get_vertex(vertex_id)  # type: ignore[union-attr]
+
+    async def get_vertex_for_tenant(
+        self, tenant_id: str, vertex_id: str,
+    ) -> Optional[Vertex]:
+        """Read exactly one vertex only if it belongs to ``tenant_id``."""
+        if not tenant_id or not vertex_id:
+            return None
+        if self._backend is None:
+            await self.connect()
+        return await self._backend.get_vertex_for_tenant(  # type: ignore[union-attr]
+            tenant_id, vertex_id
+        )
 
     async def delete_vertex_if_orphaned(
         self,
@@ -2331,6 +2537,33 @@ class GraphClient:
             await self.connect()
         return await self._backend.get_edges(  # type: ignore[union-attr]
             vertex_id, edge_type, direction, include_revoked
+        )
+
+    async def get_edges_for_tenant(
+        self,
+        tenant_id: str,
+        limit: int = 1000,
+        *,
+        edge_types: Optional[list[str]] = None,
+        include_revoked: bool = False,
+    ) -> tuple[list[Edge], bool]:
+        """Read a bounded page of edges owned by exactly one tenant.
+
+        The second return value is true when more matching edges exist beyond
+        the page cap. Backends apply tenant and optional label predicates
+        before the cap; callers must treat a truncated scan as partial.
+        """
+        if not tenant_id:
+            return [], False
+        if edge_types is not None and not edge_types:
+            return [], False
+        if self._backend is None:
+            await self.connect()
+        return await self._backend.get_edges_for_tenant(  # type: ignore[union-attr]
+            tenant_id,
+            limit,
+            edge_types=edge_types,
+            include_revoked=include_revoked,
         )
 
     async def get_all_vertices(self, limit: int = 1000) -> list[Vertex]:

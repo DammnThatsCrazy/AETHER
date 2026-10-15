@@ -265,6 +265,10 @@ class ChainCreate(BaseModel):
     vm_family: VMFamily = VMFamily.EVM
     chain_type: ChainType = ChainType.L1
     evm_chain_id: Optional[int] = Field(default=None, description="Numeric EVM chain ID (1 for Ethereum, 8453 for Base, etc.)")
+    sui_chain_identifier: Optional[str] = Field(
+        default=None,
+        description="Expected Sui genesis chain identifier, used to validate a Sui GraphQL endpoint",
+    )
     native_token_symbol: str = Field(default="ETH")
     block_explorer_url: str = Field(default="")
     rpc_default: str = Field(default="")

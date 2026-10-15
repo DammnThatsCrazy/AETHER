@@ -67,7 +67,7 @@ def base_feature(**over) -> dict:
                     "owner": "ops",
                     "required_action": "insert secret",
                     "source_code_change_expected": False,
-                    "affected_release_profiles": ["staging", "pilot", "production-lean", "production-scale"],
+                    "affected_release_profiles": ["staging", "pilot", "production", "production-scale"],
                 }
             ],
         },
@@ -89,7 +89,7 @@ def base_feature(**over) -> dict:
             "local": {"participation": "required", "implementation_floor": "VERIFIED", "productionization_required": False, "environment_gate": "local", "business_gate": False},
             "staging": {"participation": "required", "implementation_floor": "TURNKEY", "productionization_required": True, "environment_gate": "staging", "business_gate": False},
             "pilot": {"participation": "required", "implementation_floor": "TURNKEY", "productionization_required": True, "environment_gate": "pilot", "business_gate": True},
-            "production-lean": {"participation": "required", "implementation_floor": "TURNKEY", "productionization_required": True, "environment_gate": "production", "business_gate": True},
+            "production": {"participation": "required", "implementation_floor": "TURNKEY", "productionization_required": True, "environment_gate": "production", "business_gate": True},
             "production-scale": {"participation": "required", "implementation_floor": "TURNKEY", "productionization_required": True, "environment_gate": "scale", "business_gate": True},
         },
     }
@@ -124,12 +124,12 @@ def test_scenario_2_infrastructure_turnkey():
                     "owner": "ops",
                     "required_action": "apply plan",
                     "source_code_change_expected": False,
-                    "affected_release_profiles": ["staging", "pilot", "production-lean", "production-scale"],
+                    "affected_release_profiles": ["staging", "pilot", "production", "production-scale"],
                 }
             ],
         },
     )
-    feat, e = ev(f, "production-lean")
+    feat, e = ev(f, "production")
     assert feat.implementation.percent() == 100.0  # not reduced by missing infra
     assert feat.repository_ceiling.achieved is True
     assert feat.activation_state == "INFRASTRUCTURE_WAITING"

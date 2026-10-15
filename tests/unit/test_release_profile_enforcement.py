@@ -8,7 +8,7 @@ Guards two regressions found during production wiring:
      and no enforcement flags.
 
 Also pins that the founding-tenant manifest's excluded domains resolve to a
-denied classification under production-lean (and only under that profile).
+denied classification under production (and only under that profile).
 """
 
 from __future__ import annotations
@@ -85,7 +85,7 @@ def test_excluded_domains_denied_under_production_lean():
         founding_excluded_domains,
     )
 
-    excluded = founding_excluded_domains("production-lean")
+    excluded = founding_excluded_domains("production")
     assert {
         "stablecoin",
         "derivatives",
@@ -96,18 +96,17 @@ def test_excluded_domains_denied_under_production_lean():
         "agent-execution",
     } <= set(excluded)
     # Plural route domain matches its singular manifest entry.
-    assert founding_domain_excluded("stablecoins", "production-lean") is True
-    assert founding_domain_excluded("derivatives", "production-lean") is True
-    assert founding_domain_excluded("payments", "production-lean") is True
+    assert founding_domain_excluded("stablecoins", "production") is True
+    assert founding_domain_excluded("derivatives", "production") is True
+    assert founding_domain_excluded("payments", "production") is True
     # A core, non-excluded domain stays allowed.
-    assert founding_domain_excluded("profile", "production-lean") is False
+    assert founding_domain_excluded("profile", "production") is False
 
 
 def test_excluded_domains_scoped_to_founding_profile():
     from governance.security.route_registry import founding_excluded_domains
 
     # The manifest narrows only its declared profile; others are unaffected.
-    assert founding_excluded_domains("production-scale") == frozenset()
     assert founding_excluded_domains("staging") == frozenset()
 
 
@@ -115,7 +114,7 @@ def test_excluded_domains_scoped_to_founding_profile():
 # Env-template ↔ canonical-profile parity (staging / production drift)
 # ---------------------------------------------------------------------------
 #
-# Canonical staging and production-lean FORBID msk, elasticache, neptune and
+# Canonical staging and production FORBID msk, elasticache, neptune and
 # clickhouse (config/deployment_profiles.yaml → forbidden_resources). A template
 # for those profiles that suggests Kafka, Redis or Neptune as ACTIVE defaults is
 # the exact "staging environment drift" defect this guards: the old staging
@@ -207,13 +206,13 @@ def test_staging_template_has_no_forbidden_dependency_defaults():
 
 
 def test_production_template_selectors_match_canonical_profile():
-    # The production example is the founding production-lean template
-    # (DEPLOYMENT_PROFILE=production-lean is pinned against the manifest above).
-    # Its selectors must equal production-lean's canonical backends: cache is
+    # The production example is the founding production template
+    # (DEPLOYMENT_PROFILE=production is pinned against the manifest above).
+    # Its selectors must equal production's canonical backends: cache is
     # DynamoDB (elasticache forbidden), event is SNS+SQS (msk forbidden).
     _assert_selectors_match_profile(
         PROD,
-        "production-lean",
+        "production",
         ml="inline",
         extra={"EVENT_BROKER": "sns_sqs"},
     )
@@ -224,7 +223,7 @@ def test_production_template_has_no_forbidden_dependency_defaults():
     for witness in _FORBIDDEN_ENV_WITNESSES:
         assert witness not in active, (
             f"{PROD.name} must not declare ACTIVE {witness}: canonical "
-            "production-lean forbids msk/elasticache/neptune/clickhouse"
+            "production forbids msk/elasticache/neptune/clickhouse"
         )
 
 
@@ -263,8 +262,8 @@ def test_validate_infra_is_profile_aware(monkeypatch):
     ):
         assert forbidden not in staging, f"staging must not require {forbidden}"
 
-    # production-lean forbids the same heavy backends.
-    lean = _required_vars(mod, monkeypatch, env="production", profile="production-lean")
+    # production forbids the same heavy backends.
+    lean = _required_vars(mod, monkeypatch, env="production", profile="production")
     assert lean.get("DATABASE_URL") is True
     assert lean.get("SQS_QUEUE_URL") is True
     for forbidden in (
@@ -273,18 +272,15 @@ def test_validate_infra_is_profile_aware(monkeypatch):
         "NEPTUNE_ENDPOINT",
         "CLICKHOUSE_HOST",
     ):
-        assert forbidden not in lean, f"production-lean must not require {forbidden}"
+        assert forbidden not in lean, f"production must not require {forbidden}"
 
-    # production-scale MAY enable the heavy backends, so their connection vars
-    # become required when that profile is selected.
-    scale = _required_vars(mod, monkeypatch, env="production", profile="production-scale")
-    for required in (
-        "REDIS_HOST",
-        "KAFKA_BOOTSTRAP_SERVERS",
-        "NEPTUNE_ENDPOINT",
-        "CLICKHOUSE_HOST",
-    ):
-        assert scale.get(required) is True, f"production-scale must require {required}"
+    # local-full (local development, not a deployment profile) runs every local
+    # dependency, so the Redis and ClickHouse connection vars are required there.
+    full = _required_vars(mod, monkeypatch, env="dev", profile=None)
+    for required in ("REDIS_HOST", "CLICKHOUSE_HOST"):
+        assert full.get(required) is True, f"local-full must require {required}"
+    for absent in ("KAFKA_BOOTSTRAP_SERVERS", "NEPTUNE_ENDPOINT"):
+        assert absent not in full, f"local-full must not require {absent}"
 
     # local needs none of the cloud connection vars.
     local = _required_vars(mod, monkeypatch, env="local", profile="local")

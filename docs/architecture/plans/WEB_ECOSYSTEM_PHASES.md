@@ -219,7 +219,7 @@ health origin, TLS, DNS, CORS, and structured payload are proven live.
 Repository evidence is complete for this slice; live AWS evidence is not. The
 next execution sequence is AWS authentication, credentialed staging plan and
 apply, wake/migrate/smoke/load/rollback/sleep evidence, cost observation, and
-then a separately reviewed production-lean promotion. No public release claim
+then a separately reviewed production promotion. No public release claim
 is made until those live checks and the canonical release scorecard support it.
 
 ## 6. Ledger

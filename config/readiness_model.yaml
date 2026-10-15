@@ -204,21 +204,23 @@ release_profiles:
     business_gate: false
   pilot:
     title: Pilot
-    deployment_profile: production-lean
+    deployment_profile: production
     implementation_floor: TURNKEY
     productionization_required: true
     environment_gate: pilot
     business_gate: true
-  production-lean:
-    title: Production (lean)
-    deployment_profile: production-lean
+  production:
+    title: Production
+    deployment_profile: production
     implementation_floor: TURNKEY
     productionization_required: true
     environment_gate: production
     business_gate: true
   production-scale:
-    title: Production (scale)
-    deployment_profile: production-scale
+    # An assessment tier, not a deployment profile: the same production profile
+    # judged against scale traffic. Production grows by capacity inputs.
+    title: Production (at scale)
+    deployment_profile: production
     implementation_floor: TURNKEY
     productionization_required: true
     environment_gate: scale

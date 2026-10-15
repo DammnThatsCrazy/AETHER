@@ -18,10 +18,10 @@ reviewed_source_commits:
   - commit: "f63d631"
     reason: "Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required."
 source_hashes:
-  "packages/shared/graph-contract.ts": "sha256:22f04a5932fd36c169c27cab2cf3107df3a8ea6150b02796ce30bc77affd6a94"
+  "packages/shared/graph-contract.ts": "sha256:662e10a7d4737ba53c673173105344ccf1720ac7e62497d36346734898575087"
   "services/api/graph/risk_overlay/": "sha256:0e4fa40ecad53abcac06d3d843d1044efff9226aa78ccef901ea0af44684a9a3"
   "services/api/intelligence/fraud_networks/": "sha256:b8f7d4ac084e4de118d885b2cef1b12d45c066237039600e1e754c2b04d6c8e8"
-  "services/api/repositories/repos.py": "sha256:c03e0537e86217db3dc67aabc2ce179a589ece64870dcdcc1f76d7f79ae95dae"
+  "services/api/repositories/repos.py": "sha256:4763340370ea7ef9e43d91b1156def3188a83114efa832e0a289f267957206e6"
   "services/api/value/flow_trace/": "sha256:e91b3edfb7d6e7a8a0f89951a87f01491a52a155fe5fca8911abc7b5aa94279f"
 ---
 
@@ -153,6 +153,12 @@ touchpoints/conversions as fraud evidence — it only voids the attribution.
 ---
 
 ## Graph Schema
+
+The shared graph contract keeps four counted relationship layers: H2H, H2A,
+A2H, and A2A. `EXCLUDED` is a separate classification for noncanonical
+references, including source-linked economic and delegation records; those
+references remain available for inspection but are omitted from the four-layer
+counts. The fraud edge assignments below remain unchanged.
 
 ### New Vertex Types
 

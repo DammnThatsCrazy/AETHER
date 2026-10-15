@@ -11,7 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # alembic is required at runtime for the /v1/ready migrations-head check and
 # the RUN_MIGRATIONS=1 entrypoint opt-in.
 COPY pyproject.toml .
-RUN pip install --no-cache-dir ".[all,noesis]" "alembic>=1.13" "croniter>=2" tzdata
+# The root packaging metadata discovers a small package set under services/api.
+# Keep dependency installation metadata-only here, but provide its declared
+# discovery root before setuptools generates egg-info in this builder stage.
+RUN mkdir -p services/api && \
+    pip install --no-cache-dir ".[all,noesis]" "alembic>=1.13" "croniter>=2" tzdata
 
 # ---------------------------------------------------------------------------
 # Optional: install onnxruntime for ML_SERVING_INLINE=true.

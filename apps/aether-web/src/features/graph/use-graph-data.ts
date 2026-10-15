@@ -104,7 +104,9 @@ function mapGraphEdge(raw: unknown, idx: number): GraphEdge | null {
   const toId = String(r.to ?? r.to_vertex_id ?? '');
   if (!fromId || !toId) return null;
   const edgeType = String(r.edge_type ?? r.type ?? r.relation_type ?? '');
-  const layer = classifyEdgeType(edgeType);
+  // This lineage edge is already emitted by the agent-run projector. Keep its
+  // policy evidence visible while the shared relationship taxonomy catches up.
+  const layer = classifyEdgeType(edgeType) ?? (edgeType === 'EVALUATED_BY_POLICY' ? 'A2A' : null);
   if (!layer) {
     console.warn(`[graph] Unknown graph edge type "${edgeType}" — filtered (fail closed)`);
     return null;

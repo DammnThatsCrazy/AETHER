@@ -27,6 +27,7 @@ from __future__ import annotations
 import hashlib
 import json
 import pathlib
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -444,6 +445,104 @@ def _is_past(iso: Optional[str]) -> bool:
 
 # ── Decision: server-authoritative consent ──────────────────────────────────
 
+@dataclass(frozen=True)
+class ConsentEvaluation:
+    """Server consent result plus the existing receipt reference, when allowed.
+
+    ``receipt_id`` is never generated here. It is copied only from the
+    tenant/subject/purpose-scoped authoritative row after every consent check
+    succeeds. Callers that only need the historical decision tuple should keep
+    using :func:`evaluate_consent`.
+    """
+
+    allowed: bool
+    reason_code: Optional[str]
+    receipt_id: Optional[str] = None
+
+
+async def evaluate_consent_with_receipt(
+    tenant_id: str,
+    subject_id: Optional[str],
+    anonymous_id: Optional[str],
+    purpose: str,
+    *,
+    required_policy_version: Optional[str] = None,
+) -> ConsentEvaluation:
+    """Decide whether processing is lawful for a (subject, purpose).
+
+    The SERVER ConsentReceipt store is authoritative — the SDK snapshot is NOT
+    consulted here. Fail-closed: any ambiguity denies.
+
+    On an allowed result, return the actual ``receipt_id`` from the same
+    authoritative row used for the decision. Denials do not disclose a receipt
+    reference. ``reason_code`` is one of ``REJECTION_CODES`` when denied, and
+    ``None`` when allowed.
+    """
+    purpose = (purpose or "").strip()
+    if not purpose:
+        return ConsentEvaluation(False, PURPOSE_NOT_AUTHORIZED)
+    # Unknown purpose → we cannot establish a lawful basis for it.
+    if purpose not in CONSENT_PURPOSES:
+        return ConsentEvaluation(False, CONSENT_UNKNOWN)
+
+    subject = (subject_id or "").strip() or None
+    anon = (anonymous_id or "").strip() or None
+    if not subject and not anon:
+        # No identifier at all → no receipt can exist → absence is denial.
+        return ConsentEvaluation(False, CONSENT_RECEIPT_MISSING)
+
+    receipt = await _receipt_repo.latest_for(
+        tenant_id, purpose, subject_id=subject, anonymous_id=anon,
+    )
+    if not receipt:
+        # Absence of a server receipt is NOT permission (fail-closed).
+        return ConsentEvaluation(False, CONSENT_RECEIPT_MISSING)
+
+    # Defensive scope checks (the store lookup already scoped by tenant/subject).
+    if receipt.get("tenant_id") not in (None, "", tenant_id):
+        return ConsentEvaluation(False, CONSENT_TENANT_MISMATCH)
+    if subject and receipt.get("subject_id") not in (None, "", subject):
+        return ConsentEvaluation(False, CONSENT_SUBJECT_MISMATCH)
+
+    # Explicit negative states, most specific first.
+    state = (receipt.get("state") or "").strip().lower()
+    if receipt.get("revoked_at") or state == "revoked":
+        return ConsentEvaluation(False, CONSENT_REVOKED)
+    if state == "denied" or receipt.get("granted") is False:
+        return ConsentEvaluation(False, CONSENT_DENIED)
+    if state == "expired" or _is_past(receipt.get("expires_at")):
+        return ConsentEvaluation(False, CONSENT_EXPIRED)
+    if state not in _GRANTED_STATES:
+        # Present but not an affirmative grant → indeterminate.
+        return ConsentEvaluation(False, CONSENT_UNKNOWN)
+
+    # Request-time privacy signals recorded on the receipt (see DEFERRED note).
+    if receipt.get("gpc_observed") is True and purpose in _GPC_SUPPRESSED_PURPOSES:
+        return ConsentEvaluation(False, GPC_SUPPRESSED)
+    if receipt.get("dnt_observed") is True and purpose in _DNT_SUPPRESSED_PURPOSES:
+        return ConsentEvaluation(False, DNT_SUPPRESSED)
+
+    # Explicit-opt-in purposes need an explicit lawful basis, not a soft grant.
+    if purpose in _EXPLICIT_OPT_IN_PURPOSES:
+        mode = (receipt.get("mode") or "").strip().lower()
+        if not receipt.get("lawful_basis") and mode not in ("opt_in", "explicit"):
+            return ConsentEvaluation(False, LAWFUL_PROCESSING_NOT_CONFIGURED)
+
+    # Policy-version pinning (opt-in): only enforced when a version is required.
+    if (
+        required_policy_version is not None
+        and str(receipt.get("policy_version") or "") != str(required_policy_version)
+    ):
+        return ConsentEvaluation(False, CONSENT_POLICY_MISMATCH)
+
+    receipt_id = receipt.get("receipt_id")
+    return ConsentEvaluation(
+        allowed=True,
+        reason_code=None,
+        receipt_id=receipt_id if isinstance(receipt_id, str) and receipt_id else None,
+    )
+
+
 async def evaluate_consent(
     tenant_id: str,
     subject_id: Optional[str],
@@ -452,72 +551,15 @@ async def evaluate_consent(
     *,
     required_policy_version: Optional[str] = None,
 ) -> tuple[bool, Optional[str]]:
-    """Decide whether processing is lawful for a (subject, purpose).
-
-    The SERVER ConsentReceipt store is authoritative — the SDK snapshot is NOT
-    consulted here. Fail-closed: any ambiguity denies.
-
-    Returns ``(allowed, reason_code)``. ``reason_code`` is one of
-    ``REJECTION_CODES`` when denied, and ``None`` when allowed.
-    """
-    purpose = (purpose or "").strip()
-    if not purpose:
-        return False, PURPOSE_NOT_AUTHORIZED
-    # Unknown purpose → we cannot establish a lawful basis for it.
-    if purpose not in CONSENT_PURPOSES:
-        return False, CONSENT_UNKNOWN
-
-    subject = (subject_id or "").strip() or None
-    anon = (anonymous_id or "").strip() or None
-    if not subject and not anon:
-        # No identifier at all → no receipt can exist → absence is denial.
-        return False, CONSENT_RECEIPT_MISSING
-
-    receipt = await _receipt_repo.latest_for(
-        tenant_id, purpose, subject_id=subject, anonymous_id=anon,
+    """Backward-compatible decision tuple for existing consent consumers."""
+    result = await evaluate_consent_with_receipt(
+        tenant_id,
+        subject_id,
+        anonymous_id,
+        purpose,
+        required_policy_version=required_policy_version,
     )
-    if not receipt:
-        # Absence of a server receipt is NOT permission (fail-closed).
-        return False, CONSENT_RECEIPT_MISSING
-
-    # Defensive scope checks (the store lookup already scoped by tenant/subject).
-    if receipt.get("tenant_id") not in (None, "", tenant_id):
-        return False, CONSENT_TENANT_MISMATCH
-    if subject and receipt.get("subject_id") not in (None, "", subject):
-        return False, CONSENT_SUBJECT_MISMATCH
-
-    # Explicit negative states, most specific first.
-    state = (receipt.get("state") or "").strip().lower()
-    if receipt.get("revoked_at") or state == "revoked":
-        return False, CONSENT_REVOKED
-    if state == "denied" or receipt.get("granted") is False:
-        return False, CONSENT_DENIED
-    if state == "expired" or _is_past(receipt.get("expires_at")):
-        return False, CONSENT_EXPIRED
-    if state not in _GRANTED_STATES:
-        # Present but not an affirmative grant → indeterminate.
-        return False, CONSENT_UNKNOWN
-
-    # Request-time privacy signals recorded on the receipt (see DEFERRED note).
-    if receipt.get("gpc_observed") is True and purpose in _GPC_SUPPRESSED_PURPOSES:
-        return False, GPC_SUPPRESSED
-    if receipt.get("dnt_observed") is True and purpose in _DNT_SUPPRESSED_PURPOSES:
-        return False, DNT_SUPPRESSED
-
-    # Explicit-opt-in purposes need an explicit lawful basis, not a soft grant.
-    if purpose in _EXPLICIT_OPT_IN_PURPOSES:
-        mode = (receipt.get("mode") or "").strip().lower()
-        if not receipt.get("lawful_basis") and mode not in ("opt_in", "explicit"):
-            return False, LAWFUL_PROCESSING_NOT_CONFIGURED
-
-    # Policy-version pinning (opt-in): only enforced when a version is required.
-    if (
-        required_policy_version is not None
-        and str(receipt.get("policy_version") or "") != str(required_policy_version)
-    ):
-        return False, CONSENT_POLICY_MISMATCH
-
-    return True, None
+    return result.allowed, result.reason_code
 
 
 IDENTITY_LINKING_PURPOSE = "analytics"

@@ -6,18 +6,29 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/value/commerce/, services/api/value/x402/, services/api/actions/agent/economic.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py]
+source_files: [services/api/value/commerce/, services/api/value/x402/, services/api/actions/agent/economic.py, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/actions/agent_marketplace/graph_state_check.py, services/api/actions/agent/deployment_routes.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/repositories/repos.py, services/api/workers/profile360_workers/workers.py, packages/sdk/server/src/agent-telemetry.ts]
 canonical_owner: commerce@aether
 estimated_read_minutes: 45
 toc_depth: 3
 source_hashes:
+  "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
+  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
   "services/api/actions/agent/economic.py": "sha256:97ae74cc0595758a6bfc23ff9be140a442dd445ca193ea84b5df63327c3de976"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
+  "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
+  "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
+  "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
+  "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/identity/profile/agent.py": "sha256:ef4434e8cf518e4a04073a6e3356be9119708e156ecdab018692ed4a6350853a"
-  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:43c2ddaea124e2f4996e24bc98fa81ecc134661ff071cc427d253c241df41e05"
-  "services/api/value/commerce/": "sha256:50e5a942d3debd0a6c5aef8fbdab3c56fb95f024dd1e129d457beda76d67b9a8"
+  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
+  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
+  "services/api/repositories/repos.py": "sha256:4763340370ea7ef9e43d91b1156def3188a83114efa832e0a289f267957206e6"
+  "services/api/value/commerce/": "sha256:a6e9cc6ca2eb0e96b6ed2a1fe6b73960fb13ccca9dad287dfa3cd2dc5e28833a"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
-  "services/api/value/economic/operation_linkage.py": "sha256:29544d6511463065fed4bba6acb212b9a1c57bb12800733bf6de00a56cf046fa"
-  "services/api/value/x402/": "sha256:69071092cc6527dca201b9ff15cb9a5308bf8d56ab18286c82e51ca1aa40b522"
+  "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
+  "services/api/value/x402/": "sha256:5d041fbb1a1fb7494c5a547b4aac97804e0dcf478261170546663918a509377f"
+  "services/api/workers/profile360_workers/workers.py": "sha256:0c79f5ee2cc03eb0ae92d8690a8622b8ebaea245dc047c7643107fe909d7170a"
 ---
 # Aether Agentic Commerce — Day-1 Build Specification
 
@@ -27,14 +38,16 @@ source_hashes:
 **Day-1 GA anchor:** All Aether-native protected resource classes, mandatory approval on all spend classes, USDC on Base + Solana.
 **External providers:** Designed-in, shipped second-wave.
 
-**Current implementation boundary (October 10, 2026):** The repository now
+**Current implementation boundary (October 15, 2026):** The repository now
 has a versioned, evidence-only `EconomicOperationLink` for exact-reference
-commerce order/payment evidence and tenant-scoped agent intent, authorization,
-execution, and settlement records. Commerce evidence is knowledge-time
-reconstructable and can flow into Journey/Economic360 only when a persisted
-journey step contains the source-shared order reference. This link does not
-execute payments, assert payout settlement, attach an order to a person, or
-replace the provider-owned lifecycle. Signed Stripe refunds now appear as
+commerce order, payment, refund and settlement evidence plus tenant-scoped
+agent intent, authorization, execution and settlement records. Commerce
+evidence is knowledge-time reconstructable and can flow into Journey/Economic360
+only when a persisted journey step contains the source-shared order reference.
+The link never executes payments, infers payout settlement, attaches an order to
+a person, or replaces the provider-owned lifecycle. A source-authoritative
+settlement can be stored and linked only to explicit provider/payment IDs; no
+current processor adapter emits that evidence. Signed Stripe refunds remain
 separate facts only when the webhook supplies exact order/payment/refund IDs;
 other provider correction feeds and live provider certification remain open.
 
@@ -134,8 +147,11 @@ surfaces partial, unresolved and conflicting matches. The source ledger retains
 distinct order revisions with source-valid and first-observed timestamps;
 stale revisions remain visible without replacing the current source view.
 Agent reversal relations are included only from an explicit source
-`reverses_settlement_event_id`. The operation link carries no amount or
-independent payment status and does not claim payout settlement.
+`reverses_settlement_event_id`. Source-authoritative processor settlement
+outcomes can also be recorded with exact payment references and are linked by
+`settled_by`; the projection carries no amount or independent payment status.
+It never infers payout settlement from a completed payment, and no current
+processor adapter supplies this settlement evidence.
 
 This linkage is an Aether projection for navigating evidence across domains.
 The existing agent economics read also links `PaymentIntent` records to
@@ -153,11 +169,41 @@ the registered SettlementEvent → Execution edge would assert a causal relation
 that the current source records do not prove. The graph and these projections do not
 become the source of truth for intent, authorization, execution or settlement;
 those remain with their existing control-plane and source-specific authorities.
-Journey and Value propagation, correction/reversal continuity, temporal
-reconstruction and production journey evidence remain open. Linked source
-references retain source event time, validity/revision time where available,
-and first-persisted time where available so later as-of reconstruction can be
-built without conflating source time with ingestion time.
+Exact commerce references now propagate into Journey and Economic360 evidence,
+and the commerce ledger reconstructs order, payment, refund and settlement
+knowledge at an `as_of` cutoff. Agent-intent historical reconstruction,
+provider correction feeds beyond the signed Stripe refund path, and production
+journey evidence remain open. Linked source references retain source event
+time, validity/revision time where available, and first-persisted time where
+available without conflating source time with ingestion time.
+
+External-agent run evidence accepts optional caller-reported payment-intent
+and settlement-event IDs. The resolver requires an exact same-tenant match to
+server-authoritative x402 rows and a matching `agent_id` from the validated
+deployment registry. Amount, currency, provider, protocol and lifecycle state
+come from those rows. The ActionRecord links are correlation evidence only;
+they do not prove causality, settlement finality, or the source's action claim.
+A tenant administrator can explicitly bind the deployment's source namespace
+and agent reference to an existing canonical Agent through the tenant-scoped
+identity-binding authority. Missing or ambiguous bindings fail closed; this is
+separate from automatic identity resolution and does not turn source telemetry
+into merge evidence. A supplied delegation ID is resolved only to a canonical
+same-tenant Delegation. The delegated-to source reference carries an explicit
+`delegated_to_namespace`; the resolver does not infer the target namespace from
+the actor. Missing or invalid namespace leaves target binding unresolved. When
+both parties resolve, the backend evaluates the
+canonical grant's status, effective/revocation window, endpoints, action,
+resource and supported amount limit at the source-reported event time. The
+result is `within_scope`, `out_of_scope`, or `indeterminate`; action, resource,
+and event time remain source-asserted inputs. Evaluation is policy evidence,
+not proof that an external action occurred: absent a server-owned execution
+receipt, occurrence remains `source_reported` and `verified=false`.
+
+The Kyber graph-projection state check is a separate bounded, read-only
+comparison of known tenant source references with graph vertices and edges. It
+can report missing, extra, mismatched, unresolved, or unauthorized findings,
+but it is best-effort and non-snapshot; it does not mutate, drain, replay, or
+certify the whole graph.
 
 
 ---

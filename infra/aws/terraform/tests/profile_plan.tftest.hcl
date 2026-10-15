@@ -4,12 +4,12 @@
 # tenant infrastructure. Environment-authoritative plans remain a separate,
 # credential-gated workflow job.
 #
-# One run block per deployable profile, each pinning its own variables, so a
-# single `terraform test` covers all six (four cloud + demo/preview) with no
-# -var-file. The capacity scalars mirror profiles/<profile>.tfvars and are set
-# here explicitly because the CI job auto-loads exactly one profile's tfvars —
-# without pinning them, five of the six run blocks would silently plan against
-# the wrong capacity.
+# One run block per deployable profile (staging and production), each pinning its
+# own variables, so a single `terraform test` covers both with no -var-file. The
+# capacity scalars mirror profiles/<profile>.tfvars and are set here explicitly
+# because the CI job auto-loads exactly one profile's tfvars — without pinning
+# them, the other profile's run blocks would silently plan against the wrong
+# capacity.
 #
 # `network_egress_mode` is deliberately set to null in every run block so the
 # profile derivation in profiles.tf is what is under test, not the tfvars value.
@@ -108,6 +108,20 @@ mock_provider "aws" {
   mock_resource "aws_lb_target_group" {
     defaults = {
       arn = "arn:aws:elasticloadbalancing:us-east-1:111122223333:targetgroup/aether-ci-mock/0000000000000000"
+    }
+  }
+
+  mock_resource "aws_ecr_repository" {
+    defaults = {
+      arn            = "arn:aws:ecr:us-east-1:111122223333:repository/aether-access-mcp"
+      name           = "aether-access-mcp"
+      repository_url = "111122223333.dkr.ecr.us-east-1.amazonaws.com/aether-access-mcp"
+    }
+  }
+
+  mock_resource "aws_lb_listener" {
+    defaults = {
+      arn = "arn:aws:elasticloadbalancing:us-east-1:111122223333:listener/app/aether-ci-mock/0000000000000000/0000000000000000"
     }
   }
 
@@ -407,7 +421,7 @@ run "staging_profile_plan" {
     error_message = "The staging backend selectors no longer match the deployment policy."
   }
 
-  # Staging rehearses production-lean's packing, so it must show the same
+  # Staging rehearses production's packing, so it must show the same
   # consolidated shape: ONE non-api runtime service, keyed by the execution
   # group token the container boots as AETHER_ROLE.
   assert {
@@ -601,329 +615,6 @@ run "staging_consolidated_hosts_skip_legacy_dns" {
   }
 }
 
-# ---------------------------------------------------------------------------
-# demo — ephemeral-class. Temporary live demo with a seeded backend tenant.
-# Cost-capped and TTL-cleanup-required: same forbidden set and egress posture
-# as staging, in the same consolidated lean-worker shape.
-# ---------------------------------------------------------------------------
-
-run "demo_profile_plan" {
-  command = plan
-
-  variables {
-    deployment_profile  = "demo"
-    environment         = "staging"
-    network_egress_mode = null
-    aurora_min_acu      = 0
-    aurora_max_acu      = 2
-    log_retention_days  = 3
-    skip_aurora         = false
-  }
-
-  # The egress posture profiles.tf must derive for a cost-capped profile that
-  # pins no explicit override. (var.deployment_profile's own membership in the
-  # deployable set is enforced by its validation block in variables.tf, not by
-  # re-asserting an input against itself here.)
-  assert {
-    condition = alltrue([
-      local.network_egress_mode == "public_ip",
-      local.nat_mode == "none",
-      local.assign_public_ip,
-    ])
-    error_message = "demo no longer derives the cost-capped egress posture (public_ip / no NAT) from profiles.tf."
-  }
-
-  # TASK PLACEMENT — the first-apply blocker this pins.
-  #
-  # public_ip mode provisions no NAT Gateway, so aws_route.private_nat has
-  # count 0 and the private route tables carry no 0.0.0.0/0 route whatsoever.
-  # A task ENI placed there cannot reach ECR, Secrets Manager or CloudWatch —
-  # assign_public_ip does not help, because egress follows the SUBNET's route
-  # table — so the very first apply ends in CannotPullContainerError and a
-  # circuit-breaker rollback. Tasks must therefore be in the public tier, which
-  # has the IGW default route.
-  #
-  # The assertion reads module.ecs's own placement keys, i.e. the map the three
-  # network_configuration blocks index, not the root local that produced it.
-  # Subnet IDs are unknown until apply and can pin nothing; the "<tier>/<az>"
-  # keys are configuration-derived and known at plan.
-  assert {
-    condition = alltrue([
-      join(",", module.ecs.task_subnet_keys) ==
-      "public/us-east-1a,public/us-east-1b,public/us-east-1c",
-      !module.vpc.private_subnets_have_internet_route,
-      local.ecs_task_subnet_tier == "public",
-    ])
-    error_message = "demo places ECS tasks somewhere other than the public subnets while running no NAT Gateway; those tasks have no route to ECR and the first apply cannot reach steady state."
-  }
-
-  # The security invariant that must hold BECAUSE of the placement above: a
-  # public IP on the task ENI must buy egress and nothing else. The ECS
-  # security group admits 8000/8080 from the ALB security group only, and no
-  # CIDR ingress of any kind.
-  assert {
-    condition = alltrue([
-      join(",", sort([for rule in module.vpc.ecs_sg_ingress : tostring(rule.port)])) == "8000,8080",
-      alltrue([for rule in module.vpc.ecs_sg_ingress : length(rule.cidr_blocks) == 0]),
-      alltrue([for rule in module.vpc.ecs_sg_ingress : rule.from_alb]),
-    ])
-    error_message = "The ECS task security group admits a CIDR or a port the ALB does not front; with tasks on public IPs that publishes an application port to the internet."
-  }
-
-  assert {
-    condition = alltrue([
-      length(module.msk) == 0,
-      length(module.elasticache) == 0,
-      length(module.neptune) == 0,
-      length(module.rds) == 0,
-    ])
-    error_message = "The demo plan provisions a cost-capped data store it must not."
-  }
-
-  # required_resources: credential_kms — the provider-credential envelope-
-  # encryption CMK is provisioned in every cloud profile. A demo plan that
-  # dropped it would run the AwsKmsEnvelopeCredentialCipher with no key.
-  assert {
-    condition     = length(module.kms_credentials) == 1
-    error_message = "The demo plan does not provision the provider-credential envelope-encryption CMK."
-  }
-
-  assert {
-    condition = alltrue([
-      length(module.vpc.nat_gateway_ids) == 0,
-      length(module.vpc.nat_eip_ids) == 0,
-      module.vpc.nat_mode == "none",
-    ])
-    error_message = "The demo plan provisions NAT egress."
-  }
-
-  assert {
-    condition = alltrue([
-      length(module.ecs.dedicated_ml_service_arns) == 0,
-      length(module.ecs.dedicated_ml_target_group_arns) == 0,
-      length(module.alb.ml_target_group_arns) == 0,
-      module.alb.ml_target_group_arn == "",
-      module.ecs.ml_service_name == "",
-    ])
-    error_message = "The demo plan provisions the dedicated ML service or its ALB target group."
-  }
-
-  # The normalized locals must collapse to "" — not to null — when the backing
-  # module is absent, or a null flows into a string module input unnoticed.
-  assert {
-    condition = alltrue([
-      local.redis_host == "",
-      local.redis_auth_secret_arn == "",
-      local.kafka_bootstrap_servers == "",
-      local.neptune_endpoint == "",
-    ])
-    error_message = "A normalized data-store local is not the empty string with its module absent."
-  }
-
-  assert {
-    condition = (
-      local.graph_backend == "postgres" &&
-      local.cache_backend == "dynamodb" &&
-      local.event_broker == "sns_sqs" &&
-      local.analytics_backend == "postgres"
-    )
-    error_message = "The demo backend selectors no longer match the deployment policy."
-  }
-
-  # Demo is an ephemeral-class profile and is expected to run the same
-  # consolidated shape as staging: ONE non-api runtime service, keyed by the
-  # execution group token the container boots as AETHER_ROLE.
-  assert {
-    condition = alltrue([
-      length(module.ecs.runtime_service_names) == length(local.runtime_service_settings),
-      length(local.runtime_service_settings) == 1,
-      join(",", keys(local.runtime_service_settings)) == "lean-worker",
-      contains(module.ecs.runtime_service_names, "AETHER-staging-lean-worker"),
-      local.runtime_execution_mode == "consolidated",
-    ])
-    error_message = "The demo plan does not provision exactly one consolidated lean-worker service."
-  }
-
-  # Ephemeral-class plans are not scaled to zero by default; the reviewed
-  # baseline must still run.
-  assert {
-    condition = alltrue([
-      var.staging_state == "awake",
-      local.staging_state_multiplier == 1,
-      module.ecs.backend_service_desired_count == 1,
-      module.ecs.runtime_service_desired_counts["lean-worker"] == 1,
-      module.ecs.backend_autoscaling_bounds.max == 2,
-    ])
-    error_message = "A demo plan no longer runs the reviewed baseline capacity."
-  }
-}
-
-# ---------------------------------------------------------------------------
-# preview — ephemeral-class. PR-specific live environment, only when explicitly
-# requested. Cost-capped, auto-expire, no dedicated VPC/ALB/Aurora/Neptune:
-# same forbidden set and egress posture as staging, in the same consolidated
-# lean-worker shape.
-# ---------------------------------------------------------------------------
-
-run "preview_profile_plan" {
-  command = plan
-
-  variables {
-    deployment_profile  = "preview"
-    environment         = "staging"
-    network_egress_mode = null
-    aurora_min_acu      = 0
-    aurora_max_acu      = 2
-    log_retention_days  = 3
-    skip_aurora         = false
-  }
-
-  # The egress posture profiles.tf must derive for a cost-capped profile that
-  # pins no explicit override. (var.deployment_profile's own membership in the
-  # deployable set is enforced by its validation block in variables.tf, not by
-  # re-asserting an input against itself here.)
-  assert {
-    condition = alltrue([
-      local.network_egress_mode == "public_ip",
-      local.nat_mode == "none",
-      local.assign_public_ip,
-    ])
-    error_message = "preview no longer derives the cost-capped egress posture (public_ip / no NAT) from profiles.tf."
-  }
-
-  # TASK PLACEMENT — the first-apply blocker this pins.
-  #
-  # public_ip mode provisions no NAT Gateway, so aws_route.private_nat has
-  # count 0 and the private route tables carry no 0.0.0.0/0 route whatsoever.
-  # A task ENI placed there cannot reach ECR, Secrets Manager or CloudWatch —
-  # assign_public_ip does not help, because egress follows the SUBNET's route
-  # table — so the very first apply ends in CannotPullContainerError and a
-  # circuit-breaker rollback. Tasks must therefore be in the public tier, which
-  # has the IGW default route.
-  #
-  # The assertion reads module.ecs's own placement keys, i.e. the map the three
-  # network_configuration blocks index, not the root local that produced it.
-  # Subnet IDs are unknown until apply and can pin nothing; the "<tier>/<az>"
-  # keys are configuration-derived and known at plan.
-  assert {
-    condition = alltrue([
-      join(",", module.ecs.task_subnet_keys) ==
-      "public/us-east-1a,public/us-east-1b,public/us-east-1c",
-      !module.vpc.private_subnets_have_internet_route,
-      local.ecs_task_subnet_tier == "public",
-    ])
-    error_message = "preview places ECS tasks somewhere other than the public subnets while running no NAT Gateway; those tasks have no route to ECR and the first apply cannot reach steady state."
-  }
-
-  # The security invariant that must hold BECAUSE of the placement above: a
-  # public IP on the task ENI must buy egress and nothing else. The ECS
-  # security group admits 8000/8080 from the ALB security group only, and no
-  # CIDR ingress of any kind.
-  assert {
-    condition = alltrue([
-      join(",", sort([for rule in module.vpc.ecs_sg_ingress : tostring(rule.port)])) == "8000,8080",
-      alltrue([for rule in module.vpc.ecs_sg_ingress : length(rule.cidr_blocks) == 0]),
-      alltrue([for rule in module.vpc.ecs_sg_ingress : rule.from_alb]),
-    ])
-    error_message = "The ECS task security group admits a CIDR or a port the ALB does not front; with tasks on public IPs that publishes an application port to the internet."
-  }
-
-  assert {
-    condition = alltrue([
-      length(module.msk) == 0,
-      length(module.elasticache) == 0,
-      length(module.neptune) == 0,
-      length(module.rds) == 0,
-    ])
-    error_message = "The preview plan provisions a cost-capped data store it must not."
-  }
-
-  # required_resources: credential_kms — the provider-credential envelope-
-  # encryption CMK is provisioned in every cloud profile. A preview plan that
-  # dropped it would run the AwsKmsEnvelopeCredentialCipher with no key.
-  assert {
-    condition     = length(module.kms_credentials) == 1
-    error_message = "The preview plan does not provision the provider-credential envelope-encryption CMK."
-  }
-
-  assert {
-    condition = alltrue([
-      length(module.vpc.nat_gateway_ids) == 0,
-      length(module.vpc.nat_eip_ids) == 0,
-      module.vpc.nat_mode == "none",
-    ])
-    error_message = "The preview plan provisions NAT egress."
-  }
-
-  assert {
-    condition = alltrue([
-      length(module.ecs.dedicated_ml_service_arns) == 0,
-      length(module.ecs.dedicated_ml_target_group_arns) == 0,
-      length(module.alb.ml_target_group_arns) == 0,
-      module.alb.ml_target_group_arn == "",
-      module.ecs.ml_service_name == "",
-    ])
-    error_message = "The preview plan provisions the dedicated ML service or its ALB target group."
-  }
-
-  # The normalized locals must collapse to "" — not to null — when the backing
-  # module is absent, or a null flows into a string module input unnoticed.
-  assert {
-    condition = alltrue([
-      local.redis_host == "",
-      local.redis_auth_secret_arn == "",
-      local.kafka_bootstrap_servers == "",
-      local.neptune_endpoint == "",
-    ])
-    error_message = "A normalized data-store local is not the empty string with its module absent."
-  }
-
-  assert {
-    condition = (
-      local.graph_backend == "postgres" &&
-      local.cache_backend == "dynamodb" &&
-      local.event_broker == "sns_sqs" &&
-      local.analytics_backend == "postgres"
-    )
-    error_message = "The preview backend selectors no longer match the deployment policy."
-  }
-
-  # Preview is an ephemeral-class profile and is expected to run the same
-  # consolidated shape as staging: ONE non-api runtime service, keyed by the
-  # execution group token the container boots as AETHER_ROLE.
-  assert {
-    condition = alltrue([
-      length(module.ecs.runtime_service_names) == length(local.runtime_service_settings),
-      length(local.runtime_service_settings) == 1,
-      join(",", keys(local.runtime_service_settings)) == "lean-worker",
-      contains(module.ecs.runtime_service_names, "AETHER-staging-lean-worker"),
-      local.runtime_execution_mode == "consolidated",
-    ])
-    error_message = "The preview plan does not provision exactly one consolidated lean-worker service."
-  }
-
-  # Ephemeral-class plans are not scaled to zero by default; the reviewed
-  # baseline must still run.
-  assert {
-    condition = alltrue([
-      var.staging_state == "awake",
-      local.staging_state_multiplier == 1,
-      module.ecs.backend_service_desired_count == 1,
-      module.ecs.runtime_service_desired_counts["lean-worker"] == 1,
-      module.ecs.backend_autoscaling_bounds.max == 2,
-    ])
-    error_message = "A preview plan no longer runs the reviewed baseline capacity."
-  }
-}
-
-# ---------------------------------------------------------------------------
-# staging, asleep — the same topology at zero capacity.
-#
-# The point of the lifecycle state is that sleeping is a capacity change and
-# not a shape change: the plan must own exactly the same services and the same
-# roles as the awake run above, with every count at zero.
-# ---------------------------------------------------------------------------
-
 run "staging_asleep_profile_plan" {
   command = plan
 
@@ -984,14 +675,14 @@ run "staging_asleep_profile_plan" {
 }
 
 # ---------------------------------------------------------------------------
-# production-lean — the founding-tenant target and the cost-policy subject.
+# production — the founding-tenant target and the cost-policy subject.
 # ---------------------------------------------------------------------------
 
-run "production_lean_profile_plan" {
+run "production_profile_plan" {
   command = plan
 
   variables {
-    deployment_profile  = "production-lean"
+    deployment_profile  = "production"
     environment         = "production"
     network_egress_mode = null
     aurora_min_acu      = 0.5
@@ -1005,7 +696,7 @@ run "production_lean_profile_plan" {
   # backend's non-staging default.
   assert {
     condition     = local.self_signup_enabled
-    error_message = "production-lean would stop new Auth0 users from provisioning a tenant (SSO_SELF_SIGNUP_ENABLED=false)."
+    error_message = "production would stop new Auth0 users from provisioning a tenant (SSO_SELF_SIGNUP_ENABLED=false)."
   }
 
   assert {
@@ -1014,7 +705,7 @@ run "production_lean_profile_plan" {
       local.nat_mode == "none",
       local.assign_public_ip,
     ])
-    error_message = "production-lean no longer derives the cost-capped egress posture (public_ip / no NAT) from profiles.tf."
+    error_message = "production no longer derives the cost-capped egress posture (public_ip / no NAT) from profiles.tf."
   }
 
   # Production keeps one app per host until its own cutover.
@@ -1026,7 +717,7 @@ run "production_lean_profile_plan" {
       app    = "aether-app"
       status = "status"
     }
-    error_message = "production-lean moved a host off its own app before the production cutover."
+    error_message = "production moved a host off its own app before the production cutover."
   }
 
   # Only staging's Aether host serves the unified site. Production keeps the
@@ -1038,7 +729,7 @@ run "production_lean_profile_plan" {
       local.amplify_apps["aether-marketing"].app_root == "apps/marketing-aether",
       [for rule in local.amplify_custom_rules["aether-marketing"] : rule.source] == ["/login", "/signup", "/forgot-password"],
     ])
-    error_message = "production-lean switched the Aether host to the unified site before it prerenders route metadata."
+    error_message = "production switched the Aether host to the unified site before it prerenders route metadata."
   }
 
   # Task placement, same reasoning as the staging run: no NAT means the private
@@ -1051,7 +742,7 @@ run "production_lean_profile_plan" {
       !module.vpc.private_subnets_have_internet_route,
       local.ecs_task_subnet_tier == "public",
     ])
-    error_message = "production-lean places ECS tasks somewhere other than the public subnets while running no NAT Gateway; those tasks have no route to ECR and the first apply cannot reach steady state."
+    error_message = "production places ECS tasks somewhere other than the public subnets while running no NAT Gateway; those tasks have no route to ECR and the first apply cannot reach steady state."
   }
 
   assert {
@@ -1078,7 +769,7 @@ run "production_lean_profile_plan" {
       !local.enable_prometheus_grafana,
       !local.enable_legacy_rds,
     ])
-    error_message = "A production-lean forbidden-resource toggle is no longer false."
+    error_message = "A production forbidden-resource toggle is no longer false."
   }
 
   # forbidden_resources: msk, elasticache, neptune, legacy_rds.
@@ -1089,7 +780,7 @@ run "production_lean_profile_plan" {
       length(module.neptune) == 0,
       length(module.rds) == 0,
     ])
-    error_message = "The production-lean plan provisions a forbidden data store."
+    error_message = "The production plan provisions a forbidden data store."
   }
 
   # required_resources: credential_kms — the provider-credential envelope-
@@ -1097,7 +788,7 @@ run "production_lean_profile_plan" {
   # dropped it would run the AwsKmsEnvelopeCredentialCipher with no key.
   assert {
     condition     = length(module.kms_credentials) == 1
-    error_message = "The production-lean plan does not provision the provider-credential envelope-encryption CMK."
+    error_message = "The production plan does not provision the provider-credential envelope-encryption CMK."
   }
 
   # forbidden_resources: nat_gateway_unless_explicit.
@@ -1107,7 +798,7 @@ run "production_lean_profile_plan" {
       length(module.vpc.nat_eip_ids) == 0,
       module.vpc.nat_mode == "none",
     ])
-    error_message = "The production-lean plan provisions a NAT Gateway without an explicit network_egress_mode override."
+    error_message = "The production plan provisions a NAT Gateway without an explicit network_egress_mode override."
   }
 
   # forbidden_resources: dedicated_ml_service (required_resources: inline_ml).
@@ -1120,7 +811,7 @@ run "production_lean_profile_plan" {
       module.alb.ml_tg_arn_suffix == "",
       module.ecs.ml_service_name == "",
     ])
-    error_message = "The production-lean plan provisions the dedicated ML service or its ALB target group instead of running inference inline."
+    error_message = "The production plan provisions the dedicated ML service or its ALB target group instead of running inference inline."
   }
 
   # required_resources: aurora_serverless_v2, postgres_graph.
@@ -1131,7 +822,7 @@ run "production_lean_profile_plan" {
       module.aurora[0].db_name == var.db_name,
       local.graph_backend == "postgres",
     ])
-    error_message = "The production-lean plan does not provision Aurora Serverless v2 as the database and graph of record."
+    error_message = "The production plan does not provision Aurora Serverless v2 as the database and graph of record."
   }
 
   # required_resources: sqs_sns, dynamodb.
@@ -1145,7 +836,7 @@ run "production_lean_profile_plan" {
       local.event_broker == "sns_sqs",
       local.cache_backend == "dynamodb",
     ])
-    error_message = "The production-lean plan does not provision the SNS/SQS broker and DynamoDB cache it requires."
+    error_message = "The production plan does not provision the SNS/SQS broker and DynamoDB cache it requires."
   }
 
   # required_resources: alb. The DNS name is only known after apply, so the
@@ -1157,7 +848,7 @@ run "production_lean_profile_plan" {
       module.alb.backend_target_group_name == "aether-production-backend",
       module.alb.backend_target_group_replacement_strategy == "create-before-destroy",
     ])
-    error_message = "The production-lean plan does not provision the ALB and its backend target group."
+    error_message = "The production plan does not provision the ALB and its backend target group."
   }
 
   # required_resources: cloudfront_s3_frontends — two origins, each with a
@@ -1170,11 +861,11 @@ run "production_lean_profile_plan" {
       length(aws_s3_bucket_server_side_encryption_configuration.static_frontend) == 2,
       length(aws_ssm_parameter.static_frontend_bucket) == 2,
     ])
-    error_message = "The production-lean plan does not provision both static SPA origins and their SSM pointers."
+    error_message = "The production plan does not provision both static SPA origins and their SSM pointers."
   }
 
   # required_resources: explicit_runtime_role_services — one ECS service per
-  # entry of the profile's `services:` map. production-lean is
+  # entry of the profile's `services:` map. production is
   # execution_mode: consolidated, so that is exactly ONE non-api service, the
   # `lean-worker` execution group: eight roles in one task, not eight tasks.
   # The invariant is ownership (asserted below and enforced across the whole
@@ -1189,7 +880,7 @@ run "production_lean_profile_plan" {
       local.runtime_execution_mode == "consolidated",
       module.ecs.backend_service_desired_count > 0,
     ])
-    error_message = "The production-lean plan does not provision exactly one consolidated lean-worker service plus the api-serving backend service."
+    error_message = "The production plan does not provision exactly one consolidated lean-worker service plus the api-serving backend service."
   }
 
   # The consolidation-critical property: the single lean-worker task hosts all
@@ -1237,7 +928,7 @@ run "production_lean_profile_plan" {
       join(",", module.ecs.runtime_service_capacity_providers["lean-worker"]) == "FARGATE",
       join(",", module.ecs.backend_capacity_providers) == "FARGATE",
     ])
-    error_message = "The production-lean plan puts the public API or the outbox-relay-hosting worker on FARGATE_SPOT."
+    error_message = "The production plan puts the public API or the outbox-relay-hosting worker on FARGATE_SPOT."
   }
 
   # The api service's sizing and envelope come from the runtime matrix, not
@@ -1250,7 +941,7 @@ run "production_lean_profile_plan" {
       local.api_cpu == 1024,
       local.api_memory == 2048,
     ])
-    error_message = "The production-lean api service no longer matches the reviewed baseline in config/runtime_deployment.yaml."
+    error_message = "The production api service no longer matches the reviewed baseline in config/runtime_deployment.yaml."
   }
 
   assert {
@@ -1268,290 +959,6 @@ run "production_lean_profile_plan" {
   }
 }
 
-# ---------------------------------------------------------------------------
-# production-scale — heavy backends on, single shared NAT.
-# ---------------------------------------------------------------------------
-
-run "production_scale_profile_plan" {
-  command = plan
-
-  variables {
-    deployment_profile  = "production-scale"
-    environment         = "production"
-    network_egress_mode = null
-    aurora_min_acu      = 1
-    aurora_max_acu      = 8
-    log_retention_days  = 7
-    skip_aurora         = false
-  }
-
-  assert {
-    condition = alltrue([
-      local.network_egress_mode == "single_nat",
-      local.nat_mode == "single",
-      !local.assign_public_ip,
-    ])
-    error_message = "production-scale no longer derives the single-NAT egress posture from profiles.tf."
-  }
-
-  # The mirror image of the cost-capped placement: this profile pays for a NAT
-  # Gateway, so the private route tables really do carry a default route and
-  # tasks stay private with no public IP. A regression that moved every profile
-  # to the public tier fails here.
-  assert {
-    condition = alltrue([
-      join(",", module.ecs.task_subnet_keys) ==
-      "private/us-east-1a,private/us-east-1b,private/us-east-1c",
-      module.vpc.private_subnets_have_internet_route,
-      local.ecs_task_subnet_tier == "private",
-    ])
-    error_message = "production-scale no longer keeps ECS tasks in the private subnets behind its NAT Gateway."
-  }
-
-  assert {
-    condition = alltrue([
-      length(module.msk) == 1,
-      length(module.elasticache) == 1,
-      length(module.neptune) == 1,
-      length(module.kms_credentials) == 1,
-    ])
-    error_message = "The production-scale plan does not provision the heavy backends its profile enables."
-  }
-
-  # Legacy RDS is superseded at every profile, not merely at the lean one.
-  assert {
-    condition     = length(module.rds) == 0
-    error_message = "The production-scale plan provisions legacy RDS alongside Aurora."
-  }
-
-  assert {
-    condition = alltrue([
-      length(module.vpc.nat_gateway_ids) == 1,
-      length(module.vpc.nat_eip_ids) == 1,
-      module.vpc.nat_mode == "single",
-    ])
-    error_message = "The production-scale plan does not provision exactly one shared NAT Gateway."
-  }
-
-  # module.ecs.dedicated_ml_target_group_arns is deliberately absent here: its
-  # length depends on comparing the target group ARN to "", and that ARN is
-  # only known after apply, so the list length is unknown at plan on profiles
-  # that DO create it. The ALB-side list is count-derived and knowable, and
-  # covers the same fact. The ECS-side list is still asserted empty on the two
-  # cost-capped profiles, where it is known.
-  assert {
-    condition = alltrue([
-      length(module.ecs.dedicated_ml_service_arns) == 1,
-      length(module.alb.ml_target_group_arns) == 1,
-      module.ecs.ml_service_name != "",
-    ])
-    error_message = "The production-scale plan does not provision the dedicated ML service and its ALB target group."
-  }
-
-  # Alarm dimensions for the heavy stores. These are reproduced in the root
-  # rather than read back from the modules (a computed attribute would make the
-  # alarm `count` unplannable), so they have to be asserted against the exact
-  # identifiers the modules configure — a drifted reconstruction is a silently
-  # dead alarm, not a plan error.
-  assert {
-    condition = alltrue([
-      local.elasticache_replication_group_id == "aether-production-redis",
-      local.msk_cluster_name == "aether-production-kafka",
-      local.neptune_cluster_id == "aether-production-neptune",
-    ])
-    error_message = "A CloudWatch alarm dimension no longer matches the identifier its module configures."
-  }
-
-  assert {
-    condition = (
-      local.graph_backend == "neptune" &&
-      local.cache_backend == "redis" &&
-      local.event_broker == "kafka" &&
-      local.analytics_backend == "clickhouse"
-    )
-    error_message = "The production-scale backend selectors no longer match the deployment policy."
-  }
-
-  # dedicated, not consolidated: eight non-api services, one per worker role,
-  # each hosting exactly the role it is named after. This is the assertion that
-  # stops the lean packing being applied to a profile that pays for isolation.
-  assert {
-    condition = alltrue([
-      length(module.ecs.runtime_service_names) == length(local.runtime_service_settings),
-      length(local.runtime_service_settings) == 8,
-      local.runtime_execution_mode == "dedicated",
-      !contains(keys(local.runtime_service_settings), "lean-worker"),
-      alltrue([
-        for key, cfg in local.runtime_service_settings : join(",", cfg.roles) == key
-      ]),
-    ])
-    error_message = "The production-scale plan does not provision one dedicated ECS service per worker role."
-  }
-
-  # Spot policy, per the matrix: backlog-draining workers surge onto Spot,
-  # while the public API and the at-least-once delivery path never do.
-  assert {
-    condition = alltrue([
-      contains(module.ecs.runtime_service_capacity_providers["stream-worker"], "FARGATE_SPOT"),
-      join(",", module.ecs.runtime_service_capacity_providers["outbox-relay"]) == "FARGATE",
-      join(",", module.ecs.backend_capacity_providers) == "FARGATE",
-    ])
-    error_message = "The production-scale capacity providers no longer match the matrix Spot policy (never api, never outbox-relay)."
-  }
-
-  # A dedicated consumer service binds exactly its own queue; a dedicated
-  # non-consumer service binds none and falls back to SQS_QUEUE_URL.
-  assert {
-    condition = alltrue([
-      join(",", module.ecs.runtime_service_queue_roles["stream-worker"]) == "stream-worker",
-      length(module.ecs.runtime_service_queue_roles["maintenance"]) == 0,
-      module.ecs.backend_service_desired_count == 3,
-      module.ecs.backend_autoscaling_bounds.max == 12,
-    ])
-    error_message = "The production-scale plan does not bind each dedicated service to its own role queue at the reviewed api capacity."
-  }
-
-  # Same dead-letter invariant on the dedicated shape: exactly the role the
-  # service is named after, and nothing for a service that owns no queue.
-  assert {
-    condition = alltrue([
-      join(",", module.ecs.runtime_service_dlq_roles["stream-worker"]) == "stream-worker",
-      length(module.ecs.runtime_service_dlq_roles["maintenance"]) == 0,
-    ])
-    error_message = "A dedicated production-scale service is not bound to its own dead-letter queue."
-  }
-}
-
-# ---------------------------------------------------------------------------
-# enterprise-isolated — heavy backends on, NAT per AZ.
-# ---------------------------------------------------------------------------
-
-run "enterprise_isolated_profile_plan" {
-  command = plan
-
-  variables {
-    deployment_profile  = "enterprise-isolated"
-    environment         = "production"
-    network_egress_mode = null
-    aurora_min_acu      = 2
-    aurora_max_acu      = 16
-    db_multi_az         = true
-    log_retention_days  = 30
-    skip_aurora         = false
-  }
-
-  assert {
-    condition = alltrue([
-      local.network_egress_mode == "ha_nat",
-      local.nat_mode == "ha",
-      !local.assign_public_ip,
-    ])
-    error_message = "enterprise-isolated no longer derives the HA-NAT egress posture from profiles.tf."
-  }
-
-  assert {
-    condition = alltrue([
-      join(",", module.ecs.task_subnet_keys) ==
-      "private/us-east-1a,private/us-east-1b,private/us-east-1c",
-      module.vpc.private_subnets_have_internet_route,
-      local.ecs_task_subnet_tier == "private",
-    ])
-    error_message = "enterprise-isolated no longer keeps ECS tasks in the private subnets behind its per-AZ NAT Gateways."
-  }
-
-  assert {
-    condition = alltrue([
-      length(module.msk) == 1,
-      length(module.elasticache) == 1,
-      length(module.neptune) == 1,
-      length(module.rds) == 0,
-      length(module.kms_credentials) == 1,
-    ])
-    error_message = "The enterprise-isolated plan does not provision the heavy backends its profile enables."
-  }
-
-  # One NAT Gateway and one EIP per AZ — three AZs come from the mocked
-  # aws_availability_zones data source.
-  assert {
-    condition = alltrue([
-      length(module.vpc.nat_gateway_ids) == 3,
-      length(module.vpc.nat_eip_ids) == 3,
-      module.vpc.nat_mode == "ha",
-    ])
-    error_message = "The enterprise-isolated plan does not provision one NAT Gateway per AZ."
-  }
-
-  # module.ecs.dedicated_ml_target_group_arns is deliberately absent here: its
-  # length depends on comparing the target group ARN to "", and that ARN is
-  # only known after apply, so the list length is unknown at plan on profiles
-  # that DO create it. The ALB-side list is count-derived and knowable, and
-  # covers the same fact. The ECS-side list is still asserted empty on the two
-  # cost-capped profiles, where it is known.
-  assert {
-    condition = alltrue([
-      length(module.ecs.dedicated_ml_service_arns) == 1,
-      length(module.alb.ml_target_group_arns) == 1,
-      module.ecs.ml_service_name != "",
-    ])
-    error_message = "The enterprise-isolated plan does not provision the dedicated ML service and its ALB target group."
-  }
-
-  assert {
-    condition = (
-      local.graph_backend == "neptune" &&
-      local.cache_backend == "redis" &&
-      local.event_broker == "kafka" &&
-      local.analytics_backend == "clickhouse"
-    )
-    error_message = "The enterprise-isolated backend selectors no longer match the deployment policy."
-  }
-
-  assert {
-    condition = alltrue([
-      length(module.ecs.runtime_service_names) == length(local.runtime_service_settings),
-      length(local.runtime_service_settings) == 8,
-      local.runtime_execution_mode == "dedicated",
-      !contains(keys(local.runtime_service_settings), "lean-worker"),
-    ])
-    error_message = "The enterprise-isolated plan does not provision one dedicated ECS service per worker role."
-  }
-
-  # The one deliberate difference from production-scale: NO Spot anywhere. A
-  # single-tenant isolation contract prices predictable capacity above the
-  # discount, so even the surge tail of an interruption-tolerant worker stays
-  # on-demand. Asserted on the service the scale profile DOES put on Spot, so
-  # this cannot pass by accident.
-  assert {
-    condition = alltrue([
-      join(",", module.ecs.runtime_service_capacity_providers["stream-worker"]) == "FARGATE",
-      join(",", module.ecs.runtime_service_capacity_providers["materializer"]) == "FARGATE",
-      join(",", module.ecs.backend_capacity_providers) == "FARGATE",
-    ])
-    error_message = "The enterprise-isolated plan places a service on FARGATE_SPOT; this profile pays for non-interruptible capacity at every tier."
-  }
-}
-
-# ---------------------------------------------------------------------------
-# staging sleep against an APPLIED environment.
-#
-# Everything above plans against empty state, so every ECS service is a CREATE
-# and `desired_count` is always whatever the configuration says. That is why
-# the asleep run near the top of this file passed for months while
-# `staging_state = "asleep"` did not actually stop the API: the backend service
-# carried `lifecycle { ignore_changes = [desired_count] }`, which suppresses
-# the attribute only AFTER create — precisely the case a create-only plan can
-# never exercise.
-#
-# These two runs close that hole. The first APPLIES the awake shape (mocked, so
-# no infrastructure is touched) and leaves state behind; the second plans the
-# asleep shape against that state, which is an UPDATE. With desired_count
-# ignored the planned value is the prior 1 and this fails; with it managed the
-# plan really does say 0.
-#
-# They are last in the file on purpose: run blocks share one state, so an apply
-# placed earlier would turn every later plan into a diff against staging.
-# ---------------------------------------------------------------------------
-
 run "staging_awake_applied" {
   command = apply
 
@@ -1562,7 +969,7 @@ run "staging_awake_applied" {
   # run-created resource down after the file — a prevent_destroy resource makes
   # that teardown fail ("Instance cannot be destroyed") even though the suite
   # reports all passes, and no terraform version lets override_resource or a
-  # variable relax it. The apply run's assertions are ECS-only, and the six plan
+  # variable relax it. The apply run's assertions are ECS-only, and the plan
   # runs below all assert length(module.kms_credentials) == 1, so CMK coverage
   # is unchanged. The production guard in modules/kms_credentials/main.tf stays
   # prevent_destroy = true — a real plan that would retire the CMK still fails
@@ -1659,7 +1066,7 @@ run "vpc_endpoints_egress_mode_is_rejected" {
   command = plan
 
   variables {
-    deployment_profile  = "production-lean"
+    deployment_profile  = "production"
     environment         = "production"
     network_egress_mode = "vpc_endpoints"
     aurora_min_acu      = 0.5
@@ -1669,4 +1076,190 @@ run "vpc_endpoints_egress_mode_is_rejected" {
   }
 
   expect_failures = [var.network_egress_mode]
+}
+
+# ---------------------------------------------------------------------------
+# Customer-facing Access Kit MCP is opt-in and cannot use a mutable image tag.
+# ---------------------------------------------------------------------------
+
+run "access_mcp_service_opt_in" {
+  command = plan
+
+  variables {
+    deployment_profile           = "production"
+    environment                  = "production"
+    ml_image_digest              = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    network_egress_mode          = null
+    aurora_min_acu               = 0
+    aurora_max_acu               = 2
+    aurora_express_mode          = true
+    skip_aurora                  = false
+    log_retention_days           = 3
+    enable_access_mcp_repository = true
+    enable_access_mcp            = true
+    access_mcp_image_digest      = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  }
+
+  assert {
+    condition = alltrue([
+      length(module.access_mcp) == 1,
+      contains(keys(module.ecr.repository_urls), "aether-access-mcp"),
+      length(module.alb.access_mcp_target_group_arns) == 1,
+      module.access_mcp[0].desired_count == 2,
+    ])
+    error_message = "The opt-in Access Kit MCP plan must create its dedicated ECR repository, target group and bounded ECS service pinned to an immutable digest on the production profile."
+  }
+}
+
+run "access_mcp_service_requires_repository_and_digest" {
+  command = plan
+
+  variables {
+    deployment_profile  = "staging"
+    environment         = "staging"
+    network_egress_mode = null
+    aurora_min_acu      = 0
+    aurora_max_acu      = 2
+    aurora_express_mode = true
+    skip_aurora         = false
+    log_retention_days  = 3
+    enable_access_mcp   = true
+  }
+
+  expect_failures = [var.enable_access_mcp]
+}
+
+run "access_mcp_service_is_rejected_on_staging" {
+  command = plan
+
+  variables {
+    deployment_profile      = "staging"
+    environment             = "staging"
+    network_egress_mode     = null
+    aurora_min_acu          = 0
+    aurora_max_acu          = 2
+    aurora_express_mode     = true
+    skip_aurora             = false
+    log_retention_days      = 3
+    enable_access_mcp       = true
+    access_mcp_image_digest = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  }
+
+  expect_failures = [var.enable_access_mcp]
+}
+
+run "access_mcp_repository_is_rejected_on_staging" {
+  command = plan
+
+  variables {
+    deployment_profile           = "staging"
+    environment                  = "staging"
+    network_egress_mode          = null
+    aurora_min_acu               = 0
+    aurora_max_acu               = 2
+    aurora_express_mode          = true
+    skip_aurora                  = false
+    log_retention_days           = 3
+    enable_access_mcp_repository = true
+  }
+
+  expect_failures = [var.enable_access_mcp_repository]
+}
+
+run "access_mcp_path_cannot_overlap_tfmcp_route" {
+  command = plan
+
+  variables {
+    access_mcp_path     = "/McpOperator"
+    network_egress_mode = null
+    aurora_min_acu      = 0
+    aurora_max_acu      = 2
+    aurora_express_mode = true
+    skip_aurora         = false
+    log_retention_days  = 3
+  }
+
+  expect_failures = [var.access_mcp_path]
+}
+
+run "access_mcp_origin_rejects_invalid_hosts_and_ports" {
+  command = plan
+
+  variables {
+    access_mcp_allowed_origins = ["https://bad..example.test"]
+    network_egress_mode        = null
+    aurora_min_acu             = 0
+    aurora_max_acu             = 2
+    aurora_express_mode        = true
+    skip_aurora                = false
+    log_retention_days         = 3
+  }
+
+  expect_failures = [var.access_mcp_allowed_origins]
+}
+
+run "access_mcp_origin_rejects_zero_port" {
+  command = plan
+
+  variables {
+    access_mcp_allowed_origins = ["https://console.example.test:0"]
+    network_egress_mode        = null
+    aurora_min_acu             = 0
+    aurora_max_acu             = 2
+    aurora_express_mode        = true
+    skip_aurora                = false
+    log_retention_days         = 3
+  }
+
+  expect_failures = [var.access_mcp_allowed_origins]
+}
+
+run "access_mcp_origin_rejects_port_above_range" {
+  command = plan
+
+  variables {
+    access_mcp_allowed_origins = ["https://console.example.test:65536"]
+    network_egress_mode        = null
+    aurora_min_acu             = 0
+    aurora_max_acu             = 2
+    aurora_express_mode        = true
+    skip_aurora                = false
+    log_retention_days         = 3
+  }
+
+  expect_failures = [var.access_mcp_allowed_origins]
+}
+
+run "access_mcp_origin_accepts_dns_ipv4_and_valid_ports" {
+  command = plan
+
+  variables {
+    access_mcp_allowed_origins = [
+      "https://console.example.test",
+      "https://console.example.test:65535",
+      "https://192.0.2.10:1",
+    ]
+    network_egress_mode = null
+    aurora_min_acu      = 0
+    aurora_max_acu      = 2
+    aurora_express_mode = true
+    skip_aurora         = false
+    log_retention_days  = 3
+  }
+
+  assert {
+    condition     = length(var.access_mcp_allowed_origins) == 3
+    error_message = "Exact DNS and IPv4 HTTPS origins with no port or a valid 1–65535 port should be accepted."
+  }
+}
+
+# Auth0 callback and logout URLs append paths to aether_app_url.
+run "aether_app_url_with_trailing_slash_is_rejected" {
+  command = plan
+
+  variables {
+    aether_app_url = "https://app.ci.aether.invalid/"
+  }
+
+  expect_failures = [var.aether_app_url]
 }

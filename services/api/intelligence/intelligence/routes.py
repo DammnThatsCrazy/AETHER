@@ -126,14 +126,8 @@ _anti_distillation_service = None
 # keep the translation at this read-only presentation seam instead of making
 # every caller know both vocabularies.
 _PROFILE_TO_DEPLOYMENT_MODE = {
-    "local": "standard_saas",
-    "local-full": "standard_saas",
-    "demo": "standard_saas",
-    "preview": "standard_saas",
     "staging": "standard_saas",
-    "production-lean": "standard_saas",
-    "production-scale": "standard_saas",
-    "enterprise-isolated": "enterprise_isolated_tenant",
+    "production": "standard_saas",
 }
 _DELIVERY_REQUIRED_CHECKS_FALLBACK = frozenset(
     {

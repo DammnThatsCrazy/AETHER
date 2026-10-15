@@ -32,7 +32,7 @@ custom-domain associations, status app, CORS wiring, and profile controls for
 those origins. The checkout has not performed a credentialed AWS plan/apply,
 so none of the domains below may be described as live yet. Staging reuses the
 verified `*.staging.olympuslabsml.com` associations already present in Amplify,
-with Squarespace authoritative for DNS; production-lean is the controlled
+with Squarespace authoritative for DNS; production is the controlled
 `*.olympuslabsml.com` custom-domain promotion shape.
 
 Kyber stays internal. `kyber.olympuslabsml.com` is declared only so the topology
@@ -97,7 +97,7 @@ sends the `docs`, `status` and `app` hosts to `/docs`, `/status` and `/app` on
 the Aether host. The old `olympus-marketing`, `docs`, `status` and
 `aether-app` staging apps are deleted. The state-reconciliation workflow imports the site
 association before planning, so Terraform cannot create a second owner or
-detach the live targets. `production-lean` enables the reviewed
+detach the live targets. `production` enables the reviewed
 custom-domain associations under `olympuslabsml.com` and exports their DNS
 targets for Squarespace. The apex remains on Squarespace and redirects to the `www` surface;
 the Route 53 hosted-zone path is an explicit opt-in. `kyber` is not an Amplify
@@ -216,7 +216,7 @@ credentialed apply has occurred from this checkout.
    status API URL is still unset, the status page must remain explicitly
    **not yet verified**, not green.
 5. After staging evidence and cost observation, create and review a separate
-   production-lean plan. That profile enables the reviewed custom-domain
+   production plan. That profile enables the reviewed custom-domain
    association under `olympuslabsml.com`, keeps Kyber without public DNS, and
    requires a verified status health origin before promotion.
 6. Enable analytics only as a separate, deliberate configuration change after
@@ -250,5 +250,5 @@ loader, the status fail-closed behavior, and the Terraform/profile validators
 cover the implemented web layer. The remaining release work is credentialed:
 verify the deployed domain matrix and API health contract in staging, capture
 the smoke/load/rollback/sleep evidence, observe cost, and then promote the
-reviewed production-lean profile. This document must not be used to imply that
+reviewed production profile. This document must not be used to imply that
 those live checks have already run.

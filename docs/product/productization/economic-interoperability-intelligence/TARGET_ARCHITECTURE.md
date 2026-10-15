@@ -6,11 +6,18 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/main.py, services/api/config/settings.py]
+source_files: [services/api/main.py, services/api/config/settings.py, services/api/actions/agent/deployment_routes.py, services/api/actions/agent_marketplace/catalog.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/graph_state_check.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py]
 canonical_owner: platform@aether
 source_hashes:
-  "services/api/config/settings.py": "sha256:0c59864b351aaa3558edf56cc3e550803ed212c05c716f8ec24311ccfcf9779b"
-  "services/api/main.py": "sha256:d3c8f2c63bfedaa93e0d0cafd11c0fe1a25983dd48e64ac3a3de7d9a364d63d4"
+  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
+  "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
+  "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
+  "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
+  "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
+  "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
+  "services/api/config/settings.py": "sha256:4d2921c8c3a93e5cf0e3ab4eab9172770642684dd20858221481608af2ef69d5"
+  "services/api/main.py": "sha256:f76824db10962390701e0356564ecb69e7fc5c81f25fff6e51c685da359aeb75"
 ---
 
 # Target Architecture
@@ -21,6 +28,19 @@ independently merged observer-stack implementations — `services/api/value/stab
 at `/v1/stablecoin` and the derivatives ingestion/accounting layer at
 `/v1/derivatives` — coexist with these domains; this branch's derivatives
 runtime is namespaced under `/v1/derivatives/runtime`.)
+
+
+The external-agent economy slice extends the same observation-only foundation.
+Tenant deployment source references acquire canonical identity only through
+explicit tenant-admin, tenant-and-namespace-scoped bindings. Canonical
+Delegation records are evaluated at the source-reported event time using
+backend-owned status, endpoints, validity, and supported scope; action, resource,
+and time remain source claims. A scope result does not prove an external action
+occurred, and occurrence remains unverified without a server-owned execution
+receipt. The bounded read-only graph state check compares supported graph links
+to tenant source evidence, reports partial/non-snapshot coverage honestly, and
+does not repair or certify the graph. Public marketplace observations remain
+platform-scoped and separate from tenant deployment identity.
 
 A fourth observation-only slice, card-linked payment rails, follows the
 same wiring pattern: `main.py` mounts

@@ -28,6 +28,7 @@ from shared.logger.logger import get_logger
 from shared.observation.envelope import (
     CorrelationBlock,
     ObservationBlock,
+    PrivacyBlock,
     ProvenanceBlock,
     SourceBlock,
     SubjectRef,
@@ -180,6 +181,16 @@ def build_sdk_observation_envelope(
     payload = normalized.get("properties")
     payload_block = payload if isinstance(payload, dict) and payload else None
 
+    # ``privacy`` is added by the server validator only after the authoritative
+    # consent lookup succeeds. Client context privacy / consentSnapshotId are
+    # deliberately not consulted here.
+    privacy_value = normalized.get("privacy")
+    privacy = (
+        PrivacyBlock.model_validate(privacy_value)
+        if isinstance(privacy_value, dict)
+        else None
+    )
+
     return UniversalObservationEnvelope(
         observation=ObservationBlock(
             observation_id=str(event_id),
@@ -199,6 +210,7 @@ def build_sdk_observation_envelope(
         correlation=correlation,
         temporal=temporal,
         payload=payload_block,
+        privacy=privacy,
         provenance=ProvenanceBlock(
             adapter="sdk",  # canonical SDK adapter identity (SdkIngressAdapter.adapter_id)
             adapter_version="1.0.0",

@@ -65,7 +65,7 @@
 
 ## Deployment profile
 
-Start with **`production-lean`** ($187/month baseline):
+Start with **`production`** ($187/month baseline):
 - Aurora Serverless v2 (0.5–4 ACU)
 - DynamoDB cache
 - SNS/SQS events
@@ -81,7 +81,7 @@ export AUTH0_CLIENT_ID="..."
 export AUTH0_CLIENT_SECRET="..."
 
 # Run from repo root
-./scripts/deploy/go_live.sh --profile production-lean --region us-east-1
+./scripts/deploy/go_live.sh --profile production --region us-east-1
 ```
 
 The script is interactive — it pauses at each critical step for your review

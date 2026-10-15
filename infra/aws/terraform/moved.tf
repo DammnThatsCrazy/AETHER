@@ -2,8 +2,9 @@
 # AETHER — State address migrations
 #
 # Adding `count` to a module changes its state address from `module.<name>` to
-# `module.<name>[0]`. Without these blocks, an already-applied production-scale
-# or enterprise-isolated workspace would read the old address as "no longer in
+# `module.<name>[0]`. Without these blocks, an already-applied workspace that
+# provisioned one of these stores (from before the profiles were consolidated to
+# staging and production) would read the old address as "no longer in
 # configuration" and plan a DESTROY of the live cluster, followed by a CREATE
 # of an identical one at the new address. For MSK, ElastiCache, Neptune and
 # RDS that is a data-loss event, not a no-op refactor.
@@ -61,8 +62,8 @@ moved {
 #
 # The same `count` rename applies inside modules/ecs and modules/alb, where the
 # dedicated aether-ml-serving resources are now gated on enable_dedicated_ml.
-# production-scale and enterprise-isolated keep the dedicated ML service, so
-# without these blocks a promotion on either profile would destroy and recreate
+# A workspace that still runs the dedicated ML service needs these blocks, or
+# a promotion would destroy and recreate
 # a live service, its task definition, its log group, its autoscaling target
 # and its ALB target group — dropping /v1/ml/* traffic for the duration.
 #
@@ -110,8 +111,8 @@ moved {
 # VPC data-store security groups
 #
 # These gained `count` so lean profiles carry no network policy for backends
-# they never provision. Scale and enterprise still create all three, so
-# without these blocks a promotion there would destroy and recreate security
+# they never provision. A workspace that still created all three needs these
+# blocks, or a promotion would destroy and recreate security
 # groups that live ENIs are attached to — a disruptive, and in the MSK case
 # slow, replacement rather than a no-op address change.
 # --------------------------------------------------------------------------

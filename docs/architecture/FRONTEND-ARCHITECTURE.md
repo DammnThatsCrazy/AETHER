@@ -42,10 +42,12 @@ reviewed_source_commits:
     reason: "Reviewed the Aether test-only timeout stabilization (static Cluster360 import and controlled signup field changes); no runtime architecture or data-truth behavior changed, so no body update was required."
   - commit: "95e6c54f"
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
+  - commit: "453f71f9a"
+    reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:ba6389d417254b32994d9c9450dacb1603c7726d100d2a14fd1ac2d1cfd76f32"
+  "apps/aether-web/src/": "sha256:d3883a59f03ae0e3544dda57821396a29a0e319e23bc5785de13ea26faf2a583"
   "apps/kyber-web/src/": "sha256:7a31deaee6f5e047df21f6cd1115604f956f283b23e904128385824ab2fbf32a"
-  "packages/ui/core/src/": "sha256:75ba669073aebf48fe1bb982913d32019b79b5fdcfe8dce5266f95412325f2b9"
+  "packages/ui/core/src/": "sha256:01c95e007bc50d0b7378c5cb5274fd5e5d60b51f9575e5c28bf8549ab9cefde1"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -82,7 +84,13 @@ the root.
   is shown as a wait message built from `retry_after_seconds`
   (`features/auth/rate-limit.ts`) rather than as a wrong password or code. When the
   build carries Auth0 settings, login offers **Continue with Olympus sign-in**
-  (Auth0 Universal Login); `/callback` exchanges the Auth0 token through
+  (Auth0 Universal Login) plus one button per social connection listed in
+  `VITE_AUTH0_SOCIAL_CONNECTIONS` (`google=aether-staging-google,…`), which
+  opens that Auth0 connection directly; Terraform lists none when social
+  connections are off (the pilot lane). Signing out also ends the Auth0
+  session (returning to `VITE_AUTH0_LOGOUT_URI`, else the app's `/login`), so
+  the next sign-in asks again instead of silently reusing it; if Auth0 cannot
+  be reached the app still leaves for `/login`. `/callback` exchanges the Auth0 token through
   `/v1/auth/sso/callback`, which links a verified email to its existing user or
   pending invitation, or provisions a new tenant when self sign-up is on. With
   Auth0 configured, `/signup` opens Auth0's hosted sign-up
@@ -130,7 +138,12 @@ the root.
 - Campaign management, attribution dashboards, Campaign 360 (`/campaigns/:id`) — per-campaign overview, population, clusters, conversions, and attribution with referral/source-class rollups; communication rates expose governed value state, sample sufficiency, Wilson uncertainty, and lineage, and the tenant UI withholds values that do not meet the registry minimum sample. Campaign 360 also hosts **Outcome 360** / **Economic 360** intelligence-projection tabs (`features/projection-360/`): they render typed projection section states for the campaign focus (available/degraded/empty …), never recomputing projection content
 - Profile360 and Journey Explorer source evidence — journey steps surface AI provider/product, mediation type, verification, confidence, classifier version, attribution eligibility, and attributed net revenue when backed by active credits; excluded crawler/scanner noise remains counted in journey quality metadata. Journey Explorer also renders exact-reference commerce operation links with source roles and relations, and explicitly states that the evidence does not imply settlement or add operation amounts to journey value.
 - API key management, plan management, usage metering
-- Webhook endpoint management — add/test/delete outbound delivery endpoints
+- Webhook endpoint management — create, signed-test, rotate the write-only
+  signing secret, inspect bounded delivery history, and delete tenant-owned
+  Access Kit interaction endpoints. New endpoints stay inactive until a test
+  succeeds; rotation pauses delivery until re-verification. The Usage & Plan
+  page shows the non-billable Access Kit interaction count without an included
+  quota or price bar.
 - **Notification center** — paginated inbox for notification-intelligence and agent alerts with severity filtering, read/acknowledge state, and quiet-hours/timezone preference persistence (`pages/notifications/notification-center-page.tsx`)
 - **Continue-on-phone** — continuation creation, recent mobile activity, and resume surfaces backed by the `/v1/continuations` and `/v1/client-sync` planes (`features/continuation/`)
 
@@ -525,6 +538,17 @@ operation evidence from the tenant-scoped `x402_flows` projection. It shows the
 source-record roles and evidence relations for exact-matched intent,
 authorization, execution and settlement records; it does not duplicate amounts
 or replace source lifecycle status.
+
+Agent 360 also presents tenant-scoped external deployment origins, recent
+source-reported run timelines, and the separately observed public marketplace
+catalog. The deployment panel exposes the explicit tenant-admin identity binding
+status. Run evidence displays economic record matches, canonical delegation
+resolution, event-time grant-scope evaluation, and execution occurrence as
+separate facts. Source claims remain source-asserted; without a server-owned
+execution receipt the UI marks occurrence source-reported and unverified. A
+source outage is shown as unavailable rather than as missing coverage. Public
+catalog records remain platform-scoped and are not loaded into the tenant graph
+view.
 
 ---
 

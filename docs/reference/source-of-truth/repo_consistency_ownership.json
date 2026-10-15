@@ -451,7 +451,7 @@
         "!docs/archive/legacy-architecture/data-lake-architecture/**/package.json"
       ],
       "required_changed_globs": [
-        "docs/productization/sdk-universal-ingestion-alignment/**",
+        "docs/product/productization/sdk-universal-ingestion-alignment/**",
         "docs/reference/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md"
       ],
       "required_commands": [

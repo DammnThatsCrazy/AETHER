@@ -133,6 +133,98 @@ async def test_explicit_refund_is_separate_and_reverses_only_its_payment(monkeyp
     ]
 
 
+@pytest.mark.asyncio
+async def test_explicit_settlement_links_only_named_payments_and_is_temporal(monkeypatch):
+    current = [_instant(1)]
+    monkeypatch.setattr(ledger_module, "utc_now", lambda: current[0])
+    ledger = CommerceOrderPaymentLedger(MemoryStore())
+    await ledger.record_order(
+        "tenant-a", commerce_order_ref="shop:1", provider="shopify",
+        provider_order_id="1", amount="10.00", currency="USD",
+        revision_id="r1", source_revision_at="2026-10-01T10:00:00Z",
+        occurred_at="2026-10-01T10:00:00Z",
+    )
+    await ledger.record_payment(
+        "tenant-a", commerce_order_ref="shop:1", provider="stripe",
+        provider_payment_id="pi_1", amount="10.00", currency="USD",
+        status="completed", occurred_at="2026-10-01T10:30:00Z",
+    )
+
+    current[0] = _instant(2)
+    await ledger.record_settlement(
+        "tenant-a", commerce_order_ref="shop:1", provider="stripe",
+        settlement_id="po_1", amount="9.70", currency="USD",
+        settled_payment_refs=[
+            {"provider": "stripe", "provider_payment_id": "pi_1"},
+            {"provider": "stripe", "provider_payment_id": "pi_1"},
+        ],
+        occurred_at="2026-10-02T10:00:00Z",
+    )
+
+    before_settlement = await ledger.get_as_of(
+        "tenant-a", "shop:1", "2026-10-01T18:00:00Z"
+    )
+    after_settlement = await ledger.get_as_of(
+        "tenant-a", "shop:1", "2026-10-02T18:00:00Z"
+    )
+    assert before_settlement is not None
+    assert before_settlement["settlements"] == {}
+    assert before_settlement["state"] == "matched"
+    assert after_settlement is not None
+    assert after_settlement["settlements"]["stripe:po_1"]["amount"] == "9.70"
+    assert after_settlement["settlements"]["stripe:po_1"]["settlesPaymentRefs"] == [
+        {"provider": "stripe", "providerPaymentId": "pi_1"}
+    ]
+
+    link = commerce_ledger_operation_link(after_settlement)
+    assert link.state == "linked"
+    assert {row.role for row in link.records} == {"order", "payment", "settlement"}
+    assert [(row.relation, row.from_link_ref_id, row.to_link_ref_id) for row in link.relations] == [
+        ("fulfills", "payment-0", "order"),
+        ("settled_by", "payment-0", "settlement-0"),
+    ]
+    assert not any(hasattr(row, "amount") for row in link.records)
+
+
+@pytest.mark.asyncio
+async def test_unmatched_settlement_reference_stays_partial_and_reused_id_conflicts(monkeypatch):
+    current = [_instant(1)]
+    monkeypatch.setattr(ledger_module, "utc_now", lambda: current[0])
+    ledger = CommerceOrderPaymentLedger(MemoryStore())
+    await ledger.record_order(
+        "tenant-a", commerce_order_ref="shop:1", provider="shopify",
+        provider_order_id="1", amount="10.00", currency="USD",
+        revision_id="r1", source_revision_at="2026-10-01T10:00:00Z",
+        occurred_at="2026-10-01T10:00:00Z",
+    )
+    await ledger.record_payment(
+        "tenant-a", commerce_order_ref="shop:1", provider="stripe",
+        provider_payment_id="pi_1", amount="10.00", currency="USD",
+        status="completed", occurred_at="2026-10-01T10:30:00Z",
+    )
+    await ledger.record_settlement(
+        "tenant-a", commerce_order_ref="shop:1", provider="stripe",
+        settlement_id="po_1", amount="9.70", currency="USD",
+        settled_payment_refs=[{"provider": "stripe", "provider_payment_id": "pi_missing"}],
+        occurred_at="2026-10-01T11:00:00Z",
+    )
+    record = await ledger.get("tenant-a", "shop:1")
+    assert record is not None
+    assert commerce_ledger_operation_link(record).state == "partial"
+
+    current[0] = _instant(2)
+    await ledger.record_settlement(
+        "tenant-a", commerce_order_ref="shop:1", provider="stripe",
+        settlement_id="po_1", amount="8.70", currency="USD",
+        settled_payment_refs=[{"provider": "stripe", "provider_payment_id": "pi_1"}],
+        occurred_at="2026-10-01T11:00:00Z",
+    )
+    conflicted = await ledger.get("tenant-a", "shop:1")
+    assert conflicted is not None
+    assert conflicted["state"] == "conflict"
+    assert conflicted["conflictReason"] == "provider_settlement_id_reused_with_divergent_evidence"
+
+
 def test_stripe_refund_extractor_requires_explicit_order_and_payment_refs():
     from connectors.integrations.providers.payment_rails.base import ParsedProviderEvent
     from connectors.integrations.providers.payment_rails.stripe_onramp import StripeOnrampAdapter

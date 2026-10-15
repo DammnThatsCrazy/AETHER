@@ -30,7 +30,9 @@ class ImportProjector:
         mapping_version: int,
         occurred_at: str,
         records: list[dict[str, Any]],
+        rights_decision_refs: Optional[dict[str, str]] = None,
     ) -> ProjectionResult:
+        rights_refs = dict(rights_decision_refs or {})
         rows: list[dict[str, Any]] = []
         for rec in records:
             file_id = rec.get("file_id") or ""
@@ -55,7 +57,8 @@ class ImportProjector:
                     "primitive": primitive,
                     "row_index": row_index,
                     "bronze_source_tag": commit_id,
-                    "bronze_record_id": f"{file_id}:{row_index}",
+                    "bronze_record_id": rec.get("bronze_record_id") or f"{file_id}:{row_index}",
+                    "rights_decision_refs": rights_refs,
                 }
             )
         return ProjectionResult(table=SILVER_IMPORT_TABLE, rows=rows)

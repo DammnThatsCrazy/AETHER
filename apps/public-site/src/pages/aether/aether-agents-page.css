@@ -3,6 +3,7 @@
 .pg-aether-agents a { color: #3a6896; }
 .pg-aether-agents a:hover { color: #2d5373; }
 @keyframes agDraw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes agFloat { 0%, 100% { translate: 0 0; } 50% { translate: 0 -3px; } }
 @keyframes agFade { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
 .pg-aether-agents * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }

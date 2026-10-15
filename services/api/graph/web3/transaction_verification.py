@@ -38,7 +38,14 @@ class SDKTransactionVerifier:
 
     @staticmethod
     def record_id(tenant_id: str, chain_id: str, transaction_hash: str) -> str:
-        key = f"{tenant_id}:{chain_id}:{transaction_hash.lower()}"
+        # EVM transaction IDs are hexadecimal and case-insensitive. Solana and
+        # Sui signatures/digests are Base58 and case-sensitive.
+        canonical_hash = (
+            transaction_hash.lower()
+            if transaction_hash.startswith(("0x", "0X"))
+            else transaction_hash
+        )
+        key = f"{tenant_id}:{chain_id}:{canonical_hash}"
         return str(uuid.uuid5(uuid.NAMESPACE_URL, f"aether:web3-verification:{key}"))
 
     async def verify(
@@ -54,8 +61,8 @@ class SDKTransactionVerifier:
         if not tenant_id or not chain_id or not transaction_hash:
             raise ValueError("tenant_id, chain_id, and transaction_hash are required")
         vm = vm_family.lower()
-        if vm not in {"evm", "svm"}:
-            raise ValueError("vm_family must be 'evm' or 'svm'")
+        if vm not in {"evm", "svm", "movevm"}:
+            raise ValueError("vm_family must be 'evm', 'svm', or 'movevm' (Sui)")
         if finality_threshold < 1:
             raise ValueError("finality_threshold must be positive")
 
@@ -65,6 +72,11 @@ class SDKTransactionVerifier:
         registered_vm = str(chain.get("vm_family") or "").lower()
         if registered_vm and registered_vm != vm:
             raise ValueError("vm_family does not match the registered chain")
+        if vm == "movevm" and (
+            not chain_id.lower().startswith("sui:")
+            or "sui" not in str(chain.get("canonical_name") or "").lower()
+        ):
+            raise ValueError("movevm transaction verification currently supports Sui network IDs only")
 
         rpc = self.rpc or await RPCGateway.for_tenant(tenant_id, chain_id)
         if vm == "evm":
@@ -77,10 +89,15 @@ class SDKTransactionVerifier:
                 finality_threshold,
                 chain.get("evm_chain_id"),
             )
-        else:
+        elif vm == "svm":
             result = await self._verify_solana(
                 rpc, tenant_id, chain_id, transaction_hash, source_observation,
                 chain.get("genesis_hash"),
+            )
+        else:
+            result = await self._verify_sui(
+                rpc, tenant_id, chain_id, transaction_hash, source_observation,
+                chain.get("sui_chain_identifier"),
             )
         await self._persist(result)
         return result
@@ -190,6 +207,88 @@ class SDKTransactionVerifier:
                                        {**evidence, "slot": int(slot) if slot is not None else None,
                                         "error": (tx.get("meta") or {}).get("err") if failed else None})
 
+    async def _verify_sui(self, rpc, tenant_id, chain_id, digest, source, expected_chain_identifier):
+        evidence: dict[str, Any] = {
+            "rpc_method": "sui_graphql_transaction",
+            "chain_id": chain_id,
+            "finality_model": "checkpoint",
+        }
+        if not expected_chain_identifier:
+            return TransactionVerification(
+                tenant_id, chain_id, digest, "movevm", "mismatch", "unknown", 0,
+                source.get("source_event_id"),
+                {**evidence, "mismatch": "missing_registry_chain_identifier"},
+            )
+
+        response = await rpc.execute_sui_transaction(
+            tenant_id=tenant_id, chain_id=chain_id, digest=digest,
+        )
+        chain_identifier = str(response.get("chain_identifier") or "")
+        evidence.update({
+            "expected_chain_identifier": str(expected_chain_identifier),
+            "rpc_chain_identifier": chain_identifier or None,
+        })
+        if not _sui_chain_identifiers_match(str(expected_chain_identifier), chain_identifier):
+            return TransactionVerification(
+                tenant_id, chain_id, digest, "movevm", "mismatch", "unknown", 0,
+                source.get("source_event_id"),
+                {**evidence, "mismatch": "chain_identifier"},
+            )
+
+        tx = response.get("transaction")
+        if tx is None:
+            return TransactionVerification(
+                tenant_id, chain_id, digest, "movevm", "pending", "unknown", 0,
+                source.get("source_event_id"), evidence,
+            )
+        if not isinstance(tx, dict) or str(tx.get("digest") or "") != digest:
+            return TransactionVerification(
+                tenant_id, chain_id, digest, "movevm", "mismatch", "unknown", 0,
+                source.get("source_event_id"),
+                {**evidence, "mismatch": "transaction_digest"},
+            )
+
+        sender_value = tx.get("sender")
+        rpc_sender = (
+            sender_value.get("address")
+            if isinstance(sender_value, dict)
+            else sender_value
+        )
+        expected_sender = str(source.get("from_address") or "")
+        if expected_sender and (
+            not rpc_sender or not _sui_addresses_match(expected_sender, str(rpc_sender))
+        ):
+            return TransactionVerification(
+                tenant_id, chain_id, digest, "movevm", "mismatch", "unknown", 0,
+                source.get("source_event_id"),
+                {**evidence, "mismatch": "sender", "observed_sender": expected_sender,
+                 "rpc_sender": str(rpc_sender)},
+            )
+
+        effects = tx.get("effects") if isinstance(tx.get("effects"), dict) else {}
+        execution_result = str(effects.get("status") or "").upper()
+        if execution_result not in {"SUCCESS", "FAILURE"}:
+            return TransactionVerification(
+                tenant_id, chain_id, digest, "movevm", "mismatch", "unknown", 0,
+                source.get("source_event_id"),
+                {**evidence, "mismatch": "missing_execution_status"},
+            )
+
+        checkpoint = effects.get("checkpoint")
+        checkpoint_number = (
+            _optional_nonnegative_int(checkpoint.get("sequenceNumber"))
+            if isinstance(checkpoint, dict)
+            else None
+        )
+        failed = execution_result == "FAILURE"
+        return TransactionVerification(
+            tenant_id, chain_id, digest, "movevm", "finalized",
+            "failed" if failed else "succeeded", 0,
+            source.get("source_event_id"),
+            {**evidence, "execution_status": execution_result.lower(),
+             "checkpoint_sequence": checkpoint_number},
+        )
+
     async def _persist(self, result: TransactionVerification) -> None:
         # A deterministic tenant-and-chain scoped key makes rechecks update the
         # same evidence row while preserving the original Silver assertion.
@@ -230,3 +329,63 @@ def _parse_chain_id(value: str) -> int | None:
         return int(candidate, 0) if candidate.startswith("0x") else int(candidate)
     except ValueError:
         return None
+
+
+def _optional_nonnegative_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+_BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+
+def _decode_base58(value: str) -> bytes | None:
+    number = 0
+    for char in value:
+        digit = _BASE58_ALPHABET.find(char)
+        if digit < 0:
+            return None
+        number = number * 58 + digit
+    encoded = number.to_bytes((number.bit_length() + 7) // 8, "big") if number else b""
+    return b"\x00" * (len(value) - len(value.lstrip("1"))) + encoded
+
+
+def _sui_chain_identifiers_match(expected: str, actual: str) -> bool:
+    expected_clean = expected.strip()
+    actual_clean = actual.strip()
+    if not expected_clean or not actual_clean:
+        return False
+    if expected_clean.lower() == actual_clean.lower():
+        return True
+
+    expected_is_short_hex = len(expected_clean) == 8 and all(
+        char in "0123456789abcdefABCDEF" for char in expected_clean
+    )
+    actual_is_short_hex = len(actual_clean) == 8 and all(
+        char in "0123456789abcdefABCDEF" for char in actual_clean
+    )
+    if expected_is_short_hex:
+        actual_bytes = _decode_base58(actual_clean)
+        return actual_bytes is not None and actual_bytes[:4].hex() == expected_clean.lower()
+    if actual_is_short_hex:
+        expected_bytes = _decode_base58(expected_clean)
+        return expected_bytes is not None and expected_bytes[:4].hex() == actual_clean.lower()
+
+    expected_bytes = _decode_base58(expected_clean)
+    actual_bytes = _decode_base58(actual_clean)
+    return expected_bytes is not None and expected_bytes == actual_bytes
+
+
+def _sui_addresses_match(expected: str, actual: str) -> bool:
+    def normalize(value: str) -> str:
+        candidate = value.strip().lower()
+        if candidate.startswith("0x"):
+            candidate = candidate[2:]
+        return candidate.rjust(64, "0")
+
+    return normalize(expected) == normalize(actual)

@@ -44,13 +44,9 @@ QUARANTINED_APPLY_SITES = {
     "infra/cicd/aether-cicd/.github/workflows/infrastructure.yml",
 }
 # Every profile the promotion workflow can dispatch, matching the parity
-# restatement (cloud ∪ ephemeral-class). demo/preview are ephemeral-class and
-# dispatchable; the apply environment mapping in the workflow must cover all
-# six.
-TF_PROFILES = (
-    "staging", "production-lean", "production-scale", "enterprise-isolated",
-    "demo", "preview",
-)
+# restatement (the cloud-class profiles). The apply environment mapping in the
+# workflow must cover both.
+TF_PROFILES = ("staging", "production")
 # Triggers that fire without a human choosing to run the workflow.
 AUTOMATIC_TRIGGERS = {
     "push",
@@ -395,26 +391,28 @@ def test_production_status_workflow_binds_the_canonical_build_and_runtime_links(
     assert "--stage PRODUCTION" in workflow
 
 
-def test_production_releases_the_olympus_site_from_a_mirror_of_the_same_main_commit():
-    """www is a separate build of the reviewed main commit (VITE_SITE=olympus),
-    so its prerendered pages are the Olympus Labs site."""
+def test_production_releases_one_main_branch_for_every_host():
+    """Production has one Amplify branch (main); no mirror branch is written."""
     document = _workflow_yaml("amplify-status-production.yml")
     workflow = _workflow("amplify-status-production.yml")
-    assert document["env"]["OLYMPUS_BRANCH"] == "production-olympus"
-    assert document["jobs"]["deploy"]["permissions"] == {"contents": "write", "id-token": "write"}
-    # Only a commit already on main is mirrored, by exact SHA.
-    assert "compare/$EXPECTED_COMMIT_SHA...main" in workflow
-    assert 'git push --force origin "${EXPECTED_COMMIT_SHA}:refs/heads/${OLYMPUS_BRANCH}"' in workflow
-    assert workflow.index("Mirror the exact main commit to the Olympus site branch") < workflow.index(
-        "Bind the production web app to the canonical repository"
-    )
-    assert "jq '. + {\"VITE_SITE\": \"olympus\"}' \"$web_environment\" > \"$olympus_environment\"" in workflow
-    assert '--branch-name "$OLYMPUS_BRANCH"' in workflow
+    assert "OLYMPUS_BRANCH" not in document["env"]
+    assert "production-olympus" not in workflow
+    assert "olympus_job_id" not in workflow
+    assert document["jobs"]["deploy"]["permissions"] == {"contents": "read", "id-token": "write"}
+    assert "git push" not in workflow
+    # main serves every host, so it never auto-builds on push: only the gated
+    # release step (after the integration authority) publishes it.
     assert "--no-enable-auto-build" in workflow
+    assert "--no-enable-branch-auto-build" in workflow
+    assert "            --enable-auto-build" not in workflow
+    # A RELEASE job builds main's head, so it starts only while main is the gated SHA,
+    # and the control scripts come from the workflow's own revision.
+    assert 'main_head="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"' in workflow
+    assert 'if [ "$main_head" != "$EXPECTED_COMMIT_SHA" ]; then' in workflow
+    assert "ref: ${{ github.sha }}" in workflow
+    assert "--branch-name main" in workflow
     assert 'main_job_id="$(release_branch main)"' in workflow
-    assert 'olympus_job_id="$(release_branch "$OLYMPUS_BRANCH")"' in workflow
-    assert 'wait_for "$OLYMPUS_BRANCH" "$OLYMPUS_JOB_ID"' in workflow
-    assert 'if [ "$prefix" = www ]; then branch="$OLYMPUS_BRANCH"; fi' in workflow
+    assert 'wait_for main "$MAIN_JOB_ID"' in workflow
     # Prerendered pages are files: the shell is served only where no file exists.
     assert '{"source": "/<*>", "target": "/index.html", "status": "404-200"}' in workflow
     assert '"target": "/index.html", "status": "200"' not in workflow
@@ -769,10 +767,7 @@ def test_staging_lifecycle_defaults_to_pilot_and_promotion_default_is_profile_sa
         promotion_triggers = _workflow_yaml("terraform-promote.yml").get(True)
     promotion_inputs = promotion_triggers["workflow_dispatch"]["inputs"]
     assert promotion_inputs["deployment_lane"]["default"] == "full"
-    assert promotion_inputs["profile"]["options"] == [
-        "staging", "production-lean", "production-scale", "enterprise-isolated",
-        "demo", "preview",
-    ]
+    assert promotion_inputs["profile"]["options"] == ["staging", "production"]
 
 
 def test_deploy_builds_each_spa_with_its_own_auth0_client_and_endpoints():
@@ -949,15 +944,11 @@ def test_deploy_armed_check_binds_the_role_before_any_aws_step():
 
 
 def test_ttl_guards_are_loud_noops_without_the_lifecycle_role():
-    for name in ("staging-ttl-guard.yml", "ephemeral-ttl-guard.yml"):
+    for name in ("staging-ttl-guard.yml",):
         doc = _workflow_yaml(name)
         steps = doc["jobs"]["guard"]["steps"]
 
-        secret_name = (
-            "AWS_STAGING_LIFECYCLE_ROLE_ARN"
-            if name == "staging-ttl-guard.yml"
-            else "AWS_EPHEMERAL_LIFECYCLE_ROLE_ARN"
-        )
+        secret_name = "AWS_STAGING_LIFECYCLE_ROLE_ARN"
         check = next(s for s in steps if s.get("id") == "check-armed")
         assert check["env"][secret_name] == f"${{{{ secrets.{secret_name} }}}}"
         check_run = check["run"]
@@ -1017,16 +1008,6 @@ def test_staging_ttl_guard_blocking_alert_keys_on_armed_output_not_readings():
     assert alert["if"] == "always()"
     assert alert["env"]["ARMED"] == "${{ steps.check-armed.outputs.armed }}"
     assert 'if [ "${ARMED:-}" = false ]' in alert["run"]
-
-
-def test_ephemeral_ttl_guard_blocking_alert_only_when_armed_and_expired():
-    doc = _workflow_yaml("ephemeral-ttl-guard.yml")
-    alert = next(
-        s for s in doc["jobs"]["guard"]["steps"]
-        if "Blocking alert" in s.get("name", "")
-    )
-    assert "steps.check-armed.outputs.armed == 'true'" in alert["if"]
-    assert "steps.decision.outputs.expired == 'true'" in alert["if"]
 
 
 def test_infrastructure_promotion_gate_reports_not_armed_without_credentials():
@@ -1128,7 +1109,7 @@ def test_durable_integration_uses_read_only_repository_test_runner():
 
 def test_infrastructure_workflow_never_applies_terraform():
     doc = _workflow_yaml("infrastructure.yml")
-    assert "apply-production-lean" not in doc["jobs"], (
+    assert "apply-production" not in doc["jobs"], (
         "the automatic production apply job is back in infrastructure.yml"
     )
     for job_name, step_name, run in _all_run_blocks(doc):
@@ -1451,8 +1432,8 @@ def test_promotion_cannot_proceed_when_remote_plan_credentials_are_missing():
     assert guard_index < aws_index < plan_index
 
 
-def test_remote_plan_requires_ml_digest_only_for_dedicated_ml_profiles():
-    """Inline-ML profiles must not be blocked by an unrelated ML image secret."""
+def test_remote_plan_never_requires_an_ml_digest():
+    """Both profiles run ML inline, so no ML image secret may block a plan."""
     infra = _workflow_yaml("infrastructure.yml")
     probe = next(
         s for s in _steps(infra, "remote-plan-readiness") if s.get("id") == "credentials"
@@ -1462,9 +1443,7 @@ def test_remote_plan_requires_ml_digest_only_for_dedicated_ml_profiles():
     assert "TF_ML_IMAGE_DIGEST" not in required_names
 
     remote_plan = _job_script(infra, "remote-plan")
-    assert '"$PROFILE" == production-scale || "$PROFILE" == enterprise-isolated' in remote_plan
-    assert "requires TF_ML_IMAGE_DIGEST" in remote_plan
-    assert "^sha256:[0-9a-f]{64}$" in remote_plan
+    assert "requires TF_ML_IMAGE_DIGEST" not in remote_plan
 
 
 def test_amplify_checkout_token_is_required_for_public_and_private_repositories():
@@ -1626,11 +1605,9 @@ def test_promotion_uses_per_profile_terraform_environments():
     assert "production-terraform" not in name, "the shared production environment is back"
     expected = {
         "staging": "staging-terraform",
-        "production-lean": "production-lean-terraform",
-        "production-scale": "production-scale-terraform",
-        "enterprise-isolated": "enterprise-terraform",
-        "demo": "demo-terraform",
-        "preview": "preview-terraform",
+        # GitHub environments cannot be renamed, so production keeps the name
+        # it had before the profiles were consolidated.
+        "production": "production-lean-terraform",
     }
     for profile, env_name in expected.items():
         assert f"inputs.profile == '{profile}' && '{env_name}'" in name, (
@@ -1751,8 +1728,8 @@ def test_the_sanitiser_keeps_exactly_what_the_policy_gate_reads():
     assert clean["resource_changes"][0]["change"]["actions"] == ["create"]
 
 
-def test_the_variable_allow_list_is_exactly_what_the_policy_gate_reads():
-    """Derived from the consumer, so it cannot quietly widen.
+def test_the_variable_allow_list_matches_policy_and_apply_consumers():
+    """Keep safe plan variables explicit and secret values redacted by default.
 
     Widening the allow-list is how the leak comes back: it is the one layer that
     works without Terraform having told us which variables are sensitive.
@@ -1761,11 +1738,31 @@ def test_the_variable_allow_list_is_exactly_what_the_policy_gate_reads():
         encoding="utf-8"
     )
     consumed = set(re.findall(r'\(plan\.get\("variables"\) or \{\}\)\.get\("(\w+)"\)', policy))
+    consumed.update(re.findall(r'variables\.get\("(\w+)"\)', policy))
     assert consumed, "the policy gate no longer reads plan variables the way this test detects"
+    # The apply-time scan preflight reads this public digest from the reviewed
+    # plan artifact so it can revalidate the exact image before mutations.
+    consumed.add("access_mcp_image_digest")
     assert set(_sanitiser().KEEP_VARIABLE_VALUES) == consumed, (
-        "the sanitiser's variable allow-list no longer matches what "
-        f"check_terraform_plan_policy.py actually reads ({sorted(consumed)})"
+        "the sanitiser's variable allow-list no longer matches the policy and "
+        f"apply consumers ({sorted(consumed)})"
     )
+
+
+def test_the_mcp_apply_inputs_survive_sanitizing_without_widening_other_values():
+    plan = _plan_with_secret()
+    digest = "sha256:" + "a" * 64
+    plan["variables"].update({
+        "enable_access_mcp": {"value": True},
+        "access_mcp_image_digest": {"value": digest},
+        "access_mcp_allowed_origins": {"value": ["https://console.example.com"]},
+    })
+
+    clean = _sanitiser().sanitize(plan, environ={})
+
+    assert clean["variables"]["enable_access_mcp"]["value"] is True
+    assert clean["variables"]["access_mcp_image_digest"]["value"] == digest
+    assert clean["variables"]["access_mcp_allowed_origins"]["value"] == "__REDACTED_SENSITIVE__"
 
 
 def test_the_allow_list_holds_even_when_terraform_declares_no_sensitivity():
@@ -1937,9 +1934,9 @@ def test_sanitising_a_real_plan_does_not_change_the_policy_verdict(tmp_path):
     cases = [
         ("staging", "staging-awake.json"),
         ("staging", "staging-asleep.json"),
-        ("production-lean", "production-lean-valid.json"),
-        ("production-lean", "production-lean-nat-gateway.json"),
-        ("production-lean", "production-lean-dedicated-ml.json"),
+        ("production", "production-valid.json"),
+        ("production", "production-nat-gateway.json"),
+        ("production", "production-dedicated-ml.json"),
     ]
     for profile, fixture in cases:
         source = fixtures / fixture

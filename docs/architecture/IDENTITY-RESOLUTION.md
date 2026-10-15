@@ -14,18 +14,33 @@ source_files:
   - services/api/intelligence/analytics/routes.py
   - services/api/identity/profile/composer.py
   - services/api/identity/profile/aggregator.py
+  - services/api/actions/agent/deployment_routes.py
+  - services/api/actions/agent_marketplace/identity_binding.py
+  - services/api/actions/agent_marketplace/authority.py
+  - services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py
   - packages/shared/identity.ts
 canonical_owner: identity@aether
 estimated_read_minutes: 12
 toc_depth: 3
+reviewed_source_commits:
+  - commit: "fcfe08b7b"
+    reason: "Reviewed the SDK batch envelope refactor and V2 parity. The helper preserves the existing authenticated identity namespace stamp and only adds the optional flag-gated observation envelope; identity resolution behavior is unchanged."
+  - commit: "5da9690b0"
+    reason: "Reviewed request-to-usage correlation in the batch handler. The request ID becomes metering correlation metadata and actual usage references are returned; source namespace, canonical identity, and resolution decisions are unchanged."
+  - commit: "40af67902"
+    reason: "Reviewed the accepted-observation consent receipt correlation addition. The batch response and audit metadata now retain real receipt IDs; source namespace, canonical identity, and resolution decisions are unchanged."
 source_hashes:
   "packages/shared/identity.ts": "sha256:574974d03d8c4f8b99ad414c7b738b675cc293723f764e2ca3b76dc2ca40d8a2"
-  "services/api/identity/identity/": "sha256:4a4a8257dd3969d9591988d2b94ebaba91f1486ab7bf60b8f01ea512c8da5889"
+  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
+  "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
+  "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
+  "services/api/identity/identity/": "sha256:be75727023c1dba7d10db42dd0766c24a1e57f0f0f8d81d0b02d4dbaf30fc3b1"
   "services/api/identity/profile/aggregator.py": "sha256:a901c1088e387bb967d425b1aed3673fc3942b7b6bf017648c78aad860bfe04b"
   "services/api/identity/profile/composer.py": "sha256:aae09f67a164f0e2b940676e52841ff325f36650ac4b1c022cc2a60a31505c20"
-  "services/api/ingestion/ingestion/batch.py": "sha256:d91f4306575bad6127bd700158e90198e88a4f21427b748e019fee1a6f6438c3"
+  "services/api/ingestion/ingestion/batch.py": "sha256:fbb659145f6cf52cff5af991099fb2cd78bd306729b6144a3ddb93bb8dbdda45"
   "services/api/intelligence/analytics/routes.py": "sha256:b51cb890d703eb9c495b723fd79b6e03bf292300db82441024b5b645e6b341b7"
-  "services/api/repositories/repos.py": "sha256:c03e0537e86217db3dc67aabc2ce179a589ece64870dcdcc1f76d7f79ae95dae"
+  "services/api/repositories/repos.py": "sha256:4763340370ea7ef9e43d91b1156def3188a83114efa832e0a289f267957206e6"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
 ---
 # Aether Identity Resolution v0.1.0-alpha.0 — Technical Guide
@@ -111,6 +126,15 @@ the evidence and requires server-verified identity-link consent.
 
 `merge_policy.py` additionally enforces a **non-merge-eligible signal denylist** (`NON_MERGE_ELIGIBLE_SIGNAL_NAMES`): `deployment_id`, `agent_id`, `external_platform`, `external_channel_id`, and `external_workspace_id` are filtered out before merge scoring, so external agent deployment/platform telemetry can never contribute to an identity merge on its own. Exclusions are recorded with reason code `non_merge_eligible_signal_excluded`.
 
+External agent deployment identity uses a separate explicit binding authority.
+A tenant administrator may bind `(tenant_id, source_namespace, source_agent_ref)`
+to an existing canonical Agent in that same tenant. The binding is durable and records the acting tenant administrator and
+binding time; resolution checks that the binding still matches the deployment's
+namespace/reference and canonical entity. Missing, ambiguous, stale, or
+cross-tenant bindings remain unresolved. This does not alter the identity
+resolver's automatic merge policy: `agent_id` and deployment/platform signals
+remain excluded from merge scoring, and a binding is not merge evidence.
+
 ```
 SDK event
     |
@@ -168,12 +192,29 @@ chain reference from `vm` and `chainId` (for example, `eip155:1` or
 known address formats, and preserves case-sensitive encodings such as Solana,
 Bitcoin Base58, and Substrate SS58. When only the VM is known, hashes are scoped
 to that family; when neither field is present, the legacy EVM namespace is
-used. The `/sdk/identity/resolve` compatibility endpoint ignores unverified
-wallet claims, so these fields affect identity matching only when processed
-from accepted source-authorized events. A wallet connection is an observation
+used. Accepted wallet addresses remain observations unless a server-owned
+verification flow supplies stronger evidence. A wallet connection is an observation
 and does not prove ownership, custody, or key control. Historical wallet hashes
 are not rewritten by this change; reconcile retained source events before
 linking legacy non-EVM aliases.
+
+The compatibility request field `wallet_signature_verified` is deprecated and
+ignored, as are per-wallet client `verified` and `signature_verified` flags.
+The compatibility identity route can emit only an observed wallet-address
+signal from those claims; a client cannot promote it to cryptographic proof or
+change its trust class. Wallet control is established through the server-issued
+`POST /v1/identity/verification/wallet/challenges` and
+`POST /v1/identity/verification/wallet/challenges/{challenge_id}/verify`
+flow. Both calls require current server-evaluated identity-link consent for the
+same anonymous subject. The five-minute message binds tenant, subject, wallet,
+chain namespace, nonce and expiry. EVM `eip155:*` signatures use EIP-191
+`personal_sign`; Solana signatures verify Ed25519 over the exact UTF-8 message.
+Verified evidence replays through the existing resolver with the exact
+consented anonymous subject and chain-scoped wallet hash, while honoring wallet
+suppression and contradictory deterministic identifiers. A signature proves
+key control for this challenge; it does not prove exclusive ownership, custody,
+or payment authorization. Sui transaction execution evidence remains separate,
+and Sui wallet-signature formats are not accepted by this flow.
 
 ### Edge Types
 
@@ -184,7 +225,7 @@ linking legacy non-EVM aliases.
 | `LOCATED_IN` | User -> Location | Geographic association |
 | `HAS_EMAIL` | User -> Email | Email ownership (deterministic) |
 | `HAS_PHONE` | User -> Phone | Phone ownership (deterministic) |
-| `OWNS_WALLET` | User -> Wallet | Wallet ownership (deterministic) |
+| `OWNS_WALLET` | User -> Wallet | Verified wallet key control (deterministic; a connection is only an observation) |
 | `MEMBER_OF_CLUSTER` | User -> IdentityCluster | Cluster membership |
 | `SIMILAR_TO` | User -> User | Probabilistic similarity link |
 | `IP_MAPS_TO` | IPAddress -> Location | Geolocation mapping |

@@ -60,7 +60,7 @@ module "vpc" {
   vpc_cidr           = var.vpc_cidr
   availability_zones = slice(data.aws_availability_zones.available.names, 0, 3)
 
-  # "none" for staging/production-lean: tasks egress via a public IP on the
+  # "none" for staging/production: tasks egress via a public IP on the
   # task ENI, so the profile pays for no NAT Gateway or EIP at all.
   nat_mode = local.nat_mode
 
@@ -78,10 +78,11 @@ module "vpc" {
 module "ecr" {
   source = "./modules/ecr"
 
-  environment                 = var.environment
-  project                     = var.project
-  repository_encryption_types = var.ecr_repository_encryption_types
-  repository_tag_mutabilities = var.ecr_repository_tag_mutabilities
+  environment                  = var.environment
+  project                      = var.project
+  enable_access_mcp_repository = var.enable_access_mcp_repository
+  repository_encryption_types  = var.ecr_repository_encryption_types
+  repository_tag_mutabilities  = var.ecr_repository_tag_mutabilities
 }
 
 # ---------------------------------------------------------------------------
@@ -93,6 +94,28 @@ module "secrets" {
 
   environment = var.environment
   project     = var.project
+}
+
+# A dedicated, randomly generated service assertion key prevents public REST
+# callers from replaying an MCP-audience bearer directly to the backend. Only
+# the customer MCP task and API task receive this secret at container start.
+resource "random_id" "access_mcp_service_assertion" {
+  count       = var.enable_access_mcp_oauth ? 1 : 0
+  byte_length = 32
+}
+
+resource "aws_secretsmanager_secret" "access_mcp_service_assertion" {
+  count                   = var.enable_access_mcp_oauth ? 1 : 0
+  name                    = "aether/access-mcp-service-assertion"
+  description             = "HMAC boundary between the hosted customer MCP service and Aether API"
+  kms_key_id              = module.secrets.kms_key_arn
+  recovery_window_in_days = 30
+}
+
+resource "aws_secretsmanager_secret_version" "access_mcp_service_assertion" {
+  count         = var.enable_access_mcp_oauth ? 1 : 0
+  secret_id     = aws_secretsmanager_secret.access_mcp_service_assertion[0].id
+  secret_string = random_id.access_mcp_service_assertion[0].hex
 }
 
 # ---------------------------------------------------------------------------
@@ -214,7 +237,7 @@ module "aurora" {
 # destroyed by Terraform.
 
 # ---------------------------------------------------------------------------
-# 4b. ElastiCache Redis — production-scale / enterprise-isolated only.
+# 4b. ElastiCache Redis — not provisioned by either profile (enable_elasticache is false).
 # The cost-capped profiles cache in DynamoDB (4b-E1) and provision nothing
 # here; local.cache_backend tells the running task which one is authoritative.
 # ---------------------------------------------------------------------------
@@ -244,7 +267,7 @@ module "dynamodb_cache" {
 }
 
 # ---------------------------------------------------------------------------
-# 4c. MSK Kafka — production-scale / enterprise-isolated only.
+# 4c. MSK Kafka — not provisioned by either profile (enable_msk is false).
 # The cost-capped profiles publish through SNS→SQS (4c-E1); local.event_broker
 # tells the running task which broker is authoritative.
 # ---------------------------------------------------------------------------
@@ -276,7 +299,7 @@ module "sqs" {
 }
 
 # ---------------------------------------------------------------------------
-# 4d. Neptune (Graph DB) — production-scale / enterprise-isolated only.
+# 4d. Neptune (Graph DB) — not provisioned by either profile (enable_neptune is false).
 # The cost-capped profiles keep the graph in Aurora Postgres; see
 # local.graph_backend.
 # ---------------------------------------------------------------------------
@@ -347,8 +370,8 @@ locals {
   # modules/monitoring gates each alarm with
   # `count = var.enable_x && var.x_id != "" ? 1 : 0`, and a resource attribute
   # is unknown until apply — feeding one in makes the count unplannable and
-  # `terraform plan` fails outright on the first apply of a scale/enterprise
-  # workspace. Each string below reproduces the identifier its module
+  # `terraform plan` fails outright on the first apply of a workspace
+  # that enables one of these stores. Each string below reproduces the identifier its module
   # configures, so the value is known at plan and equal to the real one.
   # Keep in sync with modules/{elasticache,msk,neptune}/main.tf.
   elasticache_replication_group_id = local.enable_elasticache ? "${lower(var.project)}-${var.environment}-redis" : ""
@@ -381,6 +404,8 @@ module "alb" {
   # them. Without it a lean plan still creates a forbidden, permanently empty
   # dedicated-ML target group.
   enable_dedicated_ml               = local.enable_dedicated_ml
+  enable_access_mcp                 = var.enable_access_mcp
+  access_mcp_path                   = var.access_mcp_path
   staging_listener_target_group_arn = var.staging_listener_target_group_arn
 }
 
@@ -441,27 +466,30 @@ module "ecs" {
     aws.untagged = aws.untagged
   }
 
-  environment                = var.environment
-  project                    = var.project
-  vpc_id                     = module.vpc.vpc_id
-  task_subnets               = local.ecs_task_subnets
-  ecs_sg_id                  = module.vpc.ecs_sg_id
-  ecr_backend_url            = module.ecr.repository_urls["aether-backend"]
-  backend_image_digest       = var.backend_image_digest
-  ecr_ml_url                 = module.ecr.repository_urls["aether-ml-serving"]
-  ml_image_digest            = var.ml_image_digest
-  alb_backend_tg_arn         = module.alb.backend_target_group_arn
-  alb_ml_tg_arn              = module.alb.ml_target_group_arn
-  database_host              = local.database_host
-  database_port              = local.database_port
-  database_name              = local.database_name
-  kyber_app_url              = var.kyber_app_url
-  api_base_url               = "https://${var.domain_name}"
-  kyber_google_hosted_domain = var.kyber_google_hosted_domain
-  deployment_profile         = var.deployment_profile
-  auth0_domain               = var.auth0_domain
-  auth0_api_audience         = var.auth0_api_audience
-  aether_app_url             = local.aether_app_base_url
+  environment                      = var.environment
+  project                          = var.project
+  vpc_id                           = module.vpc.vpc_id
+  task_subnets                     = local.ecs_task_subnets
+  ecs_sg_id                        = module.vpc.ecs_sg_id
+  ecr_backend_url                  = module.ecr.repository_urls["aether-backend"]
+  backend_image_digest             = var.backend_image_digest
+  ecr_ml_url                       = module.ecr.repository_urls["aether-ml-serving"]
+  ml_image_digest                  = var.ml_image_digest
+  alb_backend_tg_arn               = module.alb.backend_target_group_arn
+  alb_ml_tg_arn                    = module.alb.ml_target_group_arn
+  database_host                    = local.database_host
+  database_port                    = local.database_port
+  database_name                    = local.database_name
+  kyber_app_url                    = var.kyber_app_url
+  api_base_url                     = "https://${var.domain_name}"
+  kyber_google_hosted_domain       = var.kyber_google_hosted_domain
+  deployment_profile               = var.deployment_profile
+  auth0_domain                     = var.auth0_domain
+  auth0_api_audience               = var.auth0_api_audience
+  auth0_mcp_audience               = var.enable_access_mcp_oauth ? "https://${var.domain_name}${var.access_mcp_path}" : ""
+  enable_access_continuations      = var.enable_access_continuations
+  mcp_service_assertion_secret_arn = var.enable_access_mcp_oauth ? aws_secretsmanager_secret_version.access_mcp_service_assertion[0].arn : ""
+  aether_app_url                   = local.aether_app_base_url
   # The pilot lane is staging-only and keeps the one-time first-admin route
   # armed behind its Secrets Manager token and durable single-use marker. The
   # approved operator address reuses the required alert recipient; no secret
@@ -592,6 +620,48 @@ module "ecs" {
 }
 
 # ---------------------------------------------------------------------------
+# 6b. Customer-facing Access Kit MCP (opt-in, isolated task identity)
+#
+# This service shares only the existing ECS cluster and ALB. It has a dedicated
+# task definition, task/execution roles, security group, log group and target
+# group; it receives no application secret and its task role has no AWS policy.
+# The ECR repository is provisioned separately so an immutable image can be
+# published before the service is enabled.
+# ---------------------------------------------------------------------------
+
+module "access_mcp" {
+  source = "./modules/access_mcp"
+  count  = var.enable_access_mcp ? 1 : 0
+
+  # The ECS service may only attach after the ALB has associated this target
+  # group with its HTTPS listener rule.
+  depends_on = [module.alb]
+
+  environment                   = var.environment
+  project                       = var.project
+  aws_region                    = var.aws_region
+  vpc_id                        = module.vpc.vpc_id
+  subnet_ids                    = values(local.ecs_task_subnets)
+  assign_public_ip              = local.assign_public_ip
+  alb_sg_id                     = module.vpc.alb_sg_id
+  cluster_arn                   = module.ecs.cluster_arn
+  target_group_arn              = module.alb.access_mcp_target_group_arn
+  ecr_repository_url            = try(module.ecr.repository_urls["aether-access-mcp"], "")
+  ecr_repository_arn            = try(module.ecr.repository_arns["aether-access-mcp"], "")
+  image_digest                  = var.access_mcp_image_digest
+  api_url                       = "https://${var.domain_name}"
+  allowed_host                  = var.domain_name
+  allowed_origins               = var.access_mcp_allowed_origins
+  access_mcp_path               = var.access_mcp_path
+  oauth_resource_uri            = var.enable_access_mcp_oauth ? "https://${var.domain_name}${var.access_mcp_path}" : ""
+  oauth_issuer                  = var.enable_access_mcp_oauth ? "https://${var.auth0_domain}/" : ""
+  service_assertion_secret_arn  = var.enable_access_mcp_oauth ? aws_secretsmanager_secret_version.access_mcp_service_assertion[0].arn : ""
+  service_assertion_kms_key_arn = module.secrets.kms_key_arn
+  log_retention_days            = var.log_retention_days
+  desired_count                 = var.access_mcp_desired_count
+}
+
+# ---------------------------------------------------------------------------
 # 6a. Provider-credential CMK — task-role crypto grant
 #
 # The task role may only call the four envelope-crypto actions
@@ -679,7 +749,7 @@ module "ml_drift_lambda" {
 }
 
 # ---------------------------------------------------------------------------
-# 9. Auth0 (SPA clients + API resource server)
+# 9. Auth0 (SPA + native CLI clients and API resource server)
 # ---------------------------------------------------------------------------
 
 # The Auth0 MANAGEMENT credentials are deliberately absent from this call, and
@@ -693,8 +763,9 @@ module "ml_drift_lambda" {
 module "auth0" {
   source = "./modules/auth0"
 
-  environment  = var.environment
-  api_audience = var.auth0_api_audience
+  environment      = var.environment
+  api_audience     = var.auth0_api_audience
+  mcp_resource_uri = var.enable_access_mcp_oauth ? "https://${var.domain_name}${var.access_mcp_path}" : ""
 
   # Per-PR previews (pr-<N>.<preview app domain>) sign in against the same
   # staging Auth0 application; Auth0 accepts a leading subdomain wildcard.
@@ -702,7 +773,7 @@ module "auth0" {
   # var.aether_app_url, which on staging is the app host that now redirects
   # to it (kept while sessions and bookmarks move over).
   aether_callback_urls = concat(distinct(["${local.aether_app_base_url}/callback", "${var.aether_app_url}/callback"]), [for d in local.frontend_preview_domains : "https://*.${d}/callback"])
-  aether_logout_urls   = concat(distinct(["${local.aether_app_base_url}/login", local.aether_app_base_url, var.aether_app_url]), [for d in local.frontend_preview_domains : "https://*.${d}"])
+  aether_logout_urls   = concat(distinct(["${local.aether_app_base_url}/login", local.aether_app_base_url, "${var.aether_app_url}/login", var.aether_app_url]), [for d in local.frontend_preview_domains : "https://*.${d}"])
   aether_web_origins   = concat(distinct([local.aether_app_origin, var.aether_app_url]), [for d in local.frontend_preview_domains : "https://*.${d}"])
 
   kyber_callback_urls = ["${var.kyber_app_url}/callback"]
@@ -821,6 +892,11 @@ locals {
   # environments keep the prerendered aether-marketing build until the site
   # prerenders its own per-route metadata, sitemap and robots file.
   aether_host_serves_site = var.environment == "staging"
+  # provider=connection pairs for the product's social sign-in buttons. The key
+  # is absent when social connections are off, so the SPA renders no buttons.
+  aether_social_login_env = length(module.auth0.aether_social_connections) > 0 ? {
+    VITE_AUTH0_SOCIAL_CONNECTIONS = join(",", [for provider, connection in module.auth0.aether_social_connections : "${provider}=${connection}"])
+  } : {}
   # Unset keeps the backend's own default (invitation-only on staging, self
   # sign-up elsewhere), written explicitly into the task definitions.
   self_signup_enabled = var.self_signup_enabled != null ? var.self_signup_enabled : var.environment != "staging"
@@ -957,18 +1033,22 @@ locals {
 resource "aws_amplify_app" "frontend_preview" {
   count = local.enable_frontend_previews ? 1 : 0
 
-  name        = "${var.project}-${var.environment}-aether-app-preview"
-  description = "Per-PR previews of the Aether app (branches pr-<N>, managed by frontend-preview.yml)"
+  name        = "${var.project}-development-web"
+  description = "Development web app: per-PR previews of the Aether app (branches pr-<N>, managed by frontend-preview.yml)"
   platform    = "WEB"
 
+  # The same single-page-app rewrite the other client-routed apps use. A bare
+  # "/<*>" 404-200 rule does not apply to branches uploaded by deployment: a
+  # deep link such as /callback (the Auth0 redirect) was answered with a 301 to
+  # /callback/ and then a 404, so sign-in could not complete on a preview.
   custom_rule {
-    source = "/<*>"
+    source = local.spa_route_pattern
     target = "/index.html"
-    status = "404-200"
+    status = "200"
   }
 
   tags = {
-    Name        = "${var.project}-${var.environment}-aether-app-preview"
+    Name        = "${var.project}-development-web"
     Purpose     = "Per-PR frontend previews"
     Environment = var.environment
   }
@@ -1014,7 +1094,7 @@ resource "aws_amplify_app" "frontend" {
         { pkg = "node", type = "nvm", version = "20" }
       ])
     },
-    each.key == "aether-app" ? {
+    each.key == "aether-app" ? merge(local.aether_social_login_env, {
       VITE_AETHER_ENV         = var.environment
       VITE_API_BASE_URL       = "https://${var.domain_name}"
       VITE_AETHER_ENDPOINT    = "https://${var.domain_name}"
@@ -1023,8 +1103,8 @@ resource "aws_amplify_app" "frontend" {
       VITE_AUTH0_AUDIENCE     = var.auth0_api_audience
       VITE_AUTH0_REDIRECT_URI = "${var.aether_app_url}/callback"
       VITE_AUTH0_LOGOUT_URI   = "${var.aether_app_url}/login"
-    } : {},
-    each.key == "aether-marketing" && local.aether_host_serves_site ? {
+    }) : {},
+    each.key == "aether-marketing" && local.aether_host_serves_site ? merge(local.aether_social_login_env, {
       # Public build settings for the unified site. Prices are published on
       # staging and production alike (owner decision).
       VITE_API_BASE_URL   = "https://${var.domain_name}"
@@ -1042,7 +1122,7 @@ resource "aws_amplify_app" "frontend" {
       VITE_AUTH0_AUDIENCE     = var.auth0_api_audience
       VITE_AUTH0_REDIRECT_URI = "${local.aether_app_base_url}/callback"
       VITE_AUTH0_LOGOUT_URI   = "${local.aether_app_base_url}/login"
-    } : {},
+    }) : {},
     each.key == "status" ? {
       VITE_STATUS_API_URL              = var.status_api_url
       VITE_STATUS_DOCS_URL             = "https://docs.${var.amplify_domain_name}"
@@ -1081,7 +1161,7 @@ resource "aws_amplify_branch" "main" {
     {
       AETHER_ENV = var.environment
     },
-    each.key == "aether-app" ? {
+    each.key == "aether-app" ? merge(local.aether_social_login_env, {
       VITE_AETHER_ENV         = var.environment
       VITE_API_BASE_URL       = "https://${var.domain_name}"
       VITE_AETHER_ENDPOINT    = "https://${var.domain_name}"
@@ -1090,8 +1170,8 @@ resource "aws_amplify_branch" "main" {
       VITE_AUTH0_AUDIENCE     = var.auth0_api_audience
       VITE_AUTH0_REDIRECT_URI = "${var.aether_app_url}/callback"
       VITE_AUTH0_LOGOUT_URI   = "${var.aether_app_url}/login"
-    } : {},
-    each.key == "aether-marketing" && local.aether_host_serves_site ? {
+    }) : {},
+    each.key == "aether-marketing" && local.aether_host_serves_site ? merge(local.aether_social_login_env, {
       # Public build settings for the unified site. Prices are published on
       # staging and production alike (owner decision).
       VITE_API_BASE_URL       = "https://${var.domain_name}"
@@ -1108,7 +1188,7 @@ resource "aws_amplify_branch" "main" {
       VITE_AUTH0_AUDIENCE     = var.auth0_api_audience
       VITE_AUTH0_REDIRECT_URI = "${local.aether_app_base_url}/callback"
       VITE_AUTH0_LOGOUT_URI   = "${local.aether_app_base_url}/login"
-    } : {},
+    }) : {},
     each.key == "status" ? {
       VITE_STATUS_API_URL = var.status_api_url
       VITE_STATUS_DOCS_URL = (

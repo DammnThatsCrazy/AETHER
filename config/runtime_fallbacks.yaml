@@ -1,5 +1,5 @@
 schema_version: 1
-profiles: [local, unit_test, staging, production-lean, production-scale, enterprise-isolated]
+profiles: [local, unit_test, staging, production]
 fallbacks:
   - fallback_id: in_memory_repository
     owner: platform

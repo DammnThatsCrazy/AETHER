@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: "0.1.0"
-source_files: [services/api/identity/identity/models.py, services/api/identity/identity/routes.py, services/api/identity/identity/resolver.py, services/api/identity/identity/repository.py, services/api/identity/identity/ingestion_worker.py, services/api/identity/identity/source_identity_registry.py, services/api/ingestion/ingestion/batch.py, services/api/workers/runtime/consumer_specs.py, services/api/repositories/repos.py, services/api/intelligence/analytics/routes.py, services/api/identity/profile/composer.py, services/api/identity/profile/aggregator.py]
+source_files: [services/api/identity/identity/models.py, services/api/identity/identity/routes.py, services/api/identity/identity/schemas.py, services/api/identity/identity/signals.py, services/api/identity/identity/resolver.py, services/api/identity/identity/repository.py, services/api/identity/identity/ingestion_worker.py, services/api/identity/identity/source_identity_registry.py, services/api/identity/identity/verification.py, services/api/identity/identity/verification_repository.py, services/api/identity/identity/evidence.py, services/api/identity/identity/resolution_replay.py, services/api/identity/identity/hashing.py, services/api/ingestion/ingestion/batch.py, services/api/workers/runtime/consumer_specs.py, services/api/repositories/repos.py, services/api/intelligence/analytics/routes.py, services/api/identity/profile/composer.py, services/api/identity/profile/aggregator.py]
 canonical_owner: identity@aether
 last_synced_commit: 4764707
 ---
@@ -173,7 +173,10 @@ as durable evidence.
   are single-use (`issued → validated → consumed`), expiry- and attempt-bounded,
   and tenant-scoped. A magic-link `GET` only *validates* (never creates
   evidence); a subsequent explicit `POST /consume` performs the one-time
-  consumption, so enterprise mail scanners cannot forge ownership.
+  consumption, so enterprise mail scanners cannot forge ownership. Wallet
+  proof challenges are also single-use and tenant-scoped: they bind a five-minute
+  message to a wallet, chain namespace, and HMAC-scoped anonymous subject.
+  Current identity-link consent is checked at issuance and again at verification.
 - **Evidence** (`identity_verification_evidence`) — the durable fact produced
   when a proof succeeds (or a trusted OIDC/SSO `email_verified` claim is
   validated server-side). Evidence carries the identifier hash, method, issuer,
@@ -190,12 +193,25 @@ they carry no contradictory deterministic identifier (e.g. two different
 `canonical_entity_id` is the **oldest** active subject (by first-seen), never the
 largest or most recent.
 
+Wallet ownership evidence is accepted only from the server challenge flow:
+EVM `eip155:*` uses EIP-191 `personal_sign`, and Solana uses Ed25519 over the
+exact UTF-8 challenge message. Client `wallet_signature_verified`, `verified`,
+and `signature_verified` flags are ignored. The successful proof replays through
+the existing resolver using the chain-scoped wallet hash and the exact
+consented anonymous subject; observed wallet suppression and contradictory
+deterministic identifiers still veto or defer a merge. This establishes
+challenge-time key control, not exclusive ownership, custody, or authorization
+to transact. Sui transaction execution remains separate, and Sui wallet-signing
+formats are not supported by this proof API.
+
 ## Resolution replay and revision
 
 New evidence can arrive after the fact. `services/api/identity/identity/resolution_replay.py`
 re-runs the **existing** resolver for the affected identifier component — it is
-not a second matcher and adds no scoring of its own. Replay is asynchronous,
-tenant- and component-scoped, and idempotent on
+not a second matcher and adds no scoring of its own. Wallet replay also carries
+the exact consented anonymous subject so a wallet proof cannot initiate an
+unbound global replay. Replay is asynchronous, tenant- and component-scoped,
+and idempotent on
 `{tenant_id}:{trigger_id}:{policy_version}`, so a duplicate verification
 callback can never double-merge.
 

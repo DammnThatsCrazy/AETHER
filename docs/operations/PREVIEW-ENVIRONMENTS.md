@@ -44,12 +44,21 @@ only when marked ready for review.
    replaces) public `VITE_*` settings, at the root of the
    preview host rather than under `/app`. It points the Auth0 redirect and logout URIs at the preview.
 2. It deploys the build to branch `pr-<N>` of the staging preview Amplify app
-   (`AETHER-staging-aether-app-preview`, not connected to the repository) and
+   (`AETHER-development-web` (formerly `AETHER-staging-aether-app-preview`), not connected to the repository) and
    comments `https://pr-<N>.<preview domain>` on the pull request.
 3. To refresh a preview after later pushes, or to preview a draft, a team
    member runs the workflow from `main` with the pull request number.
 4. Every push to `main` (each merge) and an hourly sweep delete the preview of
    every pull request that is closed or merged.
+
+## The Development build
+
+The same app also holds one persistent branch, `development`, deployed by
+`development-web.yml` on every push to `Development` that touches the Aether
+app or its shared packages (`https://development.<preview domain>`). It is built
+the same way as a preview and shares the preview role, which is scoped to the
+`pr-*` branches and the one `development` branch. The hourly sweep ignores it:
+it only removes branches named `pr-<N>`.
 
 A preview is only the frontend. It calls the staging API and signs in through
 staging Auth0, so staging must be awake for a preview to do more than render.
@@ -102,10 +111,11 @@ Until step 3 is done, the workflow skips with a notice and deploys nothing.
 
 ## Phase 2: full-stack previews
 
-The `preview` deployment profile (`profiles/preview.tfvars`,
-`scripts/release/ephemeral_env.py`, `ephemeral-ttl-guard.yml`) already
-describes a cost-capped, TTL-leased environment with no NAT. It is one shared
-environment today. Making it per pull request needs:
+The dedicated `preview` and `demo` deployment profiles were retired when the
+profile matrix was consolidated to `staging` and `production`; a full-stack
+preview would be a per-PR wake of the staging shape (cost-capped, TTL-leased
+through `staging-ttl-guard.yml`, no NAT), not a third profile. Making that
+per pull request needs:
 
 - a per-PR name, so each PR's backend service, database clone and secrets are
   separate;

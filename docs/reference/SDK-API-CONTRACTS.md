@@ -106,7 +106,7 @@ batch path accepts the event but does not schedule canonical identify resolution
 when the overall resolver, SDK late binding, or connector backfill resolution is
 disabled; the batch path has no safe connector-candidate review context yet. The legacy
 `/sdk/alias` route reports `aliased: false` when anonymous-to-known binding is
-disabled. Staging enables the proof controls; the production-lean profile keeps
+disabled. Staging enables the proof controls; the production profile keeps
 them off.
 
 Identity runtime rollout is controlled by `IDENTITY_RESOLUTION_ENABLED`,
@@ -118,7 +118,7 @@ batch path accepts the event but does not schedule canonical identify resolution
 when the overall resolver, SDK late binding, or connector backfill resolution is
 disabled; the batch path has no safe connector-candidate review context yet. The legacy
 `/sdk/alias` route reports `aliased: false` when anonymous-to-known binding is
-disabled. Staging enables the proof controls; the production-lean profile keeps
+disabled. Staging enables the proof controls; the production profile keeps
 them off.
 
 **Emission API.** Official helpers emit **canonical top-level event types** via
@@ -237,3 +237,25 @@ These schemas validate all responses from `/v1/x402/*`, `/v1/approvals/*`,
 `/v1/entitlements/*`, and `/v1/diagnostics/commerce/*` at the network boundary.
 Wire format mirrors backend Pydantic models in `services/api/value/x402/commerce_models.py`.
 Breaking changes to backend models require coordinated updates to both files.
+
+## External agent telemetry
+
+The server SDK exposes typed task, tool, policy-evaluation, delegation, and
+outcome observations for external agent deployments. These events are
+source-asserted. Ingestion attributes them using the backend-validated,
+tenant-owned deployment registry record; a payload's `agentId` or delegated-to
+reference does not resolve canonical identity or authority. The telemetry is
+accepted only when the external-agent feature is enabled and the deployment is
+active for the authenticated tenant. See
+[Agent Marketplace Lineage](source-of-truth/AGENT_MARKETPLACE_LINEAGE.md) for
+the graph and run-explanation evidence boundaries.
+
+`task(...)` and `outcomeRecorded(...)` also accept optional
+`paymentIntentId` and `settlementEventId` source references. `delegatedTask(...)`
+accepts `delegationId` and `delegatedToAgentId` references. These IDs remain
+caller-reported: the graph links them only after exact tenant-scoped matching
+against server-authoritative x402 records. A delegation ID can link to an exact
+same-tenant canonical record; the link does not resolve the deployment's source
+agent ID to either canonical delegation party or prove that the action was
+authorized. Caller-supplied amounts and payment states are not accepted as
+economic facts.

@@ -13,7 +13,7 @@ source_hashes:
   "services/api/governance/consent/erasure_jobs.py": "sha256:c181535d6b0a3fcc2bf5b7f3d248ca9970845285413c54ac75ba9433a5c6f86c"
   "services/api/governance/consent/erasure_planes.py": "sha256:bfed1f9c260910ea99f8cd56025e949dd15561ebe87bca63dcc7a71c68fc6c36"
   "services/api/governance/dsr_propagation/models.py": "sha256:c5afa46e9327a7d48ab0583836932ffb3e8f14ce3f420d7afe404ae5afe3450f"
-  "services/api/graph/web3/registries.py": "sha256:0db03da90f411420455b868e1fb9861b98421937e3fb1901bd727ff32474e7ed"
+  "services/api/graph/web3/registries.py": "sha256:13f14a786f6da928db1526c5f01d553f21fd388805feb368c4f6c18493ebdffe"
   "services/api/shared/storage/lifecycle.py": "sha256:f5446beb697cab99031cf464d9dcdb95310ad83870036fe0e5f1baf09d16d712"
   "services/api/value/x402/commerce_store.py": "sha256:e5bf2b6cffad86e8c21fe08669961e20b74838939bc3f8cc857572b30d0dd5d8"
 ---

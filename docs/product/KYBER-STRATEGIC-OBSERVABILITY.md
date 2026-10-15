@@ -15,7 +15,7 @@ toc_depth: 3
 source_hashes:
   "services/api/governance/admin/routes.py": "sha256:448866155ff0ffee0857e0843e3ac9c25dec4c32a9a1c30ba1b749e3eb4c168c"
   "services/api/intelligence/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
-  "services/api/intelligence/intelligence/routes.py": "sha256:46f4df5f21914056a91810cb1c0a490183ed144e99a9568b8aedf170f3b05e29"
+  "services/api/intelligence/intelligence/routes.py": "sha256:355eb639eb8cf03f9a79903ae67b1665b688e2fc095536e8d8bd44b2c06fcc18"
 ---
 # Kyber Strategic Observability
 
@@ -65,7 +65,7 @@ an approved break-glass grant. See
 
 Reliability, SRE, incident response, SLOs, runbooks, and tenant-safe system
 status are documented in [Reliability Operations](../operations/RELIABILITY-OPERATIONS.md) and
-related docs ([Incident Response](../operations/INCIDENT-RESPONSE.md),
+related docs ([Incident Response](../operations/incident-response.md),
 [SLO Tracking](../operations/SLO-TRACKING.md), [SRE Runbooks](../operations/SRE-RUNBOOKS.md),
 [Tenant System Status](../operations/TENANT-STATUS.md), [Pipeline Health](../operations/PIPELINE-HEALTH.md),
 [Queue & Worker Health](../operations/QUEUE-WORKER-HEALTH.md), [Postmortems](../operations/POSTMORTEMS.md)).

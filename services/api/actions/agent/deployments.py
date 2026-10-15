@@ -30,6 +30,7 @@ from enum import Enum
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
+from actions.agent_marketplace.models import AgentMarketplaceOrigin
 
 from ingestion.ingestion.generated_registry import EVENT_CONSENT_PURPOSE, EVENT_FAMILY
 from shared.common.common import BadRequestError, ConflictError, NotFoundError
@@ -115,6 +116,7 @@ _SECRET_KEY_PATTERNS: list[re.Pattern] = [
 
 _MAX_CAPABILITY_SCOPES = 64
 _MAX_CAPABILITY_SCOPE_LENGTH = 200
+_AGENT_SOURCE_NAMESPACE_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 
 # Valid lifecycle transitions: current status → allowed target statuses.
 _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
@@ -187,6 +189,9 @@ class AgentDeployment(BaseModel):
     id: str = Field(default_factory=_new_id)
     tenant_id: str = Field(..., min_length=1, max_length=256)
     agent_id: str = Field(..., min_length=1, max_length=256)
+    # Runtime identity namespace is distinct from marketplace_origin.source_namespace.
+    # Legacy deployments without it remain unbound for canonical authorization.
+    agent_source_namespace: Optional[str] = Field(default=None, max_length=64)
     display_name: str = Field(..., min_length=1, max_length=256)
     description: Optional[str] = Field(default=None, max_length=2000)
     external_platform: ExternalPlatform
@@ -205,6 +210,9 @@ class AgentDeployment(BaseModel):
     required_consent_purposes: list[str] = Field(default_factory=list)
     # Declared capability scopes (observation-only; never execution grants).
     capability_scopes: list[str] = Field(default_factory=list)
+    # Source lineage is supplied by the tenant at registration. It is a claim
+    # about provenance, not a provider-verified catalog fact or a grant.
+    marketplace_origin: Optional[AgentMarketplaceOrigin] = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     first_seen_at: Optional[str] = None
     last_seen_at: Optional[str] = None
@@ -250,6 +258,18 @@ class AgentDeployment(BaseModel):
                     f"Capability scopes must be 1-{_MAX_CAPABILITY_SCOPE_LENGTH} characters"
                 )
         return v
+
+    @field_validator("agent_source_namespace")
+    @classmethod
+    def _validate_agent_source_namespace(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        if not _AGENT_SOURCE_NAMESPACE_RE.fullmatch(normalized):
+            raise ValueError(
+                "agent_source_namespace must be a lowercase provider namespace"
+            )
+        return normalized
 
     @model_validator(mode="after")
     def _sanitize_metadata(self) -> "AgentDeployment":
@@ -328,10 +348,22 @@ class AgentDeploymentRepository:
 
         record = deployment.model_dump(mode="json")
         await self._store.set(self._key(tenant_id, deployment.id), record)
+        audit_detail: dict[str, Any] = {
+            "external_platform": record["external_platform"],
+            "environment": record["environment"],
+        }
+        if record.get("marketplace_origin"):
+            origin = record["marketplace_origin"]
+            audit_detail["marketplace_origin"] = {
+                "source_namespace": origin["source_namespace"],
+                "listing_ref": origin["listing_ref"],
+                "template_ref": origin["template_ref"],
+                "template_version": origin["template_version"],
+                "assertion": origin["assertion"],
+            }
         await self._write_audit(
             tenant_id, deployment.id, "created", actor, request_id,
-            detail={"external_platform": record["external_platform"],
-                    "environment": record["environment"]},
+            detail=audit_detail,
         )
         metrics.increment("agent_deployments_created_total")
         logger.info("Agent deployment created: %s (tenant=%s)", deployment.id, tenant_id)
@@ -367,6 +399,17 @@ class AgentDeploymentRepository:
             filters["agent_id"] = agent_id
         records = await self._store.find(**filters)
         return sorted(records, key=lambda r: r.get("updated_at", ""), reverse=True)
+
+    async def list_page(
+        self, tenant_id: str, *, limit: int, cursor: Optional[str] = None,
+    ) -> tuple[list[dict], Optional[str], bool]:
+        """Read one tenant-prefixed store page for projection recovery."""
+        return await self._store.find_page(
+            limit=limit,
+            cursor=cursor,
+            key_prefix=f"{tenant_id}:",
+            tenant_id=tenant_id,
+        )
 
     async def list_all(self) -> list[dict]:
         """Cross-tenant listing — Kyber operator fleet views only."""

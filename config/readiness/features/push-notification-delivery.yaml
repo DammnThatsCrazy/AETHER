@@ -25,7 +25,7 @@ scope:
   excluded:
     - live provider rehearsal (requires accounts)
   deferred: []
-  release_profile_applicability: [local, staging, production-lean]
+  release_profile_applicability: [local, staging, production]
 
 repository_ceiling:
   type: CREDENTIAL_TURNKEY
@@ -91,7 +91,7 @@ activation:
       required_action: Insert provider secrets; run credentials-preflight.
       source_code_change_expected: false
       affected_environments: [staging, production]
-      affected_release_profiles: [staging, pilot, production-lean, production-scale]
+      affected_release_profiles: [staging, pilot, production, production-scale]
       evidence_required: live provider accept + delivery receipt in a rehearsal
     - type: ACCOUNT_WAITING
       description: Apple Developer + Firebase/Google + SES verified domain required.
@@ -99,7 +99,7 @@ activation:
       required_action: Register provider accounts and verify sender domain.
       source_code_change_expected: false
       affected_environments: [staging, production]
-      affected_release_profiles: [staging, pilot, production-lean, production-scale]
+      affected_release_profiles: [staging, pilot, production, production-scale]
       evidence_required: provider account ids bound in the credential registry
 
 dependencies:
@@ -166,7 +166,7 @@ release_profiles:
     productionization_required: true
     environment_gate: pilot
     business_gate: false
-  production-lean:
+  production:
     participation: required
     implementation_floor: TURNKEY
     productionization_required: true

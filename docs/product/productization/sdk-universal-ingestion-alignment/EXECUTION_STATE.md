@@ -626,7 +626,9 @@ occurrence timestamps to UTC instants before filtering. Requested bounds must
 include a timezone and be ordered; a bounded replay excludes rows with an
 unknown or malformed original occurrence time. This changes selection only:
 the published event retains the original occurrence value and still receives a
-fresh replay delivery time.
+fresh replay delivery time. Legacy naive Bronze timestamps retain the existing
+compatibility rule: the shared temporal kernel treats them as UTC for selection,
+while the stored event payload remains unchanged.
 
 ## WS-B5 — single normalization-spine convergence (consumption side, flag-gated)
 

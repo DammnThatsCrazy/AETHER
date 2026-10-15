@@ -12,6 +12,7 @@ Backend selection:
 from __future__ import annotations
 
 import asyncio
+import base64
 import copy
 import hashlib
 import json
@@ -709,6 +710,70 @@ class BaseRepository(ABC):
                 *vals,
             )
         logger.info(f"INSERT {self.table_name} id={record_id}")
+        return data
+
+    async def insert_tenant_scoped(
+        self, record_id: str, data: dict, tenant_id: str
+    ) -> dict:
+        """Insert or replace a record only when the ID is owned by this tenant.
+
+        The conflict predicate is enforced by PostgreSQL itself so concurrent
+        writes cannot turn a tenant-local identifier into a cross-tenant
+        overwrite. The in-memory adapter performs the same ownership check.
+        """
+        if not tenant_id or data.get("tenant_id") != tenant_id:
+            raise ValueError("tenant-scoped insert requires matching tenant data")
+        now = utc_now().isoformat()
+        data["id"] = record_id
+        data["created_at"] = now
+        data["updated_at"] = now
+
+        pool = await self._ensure_pool()
+        if pool is None:
+            existing = self._store.get(record_id)
+            if existing is not None and existing.get("tenant_id") != tenant_id:
+                raise ConflictError(f"{self.table_name} ID is unavailable in this tenant")
+            self._store[record_id] = data
+            logger.info(f"TENANT UPSERT {self.table_name} id={record_id} (in-memory)")
+            return data
+
+        await self._ensure_table()
+        if self._jsonb_mode:
+            status = await pool.execute(
+                f"""INSERT INTO {self.table_name} (id, data, tenant_id, created_at, updated_at)
+                    VALUES ($1, $2::jsonb, $3, NOW(), NOW())
+                    ON CONFLICT (id) DO UPDATE
+                    SET data = EXCLUDED.data, updated_at = NOW()
+                    WHERE {self.table_name}.tenant_id = EXCLUDED.tenant_id""",
+                record_id, json.dumps(data, default=str), tenant_id,
+            )
+        else:
+            column_types = await self._explicit_column_types(pool)
+            cols: list[str] = []
+            vals: list[Any] = []
+            casts: list[str] = []
+            for col, val in self._explicit_write_columns(data, column_types):
+                if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", col):
+                    raise ValueError(f"Invalid column name: {col!r}")
+                bound, cast = _explicit_bind(column_types.get(col) if column_types else None, val)
+                cols.append(col)
+                vals.append(bound)
+                casts.append(cast)
+            col_list = ", ".join(cols)
+            placeholders = ", ".join(f"${i + 1}{casts[i]}" for i in range(len(cols)))
+            update_set = ", ".join(
+                f"{col} = EXCLUDED.{col}" for col in cols if col != "id"
+            )
+            status = await pool.execute(
+                f"""INSERT INTO {self.table_name} ({col_list})
+                    VALUES ({placeholders})
+                    ON CONFLICT (id) DO UPDATE SET {update_set}
+                    WHERE {self.table_name}.tenant_id = EXCLUDED.tenant_id""",
+                *vals,
+            )
+        if status.endswith(" 0"):
+            raise ConflictError(f"{self.table_name} ID is unavailable in this tenant")
+        logger.info(f"TENANT UPSERT {self.table_name} id={record_id}")
         return data
 
     async def update(self, record_id: str, data: dict) -> dict:
@@ -1480,6 +1545,112 @@ class AnalyticsRepository:
         )
         return [dict(record) for record in records]
 
+    async def query_silver_page(
+        self, table: str, filters: dict[str, Any], *, limit: int = 50,
+        cursor: Optional[str] = None,
+    ) -> tuple[list[dict], Optional[str], bool]:
+        """Page one tenant-scoped Silver fact query with a fact-key cursor."""
+        if not _SILVER_TABLE_RE.fullmatch(table or ""):
+            raise ValueError(f"not a Silver fact table: {table!r}")
+        equals = {key: value for key, value in (filters or {}).items() if value is not None}
+        if not equals.get("tenant_id"):
+            raise ValueError("a Silver query must be scoped to a tenant")
+        page_limit = max(1, min(int(limit), 1000))
+        query_fingerprint = hashlib.sha256(json.dumps(
+            [table, equals], sort_keys=True, separators=(",", ":"), default=str,
+        ).encode("utf-8")).hexdigest()[:20]
+        cursor_state: Optional[dict[str, str]] = None
+        if cursor is not None:
+            try:
+                padded = cursor + "=" * (-len(cursor) % 4)
+                decoded = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")))
+            except (ValueError, UnicodeError, json.JSONDecodeError) as exc:
+                raise ValueError("invalid Silver page cursor") from exc
+            if (
+                not isinstance(decoded, dict)
+                or decoded.get("v") != 1
+                or decoded.get("q") != query_fingerprint
+                or not isinstance(decoded.get("occurred_at"), str)
+                or not isinstance(decoded.get("fact_id"), str)
+            ):
+                raise ValueError("Silver page cursor does not match this query")
+            cursor_state = decoded
+
+        from ingestion.silver import writer as silver_writer
+
+        pool = await get_pool()
+        if pool is None:
+            rows = [
+                dict(row) for row in silver_writer._local_tables.get(table, {}).values()
+                if all(str(row.get(key)) == str(value) for key, value in equals.items())
+            ]
+            utc_min = datetime(1, 1, 1, tzinfo=timezone.utc)
+
+            def local_key(row: dict) -> tuple[datetime, str]:
+                instant = _as_utc_datetime(row.get("occurred_at")) or utc_min
+                fact_id = str(row.get("fact_id") or row.get("source_event_id") or "")
+                return instant, fact_id
+
+            rows.sort(key=local_key, reverse=True)
+            if cursor_state is not None:
+                after_instant = _as_utc_datetime(cursor_state["occurred_at"])
+                if after_instant is None:
+                    raise ValueError("Silver page cursor has an invalid timestamp")
+                after_key = (after_instant, cursor_state["fact_id"])
+                rows = [row for row in rows if local_key(row) < after_key]
+            truncated = len(rows) > page_limit
+            page = rows[:page_limit]
+        else:
+            columns = dict(await silver_writer.SilverFactWriter()._table_columns(pool, table))
+            if not columns:
+                raise ValueError(f"unknown Silver table: {table}")
+            unknown = sorted(set(equals) - set(columns))
+            if unknown:
+                raise ValueError(f"unknown {table} columns: {', '.join(unknown)}")
+            if "occurred_at" not in columns or "fact_id" not in columns:
+                raise ValueError(f"{table} lacks the stable keys required for paged reads")
+            keys = sorted(equals)
+            clauses = [f"{key}::text = ${index + 1}" for index, key in enumerate(keys)]
+            params: list[Any] = [str(equals[key]) for key in keys]
+            if cursor_state is not None:
+                instant = _as_utc_datetime(cursor_state["occurred_at"])
+                try:
+                    fact_id = uuid.UUID(cursor_state["fact_id"])
+                except (ValueError, AttributeError) as exc:
+                    raise ValueError("Silver page cursor has an invalid fact id") from exc
+                if instant is None:
+                    raise ValueError("Silver page cursor has an invalid timestamp")
+                timestamp_param = len(params) + 1
+                fact_param = len(params) + 2
+                clauses.append(f"(occurred_at, fact_id) < (${timestamp_param}, ${fact_param})")
+                params.extend([instant, fact_id])
+            params.append(page_limit + 1)
+            where = " AND ".join(clauses)
+            records = await pool.fetch(
+                f"SELECT * FROM {table} WHERE {where} "
+                f"ORDER BY occurred_at DESC, fact_id DESC LIMIT ${len(params)}",
+                *params,
+            )
+            fetched = [dict(record) for record in records]
+            truncated = len(fetched) > page_limit
+            page = fetched[:page_limit]
+
+        next_cursor = None
+        if truncated and page:
+            last = page[-1]
+            instant = _as_utc_datetime(last.get("occurred_at"))
+            fact_id = str(last.get("fact_id") or last.get("source_event_id") or "")
+            if instant is None or not fact_id:
+                raise ValueError("Silver row lacks cursor keys for paged recovery")
+            token = json.dumps({
+                "v": 1,
+                "q": query_fingerprint,
+                "occurred_at": instant.isoformat(),
+                "fact_id": fact_id,
+            }, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            next_cursor = base64.urlsafe_b64encode(token).decode("ascii").rstrip("=")
+        return page, next_cursor, truncated
+
     async def get_event(self, event_id: str, tenant_id: Optional[str] = None) -> dict:
         """Fetch one event.
 
@@ -2238,11 +2409,37 @@ class EntityRepository(BaseRepository):
 
     async def list_by_tenant(
         self, tenant_id: str, entity_type: Optional[str] = None, limit: int = 100,
+        *, offset: int = 0, stable_order: bool = False,
     ) -> list[dict]:
         filters: dict[str, Any] = {"tenant_id": tenant_id}
         if entity_type:
             filters["entity_type"] = entity_type
-        return await self.find_many(filters=filters, limit=limit)
+        if not stable_order:
+            return await self.find_many(filters=filters, limit=limit)
+
+        # BaseRepository.find_many only allows timestamp sorts. An entity page
+        # needs a unique key so equal timestamps cannot skip or repeat rows.
+        pool = await self._ensure_pool()
+        if pool is None:
+            rows = [row for row in self._store.values() if _matches_filters(row, filters)]
+            rows.sort(key=lambda row: str(row.get("entity_id", "")))
+            return rows[offset: offset + limit]
+
+        await self._ensure_table()
+        if entity_type:
+            rows = await pool.fetch(
+                "SELECT data FROM entities WHERE tenant_id = $1 "
+                "AND data->>'entity_type' = $2 "
+                "ORDER BY id ASC LIMIT $3 OFFSET $4",
+                tenant_id, entity_type, limit, offset,
+            )
+        else:
+            rows = await pool.fetch(
+                "SELECT data FROM entities WHERE tenant_id = $1 "
+                "ORDER BY id ASC LIMIT $2 OFFSET $3",
+                tenant_id, limit, offset,
+            )
+        return [json.loads(row["data"]) for row in rows]
 
     async def count_by_tenant(self, tenant_id: str) -> int:
         """Count the complete tenant sampling frame."""
@@ -2751,7 +2948,7 @@ class PaymentIntentRepository(BaseRepository):
         metadata: Optional[dict] = None,
         occurred_at: Optional[str] = None,
     ) -> dict:
-        return await self.insert(intent_id, {
+        return await self.insert_tenant_scoped(intent_id, {
             "intent_id": intent_id,
             "tenant_id": tenant_id,
             "agent_id": agent_id,
@@ -2771,7 +2968,7 @@ class PaymentIntentRepository(BaseRepository):
             "abandoned_reason": abandoned_reason,
             "occurred_at": occurred_at or utc_now().isoformat(),
             "metadata": metadata or {},
-        })
+        }, tenant_id)
 
     async def list_for_agent(self, agent_id: str, tenant_id: str, limit: int = 100) -> list[dict]:
         rows = await self.find_many(filters={"agent_id": agent_id, "tenant_id": tenant_id}, limit=limit)
@@ -2813,6 +3010,15 @@ class PaymentIntentRepository(BaseRepository):
 class SettlementEventRepository(BaseRepository):
     """Settlement attempts and terminal outcomes for PaymentIntent records."""
 
+    _STATUS_ORDER = {
+        "pending": 10,
+        "submitted": 20,
+        "failed": 30,
+        "timeout": 30,
+        "settled": 40,
+        "reversed": 50,
+    }
+
     def __init__(self) -> None:
         super().__init__("settlement_events")
 
@@ -2834,7 +3040,13 @@ class SettlementEventRepository(BaseRepository):
         metadata: Optional[dict] = None,
         occurred_at: Optional[str] = None,
     ) -> dict:
-        return await self.insert(settlement_event_id, {
+        existing = await self.find_by_id(settlement_event_id)
+        if existing is not None and existing.get("tenant_id") == tenant_id:
+            existing_order = self._STATUS_ORDER.get(str(existing.get("status") or "").lower(), -1)
+            incoming_order = self._STATUS_ORDER.get(str(status or "").lower(), -1)
+            if existing_order > incoming_order:
+                return existing
+        return await self.insert_tenant_scoped(settlement_event_id, {
             "settlement_event_id": settlement_event_id,
             "tenant_id": tenant_id,
             "intent_id": intent_id,
@@ -2850,7 +3062,7 @@ class SettlementEventRepository(BaseRepository):
             "tx_hash": tx_hash,
             "occurred_at": occurred_at or utc_now().isoformat(),
             "metadata": metadata or {},
-        })
+        }, tenant_id)
 
     async def list_for_intent(self, intent_id: str, tenant_id: str, limit: int = 100) -> list[dict]:
         rows = await self.find_many(filters={"intent_id": intent_id, "tenant_id": tenant_id}, limit=limit)

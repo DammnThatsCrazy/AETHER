@@ -66,7 +66,7 @@ def test_staging_target_group_replacement_is_name_safe() -> None:
     migration = STATE_MIGRATION.read_text(encoding="utf-8")
     assert "legacy='module.alb.aws_lb_target_group.backend'" in migration
     assert "staging) target='module.alb.aws_lb_target_group.backend[0]'" in migration
-    assert "production-lean|production-scale|enterprise-isolated|demo|preview)" in migration
+    assert "  production)" in migration
     assert "backend_replacement[0]" in migration
     assert 'terraform state mv -lock-timeout=5m "$legacy" "$target"' in migration
     migration_workflow = STATE_MIGRATION_WORKFLOW.read_text(encoding="utf-8")
@@ -996,7 +996,7 @@ def test_ecr_collision_lookup_precedes_any_apply_mutation() -> None:
     assert 'split("[")[1]' in block
     assert 'rtrimstr("]")' in block
     assert text.index("describe-repositories", start) < text.index("terraform apply", start)
-    assert "inputs.profile == 'staging' || inputs.profile == 'demo' || inputs.profile == 'preview'" in text
+    assert "if: inputs.profile == 'staging'" in text
     assert 'key=profiles/${PROFILE}/terraform.tfstate' in text
 
 
@@ -1148,7 +1148,8 @@ def test_staging_reconciles_preexisting_immutable_aes256_backend_repository() ->
     assert "repository_encryption_types" in variables
     assert "repository_tag_mutabilities" in variables
     assert 'lookup(var.repository_encryption_types, repository, "KMS")' in module
-    assert 'lookup(var.repository_tag_mutabilities, repository, "MUTABLE")' in module
+    assert "lookup(\n      var.repository_tag_mutabilities,\n      repository," in module
+    assert 'repository == "aether-access-mcp" ? "IMMUTABLE" : "MUTABLE"' in module
     assert 'local.encryption_types[each.value] == "KMS" ? aws_kms_key.ecr.arn : null' in module
     assert 'aether-backend = "AES256"' in staging
     assert 'aether-backend = "IMMUTABLE"' in staging

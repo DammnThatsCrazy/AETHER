@@ -76,8 +76,30 @@ async def _create_approved_csv_import(
     tenant_id: str, rows: list[tuple[str, str, str]]
 ) -> str:
     import ingestion.imports.service as import_service
+    from connectors.integrations.data_rights.models import DataRightsGrantCreate
+    from connectors.integrations.data_rights.service import data_rights_service
 
-    session = await import_service.create_import(tenant_id)
+    actor = f"tenant-admin:{tenant_id}"
+    source_id = f"identity-test-source:{uuid.uuid4().hex}"
+    await data_rights_service.create_grant(
+        DataRightsGrantCreate(
+            tenant_id=tenant_id,
+            source_id=source_id,
+            connector_id="csv_import",
+            connector_class="tenant_import",
+            data_category="customer",
+            data_sensitivity="sensitive_pii",
+            raw_data_owner=tenant_id,
+            tenant_lake_allowed=True,
+            tenant_graph_allowed=True,
+            tenant_insights_allowed=True,
+            legal_basis="contract",
+        ),
+        granted_by_user_id=actor,
+    )
+    session = await import_service.create_import(
+        tenant_id, created_by=actor, source_id=source_id
+    )
     import_id = session["id"]
     content = "entity_id,identifier_type,value\n" + "".join(
         f"{entity_id},{claim_type},{value}\n" for entity_id, claim_type, value in rows
@@ -98,7 +120,7 @@ async def _create_approved_csv_import(
     ])
     validation = await import_service.validate_import(tenant_id, import_id)
     assert validation["status"] in {"validated", "review_required"}
-    await import_service.approve_import(tenant_id, import_id)
+    await import_service.approve_import(tenant_id, import_id, approver=actor)
 
     return import_id
 

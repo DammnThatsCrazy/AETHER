@@ -231,6 +231,24 @@ variable "auth0_api_audience" {
   description = "Auth0 API audience passed to the hosted backend token validator."
 }
 
+variable "auth0_mcp_audience" {
+  type        = string
+  description = "Exact delegated MCP OAuth resource audience, empty when the MCP service is disabled."
+  default     = ""
+}
+
+variable "enable_access_continuations" {
+  type        = bool
+  description = "Enable the existing continuation routes on the public API task; default off."
+  default     = false
+}
+
+variable "mcp_service_assertion_secret_arn" {
+  type        = string
+  description = "Secrets Manager version ARN of the private MCP-to-API HMAC key; mounted only into the API task."
+  default     = ""
+}
+
 variable "aether_app_url" {
   type        = string
   description = "Canonical Aether customer-app origin used by backend email and billing links."
@@ -293,7 +311,7 @@ variable "stripe_portal_return_url" {
 # defaults on purpose. They come from the api service in the schema-v2runtime
 # matrix via the root's local.api_* values, and a default here would be a
 # second source of truth for a number the matrix already states — exactly the
-# divergence that let a production-scale plan run a lean-sized API.
+# divergence that let one plan run a differently sized API than the one reviewed.
 
 variable "backend_cpu" {
   type        = number

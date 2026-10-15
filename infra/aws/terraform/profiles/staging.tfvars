@@ -30,7 +30,7 @@ aurora_max_acu = 2
 # backups. Longer retention is reserved for paid production profiles.
 aurora_backup_retention_days = 1
 # The account is paid, so full staging uses the customer-managed Aurora KMS
-# key and exercises the same encrypted database topology that production-lean
+# key and exercises the same encrypted database topology that production
 # will receive. The bounded Serverless v2 profile still auto-pauses while idle.
 aurora_express_mode = false
 skip_aurora         = false

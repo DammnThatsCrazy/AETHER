@@ -31,7 +31,7 @@ controls:
     control_family: identity-and-access
     owner: trust
     scope: backend-auth
-    environments: [staging, production-lean]
+    environments: [staging, production]
     frequency: continuous
     implementation_type: preventive
     status: implemented
@@ -59,7 +59,7 @@ controls:
     control_family: identity-and-access
     owner: trust
     scope: backend-auth
-    environments: [staging, production-lean]
+    environments: [staging, production]
     frequency: continuous
     implementation_type: preventive
     status: implemented
@@ -87,7 +87,7 @@ controls:
     control_family: identity-and-access
     owner: trust
     scope: backend-auth
-    environments: [staging, production-lean]
+    environments: [staging, production]
     frequency: continuous
     implementation_type: preventive
     status: implemented
@@ -107,16 +107,16 @@ controls:
     next_review_at: null
 
   - control_id: COST-LEAN-01
-    name: production-lean excludes expensive scale/enterprise resources
+    name: production excludes expensive scale/enterprise resources
     description: >
-      The production-lean profile forbids MSK, ElastiCache, Neptune, ClickHouse,
+      The production profile forbids MSK, ElastiCache, Neptune, ClickHouse,
       dedicated ML, frontend ECS, legacy RDS, and NAT (unless explicitly
       enabled). The canonical policy is data-validated now; Terraform-plan
       enforcement lands in the deployment-profile PR (ledger FT-9).
     control_family: cost-governance
     owner: platform
     scope: infrastructure
-    environments: [production-lean]
+    environments: [production]
     frequency: per-release
     implementation_type: detective
     status: designed
@@ -144,7 +144,7 @@ controls:
     control_family: release-governance
     owner: platform
     scope: ci-cd
-    environments: [staging, production-lean]
+    environments: [staging, production]
     frequency: per-release
     implementation_type: detective
     status: implemented
@@ -175,7 +175,7 @@ controls:
     control_family: identity-and-access
     owner: trust
     scope: backend-authz
-    environments: [staging, production-lean]
+    environments: [staging, production]
     frequency: continuous
     implementation_type: preventive
     status: implemented

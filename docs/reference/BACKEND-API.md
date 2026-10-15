@@ -6,7 +6,7 @@ visibility: P
 audience: [dev-junior, dev-senior, architect]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/tenancy/, services/api/ingestion/, services/api/identity/, services/api/graph/, services/api/journeys/, services/api/intelligence/, services/api/value/, services/api/actions/, services/api/governance/, services/api/workers/, services/api/connectors/, services/api/replay/, services/api/billing/]
+source_files: [services/api/tenancy/, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/ingestion/, services/api/identity/, services/api/graph/, services/api/journeys/, services/api/intelligence/, services/api/value/, services/api/actions/, services/api/governance/, services/api/workers/, services/api/connectors/, services/api/replay/, services/api/billing/]
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
@@ -21,20 +21,24 @@ reviewed_source_commits:
   - {'commit': '33dfedb4', 'reason': 'Reviewed 33dfedb4 — the /v1/rights surface is now MOUNTED in main.py (always mounted beside /v1/dsr); the routes carry the rollout-OFF 503 gate and require scalar source/purpose/destination matching RightsDecisionRequest; the durable repositories accept dict-or-model rows. This commit makes /v1/rights live and supersedes the earlier not-wired-into-main.py review notes. Body change: the Rights Authority section below documents the three endpoints and their rollout-gated 503 posture.'}
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
+  - {'commit': 'fcfe08b7b', 'reason': 'Reviewed V1/V2 SDK batch observation-envelope parity. Both storage branches preserve the flat normalized event contract and add the same optional Envelope-B projection only when adoption is enabled; no route or response schema changed.'}
+  - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
+  - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:cc762b94faad369af1d66f4f3e3ca0728a99860f2d5133a2522ecdcff2413a65"
-  "services/api/billing/": "sha256:dd694b14e890adec41191a54a035ad863d9c14a2183ba5e9888c64c018658e77"
+  "services/api/actions/": "sha256:f5e9afb088d3a8f9e93bdd981db2b6dd1fc522c67d22d37b72d20d1b720791cb"
+  "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
+  "services/api/billing/": "sha256:4dd92369eb7f8e3183dc069a284afb09450eeabbdd24a504a24401c270684e22"
   "services/api/connectors/": "sha256:01f3d11694ce153f102de85133e514fe4548877376c05668c2ee6fe63e1ad633"
-  "services/api/governance/": "sha256:4979f1d68790c9673561b70d97ad0710960603cc7228fd429539160d64db4f1d"
-  "services/api/graph/": "sha256:7372bf88ff18200edd21b53649b25098a9b1e1ec474a79ee36cd28a480093706"
-  "services/api/identity/": "sha256:e983d0dc2e0dae26c6254cdc8bcff4fff0cb2a8d4e418eefdbbb37bd8103e253"
-  "services/api/ingestion/": "sha256:cced019a9d58c2b5da76ba38436b3d9b945ba9baefdeaf1676fd521977885d5f"
-  "services/api/intelligence/": "sha256:6f97e244ba5d4ab36c14ce27c6a207ba4e428b61173821f33d0e387411a7c737"
-  "services/api/journeys/": "sha256:5d7336fa8f43bb5107a9314f09a08c16132ba1c1cf1f57762344f55a1192608a"
+  "services/api/governance/": "sha256:88d555a3245092c8b9359f48213c260d0e370b82d615858a14c11ac744bd48a6"
+  "services/api/graph/": "sha256:4955410983baf725cbace6872f3d013315fff1482b42e71b36ba94167a1c4e5b"
+  "services/api/identity/": "sha256:ba702f6a5f25ce0100bc118bf1b62f3a883cdaa777c56bd33c73aac72c1f003f"
+  "services/api/ingestion/": "sha256:89757f37b1e77f0bf3f55a5cb6e7a7df86ed5cfe5478010497e4e86d51333145"
+  "services/api/intelligence/": "sha256:21066dbfa991f01ee3070734c364087d7e5e538c4fda48efc8993fdb7b4ce56a"
+  "services/api/journeys/": "sha256:fcd9a0fe60b841344f6391b3265abc58a847d31e892977362515667781c43eba"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
-  "services/api/tenancy/": "sha256:b3e28efab538d22bad132a158a150d7ac9872d05a14ce3bf858637dc58e18289"
-  "services/api/value/": "sha256:f152a470584719e80d5d398c8e166cf34754b85c4aaae12803a1e3630bfffbc8"
-  "services/api/workers/": "sha256:483bc638eae1311f235c3eae1407f868ab392de4d3788799cbda70c1e477a321"
+  "services/api/tenancy/": "sha256:b8b5c4e0956e300494f051e9b82958da6caf3ca375b8c79f00d5b76dd061fc63"
+  "services/api/value/": "sha256:7a31f39d5aec70568ed834fc1c4b276a3d7fd2d85b61e98fdaaff6c4e6cf8ef7"
+  "services/api/workers/": "sha256:bebf5c0765768bd9b025b1847bb728c5296491d5d8cb511e4ae4a15121e09aef"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -169,6 +173,8 @@ Every successful response carries:
 | `X-Quota-Reset`       | ISO 8601 timestamp of next billing period start  |
 | `X-Quota-Overage`     | Present (`true`) only when the tenant is in overage |
 | `X-Access-Tier`       | Plan-specific access tier label for the matched service |
+| `X-Aether-Audit-Event-ID` | Present on attributed Access Kit reads when the audit record is persisted |
+| `X-Aether-Usage-Event-ID` | Present on attributed Access Kit reads when the usage event is persisted |
 
 ### Error Envelopes
 
@@ -220,8 +226,8 @@ signature-verification failures.
 | `/v1/auth/verify-email` | POST | Email sign-up step 2 — verify OTP, create tenant + first API key (20 requests per minute per client IP; 5 wrong codes per address per 15 minutes, then `429` even for the right code) |
 | `/v1/auth/resend-verification` | POST | Resend the OTP if the first email was lost (same IP and per-address limits as `register`) |
 | `/v1/auth/login` | POST | Email + password → API key (creates a new key per login). Throttled: 10 attempts per minute per client IP; 5 failed attempts per 15 minutes per address from one client IP (so one caller cannot lock the account holder out); and 25 failed attempts per 15 minutes per address from anywhere. A successful login clears both failure counts; over any limit answers `429`, and `errors[0].limiter` names which limit refused the request |
-| `/v1/auth/sso/callback` | POST | Auth0 JWT → session (API key with human sessions off). An unlinked sign-in first links a verified email to its existing user, joins a `PLATFORM_OPERATOR_EMAILS` address to the operator tenant as owner, or accepts a pending organization invitation; staging never self-provisions a tenant. A rejected token returns 400 and logs the reason (see [Access Control](../architecture/ACCESS-CONTROL.md#staging-sign-in-internal-only)) |
-| `/v1/auth/sso/providers` | GET | List configured SSO providers (no auth) |
+| `/v1/auth/sso/callback` | POST | Auth0 JWT → session (API key with human sessions off unless `session_required: true`, which refuses before token validation or membership side effects). The Access Kit CLI uses Auth0 Device Authorization and this guard. An unlinked sign-in first links a verified email to its existing user, joins a `PLATFORM_OPERATOR_EMAILS` address to the operator tenant as owner, or accepts a pending organization invitation; staging never self-provisions a tenant. A rejected token returns 400 and logs the reason (see [Access Control](../architecture/ACCESS-CONTROL.md#staging-sign-in-internal-only)) |
+| `/v1/auth/sso/providers` | GET | List configured SSO providers (no auth), including whether revocable human-session auth is enabled |
 | `/v1/auth/recover` | POST | Recover lost API key via signed email |
 | `/v1/billing/plans` | GET | Public plan catalog for signup and upgrade discovery |
 | `/v1/admin/billing/stripe/webhook` | POST | Stripe-signed webhook (subscription, invoice, and delayed Checkout payment events; delayed activation is fulfilled only after async payment success) |
@@ -275,6 +281,17 @@ coordinates are server authority: client input, URL state, tenant-record
 metadata, and `AETHER_ENV` cannot override them. Multi-workspace selection is
 not exposed by this model.
 
+The Access Kit CLI, MCP adapters, and Node client use this tenant API rather
+than owning a second authorization or graph path. Attributed reads of account
+context, sessions, entities, the observed capability catalog, and owned
+continuations, plus continuation creates, are written to the
+existing audit ledger and the non-billable `access_interaction` usage
+dimension. The API returns durable audit and usage IDs in
+`X-Aether-Audit-Event-ID` and `X-Aether-Usage-Event-ID`; the
+`X-Aether-Access-Surface` request label is limited to `cli`, `mcp_stdio`,
+`mcp_http`, and `access_sdk`; it does not grant permission or choose a tenant.
+The package's operation list describes adapter support, not a tenant grant.
+
 ### Contact & enterprise inquiries (`/v1/contact/*`)
 
 | Endpoint | Method | Auth | Purpose |
@@ -308,7 +325,7 @@ are returned in customer or operator responses.
 | `/v1/billing/plan` | GET | API key | Caller-safe contract profile and enabled billing modules |
 | `/v1/billing/entitlements` | GET | API key | Caller-safe tenant entitlements |
 | `/v1/billing/usage` | GET | API key | Caller tenant usage events for a requested or current billing window |
-| `/v1/billing/usage/summary` | GET | API key | Caller tenant billable-usage summary |
+| `/v1/billing/usage/summary` | GET | API key | Caller tenant usage dimensions, including non-billable visibility meters |
 | `/v1/billing/invoice-previews` | GET | API key | Caller-safe invoice previews with internal pricing notes removed |
 | `/v1/billing/value-created` | GET | API key | Caller-safe value-created events for value-based billing review |
 | `/v1/billing/payment-status` | GET | API key | Caller-safe payment status and active provider mode |
@@ -626,6 +643,40 @@ publish semantics match `/v1/batch`, and the aliases now require the same
 `write` permission. Setting `AETHER_KILL_DEPRECATED_INGEST_ALIASES=true`
 retires them with HTTP 410 (routes stay mounted; their bodies return the
 retired error and direct callers to `/v1/batch`).
+
+**Optional observation envelope:** when `AETHER_OBSERVATION_ENVELOPE_ENABLED`
+is on, both the V1 event-bus path and V2 transactional Bronze/outbox path add
+the SDK adapter's `observation_envelope` to the persisted event. When
+`AETHER_UNIVERSAL_INGRESS_GATEWAY_ENABLED` is also on, that projection is
+validated and stamped through the existing gateway. The change is additive and
+default-off; envelope construction or gateway rejection degrades to the
+accepted flat event and records the corresponding metric. Downstream consumers
+must continue treating the flat event as the compatibility surface during this
+adoption phase.
+
+Each batch response echoes the middleware `requestId`. When the advisory
+metering hook succeeds, it also returns the actual `usageEventId` and
+`usageEvidenceId`; these fields may be absent when metering is unavailable or
+no accepted event was billable. The request ID is passed to the existing
+metering authority as correlation metadata. After intake completes, the route
+records an `ingestion.batch` event in the existing tenant Audit Ledger and
+returns its actual `auditEventId` when persisted. When present, the
+`consentReceiptIds` response array contains only the real tenant-scoped receipt
+IDs used to admit accepted observations. The audit row links those references
+to the batch ID, outcome counts, available usage references, and authenticated
+request correlation. Because the observation may already be durable, audit
+persistence is best-effort and a missing `auditEventId` means no durable audit
+ID was returned; the server does not fabricate one.
+
+When authoritative consent allows an observation and provides a durable
+tenant-scoped consent receipt, validation preserves that actual receipt ID and
+purpose in the normalized event. With Envelope-B enabled, the ID is also
+present in its privacy block; when the universal ingress gateway is enabled,
+that projection is validated and stamped by the gateway. Denied or unreceipted
+consent receives no invented reference. These fields provide consent evidence,
+not a general authorization-decision or billing receipt. The ordinary `WRITE`
+permission check still has no durable decision ID, and billing/payment receipts
+remain owned by their existing flows.
 
 ---
 
@@ -1295,9 +1346,12 @@ Three service groups are available when Intelligence Graph feature flags are ena
 the exact shared order-reference basis, and reports linked/partial/conflict/
 unresolved. It has no amount or independent payment status. Multiple completed
 payments and mismatched evidence remain conflicts; processor completion is not
-a claim of payout settlement. When `as_of` is supplied it must include an
-explicit timezone and reconstructs which order revisions and payment
-observations Aether had recorded by that knowledge-time cutoff.
+a claim of payout settlement. If a verified source outcome is supplied to the
+ledger, the link can include its separate settlement record and `settled_by`
+relation only for exact provider/payment references. No current processor
+adapter emits that evidence. When `as_of` is supplied it must include an
+explicit timezone and reconstructs which order revisions, payment, refund and
+settlement observations Aether had recorded by that knowledge-time cutoff.
 
 The agent economics response includes `economic_operation_links`. Each link
 references its tenant-scoped `PaymentIntent` and `SettlementEvent` rows only
@@ -1313,10 +1367,11 @@ vertices/edges through the graph mutation gateway.
 Record references preserve source `occurred_at`, source `valid_at` where
 available, and first-persistence `observed_at` where the repository exposes it.
 This provides temporal lineage, but it does not itself provide historical
-as-of reconstruction. The commerce ledger retains each distinct order
-revision, including stale revisions without allowing them to replace the
-current source view. Agent reversal links are emitted only when a settlement
-source supplies the exact `reverses_settlement_event_id` reference.
+as-of reconstruction for agent intents. The commerce ledger retains each
+distinct order revision, payment, refund and settlement observation, including
+stale revisions without allowing them to replace the current source view.
+Agent reversal links are emitted only when a settlement source supplies the
+exact `reverses_settlement_event_id` reference.
 
 ### On-Chain Service (L0)
 
@@ -1604,8 +1659,28 @@ Core identity resolution and entity management endpoints.
 | GET | `/v1/identity/profiles/{user_id}` | Get stored profile for a user/entity |
 | PUT | `/v1/identity/profiles/{user_id}` | Upsert profile record for a user/entity |
 | GET | `/v1/identity/profiles/{user_id}/graph` | Profile-scoped graph view (bounded to 50 neighbors) |
+| POST | `/v1/identity/verification/wallet/challenges` | Issue a five-minute, tenant/subject/wallet/chain-bound wallet ownership message (`write`; current server-evaluated identity-link consent required) |
+| POST | `/v1/identity/verification/wallet/challenges/{challenge_id}/verify` | Verify and consume the wallet signature, then issue durable evidence and replay identity resolution (`write`; consent is re-evaluated) |
 
-**Permissions:** `read` for GET queries; `write` for resolve/profiles; `admin` for merge/split/recompute/conflicts.
+**Permissions:** `read` for GET queries; `write` for resolve/profiles/wallet proof; `admin` for merge/split/recompute/conflicts.
+
+#### Wallet ownership proof
+
+Both wallet verification routes also require `identity_continuity.resolution_enabled`.
+The challenge request body is `{ "anonymous_id", "wallet_address",
+"chain_namespace" }`. The response data contains `{ "challenge_id",
+"wallet_address", "chain_namespace", "message", "expires_at" }`. To verify,
+send `{ "challenge_id", "anonymous_id", "wallet_address",
+"chain_namespace", "signature" }` to the matching challenge path. The server
+re-evaluates consent for that exact anonymous subject before verification.
+
+Supported signatures are EVM `eip155:*` EIP-191 `personal_sign` and Solana
+Ed25519 over the exact UTF-8 message (standard Base64 signature). The consumed
+proof is chain-scoped and replayed through the existing resolver for the
+consented anonymous subject. It proves key control for the challenge only; it
+does not authorize a transaction or establish exclusive custody. Sui
+transaction verification is a separate execution-evidence path, and Sui wallet
+signature formats are not accepted here.
 
 ---
 
@@ -1949,7 +2024,7 @@ Registry-first Web3 intelligence system with canonical chain/protocol/app/domain
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/v1/web3/transactions/verify` | Verify an already stored tenant SDK transaction using registered-chain, read-only EVM/Solana RPC evidence |
+| `POST` | `/v1/web3/transactions/verify` | Verify an already stored tenant SDK transaction using registered-chain, read-only EVM/Solana RPC or Sui GraphQL evidence |
 | `GET` | `/v1/web3/transactions/{chain_id}/{transaction_hash}/verification` | Read the tenant-scoped verification record |
 
 Verification requires an existing matching row in `silver_web3_transaction_facts`
@@ -1958,8 +2033,11 @@ The POST requires `write` and accepts `chain_id` and `transaction_hash`; GET
 requires `read` and uses the registered chain ID. EVM verifies the RPC chain
 ID, transaction sender/hash, receipt, and the server-set confirmation threshold;
 SVM verification requests finalized transaction data and checks a registered
-genesis hash when configured. The result records execution status separately and
-does not establish payment settlement. The verification route refreshes Journey
+genesis hash when configured. Sui verification uses a fixed read-only GraphQL
+transaction query, requires a `sui:<network>` chain namespace, and checks the
+registered chain identifier, digest, observed sender and execution result. The
+result records execution status separately and does not establish payment
+settlement. The verification route refreshes Journey
 activity only after RPC evidence is obtained; a missing transaction remains
 pending and a chain mismatch does not update canonical activity.
 
@@ -2656,8 +2734,9 @@ Core entity management — create, resolve, and manage entity records and cluste
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/v1/entities` | Create a new entity record |
-| GET | `/v1/entities` | List entities with optional filters |
+| GET | `/v1/entities` | List tenant entities with optional filters; an explicit `offset` (0–100000) enables durable entity-ID ordering and `next_offset`, with `limit` 1–500 |
 | GET | `/v1/entities/{id}` | Get entity details |
+| GET | `/v1/entities/{id}/neighborhood` | Read a tenant-authorized one-hop graph projection (up to 50 neighbors and 100 edges); returns a bounded node/edge shape and truncation flags, with graph-family metering |
 | PATCH | `/v1/entities/{id}` | Update entity fields |
 | POST | `/v1/entities/{id}/identifiers` | Add identifiers (email, phone, wallet, device) to an entity |
 | DELETE | `/v1/entities/{id}/identifiers/{cluster_id}` | Remove an identifier from an entity |
@@ -2682,7 +2761,7 @@ Graph traversal, overlay, and analytics over the unified profile-selected intell
 | GET | `/v1/graph/contracts` | List active smart-contract vertices in the graph |
 
 **Permissions:** `read`. Uses the profile-selected durable graph backend (PostgreSQL for
-staging/production-lean; Neptune only where a heavier profile selects it); local uses the
+staging/production; Neptune only where a deployment enables it); local uses the
 local graph backend.
 
 ---
@@ -3004,14 +3083,24 @@ Redacted tenant-safe feed — no internal scoring or suppression metadata expose
 
 ### Webhook Endpoint Configuration
 
-Tenant-managed outbound webhook delivery endpoints. Aether signs each delivery with an HMAC-SHA256 signature in the `X-Aether-Signature` header.
+Tenant-managed Access Kit interaction endpoints. Aether signs each delivery
+with an HMAC-SHA256 signature in the `X-Aether-Signature` header. New endpoints
+remain inactive until a signed test succeeds. Aether generates a secret by
+default; an optional bounded custom secret is also accepted. Secrets are
+encrypted in the credential authority and shown only in the create or rotate
+response. URLs must resolve to public HTTPS addresses; delivery pins validated DNS addresses,
+refuses redirects, and uses the durable retry/dead-letter outbox. Payloads
+include minimized interaction and audit references, not request bodies, entity
+identifiers, or response content.
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/v1/notifications/webhooks` | List all registered webhook endpoints for the tenant |
-| POST | `/v1/notifications/webhooks` | Register a new endpoint (`url`, `events`, optional `secret`) |
+| POST | `/v1/notifications/webhooks` | Register a public HTTPS endpoint for `access.interaction.completed`, `.blocked`, or `.failed`; Aether generates a write-only signing secret |
 | DELETE | `/v1/notifications/webhooks/{webhook_id}` | Remove a webhook endpoint |
-| POST | `/v1/notifications/webhooks/{webhook_id}/test` | Ping the endpoint to verify reachability; returns `success`, `status_code`, and `latency_ms` |
+| POST | `/v1/notifications/webhooks/{webhook_id}/test` | Send a signed test; activates only on success and returns `success`, `status_code`, and `latency_ms` |
+| POST | `/v1/notifications/webhooks/{webhook_id}/rotate-secret` | Rotate the write-only secret, pause delivery, and require another successful test |
+| GET | `/v1/notifications/webhooks/{webhook_id}/deliveries?limit=50` | Read bounded tenant-scoped delivery status history |
 
 ### Interactive Callbacks
 
@@ -3027,6 +3116,30 @@ Tenant-managed outbound webhook delivery endpoints. Aether signs each delivery w
 - `notifications:channels:write` — channel registration/removal
 
 ---
+
+## Agent Deployment Evidence and Projection Recovery
+
+Tenant routes require `agent:manage` and always use the authenticated tenant:
+
+- `GET /v1/agent/deployments/marketplace/catalog` — returns bounded public listing labels, URLs, observation status, and graph projection status. The default-off observer does not return bot configuration.
+- `GET /v1/agent/deployments/{deployment_id}/runs` — lists bounded run references from that tenant's deployment-filtered Silver facts.
+- `GET /v1/agent/deployments/{deployment_id}/runs/{run_id}/explanation` — returns the observed task, trigger, policy, delegation, tool, and outcome evidence for one deployment-scoped run. Evidence is labelled source-asserted and includes coverage gaps; the route does not claim hidden reasoning or independently verified authority.
+- `POST /v1/agent/deployments` — accepts optional tenant-declared `marketplace_origin` provenance. When graph projection is enabled, writes are queued for asynchronous projection.
+- `PUT /v1/agent/deployments/{deployment_id}/identity-binding` — tenant admin explicitly binds the deployment's source namespace and agent reference to an existing canonical Agent owned by the same tenant. This binding is not automatic identity merge evidence.
+- `GET /v1/agent/deployments/{deployment_id}/identity-binding` — returns the binding status (`matched`, `unresolved`, `ambiguous`, or `unavailable`) and provenance without crossing tenant boundaries.
+
+If the Silver query for a run explanation fails, the response sets
+`source_status=unavailable` and omits `coverage`; clients must not interpret
+that response as evidence that coverage was absent.
+
+Kyber operator routes require admin permission and an explicit tenant scope for reconciliation and repair:
+
+- `POST /v1/admin/kyber/agent-telemetry/graph-projection/drain?tenant_id=...&limit=100` — drains a bounded outbox batch.
+- `GET /v1/admin/kyber/agent-telemetry/graph-projection/reconcile?tenant_id=...` — reports source-to-outbox coverage, pending and dead-lettered rows; it does not inspect graph state. The source cursor pages platform catalog observations or tenant deployment/Silver facts; the outbox cursor pages tenant queue status. The response returns `source_next_cursor` and `outbox_next_cursor`; an empty page may still return a cursor. Missing mutations are checked by direct outbox key lookup. `scan_consistency=best_effort_non_snapshot` means cursor exhaustion is not a consistent snapshot guarantee; restart from page one after concurrent writes settle when full coverage is required.
+- `POST /v1/admin/kyber/agent-telemetry/graph-projection/repair?tenant_id=...` — re-enqueues missing source mutations and requeues dead letters. Pass the returned `source_next_cursor` as `cursor` and `outbox_next_cursor` as `outbox_cursor` to continue each scan. `replay_persisted=true` explicitly replays persisted queue rows.
+- `GET /v1/admin/kyber/agent-telemetry/graph-projection/state-check?tenant_id=...&limit=...` — bounded read-only check of known tenant deployment, Silver, delegation, and economic references against supported graph vertices/edges. Reports `consistent`, `inconsistent`, or `partial`, with missing/extra/mismatched/unresolved/unauthorized findings and truncation/coverage. It is `best_effort_non_snapshot`, does not mutate or drain the outbox, and does not certify all graph contents.
+
+Run-explanation evidence separates `delegation_resolution` (canonical record/party binding), `delegation_authorization` (event-time scope result), and `execution_occurrence`. Canonical grant data may support `within_scope`, `out_of_scope`, or `indeterminate`; action, resource, and event time are source-asserted. Target party binding uses source `delegatedToNamespace` (`delegated_to_namespace` in Silver); missing/invalid namespace remains unresolved and does not fall back to the actor namespace. Without a server-owned external execution receipt, occurrence remains `source_reported` and `verified=false`. A grant match is not proof the reported action occurred.
 
 ## Agentic Observability Layer
 
@@ -3621,11 +3734,14 @@ request body: a client cannot forge `principal_id`, `tenant_id`, or `app_kind`.
 
 Scope is `t:{tenant_id}`; the principal is the authenticated user (or the tenant
 itself for API-key auth). GETs require `read`, writes `write`. Creating,
-updating, or deleting a continuation emits a `continuation_changed` sync event.
+updating, or deleting a continuation enqueues a `continuation_changed` sync
+event when client-sync is enabled; the feed append is best effort. Create
+retries use a stable source-event ID so they can repair a missed append without
+duplicating a persisted one.
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/v1/continuations` | Create a continuation (optional `idempotency_key` query param). Body: `source_client`, `surface`, `summary`, `canonical_context`, `resource_references`, `sensitivity` (default `standard`), `freshness`, `expires_at`. Returns the row with `state_revision` (0 on create). |
+| POST | `/v1/continuations` | Create a continuation (optional bounded `idempotency_key` query param). Body: `source_client`, `surface`, `summary`, `canonical_context`, `resource_references`, `sensitivity` (default `standard`), `freshness`, `expires_at`. Returns the row with `state_revision` (0 on create) and `replayed`; keys are principal scoped and changed-content replay returns 409. |
 | GET | `/v1/continuations/recent` | Recent continuations for the principal (`limit` 1–100, default 25). Response `{ "continuations": [...] }`. |
 | GET | `/v1/continuations/{id}` | One continuation. |
 | PATCH | `/v1/continuations/{id}` | Compare-and-swap update. Body is the continuation fields plus the required `expected_state_revision`; a `state_revision` mismatch returns HTTP 409. |
@@ -4147,6 +4263,21 @@ canonical `/v1/imports` and `/v1/exports` seams.
 | POST | `/v1/data-exchange/imports/{import_id}/preview/graph` | Graph-mutation preview | `write`; delegates to the canonical commit preview. |
 | POST | `/v1/data-exchange/imports/{import_id}/commit` | Commit the import | `admin`; enqueues the canonical `import.commit` durable job. |
 | POST | `/v1/data-exchange/imports/{import_id}/rollback` | Roll back a committed import | `admin`; uses canonical source-tag rollback. |
+
+For CSV commits, the worker resolves Rights Authority decisions for
+`tenant_lake`, `write_tenant_graph`, and `tenant_insights` against the import's
+source before identity, Bronze, Silver, or graph writes. A durable active grant
+for the exact tenant and source must remain valid through the writes. Missing,
+denied, wrong-source, revoked, or unavailable rights fail closed as
+`import_rights_denied`; the import session keeps the attempt history and any
+durable decision references. Successful commit records and Bronze/Silver
+evidence retain those references, and governed graph mutations carry the graph
+decision reference. Silver remains a best-effort projection under its existing
+contract. CSV graph writes currently use the mutation gateway's shadow mode,
+but the commit is not acknowledged complete unless its graph-ledger rows retain
+durable rights references. If projection succeeds and a ledger append fails,
+the import remains failed; requeue resumes under the preserved commit ID and
+repairs an already projected same-commit edge without adding a duplicate.
 
 ### Saved import mappings
 

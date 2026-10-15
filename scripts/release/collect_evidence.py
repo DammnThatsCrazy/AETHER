@@ -90,7 +90,7 @@ EVIDENCE_CHECK_ARGS: dict[str, list[str]] = {
     # from AWS, which is the precise confusion the bundle exists to prevent.
     # With no real plan present the check fails, and that is the honest result.
     "terraform_plan_policy": [
-        "--profile", "production-lean",
+        "--profile", "production",
         "--plan-json", ".artifacts/reviewed.tfplan.json",
     ],
     # Scored against the inventory a credentialed plan produced. The path is the
@@ -102,7 +102,7 @@ EVIDENCE_CHECK_ARGS: dict[str, list[str]] = {
     # bundle exists to prevent, and it was reachable because only the plan gate
     # was pointed at a path a fixture never occupies.
     "cost_model": [
-        "--profile", "production-lean",
+        "--profile", "production",
         "--inventory", ".artifacts/profile-resource-inventory.json",
     ],
 }

@@ -34,7 +34,7 @@ export const FEATURES: Record<string, Feature> = {
   graph: { name: 'Graph', q: 'What is connected to what?', lead: 'The Graph shows how everything in your business links together — people, companies, AI agents, apps, and orders — and how Aether knows each link is real.', vizKicker: 'Start with one person', vizTitle: 'Then see everything around them.', vizBody: 'Pick anyone and follow their connections outward. Solid lines are things Aether saw happen. Dashed lines are things it worked out.', story: 'customer', stages: '1,3', can: ['See who and what a person is connected to', 'Follow a connection to the thing on the other end', 'Spot groups that act together', 'Check how Aether knows each connection'], plain: 'A map of how everything connects.', product: 'The Graph workspace, where every person, company, agent, and connection can be explored.', tech: 'Tenant-scoped graph projection of resolved entities and typed, temporal edges.', docs: 'Docs.dc.html?page=relationships', next: 'profiles' },
   profiles: { name: 'Profiles', q: 'Who is this, really?', lead: 'Your CRM knows an email, your website knows a browser, Stripe knows a customer ID. A Profile brings them together into one person — with the reasons Aether believes they match.', vizKicker: 'Seven records, one person', vizTitle: 'Separate records become one Profile.', vizBody: 'Aether matches the same person across your tools, and keeps the evidence for every match so you can check it.', story: 'customer', stages: '0,1', can: ['See everything about one customer in one place', 'Check why records were matched', 'See their history, journeys, and messages', 'Know when someone anonymous becomes known'], plain: 'Everything Aether knows about one person, company, or agent.', product: 'Profile 360 — the full view for one person or company.', tech: 'A tenant-scoped resolved entity projection built from identity evidence.', docs: 'Docs.dc.html?page=profiles', next: 'journeys' },
   journeys: { name: 'Journeys', q: 'How did they get here?', lead: 'A Journey puts activity in order — from the first ad to the purchase to the support ticket — so you can see the path that led to an outcome.', vizKicker: 'From scattered events', vizTitle: 'To one ordered path.', vizBody: 'Journeys can pause, pick up on another device, branch, and end in a purchase or a drop-off. Aether keeps it all in one line.', story: 'customer', stages: '1,2', can: ['See every step a customer took', 'Find where people drop off', 'Compare paths that converted with those that didn’t', 'Follow a journey across devices'], plain: 'The path that led to an outcome.', product: 'Journeys and Journey 360.', tech: 'Journey construction over time-ordered, linked signals; supports pause, resume, and branching.', docs: 'Docs.dc.html?page=journeys', next: 'communications' },
-  communications: { name: 'Communications', q: 'What was said, and when?', lead: 'Emails, texts, support replies, and AI agent chats — placed on the customer’s timeline where they actually happened, instead of in another inbox.', vizKicker: 'Not another inbox', vizTitle: 'Messages, in the context of the relationship.', vizBody: 'Every message is tied to the person it went to and the moment in their journey it arrived.', flow: [['✉', 'Email', 'opened · Mar 09 11:43'], ['◉', 'Text message', 'link clicked · Mar 09 12:02'], ['●', 'Support', 'replied · Mar 10 17:30'], ['⬡', 'AI agent', 'conversation · Mar 10 14:22'], ['→', 'On Jane’s timeline', 'all four, in order']], can: ['See every message a customer received', 'Know which messages led somewhere', 'Read agent conversations next to human ones', 'Line messages up against the journey'], plain: 'Every message, where it belongs in the story.', product: 'Communications 360.', tech: 'Communication events resolved to entities and placed on journey timelines.', docs: 'Docs.dc.html?page=communications', next: 'value' },
+  communications: { name: 'Communications', q: 'What was said, and when?', lead: 'Emails, texts, support replies, and AI agent chats — placed on the customer’s timeline where they actually happened, instead of in another inbox.', vizKicker: 'Not another inbox', vizTitle: 'Messages, in the context of the relationship.', vizBody: 'Every message is tied to the person it went to and the moment in their journey it arrived.', flow: [['✉', 'Email', 'opened · Mar 09 11:43'], ['◉', 'Text message', 'link clicked · Mar 09 12:02'], ['●', 'Support', 'replied · Mar 10 17:30'], ['⬡', 'AI agent', 'conversation · Mar 10 14:22'], ['→', 'On Sofia’s timeline', 'all four, in order']], can: ['See every message a customer received', 'Know which messages led somewhere', 'Read agent conversations next to human ones', 'Line messages up against the journey'], plain: 'Every message, where it belongs in the story.', product: 'Communications 360.', tech: 'Communication events resolved to entities and placed on journey timelines.', docs: 'Docs.dc.html?page=communications', next: 'value' },
   value: { name: 'Value', q: 'Where did this money come from?', lead: 'Start with a sale and trace it back — through the order, the email, the campaign, and the referral — to see what actually contributed and by how much.', vizKicker: 'Trace a sale backwards', vizTitle: 'Every step that helped, with its share.', vizBody: 'Aether gives credit across the path and shows where it isn’t sure.', story: 'value', stages: '1,3', can: ['See what led to a sale', 'Compare campaigns by what they actually produced', 'See revenue by customer, journey, or region', 'Spot refunds and what caused them'], plain: 'What something was worth, and what helped.', product: 'Value and attribution.', tech: 'Attribution credits over journey touchpoints joined to normalized financial events.', docs: 'Docs.dc.html?page=journeys', next: 'risk' },
   risk: { name: 'Risk', q: 'What should I look into?', lead: 'Each account can look fine on its own. Risk often only shows up in the connections between them — a shared device, a pattern of refunds, an unusual payment.', vizKicker: 'Risk lives in the connections', vizTitle: 'What Aether saw, kept apart from what it suspects.', vizBody: 'Every risk signal shows its evidence and how confident Aether is — so a person can decide.', flow: [['●', 'Account A', 'jane@…'], ['□', 'Shared device', 'dev_ios_2c9'], ['●', 'Account B', 'created 2 days ago'], ['↺', 'Refund pattern', '3 refunds in 48h'], ['▲', 'Risk signal', 'confidence 0.88 · for review']], can: ['See why something was flagged', 'Tell evidence apart from guesses', 'Follow the connections behind a risk', 'Send it to a person to decide'], plain: 'Things worth a closer look, and why.', product: 'Risk signals with confidence and source.', tech: 'Inferred risk edges, stored separately from observed evidence.', docs: 'Docs.dc.html?page=evidence-states', next: 'graph' },
 };
@@ -61,7 +61,7 @@ export function AetherFeaturePage() {
     <div data-page="aether-feature" style={css("min-height: 100vh; background: #f5f4f1; color: #1a1a1e; font-family: var(--font-sans);")}>
       <SiteHeader brand="aether" active="Platform" />
       <main id="main" tabIndex={-1}>
-        <section>
+        <section style={css("background: radial-gradient(40% 50% at 80% 25%, rgba(58,104,150,0.28), transparent 72%), radial-gradient(40% 50% at 50% 85%, rgba(107,154,124,0.3), transparent 72%), linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%);")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(64px, 10vw, 136px) 24px clamp(48px, 7vw, 80px); display: flex; flex-direction: column; gap: 22px;")}>
             <span style={css("display: flex; gap: 8px; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;")}>
               <a href={link("Aether Platform.dc.html")} style={css("color: #6b6a65; text-decoration: none;")}>
@@ -93,7 +93,7 @@ export function AetherFeaturePage() {
             </div>
           </div>
         </section>
-        <section data-theme="dark" style={css("background: #111114; color: #e8e6e1;")}>
+        <section data-theme="dark" style={css("background: radial-gradient(60% 50% at 85% 18%, rgba(58,104,150,0.42), transparent 70%), radial-gradient(50% 45% at 8% 92%, rgba(107,154,124,0.24), transparent 70%), radial-gradient(45% 40% at 92% 92%, rgba(201,151,90,0.26), transparent 70%), #111114; color: #e8e6e1;")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(56px, 8vw, 104px) 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: clamp(32px, 5vw, 72px); align-items: center;")}>
             <div style={css("display: flex; flex-direction: column; gap: 16px;")}>
               <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;")}>
@@ -106,7 +106,7 @@ export function AetherFeaturePage() {
                 {f.vizBody}
               </p>
             </div>
-            <div style={css("min-width: 0; border: 1px solid #2a2a2f; border-radius: 12px; background: #1a1a1e; padding: 20px;")}>
+            <div style={css("min-width: 0; border-radius: 26px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14); padding: 20px;")}>
               {(useScene) ? (
                 <>
                   <AetherScene dark={true} story={f.story} stages={f.stages} autoplay={true} controls={false} />
@@ -138,7 +138,7 @@ export function AetherFeaturePage() {
             </div>
           </div>
         </section>
-        <section style={css("border-bottom: 1px solid #d8d6d0;")}>
+        <section style={css("background: radial-gradient(40% 50% at 80% 25%, rgba(58,104,150,0.28), transparent 72%), radial-gradient(40% 50% at 50% 85%, rgba(107,154,124,0.3), transparent 72%), linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%); border-bottom: 1px solid #d8d6d0;")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(64px, 9vw, 120px) 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: clamp(32px, 6vw, 96px); align-items: start;")}>
             <h2 style={css("font-size: clamp(28px, 3.4vw, 42px); font-weight: 500; letter-spacing: -0.028em; line-height: 1.06; margin: 0; text-wrap: balance;")}>
               {"What you can do"}
@@ -157,7 +157,7 @@ export function AetherFeaturePage() {
             </ul>
           </div>
         </section>
-        <section style={css("border-bottom: 1px solid #d8d6d0; background: #eceae5;")}>
+        <section style={css("border-bottom: 1px solid #d8d6d0; background: radial-gradient(40% 50% at 80% 25%, rgba(58,104,150,0.28), transparent 72%), radial-gradient(40% 50% at 50% 85%, rgba(107,154,124,0.3), transparent 72%), linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%);")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(56px, 8vw, 96px) 24px; display: flex; flex-direction: column; gap: 20px;")}>
             <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6a65;")}>
               {f.name}{", three ways"}
@@ -190,7 +190,7 @@ export function AetherFeaturePage() {
             </div>
           </div>
         </section>
-        <section>
+        <section style={css("background: radial-gradient(40% 50% at 80% 25%, rgba(58,104,150,0.28), transparent 72%), radial-gradient(40% 50% at 50% 85%, rgba(107,154,124,0.3), transparent 72%), linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%);")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(56px, 8vw, 96px) 24px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 24px;")}>
             <div style={css("display: flex; flex-direction: column; gap: 6px;")}>
               <span style={css("font-size: 13px; color: #6b6a65;")}>

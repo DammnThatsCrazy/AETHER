@@ -18,7 +18,7 @@ estimated_read_minutes: 3
 toc_depth: 3
 source_hashes:
   "AGENTS.md": "sha256:4e413d9b540e17345bc6ccc38d53a8baee240a3e761d07cf5630c9c8f78b3e89"
-  "Makefile": "sha256:0aeb8a8809ed9afc536662468d334282f9945150085bcb9a242c73e1e2fb00cb"
+  "Makefile": "sha256:e3626597e10f801f292d5dafece6e2e25172f88300dd6a04d43564b3a2edbee4"
   "config/unread_settings_flags.yaml": "sha256:3587b913f93df944cd4d53287db9f5b656042ae645aa50eb040adb1700f7583a"
   "docs/reference/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:a30d10876d2e5201438620787212007075ca64b61db807b6b500776090016c7e"
   "scripts/repo_doctor.py": "sha256:7e9d905cf0ebc5645496dc99ed1116c98e891f45ddce02d62604e98eed52abc2"
@@ -48,7 +48,7 @@ When preparing or updating a PR:
 6. Run `make validate-ci-execution-contracts` and `make validate-ci-performance-policy` when changing the adaptive CI plan, suite registry, evidence schemas, or latency policy.
 7. If strict docs drift reports source-linked pages, review each listed page against its declared `source_files` and update authored content where behavior changed.
 8. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
-9. For deployment-profile changes, run `make resolved-feature-flags` so staging and production-lean each have an explicit, reviewed flag resolution.
+9. For deployment-profile changes, run `make resolved-feature-flags` so staging and production each have an explicit, reviewed flag resolution.
 10. Mark the completed PR ready for review; this starts the single hosted `verification / disposition` authority. Run `make verification-disposition BASE=<ref> EXECUTE=1` once for the final lane tip.
 11. Run `make ci-check` only for broad local, trusted-main, nightly, release, or explicitly requested evidence; it is not a second blocking PR authority.
 12. Commit generated and synced outputs when preparing the PR or when a commit was requested.

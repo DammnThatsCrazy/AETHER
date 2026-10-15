@@ -276,6 +276,28 @@ async def test_staging_refuses_self_signup_for_an_uninvited_sign_in(monkeypatch)
     inserted.assert_not_called()
 
 
+async def test_sso_session_required_refuses_legacy_key_mode_before_token_validation(monkeypatch):
+    """A CLI that requires a revocable session cannot mint an API key as fallback."""
+    from tenancy.auth import routes as auth_routes
+    from shared.common.common import ForbiddenError
+
+    monkeypatch.setattr(
+        settings, "trust_plane",
+        dataclasses.replace(settings.trust_plane, human_sessions_enabled=False),
+    )
+    validate = AsyncMock()
+    monkeypatch.setattr("shared.auth.auth0_validator.validate_auth0_token", validate)
+    provisioned = AsyncMock()
+    monkeypatch.setattr(auth_routes._repo, "insert", provisioned)
+
+    with pytest.raises(ForbiddenError, match="revocable human sessions"):
+        await auth_routes.sso_callback(
+            auth_routes.SSOCallbackRequest(token="t", session_required=True)
+        )
+    validate.assert_not_awaited()
+    provisioned.assert_not_awaited()
+
+
 async def test_a_revoked_or_already_claimed_invitation_provisions_nothing():
     """The claim is atomic and comes first: an invitation that stopped being
     pending between the read and the claim grants no access."""

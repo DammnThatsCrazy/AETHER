@@ -201,7 +201,7 @@ release_profiles:
     productionization_required: true
     environment_gate: pilot
     business_gate: true
-  production-lean:
+  production:
     participation: not_in_release
     note: Out of scope for the V1 observe-only pilot.
   production-scale:

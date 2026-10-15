@@ -3,7 +3,7 @@
  */
 import { Fragment } from 'react';
 import { createElement as h, type ReactNode } from 'react';
-import { asset, css, portalLabel, useDesignState, useLink, useReducedMotion } from '@site/design/runtime';
+import { asset, css, hoverClass, portalLabel, useDesignState, useLink, useReducedMotion } from '@site/design/runtime';
 import { markSrc } from '@site/components/brand-mark';
 import { usePageMeta } from '@site/design/page-meta';
 import { SiteFooter } from '@site/components/site-footer';
@@ -37,7 +37,7 @@ export function AetherConnectPage() {
             </p>
           </div>
         </section>
-        <section id="wizard" data-theme="dark" style={css("background: #111114; color: #e8e6e1;")}>
+        <section id="wizard" data-theme="dark" style={css("background: radial-gradient(60% 50% at 85% 18%, rgba(58,104,150,0.42), transparent 70%), radial-gradient(50% 45% at 8% 92%, rgba(107,154,124,0.24), transparent 70%), radial-gradient(45% 40% at 92% 92%, rgba(201,151,90,0.24), transparent 70%), #111114; color: #e8e6e1;")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(48px, 7vw, 88px) 24px; display: flex; flex-direction: column; gap: 24px;")}>
             <h2 style={css("font-size: clamp(26px, 3vw, 38px); font-weight: 500; letter-spacing: -0.026em; line-height: 1.08; margin: 0; color: #e8e6e1;")}>
               {"Where is your data?"}
@@ -62,12 +62,12 @@ export function AetherConnectPage() {
                   </Fragment>
                 ))}
               </div>
-              <div style={css("flex: 1.2 1 360px; min-width: 0; border: 1px solid #2a2a2f; border-radius: 12px; background: #1a1a1e; padding: 12px; box-sizing: border-box;")}>
+              <div style={css("flex: 1.2 1 360px; min-width: 0; border-radius: 24px; padding: 12px; box-sizing: border-box; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14);")}>
                 <div style={css("position: relative; width: 100%; aspect-ratio: 1 / 0.86;")}>
                   {hub}
                 </div>
               </div>
-              <div style={css("flex: 1.2 1 320px; min-width: 0; border: 1px solid #2a2a2f; border-radius: 12px; background: #1a1a1e; padding: 24px; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box;")}>
+              <div style={css("flex: 1.2 1 320px; min-width: 0; border-radius: 24px; padding: 24px; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14);")}>
                 <span style={css("font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: #a09f99;")}>
                   {"Start with"}
                 </span>
@@ -77,7 +77,7 @@ export function AetherConnectPage() {
                 <span style={css("font-size: 14px; line-height: 1.6; color: #a09f99;")}>
                   {cur.body}
                 </span>
-                <pre style={css("margin: 0; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.7; color: #e8e6e1; background: #111114; border: 1px solid #2a2a2f; border-radius: 8px; padding: 14px; overflow-x: auto; white-space: pre;")}>
+                <pre style={css("margin: 0; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.7; color: #e8e6e1; background: rgba(0,0,0,0.38); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 14px; overflow-x: auto; white-space: pre;")}>
                   {cur.code}
                 </pre>
                 <a href={link(cur.href)} style={css("display: inline-flex; gap: 6px; font-size: 14px; font-weight: 500; color: #e8e6e1; text-decoration: none; margin-top: auto;")} className="hv-6f6d4759">
@@ -90,7 +90,7 @@ export function AetherConnectPage() {
             </div>
           </div>
         </section>
-        <section id="connectors" style={css("border-bottom: 1px solid #d8d6d0;")}>
+        <section id="connectors" style={css("border-bottom: 1px solid #d8d6d0; background: linear-gradient(155deg, #f1ebdd 0%, #e6e0ea 55%, #d6d2ec 100%);")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(56px, 8vw, 96px) 24px; display: flex; flex-direction: column; gap: 24px;")}>
             <div style={css("display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 24px; align-items: end;")}>
               <div style={css("display: flex; flex-direction: column; gap: 12px;")}>
@@ -108,7 +108,7 @@ export function AetherConnectPage() {
             <div style={css("display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr)); gap: 8px;")}>
               {(connectors).map((c, cIndex) => (
                 <Fragment key={cIndex}>
-                  <a href={link("Docs.dc.html?page=connector-catalog")} style={css("display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 10px; background: #fbfaf8; border: 1px solid #d8d6d0; text-decoration: none; color: #1a1a1e; transition: border-color 120ms cubic-bezier(0.22,1,0.36,1);")} className="hv-6268baea">
+                  <a href={link("Docs.dc.html?page=connector-catalog")} style={css("display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 18px; background: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.85); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 8px 24px rgba(40,34,70,0.08); text-decoration: none; color: #1a1a1e; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1), border-color 120ms cubic-bezier(0.22,1,0.36,1);")} className={hoverClass("background: rgba(255,255,255,0.8); border-color: #fff; color: #1a1a1e;")}>
                     <span style={css("width: 32px; height: 32px; border-radius: 8px; background: #ffffff; border: 1px solid #e2e0da; display: flex; align-items: center; justify-content: center; flex-shrink: 0;")}>
                       <img src={asset(c.logo)} alt="" style={css("width: 18px; height: 18px; object-fit: contain;")} />
                     </span>
@@ -124,7 +124,7 @@ export function AetherConnectPage() {
                 </Fragment>
               ))}
             </div>
-            <div style={css("display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 20px; border: 1px dashed #c9c7c0; border-radius: 10px;")}>
+            <div style={css("display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 20px; border-radius: 18px; background: rgba(255,255,255,0.35); border: 1px dashed rgba(26,26,30,0.28);")}>
               <span style={css("font-size: 14px; color: #4a4945;")}>
                 {"Don’t see your tool? Anything that can send a webhook or call an API can connect today — and new integrations ship regularly."}
               </span>
@@ -137,32 +137,32 @@ export function AetherConnectPage() {
             </div>
           </div>
         </section>
-        <section id="sdks" style={css("border-bottom: 1px solid #d8d6d0; background: #eceae5;")}>
+        <section id="sdks" data-theme="dark" style={css("background: radial-gradient(60% 50% at 85% 18%, rgba(58,104,150,0.42), transparent 70%), radial-gradient(50% 45% at 8% 92%, rgba(107,154,124,0.24), transparent 70%), radial-gradient(45% 40% at 92% 92%, rgba(201,151,90,0.24), transparent 70%), #111114; color: #e8e6e1;")}>
           <div style={css("max-width: 1200px; margin: 0 auto; padding: clamp(56px, 8vw, 96px) 24px; display: flex; flex-direction: column; gap: 24px;")}>
             <div style={css("display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 24px; align-items: end;")}>
               <div style={css("display: flex; flex-direction: column; gap: 12px;")}>
-                <a href={link("Aether Detail Page.dc.html?p=sdks")} style={css("font-family: var(--font-mono); font-size: 12px; color: #3a6896; text-decoration: none;")}>
+                <a href={link("Aether Detail Page.dc.html?p=sdks")} style={css("font-family: var(--font-mono); font-size: 12px; color: #9fbad6; text-decoration: none;")}>
                   {"⌘ sdks →"}
                 </a>
-                <h2 style={css("font-size: clamp(28px, 3.4vw, 42px); font-weight: 500; letter-spacing: -0.028em; line-height: 1.06; margin: 0;")}>
+                <h2 style={css("font-size: clamp(28px, 3.4vw, 42px); font-weight: 500; letter-spacing: -0.028em; line-height: 1.06; margin: 0; color: #e8e6e1;")}>
                   {"Your websites and apps"}
                 </h2>
               </div>
-              <p style={css("font-size: 15px; line-height: 1.6; color: #6b6a65; margin: 0;")}>
+              <p style={css("font-size: 15px; line-height: 1.6; color: #a09f99; margin: 0;")}>
                 {"Small libraries for your website and apps. They only send data people have agreed to share, and do the heavy lifting in Aether — not on your users’ devices."}
               </p>
             </div>
             <div style={css("display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 10px;")}>
               {(sdks).map((s, sIndex) => (
                 <Fragment key={sIndex}>
-                  <a href={link(s.href)} style={css("display: flex; flex-direction: column; gap: 8px; min-height: 150px; padding: 20px; border-radius: 12px; background: #f5f4f1; border: 1px solid #d8d6d0; text-decoration: none; color: #1a1a1e; box-sizing: border-box;")} className="hv-2e012587">
+                  <a href={link(s.href)} style={css("display: flex; flex-direction: column; gap: 8px; min-height: 150px; padding: 20px; border-radius: 22px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14); text-decoration: none; color: #e8e6e1; box-sizing: border-box; transition: background-color 120ms cubic-bezier(0.22,1,0.36,1), border-color 120ms cubic-bezier(0.22,1,0.36,1);")} className={hoverClass("background: rgba(255,255,255,0.13); border-color: rgba(255,255,255,0.28); color: #e8e6e1;")}>
                     <span style={css("font-size: 17px; font-weight: 500;")}>
                       {s.name}
                     </span>
-                    <span style={css("font-family: var(--font-mono); font-size: 12px; color: #4a4945; margin-top: auto;")}>
+                    <span style={css("font-family: var(--font-mono); font-size: 12px; color: #a09f99; margin-top: auto;")}>
                       {s.pkg}
                     </span>
-                    <span style={css("font-size: 12px; font-weight: 500; color: #2d5373;")}>
+                    <span style={css("font-size: 12px; font-weight: 500; color: #9fbad6;")}>
                       {"Quickstart →"}
                     </span>
                   </a>
@@ -184,20 +184,20 @@ export function AetherConnectPage() {
                 {"Send events from your own servers, or let another service push them in automatically. AI agents connect the same way."}
               </p>
             </div>
-            <div style={css("flex: 1.2 1 420px; display: flex; flex-direction: column; gap: 8px; min-width: 0;")}>
-              <div style={css("font-family: var(--font-mono); font-size: 12px; color: #e8e6e1; padding: 14px 16px; border: 1px solid #2a2a2f; border-radius: 10px; background: #111114;")}>
+            <div style={css("flex: 1.2 1 420px; display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 22px; border-radius: 26px; border: 1px solid rgba(255,255,255,0.1); background: radial-gradient(60% 50% at 85% 18%, rgba(58,104,150,0.42), transparent 70%), radial-gradient(50% 45% at 8% 92%, rgba(107,154,124,0.24), transparent 70%), radial-gradient(45% 40% at 92% 92%, rgba(201,151,90,0.24), transparent 70%), #111114; box-sizing: border-box;")}>
+              <div style={css("font-family: var(--font-mono); font-size: 12px; color: #e8e6e1; padding: 14px 16px; border-radius: 16px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14);")}>
                 <span style={css("color: #9cc4a9;")}>
                   {"POST"}
                 </span>
                 {" /v1/batch · signed · idempotent"}
               </div>
-              <div style={css("font-family: var(--font-mono); font-size: 12px; color: #e8e6e1; padding: 14px 16px; border: 1px solid #2a2a2f; border-radius: 10px; background: #111114;")}>
+              <div style={css("font-family: var(--font-mono); font-size: 12px; color: #e8e6e1; padding: 14px 16px; border-radius: 16px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14);")}>
                 <span style={css("color: #9cc4a9;")}>
                   {"POST"}
                 </span>
                 {" /v1/ingest/feed · server events"}
               </div>
-              <div style={css("font-family: var(--font-mono); font-size: 12px; color: #e8e6e1; padding: 14px 16px; border: 1px solid #2a2a2f; border-radius: 10px; background: #111114;")}>
+              <div style={css("font-family: var(--font-mono); font-size: 12px; color: #e8e6e1; padding: 14px 16px; border-radius: 16px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14);")}>
                 <span style={css("color: #dcb683;")}>
                   {"HMAC"}
                 </span>
@@ -249,26 +249,26 @@ export function AetherConnectPage() {
                 </Fragment>
               ))}
             </div>
-            <div style={css("display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 18px 20px; border-radius: 12px; background: #1a1a1e; color: #e8e6e1; font-family: var(--font-mono); font-size: 12px;")}>
-              <span style={css("padding: 6px 10px; border: 1px solid #3a3a40; border-radius: 6px;")}>
+            <div style={css("display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 20px; border-radius: 22px; border: 1px solid rgba(255,255,255,0.1); background: radial-gradient(60% 50% at 85% 18%, rgba(58,104,150,0.42), transparent 70%), radial-gradient(50% 45% at 8% 92%, rgba(107,154,124,0.24), transparent 70%), radial-gradient(45% 40% at 92% 92%, rgba(201,151,90,0.24), transparent 70%), #111114; color: #e8e6e1; font-family: var(--font-mono); font-size: 12px;")}>
+              <span style={css("padding: 7px 12px; border-radius: 12px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14);")}>
                 {"historical profile"}
               </span>
               <span style={css("color: #6b6a65;")}>
                 {"+"}
               </span>
-              <span style={css("padding: 6px 10px; border: 1px solid #3a3a40; border-radius: 6px;")}>
+              <span style={css("padding: 7px 12px; border-radius: 12px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.14);")}>
                 {"new SDK signal"}
               </span>
               <span style={css("color: #6b6a65;")}>
                 {"→"}
               </span>
-              <span style={css("padding: 6px 10px; border: 1px solid rgba(220,182,131,0.4); border-radius: 6px; color: #dcb683;")}>
+              <span style={css("padding: 7px 12px; border-radius: 12px; background: rgba(201,151,90,0.22); border: 1px solid rgba(224,184,120,0.55); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); color: #f0c995;")}>
                 {"identity resolution"}
               </span>
               <span style={css("color: #6b6a65;")}>
                 {"→"}
               </span>
-              <span style={css("padding: 6px 10px; border-radius: 6px; background: #e8e6e1; color: #1a1a1e;")}>
+              <span style={css("padding: 7px 12px; border-radius: 12px; background: rgba(255,255,255,0.92); color: #1a1a1e;")}>
                 {"same profile"}
               </span>
             </div>
@@ -337,13 +337,27 @@ function connectVals(k: string, choose: (id: string) => void, reduce: boolean, a
     { viewBox: '0 0 500 430', width: '100%', height: '100%', role: 'img', 'aria-label': 'Connection paths into Aether, ' + cur[3] + ' selected', style: { position: 'absolute', inset: 0, display: 'block', overflow: 'visible' } },
     spokes.map(({ o, x, y }, i) => {
       const on = o[0] === k;
-      const d = 'M' + x + ' ' + y + 'L' + cx + ' ' + cy;
+      // Spokes bow to alternating sides; dots ride an off-canvas copy of each curve into the hub.
+      const dx = cx - x;
+      const dy = cy - y;
+      const len = Math.hypot(dx, dy);
+      const bow = (i % 2 ? 1 : -1) * len * 0.2;
+      const qx = (x + cx) / 2 - (dy / len) * bow;
+      const qy = (y + cy) / 2 + (dx / len) * bow;
+      const d = 'M' + x.toFixed(1) + ' ' + y.toFixed(1) + 'Q' + qx.toFixed(1) + ' ' + qy.toFixed(1) + ' ' + cx + ' ' + cy;
+      const dS = 'M' + (x + 2000).toFixed(1) + ' ' + (y + 2000).toFixed(1) + 'Q' + (qx + 2000).toFixed(1) + ' ' + (qy + 2000).toFixed(1) + ' ' + (cx + 2000) + ' ' + (cy + 2000);
+      const peak = on ? 1 : 0.55;
       return h(
         'g',
         { key: 'l' + i },
-        h('path', { key: on ? 'on' + k : 'off', d, pathLength: 1, stroke: on ? o[4] : '#2a2a2f', strokeWidth: on ? 2 : 1, fill: 'none', strokeDasharray: on ? '1' : '0.02 0.02', style: on ? { animation: 'cnDraw 320ms ' + ease + ' both' } : {} }),
-        on && !reduce
-          ? h('circle', { key: 'p' + k, r: 3, fill: o[4], opacity: 0 }, h('animateMotion', { dur: '1.6s', repeatCount: 'indefinite', path: d }), h('animate', { attributeName: 'opacity', values: '0;1;1;0', keyTimes: '0;0.1;0.85;1', dur: '1.6s', repeatCount: 'indefinite' }))
+        h('path', { key: on ? 'on' + k : 'off', d, pathLength: 1, stroke: on ? o[4] : 'rgba(255,255,255,0.28)', strokeWidth: on ? 2 : 1.25, fill: 'none', strokeLinecap: 'round', strokeDasharray: on ? '1' : '0.02 0.03', style: on ? { animation: 'cnDraw 320ms ' + ease + ' both' } : {} }),
+        !reduce
+          ? h(
+              'circle',
+              { key: 'p' + k + i, cx: -2000, cy: -2000, r: on ? 3.2 : 2.2, fill: on ? o[4] : '#cfe0f2', style: { opacity: 0 } },
+              h('animateMotion', { dur: on ? '4s' : '7s', begin: i * 0.8 + 's', repeatCount: 'indefinite', path: dS, calcMode: 'spline', keyTimes: '0;1', keyPoints: '0;1', keySplines: '0.22 1 0.36 1' }),
+              h('animate', { attributeName: 'opacity', values: '0;' + peak + ';' + peak + ';0', keyTimes: '0;0.2;0.8;1', dur: on ? '4s' : '7s', begin: i * 0.8 + 's', repeatCount: 'indefinite' }),
+            )
           : null,
       );
     }),
@@ -353,13 +367,13 @@ function connectVals(k: string, choose: (id: string) => void, reduce: boolean, a
       return h(
         'g',
         { key: 'n' + i, style: { cursor: 'pointer' }, onClick: () => choose(o[0]) },
-        h('circle', { cx: x, cy: y, r: on ? 22 : 18, fill: on ? o[4] : '#111114', stroke: on ? o[4] : '#3a3a40', style: { transition: 'r 200ms ' + ease + ', fill 200ms ' + ease } }),
+        h('circle', { cx: x, cy: y, r: on ? 24 : 19, fill: on ? o[4] : 'rgba(255,255,255,0.1)', stroke: on ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.28)', strokeWidth: 1, style: { transition: 'r 200ms ' + ease + ', fill 200ms ' + ease } }),
         h('text', { x, y: y + 5, textAnchor: 'middle', fill: on ? '#111114' : o[4], style: { fontFamily: 'var(--font-mono)', fontSize: 14 } }, o[1]),
-        h('text', { x, y: y + (y > cy ? 40 : -30), textAnchor: 'middle', fill: on ? '#e8e6e1' : '#a09f99', style: { fontFamily: 'var(--font-sans)', fontSize: 11.5, fontWeight: on ? 500 : 400 } }, lab),
+        h('text', { x, y: y + (y > cy ? 42 : -32), textAnchor: 'middle', fill: on ? '#f4f2ee' : '#b4b2ac', style: { fontFamily: 'var(--font-sans)', fontSize: 11.5, fontWeight: on ? 500 : 400 } }, lab),
       );
     }),
-    h('rect', { x: cx - 52, y: cy - 30, width: 104, height: 60, rx: 10, fill: '#e8e6e1' }),
-    h('image', { href: markSrc('aether'), x: cx - 40, y: cy - 12, width: 24, height: 24 }),
+    h('rect', { x: cx - 60, y: cy - 32, width: 120, height: 64, rx: 20, fill: 'rgba(255,255,255,0.9)', stroke: 'rgba(255,255,255,0.9)' }),
+    h('image', { href: markSrc('aether'), x: cx - 44, y: cy - 13, width: 26, height: 26 }),
     h('text', { x: cx - 10, y: cy + 5, fill: '#1a1a1e', style: { fontFamily: 'var(--font-sans)', fontSize: 15, fontWeight: 500 } }, 'Aether'),
   );
   return {
@@ -374,14 +388,14 @@ function connectVals(k: string, choose: (id: string) => void, reduce: boolean, a
         go: () => choose(id),
         gStyle:
           'width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-family: var(--font-mono); font-size: 14px; ' +
-          (on ? 'background: ' + c + '; color: #111114;' : 'background: #111114; color: ' + c + '; border: 1px solid #2a2a2f; box-sizing: border-box;'),
+          (on ? 'background: ' + c + '; color: #111114;' : 'background: rgba(255,255,255,0.08); color: ' + c + '; border: 1px solid rgba(255,255,255,0.14); box-sizing: border-box;'),
         style:
-          'font-family: inherit; text-align: left; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; cursor: pointer; color: #e8e6e1; transition: background-color 120ms ' +
+          'font-family: inherit; text-align: left; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 16px; cursor: pointer; color: #e8e6e1; -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); transition: background-color 120ms ' +
           ease +
           ', border-color 120ms ' +
           ease +
           '; ' +
-          (on ? 'background: #1a1a1e; border: 1px solid #3a3a40;' : 'background: transparent; border: 1px solid transparent;'),
+          (on ? 'background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3);' : 'background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);'),
       };
     }),
     cur: { a: cur[3], body: cur[5], code: cur[6], href: cur[7], cta: cur[8] },
@@ -397,7 +411,7 @@ function connectVals(k: string, choose: (id: string) => void, reduce: boolean, a
       ['Exports from Shopify, HubSpot, Stripe, Salesforce', 0], ['Cloud storage sync', 0], ['Database snapshots', 0],
     ] as [string, number][]).map(([t, live]) => ({
       t: live ? t : t + ' · soon',
-      style: 'font-size: 13px; padding: 6px 12px; border-radius: 999px; ' + (live ? 'background: #f5f4f1; border: 1px solid #d8d6d0; color: #1a1a1e;' : 'border: 1px dashed #c9c7c0; color: #6b6a65;'),
+      style: 'font-size: 13px; padding: 6px 12px; border-radius: 999px; ' + (live ? 'background: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.85); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 8px 24px rgba(40,34,70,0.08); color: #1a1a1e;' : 'border: 1px dashed #c9c7c0; color: #6b6a65;'),
     })),
     importFlow: IMPORT_FLOW.map((l, i) => ({
       l,
@@ -408,7 +422,7 @@ function connectVals(k: string, choose: (id: string) => void, reduce: boolean, a
           ? 'background: #1a1a1e; color: #e8e6e1;'
           : i === 4
             ? 'background: rgba(201,151,90,0.18); color: #8a6433; border: 1px solid rgba(201,151,90,0.4);'
-            : 'background: #f5f4f1; border: 1px solid #d8d6d0;'),
+            : 'background: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.85); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 8px 24px rgba(40,34,70,0.08);'),
     })),
   };
 }

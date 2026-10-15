@@ -39,7 +39,7 @@ The founding-tenant control plane is data-first and validated by tooling:
 | `config/implementation_ledger.yaml` | Honest per-item status across the release train (PR 0–10). |
 | `config/control_catalog.yaml` | Internal control catalog with framework *mapping references* (not attestations). |
 | `config/posture/founding_tenant_production.yaml` | Commercial stage, permitted/prohibited data classes, and which trust-plane flags are ON. |
-| `config/deployment_profiles.yaml` | Canonical profile matrix and the production-lean cost policy. |
+| `config/deployment_profiles.yaml` | Canonical profile matrix and the production cost policy. |
 | `config/runtime_deployment.yaml` | Canonical deployable topology (schema v2 — the unit is the ECS **service**, not the role). |
 | `config/deployment_readiness.yaml` | Evidence contract behind every deployment-readiness percentage Aether is allowed to state. |
 | `config/founding_tenant_release.yaml` | Exact founding-tenant route, role, consumer, backend, control, rollout, and rollback surface. |
@@ -49,7 +49,7 @@ Validate the spine:
 ```bash
 make audit-readiness-check      # foundation: ledger + catalog + posture
 make validate-profile-config    # deployment profiles + posture schema
-make validate-cost-policy       # production-lean forbidden/required resources
+make validate-cost-policy       # production forbidden/required resources
 make validate-route-registry    # route policy registry seed schema
 make validate-storage-policies  # storage policy registry seed schema
 make validate-founding-tenant-surface # manifest-to-code parity and rollout controls
@@ -146,7 +146,7 @@ they are distinct from unit evidence and must not be silently skipped for a
 release verdict.
 
 That local shape is deliberately one container per role. The **deployed**
-founding-tenant shape is not: `production-lean` is
+founding-tenant shape is not: `production` is
 `execution_mode: consolidated` and runs two always-on ECS tasks — `api`, and one
 `lean-worker` task hosting all eight worker roles. Consolidation moves the
 process boundary and nothing else; inside the task each role keeps its own
@@ -165,7 +165,7 @@ readiness percentage. It reports **three numbers and never merges them**.
 | Scorecard | Code-complete | Externally verified | Max attainable here | Gate (on externally verified) |
 |---|---|---|---|---|
 | overall | 60 / 100 | **0 / 100** | 20 | 90 |
-| `production-lean` | 45 / 100 | **0 / 100** | 20 | 92 |
+| `production` | 45 / 100 | **0 / 100** | 20 | 92 |
 | `staging` | 75 / 100 | **0 / 100** | 10 | 95 |
 
 **Externally verified is zero, and that is the correct reading.** An earlier

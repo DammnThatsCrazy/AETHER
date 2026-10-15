@@ -44,7 +44,11 @@ customer-facing work and proof still needed.
 Continue the Android, iOS, and React Native wallet contract work already in the
 checkout: preserve VM family and concrete chain namespace end-to-end, connect
 wallet observations to the canonical source-identity path, and keep a wallet
-connection distinct from verified ownership, custody, or key control. Aether's
+connection distinct from verified ownership, custody, or key control. The
+server now issues and verifies five-minute EIP-191 and Solana Ed25519 wallet
+proof challenges under current identity-link consent, then records evidence
+through chain-scoped resolver replay for the exact consented subject. SDK-level
+signing orchestration and physical device runs remain acceptance work. Aether's
 SDK observes activity in the integrating application; Samsung Wallet or Apple
 Wallet account-level activity requires an authorized provider integration.
 
@@ -124,7 +128,11 @@ verified Stripe `charge.refunded` webhook may write a separate refund fact
 only when its charge carries explicit `aether_order_ref`, PaymentIntent ID,
 refund ID, currency, and succeeded refund amount; the operation link then adds
 an exact `reverses` relation. This does not rewrite the original payment
-status. Merchant
+status. The ledger now also accepts a source-authoritative settled outcome
+with explicit provider/payment references and exposes an exact `settled_by`
+operation relation; the settlement remains a separate record and its amount
+is not copied into the link. No current processor adapter emits this settlement
+evidence, so provider ingestion and live certification remain open. Merchant
 metadata configuration, live staging
 certification, SDK checkout linkage, non-Stripe adjustment support, and
 two-provider live certification remain release work. A contract-only scenario
@@ -179,19 +187,34 @@ source event, wallet context, chain namespace/VM, consent, and source-observed
 status; non-SDK-emittable events are rejected at the public SDK boundary. A
 client event alone never creates a `PAID` or settled relationship.
 
-**Implementation status (October 10, 2026):** Android/iOS transaction calls
+**Implementation status (October 15, 2026):** Android/iOS transaction calls
 include the connected address as context; the event contract marks wallet,
-chain, and VM fields as source references; Web3 Silver now accepts canonical
+chain, and VM fields as source references; Web3 Silver accepts canonical
 `wallet`/`transaction` events and retains their observed status; identity
-ingestion recognizes `walletAddress`. A wallet-only event now records a
+ingestion recognizes `walletAddress`. A wallet-only event records a
 tenant/chain/VM-scoped hashed source identity without creating a person or
-claiming ownership. Validation enforces the generated SDK-emittable event
-set. The Web3 API now verifies only transactions already present in the
-requesting tenant's Silver facts using read-only EVM or Solana RPC, stores a
-separate tenant-scoped verification observation, and updates canonical journey
-status only after RPC verification. A successful or failed chain execution is
-not represented as payment settlement. Provider-backed runtime evidence and
-product proof remain open.
+claiming ownership. Caller booleans such as `wallet_signature_verified`,
+`walletSignatureVerified`, or per-wallet `verified` remain unverified
+`WALLET_ADDRESS` evidence and cannot authorize an identity merge. Validation
+enforces the generated SDK-emittable event set. The Web3 API verifies only
+transactions already present in the requesting tenant's Silver facts and
+stores separate tenant-scoped execution evidence: EVM and Solana use their
+read-only RPC methods, while Sui uses a configured GraphQL endpoint and checks
+the registered chain identifier, transaction digest, optional observed sender,
+and execution result. The web SDK no longer polls Sui's deprecated JSON-RPC
+endpoint; it emits an observation for backend verification. A successful or
+failed execution is not represented as payment settlement. A live Sui provider
+run, SDK/device wallet-signing journeys, physical-device evidence and product
+proof remain open. The server-issued EVM/Solana proof API is implemented with
+current-consent revalidation, one-time challenge use and identity-linked replay;
+it does not authorize transactions or prove exclusive custody.
+
+The Sui adapter uses the tenant-scoped GraphQL endpoint and has no JSON-RPC
+fallback. Sui Foundation disabled JSON-RPC on Mainnet in July 2026 and directed
+new integrations to gRPC or GraphQL ([Sui API migration guidance](https://docs.sui.io/references/sui-api),
+[GraphQL RPC](https://docs.sui.io/develop/accessing-data/graphql/graphql-rpc)).
+The seeded `sui:mainnet` alias is bound to Sui's short chain identifier
+`35834a8a`; provider configuration and a live read remain acceptance evidence.
 
 ### Slice 2 — Authoritative agent execution and economic reconciliation
 

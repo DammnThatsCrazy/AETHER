@@ -116,6 +116,73 @@ _CANONICAL_ENTITY_KEYS = frozenset({"canonical_entity_id", "canonicalentityid"})
 
 SCHEMA_VERSION = "1.0.0"
 
+
+def _attach_observation_envelope(
+    normalized: dict[str, Any], *, batch_id: str, tenant_id: str
+) -> None:
+    """Add the flag-gated Envelope-B projection consistently to V1 and V2 SDK intake.
+
+    The flat normalized payload remains the compatibility surface. Envelope-B is
+    additive and only built when the existing adoption flag is enabled. When the
+    universal gateway is enabled, its validation and provenance stamping are
+    applied before the envelope is persisted.
+    """
+    if not settings.observation_envelope.enabled:
+        return
+
+    try:
+        from ingestion.ingestion.adapters.sdk import SdkIngressAdapter
+        from ingestion.ingestion.gateway import validate_and_stamp
+
+        adapter = SdkIngressAdapter()
+        envelope = adapter.build_observation_envelope(normalized)
+        if envelope is None:
+            metrics.increment(
+                "ingestion_observation_envelope_skipped_total",
+                labels={"tenant_id": tenant_id},
+            )
+            return
+
+        envelope_dict = envelope.to_bronze_additive()
+        if settings.ingress_gateway.enabled:
+            result = validate_and_stamp(
+                envelope_dict,
+                adapter=adapter,
+                tenant_id=tenant_id,
+            )
+            if not result.accepted:
+                logger.warning(
+                    "observation_envelope gateway-rejected for batch %s event_id=%s reason=%s",
+                    batch_id,
+                    normalized.get("event_id"),
+                    result.reasons,
+                )
+                metrics.increment(
+                    "ingestion_observation_envelope_gateway_rejected_total",
+                    labels={"tenant_id": tenant_id},
+                )
+                record_degraded(
+                    tenant_id=tenant_id,
+                    event_id=normalized.get("event_id"),
+                )
+                return
+            normalized["observation_envelope"] = result.envelope
+            return
+
+        normalized["observation_envelope"] = envelope_dict
+    except Exception as exc:
+        logger.warning(
+            "observation_envelope build failed for batch %s event_id=%s: %s",
+            batch_id,
+            normalized.get("event_id"),
+            exc,
+            exc_info=True,
+        )
+        metrics.increment(
+            "ingestion_observation_envelope_build_failed_total",
+            labels={"tenant_id": tenant_id},
+        )
+
 # ── Pydantic models ────────────────────────────────────────────────────────────
 
 class EventContext(BaseModel):
@@ -277,6 +344,22 @@ class BatchResponse(BaseModel):
     events: list[EventResult]
     batchId: str
     receivedAt: str
+    requestId: Optional[str] = None
+    usageEventId: Optional[str] = None
+    usageEvidenceId: Optional[str] = None
+    auditEventId: Optional[str] = None
+    consentReceiptIds: list[str] = Field(default_factory=list)
+
+
+def _consent_receipt_ids(payloads: Sequence[dict[str, Any]]) -> list[str]:
+    """Return only authoritative receipt references on accepted observations."""
+    receipt_ids: dict[str, None] = {}
+    for payload in payloads:
+        privacy = payload.get("privacy")
+        receipt_id = privacy.get("consent_snapshot") if isinstance(privacy, dict) else None
+        if isinstance(receipt_id, str) and receipt_id:
+            receipt_ids.setdefault(receipt_id, None)
+    return list(receipt_ids)
 
 
 # ── Route ─────────────────────────────────────────────────────────────────────
@@ -310,28 +393,82 @@ async def ingest_batch(
     declared_site = getattr(request, "headers", {}).get("X-Aether-Site")
     iv2 = settings.ingestion_v2
     if iv2.enabled or tenant.tenant_id in iv2.canary_tenants:
-        return await _ingest_batch_v2(
+        response = await _ingest_batch_v2(
             body=body,
             tenant=tenant,
             request_privacy=request_privacy,
             server_context=server_context,
             declared_site=declared_site,
+            request_id=getattr(request.state, "request_id", None),
         )
+    else:
+        response_model = await ingest_events(
+            events=body.batch,
+            tenant_id=tenant.tenant_id,
+            request_privacy=request_privacy,
+            server_context=server_context,
+            granted_consents=frozenset(body.consents or []),
+            sent_at=body.sentAt,
+            producer=producer,
+            declared_site=declared_site,
+            request_id=getattr(request.state, "request_id", None),
+        )
+        # The /v1/batch handler keeps returning the plain BatchResponse dict
+        # (ingest_events returns the model); ingest_events is the shared spine the
+        # deprecated aliases also converge onto.
+        response = response_model.model_dump()
 
-    response = await ingest_events(
-        events=body.batch,
-        tenant_id=tenant.tenant_id,
-        request_privacy=request_privacy,
-        server_context=server_context,
-        granted_consents=frozenset(body.consents or []),
-        sent_at=body.sentAt,
-        producer=producer,
-        declared_site=declared_site,
-    )
-    # The /v1/batch handler keeps returning the plain BatchResponse dict
-    # (ingest_events returns the model); ingest_events is the shared spine the
-    # deprecated aliases also converge onto.
-    return response.model_dump()
+    return await _record_batch_audit(tenant, response)
+
+
+async def _record_batch_audit(tenant: Any, response: dict) -> dict:
+    """Link a completed SDK batch to the existing tenant audit ledger.
+
+    The route's WRITE gate is the authorization authority; this record is an
+    audit of the permitted batch operation, not a newly minted authorization
+    decision. Audit persistence is best-effort because observation and usage
+    writes may already be durable by the time this function runs.
+    """
+    batch_id = response.get("batchId")
+    tenant_id = getattr(tenant, "tenant_id", None)
+    if not isinstance(batch_id, str) or not batch_id or not tenant_id:
+        return response
+
+    try:
+        from governance.security.audit_ledger import audit_ledger
+
+        user_id = getattr(tenant, "user_id", None)
+        event = await audit_ledger.record(
+            actor_id=str(user_id or "aether_ingestion"),
+            actor_type="tenant_user" if user_id else "system",
+            event_type="ingestion.batch",
+            resource_type="observation_batch",
+            resource_id=batch_id,
+            action="ingest",
+            outcome="allowed",
+            tenant_id=tenant_id,
+            metadata={
+                "accepted_count": response.get("accepted", 0),
+                "duplicate_count": response.get("duplicates", 0),
+                "rejected_count": response.get("rejected", 0),
+                "usage_event_id": response.get("usageEventId"),
+                "usage_evidence_id": response.get("usageEvidenceId"),
+                "consent_receipt_ids": response.get("consentReceiptIds", []),
+            },
+        )
+        response["auditEventId"] = event.audit_event_id
+    except Exception:
+        # Intake has already written or acknowledged its governed result. Do not
+        # turn an audit-store outage into a retry that can only appear duplicate;
+        # the response omits auditEventId when no durable audit row was written.
+        logger.warning(
+            "ingestion batch audit write failed tenant=%s batch=%s",
+            tenant_id,
+            batch_id,
+            exc_info=True,
+        )
+        metrics.increment("ingestion_batch_audit_write_failed_total")
+    return response
 
 
 # ── Canonical V1 ingestion spine ─────────────────────────────────────────────
@@ -353,6 +490,7 @@ async def ingest_events(
     sent_at: str | None,          # None → temporal enforcement uses received_at
     producer: EventProducer,
     declared_site: str | None = None,
+    request_id: str | None = None,
 ) -> BatchResponse:
     """Canonical V1 ingestion spine over a sequence of SDK events.
 
@@ -433,72 +571,9 @@ async def ingest_events(
             if server_context is not None:
                 normalized["server_context"] = server_context
             _stamp_identity_namespace(normalized, tenant_id, declared_site)
-            if settings.observation_envelope.enabled:
-                # WS-A5/WS-B1 flag-gated adoption (default OFF). Builds the
-                # canonical Envelope-B observation for this accepted SDK event
-                # through the SDK adapter (services/api/ingestion/ingestion/adapters/sdk.py),
-                # then — when the WS-B1 gateway flag is also ON — validates and
-                # stamps it through the universal ingestion gateway
-                # (services/api/ingestion/ingestion/gateway.py). Persisted additively as
-                # normalized["observation_envelope"]; consumers keep reading the
-                # flat dict until WS-B converges every adapter onto Envelope B.
-                # Any mapping/validation failure degrades to the flat path, so
-                # the flags can never take ingestion down.
-                try:
-                    from ingestion.ingestion.adapters.sdk import SdkIngressAdapter
-                    from ingestion.ingestion.gateway import validate_and_stamp
-
-                    adapter = SdkIngressAdapter()
-                    envelope = adapter.build_observation_envelope(normalized)
-                    if envelope is not None:
-                        if settings.ingress_gateway.enabled:
-                            result = validate_and_stamp(
-                                envelope.to_bronze_additive(),
-                                adapter=adapter,
-                                tenant_id=tenant_id,
-                            )
-                            if result.accepted:
-                                normalized["observation_envelope"] = result.envelope
-                            else:
-                                # Gateway rejected this envelope (schema / type /
-                                # family / tenant). The A-side event is already
-                                # accepted — degrade to the flat dict.
-                                logger.warning(
-                                    "observation_envelope gateway-rejected for batch "
-                                    "%s event_id=%s reason=%s",
-                                    batch_id,
-                                    normalized.get("event_id"),
-                                    result.reasons,
-                                )
-                                metrics.increment(
-                                    "ingestion_observation_envelope_gateway_rejected_total",
-                                    labels={"tenant_id": tenant_id},
-                                )
-                                # WS-E funnel: flag fail-open degrade (accepted A-side,
-                                # envelope rejected → flat dict). No-op while OFF.
-                                record_degraded(
-                                    tenant_id=tenant_id,
-                                    event_id=normalized.get("event_id"),
-                                )
-                        else:
-                            normalized["observation_envelope"] = envelope.to_bronze_additive()
-                    else:
-                        metrics.increment(
-                            "ingestion_observation_envelope_skipped_total",
-                            labels={"tenant_id": tenant_id},
-                        )
-                except Exception as exc:
-                    logger.warning(
-                        "observation_envelope build failed for batch %s event_id=%s: %s",
-                        batch_id,
-                        normalized.get("event_id"),
-                        exc,
-                        exc_info=True,
-                    )
-                    metrics.increment(
-                        "ingestion_observation_envelope_build_failed_total",
-                        labels={"tenant_id": tenant_id},
-                    )
+            _attach_observation_envelope(
+                normalized, batch_id=batch_id, tenant_id=tenant_id
+            )
             accepted_events.append(Event(
                 topic=Topic.SDK_EVENTS_VALIDATED,
                 tenant_id=tenant_id,
@@ -676,10 +751,12 @@ async def ingest_events(
 
     # Family seam: durable meter + evidence for accepted ingestion only
     # (advisory — no entitlement gate; metering never breaks the request).
+    metering_outcome = None
     if n_accepted > 0:
-        await meter_family_usage(
+        metering_outcome = await meter_family_usage(
             "ingestion", tenant_id, event_id=batch_id,
             quantity=n_accepted, enforce=False, raise_on_metering_error=False,
+            metadata={"correlation_id": request_id} if request_id else None,
         )
 
     return BatchResponse(
@@ -689,6 +766,10 @@ async def ingest_events(
         events=results,
         batchId=batch_id,
         receivedAt=received_at,
+        requestId=request_id,
+        usageEventId=getattr(metering_outcome, "metered_event_id", None),
+        usageEvidenceId=getattr(metering_outcome, "evidence_id", None),
+        consentReceiptIds=_consent_receipt_ids(accepted_raw),
     )
 
 
@@ -700,6 +781,7 @@ async def _ingest_batch_v2(
     request_privacy: RequestPrivacySignals = RequestPrivacySignals(),
     server_context: Optional[dict] = None,
     declared_site: Optional[str] = None,
+    request_id: str | None = None,
 ) -> dict:
     """Transactional /v1/batch path.
 
@@ -788,6 +870,11 @@ async def _ingest_batch_v2(
         if server_context is not None:
             normalized["server_context"] = server_context
         _stamp_identity_namespace(normalized, tenant.tenant_id, declared_site)
+        # Keep the transactional path on the same additive Envelope-B adoption
+        # contract as V1; the default-off flag preserves existing payloads.
+        _attach_observation_envelope(
+            normalized, batch_id=batch_id, tenant_id=tenant.tenant_id
+        )
 
         entity_id = normalized.get("user_id") or normalized.get("anonymous_id", "")
         candidates.append(BronzeSDKEvent(
@@ -817,6 +904,7 @@ async def _ingest_batch_v2(
         candidate_positions.append(len(results) - 1)
         candidate_deployments.append(validation.deployment_id)
 
+    accepted_payloads: list[dict[str, Any]] = []
     if candidates:
         try:
             bulk = await ingest_many(candidates, candidate_outbox)
@@ -891,10 +979,12 @@ async def _ingest_batch_v2(
 
     # Family seam: durable meter + evidence for accepted ingestion only
     # (advisory — no entitlement gate; metering never breaks the request).
+    metering_outcome = None
     if n_accepted > 0:
-        await meter_family_usage(
+        metering_outcome = await meter_family_usage(
             "ingestion", tenant.tenant_id, event_id=batch_id,
             quantity=n_accepted, enforce=False, raise_on_metering_error=False,
+            metadata={"correlation_id": request_id} if request_id else None,
         )
 
     return BatchResponse(
@@ -904,6 +994,10 @@ async def _ingest_batch_v2(
         events=results,
         batchId=batch_id,
         receivedAt=received_at,
+        requestId=request_id,
+        usageEventId=getattr(metering_outcome, "metered_event_id", None),
+        usageEvidenceId=getattr(metering_outcome, "evidence_id", None),
+        consentReceiptIds=_consent_receipt_ids(accepted_payloads),
     ).model_dump()
 
 

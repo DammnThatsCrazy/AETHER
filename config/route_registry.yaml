@@ -78,7 +78,7 @@ known_prefixes:
   - "/"
   - /health
   - /ready
-  # The consolidated staging/production-lean image mounts the inline ML
+  # The consolidated staging/production image mounts the inline ML
   # router at the backend root. Keep its route prefixes in the same default-
   # deny catalog as the backend-owned routers so enabling ML_SERVING_INLINE
   # cannot make startup fail only after ECS launch.

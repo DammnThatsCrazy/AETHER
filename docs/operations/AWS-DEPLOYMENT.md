@@ -47,17 +47,20 @@ source_files:
   - scripts/release/check_terraform_state_access_policy.py
   - scripts/release/check_staging_lifecycle_policy.py
   - services/api/Dockerfile
+reviewed_source_commits:
+  - commit: "609a3ad37"
+    reason: "Reviewed the new Auth0 Native Aether CLI client and connection grants. The Auth0 deployment inventory now records the public Device Authorization client and its human-session deployment gate; the independent operator tfmcp service is unchanged."
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/amplify-status-production.yml": "sha256:7debcfe047fd42bdb4e6b18ed3b25ee0f4d843c4017154e497be3fe63bf2aaeb"
-  ".github/workflows/deploy.yml": "sha256:103a856af062237e1e7fa6eab4072f17cb737ce66e78cb3d040fee1cac1959a8"
+  ".github/workflows/amplify-status-production.yml": "sha256:552a549e6f681c8052495a269211d0ff883686349b025b7d9b1b34525f8f4b14"
+  ".github/workflows/deploy.yml": "sha256:e9555bd68e7a994e984fd012fa290540c89e078775e4f6da8c3f5b82ed539238"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-lifecycle.yml": "sha256:ab0d86125cd2be277ba7e0a40a4dbc9fdd5db1480ff1c7cb816adf4874a55ae9"
   ".github/workflows/staging-state-reconcile.yml": "sha256:c08a7521eee7fbe505195ab1e49f27272b6ef144d4ba2e9b0153fe6e2f07f33d"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
-  ".github/workflows/terraform-promote.yml": "sha256:68788bf092927d34ca9228da38d64989c8360bde77b087945cf17e29e95e73de"
+  ".github/workflows/terraform-promote.yml": "sha256:804e3b437274475d5125b4dbf6c3988ff9387909af73a5aeb5690713cf310adf"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
@@ -69,13 +72,13 @@ source_hashes:
   "config/staging_secret_preflight_trust_policy.json": "sha256:38c81fbb5674275998114973bd151fccb23e510d999560e14f6c3dbf591e2fc5"
   "config/terraform_plan_state_access_policy.yaml": "sha256:3ef6bc24c567f84eb9a44c8a180d0f6f14e6c4a9fabb76138cb3543e4cf150e0"
   "config/terraform_state_access_policy.yaml": "sha256:474ebd2cd035d8c27e09e6fd20da2b752ba5171225d8c832ab1c1fcb72a724d6"
-  "infra/aws/README.md": "sha256:4000def0bab474425027de1e14f655bc6c9190e320701db55973e9a779b84f47"
+  "infra/aws/README.md": "sha256:0da523ab56c398fcc42c98f4fdad5065fbd4737a5badd539fd68f738af39f3f8"
   "infra/aws/config/": "sha256:cfe8d46db890f7855fbc7f28ece5c3a9ce4a891e065478060a254c1f36bf0bf0"
   "infra/aws/lead-intake/template.yaml": "sha256:f076101dd476c103f32b717444598ea2cbea181b292c61230ca9b02de4feb9a1"
   "infra/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "infra/aws/terraform/": "sha256:eace0b2cae355aa48d20b755a7e574613f7c9bb70882e70958e0c95b1eeffe21"
+  "infra/aws/terraform/": "sha256:d7294219d0cb8e10fa5a108a1af562d586bb3b7cb78b1ef34cccf37e1ffb79f2"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
-  "scripts/release/check_amplify_app_contract.py": "sha256:124f62c1f1469281a3e19de2ec58d36b50f6f210410f1e79de8f79b2ef222e36"
+  "scripts/release/check_amplify_app_contract.py": "sha256:b8ce2e914ba4878098b41c3bdfcf1ec5f0163876578610af5a5362004bc7bdfa"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
   "scripts/release/check_staging_credential_contract.py": "sha256:01c7eed02e4873e19be2477fe2a131c0bc0641aa7bcf9ab647187bb9575b6f23"
@@ -90,7 +93,7 @@ source_hashes:
   "scripts/release/release_changed_amplify_apps.py": "sha256:e74d2aa68e37867d3b25e3305345d7053b7a0e9f1231e1420d1f830042c12ca7"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:e06d55ce02df622bdf9dc4ae986361d1fcf2292eae9f7133be2219dd7853046a"
   "scripts/release/verify_terraform_state_role.py": "sha256:05ac020c4551cdc2c5ae07b00c5e2ef8d88ae33db7fcb0fa5439f9be238222f0"
-  "services/api/Dockerfile": "sha256:3cead3d09671f10595adc975ea3ff963e2fde1e10b6fb21b41027c3d6763cfd4"
+  "services/api/Dockerfile": "sha256:619471497e7144f93af70b49c509667754ed834809c1977335d38fa90173bee9"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -348,46 +351,46 @@ Nearly every cost- and shape-relevant decision in the root is made by one
 variable:
 
 ```hcl
-deployment_profile = "staging" | "production-lean" | "production-scale" | "enterprise-isolated" | "demo" | "preview"
+deployment_profile = "staging" | "production"
 ```
 
 `profiles.tf` derives `enable_*` locals and backend selectors from it and
 `main.tf` wires those into module `count` and module inputs, so a
-`production-lean` plan structurally cannot contain a forbidden resource.
-The four cloud-class profiles plus the two ephemeral-class profiles
-(demo/preview) are Terraform-selectable from this root; the parity contract
-pins the selectable set to cloud ∪ ephemeral.
+`production` plan structurally cannot contain a forbidden resource.
+Both profiles are Terraform-selectable from this root; the parity contract
+pins the selectable set to exactly `staging` and `production`. Production
+grows by changing variables (see "How production grows" in
+[Deployment Profiles](../architecture/DEPLOYMENT-PROFILES.md)), not by adding
+profiles.
 Canonical policy data is `config/deployment_profiles.yaml`;
 `config/terraform_resource_contracts.yaml` maps each policy key to the module
-address and cardinality a conforming plan must show. The per-profile matrix,
-including the four non-cloud profiles, is
+address and cardinality a conforming plan must show. The per-profile matrix is
 [Deployment Profiles](../architecture/DEPLOYMENT-PROFILES.md).
 
-| | staging | production-lean | production-scale | enterprise-isolated |
-|---|---|---|---|---|
-| Database | Aurora Serverless v2 | Aurora Serverless v2 | Aurora Serverless v2 | Aurora Serverless v2 |
-| Aurora ACU floor / ceiling | 0 / 2 | 0.5 / 4 | 1 / 8 | 2 / 16 |
-| Cache | DynamoDB | DynamoDB | ElastiCache Redis | ElastiCache Redis |
-| Events | SNS → SQS | SNS → SQS | MSK Kafka | MSK Kafka |
-| Graph | Aurora Postgres | Aurora Postgres | Neptune | Neptune |
-| Analytics | Postgres | Postgres | ClickHouse (selector only) | ClickHouse (selector only) |
-| ML serving | inline in backend | inline in backend | dedicated ECS service | dedicated ECS service |
-| Egress | `public_ip` — **0 NAT** | `public_ip` — **0 NAT** | `single_nat` — 1 NAT | `ha_nat` — 3 NAT |
-| Legacy RDS | never | never | never | never |
-| Public web | Amplify shells + app/status; private S3 artifacts | Amplify shells + app/status; private S3 artifacts | Amplify shells + app/status; private S3 artifacts | Amplify shells + app/status; private S3 artifacts |
-| Log retention | 3 days | 3 days | 7 days | 30 days |
+| | staging | production |
+|---|---|---|
+| Database | Aurora Serverless v2 | Aurora Serverless v2 |
+| Aurora ACU floor / ceiling | 0 / 2 | 0.5 / 4 |
+| Cache | DynamoDB | DynamoDB |
+| Events | SNS → SQS | SNS → SQS |
+| Graph | Aurora Postgres | Aurora Postgres |
+| Analytics | Postgres | Postgres |
+| ML serving | inline in backend | inline in backend |
+| Egress | `public_ip` — **0 NAT** | `public_ip` — **0 NAT** |
+| Legacy RDS | never | never |
+| Public web | Amplify shells + app/status; private S3 artifacts | Amplify shells + app/status; private S3 artifacts |
+| Log retention | 3 days | 3 days |
 
 Apply a profile with its checked-in variable file:
 
 ```bash
 cd "infra/aws/terraform"
-terraform plan -var-file=profiles/production-lean.tfvars -out=tfplan
+terraform plan -var-file=profiles/production.tfvars -out=tfplan
 ```
 
 `backend_image_digest` is always required and is validated against
-`^sha256:[0-9a-f]{64}$`. `ml_image_digest` is required for the dedicated
-production-scale and enterprise-isolated profiles; lean, staging, demo, and
-preview profiles may leave it empty when `remote_ml` is disabled. Every digest
+`^sha256:[0-9a-f]{64}$`. `ml_image_digest` may be left empty while `remote_ml`
+is disabled (both profiles today). Every digest
 that is supplied is still pinned to the exact release-manifest value.
 
 The apply preflight verifies the selected profile's exact Terraform state key
@@ -443,7 +446,7 @@ cost-capped profiles actually want.
 | `none` | 0 | 0 | private, no egress |
 
 Omit the variable to take the profile default. `nat_gateway_unless_explicit` is
-a forbidden resource for `production-lean` and `staging`; **setting this
+a forbidden resource for `production` and `staging`; **setting this
 variable to a NAT mode on a cost-capped profile is that explicit opt-in** and
 must be reviewed as a cost-policy exception.
 
@@ -459,19 +462,19 @@ and no self-managed Prometheus or Grafana servers at any profile.
 The deployable unit is a **service**, not a role, and the service count depends
 on the profile's `execution_mode` in `config/runtime_deployment.yaml`:
 
-**`consolidated` — `staging`, `production-lean`, `demo` and `preview`: two always-on tasks.**
+**`consolidated` — `staging`, `production`, `demo` and `preview`: two always-on tasks.**
 
 | Service | Roles hosted | vCPU / MiB (lean) | Desired | Max | Capacity |
 |---|---|---|---|---|---|
 | `api` (ECS service `AETHER-<env>-backend`) | `api` | 1024 / 2048 | 1 | 4 | FARGATE only |
 | `lean-worker` | `outbox-relay`, `stream-worker`, `identity-worker`, `graph-writer`, `measurement-worker`, `semantic-worker`, `materializer`, `maintenance` | 2048 / 8192 | 1 | 4 | FARGATE only |
 
-Staging, `demo` and `preview` run the same shape one size down (`lean-worker`
+Staging runs the same shape one size down (`lean-worker`
 at 1024 / 4096, max 2).
 `lean-worker` never uses Spot at any capacity because it hosts `outbox-relay`,
 the at-least-once delivery path.
 
-**`dedicated` — `production-scale` and `enterprise-isolated`: nine services.**
+**`dedicated` — reserved for dedicated customer deployments: nine services.** No checked-in profile selects this mode today; it is the topology a customer-isolated deployment would use.
 
 | Service | Desired | Max | vCPU / MiB | Surge capacity (scale) |
 |---|---|---|---|---|
@@ -485,7 +488,7 @@ the at-least-once delivery path.
 | `materializer` | 2 | 8 | 1024 / 2048 | FARGATE_SPOT |
 | `maintenance` | 1 | 1 | 1024 / 2048 | FARGATE (no queue to drain) |
 
-`enterprise-isolated` uses the same sizing with **no Spot anywhere**: a
+A fully isolated deployment would use the same sizing with **no Spot anywhere**: a
 reclaimed surge task is an availability event to explain, not a discount to
 report. Spot is forbidden outright on `api` and on any service hosting
 `outbox-relay`, enforced by
@@ -497,9 +500,8 @@ elsewhere), with 180 s / 300 s cooldowns. `min_capacity` equals the desired
 count and is the always-on floor; `max_capacity` is the surge ceiling.
 
 A dedicated `aether-ml-serving` service, its ALB target group and its
-`/v1/ml/*` listener rule exist only on `production-scale` and
-`enterprise-isolated`. On the cost-capped profiles there is no rule and ML runs
-inline in the backend process.
+`/v1/ml/*` listener rule exist only in dedicated mode, which no current profile selects. On `staging`
+and `production` there is no rule and ML runs inline in the backend process.
 
 `staging_state = "asleep"` multiplies every desired count, both autoscaling
 bounds, and every capacity-provider base count by zero, so target-tracking
@@ -512,13 +514,13 @@ envelope, including `max_capacity`.
 | Store | Provisioned on | Notes |
 |---|---|---|
 | Aurora Serverless v2 Postgres + writer | **all profiles** | Database, graph and analytics of record. Isolated subnets, customer-managed KMS key (or AWS-managed in express mode), AWS-managed master password rotation into the RDS-managed `rds!cluster-*` Secrets Manager secret. |
-| DynamoDB cache table | **all profiles** | Read/write autoscaling, TTL-backed. The staging and production-lean `shared.store` durable-store path uses this table when `CACHE_BACKEND=dynamodb`; it does not enable an in-memory fallback. |
+| DynamoDB cache table | **all profiles** | Read/write autoscaling, TTL-backed. The staging and production `shared.store` durable-store path uses this table when `CACHE_BACKEND=dynamodb`; it does not enable an in-memory fallback. |
 | SNS fanout topic → per-role SQS queues + DLQs | **all profiles** | One queue per role, so a consolidated task binds one queue per hosted role. |
 | S3 object lake, log archive, SPA origins | **all profiles** | Public access blocked, SSE configured. |
 | Secrets Manager + KMS | **all profiles** | Stubs created empty; rotation Lambda. |
-| ElastiCache Redis 7.x | scale / enterprise | TLS in transit, AUTH token in Secrets Manager only, KMS at rest. `cache.t3.micro` default. |
-| MSK Kafka | scale / enterprise | 3 brokers (`kafka.m5.large`, Kafka 3.5.1), TLS, KMS, CloudWatch metrics. |
-| Neptune | scale / enterprise | `db.r6g.large`, cluster size 1 by default, IAM auth, KMS. |
+| ElastiCache Redis 7.x | gated — raise via variables, not a profile | TLS in transit, AUTH token in Secrets Manager only, KMS at rest. `cache.t3.micro` default. |
+| MSK Kafka | gated — raise via variables, not a profile | 3 brokers (`kafka.m5.large`, Kafka 3.5.1), TLS, KMS, CloudWatch metrics. |
+| Neptune | gated — raise via variables, not a profile | `db.r6g.large`, cluster size 1 by default, IAM auth, KMS. |
 | Legacy RDS Postgres | **never** | `enable_legacy_rds` is the literal `false`. Retained in code only as an importable rollback target — see `DECOMMISSION.md`. |
 
 There is **no OpenSearch, no SageMaker, no Athena, no TimescaleDB and no
@@ -598,16 +600,13 @@ the caller's credentials when it updates a domain association.
 Route 53 records are keyed by host. Production also runs one app,
 `AETHER-production-web` (the former `aether-status` app), with the same build
 and the five hosts under `olympuslabsml.com`; Squarespace holds their CNAMEs.
-It has two branches built from the same `main` commit, because each site build
-prerenders its own pages: `main` builds the Aether site (with the product under
-`/app`) for `aether`, `docs`, `status` and `app`, and `production-olympus`
-builds the Olympus Labs site (`VITE_SITE=olympus`) for `www`.
-`amplify-status-production.yml` deploys both on each `main` push: it checks the
-commit is on `main`, force-pushes it to the `production-olympus` Git branch (a
-mirror only that workflow writes), binds both branches in `PRODUCTION` stage
-(`production-olympus` does not auto-build), and starts and waits for a
-commit-pinned release job on each. It verifies, without changing, that `www`
-maps to `production-olympus` and the other hosts to `main`. The staging
+It has one branch, `main`, which builds the unified site (with the product under
+`/app`) for all five hosts; the site picks Olympus Labs or Aether from the
+hostname at runtime. `amplify-status-production.yml` deploys it on each `main`
+push: it binds the branch in `PRODUCTION` stage and starts and waits for a
+commit-pinned release job. It verifies, without changing, that every host maps
+to `main`. The former `production-olympus` branch is retired; before deleting
+it, an administrator remaps `www` to `main` in Amplify. The staging
 lifecycle preflight checks the production settings, exact commit and host
 mappings. It is not Terraform-managed yet.
 
@@ -663,7 +662,7 @@ mapping is live when Amplify marks it verified or its public CNAME already
 resolves to the subdomain's `dnsRecord` target: Amplify leaves `verified`
 false on every association it has updated, even while the host serves traffic.
 It never creates or deletes a domain association and never changes Squarespace
-DNS. Production-lean leaves Squarespace authoritative by default; the
+DNS. Production leaves Squarespace authoritative by default; the
 Amplify association's DNS targets are exported for the controlled manual DNS
 change. The public status application consumes its profile's verified
 `status_api_url`; a missing or unverified API origin renders an explicit
@@ -690,8 +689,10 @@ branches or call `UpdateDomainAssociation`; they verify the AVAILABLE
 association and canonical `main` mapping before release. Amplify performs a
 dependent `iam:PassRole` authorization for domain mutations, so the status
 workflow intentionally does not make that API call from its OIDC deploy role.
-Because a repository-bound app can auto-start the branch build for a pushed
-commit, the workflow first reuses an active job for the exact reviewed SHA,
+The workflow binds `main` with auto-build off, so a push never goes live before
+the integration authority passes; only its commit-pinned release publishes.
+Because a job can still be active (started from the console, or by auto-build
+before this setting), the workflow first reuses an active job for the exact reviewed SHA,
 but only one that started after it applied the build settings: a job reads its
 environment variables when it starts, so an earlier auto-build would publish
 the previous settings. It waits for any other active branch job to clear, and
@@ -727,7 +728,8 @@ router redirects the previous
 marketing app's URLs to their new pages. Its status page reads the backend's 90-day per-component uptime feed (`VITE_STATUS_HISTORY_URL`, `GET /v1/status/history`). Because the product is served from `aether.*/app`, the staging Auth0 callback,
 logout and web-origin lists, the API's app URL and the Stripe checkout return
 URLs all use `https://aether.<domain>/app`, and the site build carries the
-product's `VITE_AUTH0_*` and `VITE_AETHER_*` settings. Other environments keep the
+product's `VITE_AUTH0_*` and `VITE_AETHER_*` settings (`VITE_AUTH0_SOCIAL_CONNECTIONS`
+only when the Auth0 social connections are provisioned). Other environments keep the
 prerendered `apps/marketing-aether` build, with index rewrites for its
 `/login`, `/signup` and `/forgot-password` routes, until the site prerenders
 its own route metadata. The end-user app and docs portal
@@ -836,14 +838,58 @@ Seventeen module directories exist under `terraform/modules/`. Modules marked
 | `ecs` | Fargate cluster, backend service, per-service task definitions, IAM roles, autoscaling | always; **gated** dedicated ML service |
 | `monitoring` | SNS alerts, CloudWatch alarms, dashboard, S3 log archive | always; per-backend alarms **gated** |
 | `ml_drift_lambda` | Nightly PSI drift check → `Aether/MLDrift` namespace | always |
-| `auth0` | SPA clients + API resource server | always |
-| `elasticache` | Redis 7.x, TLS in transit, AUTH token, KMS at rest | **gated** — scale / enterprise |
-| `msk` | 3-broker MSK Kafka, TLS, KMS, CloudWatch metrics | **gated** — scale / enterprise |
-| `neptune` | Neptune cluster + instances, IAM auth, KMS | **gated** — scale / enterprise |
+| `auth0` | Aether and Kyber SPA clients, public Aether CLI Native client with Device Authorization, and the API resource server | always |
+| `elasticache` | Redis 7.x, TLS in transit, AUTH token, KMS at rest | **gated** — off in both profiles; enabled only by a reviewed production variable change |
+| `msk` | 3-broker MSK Kafka, TLS, KMS, CloudWatch metrics | **gated** — off in both profiles; enabled only by a reviewed production variable change |
+| `neptune` | Neptune cluster + instances, IAM auth, KMS | **gated** — off in both profiles; enabled only by a reviewed production variable change |
 | `rds` | Legacy RDS Postgres | **never** — superseded by Aurora |
 | `s3` | — | **not instantiated by this root** |
-| `tfmcp` | tfmcp MCP server (ECS Fargate, IAM, Secrets, ALB rule) | **gated** — production-scale / enterprise (default); production-lean opt-in via `enable_tfmcp_in_lean` |
+| `tfmcp` | tfmcp MCP server (ECS Fargate, IAM, Secrets, ALB rule) | **not wired** into the live root; neither profile provisions it |
+| `access_mcp` | Customer-facing Access Kit MCP (dedicated ECR, Fargate, task/execution roles, security group, log group, ALB target/rule) | **opt-in** — production is the single persistent ECR/state owner; immutable image digest required; staging is blocked |
 | `vpc_endpoints` | — | **not instantiated by this root** |
+
+The Auth0 module's CLI client is a public Native application with no client
+secret. Terraform enables the Device Authorization grant, grants the API
+audience, associates the configured database/social connections, and exposes
+the non-secret `aether_cli_auth0_client_id` root output. A CLI installation
+also needs the Auth0 domain and API audience. Auth0 provisioning alone does not
+enable customer login: the API must advertise and issue revocable human
+sessions, and the user must have an existing tenant membership or invitation.
+This CLI client is customer identity configuration; it is not the operator
+`tfmcp` service or its privileged runtime role.
+
+### Customer Access Kit MCP service
+
+The optional `modules/access_mcp` service is the hosted customer MCP endpoint
+for the Access Kit. It uses its own immutable ECR image, task definition,
+roles, security group, CloudWatch log group, target group, and HTTPS path rule.
+It is not `tfmcp`: the Access Kit task has no shared Aether credential and no
+workload AWS permissions, while `tfmcp` can operate Terraform with a privileged
+operator policy. The customer endpoint requires a request-scoped Aether API key
+or revocable session and forwards that same identity to tenant APIs. Optional
+delegated OAuth uses a distinct Auth0 MCP audience and a KMS-backed Secrets
+Manager key injected into the MCP and API tasks. Each OAuth downstream call is
+signed so the MCP token cannot be used directly on the public REST API with a
+spoofed surface header. `enable_access_continuations` separately opens the
+existing tenant continuation route on the API task; the continuation tools
+still require the caller's read or write permission.
+
+The image is built from a clean reviewed commit by
+`infra/aws/terraform/scripts/publish_access_mcp_image.sh`; Terraform consumes
+the returned immutable digest. `.github/workflows/terraform-promote.yml`
+accepts these opt-ins on a reviewed `action=plan`, then applies only the exact
+stored plan by run ID and checksum. The service and globally named ECR
+repository are allowed only on the canonical `production` state; one
+owner prevents profile-state races for that shared repository. The
+staging lifecycle does not yet manage its always-on task count.
+The route shares the existing API hostname and TLS listener. See the
+[deployment runbook](../../infra/aws/terraform/ACCESS_KIT_MCP_DEPLOYMENT.md)
+for the repository-first, image-publish, service-enable sequence and cost gate.
+The clean hosted container workflow builds the linux/amd64 image, verifies
+the npm package contents, and checks the container's health, readiness, and
+headless CLI entrypoint. The publisher, plan, and apply gates verify the
+immutable ECR digest's completed scan and reject HIGH
+or CRITICAL findings.
 
 ### tfmcp — Terraform MCP server
 
@@ -853,13 +899,10 @@ port 8080. It lets Aether's agentic workflow (Claude Code, Codex, Cursor) plan,
 apply and inspect state against this Terraform root with profile awareness, IAM
 scoping and CloudWatch audit logging.
 
-**Gate.** On `production-scale` and `enterprise-isolated` the module is
-provisioned by default. On `production-lean` it is opt-in via
-`enable_tfmcp_in_lean = true` in the profile tfvars. It is not provisioned on
-`staging`, `demo` or `preview`. The gate is expressed as
-`local.enable_tfmcp = local.scale || local.enterprise || (local.lean && var.enable_tfmcp_in_lean)`
-in `profiles.tf`; the root `main.tf` module call passes that local, not the raw
-root variable (whose default is `false` and which no profile sets).
+**Gate.** The module exists under `modules/tfmcp` but the live root does not
+instantiate it (no `enable_tfmcp*` variable or `profiles.tf` local exists), so
+neither `staging` nor `production` provisions it. Wiring it in is a reviewed
+change to `main.tf` and `profiles.tf`.
 
 **Image.** The tfmcp binary is built by
 `infra/aws/build-tfmcp.sh` into a dedicated ECR repository
@@ -901,7 +944,7 @@ otherwise — the ALB DNS name is not covered by the custom ACM certificate and
 clients following it would fail TLS hostname verification.
 
 **Cost.** One 512 CPU / 1024 MiB Fargate task at us-east-1 Fargate rates is
-roughly USD 18.02/month, raising the `production-lean` fixed baseline from the
+roughly USD 18.02/month, raising the `production` fixed baseline from the
 pre-tfmcp USD 187.13 to approximately USD 205.15. Enabling tfmcp in lean
 therefore exceeds the USD 200 hard ceiling and must be reviewed as a cost-policy
 exception; re-run `scripts/release/check_cost_model.py` and confirm the total
@@ -934,10 +977,9 @@ make validate-cost-model              # that inventory priced against the budget
 ```
 
 `terraform validate` passes, and `terraform test -filter=tests/profile_plan.tftest.hcl`
-passes for all six selectable profiles across the run blocks
-(`staging`, `demo`, `preview`, `staging_asleep`, `production_lean`,
-`production_scale`, `enterprise_isolated`, plus the applied-state and
-egress-rejection blocks). Assertions read the **planned module graph** —
+passes for both selectable profiles across the run blocks
+(`staging`, `staging_asleep`, `production_profile_plan`, plus the applied-state
+and egress-rejection blocks). Assertions read the **planned module graph** —
 `length(module.msk) == 0`, `length(module.vpc.nat_gateway_ids) == 3`,
 `module.vpc.nat_mode == "ha"` — not the locals that produced it, so a local that
 stops being wired into a `count` is caught rather than passed over. They are
@@ -946,7 +988,7 @@ mutation-proven: forcing `count = 1` on MSK fails the lean run block with
 
 ### Cost
 
-`production-lean`'s fixed baseline measures **USD 187.13/month** — over the
+`production`'s fixed baseline measures **USD 187.13/month** — over the
 USD 150 design target, under the USD 200 hard ceiling; the gate warns and
 passes, and the deviation is reviewed and accepted. Staging is budgeted at
 USD 25 target / USD 50 ceiling against 40 scheduled awake hours per month. The
@@ -962,7 +1004,7 @@ from a pinned price book against a plan inventory.
 ## Promotion and apply
 
 `.github/workflows/infrastructure.yml` **plans and validates only; it never
-applies.** The `apply-production-lean` job that once auto-applied on every push
+applies.** The `apply-production` job that once auto-applied on every push
 to `main` has been deleted. On a push to `main` its
 `require-production-credentials` job gates *promotability*, not an apply. When
 pushes and PR finalization intentionally hold the credentialed remote-plan lane;
@@ -978,8 +1020,8 @@ PR pushes do not start `infrastructure.yml`.
 
 `.github/workflows/terraform-promote.yml` is the **sole apply path**:
 `workflow_dispatch`-only, per-profile GitHub environment
-(`staging-terraform`, `production-lean-terraform`,
-`production-scale-terraform`, `enterprise-terraform`), and an apply that
+(`staging-terraform`, `production-lean-terraform` — production's name predates
+the consolidation and GitHub environments cannot be renamed), and an apply that
 consumes the exact reviewed binary plan and **never re-plans**. Before applying
 it re-verifies the plan digest against the dispatched checksum, the profile, the
 state key, the plan's own recorded commit (which it checks out rather than
@@ -1283,8 +1325,8 @@ coverage is claimed anywhere.
 **The live root provisions no DR posture.** There is no cross-region read
 replica, no S3 Cross-Region Replication, no us-west-2 standby, no Route 53
 health-check failover, and no `dr_failover.py` script. Aurora carries a
-`backup_retention_days` default of 7 and `enterprise-isolated` sets
-`db_multi_az = true`; that is the whole of the durability story in Terraform
+`backup_retention_days` default of 7 and `db_multi_az` is a variable;
+that is the whole of the durability story in Terraform
 today.
 
 RPO/RTO targets, DR regions and drill cadences appear in the reference model

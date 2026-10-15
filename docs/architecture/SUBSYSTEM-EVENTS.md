@@ -6,13 +6,24 @@ visibility: P
 audience: [dev-senior, architect, ops]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/shared/events/events.py, services/api/ingestion/ingestion/validation.py]
+source_files: [services/api/shared/events/events.py, services/api/ingestion/ingestion/validation.py, packages/shared/contracts/event-registry.json, packages/sdk/server/src/agent-telemetry.ts, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/actions/agent/deployment_routes.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/repositories/repos.py, services/api/value/x402/provenance.py]
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
-  "services/api/ingestion/ingestion/validation.py": "sha256:3fcbc5123e0c7da5ebad64b7968a6a61095b541644d7c4c2d9eac9c230c210ab"
+  "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
+  "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
+  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
+  "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
+  "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
+  "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
+  "services/api/ingestion/ingestion/validation.py": "sha256:0b5528935209e6b9a75c0c58ece7cde8e5097ed13b5e199d3d76853ace69b2ee"
+  "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
+  "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
+  "services/api/repositories/repos.py": "sha256:4763340370ea7ef9e43d91b1156def3188a83114efa832e0a289f267957206e6"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
+  "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
 ---
 
 # Events / Kafka Subsystem
@@ -110,3 +121,28 @@ Ingestion validation (`services/api/ingestion/ingestion/validation.py`) stages e
 - Client torn down while messages are unacknowledged → `ConsumerClientTornDown` (drains wait on both in-flight handlers and unacknowledged messages to avoid duplicate application)
 - Kafka batch overflow (`batch.append()` returns `None`) → overflow events fall back to individual `publish()` calls, ensuring no silent drops when a batch payload exceeds broker limits
 - DLQ events include `original_payload` so failed events are replayable without data loss
+
+## External agent action evidence
+
+The server SDK emits source-asserted events for agent task starts/completions/
+failures, tool invocations, policy evaluations, and delegated tasks. Ingestion
+accepts these events only with an active deployment identity validated against
+the authenticated tenant. The backend registry identity is authoritative;
+SDK-supplied agent identity and delegation targets remain source references.
+Silver preserves the event timeline and run explanation reports which evidence
+was not observed. Graph projection links bounded action and policy-decision
+records to a tenant-scoped run through the retryable graph-writer outbox.
+Optional payment, settlement and delegation IDs remain source references.
+Economic links require exact same-tenant records with server-owned x402
+provenance and the validated deployment agent reference; reported payment
+values are not accepted as facts. For delegation, the tenant-admin binding
+service resolves deployment source namespace/reference to a same-tenant
+canonical Agent, and an exact delegation reference resolves the canonical
+Delegation. Target binding requires the source-declared `delegated_to_namespace`
+and never falls back to the actor namespace. If both endpoints resolve, the
+backend evaluates canonical grant status, endpoints, effective/revocation window, action, resource, and supported
+amount limit at the source-reported event time as `within_scope`,
+`out_of_scope`, or `indeterminate`. Event payload action/resource/time remain
+source-asserted. This grant-policy evaluation does not prove external execution;
+without a server-owned receipt occurrence remains source-reported and
+unverified.

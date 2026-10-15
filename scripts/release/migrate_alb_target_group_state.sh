@@ -7,7 +7,7 @@ set -euo pipefail
 profile="${1:?usage: migrate_alb_target_group_state.sh PROFILE}"
 case "$profile" in
   staging) target='module.alb.aws_lb_target_group.backend[0]' ;;
-  production-lean|production-scale|enterprise-isolated|demo|preview)
+  production)
     target='module.alb.aws_lb_target_group.backend_replacement[0]' ;;
   *) echo "unsupported deployment profile: $profile" >&2; exit 2 ;;
 esac

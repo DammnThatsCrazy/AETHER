@@ -50,7 +50,7 @@ WORKER_ROLES: frozenset[str] = frozenset(
 # roles in one process. They are a packing decision, not a new kind of work —
 # every member role keeps its own queue, consumer group, DLQ, retry policy,
 # metrics label and independent failure/restart behaviour; only the process
-# boundary is shared. ``production-lean`` trades 8 dedicated worker tasks for
+# boundary is shared. ``production`` trades 8 dedicated worker tasks for
 # one "lean-worker" task without collapsing the logical topology, which is why
 # this maps to a *set* of roles rather than to a merged pseudo-role.
 #
@@ -141,13 +141,16 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
     # canonical observation spine (dune_polling): stablecoin provider polling and
     # the interop scan are polling/observation loops, not materialization.
     "stream-worker": frozenset(
-        {"event_replay", "dune_polling", "stablecoin_provider_polling", "interop_scan"}
+        {
+            "event_replay", "dune_polling", "stablecoin_provider_polling",
+            "interop_scan", "agent_marketplace_catalog_observer",
+        }
     ),
     "identity-worker": frozenset(),
     # The Kyber Graph projector consumes the graph mutation ledger into platform
     # topology. The card-linked graph outbox projects card-linked ingestion
     # graph writes the same way, so it rides graph-writer.
-    "graph-writer": frozenset({"kyber_graph_projector", "card_linked_graph_outbox"}),
+    "graph-writer": frozenset({"kyber_graph_projector", "card_linked_graph_outbox", "agent_marketplace_graph_outbox"}),
     "measurement-worker": frozenset(),
     # Stream consumer is owned by consumer_specs.py; the reconciler + retention
     # supervised loop specs (each gated on its settings flag) are owned here.
