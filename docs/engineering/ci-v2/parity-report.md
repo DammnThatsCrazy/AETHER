@@ -8,7 +8,7 @@ status: beta
 since_version: 0.1.0
 ---
 
-# CI V2 parity report (selection phase)
+# CI V2 parity report (selection phase and post-cutover measurement)
 
 Local replay with `python scripts/ci_parity.py --rev <rev> --count 60`. For each
 of the last 60 non-merge commits on `Development` (before the CI V2 commits), it
@@ -103,8 +103,77 @@ legacy workflows that V2 does not run (identity gates 1 and 6, Playwright,
 Slither, native SDK builds) passed on every compared commit, so their absence
 from V2 could not have produced a disagreement. See the retirement ledger.
 
+## Post-cutover measurement (2026-10-16)
+
+Measured from the 78 `ci` runs recorded after the cutover and before it landed
+(wall clock from `run_started_at` to `updated_at`; queueing included). The legacy
+figures are the 30-run sample in `baseline.md`.
+
+### Structure (exact, from `scripts/ci_baseline.py`)
+
+| Measure | Baseline (`063ca632`) | After cutover |
+|---|---|---|
+| Workflow files | 30 | 28 (two added: `ci.yml`, `release-gate.yml`; four deleted; others kept) |
+| Workflow lines | 16,517 | 15,538 |
+| Workflows triggered on `pull_request` | 13 | 6 (`ci`, `frontend-preview`, `infrastructure`, `production-equivalent-ci`, `sdk-release-validation`, `smart-contract-analysis`) |
+| Of those, path-filtered (cannot be required) | 7 | 3 |
+| Workflows that run on `synchronize` | 0 | 1 (`ci`, and it skips drafts) |
+| Required merge authority | `verification / disposition` | `ci / verdict` |
+| `upload-artifact` / `download-artifact` steps | 48 / 25 | 36 / 18 |
+| PR jobs that chain artifacts to reach the verdict | 9 uploads feed 7 downloads | none (one tiny diagnostic upload) |
+
+The workflow and line counts moved only modestly: about 12,000 lines are staging,
+Terraform and delivery operations that this program does not touch. The change
+that matters is the number of PR-triggered workflows and the single authority.
+
+### Time
+
+| Sample | n | p50 | p95 | Max |
+|---|---|---|---|---|
+| Legacy `verification / disposition` (latest 30, baseline) | 30 | about 5.7 min | about 8.4 min | about 11.4 min |
+| `ci` pull-request and push runs, completed (pass or fail) | 47 | 6.0 min | 12.6 min | 13.7 min |
+| `ci`, successful only | 34 | 5.8 min | 12.0 min | |
+| `ci` pushes to `development` since the cutover | 4 | 6.1 min | 10.8 min | 11.7 min |
+
+Excluded: 26 runs cancelled by a newer push (the concurrency group does this by
+design) and 4 draft runs that finish in under 10 s because drafts run nothing.
+
+**Reading this honestly: wall clock did not improve.** The V2 median is level with
+the legacy median and the tail is worse. What the data supports:
+
+- **The long pole is one suite shard plus queueing.** In a full-selection run
+  (`#803` merge, 343 s wall, 26 jobs) the slowest job was
+  `suites (python-backend-medium-2)` at 277 s, and it started 60 s after the
+  run began because 26 jobs compete for runners. Of 26 jobs, 12 took 98 s or more.
+- **The sample is the hard case.** Most runs here are PRs for the CI V2 work
+  itself, which touch `scripts/**` and workflows, so the selector falls back to
+  every PR-lane suite plus all checks. Narrow PRs in the same sample finished in
+  130 s, 142 s, 207 s and 209 s.
+- **Contention inflated the tail.** During the shadow phase the legacy pipeline
+  ran alongside V2 on every PR, which plausibly doubled runner demand (not measured). The three
+  `development` pushes after the legacy workflows were deleted took 347, 362 and
+  374 s, with 699 s for the one push before that. That is four points; treat the
+  improvement as unproven until more post-cutover runs accumulate.
+- **Failures are not comparable.** 13 of 47 completed runs failed (28%), against
+  2 of 11 legacy pull-request runs. Several were real findings (wallet proof,
+  access-kit, docs drift) and several were bugs in V2 itself that were fixed
+  during the program (`shared` build order, shallow checkout, stale generated
+  index). The rate should be re-measured on a steady state.
+
+### What this does and does not show
+
+Shown: one authority, fewer PR workflows, no artifact chain, narrow PRs in 2 to
+3.5 minutes, and equal median time on the broad worst case while also running
+the control gates, builds, Playwright, identity and Slither checks that the old
+authority did not.
+
+Not shown: lower p95 time, lower runner-minutes, or a lower failure rate.
+Runner-minutes were not measured; the Actions API exposes per-job durations, so a
+follow-up can sum them per run for both pipelines.
+
 ## Remaining parity work
 
 - [ ] Hosted shadow runs on at least 30 PRs across change classes (16 distinct commits so far; 5 paired with the legacy gate)
 - [ ] Controlled failing fixtures per category
-- [ ] p50/p95 and runner-minute comparison against `verification / disposition`
+- [x] p50/p95 against `verification / disposition` (above; no improvement shown, see the analysis)
+- [ ] Runner-minute comparison (sum job durations per run for both pipelines)
