@@ -66,8 +66,8 @@ def _validate(rules: dict, suites: dict) -> None:
     for e in rules.get("extra", []):
         named.update(e["suites"])
     for c in rules.get("checks", []):
-        if not (c.get("id") and c.get("include") and c.get("run")):
-            raise ValueError(f"ownership.yaml check needs id, include and run: {c}")
+        if not (c.get("id") and (c.get("include") or c.get("always")) and c.get("run")):
+            raise ValueError(f"ownership.yaml check needs id, run and include (or always): {c}")
     unknown = sorted(named - set(suites))
     if unknown or DOCS_SUITE not in suites:
         raise ValueError(f"ownership.yaml names unknown suites: {unknown or [DOCS_SUITE]}")
@@ -112,10 +112,12 @@ def select(paths: list[str], rules: dict, suites: dict) -> dict:
             reasons.append(f"unclassified path: {p}")
     checks: dict[str, str] = {}
     for c in rules.get("checks", []):
-        if mode == "broad-safe":
+        if c.get("always"):
+            checks[c["id"]] = "always-on control gate"
+        elif mode == "broad-safe":
             checks[c["id"]] = "broad-safe fallback"
         else:
-            hit = next((p for p in non_text if _any(c["include"], p)), None)
+            hit = next((p for p in non_text if _any(c.get("include", []), p)), None)
             if hit:
                 checks[c["id"]] = f"path: {hit}"
     if mode == "broad-safe":
@@ -134,7 +136,9 @@ def _result(mode, paths, selected, reasons, suites, checks=None, rules=None) -> 
             {"id": i, "why": why, "setup": by_id[i].get("setup", []), "run": by_id[i]["run"],
              "env": by_id[i].get("env", {}), "node": by_id[i].get("node", True),
              "python_extra": by_id[i].get("python_extra"),
-             "pnpm": by_id[i].get("pnpm", False)}
+             "pnpm": by_id[i].get("pnpm", False),
+             "python": bool(by_id[i].get("python") or by_id[i].get("python_extra")),
+             "base": by_id[i].get("base", False)}
             for i, why in sorted((checks or {}).items())
         ],
         "schema_version": 1,

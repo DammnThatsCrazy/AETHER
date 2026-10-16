@@ -18,8 +18,8 @@ toc_depth: 3
 
 Aether uses a change-aware verification spine so ordinary work executes the
 smallest check set justified by its affected domains. Normal pull requests have
-one blocking authority, `verification / disposition`: the Impact Graph selects
-the affected checks and BuildSelection artifacts after the universal-fast lane.
+one blocking authority, `ci / verdict`: the always-on control gates run, then
+`scripts/ci_select.py` selects the affected suites, checks and builds.
 The legacy full `make ci-check` remains available for trusted-main, nightly, and
 release evidence, but it is not a second blocking PR authority or a PR job.
 Local or PR evidence proves only the selected lane; it never establishes
@@ -50,9 +50,8 @@ latency regression.
    run `make docs-generate-changed` after all affected pages have been reviewed.
    Prove idempotence with `make docs-verify-idempotent` and run focused checks.
 4. Mark the PR ready for review after that finalization. The
-   `ready_for_review` event starts `.github/workflows/repo-consistency.yml`,
-   whose terminal `verification / disposition` is the single normal PR
-   authority. A failed terminal disposition may be rerun after a material fix.
+   `ready_for_review` event starts `.github/workflows/ci.yml`, whose
+   terminal `ci / verdict` is the single normal PR authority. A failed terminal disposition may be rerun after a material fix.
 5. Use `make ci-check` for broad trusted-main, nightly, release, or explicitly
    requested evidence and `make release-gate` for release evidence. Neither is
    a second ordinary PR authority or a substitute for profile-specific

@@ -29,7 +29,7 @@ reviewed_source_commits:
   - commit: "c71ebc5cb"
     reason: "Reviewed Access Kit container workflow cadence: pull requests build on ready_for_review, with explicit dispatch and development/main push lanes for targeted or post-landing builds; no staging wake or deployment is added."
 source_hashes:
-  ".github/workflows/": "sha256:9adef47cb8a8188e046c608399085c4b21862b1f513917c3c4d4586f519ec42f"
+  ".github/workflows/": "sha256:6392f43791ebc4d2a9d5396c59471aab2d3785ba45aded5026dd226c7b3a3dce"
   "config/delivery_workflow_authority.yaml": "sha256:f9f6f8d8892aefe2b04ef6f2adbc95e5d514efbca7d8a833cf141a1ed17e7038"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
@@ -62,7 +62,9 @@ disposition. The old full `make ci-check` PR job has been retired after the
 representative selection observation window recorded zero unexplained misses;
 it remains available for local, trusted-main, nightly, and release evidence but
 does not determine mergeability. Hosted p50/p95 timing is measured separately
-by `ci-runtime-report.yml`; its report remains `INSUFFICIENT_SAMPLES` until at
+by `ci-runtime-report.yml`, which times `classify` through `ci / verdict` on
+completed non-draft `ci.yml` pull-request runs (cancelled and draft runs are
+ignored); its report remains `INSUFFICIENT_SAMPLES` until at
 least 20 completed adaptive PR authority runs are available, so local timing
 must not be presented as hosted timing evidence.
 
@@ -307,19 +309,31 @@ roll-forward.
 
 ## CI V2 shadow verdict
 
-`.github/workflows/ci.yml` (check `ci / verdict`) is the replacement for the
-`verification / disposition` DAG. During the shadow phase it runs on every new
-PR head SHA and merge-queue SHA, selects suites with `scripts/ci_select.py`
-and `config/ci/ownership.yaml`, shards suite workers by the registry's expected
-runtime, runs path-selected non-suite `checks` (aether-web typecheck, kyber-web
-Playwright e2e, and the identity-continuity static gates plus the tests no suite
-runs, which need a Python extra; the pnpm proof-package builds, the
-functionality-proof gating jobs, Slither, and the Access Kit container smoke,
-which need pnpm, Python, or Docker), uploads no artifacts, and is **not** a required status.
-`verification / disposition` stays the merge authority until the parity report
-clears the cutover. Diagnostic artifact uploads in workflows that never
-download artifacts are `continue-on-error` with seven-day retention so a storage
-quota failure cannot fail a run whose tests passed. See
+`.github/workflows/ci.yml` (check `ci / verdict`; GitHub exposes the job name
+as the required status context, so the `verdict` job is named exactly that) is
+the declared pull-request authority in `config/verification_policy.yaml`, replacing the
+`verification / disposition` DAG. **Transition state:** `repo-consistency.yml`
+still exists and still reports `verification / disposition` until it is deleted
+in the cutover PR, and the repository ruleset must require `ci / verdict`
+(and drop the old check) before that deletion merges.
+
+Draft pull requests run nothing: `verdict` passes with a note, and the first run
+starts at `ready_for_review` and then on every new head SHA. It also runs on
+merge-queue SHAs and on pushes to `development`, `staging` and `main`. It selects
+suites with `scripts/ci_select.py` and `config/ci/ownership.yaml`, shards suite
+workers by the registry's expected runtime, and runs path-selected non-suite
+`checks`: aether-web typecheck, kyber-web Playwright e2e, the identity-continuity
+static gates plus the tests no suite runs (which need a Python extra), the pnpm
+proof-package builds, the functionality-proof gating jobs, Slither, the Access Kit
+container smoke (pnpm, Python or Docker), the always-on control gates that replace
+`universal-fast`, and the selected Node and backend image builds. `verdict`
+uploads one tiny diagnostic artifact, `ci-verdict-evidence`, only for a passing
+non-draft run. A manual `workflow_dispatch` replay chooses its own diff base, so it
+publishes under the name `ci / verdict (manual replay)` and uploads no evidence;
+it can never satisfy the required context. Diagnostic artifact
+uploads in workflows that never download artifacts are `continue-on-error` with
+seven-day retention so a storage quota failure cannot fail a run whose tests
+passed. `release-gate.yml` is the on-demand `make release-gate`. See
 `docs/engineering/ci-v2/architecture.md`.
 
 ## Scope — two different things

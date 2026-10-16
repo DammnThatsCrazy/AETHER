@@ -29,7 +29,7 @@ source_hashes:
   "scripts/docs_extract/run_all.py": "sha256:404445eba05d12de88af585f79839b7496a1658411a110e606c46d5ed7e8c338"
   "scripts/docs_idempotency.py": "sha256:fe8628ef3a9b9d824645a5db062857754d2984b0f3f4d866b571df6232302f17"
   "scripts/docs_schema.json": "sha256:4bca1171f04d0804189a63a818dfa0fb671cfa130a7d982b2bc55b624499b5a0"
-  "scripts/sync_docs.py": "sha256:527359eea92187fcd67be417ed789e0574ab15ca80f0332af575def58ae6c2e5"
+  "scripts/sync_docs.py": "sha256:5926b4e418067063a721fd8a0a875a114ca0b7ba6d0112d6beab7ee850471e49"
   "scripts/validate_contracts.py": "sha256:00b5fcb85c2e9c749d647d488784dcd762de9b372f42b9e9f03355e46b5bc096"
   "scripts/validate_docs.py": "sha256:6402a54386b9610be8d5acaad9bde294cad4a293a19507309df3a3f05d54b5e9"
   "scripts/validate_frontmatter.py": "sha256:bca720067d28914df95e3b34b78551aec334d1bfc09a085515728fe55900325b"
@@ -209,10 +209,9 @@ different authority scopes:
   PRs (`ready_for_review`) and
   the trusted-main/nightly documentation runners. Its `docs-sync` write path is
   restricted to pushes to `main`.
-- `.github/workflows/repo-consistency.yml` — the normal PR authority named
-  `verification / disposition`; it starts at PR finalization (`ready_for_review`)
-  and runs the selected documentation check when
-  the Impact Graph requires it. Its full `make ci-check` execution is retired
+- `.github/workflows/ci.yml` — the normal PR authority named `ci / verdict`; it
+  starts at PR finalization (`ready_for_review`) and runs the `docs` suite when
+  documentation or its inputs change. Its full `make ci-check` execution is retired
   from PRs after the observation window, while the same broad command remains
   available for trusted-main/nightly/release evidence.
 

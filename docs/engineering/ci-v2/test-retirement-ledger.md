@@ -31,7 +31,7 @@ Disposition key: **retire** (after parity), **convert** (move its checks into
 | `infrastructure.yml` | `plan` (`terraform validate`/plan), credential readiness | Infra validity; no automatic apply | none | **Retain** (becomes `infra.yml`): needs `setup-terraform`, plugin caching and the remote-plan dispatch flow; already path-filtered to `infra/aws/**`, no apply. Supplementary evidence, not a merge authority |
 | `access-kit-container.yml` | `build-and-smoke` (`npm pack`, Docker build) | Access Kit packaging | none | check `access-kit-container` (shadow: `npm pack`, buildx, container smoke via `scripts/ci_access_kit_smoke.sh`). Retire the PR trigger after parity; push and dispatch runs stay |
 | `frontend-preview.yml` | preview deploys | Preview environments | n/a | **Retain** (`preview.yml`) |
-| `repo-consistency.yml` | 10-job DAG, `verification / disposition` | Current merge authority | `ci / verdict` | **Retire last**, after the ruleset requires `ci / verdict` |
+| `repo-consistency.yml` | 10-job DAG, `verification / disposition` | Current merge authority | `ci / verdict`; see the job map below | **Retire last**, after the ruleset requires `ci / verdict` and the push-time `release-gate` job has a home |
 
 Out of scope for this phase: staging, terraform-promote, deploy and publish
 workflows. They are privileged operations, not PR verification.
@@ -68,3 +68,19 @@ workflows also protect invariants outside the registry, so deleting them first
 would remove unique coverage. `config/ci/ownership.yaml` now has a `checks`
 section for non-suite commands; each retirement moves one workflow's unique
 commands there, then waits for hosted parity.
+
+## `repo-consistency.yml`, job by job
+
+Mapping the legacy DAG showed V2 ran **none** of its control validators, builds
+or release gate. Closed by this change unless noted:
+
+| Legacy job | What it did | V2 home |
+|---|---|---|
+| `classify-change` | `check_router`, execution plan, impact graph `--fail-on-unresolved` | `ci_select.py` for selection; `impact_graph` and the plan run inside the `control-gates` and `build-selected` checks |
+| `universal-fast` | the router `fast` lane: 17 validators (toolchain, metadata, delivery, verification policy, impact graph, telemetry, workflow authority, CI execution contracts, branding, debt ledger, profile config, capability overlays, service classification, reachability, settings flags) | check `control-gates` (`scripts/ci_control_gates.py`), always on, adds `contracts` from the `pr` lane |
+| `plan-verification`, `suite-matrix` | suite workers | `classify` + `suites` matrix |
+| `plan-build`, `build-node` | Build Selection v2, dependency-first workspace builds | check `build-selected` (`scripts/ci_build_selected.py`); the archive tarball is not produced |
+| `build-backend-image` | `docker build services/api` | check `build-selected` (same script); the image is not saved |
+| `candidate-verification` | verified the immutable archive of the two builds above | **Retired with the archives.** `deploy.yml` builds the release candidate; no workflow downloads the PR run's archives |
+| `publish-evidence` | `verification / disposition` | `ci / verdict` |
+| `release-gate` | `make release-gate` and staging preflight dry-run on push to `development`, `staging`, `main` | **Not yet ported.** `ci.yml` has no `push` trigger; needs a push-time home before this workflow can go |

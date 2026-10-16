@@ -604,7 +604,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Single verification authority policy",
         results=results,
         stop_on_failure=stop,
-        remediation="repair config/verification_policy.yaml and keep verification / disposition as the only blocking PR status",
+        remediation="repair config/verification_policy.yaml and keep ci / verdict as the only blocking PR status",
     )
 
 
