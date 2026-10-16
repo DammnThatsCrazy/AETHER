@@ -535,6 +535,151 @@ async def test_evidence_binds_only_accepted_resolution_decisions():
 
 
 @pytest.mark.asyncio
+async def test_identifier_active_proof_query_filters_status_before_paging(monkeypatch):
+    repository = VerificationEvidenceRepository()
+    captured = {}
+
+    async def list_for_tenant(tenant_id, *, limit=100, offset=0, extra=None):
+        captured.update({"tenant_id": tenant_id, "limit": limit, "offset": offset, "extra": extra})
+        return [{"status": "active", "id": "active-row"}]
+
+    monkeypatch.setattr(repository, "list_for_tenant", list_for_tenant)
+    rows = await repository.get_active_for_identifier(
+        "tenant-page", "email", "email-hash", limit=100, offset=100
+    )
+
+    assert captured["extra"] == {
+        "identifier_type": "email",
+        "identifier_hash": "email-hash",
+        "status": "active",
+    }
+    assert rows == [{"status": "active", "id": "active-row"}]
+
+
+@pytest.mark.asyncio
+async def test_expiring_replayed_evidence_removes_unreferenced_verified_alias():
+    reset_in_memory_stores()
+    tenant_id = "tenant-expiring-proof"
+    identifier_hash = "expired-email-hash"
+    evidence_repo = VerificationEvidenceRepository()
+    resolution_repo = IdentityResolutionRepository()
+    entity_id = "entity-expiring-proof"
+    await resolution_repo.create_subject(tenant_id, entity_id, EntityType.HUMAN)
+    await resolution_repo.upsert_alias(
+        tenant_id,
+        entity_id,
+        IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED,
+        identifier_hash,
+        confidence_tier=ConfidenceTier.STRONG,
+    )
+    evidence_id = "expired-proof-row"
+    await evidence_repo.insert(evidence_id, {
+        "id": evidence_id,
+        "tenant_id": tenant_id,
+        "identifier_type": "email",
+        "identifier_hash": identifier_hash,
+        "evidence_type": "email_ownership_verified",
+        "status": "active",
+        "expires_at": (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(),
+        "policy_version": "1.0.0",
+    })
+    service = EvidenceService(repo=evidence_repo, replay_service=ReplaySpy())
+
+    result = await service.retry_evidence_replay(tenant_id, evidence_id)
+
+    assert result == {"status": "expired_evidence"}
+    persisted = await evidence_repo.get_for_tenant(tenant_id, evidence_id)
+    assert persisted["status"] == "expired"
+    aliases = await resolution_repo.find_aliases_by_signal(
+        tenant_id,
+        IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED,
+        identifier_hash,
+        include_revoked=True,
+    )
+    assert aliases and aliases[0]["revoked_at"]
+
+
+@pytest.mark.asyncio
+async def test_proof_issuance_waits_for_revocation_alias_cleanup(monkeypatch):
+    reset_in_memory_stores()
+    tenant_id = "tenant-proof-race"
+    identifier_hash = "race-email-hash"
+    entity_id = "entity-proof-race"
+    evidence_repo = VerificationEvidenceRepository()
+    resolution_repo = IdentityResolutionRepository()
+    await resolution_repo.create_subject(tenant_id, entity_id, EntityType.HUMAN)
+    await resolution_repo.upsert_alias(
+        tenant_id,
+        entity_id,
+        IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED,
+        identifier_hash,
+        confidence_tier=ConfidenceTier.STRONG,
+    )
+    old_id = "proof-race-old"
+    await evidence_repo.insert(old_id, {
+        "id": old_id,
+        "tenant_id": tenant_id,
+        "identifier_type": "email",
+        "identifier_hash": identifier_hash,
+        "evidence_type": "email_ownership_verified",
+        "status": "active",
+        "policy_version": "1.0.0",
+        "metadata": {},
+    })
+    query_started = asyncio.Event()
+    allow_cleanup = asyncio.Event()
+    original_query = evidence_repo.get_active_for_identifier
+
+    async def blocked_query(*args, **kwargs):
+        rows = await original_query(*args, **kwargs)
+        query_started.set()
+        await allow_cleanup.wait()
+        return rows
+
+    monkeypatch.setattr(evidence_repo, "get_active_for_identifier", blocked_query)
+
+    class AliasRestoringReplay:
+        async def request_replay(self, **_kwargs):
+            await resolution_repo.upsert_alias(
+                tenant_id,
+                entity_id,
+                IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED,
+                identifier_hash,
+                confidence_tier=ConfidenceTier.STRONG,
+            )
+            return {
+                "status": "complete",
+                "decision": "link",
+                "canonical_entity_id": entity_id,
+            }
+
+    service = EvidenceService(repo=evidence_repo, replay_service=AliasRestoringReplay())
+    revoke_task = asyncio.create_task(service.revoke_evidence(tenant_id, old_id))
+    await asyncio.wait_for(query_started.wait(), timeout=1)
+    issue_task = asyncio.create_task(service.issue_evidence(
+        tenant_id=tenant_id,
+        identifier_type="email",
+        identifier_hash=identifier_hash,
+        verification_method="email_otp",
+    ))
+    await asyncio.sleep(0.01)
+    assert not issue_task.done()
+
+    allow_cleanup.set()
+    await revoke_task
+    issued = await issue_task
+
+    active = await evidence_repo.get_active_for_identifier(
+        tenant_id, "email", identifier_hash
+    )
+    aliases = await resolution_repo.find_aliases_by_signal(
+        tenant_id, IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED, identifier_hash
+    )
+    assert any(row["id"] == issued.id for row in active)
+    assert aliases and aliases[0]["canonical_entity_id"] == entity_id
+
+
+@pytest.mark.asyncio
 async def test_wallet_evidence_retry_recovers_subject_and_binds_entity_after_reload(
     monkeypatch,
 ):
@@ -665,6 +810,17 @@ def test_wallet_subject_binding_decrypts_across_key_rotation(monkeypatch):
     assert verify_token_digest(
         "valid-token", old_token_digest, "purpose:tenant-rotate"
     )
+
+
+def test_blank_previous_key_id_defaults_during_wallet_key_rotation(monkeypatch):
+    monkeypatch.setenv("IDENTITY_VERIFICATION_TOKEN_KEY", "active-key-material")
+    monkeypatch.setenv("IDENTITY_VERIFICATION_TOKEN_KEY_ID", "active-2026")
+    monkeypatch.setenv("IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS", "previous-key-material")
+    monkeypatch.setenv("IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS_ID", "")
+
+    ciphertext = encrypt_wallet_subject_binding("anon-blank-id", "tenant-blank-id")
+
+    assert decrypt_wallet_subject_binding(ciphertext, "tenant-blank-id") == "anon-blank-id"
 
 
 @pytest.mark.asyncio

@@ -13,7 +13,10 @@ persists a raw OTP/token and never logs PII or secrets.
 from __future__ import annotations
 
 import uuid
-from typing import Any, Optional
+import asyncio
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, Optional
+from weakref import WeakKeyDictionary
 
 from shared.common.common import parse_iso, utc_now
 from shared.logger.logger import get_logger
@@ -29,6 +32,22 @@ from .models import (
 from .verification_repository import VerificationEvidenceRepository
 
 logger = get_logger("aether.service.identity.evidence")
+
+_LOCAL_IDENTIFIER_LOCKS: WeakKeyDictionary[
+    asyncio.AbstractEventLoop, dict[str, asyncio.Lock]
+] = WeakKeyDictionary()
+
+
+def _local_identifier_lock(key: str) -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    locks = _LOCAL_IDENTIFIER_LOCKS.get(loop)
+    if locks is None:
+        locks = {}
+        _LOCAL_IDENTIFIER_LOCKS[loop] = locks
+    lock = locks.get(key)
+    if lock is None:
+        lock = locks[key] = asyncio.Lock()
+    return lock
 
 
 # Operator-facing evidence is redacted (§56): secret-ish fields (proof_digest,
@@ -132,21 +151,22 @@ class EvidenceService:
             identity_namespace=identity_namespace,
             metadata=dict(metadata or {}),
         )
-        await self._repo.create(evidence)
-        self._metrics.record_evidence_active(evidence_type)
-        replay_result = await self._trigger_replay(
-            tenant_id=tenant_id,
-            identifier_type=identifier_type,
-            identifier_hash=identifier_hash,
-            trigger_type="verification_evidence_issued",
-            trigger_id=evidence.id,
-            policy_version=policy_version,
-            consent_snapshot=consent_snapshot,
-            chain_namespace=(metadata or {}).get("chain_namespace"),
-            subject_hint_id=subject_hint_id,
-            identity_namespace=identity_namespace,
-        )
-        await self._bind_entity_if_resolved(evidence.id, tenant_id, replay_result)
+        async with self._identifier_guard(tenant_id, identifier_type, identifier_hash):
+            await self._repo.create(evidence)
+            self._metrics.record_evidence_active(evidence_type)
+            replay_result = await self._trigger_replay(
+                tenant_id=tenant_id,
+                identifier_type=identifier_type,
+                identifier_hash=identifier_hash,
+                trigger_type="verification_evidence_issued",
+                trigger_id=evidence.id,
+                policy_version=policy_version,
+                consent_snapshot=consent_snapshot,
+                chain_namespace=(metadata or {}).get("chain_namespace"),
+                subject_hint_id=subject_hint_id,
+                identity_namespace=identity_namespace,
+            )
+            await self._bind_entity_if_resolved(evidence.id, tenant_id, replay_result)
         return evidence
 
     async def revoke_evidence(
@@ -158,12 +178,25 @@ class EvidenceService:
         Raises when alias cleanup fails so callers do not report revocation as
         complete while the proof-derived alias is still active.
         """
-        row = await self._repo.revoke(tenant_id, evidence_id, reason=reason)
-        if row is None:
+        existing = await self._repo.get_for_tenant(tenant_id, evidence_id)
+        if existing is None:
             return None
-        self._metrics.record_evidence_revoked(row.get("evidence_type", ""))
-        await self._remove_verified_alias_if_unreferenced(tenant_id, row)
-        return row
+        async with self._identifier_guard(
+            tenant_id,
+            str(existing.get("identifier_type") or ""),
+            str(existing.get("identifier_hash") or ""),
+        ):
+            # Re-read after acquiring the shared identifier lock so the status
+            # transition and proof count observe any preceding issuer/revoker.
+            current = await self._repo.get_for_tenant(tenant_id, evidence_id)
+            if current is None:
+                return None
+            row = await self._repo.revoke(tenant_id, evidence_id, reason=reason)
+            if row is None:
+                return None
+            self._metrics.record_evidence_revoked(row.get("evidence_type", ""))
+            await self._remove_verified_alias_if_unreferenced(tenant_id, row)
+            return row
 
     async def _remove_verified_alias_if_unreferenced(
         self, tenant_id: str, revoked_evidence: dict
@@ -247,10 +280,24 @@ class EvidenceService:
         This supports operator reconciliation after a resolver outage without
         retaining the caller's raw anonymous identifier in process state.
         """
+        existing = await self._repo.get_for_tenant(tenant_id, evidence_id)
+        if existing is None:
+            return {"status": "not_found"}
+        async with self._identifier_guard(
+            tenant_id,
+            str(existing.get("identifier_type") or ""),
+            str(existing.get("identifier_hash") or ""),
+        ):
+            return await self._retry_evidence_replay_locked(tenant_id, evidence_id)
+
+    async def _retry_evidence_replay_locked(
+        self, tenant_id: str, evidence_id: str
+    ) -> dict:
         row = await self._repo.get_for_tenant(tenant_id, evidence_id)
         if row is None:
             return {"status": "not_found"}
         if row.get("status") == VerificationEvidenceStatus.EXPIRED.value:
+            await self._remove_verified_alias_if_unreferenced(tenant_id, row)
             return {"status": "expired_evidence"}
         if row.get("status") != VerificationEvidenceStatus.ACTIVE.value:
             return {"status": "inactive_evidence"}
@@ -262,7 +309,9 @@ class EvidenceService:
                 expired = True
             if expired:
                 try:
-                    await self._repo.expire_if_active(tenant_id, evidence_id)
+                    expired_row = await self._repo.expire_if_active(
+                        tenant_id, evidence_id
+                    )
                 except Exception as exc:  # noqa: BLE001 - replay remains blocked
                     logger.warning(
                         "expired verification evidence status update failed",
@@ -271,6 +320,11 @@ class EvidenceService:
                             "evidence_id": evidence_id,
                             "error_type": type(exc).__name__,
                         },
+                    )
+                    return {"status": "error", "error": "evidence_expiry_failed"}
+                if expired_row and expired_row.get("status") == VerificationEvidenceStatus.EXPIRED.value:
+                    await self._remove_verified_alias_if_unreferenced(
+                        tenant_id, expired_row
                     )
                 return {"status": "expired_evidence"}
         subject_hint_id = self._recover_subject_hint(row, tenant_id)
@@ -319,6 +373,22 @@ class EvidenceService:
         )
         await self._bind_entity_if_resolved(evidence_id, tenant_id, result)
         return result or {"status": "error", "error": "resolution replay failed"}
+
+    @asynccontextmanager
+    async def _identifier_guard(
+        self, tenant_id: str, identifier_type: str, identifier_hash: str
+    ) -> AsyncIterator[None]:
+        guard = getattr(self._repo, "identifier_guard", None)
+        if callable(guard):
+            async with guard(tenant_id, identifier_type, identifier_hash):
+                yield
+            return
+        normalized_type = identifier_type.strip().lower()
+        if normalized_type in {"email", "email_hash"}:
+            normalized_type = "email"
+        key = f"{tenant_id}:{normalized_type}:{identifier_hash}"
+        async with _local_identifier_lock(key):
+            yield
 
     @staticmethod
     def _recover_subject_hint(row: dict, tenant_id: str) -> Optional[str]:

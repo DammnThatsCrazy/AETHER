@@ -439,8 +439,9 @@ locals {
 
   # Secret name → container env var name mapping for backend.
   # lookup() tolerates missing keys so terraform import can evaluate the
-  # graph before every secret is in state; the apply workflow validates
-  # all secrets exist before any task definition is created.
+  # graph before every secret is in state. Identity verification keys are
+  # mounted only after the operator has populated both AWSCURRENT versions;
+  # the promotion workflow checks this metadata before accepting the opt-in.
   backend_secrets = merge(
     {
       JWT_SECRET                       = lookup(var.secret_arns, "jwt-secret", "")
@@ -453,9 +454,11 @@ locals {
       CANARY_SECRET_SEED               = lookup(var.secret_arns, "canary-secret-seed", "")
       EXTRACTION_CANARY_SEED           = lookup(var.secret_arns, "extraction-canary-seed", "")
       SDK_CONFIG_SECRET                = lookup(var.secret_arns, "sdk-config-secret", "")
-      IDENTITY_VERIFICATION_TOKEN_KEY  = lookup(var.secret_arns, "identity-verification-token-key", "")
       FIRST_ADMIN_BOOTSTRAP_TOKEN      = lookup(var.secret_arns, "first-admin-bootstrap-token", "")
     },
+    var.identity_verification_secrets_enabled ? {
+      IDENTITY_VERIFICATION_TOKEN_KEY = lookup(var.secret_arns, "identity-verification-token-key", "")
+    } : {},
     # Full staging keeps the two workforce credentials in the ECS execution
     # role's secret injection set. Pilot deliberately omits them; the backend
     # runtime contract above disables the workforce plane in that lane.
@@ -496,7 +499,7 @@ locals {
     lookup(var.companion_secret_arns, "byok-encryption-key-previous", null) != null ? {
       BYOK_ENCRYPTION_KEY_PREVIOUS = var.companion_secret_arns["byok-encryption-key-previous"]
     } : {},
-    lookup(var.companion_secret_arns, "identity-verification-token-key-previous", null) != null ? {
+    var.identity_verification_secrets_enabled && lookup(var.companion_secret_arns, "identity-verification-token-key-previous", null) != null ? {
       IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS = var.companion_secret_arns["identity-verification-token-key-previous"]
     } : {},
   )

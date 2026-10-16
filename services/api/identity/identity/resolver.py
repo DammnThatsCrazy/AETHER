@@ -855,6 +855,14 @@ class IdentityResolutionService:
                 IdentitySignalType.MOBILE_INSTALL_ID.value,
             }
             signal_pairs = {(sig_type.value, sig_hash) for sig_type, sig_hash, _ in hashed_signals}
+            fresh_verified_pairs = {
+                pair
+                for pair in signal_pairs
+                if pair[0] in {
+                    IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED.value,
+                    IdentitySignalType.WALLET_SIGNATURE_VERIFIED.value,
+                }
+            }
             for candidate_entity_id in existing_entity_ids:
                 subject = await self._repo.get_subject_by_canonical_entity_id(
                     tenant_id, candidate_entity_id
@@ -894,7 +902,15 @@ class IdentityResolutionService:
                     if alias_type == IdentitySignalType.USER_ID.value and alias_hash:
                         candidate_authenticated_user_ids.append((alias_hash, candidate_entity_id))
                     if alias.get("revoked_at") and (alias_type, alias_hash) in signal_pairs:
-                        candidate_has_revoked_consent = True
+                        is_replaced_proof = (
+                            alias_type in {
+                                IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED.value,
+                                IdentitySignalType.WALLET_SIGNATURE_VERIFIED.value,
+                            }
+                            and (alias_type, alias_hash) in fresh_verified_pairs
+                        )
+                        if not is_replaced_proof:
+                            candidate_has_revoked_consent = True
 
             # Gather veto inputs from repository-owned candidate state plus
             # the resolver's canonicalized incoming signal types. Caller

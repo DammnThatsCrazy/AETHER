@@ -77,9 +77,10 @@ def _wallet_subject_binding_keyring(tenant_id: str) -> tuple[str, dict[str, byte
 
     previous_raw = os.getenv("IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS", "")
     if previous_raw:
-        previous_id = os.getenv(
-            "IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS_ID", "previous"
-        ).strip()
+        previous_id = (
+            os.getenv("IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS_ID", "").strip()
+            or "previous"
+        )
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", previous_id):
             raise ValueError("invalid IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS_ID")
         if previous_id == active_id:

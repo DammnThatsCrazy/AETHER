@@ -19,7 +19,7 @@ source_hashes:
   "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
   "config/runtime_deployment.yaml": "sha256:cd65f4902ed9062c2526bd9b83b99e2c0ecc58f012a3fa1c90ba9660b874a332"
   "config/terraform_resource_contracts.yaml": "sha256:b1414be3c53b0309d484b8029aadf336618bd88d94d31de72ed0f54865493d59"
-  "infra/aws/terraform/main.tf": "sha256:3452bf10acf326ce6eea1267042b305d494bcd6844a66e87df3a3cad8d0d7626"
+  "infra/aws/terraform/main.tf": "sha256:4d67fde198b1c7c6cae30fbb32725cee6a89b894b29449e9ac1e380f6d26d3a5"
   "infra/aws/terraform/modules/alb/main.tf": "sha256:5ffc32ab652489d712a16ec6a1828143d6eed7f12a4c114fa491bb95cbd1367d"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
   "infra/aws/terraform/modules/ecr/main.tf": "sha256:f880cb8a6a4dfec313b115d89e6714906dcfcf3dc1cd4496945d7e86814d6407"
@@ -27,7 +27,7 @@ source_hashes:
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:29607ea44951c132385a375626cb9dafd213a9f26fb87ce8d1694b6fd74524da"
   "infra/aws/terraform/modules/secrets/rotation.tf": "sha256:c6c06da21c6ccd01468741102529c59a17ffc0e0b9c230df08d49869a3858589"
   "infra/aws/terraform/profiles.tf": "sha256:da63e1f50e4030924713679445e3c365883a23821ac78df83bebe14436c67f60"
-  "infra/aws/terraform/variables.tf": "sha256:46f64fe05369a15910f3702ed7161da5be3c539f52908643570b60b18fecb8e1"
+  "infra/aws/terraform/variables.tf": "sha256:ca0ecdd26f0d7212e4ab11cd7361af4ae6e562915a9f36b7e5d76cb97c1a4b6e"
   "scripts/release/check_cost_model.py": "sha256:e406557fe672b5af7c7cc3dc3ce83220813f19c84ba70791b0facc89e5e40717"
   "scripts/release/check_profile_config.py": "sha256:77bd45e6128fb26beb490906c88686c378a2d074dd7dfd18c88a1a7e4cbc1b73"
   "scripts/release/check_profile_parity.py": "sha256:da8bd779227c8f0945ea4b897559720f7600bcd6f9dccf8c1f659b5e6a7ede15"
@@ -207,9 +207,14 @@ durable GitHub `STAGING_ADMIN_API_KEY` are separate credentials: the pilot task
 arms the one-time route, and the lifecycle validates the returned `ak_...` key
 against `/v1/me` with admin scope before rehearsal mutation.
 The staging ECS API and consolidated worker mount the Google workforce client
-ID and secret from those reviewed secret records. They also mount the active
-`IDENTITY_VERIFICATION_TOKEN_KEY` and its previous-key companion from Secrets
-Manager; retain the previous value while persisted evidence needs it.
+ID and secret from those reviewed secret records. The active
+`IDENTITY_VERIFICATION_TOKEN_KEY` and its previous-key companion mount only
+when the reviewed `identity_verification_secrets_enabled` input is true. For
+the first rollout, plan and apply with the input false, populate both Secrets
+Manager values, then create a fresh reviewed plan with the input true. The
+promotion workflow checks that both secrets have `AWSCURRENT` versions before
+planning or applying a task revision that mounts them; the check reads metadata
+only. Retain the previous value while persisted evidence needs it.
 Workforce enforcement, backend authorization, device trust, scope v2, and
 step-up are explicitly on;
 the legacy operator identity and bootstrap paths are explicitly off. The

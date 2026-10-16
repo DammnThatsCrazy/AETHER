@@ -24,9 +24,9 @@ reviewed_source_commits:
     reason: "Reviewed the optional session_required guard on the SSO callback. This page now explains its CLI-only fail-closed behavior while preserving browser sign-in and first-admin bootstrap behavior."
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:94f3ca18d86f2d5b9e56a319bc7d41db56d524c009458b50bfe226e59d2f9a53"
-  ".github/workflows/staging-lifecycle.yml": "sha256:ab0d86125cd2be277ba7e0a40a4dbc9fdd5db1480ff1c7cb816adf4874a55ae9"
-  ".github/workflows/terraform-promote.yml": "sha256:804e3b437274475d5125b4dbf6c3988ff9387909af73a5aeb5690713cf310adf"
-  "infra/aws/terraform/modules/ecs/main.tf": "sha256:b4f885f14cd5a6fcda8d3b0ccc4b150dfcb097b0be9de28a78ddb5eb520e55f5"
+  ".github/workflows/staging-lifecycle.yml": "sha256:9a9a30a08991de719b73cb0da935e322837f0f9a124f7a566d48e5d5be25fd00"
+  ".github/workflows/terraform-promote.yml": "sha256:a4c235b5777e0dc0ec1e41faabe964314fa751d9c4239d60f156517e3c7eb84c"
+  "infra/aws/terraform/modules/ecs/main.tf": "sha256:fcfc016058554a533e9e328101cf4cd726a1e8e61f94cb7599717f12275792c1"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "services/api/repositories/repos.py": "sha256:0526f10f7486f0e40a6b808400feaf9f65c787880ea5858c4db6b5f348645959"
@@ -54,7 +54,11 @@ requires all of the following:
    `aether/first-admin-bootstrap-token` in Secrets Manager, in the request
    header `X-Aether-First-Admin-Bootstrap-Token`.
    This credential is distinct from the identity verification key, which is
-   separately mounted for wallet proof and checked by hosted preflight.
+   separately mounted for wallet proof and checked by hosted preflight. The
+   identity-key mounts are gated by the reviewed
+   `identity_verification_secrets_enabled` Terraform input; first-time setup
+   populates both key secrets before creating the plan that enables those
+   mounts.
 3. `FIRST_ADMIN_BOOTSTRAP_EMAIL` set to the approved operator address.
 4. A backend running with the staging database and cache available.
 5. The durable marker is unclaimed for a new bootstrap. If a prior request

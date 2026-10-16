@@ -35,7 +35,7 @@ source_hashes:
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/identity/identity/": "sha256:ff83983ab065d9187aa6a663c9f7e78da95ff0f0e5fee83e02656ff743f5ad5f"
+  "services/api/identity/identity/": "sha256:66895139ce16abfb74a981b7c20a10dc63b442a07bd6af824da66d72d2c9d881"
   "services/api/identity/profile/aggregator.py": "sha256:228b48e5b06d6f4355c1d5fda2363ef5e3265570e750863bd7fd98941a41109f"
   "services/api/identity/profile/composer.py": "sha256:aae09f67a164f0e2b940676e52841ff325f36650ac4b1c022cc2a60a31505c20"
   "services/api/ingestion/ingestion/batch.py": "sha256:fbb659145f6cf52cff5af991099fb2cd78bd306729b6144a3ddb93bb8dbdda45"
@@ -227,14 +227,17 @@ returns a cached completed result for legacy evidence without a subject; when
 no such result exists, it requires a fresh proof rather than inferring identity.
 Resolver `internal_error` outcomes leave replay jobs failed and retryable,
 including legacy completed jobs whose recorded reason is `internal_error`.
-Revoking evidence removes its verified alias only after no unexpired active
-proof remains for that identifier. Revoked evidence is never replayed as
-affirmative verification. A subsequent fresh proof may establish a new
-verified alias, while a revoked observed alias or suppression still vetoes
-linking. Reversing an earlier entity merge requires the explicit identity
-split workflow. If alias cleanup fails, the revoke request reports failure and
-can be retried; it does not report revocation complete while the alias remains
-active.
+Replay claims use a renewable lease and fencing token: a crashed or cancelled
+worker's stale claim can be reclaimed, while the prior owner cannot overwrite
+the successor's result. Issuance, retry, revocation, and proof-derived alias
+cleanup are serialized per tenant and identifier. Revoking or expiring evidence
+removes its verified alias only after no unexpired active proof remains for
+that identifier. Revoked evidence is never replayed as affirmative
+verification. A subsequent fresh proof may establish a new verified alias,
+while a revoked observed alias or suppression still vetoes linking. Reversing
+an earlier entity merge requires the explicit identity split workflow. If
+alias cleanup fails, the revoke or expiry path reports failure and can be
+retried; it does not report cleanup complete while the alias remains active.
 
 ### Edge Types
 

@@ -74,8 +74,8 @@ _ENV_VAR_TO_SECRET_PATH: dict[str, str] = {
     "CANARY_SECRET_SEED": "canary-secret-seed",
     "EXTRACTION_CANARY_SEED": "extraction-canary-seed",
     "SDK_CONFIG_SECRET": "sdk-config-secret",
-    "IDENTITY_VERIFICATION_TOKEN_KEY": "identity-verification-token-key",
     "IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS": "identity-verification-token-key-previous",
+    "IDENTITY_VERIFICATION_TOKEN_KEY": "identity-verification-token-key",
     "ORACLE_SIGNER_PRIVATE_KEY": "oracle-signer-private-key",
     "FIRST_ADMIN_BOOTSTRAP_TOKEN": "first-admin-bootstrap-token",
     "STRIPE_SECRET_KEY": "stripe-secret-key",
@@ -269,6 +269,7 @@ def run(
     skip_manual: bool,
     kms_key_id: Optional[str],
     rotate_generated: bool = False,
+    only_identity_verification_keys: bool = False,
 ) -> None:
     try:
         import boto3
@@ -332,6 +333,8 @@ def run(
     skipped: list[str] = []
 
     for env_var, path_suffix in _ENV_VAR_TO_SECRET_PATH.items():
+        if only_identity_verification_keys and env_var not in identity_key_envs:
+            continue
         value = values.get(env_var, "")
         secret_path = f"{prefix}{path_suffix}"
 
@@ -440,6 +443,10 @@ def main() -> None:
         "--rotate-generated", action="store_true",
         help="Explicitly rotate existing auto-generated secrets; default bootstrap preserves them.",
     )
+    parser.add_argument(
+        "--only-identity-verification-keys", action="store_true",
+        help="Populate only the active and previous identity-verification keys after Terraform creates their metadata.",
+    )
     args = parser.parse_args()
 
     set_overrides = _parse_set_args(args.set_args)
@@ -452,6 +459,7 @@ def main() -> None:
         skip_manual=args.skip_manual,
         kms_key_id=args.kms_key_id,
         rotate_generated=args.rotate_generated,
+        only_identity_verification_keys=args.only_identity_verification_keys,
     )
 
 

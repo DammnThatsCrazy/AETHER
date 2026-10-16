@@ -242,8 +242,7 @@ procedure is [`docs/operations/DEPLOYMENT-RUNBOOK.md`](../../docs/operations/DEP
    ```
 
    It initializes the active and previous identity-verification keys to the
-   same random value. For later rotation, supply both key values through a
-   secure env file. Store **raw strings, not JSON** (ECS `valueFrom` injects
+   same random value. Store **raw strings, not JSON** (ECS `valueFrom` injects
    the whole secret string).
 
    For manual single-secret setup:
@@ -254,10 +253,18 @@ procedure is [`docs/operations/DEPLOYMENT-RUNBOOK.md`](../../docs/operations/DEP
      --secret-string 'REPLACE_WITH_SECURE_RANDOM_256BIT_KEY'
    ```
 
-   Before enabling wallet identity verification, also initialize
-   `aether/identity-verification-token-key` and
-   `aether/identity-verification-token-key-previous` with the same high-entropy
-   value. ECS mounts these as the active and previous verification keys.
+   On the initial deployment, create the reviewed plan with
+   `identity_verification_secrets_enabled=false`. After this step has populated
+   both identity verification key secrets, create a fresh reviewed plan with
+   `identity_verification_secrets_enabled=true` and apply it. The plan and
+   apply workflows require AWSCURRENT metadata for both keys before adding the
+   ECS mounts; they never read the values. If only this key pair needs
+   bootstrapping, use `python scripts/bootstrap_aws_secrets.py --env staging
+   --only-identity-verification-keys`.
+
+   When rotating, provide both the new active key and old active key through a
+   secure env file. The bootstrap writes the previous-key companion first,
+   then the active key, so replacement tasks can decrypt existing evidence.
 
    `aether/db-password` is populated automatically by Aurora's managed rotation;
    `aether/redis-auth-token` exists only on Redis profiles.

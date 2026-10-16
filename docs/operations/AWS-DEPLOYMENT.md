@@ -57,10 +57,10 @@ source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:552a549e6f681c8052495a269211d0ff883686349b025b7d9b1b34525f8f4b14"
   ".github/workflows/deploy.yml": "sha256:61018abf61f2944d9ca884637c929f0f8a8306b3803992396e7f3b552e33ddd4"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
-  ".github/workflows/staging-lifecycle.yml": "sha256:ab0d86125cd2be277ba7e0a40a4dbc9fdd5db1480ff1c7cb816adf4874a55ae9"
+  ".github/workflows/staging-lifecycle.yml": "sha256:9a9a30a08991de719b73cb0da935e322837f0f9a124f7a566d48e5d5be25fd00"
   ".github/workflows/staging-state-reconcile.yml": "sha256:c08a7521eee7fbe505195ab1e49f27272b6ef144d4ba2e9b0153fe6e2f07f33d"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
-  ".github/workflows/terraform-promote.yml": "sha256:804e3b437274475d5125b4dbf6c3988ff9387909af73a5aeb5690713cf310adf"
+  ".github/workflows/terraform-promote.yml": "sha256:a4c235b5777e0dc0ec1e41faabe964314fa751d9c4239d60f156517e3c7eb84c"
   "config/staging_application_delivery_iam_policy.yaml": "sha256:2f00eee1b1345b6c57fd722a883f53904d9fa031e0ab1421e4ad7bdea884b97d"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
@@ -76,7 +76,7 @@ source_hashes:
   "infra/aws/config/": "sha256:cfe8d46db890f7855fbc7f28ece5c3a9ce4a891e065478060a254c1f36bf0bf0"
   "infra/aws/lead-intake/template.yaml": "sha256:f076101dd476c103f32b717444598ea2cbea181b292c61230ca9b02de4feb9a1"
   "infra/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "infra/aws/terraform/": "sha256:de7f171ef3ba8f41a7eae4f36ace34360d469dd551e329951da1ac3afa7ef69b"
+  "infra/aws/terraform/": "sha256:667f817e0fd6918293e6531949d32490ea8435c0016e8f914002a74f34b1134c"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:b8ce2e914ba4878098b41c3bdfcf1ec5f0163876578610af5a5362004bc7bdfa"
   "scripts/release/check_staging_application_delivery_policy.py": "sha256:6a6cecddd6696ccefe1601335d6cf8eb670f4b3a01109d4f7507fb1367b685e3"
@@ -87,7 +87,7 @@ source_hashes:
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:4108624b378be9fe306c7a24608fd6f747a7598cd175b120a524a31cd67f6e4c"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
-  "scripts/release/check_staging_task_definition_contract.py": "sha256:9fdbde3d52bffc8ba703483eb86fe0c17d8353f62140f760eaf20439a36ade88"
+  "scripts/release/check_staging_task_definition_contract.py": "sha256:3b38ca65a936f122927c214b814d9742913e6b65f7b7b9295f040fdac5e61fa3"
   "scripts/release/check_terraform_state_access_policy.py": "sha256:1d2f02fa7bf000a1db46fbab1071f71606ab8f3d290277f8e1d21ead8bed9aa5"
   "scripts/release/reconcile_staging_plan_role.py": "sha256:57bba3c35673af5cac235028f22cb716829afab7a8c2d34b3f7281ba5d2fd8ae"
   "scripts/release/release_changed_amplify_apps.py": "sha256:e74d2aa68e37867d3b25e3305345d7053b7a0e9f1231e1420d1f830042c12ca7"
@@ -1255,8 +1255,13 @@ accounts when their names would otherwise collide.
    put any secret value in Terraform variables, state, plans, or logs.
    The same bootstrap creates `aether/identity-verification-token-key` and
    `aether/identity-verification-token-key-previous`, initially with the same
-   generated key. ECS mounts them as `IDENTITY_VERIFICATION_TOKEN_KEY` and
-   `IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS`; during rotation, keep the
+   generated key. For the first rollout, plan and apply with
+   `identity_verification_secrets_enabled=false`, populate both values through
+   the secure bootstrap, and create a fresh reviewed plan with the input true.
+   The workflow checks both `AWSCURRENT` versions using metadata only before
+   creating or applying ECS task definitions that mount them as
+   `IDENTITY_VERIFICATION_TOKEN_KEY` and
+   `IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS`. During rotation, keep the
    previous value until stored verification evidence no longer needs it (see
    [Secret Rotation](SECRET-ROTATION.md)).
 3. **Push images.** Task definitions pin an immutable digest, so a new digest is

@@ -14,20 +14,27 @@ never re-run, so a duplicate verification callback cannot double-merge.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import re
+import uuid
+from contextlib import suppress
+from datetime import timedelta
 from typing import Any, Optional
 
 from shared.logger.logger import get_logger
 
 from governance.security.repositories import _ScopedRepo
-from shared.common.common import utc_now
+from shared.common.common import parse_iso, utc_now
 
 from .models import IdentitySignalType
 from .hashing import hash_value
 
 logger = get_logger("aether.identity.resolution_replay")
+
+_REPLAY_CLAIM_LEASE_SECONDS = 300
+_REPLAY_CLAIM_HEARTBEAT_SECONDS = 60
 
 
 # identifier_type → verified-ownership signal type. Wallet proof additionally
@@ -54,17 +61,16 @@ class _ReplayJobsRepo(_ScopedRepo):
         super().__init__("identity_resolution_replay_jobs")
 
     async def claim(
-        self, key: str, record: dict
+        self, key: str, record: dict, *, lease_seconds: int = _REPLAY_CLAIM_LEASE_SECONDS
     ) -> tuple[bool, Optional[dict]]:
-        """Atomically create a replay claim or reclaim a failed job.
+        """Atomically claim, retry, or reclaim a stale replay job.
 
         A competing request can only observe the existing row; it cannot
-        replace an ``in_progress`` or successful ``completed`` job. Failed
-        jobs, plus legacy completed jobs whose resolver summary records an
-        internal error, may be atomically reclaimed for retry. PostgreSQL
-        enforces that transition in the conflicting INSERT itself, so
-        separate API processes cannot both enter the resolver for the same
-        evidence.
+        replace an active ``in_progress`` or successful ``completed`` job.
+        Failed jobs, legacy completed jobs whose resolver summary records an
+        internal error, and expired in-progress leases may be atomically
+        reclaimed. A fencing token prevents an expired owner from overwriting
+        the result of its successor.
         """
         now = utc_now().isoformat()
         claim = {
@@ -89,7 +95,22 @@ class _ReplayJobsRepo(_ScopedRepo):
                     and "internal_error"
                     in (existing.get("summary") or {}).get("reason_codes", [])
                 )
-                if existing.get("status") != "failed" and not retryable_internal_error:
+                stale_in_progress = False
+                if existing.get("status") == "in_progress":
+                    try:
+                        updated_at = parse_iso(
+                            str(existing.get("updated_at") or existing.get("created_at"))
+                        )
+                        stale_in_progress = (
+                            utc_now() - updated_at
+                        ).total_seconds() >= lease_seconds
+                    except Exception:  # noqa: BLE001 - malformed lease fails closed
+                        stale_in_progress = False
+                if (
+                    existing.get("status") != "failed"
+                    and not retryable_internal_error
+                    and not stale_in_progress
+                ):
                     return False, existing
                 claim["created_at"] = existing.get("created_at", now)
             self._store[key] = claim
@@ -106,6 +127,11 @@ class _ReplayJobsRepo(_ScopedRepo):
                       AND (
                         {self.table_name}.data->>'status' = 'failed'
                         OR (
+                          {self.table_name}.data->>'status' = 'in_progress'
+                          AND {self.table_name}.updated_at <=
+                              NOW() - ($4::int * INTERVAL '1 second')
+                        )
+                        OR (
                           {self.table_name}.data->>'status' = 'completed'
                           AND COALESCE(
                             {self.table_name}.data->'summary'->'reason_codes',
@@ -117,11 +143,77 @@ class _ReplayJobsRepo(_ScopedRepo):
             key,
             json.dumps(claim, default=str),
             tenant_id,
+            lease_seconds,
         )
         if row is not None:
             data = row["data"]
             return True, json.loads(data) if isinstance(data, str) else dict(data)
         return False, await self.find_by_id(key)
+
+    async def renew_claim(self, key: str, tenant_id: str, lease_token: str) -> bool:
+        """Extend an owned in-progress lease without changing its fencing token."""
+        now = utc_now().isoformat()
+        pool = await self._ensure_pool()
+        if pool is None:
+            current = self._store.get(key)
+            if (
+                not current
+                or current.get("tenant_id") != tenant_id
+                or current.get("status") != "in_progress"
+                or current.get("lease_token") != lease_token
+            ):
+                return False
+            current["updated_at"] = now
+            return True
+
+        await self._ensure_table()
+        row = await pool.fetchrow(
+            f"""UPDATE {self.table_name}
+                SET updated_at = NOW()
+                WHERE id = $1 AND tenant_id = $2
+                  AND data->>'status' = 'in_progress'
+                  AND data->>'lease_token' = $3
+                RETURNING id""",
+            key,
+            tenant_id,
+            lease_token,
+        )
+        return row is not None
+
+    async def finish_claim(
+        self, key: str, tenant_id: str, lease_token: str, fields: dict
+    ) -> bool:
+        """Finish a replay only while the caller still owns its lease."""
+        now = utc_now().isoformat()
+        pool = await self._ensure_pool()
+        if pool is None:
+            current = self._store.get(key)
+            if (
+                not current
+                or current.get("tenant_id") != tenant_id
+                or current.get("status") != "in_progress"
+                or current.get("lease_token") != lease_token
+            ):
+                return False
+            current.update(fields)
+            current["updated_at"] = now
+            return True
+
+        await self._ensure_table()
+        row = await pool.fetchrow(
+            f"""UPDATE {self.table_name}
+                SET data = data || $4::jsonb,
+                    updated_at = NOW()
+                WHERE id = $1 AND tenant_id = $2
+                  AND data->>'status' = 'in_progress'
+                  AND data->>'lease_token' = $3
+                RETURNING id""",
+            key,
+            tenant_id,
+            lease_token,
+            json.dumps(fields, default=str),
+        )
+        return row is not None
 
 
 class ResolutionReplayService:
@@ -216,7 +308,7 @@ class ResolutionReplayService:
             default=str,
         ).encode("utf-8")).hexdigest()
 
-        # ── Idempotency: completed and in-progress jobs are never re-run ──
+        # ── Idempotency: completed jobs are never re-run ──
         try:
             existing = await self._jobs.find_by_id(key)
         except Exception:  # noqa: BLE001 - missing ledger row is not an error
@@ -258,15 +350,9 @@ class ResolutionReplayService:
                 "decision": summary.get("decision"),
                 "canonical_entity_id": summary.get("canonical_entity_id"),
             }
-        if existing and existing.get("status") == "in_progress":
-            return {
-                "status": "in_progress",
-                "idempotent": True,
-                "key": key,
-                "policy_version": policy_version,
-            }
-
         owns_claim = False
+        lease_token = str(uuid.uuid4())
+        heartbeat: Optional[asyncio.Task] = None
 
         try:
             sig_type = _IDENTIFIER_SIGNAL_TYPES.get(normalized_identifier_type)
@@ -303,6 +389,7 @@ class ResolutionReplayService:
                 "status": "in_progress",
                 "summary": None,
                 "error": None,
+                "lease_token": lease_token,
             })
             if not owns_claim:
                 if (
@@ -350,12 +437,17 @@ class ResolutionReplayService:
                     "policy_version": policy_version,
                 }
 
+            heartbeat = asyncio.create_task(
+                self._renew_claim_periodically(key, tenant_id, lease_token)
+            )
+
             supports_policy = getattr(self._resolver, "supports_policy_version", None)
             if callable(supports_policy) and not supports_policy(policy_version):
                 await self._mark(
                     key, tenant_id, trigger_type, trigger_id, policy_version, "failed",
                     error=f"unsupported policy_version: {policy_version}",
                     evidence_fingerprint=evidence_fingerprint,
+                    lease_token=lease_token,
                 )
                 return {
                     "status": "error",
@@ -436,6 +528,7 @@ class ResolutionReplayService:
                 key, tenant_id, trigger_type, trigger_id, policy_version,
                 "completed", summary=summary,
                 evidence_fingerprint=evidence_fingerprint,
+                lease_token=lease_token,
             )
             if self._metrics is not None:
                 try:
@@ -463,10 +556,34 @@ class ResolutionReplayService:
                         key, tenant_id, trigger_type, trigger_id, policy_version,
                         "failed", error=str(exc),
                         evidence_fingerprint=evidence_fingerprint,
+                        lease_token=lease_token,
                     )
                 except Exception:  # noqa: BLE001
                     pass
             return {"status": "error", "error": str(exc), "key": key, "idempotent": False}
+        finally:
+            if heartbeat is not None:
+                heartbeat.cancel()
+                with suppress(asyncio.CancelledError):
+                    await heartbeat
+
+    async def _renew_claim_periodically(
+        self, key: str, tenant_id: str, lease_token: str
+    ) -> None:
+        while True:
+            await asyncio.sleep(_REPLAY_CLAIM_HEARTBEAT_SECONDS)
+            try:
+                renewed = await self._jobs.renew_claim(key, tenant_id, lease_token)
+            except Exception as exc:  # noqa: BLE001 - the lease remains fenced
+                logger.warning(
+                    "resolution replay claim heartbeat failed for key=%s: %s",
+                    key,
+                    type(exc).__name__,
+                )
+                continue
+            if not renewed:
+                logger.warning("resolution replay claim lease was lost for key=%s", key)
+                return
 
     async def _mark(
         self,
@@ -480,15 +597,14 @@ class ResolutionReplayService:
         summary: Optional[dict] = None,
         error: Optional[str] = None,
         evidence_fingerprint: Optional[str] = None,
-    ) -> None:
-        """Upsert the replay job row (insert is an upsert on id)."""
-        await self._jobs.insert(key, {
-            "tenant_id": tenant_id,
-            "trigger_type": trigger_type,
-            "trigger_id": trigger_id,
-            "policy_version": policy_version,
-            "evidence_fingerprint": evidence_fingerprint,
+        lease_token: str,
+    ) -> bool:
+        """Finish only if this worker still owns the claim fencing token."""
+        updated = await self._jobs.finish_claim(key, tenant_id, lease_token, {
             "status": status,
             "summary": summary,
             "error": error,
         })
+        if not updated:
+            logger.warning("resolution replay result ignored after lease loss for key=%s", key)
+        return updated

@@ -29,7 +29,7 @@ reviewed_source_commits:
   - commit: "c71ebc5cb"
     reason: "Reviewed Access Kit container workflow cadence: pull requests build on ready_for_review, with explicit dispatch and development/main push lanes for targeted or post-landing builds; no staging wake or deployment is added."
 source_hashes:
-  ".github/workflows/": "sha256:e264d627b3ba774164649173b998ee0082dd90d78509e3769c9a16d953d50a19"
+  ".github/workflows/": "sha256:880e81a82106f854cfdd522886de0232ed1479a906a69015d3611cd446b39be7"
   "config/delivery_workflow_authority.yaml": "sha256:2412ea1ace2008760b340ce12d9922d2256d1ffa6daff9dbd96d04fb7c6acad8"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
@@ -144,7 +144,11 @@ the exact Secrets Manager names, staging CMK, and `AWSCURRENT` metadata, then
 imports only the reviewed Terraform addresses. It never calls
 `get-secret-value`; secret materialization remains a separate secure bootstrap.
 The active and previous identity-verification keys are provisioned by that
-bootstrap and injected into API and worker tasks by their task definitions;
+bootstrap. `identity_verification_secrets_enabled` gates both API and worker
+task mounts and is bound into the reviewed Terraform plan. Before a plan or
+apply mounts them, the promotion workflow verifies both Secrets Manager
+`AWSCURRENT` versions using metadata only. For first-time setup, apply with the
+input false, populate both values, then generate a fresh plan with it true.
 CI validates the secret references and never reads the key values.
 The full-lane release requires the Kyber Google workforce contract and passes
 only the public client identifier into the Kyber bundle; its client secret is
@@ -622,6 +626,13 @@ and release preflights.
 | `production-equivalent-ci.yml` | PR finalization (`ready_for_review`) / push / schedule / dispatch | Runs a cheap Impact Graph classifier for every triggered event. On finalized PRs it provisions the Postgres + Redis real stack only for persistence-impacting backend/infrastructure changes, production-equivalent tests, or unresolved paths. Its real-stack steps include the ingestion smoke and concurrency tests, the measurement/attribution repository tests, and the provider rights revocation fence tests. Pushes to `development`, `staging` and `main`, nightly runs, and explicit dispatch retain full real-stack coverage. The lane remains non-blocking and is not a required merge check. | no |
 | `ci.yml` | `pull_request` on non-draft PRs (`opened`, `synchronize`, `reopened`, `ready_for_review`); merge queue; push to `development`, `staging` or `main`; `workflow_dispatch` (manual replay) | The single blocking pull-request authority. `classify` selects suites and checks with `scripts/ci_select.py`; `suites` runs sharded registry workers; `checks` runs path-selected non-suite commands (always-on control gates, diff-selected builds, typechecks, browser e2e, identity, functionality-proof, Slither, Access Kit container); `verdict` publishes the required status `ci / verdict`. Draft PRs run nothing, and a manual replay publishes as `ci / verdict (manual replay)`. | no |
 | `release-gate.yml` | `workflow_dispatch` only | `make release-gate` plus the staging preflight dry run. Release-only; never evaluated on a normal PR or push. | no |
+
+`terraform-promote.yml` records the `identity_verification_secrets_enabled`
+input in its reviewed plan. It checks both identity-key secrets have
+`AWSCURRENT` versions before planning or applying a task revision that mounts
+them. `staging-lifecycle.yml` carries the same value through wake and sleep
+plan/apply handoffs. Initial setup uses a first apply with the input false,
+securely populates both keys, then creates a fresh plan with it true.
 
 Staging delivery and lifecycle workflows carry the same explicit
 `deployment_lane` token (`full` or `pilot`) through the immutable release,
