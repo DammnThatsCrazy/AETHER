@@ -778,8 +778,9 @@
       "id": "adaptive_ci_execution",
       "name": "adaptive CI execution, suite registry, or performance policy changed",
       "source_globs": [
-        ".github/workflows/repo-consistency.yml",
+        ".github/workflows/ci.yml",
         ".github/workflows/*.yml",
+        "config/ci/ownership.yaml",
         "config/ci_performance_policy.yaml",
         "config/dependency_profiles.yaml",
         "config/required_release_checks.yaml",
@@ -801,7 +802,7 @@
         "scripts/verification_execution_plan.py"
       ],
       "required_changed_globs": [
-        ".github/workflows/repo-consistency.yml",
+        ".github/workflows/ci.yml",
         ".github/workflows/*.yml",
         "config/impact_graph.json",
         "config/required_release_checks.yaml",

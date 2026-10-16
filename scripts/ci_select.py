@@ -149,7 +149,7 @@ def _result(mode, paths, selected, reasons, suites, checks=None, rules=None) -> 
     }
 
 
-SHARD_TARGET_SECONDS = 300  # registry `expected_runtime_seconds` budget per worker
+SHARD_TARGET_SECONDS = 450  # registry `expected_runtime_seconds` budget per worker
 
 
 def _shard(ids: list[str], suites: dict, target: int) -> list[list[str]]:

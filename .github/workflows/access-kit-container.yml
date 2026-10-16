@@ -2,19 +2,10 @@ name: Access Kit Container
 
 # Build the exact linux/amd64 runtime artifact on a clean hosted runner. This
 # keeps the cloud image build independently verifiable without AWS credentials,
-# ECR publication, or a developer's local Docker storage. PRs follow the
-# repository's ready-for-review cadence; use workflow_dispatch for a targeted
+# ECR publication, or a developer's local Docker storage. Use workflow_dispatch for a targeted
 # rerun after a material fix, while push covers development/main after landing.
+# Pull requests are verified by the `access-kit-container` check in ci.yml.
 on:
-  pull_request:
-    types: [ready_for_review]
-    paths:
-      - '.github/workflows/access-kit-container.yml'
-      - 'packages/access-kit/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - '.npmrc'
   push:
     branches: [development, main]
     paths:

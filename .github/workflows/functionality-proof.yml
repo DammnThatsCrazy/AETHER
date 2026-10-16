@@ -38,9 +38,7 @@ name: Functionality Proof Spine (CI)
 # ---------------------------------------------------------------------
 
 on:
-  pull_request:
-    types: [ready_for_review]
-    branches: [development, staging, main]
+  # Pull requests are verified by the `functionality-proof` check in ci.yml.
   push:
     branches: [development, staging, main]
   workflow_dispatch:

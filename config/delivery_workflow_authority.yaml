@@ -13,10 +13,9 @@ authorities:
     owner: platform@aether
     purpose: classify_and_verify_change
     workflows:
-      - .github/workflows/repo-consistency.yml
+      - .github/workflows/ci.yml
     required_commands:
-      - scripts/verification_disposition.py
-      - scripts/impact_graph.py
+      - scripts/ci_select.py
   - id: candidate
     owner: release@aether
     purpose: build_and_publish_immutable_candidate

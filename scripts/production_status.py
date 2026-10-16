@@ -217,7 +217,7 @@ AREAS: list[Area] = [
         "in CI. Operator data never mounted on tenant-facing routers.",
         [
             "apps/kyber-web/",
-            ".github/workflows/kyber-e2e.yml",
+            ".github/workflows/ci.yml",
             "services/api/intelligence/intelligence/routes.py",
         ],
     ),
@@ -931,7 +931,7 @@ REQUIRED_ARTIFACTS = [
     ".github/pull_request_template.md",
     ".github/CODEOWNERS",
     "config/environments/.env.example",
-    ".github/workflows/repo-consistency.yml",
+    ".github/workflows/ci.yml",
     ".github/workflows/repo-health.yml",
     "scripts/repo_doctor.py",
     "docs/product/productization/aether_productization_audit.md",

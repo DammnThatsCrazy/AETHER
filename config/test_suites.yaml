@@ -718,6 +718,7 @@ suites:
       "tests/unit/test_ci_select.py",
       "tests/unit/test_ci_check_identity_continuity.py",
       "tests/unit/test_ci_gates_and_builds.py",
+      "tests/unit/test_ci_workflow_authority.py",
       "tests/unit/test_capability_contract.py",
       "tests/unit/test_ci_runtime_budgets.py",
       "tests/unit/test_customer_settings_contract.py",
@@ -1323,7 +1324,7 @@ suites:
   # Already exercised by .github/workflows/repo-health.yml's `typescript` job
   # (root `npm run test` -> `npm run test --workspaces --if-present`), except
   # apps/kyber-web's component/integration suites, which are wired into
-  # .github/workflows/kyber-e2e.yml instead.
+  # check `kyber-web-e2e` in config/ci/ownership.yaml instead.
   # ---------------------------------------------------------------------------
 
   - id: sdk-shared
@@ -1502,7 +1503,7 @@ suites:
     expected_runtime_seconds: 60
     hard_runtime_budget_seconds: 180
     paths: ["apps/kyber-web"]
-    # Wired via .github/workflows/kyber-e2e.yml (working-directory: apps/kyber-web).
+    # Wired via check `kyber-web-e2e` in config/ci/ownership.yaml (apps/kyber-web).
     runner: ["npm", "run", "test:component", "--workspace=apps/kyber-web"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
@@ -1526,7 +1527,7 @@ suites:
     expected_runtime_seconds: 90
     hard_runtime_budget_seconds: 240
     paths: ["apps/kyber-web"]
-    # Wired via .github/workflows/kyber-e2e.yml (working-directory: apps/kyber-web).
+    # Wired via check `kyber-web-e2e` in config/ci/ownership.yaml (apps/kyber-web).
     runner: ["npm", "run", "test:integration", "--workspace=apps/kyber-web"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
