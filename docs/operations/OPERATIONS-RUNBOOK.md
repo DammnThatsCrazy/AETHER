@@ -49,7 +49,7 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/config/settings.py": "sha256:120775873521c402933065c3073b8f2d242589bca26b095f982952f6bb392f42"
-  "services/api/connectors/provider_runtime/": "sha256:96d47e6fee2e0fff4c6b3b3a9bb28c89414a7af87ed137bb489845519434f5d9"
+  "services/api/connectors/provider_runtime/": "sha256:5eedccb3a72559ccf5eed414dff03d39c014f9ab2b0ac623afad4a77a07ee207"
   "services/api/graph/platform_vertex_owners.py": "sha256:838aad5b76eb7470349ad42fafa95a01e840491736dba059cc3e0c2eef1b68b1"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
@@ -818,8 +818,13 @@ Raw provider payloads are retained only after the canonical Effective Rights
 Resolver allows `tenant_lake` use for purpose `provider_raw_ingestion` and
 destination `tenant_lake`. The grant must be active, tenant-scoped, use the
 `tenant_byod_data` connector class, and match the provider identity and account
-source `provider-account:{connection_id}:{account_id}`. BYOK credential access
-does not supply this data-retention grant.
+source `provider-account:{connection_id}:{account_id}`, or
+`provider-stream:{connection_id}:{stream_id}` for a manifest-declared accountless
+stream. Operator-onboarded `olympus_provider` and `partner_feed` grants are
+admitted to `olympus_baseline` or `tenant_lake` by their class; other classes are
+denied, and records under the reserved `olympus` tenant are never forwarded to
+the tenant pipeline. A grant whose `source_relationship` is inconsistent with its
+class also denies. BYOK credential access does not supply this data-retention grant.
 
 The canonical Data Rights grant service persists grants and append-only
 create/revoke events in the migration-owned tenant-scoped repository. Raw

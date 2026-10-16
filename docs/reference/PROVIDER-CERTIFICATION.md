@@ -15,7 +15,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "services/api/connectors/provider_runtime/": "sha256:96d47e6fee2e0fff4c6b3b3a9bb28c89414a7af87ed137bb489845519434f5d9"
+  "services/api/connectors/provider_runtime/": "sha256:5eedccb3a72559ccf5eed414dff03d39c014f9ab2b0ac623afad4a77a07ee207"
   "services/api/connectors/providers/routes.py": "sha256:49308bb682d1347fb244676eaf438349c42b961d87561900ba24f20549cee523"
   "services/api/shared/certification/readiness.py": "sha256:313478219b358e356847b4468b6e174620950dd12b90eeb68ab03856556bda6d"
   "services/api/shared/integration_contracts/certification.py": "sha256:2969b5f1176212f462882a7361fcdeebdaf13a390148eba0626c459451fdf101"
@@ -89,7 +89,9 @@ body. Tenant-use permissions default to false and must be granted explicitly.
 The canonical grant service persists grants and lifecycle events through its
 migration-owned repository; staging and production admission additionally
 requires the database and schema to be available. Missing, ambiguous, revoked,
-expired, or cross-tenant grants fail closed. Certification must not be used to
+expired, or cross-tenant grants fail closed. Operator-onboarded sources (partner
+feeds, Olympus-licensed sources) are admitted by their own rights-source class
+through the same gate; certification grants none of them. Certification must not be used to
 infer tenant consent, storage rights, graph authority, or production readiness.
 
 ## 4. How a dishonest plugin fails

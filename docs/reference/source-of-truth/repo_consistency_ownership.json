@@ -746,6 +746,10 @@
         "services/api/**/data_rights/models.py",
         "services/api/**/data_rights/service.py",
         "services/api/**/rights_authority/**",
+        "services/api/shared/integration_contracts/source_relationship.py",
+        "services/api/connectors/provider_runtime/rights_admission.py",
+        "services/api/tenancy/rights_authority/source_lineage.py",
+        "services/api/ingestion/imports/rights_admission.py",
         "packages/shared/contracts/spine-registry.json",
         "scripts/validate_rights_vocabulary.py",
         "scripts/validate_no_parallel_rights_registries.py",
@@ -754,6 +758,7 @@
         "docs/reference/source-of-truth/IRRL_NAMING_OVERLAY.md"
       ],
       "required_changed_globs": [
+        "docs/architecture/target/**",
         "docs/_generated/**",
         "docs/reference/source-of-truth/**",
         "docs/REPO-INDEX.md",

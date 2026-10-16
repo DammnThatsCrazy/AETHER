@@ -3342,12 +3342,14 @@ Feature-flagged (`AETHER_CONNECTOR_DATA_RIGHTS_ENABLED`). Tenant API key require
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/v1/integrations/data-rights` | List data rights grants for caller's tenant |
-| POST | `/v1/integrations/data-rights/grants` | Create a new data rights grant |
+| POST | `/v1/integrations/data-rights/grants` | Create a tenant-source grant; `source_relationship` (`personal_account` or `organization_system`) and a matching `raw_data_owner` are required |
 | GET | `/v1/integrations/data-rights/grants/{grant_id}` | Get one grant |
 | POST | `/v1/integrations/data-rights/grants/{grant_id}/revoke` | Revoke a grant (immediate denial) |
 | POST | `/v1/integrations/data-rights/policy-check` | Run a named policy check against a grant |
 
 All permission fields default to false, including tenant-lake, tenant-graph, and tenant-insights uses. A create request must explicitly grant each intended use. Grant records and append-only create/revoke lifecycle events persist through the canonical tenant-scoped rights repository; tenant grant reads and revocations are scoped in the repository itself. This persistence does not change feature-flag defaults or enable provider ingestion.
+
+Every grant carries a `source_relationship` (legacy rows read `unclassified` and cannot be created). The tenant route accepts only `personal_account` and `organization_system`: any operator relationship (`partner_feed`, `olympus_source`, `public_reference`, `internal_system`) returns 403, the reserved `olympus` scope is refused, and a failed classification (`raw_data_owner` not matching the relationship, a `connector_class` incompatible with it, `personal_account` without a subject and consent basis) returns 400. The relationship is descriptive and can only deny; it never authorizes use.
 
 ### Tenant — BYOK Key Rotate / Revoke / Verify (`/v1/providers/keys/*`)
 
@@ -3416,6 +3418,7 @@ Anti-distillation enforcement on intelligence query endpoints is activated by `A
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/v1/admin/kyber/data-rights` | All data rights grants (operator-scoped view) |
+| POST | `/v1/admin/kyber/data-rights/grants` | Onboard a `partner_feed`, `olympus_source`, `public_reference` or `internal_system` grant (Kyber operator; a tenant relationship returns 403, a failed classification 400). `olympus_source` and `internal_system` grants use the reserved `olympus` scope; `partner_feed` requires a `contract_id` |
 
 ---
 

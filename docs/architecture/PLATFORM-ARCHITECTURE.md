@@ -122,6 +122,11 @@ Batch responses can return the real consent, usage, and audit references that
 their owning authorities persisted. SDK batch payloads share a minimum
 cross-platform wire vector, while the optional Envelope-B field remains behind
 the server's adoption flags.
+When Envelope-B is built, the server stamps the source block: relationship
+`first_party_application`, the platform from the authenticated API key record,
+and the site or tenant namespace as the source instance. Client-supplied source
+claims are ignored. The relationship is descriptive provenance only; it never
+authorizes use. See `docs/architecture/target/source-authority.md`.
 
 Authenticated Access Kit calls through the CLI, local MCP, hosted MCP, and Node
 client are attributed by an allowlisted surface label and recorded by the API middleware

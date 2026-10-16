@@ -50,11 +50,12 @@ permitted uses. Field names below match `models.py`.
 | `contract_id` | string or null | Optional governing contract/MSA reference |
 | `source_id` | string | Provider/source slug (e.g., `dune`, `tenant_byod`) |
 | `connector_id` | string | The connector instance that routed the source |
-| `connector_class` | string | `olympus_provider` / `tenant_byod_data` / `byok_gateway` / … drives defaults |
+| `connector_class` | string | `olympus_provider` / `tenant_byod_data` / `byok_gateway` / `partner_feed` / … drives defaults |
 | `source_manifest_id` | string or null | Optional source-manifest reference |
 | `data_category` | string | High-level category of the data |
 | `data_sensitivity` | string | Sensitivity classification (default `unclassified`) |
-| `raw_data_owner` | string | Principal that owns the contributed raw data |
+| `raw_data_owner` | string | Principal that owns the contributed raw data; curated on creation (`subject`, `tenant`, `partner`, `olympus_labs`, `public`) and fixed by the source relationship |
+| `source_relationship` | string | What kind of source this is (`personal_account`, `organization_system`, `partner_feed`, `olympus_source`, `public_reference`, `internal_system`; legacy rows read `unclassified`). Required on creation, descriptive only, and can only deny when inconsistent with `connector_class` |
 | `tenant_lake_allowed` | boolean | May data be written to the tenant lake? (default `false`) |
 | `tenant_graph_allowed` | boolean | May data produce edges in the tenant graph? (default `false`) |
 | `tenant_insights_allowed` | boolean | May data feed tenant-scoped insights/computation? (default `false`) |
@@ -79,6 +80,10 @@ permitted uses. Field names below match `models.py`.
 > cross-boundary uses (`olympus_baseline`,
 > `cross_tenant_aggregate`, `model_training`, `commercial_reuse`) default
 > `false` — an explicit grant is required.
+
+## Who creates which grant
+
+Tenant admins create `personal_account` and `organization_system` grants through the tenant route. `partner_feed`, `olympus_source`, `public_reference` and `internal_system` grants are created only by a Kyber operator through `POST /v1/admin/kyber/data-rights/grants`; `olympus_source` and `internal_system` use the reserved tenant `olympus`. `partner_feed` permissions default closed and need a contract reference. See `docs/architecture/target/source-authority.md`.
 
 ## Durable grant storage
 

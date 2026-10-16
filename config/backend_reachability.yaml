@@ -145,3 +145,7 @@ allow_unreachable:
     modules: [evidence, motif_indicators, motifs, promotion]
     ledger: product-backend-unmounted-code-pending
     reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
+  - package: tenancy.rights_authority
+    modules: [source_lineage]
+    ledger: product-backend-unmounted-code-pending
+    reason: read-only lineage trace from a rights decision to its source grant and relationship; tested, but no route or worker consumes it yet

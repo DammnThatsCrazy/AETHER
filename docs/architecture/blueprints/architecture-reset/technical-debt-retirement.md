@@ -173,7 +173,9 @@ These are measurements, each tied to a ledger row.
   `config/backend_reachability.yaml` against ledger row
   `product-backend-unmounted-code-pending`, and
   `scripts/validate_backend_reachability.py` fails any PR that adds a module
-  nothing reaches or leaves a stale allowlist entry. Rows
+  nothing reaches or leaves a stale allowlist entry. The read-only rights lineage
+  trace (`tenancy.rights_authority.source_lineage`) is listed there: tested, but
+  no route or worker consumes it yet. Rows
   `product-backend-unmounted-code` and `product-backend-unmounted-code-pending`.
 - **Two handlers on one URL.** `tests/unit/test_route_conflicts.py` froze 7
   duplicates but compared path-parameter names literally, so it could not see
