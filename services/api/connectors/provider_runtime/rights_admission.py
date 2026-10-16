@@ -8,7 +8,7 @@ canonical Effective Rights Resolver and an active tenant BYOD grant.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Callable, Iterable, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -52,6 +52,48 @@ def provider_account_source_id(connection_id: str, account_id: str) -> str:
     if not connection or not account:
         raise ProviderRawRightsDenied()
     return f"provider-account:{connection}:{account}"
+
+
+def provider_stream_source_id(connection_id: str, stream_id: str) -> str:
+    """Return the stable source scope for one declared accountless stream."""
+    connection = (connection_id or "").strip()
+    stream = (stream_id or "").strip()
+    if not connection or not stream:
+        raise ProviderRawRightsDenied()
+    return f"provider-stream:{connection}:{stream}"
+
+
+def _installed_streams(provider_identity: str) -> Iterable[Any]:
+    from connectors.provider_runtime.registry import provider_registry
+
+    return provider_registry.streams_for(provider_identity)
+
+
+def provider_source_id(
+    record: RawProviderRecord,
+    *,
+    stream_lookup: Optional[Callable[[str], Iterable[Any]]] = None,
+) -> str:
+    """Account scope when the record names an account, else a manifest-declared stream.
+
+    The stream id must be declared by the capability manifest; a record-supplied
+    stream id alone never creates a scope, and there is no connection-wide scope.
+    """
+    if (record.account_id or "").strip():
+        return provider_account_source_id(record.connection_id, record.account_id)
+    stream_id = (record.stream_id or "").strip()
+    if not stream_id:
+        raise ProviderRawRightsDenied()
+    try:
+        declared = {
+            str(descriptor.stream_id)
+            for descriptor in (stream_lookup or _installed_streams)(record.provider_identity)
+        }
+    except Exception:
+        raise ProviderRawRightsDenied() from None
+    if stream_id not in declared:
+        raise ProviderRawRightsDenied()
+    return provider_stream_source_id(record.connection_id, stream_id)
 
 
 def _request_for_record(record: RawProviderRecord):
@@ -311,4 +353,6 @@ __all__ = [
     "ProviderRawRightsDenied",
     "ProviderRawRightsEvidence",
     "provider_account_source_id",
+    "provider_source_id",
+    "provider_stream_source_id",
 ]
