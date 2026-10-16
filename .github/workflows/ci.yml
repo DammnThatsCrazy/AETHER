@@ -114,12 +114,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
+        if: matrix.check.node
         with:
           node-version: "22"
           cache: npm
-      - run: |
+      - name: Install and build Node workspace
+        if: matrix.check.node
+        run: |
           npm ci --ignore-scripts
           npm run build --workspace=packages/shared
+      - uses: actions/setup-python@v5
+        if: matrix.check.python_extra
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install the check's Python extra
+        if: matrix.check.python_extra
+        run: |
+          make bootstrap-ci-control
+          .venv/bin/python -m pip install -e ".[${{ matrix.check.python_extra }}]"
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: Run check
         env:
           CHECK: ${{ toJson(matrix.check) }}

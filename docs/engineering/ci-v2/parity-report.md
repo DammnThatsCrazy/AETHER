@@ -79,8 +79,32 @@ to `updated_at`).
   not registry suites (identity gates, Playwright e2e, typecheck, Slither,
   native SDK builds). See `test-retirement-ledger.md`.
 
+## Hosted comparison with the legacy authority
+
+Counted on 2026-10-15/16 from the `ci` workflow history (29 runs).
+
+| Measure | Value |
+|---|---|
+| `ci` runs | 29 (8 cancelled by newer pushes, 21 completed) |
+| Distinct commits with a completed run | 16, across 8 PRs |
+| Completed runs that failed | 5 (3 distinct commits, on #781 and #791) |
+| Commits where both V2 and the legacy gate completed | 5 (`ad80b3de`, `57813fe4`, `410d9deb`, `e9143a96`, `ea7b1082`) |
+| Disagreements between the two on those 5 | **0** (3 passed on both, 2 failed on both) |
+
+The two commits both authorities failed show V2 catching real failures: on
+`e9143a96` (#791) the `docs` worker reported source-linked docs drift, and on
+`410d9deb` (#781) a `python-backend-medium` suite failed. V2 also produced
+verdicts on draft pushes the legacy gate never sees (it only runs at
+`ready_for_review`): `ec866c7e` failed and `b1659ebc` passed with no legacy run.
+
+**Not enough for cutover.** Five paired commits against a target of 30 PRs, and
+no controlled failing fixtures yet. Pairs also under-test the coverage gap: the
+legacy workflows that V2 does not run (identity gates 1 and 6, Playwright,
+Slither, native SDK builds) passed on every compared commit, so their absence
+from V2 could not have produced a disagreement. See the retirement ledger.
+
 ## Remaining parity work
 
-- [ ] Hosted shadow runs on at least 30 PRs across change classes (4 completed so far)
+- [ ] Hosted shadow runs on at least 30 PRs across change classes (16 distinct commits so far; 5 paired with the legacy gate)
 - [ ] Controlled failing fixtures per category
 - [ ] p50/p95 and runner-minute comparison against `verification / disposition`

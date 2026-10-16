@@ -35,7 +35,8 @@ until the parity report clears the cutover.
    sharded by the registry's `expected_runtime_seconds` (about 300 s per worker)
    through `scripts/suite_worker.py`. No artifacts are uploaded or downloaded.
    `checks` runs path-selected non-suite commands declared under `checks:` in
-   `config/ci/ownership.yaml` (type checks, browser e2e); a broad-safe
+   `config/ci/ownership.yaml` (type checks, browser e2e, the identity-continuity
+   static gates); a check may need Node, Python extras, or both. A broad-safe
    selection runs all of them.
 5. `verdict` runs with `if: always()` and fails on a failed, cancelled or
    unexpectedly skipped required job (suites or checks). The only valid no-op
