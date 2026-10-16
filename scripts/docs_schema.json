@@ -81,8 +81,8 @@
     },
     "since_version": {
       "type": "string",
-      "pattern": "^\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9]+(\\.[a-zA-Z0-9]+)*)?$",
-      "description": "Semver of the platform version this page first applies to."
+      "pattern": "^0\\.\\d+\\.\\d+(-[a-zA-Z0-9]+(\\.[a-zA-Z0-9]+)*)?$",
+      "description": "Pre-1.0 semver of the platform version this page first applies to. Aether has not reached 1.0, so the major version must be 0."
     },
     "last_synced_commit": {
       "type": "string",
