@@ -1,18 +1,20 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Badge, Button, Card, CardContent, CardHeader, CardTitle,
-  DataTable, ErrorState, GlyphIcon, LoadingState, Skeleton,
-  TerminalSeparator, TimeWindowSelector,
+  DataTable, ErrorState, LoadingState, Skeleton,
   formatCount, useTimeContext,
 } from '@aether/ui';
 import type { TimeWindow } from '@aether/ui';
 import { TruthBanner, encodeExplorationContext } from '@aether/ui/exploration';
+import { GlassPage } from '@aether-app/components/app-shell';
+import { Eyebrow, InlineNotice, LinkButton, SecondaryButton, TonePill, type Tone } from '@aether-app/components/ae-ui';
+import { GlassSection, SegmentedTabs, ShareRow, type SegmentOption } from '@aether-app/components/ae-campaigns-geo-ui';
 import { useGeoSummary, useGeoEntities } from '@aether-app/features/geo/use-geo';
 import {
   useGeoExploration,
   type GeoExplorationRow,
 } from '@aether-app/features/geo/use-geo-exploration';
+import { GeoDotMap, geoPosition, type MapMarker } from './geo-dot-map';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -35,10 +37,22 @@ function relTime(iso: string | undefined | null): string {
   return `${Math.floor(d / 30)}mo ago`;
 }
 
-// ── Breadcrumb ─────────────────────────────────────────────────────────────────
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error ?? '');
+}
+
+// ── Levels ─────────────────────────────────────────────────────────────────────
 
 const GEO_LEVELS = ['global', 'country', 'state', 'metro', 'city'] as const;
 type GeoLevel = typeof GEO_LEVELS[number];
+
+const LEVEL_LABEL: Record<GeoLevel, string> = {
+  global: 'World',
+  country: 'Country',
+  state: 'State / Province',
+  metro: 'Metro area',
+  city: 'City',
+};
 
 function nextLevel(current: GeoLevel): GeoLevel | null {
   const idx = GEO_LEVELS.indexOf(current);
@@ -46,42 +60,45 @@ function nextLevel(current: GeoLevel): GeoLevel | null {
   return GEO_LEVELS[idx + 1] ?? null;
 }
 
-interface BreadcrumbItem {
-  level: GeoLevel;
-  geo_id: string | null;
-  label: string;
-}
-
-function Breadcrumb({ items, onNavigate }: { items: BreadcrumbItem[]; onNavigate: (level: GeoLevel, geoId: string | null) => void }) {
-  return (
-    <div className="flex items-center gap-1 font-mono text-xs text-text-muted">
-      {items.map((item, i) => (
-        <span key={i} className="flex items-center gap-1">
-          {i > 0 && <span>›</span>}
-          {i < items.length - 1 ? (
-            <button
-              onClick={() => onNavigate(item.level, item.geo_id)}
-              className="text-accent underline hover:no-underline"
-            >
-              {item.label}
-            </button>
-          ) : (
-            <span className="text-text-primary">{item.label}</span>
-          )}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-// ── Metric chips ───────────────────────────────────────────────────────────────
+// ── Lens (metric) and window ───────────────────────────────────────────────────
 
 type GeoMetric = 'entity_count' | 'conversion_rate' | 'anomaly_flags';
-const METRICS: { value: GeoMetric; label: string }[] = [
-  { value: 'entity_count', label: 'Entity Density' },
-  { value: 'conversion_rate', label: 'Attribution' },
-  { value: 'anomaly_flags', label: 'Anomaly Distribution' },
+
+const LENS_LABEL: Record<GeoMetric, string> = {
+  entity_count: 'Entity density',
+  conversion_rate: 'Conversion',
+  anomaly_flags: 'Anomalies',
+};
+
+const LENSES: readonly SegmentOption<GeoMetric>[] = (Object.keys(LENS_LABEL) as GeoMetric[]).map(value => ({ value, label: LENS_LABEL[value] }));
+
+const LENS_COLOR: Record<GeoMetric, string> = {
+  entity_count: 'var(--ae-blue)',
+  conversion_rate: 'var(--ae-sage)',
+  anomaly_flags: 'var(--ae-amber)',
+};
+
+const WINDOWS: readonly SegmentOption<TimeWindow>[] = [
+  { value: '30d', label: '30 days' },
+  { value: '60d', label: '60 days' },
+  { value: '90d', label: '90 days' },
+  { value: 'lifetime', label: 'All time' },
 ];
+
+interface GeoChild {
+  readonly geo_id: string;
+  readonly geo_name: string;
+  readonly entity_count: number | null;
+  readonly conversion_rate: number | null;
+  readonly anomaly_flags: number | null;
+  readonly raw: Record<string, unknown>;
+}
+
+function lensValue(child: GeoChild, metric: GeoMetric): number | null {
+  return child[metric];
+}
+
+// ── Graph-backed exploration (unchanged contract) ─────────────────────────────
 
 export function GeoExplorationPanel() {
   const navigate = useNavigate();
@@ -162,281 +179,316 @@ export function GeoExplorationPanel() {
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 
+function riskTone(score: number): Tone {
+  if (score > 0.7) return 'ember';
+  if (score > 0.4) return 'amber';
+  return 'sage';
+}
+
+/**
+ * Geography (Claude Design handoff: Aether Geography — stylized dot map and
+ * location insights). Every count, rate and marker comes from the tenant geo
+ * summary and geo entities endpoints; the land dots are static base geography.
+ */
 export function GeoPage() {
   const navigate = useNavigate();
   const params = useParams<{ level?: string; geoId?: string }>();
   const timeCtx = useTimeContext();
 
-  const currentLevel = (params.level as GeoLevel) ?? 'global';
+  const currentLevel: GeoLevel = (GEO_LEVELS as readonly string[]).includes(params.level ?? '') ? (params.level as GeoLevel) : 'global';
   const currentGeoId = params.geoId ?? null;
 
-  const [window, setWindow] = useState<TimeWindow>('30d');
+  const [timeWindow, setTimeWindow] = useState<TimeWindow>('30d');
   const [metric, setMetric] = useState<GeoMetric>('entity_count');
   const [entityOffset, setEntityOffset] = useState(0);
   const [showExploration, setShowExploration] = useState(false);
 
-  const { data: summary, isLoading: summaryLoading, error: summaryError } = useGeoSummary({
+  const { data: summary, isLoading: summaryLoading, error: summaryError, refetch: refetchSummary } = useGeoSummary({
     level: currentLevel,
     ...(currentGeoId ? { geo_id: currentGeoId } : {}),
-    window,
+    window: timeWindow,
   });
 
   const { data: entitiesData, isLoading: entitiesLoading, error: entitiesError, refetch: refetchEntities } = useGeoEntities({
     level: currentLevel,
     geo_id: currentGeoId ?? 'global',
-    window,
+    window: timeWindow,
     limit: 20,
     offset: entityOffset,
   });
 
-  // Build breadcrumb trail from URL
-  const breadcrumbItems: BreadcrumbItem[] = [{ level: 'global', geo_id: null, label: 'Global' }];
-  if (currentLevel !== 'global' && currentGeoId) {
-    breadcrumbItems.push({ level: currentLevel, geo_id: currentGeoId, label: summary?.geo_name ?? currentGeoId });
-  }
+  const children: GeoChild[] = useMemo(() => (summary?.children ?? []).map(c => {
+    const raw = c as unknown as Record<string, unknown>;
+    const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+    return {
+      geo_id: String(c.geo_id),
+      geo_name: fmt(c.geo_name, String(c.geo_id)),
+      entity_count: n(c.entity_count),
+      conversion_rate: n(c.conversion_rate),
+      anomaly_flags: n(c.anomaly_flags),
+      raw,
+    };
+  }), [summary]);
 
-  function handleNavigate(level: GeoLevel, geoId: string | null) {
-    if (!geoId) {
-      navigate('/geo');
-    } else {
-      navigate(`/geo/${level}/${geoId}`);
-    }
+  const next = nextLevel(currentLevel);
+  const placeName = currentLevel === 'global' ? 'World' : summary?.geo_name ?? currentGeoId ?? 'World';
+
+  function goTo(level: GeoLevel, geoId: string | null) {
+    navigate(geoId ? `/geo/${level}/${encodeURIComponent(geoId)}` : '/geo');
     setEntityOffset(0);
   }
 
-  function handleDrillDown(child: { geo_id: string; geo_name: string }) {
-    const next = nextLevel(currentLevel);
+  function drill(child: GeoChild) {
     if (!next) return;
-    navigate(`/geo/${next}/${child.geo_id}`);
-    setEntityOffset(0);
+    goTo(next, child.geo_id);
   }
 
-  type EntityRow = Record<string, unknown>;
-  type ChildRow = Record<string, unknown>;
+  // Map markers: children that carry or resolve to a position.
+  const lensMax = Math.max(0, ...children.map(c => lensValue(c, metric) ?? 0));
+  const lensTotal = children.reduce((n, c) => n + (lensValue(c, metric) ?? 0), 0);
+  const valueLabel = (v: number | null) => metric === 'conversion_rate' ? fmtPct(v) : v === null ? '—' : formatCount(v, timeCtx);
+  const markers: MapMarker[] = [];
+  let unplaced = 0;
+  for (const c of children) {
+    const position = geoPosition(c.raw);
+    if (!position) { unplaced += 1; continue; }
+    const v = lensValue(c, metric);
+    markers.push({
+      id: c.geo_id,
+      label: c.geo_name,
+      position,
+      weight: lensMax > 0 && v !== null ? v / lensMax : 0,
+      valueLabel: valueLabel(v),
+      ...(next ? { onSelect: () => drill(c) } : {}),
+    });
+  }
+  const focus = currentLevel === 'global'
+    ? null
+    : geoPosition({ ...(summary as unknown as Record<string, unknown> ?? {}), geo_id: currentGeoId ?? '', geo_name: summary?.geo_name ?? '' });
+
+  const tiers = Object.entries(summary?.tier_distribution ?? {}).filter(([, v]) => typeof v === 'number');
+  const tierTotal = tiers.reduce((n, [, v]) => n + (v as number), 0);
+  const entities = (entitiesData?.entities ?? []) as Array<Record<string, unknown>>;
 
   return (
-    <div className="p-8 max-w-5xl">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <span className="text-sm font-mono text-text-muted">Geographic Intelligence</span>
-          <div className="mt-1">
-            <Breadcrumb items={breadcrumbItems} onNavigate={handleNavigate} />
-          </div>
+    <GlassPage>
+      <div className="flex flex-col gap-4" data-testid="aether-geo">
+        {/* Header */}
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <span className="flex flex-col gap-1">
+            <h1 className="text-[clamp(26px,4.4vw,32px)] font-medium leading-[1.1] tracking-[-0.64px]">Geography</h1>
+            <span className="text-[14px]" style={{ color: 'var(--ae-mute)' }}>Understand where activity is happening.</span>
+          </span>
+          <nav aria-label="Geography breadcrumb" className="ae-mono flex flex-wrap items-center gap-1 text-[12px]" style={{ color: 'var(--ae-mute)' }}>
+            {currentLevel === 'global' ? (
+              <span style={{ color: 'var(--ae-ink)' }}>World</span>
+            ) : (
+              <>
+                <button type="button" onClick={() => goTo('global', null)} className="ae-focus hover:underline" style={{ color: 'var(--ae-blue-ink)' }}>World</button>
+                <span aria-hidden="true">›</span>
+                <span style={{ color: 'var(--ae-ink)' }}>{placeName}</span>
+              </>
+            )}
+          </nav>
         </div>
-        <TimeWindowSelector value={window} onChange={setWindow} />
-      </div>
 
-      {/* Metric selector */}
-      <div className="flex gap-2 mb-6">
-        {METRICS.map(m => (
+        {/* Controls */}
+        <div className="flex flex-wrap items-center gap-2">
+          <SegmentedTabs label="Time window" options={WINDOWS} value={timeWindow} onChange={v => { setTimeWindow(v); setEntityOffset(0); }} />
+          <SegmentedTabs label="Map lens" options={LENSES} value={metric} onChange={setMetric} />
           <button
-            key={m.value}
-            onClick={() => setMetric(m.value)}
-            className={`font-mono text-xs px-3 py-1 rounded border transition-colors ${
-              metric === m.value
-                ? 'bg-accent/20 text-accent border-accent/40'
-                : 'text-text-muted border-border-default hover:text-text-secondary'
-            }`}
+            type="button"
+            onClick={() => setShowExploration(value => !value)}
+            aria-expanded={showExploration}
+            className="ae-focus whitespace-nowrap rounded-full border px-3.5 py-1.5 text-[13px]"
+            style={{ borderColor: 'var(--ae-edge)' }}
           >
-            {m.label}
+            {showExploration ? 'Hide graph exploration' : 'Explore graph-backed geography'}
           </button>
-        ))}
-        <button
-          type="button"
-          onClick={() => setShowExploration((value) => !value)}
-          aria-expanded={showExploration}
-          className="font-mono text-xs px-3 py-1 rounded border border-border-default text-text-secondary hover:text-text-primary"
-        >
-          {showExploration ? 'Hide graph exploration' : 'Explore graph-backed geography'}
-        </button>
-      </div>
-
-      {showExploration && <GeoExplorationPanel />}
-
-      {summaryLoading && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20" />)}
         </div>
-      )}
 
-      {summaryError && <ErrorState message="Failed to load geographic data" />}
+        {showExploration && <div className="ae-legacy"><GeoExplorationPanel /></div>}
 
-      {!summaryLoading && !summary && !summaryError && (
-        <div className="rounded border border-border-subtle bg-surface-raised px-4 py-6 text-center mb-6">
-          <p className="text-sm font-mono text-text-muted">
-            Geographic intelligence is being provisioned for your account.
-            Data will appear here once your geo pipeline is active.
-          </p>
-        </div>
-      )}
+        {summaryError && (
+          <InlineNotice tone="ember">
+            <span className="flex flex-wrap items-center justify-between gap-2">
+              <span>
+                <span className="block font-medium">Failed to load geographic data</span>
+                <span className="block">{errorText(summaryError)}</span>
+              </span>
+              <LinkButton onClick={() => refetchSummary()} tone="ember">Retry</LinkButton>
+            </span>
+          </InlineNotice>
+        )}
 
-      {!summaryLoading && summary && (
-        <>
-          {/* Summary cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-text-muted font-mono">Entities</p>
-                <p className="text-2xl font-mono text-accent mt-1">
-                  {summary.entity_count == null ? '—' : formatCount(summary.entity_count, timeCtx)}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-text-muted font-mono">Avg edges / entity</p>
-                <p className="text-2xl font-mono text-text-primary mt-1">
-                  {summary.avg_edges_per_entity?.toFixed(1) ?? '—'}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-text-muted font-mono">Conversion rate</p>
-                <p className="text-2xl font-mono text-text-primary mt-1">
-                  {fmtPct(summary.conversion_rate)}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-text-muted font-mono">Anomaly flags</p>
-                <p className={`text-2xl font-mono mt-1 ${summary.anomaly_flags != null && summary.anomaly_flags > 0 ? 'text-warning' : 'text-text-primary'}`}>
-                  {summary.anomaly_flags ?? '—'}
-                </p>
-              </CardContent>
-            </Card>
+        {/* Map + location insights */}
+        <div className="grid items-start gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))' }}>
+          <div className="ae-glass-card relative flex min-w-0 flex-col gap-2 overflow-hidden rounded-[20px] p-3 sm:p-4" style={{ gridColumn: 'span 1 / span 1' }}>
+            <span className="flex flex-wrap items-center justify-between gap-2 px-1">
+              <Eyebrow>{LENS_LABEL[metric]} · {placeName}</Eyebrow>
+              <span className="ae-mono text-[11px]" style={{ color: 'var(--ae-mute)' }}>
+                {summary?.computed_at ? `computed ${relTime(summary.computed_at)}` : summary ? 'computed time not reported' : ''}
+              </span>
+            </span>
+            {summaryLoading ? (
+              <Skeleton className="h-[260px] w-full" />
+            ) : (
+              <GeoDotMap
+                markers={markers}
+                focus={focus}
+                color={LENS_COLOR[metric]}
+                label={`Map of ${placeName} by ${LENS_LABEL[metric].toLowerCase()}`}
+              />
+            )}
+            {!summaryLoading && !summary && !summaryError && (
+              <p className="px-1 text-[13px] leading-relaxed" style={{ color: 'var(--ae-mute)' }}>
+                Geographic intelligence is being provisioned for your account.
+                Data will appear here once your geo pipeline is active.
+              </p>
+            )}
+            {summary && children.length > 0 && (unplaced > 0 || markers.length === 0) && (
+              <p className="px-1 text-[12px]" style={{ color: 'var(--ae-mute)' }}>
+                {markers.length === 0
+                  ? `Sub-regions at the ${next ? LEVEL_LABEL[next].toLowerCase() : 'next'} level have no map position; they are listed alongside.`
+                  : `${unplaced} region${unplaced === 1 ? '' : 's'} without a map position ${unplaced === 1 ? 'is' : 'are'} listed alongside.`}
+              </p>
+            )}
           </div>
 
-          {/* Tier distribution */}
-          {summary.tier_distribution && Object.keys(summary.tier_distribution).length > 0 && (
-            <>
-              <TerminalSeparator label="tier distribution" className="mb-3" />
-              <div className="flex gap-3 mb-6 flex-wrap">
-                {Object.entries(summary.tier_distribution).map(([tier, count]) => (
-                  <div key={tier} className="bg-surface-raised border border-border-default rounded px-3 py-2 text-xs font-mono">
-                    <span className="text-text-muted">{tier}: </span>
-                    <span className="text-text-primary">{formatCount(count as number, timeCtx)}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-
-          {/* Drill-down table */}
-          {summary.children && summary.children.length > 0 && (
-            <>
-              <TerminalSeparator label={`drill down → ${nextLevel(currentLevel) ?? 'N/A'}`} className="mb-3" />
-              <DataTable<ChildRow>
-                keyExtractor={c => String(c.geo_id)}
-                data={summary.children as ChildRow[]}
-                emptyMessage="No sub-regions"
-                columns={[
-                  {
-                    key: 'name',
-                    header: 'Region',
-                    render: c => (
-                      <button
-                        onClick={() => handleDrillDown(c as { geo_id: string; geo_name: string })}
-                        className="text-accent underline hover:no-underline font-mono text-sm"
-                      >
-                        {fmt(c.geo_name)}
-                      </button>
-                    ),
-                  },
-                  { key: 'entities', header: 'Entities', render: c => <span className="font-mono">{c.entity_count == null ? '—' : formatCount(c.entity_count as number, timeCtx)}</span> },
-                  { key: 'conv', header: 'Conv. rate', render: c => fmtPct(c.conversion_rate as number | null) },
-                  {
-                    key: 'anomaly',
-                    header: 'Anomalies',
-                    render: c => {
-                      const flags = c.anomaly_flags as number | null | undefined;
-                      return flags != null ? <Badge variant={flags > 0 ? 'warning' : 'default'} size="sm">{flags}</Badge> : <span className="text-text-muted">—</span>;
-                    },
-                  },
-                ]}
-              />
-            </>
-          )}
-        </>
-      )}
-
-      {/* Entity list */}
-      <TerminalSeparator label="entities at this level" className="my-6" />
-
-      {entitiesLoading && <LoadingState lines={5} />}
-      {entitiesError && <ErrorState message="Failed to load geographic entities" onRetry={refetchEntities} />}
-
-      {!entitiesLoading && entitiesData && (
-        <>
-          <DataTable<EntityRow>
-            keyExtractor={e => String(e.entity_id)}
-            data={entitiesData.entities as EntityRow[]}
-            emptyMessage="No entities found at this location"
-            columns={[
-              {
-                key: 'name',
-                header: 'Entity',
-                render: e => (
+          <div className="flex min-w-0 flex-col gap-3">
+            {/* Drill list */}
+            <GlassSection testId="geo-drill">
+              <Eyebrow>Drill: {next ? LEVEL_LABEL[next] : 'finest available precision'}</Eyebrow>
+              {currentLevel !== 'global' && (
+                <button type="button" onClick={() => goTo('global', null)} className="ae-focus flex justify-between rounded-xl px-2.5 py-2 text-left text-[14px] hover:bg-[var(--ae-glass-card)]">
+                  <span>← World</span>
+                </button>
+              )}
+              {summaryLoading && <Skeleton className="h-24 w-full" />}
+              {!summaryLoading && summary && children.length === 0 && (
+                <span className="px-1 text-[13px]" style={{ color: 'var(--ae-mute)' }}>
+                  {next ? 'No sub-regions reported at this level.' : 'This is the finest level the evidence supports.'}
+                </span>
+              )}
+              {children.map(child => {
+                const v = lensValue(child, metric);
+                const share = metric !== 'conversion_rate' && lensTotal > 0 && v !== null ? `${((v / lensTotal) * 100).toFixed(1)}% · ` : '';
+                return (
                   <button
-                    onClick={() => navigate(`/users/${String(e.entity_id)}`)}
-                    className="text-accent underline hover:no-underline text-sm"
+                    key={child.geo_id}
+                    type="button"
+                    onClick={() => drill(child)}
+                    disabled={!next}
+                    className="ae-focus flex items-center justify-between gap-2.5 rounded-xl px-2.5 py-2 text-left text-[14px] hover:bg-[var(--ae-glass-card)] disabled:cursor-default"
                   >
-                    {fmt(e.display_name) !== '—' ? fmt(e.display_name) : fmt(e.entity_id)}
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate">{child.geo_name}</span>
+                      {(child.anomaly_flags ?? 0) > 0 && <TonePill tone="amber">{child.anomaly_flags} anomal{child.anomaly_flags === 1 ? 'y' : 'ies'}</TonePill>}
+                    </span>
+                    <span className="ae-mono shrink-0 text-[12px]" style={{ color: 'var(--ae-mute)' }}>{share}{valueLabel(v)}</span>
                   </button>
-                ),
-              },
-              {
-                key: 'tier',
-                header: 'Tier',
-                render: e => e.tier ? <Badge variant="default" size="sm">{fmt(e.tier)}</Badge> : <span className="text-text-muted">—</span>,
-              },
-              {
-                key: 'ltv',
-                header: 'LTV',
-                render: e => e.ltv != null
-                  ? <span className="font-mono">${formatCount(e.ltv as number, timeCtx)}</span>
-                  : <span className="text-text-muted">—</span>,
-              },
-              {
-                key: 'risk',
-                header: 'Risk',
-                render: e => e.risk_score != null ? (
-                  <Badge variant={Number(e.risk_score) > 0.7 ? 'danger' : Number(e.risk_score) > 0.4 ? 'warning' : 'success'} size="sm">
-                    {Math.round(Number(e.risk_score) * 100)}
-                  </Badge>
-                ) : <span className="text-text-muted">—</span>,
-              },
-              { key: 'last_active', header: 'Last active', render: e => relTime(e.last_active_at as string) },
-              {
-                key: 'action',
-                header: '',
-                render: e => (
-                  <Button variant="ghost" size="sm" onClick={() => navigate(`/users/${String(e.entity_id)}`)}>
-                    <GlyphIcon glyph="[>]" />
-                  </Button>
-                ),
-              },
-            ]}
-          />
+                );
+              })}
+            </GlassSection>
 
-          {/* Pagination */}
-          {entitiesData.total > 20 && (
-            <div className="flex items-center justify-between mt-3 font-mono text-xs text-text-muted">
-              <span>{entityOffset + 1}–{Math.min(entityOffset + 20, entitiesData.total)} of {entitiesData.total}</span>
-              <div className="flex gap-2">
-                <Button variant="ghost" size="sm" onClick={() => setEntityOffset(Math.max(0, entityOffset - 20))} disabled={entityOffset === 0}>
-                  {'<'} Prev
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setEntityOffset(entityOffset + 20)} disabled={entityOffset + 20 >= entitiesData.total}>
-                  Next {'>'}
-                </Button>
-              </div>
+            {/* Current place */}
+            <GlassSection testId="geo-current">
+              <span className="text-[20px] font-medium tracking-[-0.3px]">{placeName}</span>
+              {summaryLoading ? (
+                <div className="flex flex-col gap-2">
+                  {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-6 w-full" />)}
+                </div>
+              ) : summary ? (
+                <>
+                  {([
+                    ['Entities', summary.entity_count == null ? '—' : formatCount(summary.entity_count, timeCtx)],
+                    ['Avg edges / entity', summary.avg_edges_per_entity?.toFixed(1) ?? '—'],
+                    ['Conversion rate', fmtPct(summary.conversion_rate)],
+                    ['Anomaly flags', summary.anomaly_flags == null ? '—' : String(summary.anomaly_flags)],
+                  ] as const).map(([k, v]) => (
+                    <div key={k} className="flex justify-between border-t py-1.5 text-[13px]" style={{ borderColor: 'var(--ae-edge-soft)' }}>
+                      <span style={{ color: 'var(--ae-mute)' }}>{k}</span>
+                      <span className="ae-mono text-[12px]" style={k === 'Anomaly flags' && (summary.anomaly_flags ?? 0) > 0 ? { color: 'var(--ae-amber)' } : undefined}>{v}</span>
+                    </div>
+                  ))}
+                  {tiers.length > 0 && (
+                    <div className="flex flex-col gap-2 pt-1.5">
+                      <Eyebrow>Tier distribution</Eyebrow>
+                      {tiers.map(([tier, count]) => (
+                        <ShareRow key={tier} label={tier} value={formatCount(count as number, timeCtx)} share={tierTotal > 0 ? ((count as number) / tierTotal) * 100 : null} />
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <span className="text-[13px]" style={{ color: 'var(--ae-mute)' }}>
+                  {summaryError ? 'Location figures are unavailable right now.' : 'No location figures yet.'}
+                </span>
+              )}
+              <span className="pt-1 text-[12px] leading-relaxed" style={{ color: 'var(--ae-mute)' }}>
+                Precision: {LEVEL_LABEL[currentLevel].toLowerCase()}. Aether does not show finer detail than the evidence supports.
+              </span>
+            </GlassSection>
+          </div>
+        </div>
+
+        {/* Entities at this level */}
+        <GlassSection testId="geo-entities">
+          <span className="flex flex-wrap items-baseline justify-between gap-2">
+            <Eyebrow>People and entities here</Eyebrow>
+            {entitiesData && entitiesData.total > 0 && (
+              <span className="ae-mono text-[12px]" style={{ color: 'var(--ae-mute)' }}>{formatCount(entitiesData.total, timeCtx)} total</span>
+            )}
+          </span>
+          {entitiesLoading && !entitiesData && <Skeleton className="h-24 w-full" />}
+          {entitiesError && (
+            <InlineNotice tone="ember">
+              <span className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-medium">Failed to load geographic entities</span>
+                <LinkButton onClick={() => refetchEntities()} tone="ember">Retry</LinkButton>
+              </span>
+            </InlineNotice>
+          )}
+          {!entitiesError && entitiesData && entities.length === 0 && (
+            <span className="text-[13px]" style={{ color: 'var(--ae-mute)' }}>No entities found at this location</span>
+          )}
+          {!entitiesError && entities.length > 0 && (
+            <div className="flex flex-col">
+              {entities.map(e => {
+                const id = String(e.entity_id);
+                const name = fmt(e.display_name) !== '—' ? fmt(e.display_name) : fmt(e.entity_id);
+                const risk = typeof e.risk_score === 'number' ? e.risk_score : null;
+                const ltv = typeof e.ltv === 'number' ? e.ltv : null;
+                return (
+                  <div key={id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t py-2 text-[13px]" style={{ borderColor: 'var(--ae-edge)' }}>
+                    <button
+                      type="button"
+                      onClick={() => void navigate(`/users/${encodeURIComponent(id)}`)}
+                      className="ae-focus min-w-0 flex-1 truncate text-left hover:underline"
+                      style={{ color: 'var(--ae-blue-ink)' }}
+                    >
+                      {name}
+                    </button>
+                    {e.tier ? <TonePill tone="blue">{fmt(e.tier)}</TonePill> : null}
+                    <span className="ae-mono w-20 text-right text-[12px]">{ltv !== null ? `$${formatCount(ltv, timeCtx)}` : '—'}</span>
+                    <span className="w-14 text-right">{risk !== null ? <TonePill tone={riskTone(risk)}>risk {Math.round(risk * 100)}</TonePill> : <span style={{ color: 'var(--ae-faint)' }}>—</span>}</span>
+                    <span className="w-20 text-right text-[12px]" style={{ color: 'var(--ae-mute)' }}>{relTime(e.last_active_at as string | null)}</span>
+                  </div>
+                );
+              })}
             </div>
           )}
-        </>
-      )}
-    </div>
+          {entitiesData && entitiesData.total > 20 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[12px]" style={{ color: 'var(--ae-mute)' }}>
+              <span className="ae-mono">{entityOffset + 1}–{Math.min(entityOffset + 20, entitiesData.total)} of {entitiesData.total}</span>
+              <span className="flex gap-2">
+                <SecondaryButton onClick={() => setEntityOffset(Math.max(0, entityOffset - 20))} disabled={entityOffset === 0}>Previous</SecondaryButton>
+                <SecondaryButton onClick={() => setEntityOffset(entityOffset + 20)} disabled={entityOffset + 20 >= entitiesData.total}>Next</SecondaryButton>
+              </span>
+            </div>
+          )}
+        </GlassSection>
+      </div>
+    </GlassPage>
   );
 }

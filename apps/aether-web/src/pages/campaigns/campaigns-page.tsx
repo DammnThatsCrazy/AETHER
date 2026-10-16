@@ -1,12 +1,18 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Badge, Button, Card, CardContent, CardHeader,
-  DataTable, EmptyState, ErrorState, LoadingState, Skeleton, Tabs,
-  TabsContent, TabsList, TabsTrigger, formatUSD,
+  DataTable, ErrorState, LoadingState,
   formatCount, useTimeContext,
 } from '@aether/ui';
 import { TruthBanner, encodeExplorationContext } from '@aether/ui/exploration';
+import { GlassPage } from '@aether-app/components/app-shell';
+import { BrandMark } from '@aether-app/components/brand-mark';
+import {
+  Eyebrow, InlineNotice, LinkButton, MetricTile, PrimaryButton, SecondaryButton, TonePill, type Tone,
+} from '@aether-app/components/ae-ui';
+import {
+  EmptySlot, GlassSearch, GlassSection, LoadingRow, SegmentedTabs, ShareRow, type SegmentOption,
+} from '@aether-app/components/ae-campaigns-geo-ui';
 import { useCampaigns, usePlatformOverview, useAutomationInsights } from '@aether-app/features/campaigns/use-campaigns';
 import { useCampaignQuality } from '@aether-app/features/campaigns/use-campaign-quality';
 import { useMappingReviews } from '@aether-app/features/campaigns/use-mapping-review';
@@ -14,414 +20,376 @@ import {
   useCampaignExploration,
   type CampaignExplorationRow,
 } from '@aether-app/features/campaigns/use-campaign-exploration';
+import {
+  asList, asRecord, campaignSummary, compact, num, pct, statusTone, text, usd,
+  type AnyRecord, type CampaignSummary,
+} from './campaign-model';
 
-// ── helpers ────────────────────────────────────────────────────────────────────
+// ── Views ─────────────────────────────────────────────────────────────────────
 
-function asRecord(v: unknown): Record<string, unknown> {
-  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+type View = 'active' | 'paused' | 'ended' | 'all' | 'review' | 'attribution' | 'exploration';
+
+const STATUS_VIEWS: Partial<Record<View, string>> = { active: 'active', paused: 'paused', ended: 'ended' };
+const VIEWS: readonly View[] = ['active', 'paused', 'ended', 'all', 'review', 'attribution', 'exploration'];
+
+function isView(v: string | null): v is View {
+  return v !== null && (VIEWS as readonly string[]).includes(v);
 }
 
-function asList(v: unknown): unknown[] {
-  return Array.isArray(v) ? v : [];
+function errorText(error: unknown): string {
+  if (!error) return '';
+  return error instanceof Error ? error.message : String(error);
 }
 
-function fmt(v: unknown, fallback = '—'): string {
-  if (v === null || v === undefined || v === '') return fallback;
-  return String(v);
-}
+// ── Campaign card ─────────────────────────────────────────────────────────────
 
-function fmtPct(v: unknown): string {
-  if (v === null || v === undefined) return '—';
-  return `${(Number(v) * 100).toFixed(1)}%`;
-}
-
-// Delegates to the canonical shared USD formatter; keeps the compact "—"
-// sentinel for absent values (never "$0" on absence).
-function usdText(v: unknown): string {
-  return formatUSD(v as string | number | null | undefined, { maximumFractionDigits: 0, fallback: '—' });
-}
-
-function relTime(iso: string | undefined | null): string {
-  if (!iso) return '—';
-  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
-  if (d === 0) return 'Today';
-  if (d === 1) return 'Yesterday';
-  if (d < 30) return `${d}d ago`;
-  if (d < 365) return `${Math.floor(d / 30)}mo ago`;
-  return `${Math.floor(d / 365)}y ago`;
-}
-
-function statusVariant(status: string): 'success' | 'warning' | 'danger' | 'default' {
-  if (status === 'active') return 'success';
-  if (status === 'paused') return 'warning';
-  if (status === 'ended' || status === 'archived') return 'danger';
-  return 'default';
-}
-
-// ── Stat tile ─────────────────────────────────────────────────────────────────
-
-function Stat({ label, value, sub }: { label: string; value: React.ReactNode; sub?: string }) {
+function CardFigure({ value, label, tone }: { value: string; label: string; tone?: Tone }) {
   return (
-    <div className="bg-surface-raised border border-border-default rounded-md px-4 py-3">
-      <p className="text-xs text-text-secondary">{label}</p>
-      <p className="text-xl font-semibold text-text-primary mt-0.5">{value}</p>
-      {sub && <p className="text-xs text-text-muted mt-0.5">{sub}</p>}
-    </div>
+    <span className="flex flex-col">
+      <span
+        className="ae-mono text-[15px] font-medium"
+        style={{ color: tone === 'sage' ? 'var(--ae-sage)' : value === '—' ? 'var(--ae-faint)' : undefined }}
+      >
+        {value}
+      </span>
+      <span className="text-[10px]" style={{ color: 'var(--ae-faint)' }}>{label}</span>
+    </span>
   );
 }
 
-// ── Funnel bar ────────────────────────────────────────────────────────────────
-
-function FunnelBar({ label, value, max, variant = 'default' }: {
-  label: string;
-  value: number;
-  max: number;
-  variant?: 'success' | 'warning' | 'danger' | 'default';
-}) {
+function CampaignDetails({ c }: { c: CampaignSummary }) {
   const timeCtx = useTimeContext();
-  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
-  const barColor = variant === 'success' ? 'bg-success' : variant === 'warning' ? 'bg-warning' : variant === 'danger' ? 'bg-danger' : 'bg-accent';
+  const entered = c.reached ?? 0;
+  const share = (v: number | null) => (entered > 0 && v !== null ? (v / entered) * 100 : null);
   return (
-    <div className="space-y-1">
-      <div className="flex justify-between text-xs">
-        <span className="text-text-secondary">{label}</span>
-        <span className="text-text-primary font-medium">{formatCount(value, timeCtx)} <span className="text-text-muted">({pct}%)</span></span>
-      </div>
-      <div className="h-1.5 bg-surface-overlay rounded-full">
-        <div className={`h-1.5 rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
-      </div>
+    <div className="flex flex-col gap-4 border-t pt-3.5" style={{ borderColor: 'var(--ae-edge)' }} data-testid="campaign-details">
+      {entered > 0 && (
+        <div className="flex flex-col gap-2">
+          <Eyebrow>Funnel</Eyebrow>
+          <ShareRow label="Entered" value={formatCount(entered, timeCtx)} share={100} />
+          {c.clicked !== null && c.clicked > 0 && <ShareRow label="Clicked" value={formatCount(c.clicked, timeCtx)} share={share(c.clicked)} />}
+          <ShareRow label="Converted" value={formatCount(c.converted ?? 0, timeCtx)} share={share(c.converted ?? 0)} color="var(--ae-sage)" />
+          {c.dropped !== null && c.dropped > 0 && <ShareRow label="Dropped off" value={formatCount(c.dropped, timeCtx)} share={share(c.dropped)} color="var(--ae-amber)" />}
+          {c.abandoned !== null && c.abandoned > 0 && <ShareRow label="Abandoned" value={formatCount(c.abandoned, timeCtx)} share={share(c.abandoned)} color="var(--ae-ember)" />}
+          {(c.dropOffRate !== null || c.abandonmentRate !== null) && (
+            <span className="flex flex-wrap gap-4 text-[12px]" style={{ color: 'var(--ae-mute)' }}>
+              {c.dropOffRate !== null && <span>Drop-off rate <span className="ae-mono" style={{ color: 'var(--ae-amber)' }}>{pct(c.dropOffRate)}</span></span>}
+              {c.abandonmentRate !== null && <span>Abandonment <span className="ae-mono" style={{ color: 'var(--ae-ember)' }}>{pct(c.abandonmentRate)}</span></span>}
+            </span>
+          )}
+        </div>
+      )}
+
+      {c.channels.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <Eyebrow>Top channels</Eyebrow>
+          {c.channels.slice(0, 6).map((ch, i) => {
+            const label = text(ch.channel ?? ch.name);
+            const source = ch.source ? String(ch.source) : null;
+            return (
+              <div key={`${label}-${source ?? ''}-${i}`} className="flex flex-wrap items-center justify-between gap-2 border-t pt-1.5 text-[12px]" style={{ borderColor: 'var(--ae-edge-soft)' }}>
+                <span className="flex items-center gap-2">
+                  {source && <BrandMark token={source} label={source} size={20} markSize={12} />}
+                  <span>{label}</span>
+                  {source && <span style={{ color: 'var(--ae-mute)' }}>{source}</span>}
+                </span>
+                <span className="ae-mono flex gap-4" style={{ color: 'var(--ae-mute)' }}>
+                  {num(ch.conversions) !== null && <span style={{ color: 'var(--ae-ink)' }}>{formatCount(num(ch.conversions) ?? 0, timeCtx)} conv.</span>}
+                  {num(ch.revenue_usd) !== null && <span style={{ color: 'var(--ae-sage)' }}>{usd(num(ch.revenue_usd))}</span>}
+                  {num(ch.conversion_rate) !== null && <span>{pct(num(ch.conversion_rate))}</span>}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {c.revenue !== null && (
+        <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}>
+          <MetricTile label="Revenue" value={usd(c.revenue)} />
+          {c.cost !== null && <MetricTile label="Cost" value={usd(c.cost)} />}
+          {c.roas !== null && <MetricTile label="ROAS" value={`${c.roas.toFixed(2)}x`} />}
+        </div>
+      )}
+
+      {entered === 0 && c.channels.length === 0 && c.revenue === null && (
+        <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>
+          The source has not reported funnel, channel or revenue figures for this campaign yet.
+        </span>
+      )}
     </div>
   );
 }
 
-// ── Campaign detail panel ─────────────────────────────────────────────────────
-
-function CampaignRow({ campaign }: { campaign: Record<string, unknown> }) {
+function CampaignCard({ campaign }: { campaign: CampaignSummary }) {
+  const navigate = useNavigate();
   const timeCtx = useTimeContext();
   const [open, setOpen] = useState(false);
-  const navigate = useNavigate();
-  const metrics = asRecord(campaign.metrics);
-  const funnel = asRecord(campaign.funnel ?? metrics.funnel);
-  const channels = asList(campaign.top_channels ?? metrics.top_channels);
-  const name = fmt(campaign.name ?? campaign.campaign_id ?? campaign.id);
-  const status = fmt(campaign.status);
-  const convRate = metrics.conversion_rate ?? campaign.conversion_rate;
-  const fraudBlocked = metrics.fraud_blocked ?? campaign.fraud_blocked;
-
-  const entered = Number(funnel.entered ?? campaign.impressions ?? 0);
-  const clicked = Number(funnel.clicked ?? campaign.clicks ?? 0);
-  const converted = Number(funnel.converted ?? campaign.conversions ?? 0);
-  const dropped = Number(funnel.dropped ?? 0);
-  const abandoned = Number(funnel.abandoned ?? 0);
-  const dropOffRate = funnel.drop_off_rate ?? campaign.drop_off_rate;
-  const abandonmentRate = funnel.abandonment_rate ?? campaign.abandonment_rate;
+  const c = campaign;
+  const openCampaign = () => { if (c.id) void navigate(`/campaigns/${encodeURIComponent(c.id)}`); };
+  const dates = c.start ? `Started ${c.start}${c.end ? ` · ends ${c.end}` : ''}` : c.end ? `Ends ${c.end}` : 'No dates reported by the source';
 
   return (
-    <div className="border border-border-default rounded-lg overflow-hidden">
-      {/* Header row */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-surface-raised transition-colors"
-      >
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium text-text-primary text-sm">{name}</span>
-            <Badge variant={statusVariant(status)} size="sm">{status}</Badge>
-            {!!campaign.type && <Badge variant="default" size="sm">{fmt(campaign.type)}</Badge>}
-          </div>
-          <div className="flex items-center gap-4 mt-1 text-xs text-text-muted">
-            <span>Started {relTime(campaign.start_date as string ?? campaign.created_at as string)}</span>
-            {!!campaign.end_date && <span>Ends {relTime(campaign.end_date as string)}</span>}
-            <code className="font-mono">{fmt(campaign.id ?? campaign.campaign_id)}</code>
-          </div>
+    <article
+      className="ae-glass-card flex flex-col gap-3.5 rounded-[24px] px-5 py-4"
+      data-testid="campaign-card"
+      data-campaign-id={c.id}
+    >
+      <div className="flex flex-wrap items-center gap-x-[18px] gap-y-3.5">
+        <div className="flex min-w-0 flex-col gap-1.5" style={{ flex: '1 1 300px' }}>
+          <span className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={openCampaign}
+              disabled={!c.id}
+              className="ae-focus truncate text-left text-[18px] font-medium tracking-[-0.3px] hover:underline"
+            >
+              {c.name}
+            </button>
+            <TonePill tone={statusTone(c.status)}>{c.status}</TonePill>
+            {c.type && <span className="text-[11px]" style={{ color: 'var(--ae-faint)' }}>type: {c.type}</span>}
+          </span>
+          <span className="text-[13px]" style={{ color: 'var(--ae-mute)' }}>{dates}</span>
+          <span className="flex flex-wrap items-center gap-1.5">
+            {c.platform && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border py-0.5 pl-1 pr-2.5 text-[11px]" style={{ borderColor: 'var(--ae-edge-soft)', background: 'var(--ae-glass-card)' }}>
+                <BrandMark token={c.platform} label={c.platform} size={16} markSize={11} shape="round" />
+                {c.platform}
+              </span>
+            )}
+            {c.channel && (
+              <span className="rounded-full border px-2.5 py-0.5 text-[11px]" style={{ borderColor: 'var(--ae-edge-soft)' }}>{c.channel}</span>
+            )}
+            {c.mappingQuality && (
+              <span className="text-[11px]" style={{ color: c.mappingQuality === 'high' ? 'var(--ae-sage)' : 'var(--ae-mute)' }}>
+                mapping {c.mappingQuality}
+              </span>
+            )}
+            <code className="ae-mono text-[11px]" style={{ color: 'var(--ae-faint)' }}>{c.id}</code>
+          </span>
         </div>
-        {/* Quick stats */}
-        <div className="flex items-center gap-6 text-right shrink-0">
-          {convRate !== undefined && (
-            <div>
-              <p className="text-xs text-text-secondary">Conv. rate</p>
-              <p className="text-sm font-semibold text-success">{fmtPct(convRate)}</p>
-            </div>
-          )}
-          {converted > 0 && (
-            <div>
-              <p className="text-xs text-text-secondary">Conversions</p>
-              <p className="text-sm font-semibold text-text-primary">{formatCount(converted, timeCtx)}</p>
-            </div>
-          )}
-          {fraudBlocked !== undefined && Number(fraudBlocked) > 0 && (
-            <div>
-              <p className="text-xs text-text-secondary">Fraud blocked</p>
-              <p className="text-sm font-semibold text-danger">{formatCount(Number(fraudBlocked), timeCtx)}</p>
-            </div>
-          )}
-          <button
-            onClick={e => { e.stopPropagation(); navigate(`/campaigns/${String(campaign.id ?? campaign.campaign_id)}`); }}
-            className="text-xs text-accent hover:underline whitespace-nowrap"
-          >
-            360 →
-          </button>
-          <span className="text-text-muted text-xs">{open ? '▲' : '▼'}</span>
-        </div>
-      </button>
-
-      {/* Expanded detail */}
-      {open && (
-        <div className="border-t border-border-default px-4 py-4 space-y-5 bg-surface-raised">
-          {/* Funnel */}
-          {entered > 0 && (
-            <div className="space-y-2">
-              <h4 className="text-xs font-medium text-text-secondary uppercase tracking-wide">Funnel</h4>
-              <FunnelBar label="Entered" value={entered} max={entered} variant="default" />
-              {clicked > 0 && <FunnelBar label="Clicked" value={clicked} max={entered} variant="default" />}
-              <FunnelBar label="Converted" value={converted} max={entered} variant="success" />
-              {dropped > 0 && <FunnelBar label="Dropped off" value={dropped} max={entered} variant="warning" />}
-              {abandoned > 0 && <FunnelBar label="Abandoned" value={abandoned} max={entered} variant="danger" />}
-              {(dropOffRate !== undefined || abandonmentRate !== undefined) && (
-                <div className="flex gap-4 pt-1 text-xs text-text-muted">
-                  {dropOffRate !== undefined && <span>Drop-off rate: <span className="text-warning font-medium">{fmtPct(dropOffRate)}</span></span>}
-                  {abandonmentRate !== undefined && <span>Abandonment: <span className="text-danger font-medium">{fmtPct(abandonmentRate)}</span></span>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Top channels */}
-          {channels.length > 0 && (
-            <div>
-              <h4 className="text-xs font-medium text-text-secondary uppercase tracking-wide mb-2">Top channels</h4>
-              <div className="space-y-1.5">
-                {channels.slice(0, 6).map((ch, i) => {
-                  const c = typeof ch === 'object' && ch ? (ch as Record<string, unknown>) : { channel: String(ch), conversions: 0 };
-                  return (
-                    <div key={i} className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="default" size="sm">{fmt(c.channel ?? c.name)}</Badge>
-                        {!!c.source && <span className="text-text-muted">{fmt(c.source)}</span>}
-                      </div>
-                      <div className="flex items-center gap-4 text-right">
-                        {c.conversions !== undefined && <span className="text-text-primary">{formatCount(Number(c.conversions), timeCtx)} conv.</span>}
-                        {c.revenue_usd !== undefined && <span className="text-success">{usdText(c.revenue_usd)}</span>}
-                        {c.conversion_rate !== undefined && <span className="text-text-secondary">{fmtPct(c.conversion_rate)}</span>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Revenue */}
-          {(campaign.revenue_usd ?? metrics.revenue_usd) !== undefined && (
-            <div className="grid grid-cols-3 gap-3">
-              <Stat label="Revenue" value={usdText(campaign.revenue_usd ?? metrics.revenue_usd)} />
-              {(campaign.cost_usd ?? metrics.cost_usd) !== undefined && (
-                <Stat label="Cost" value={usdText(campaign.cost_usd ?? metrics.cost_usd)} />
-              )}
-              {(campaign.roas ?? metrics.roas) !== undefined && (
-                <Stat label="ROAS" value={`${Number(campaign.roas ?? metrics.roas).toFixed(2)}x`} />
-              )}
-            </div>
+        <div className="flex flex-wrap gap-[18px]">
+          <CardFigure value={c.reached !== null ? formatCount(c.reached, timeCtx) : '—'} label="reached" />
+          <CardFigure value={c.converted !== null ? formatCount(c.converted, timeCtx) : '—'} label="conversions" />
+          <CardFigure value={c.conversionRate !== null ? pct(c.conversionRate) : '—'} label="conv. rate" />
+          <CardFigure value={usd(c.revenue)} label="attributed revenue" {...(c.revenue !== null ? { tone: 'sage' as Tone } : {})} />
+          {c.fraudBlocked !== null && c.fraudBlocked > 0 && (
+            <span className="flex flex-col">
+              <span className="ae-mono text-[15px] font-medium" style={{ color: 'var(--ae-ember)' }}>{formatCount(c.fraudBlocked, timeCtx)}</span>
+              <span className="text-[10px]" style={{ color: 'var(--ae-faint)' }}>fraud blocked</span>
+            </span>
           )}
         </div>
-      )}
-    </div>
-  );
-}
-
-// ── Overview tab ──────────────────────────────────────────────────────────────
-
-function OverviewTab({ hours }: { hours: number }) {
-  const timeCtx = useTimeContext();
-  const { data, isLoading, error } = usePlatformOverview(hours);
-  const { data: insightsData } = useAutomationInsights();
-  const ov = asRecord(data);
-  const web2 = asRecord(ov.web2);
-  const web3 = asRecord(ov.web3);
-  const insights = asList(insightsData ?? ov.insights);
-
-  if (error) return <ErrorState title="Failed to load overview" message={String(error)} />;
-  if (isLoading) return <LoadingState lines={6} />;
-
-  return (
-    <div className="space-y-6">
-      {/* Top-level metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Stat
-          label="Total sessions"
-          value={ov.total_sessions !== undefined ? formatCount(Number(ov.total_sessions), timeCtx) : (isLoading ? <Skeleton className="h-5 w-16" /> : '—')}
-          sub={`Last ${hours}h`}
-        />
-        <Stat
-          label="Conversion rate"
-          value={ov.conversion_rate !== undefined ? fmtPct(ov.conversion_rate) : '—'}
-        />
-        <Stat
-          label="Fraud blocked"
-          value={ov.fraud_blocked !== undefined ? formatCount(Number(ov.fraud_blocked), timeCtx) : '—'}
-        />
-        <Stat
-          label="Active campaigns"
-          value={ov.active_campaigns !== undefined ? formatCount(Number(ov.active_campaigns), timeCtx) : '—'}
-        />
+        <span className="flex items-center gap-3">
+          <LinkButton onClick={() => setOpen(o => !o)} tone="mute">{open ? 'Hide details' : 'Details'}</LinkButton>
+          {c.id && <LinkButton onClick={openCampaign}>Open →</LinkButton>}
+        </span>
       </div>
-
-      {/* Web2 vs Web3 split */}
-      {(web2.sessions !== undefined || web3.sessions !== undefined) && (
-        <div>
-          <h3 className="text-sm font-medium text-text-secondary mb-3">Web2 vs Web3 breakdown</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <Card>
-              <CardHeader><span className="text-sm font-medium text-text-primary">Web2</span></CardHeader>
-              <CardContent className="grid grid-cols-2 gap-3">
-                <Stat label="Sessions" value={web2.sessions !== undefined ? formatCount(Number(web2.sessions), timeCtx) : '—'} />
-                <Stat label="Conv. rate" value={fmtPct(web2.conversion_rate)} />
-                <Stat label="Revenue" value={usdText(web2.revenue_usd)} />
-                <Stat label="Avg. LTV" value={usdText(web2.avg_ltv_usd)} />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><span className="text-sm font-medium text-text-primary">Web3</span></CardHeader>
-              <CardContent className="grid grid-cols-2 gap-3">
-                <Stat label="Wallet sessions" value={web3.sessions !== undefined ? formatCount(Number(web3.sessions), timeCtx) : '—'} />
-                <Stat label="Conv. rate" value={fmtPct(web3.conversion_rate)} />
-                <Stat label="On-chain vol." value={usdText(web3.volume_usd)} />
-                <Stat label="Wallets active" value={web3.active_wallets !== undefined ? formatCount(Number(web3.active_wallets), timeCtx) : '—'} />
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {/* Insights */}
-      {insights.length > 0 && (
-        <div>
-          <h3 className="text-sm font-medium text-text-secondary mb-3">Automation insights</h3>
-          <div className="space-y-2">
-            {insights.map((insight, i) => {
-              const ins = asRecord(insight);
-              return (
-                <div key={i} className="border border-border-default rounded-md p-3 flex items-start gap-3">
-                  {!!ins.severity && (
-                    <Badge
-                      variant={ins.severity === 'high' ? 'danger' : ins.severity === 'medium' ? 'warning' : 'default'}
-                      size="sm"
-                    >
-                      {fmt(ins.severity)}
-                    </Badge>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-text-primary">{fmt(ins.message ?? ins.description ?? insight)}</p>
-                    {!!ins.recommendation && (
-                      <p className="text-xs text-text-muted mt-0.5">{fmt(ins.recommendation)}</p>
-                    )}
-                  </div>
-                  {!!ins.metric && (
-                    <span className="text-xs text-text-secondary shrink-0">{fmt(ins.metric)}: {fmt(ins.value)}</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
+      {open && <CampaignDetails c={c} />}
+    </article>
   );
 }
 
-// ── Campaigns list tab ────────────────────────────────────────────────────────
+// ── Campaign list ─────────────────────────────────────────────────────────────
 
-function CampaignListTab({ status }: { status?: string }) {
+function CampaignList({ status, query }: { status?: string; query: string }) {
+  const navigate = useNavigate();
   const { data, isLoading, error } = useCampaigns(status ? { status, limit: 50 } : { limit: 50 });
-  const d = asRecord(data);
-  const campaigns = asList(d.campaigns ?? data);
+  const campaigns = useMemo(() => {
+    const d = asRecord(data);
+    return asList(d.campaigns ?? data).map(campaignSummary);
+  }, [data]);
+  const q = query.trim().toLowerCase();
+  const rows = q
+    ? campaigns.filter(c => [c.name, c.id, c.platform ?? '', c.channel ?? ''].some(v => v.toLowerCase().includes(q)))
+    : campaigns;
 
   if (error) {
     return (
-      <ErrorState
-        title="Failed to load campaigns"
-        message={String(error)}
-      />
+      <InlineNotice tone="ember">
+        <span className="block font-medium">Failed to load campaigns</span>
+        <span className="block">{errorText(error)}</span>
+      </InlineNotice>
     );
   }
-
-  if (isLoading) return <LoadingState lines={8} />;
+  if (isLoading && !data) return <LoadingRow label="Loading campaigns…" />;
 
   if (campaigns.length === 0) {
     return (
-      <EmptyState
-        title="No campaigns"
-        description={
-          status
+      <EmptySlot testId="campaigns-empty">
+        <span className="block text-[14px] font-medium" style={{ color: 'var(--ae-ink)' }}>
+          {status ? `No ${status} campaigns` : 'No campaigns'}
+        </span>
+        <span className="mt-1 block">
+          {status
             ? `No ${status} campaigns found.`
-            : 'Campaigns appear here once traffic and orders are attributed — connect a source to start building attribution.'
-        }
-        action={
-          !status && (
-            <Button asChild variant="primary" size="sm">
-              <Link to="/activation">Connect your first source</Link>
-            </Button>
-          )
-        }
-      />
+            : 'Campaigns appear here once traffic and orders are attributed — connect a source to start building attribution.'}
+        </span>
+        {!status && (
+          <span className="mt-3 inline-block">
+            <PrimaryButton onClick={() => void navigate('/activation')}>Connect your first source</PrimaryButton>
+          </span>
+        )}
+      </EmptySlot>
     );
   }
 
+  if (rows.length === 0) {
+    return <EmptySlot>No campaigns match “{query.trim()}”.</EmptySlot>;
+  }
+
   return (
-    <div className="space-y-3">
-      {campaigns.map((campaign, i) => (
-        <CampaignRow key={String(asRecord(campaign).id ?? asRecord(campaign).campaign_id ?? i)} campaign={asRecord(campaign)} />
-      ))}
+    <div className="flex flex-col gap-3" data-testid="campaign-list">
+      {rows.map((c, i) => <CampaignCard key={c.id || i} campaign={c} />)}
     </div>
   );
 }
 
-// ── Attribution overview ──────────────────────────────────────────────────────
+// ── Review queue ──────────────────────────────────────────────────────────────
 
-function AttributionOverviewTab() {
-  const { data: allData } = useCampaigns({ limit: 50 });
-  const d = asRecord(allData);
-  const campaigns = asList(d.campaigns ?? allData);
+function evidenceChips(review: AnyRecord): { label: string; value: string }[] {
+  const evidence = asRecord(review.evidence);
+  return ([
+    ['ext id', evidence.external_campaign_id],
+    ['utm_id', evidence.utm_id],
+    ['utm_campaign', evidence.utm_campaign],
+    ['utm_source', evidence.utm_source],
+    ['utm_medium', evidence.utm_medium],
+  ] as const)
+    .filter(([, v]) => v !== null && v !== undefined && v !== '')
+    .map(([label, v]) => ({ label, value: String(v) }));
+}
 
-  type Row = Record<string, unknown>;
-
-  const rows: Row[] = campaigns.flatMap(c => {
-    const cr = asRecord(c);
-    const channels = asList(cr.top_channels ?? asRecord(cr.metrics).top_channels);
-    return channels.map(ch => {
-      const channelRow = asRecord(ch);
-      return {
-        campaign_name: cr.name ?? cr.campaign_id ?? cr.id,
-        channel: channelRow.channel ?? channelRow.name ?? ch,
-        source: channelRow.source,
-        conversions: channelRow.conversions,
-        revenue_usd: channelRow.revenue_usd,
-        conversion_rate: channelRow.conversion_rate,
-        weight: channelRow.weight,
-      } as Row;
-    });
-  });
-
-  if (rows.length === 0) {
-    return <EmptyState title="No attribution data" description="Attribution data will appear once campaigns have recorded touchpoints." />;
-  }
+function ReviewQueue() {
+  const navigate = useNavigate();
+  const timeCtx = useTimeContext();
+  const { data, isLoading, error } = useMappingReviews({ status: 'open', limit: 50 });
+  const raw = asRecord(data);
+  const reviews = (Array.isArray(raw.items) ? raw.items : Array.isArray(data) ? data : []) as AnyRecord[];
+  const openQueue = () => void navigate('/campaign-intelligence/mapping-review');
 
   return (
-    <DataTable<Row>
-      keyExtractor={r => `${String(r.campaign_name)}-${String(r.channel)}-${String(r.source ?? '')}`}
-      data={rows}
-      columns={[
-        { key: 'campaign', header: 'Campaign', render: r => <span className="text-text-primary">{fmt(r.campaign_name)}</span> },
-        { key: 'channel', header: 'Channel', render: r => <Badge variant="default" size="sm">{fmt(r.channel)}</Badge> },
-        { key: 'source', header: 'Source', render: r => r.source ? <span className="text-text-secondary">{fmt(r.source)}</span> : <span className="text-text-muted">—</span> },
-        { key: 'conversions', header: 'Conversions', render: r => fmt(r.conversions) },
-        { key: 'revenue', header: 'Revenue', render: r => r.revenue_usd !== undefined ? <span className="text-success">{usdText(r.revenue_usd)}</span> : <span className="text-text-muted">—</span> },
-        { key: 'conv_rate', header: 'Conv. rate', render: r => r.conversion_rate !== undefined ? fmtPct(r.conversion_rate) : <span className="text-text-muted">—</span> },
-        { key: 'weight', header: 'Attribution weight', render: r => r.weight !== undefined ? fmtPct(r.weight) : <span className="text-text-muted">—</span> },
-      ]}
-    />
+    <div className="flex flex-col gap-3" data-testid="campaign-review">
+      <span className="max-w-[640px] text-[13px] leading-relaxed" style={{ color: 'var(--ae-mute)' }}>
+        These source campaigns did not group cleanly. A source label or medium alone never decides a campaign’s identity, so a person confirms them in the review queue.
+      </span>
+      {error && (
+        <InlineNotice tone="ember">
+          <span className="block font-medium">Review queue unavailable</span>
+          <span className="block">{errorText(error)}</span>
+        </InlineNotice>
+      )}
+      {!error && isLoading && !data && <LoadingRow label="Loading review items…" />}
+      {!error && data !== undefined && data !== null && reviews.length === 0 && (
+        <EmptySlot>The queue is clear. Every observed source campaign is grouped.</EmptySlot>
+      )}
+      {reviews.map((review, i) => {
+        const evidence = asRecord(review.evidence);
+        const platform = evidence.platform ? String(evidence.platform) : null;
+        const observed = num(review.observed_count);
+        const touchpoints = num(review.affected_touchpoints);
+        const chips = evidenceChips(review);
+        return (
+          <article key={text(review.review_id ?? review.id, String(i))} className="ae-glass-card flex flex-col gap-3 rounded-[24px] px-5 py-4">
+            <span className="flex flex-wrap items-start justify-between gap-2.5">
+              <span className="flex flex-col gap-1.5">
+                <span className="flex flex-wrap items-center gap-1.5">
+                  {platform && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border py-0.5 pl-1 pr-2.5 text-[12px]" style={{ borderColor: 'var(--ae-edge-soft)', background: 'var(--ae-glass-card)' }}>
+                      <BrandMark token={platform} label={platform} size={18} markSize={12} shape="round" />
+                      {platform}
+                    </span>
+                  )}
+                  {chips.map(chip => (
+                    <span key={chip.label} className="ae-mono rounded-full border px-2.5 py-0.5 text-[11px]" style={{ borderColor: 'var(--ae-edge-soft)' }}>
+                      <span style={{ color: 'var(--ae-faint)' }}>{chip.label} </span>{chip.value}
+                    </span>
+                  ))}
+                </span>
+                <span className="text-[13px]" style={{ color: 'var(--ae-mute)' }}>
+                  {observed !== null ? `${formatCount(observed, timeCtx)} observation${observed === 1 ? '' : 's'}` : 'Observations not reported'}
+                  {touchpoints !== null && touchpoints > 0 ? ` · ${formatCount(touchpoints, timeCtx)} touchpoints waiting` : ''}
+                </span>
+              </span>
+              <TonePill tone="amber">needs a person</TonePill>
+            </span>
+            <span className="flex flex-wrap gap-2 border-t pt-2.5" style={{ borderColor: 'var(--ae-edge-soft)' }}>
+              <LinkButton onClick={openQueue}>Resolve or ignore in the review queue →</LinkButton>
+            </span>
+          </article>
+        );
+      })}
+    </div>
   );
 }
+
+// ── Attribution ───────────────────────────────────────────────────────────────
+
+function AttributionView() {
+  const timeCtx = useTimeContext();
+  const { data, isLoading, error } = useCampaigns({ limit: 50 });
+  const rows = useMemo(() => {
+    const d = asRecord(data);
+    return asList(d.campaigns ?? data).flatMap(raw => {
+      const c = campaignSummary(raw);
+      return c.channels.map(ch => ({
+        campaign: c.name,
+        channel: text(ch.channel ?? ch.name),
+        source: ch.source ? String(ch.source) : null,
+        conversions: num(ch.conversions),
+        revenue: num(ch.revenue_usd),
+        rate: num(ch.conversion_rate),
+        weight: num(ch.weight),
+      }));
+    });
+  }, [data]);
+
+  if (error) {
+    return (
+      <InlineNotice tone="ember">
+        <span className="block font-medium">Attribution unavailable</span>
+        <span className="block">{errorText(error)}</span>
+      </InlineNotice>
+    );
+  }
+  if (isLoading && !data) return <LoadingRow label="Loading attribution…" />;
+  if (rows.length === 0) {
+    return <EmptySlot>No attribution data. Channel credits appear once campaigns have recorded touchpoints.</EmptySlot>;
+  }
+  const cols = 'minmax(150px,1.6fr) minmax(110px,1fr) 90px 90px 80px 90px';
+  return (
+    <GlassSection testId="campaign-attribution">
+      <Eyebrow>Attribution by channel</Eyebrow>
+      <div className="overflow-x-auto">
+        <div className="flex min-w-[640px] flex-col" role="table" aria-label="Campaign attribution by channel">
+          <div role="row" className="ae-eyebrow grid gap-3 px-1 pb-1.5" style={{ gridTemplateColumns: cols }}>
+            <span role="columnheader">Campaign</span>
+            <span role="columnheader">Channel</span>
+            <span role="columnheader" className="text-right">Conversions</span>
+            <span role="columnheader" className="text-right">Revenue</span>
+            <span role="columnheader" className="text-right">Conv. rate</span>
+            <span role="columnheader" className="text-right">Weight</span>
+          </div>
+          {rows.map((r, i) => (
+            <div role="row" key={`${r.campaign}-${r.channel}-${r.source ?? ''}-${i}`} className="grid items-center gap-3 border-t px-1 py-[7px] text-[13px]" style={{ gridTemplateColumns: cols, borderColor: 'var(--ae-edge)' }}>
+              <span role="cell" className="truncate">{r.campaign}</span>
+              <span role="cell" className="flex min-w-0 items-center gap-2">
+                {r.source && <BrandMark token={r.source} label={r.source} size={20} markSize={12} />}
+                <span className="truncate">{r.channel}{r.source ? <span style={{ color: 'var(--ae-mute)' }}> · {r.source}</span> : null}</span>
+              </span>
+              <span role="cell" className="ae-mono text-right text-[12px]">{r.conversions !== null ? formatCount(r.conversions, timeCtx) : '—'}</span>
+              <span role="cell" className="ae-mono text-right text-[12px]" style={{ color: r.revenue !== null ? 'var(--ae-sage)' : 'var(--ae-faint)' }}>{usd(r.revenue)}</span>
+              <span role="cell" className="ae-mono text-right text-[12px]">{pct(r.rate)}</span>
+              <span role="cell" className="ae-mono text-right text-[12px]">{pct(r.weight)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </GlassSection>
+  );
+}
+
+// ── Exploration (graph-backed) ────────────────────────────────────────────────
 
 export function CampaignExplorationTab() {
   const navigate = useNavigate();
@@ -508,138 +476,226 @@ export function CampaignExplorationTab() {
   );
 }
 
-// ── Campaign Intelligence overview strip ──────────────────────────────────────
+// ── Platform overview (KPI band + mix + insights) ─────────────────────────────
 
-function CampaignIntelligenceStrip() {
-  const navigate = useNavigate();
-  const { data: quality } = useCampaignQuality();
-  const { data: reviewsData } = useMappingReviews({ status: 'open', limit: 1 });
+const WINDOWS: readonly SegmentOption<'6' | '24' | '72'>[] = [
+  { value: '6', label: '6h' },
+  { value: '24', label: '24h' },
+  { value: '72', label: '72h' },
+];
 
-  const q = (quality ?? {}) as Record<string, unknown>;
-  const spendRate = q.spend_mapping_rate as number | null ?? null;
-  const openReviews = (reviewsData as Record<string, unknown>)?.total as number | undefined
-    ?? (Array.isArray(reviewsData) ? (reviewsData as unknown[]).length : 0);
-
-  const spendPct = spendRate !== null ? (spendRate * 100).toFixed(1) : null;
-  const qualityBad = spendRate !== null && spendRate < 0.9;
+function OverviewBand({ hours, onHours }: { hours: number; onHours: (h: number) => void }) {
+  const timeCtx = useTimeContext();
+  const { data, isLoading, error } = usePlatformOverview(hours);
+  const ov = asRecord(data);
+  const value = (v: unknown, kind: 'count' | 'pct') => {
+    const n = num(v);
+    if (n === null) return isLoading && !data ? '…' : '—';
+    return kind === 'pct' ? pct(n) : formatCount(n, timeCtx);
+  };
+  const fraud = num(ov.fraud_blocked);
 
   return (
-    <Card className="border-border-default">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-text-primary">Campaign Intelligence</span>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => navigate('/campaign-intelligence/sources')}>
-              Sources
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => navigate('/campaign-intelligence/registry')}>
-              Registry
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => navigate('/campaign-intelligence/mapping-review')}>
-              Review queue
-            </Button>
-            <Button variant="primary" size="sm" onClick={() => navigate('/campaign-intelligence/sources')}>
-              Connect campaign source
-            </Button>
+    <div className="flex flex-col gap-2.5" data-testid="campaigns-overview">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Eyebrow>Platform · last {hours}h</Eyebrow>
+        <SegmentedTabs
+          label="Overview window"
+          options={WINDOWS}
+          value={String(hours) as '6' | '24' | '72'}
+          onChange={v => onHours(Number(v))}
+        />
+      </div>
+      <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+        <MetricTile label="Total sessions" value={value(ov.total_sessions, 'count')} sub={`last ${hours}h`} />
+        <MetricTile label="Conversion rate" value={value(ov.conversion_rate, 'pct')} sub="sessions that converted" />
+        <MetricTile label="Fraud blocked" value={value(ov.fraud_blocked, 'count')} sub="sessions" {...(fraud !== null && fraud > 0 ? { tone: 'ember' as Tone } : {})} />
+        <MetricTile label="Active campaigns" value={value(ov.active_campaigns, 'count')} sub="observed" />
+      </div>
+      {error && (
+        <InlineNotice tone="amber">
+          <span className="block font-medium">Failed to load overview</span>
+          <span className="block">Platform totals are unavailable right now; campaign records below are read separately. {errorText(error)}</span>
+        </InlineNotice>
+      )}
+    </div>
+  );
+}
+
+function PlatformMix({ hours }: { hours: number }) {
+  const timeCtx = useTimeContext();
+  const { data } = usePlatformOverview(hours);
+  const { data: insightsData } = useAutomationInsights();
+  const ov = asRecord(data);
+  const web2 = asRecord(ov.web2);
+  const web3 = asRecord(ov.web3);
+  const insights = asList(insightsData ?? ov.insights);
+  const hasMix = web2.sessions !== undefined || web3.sessions !== undefined;
+  if (!hasMix && insights.length === 0) return null;
+  const count = (v: unknown) => (num(v) !== null ? formatCount(num(v) ?? 0, timeCtx) : '—');
+
+  return (
+    <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(300px, 100%), 1fr))' }}>
+      {hasMix && (
+        <GlassSection testId="campaigns-mix">
+          <Eyebrow>Web2 and Web3 · last {hours}h</Eyebrow>
+          <div className="grid grid-cols-2 gap-2.5">
+            <MetricTile label="Web2 sessions" value={count(web2.sessions)} sub={`${pct(num(web2.conversion_rate))} conv.`} />
+            <MetricTile label="Web2 revenue" value={usd(num(web2.revenue_usd))} sub={`avg LTV ${usd(num(web2.avg_ltv_usd))}`} />
+            <MetricTile label="Wallet sessions" value={count(web3.sessions)} sub={`${pct(num(web3.conversion_rate))} conv.`} />
+            <MetricTile label="On-chain volume" value={usd(num(web3.volume_usd))} sub={`${count(web3.active_wallets)} wallets active`} />
           </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="flex items-center gap-6 text-xs flex-wrap">
-          {spendPct !== null && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-text-secondary">Spend mapping rate</span>
-              <span className={`font-semibold ${qualityBad ? 'text-warning' : 'text-success'}`}>
-                {spendPct}%
-              </span>
-              {qualityBad && (
-                <Badge variant="warning" size="sm">Below target</Badge>
-              )}
-            </div>
-          )}
-          {openReviews > 0 && (
-            <button
-              onClick={() => navigate('/campaign-intelligence/mapping-review')}
-              className="flex items-center gap-1.5 text-warning hover:underline"
-            >
-              <Badge variant="warning" size="sm">{openReviews}</Badge>
-              <span>open mapping review{openReviews !== 1 ? 's' : ''}</span>
-            </button>
-          )}
-          {spendPct === null && openReviews === 0 && (
-            <span className="text-text-muted">
-              Connect a campaign source to start populating the registry.
-            </span>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+        </GlassSection>
+      )}
+      {insights.length > 0 && (
+        <GlassSection testId="campaigns-insights">
+          <Eyebrow>What this tells you</Eyebrow>
+          {insights.slice(0, 6).map((insight, i) => {
+            const ins = asRecord(insight);
+            const sev = String(ins.severity ?? '');
+            const tone: Tone = sev === 'high' ? 'ember' : sev === 'medium' ? 'amber' : 'blue';
+            return (
+              <div key={i} className="flex items-start gap-2.5 rounded-[14px] border px-3 py-2.5" style={{ borderColor: 'var(--ae-edge-soft)', background: 'var(--ae-glass-card)' }}>
+                {sev && <TonePill tone={tone}>{sev}</TonePill>}
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="text-[13px] leading-snug">{text(ins.message ?? ins.description ?? (typeof insight === 'string' ? insight : ''))}</span>
+                  {!!ins.recommendation && <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>{text(ins.recommendation)}</span>}
+                </span>
+                {!!ins.metric && <span className="ae-mono shrink-0 text-[11px]" style={{ color: 'var(--ae-mute)' }}>{text(ins.metric)}: {text(ins.value)}</span>}
+              </div>
+            );
+          })}
+        </GlassSection>
+      )}
+    </div>
+  );
+}
+
+// ── Campaign intelligence strip ───────────────────────────────────────────────
+
+function IntelligenceStrip({ openReviews }: { openReviews: number }) {
+  const navigate = useNavigate();
+  const { data: quality } = useCampaignQuality();
+  const spendRate = num(asRecord(quality).spend_mapping_rate);
+  const below = spendRate !== null && spendRate < 0.9;
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[18px] border px-4 py-2.5" style={{ borderColor: 'var(--ae-edge)', background: 'var(--ae-glass-card)' }} data-testid="campaign-intelligence">
+      <span className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[12px]">
+        <Eyebrow>Campaign intelligence</Eyebrow>
+        {spendRate !== null ? (
+          <span className="flex items-center gap-1.5">
+            <span style={{ color: 'var(--ae-mute)' }}>Spend mapping rate</span>
+            <span className="ae-mono font-medium" style={{ color: below ? 'var(--ae-amber)' : 'var(--ae-sage)' }}>{(spendRate * 100).toFixed(1)}%</span>
+            {below && <TonePill tone="amber">Below target</TonePill>}
+          </span>
+        ) : openReviews === 0 ? (
+          <span style={{ color: 'var(--ae-mute)' }}>Connect a campaign source to start populating the registry.</span>
+        ) : null}
+      </span>
+      <span className="flex flex-wrap items-center gap-3">
+        <LinkButton onClick={() => void navigate('/campaign-intelligence/sources')}>Sources</LinkButton>
+        <LinkButton onClick={() => void navigate('/campaign-intelligence/registry')}>Registry</LinkButton>
+        <LinkButton onClick={() => void navigate('/campaign-intelligence/mapping-review')}>Review queue</LinkButton>
+        <LinkButton onClick={() => void navigate('/campaign-intelligence/quality')}>Quality</LinkButton>
+      </span>
+    </div>
   );
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+/**
+ * Campaigns (Claude Design handoff: Aether Campaigns). Campaigns are imported
+ * from the systems that run them and normalised here; Aether observes them and
+ * never edits, pauses or launches anything at the source. Every figure is a
+ * read from the existing campaign, automation, quality and mapping-review
+ * endpoints.
+ */
 export function CampaignsPage() {
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const viewParam = params.get('view');
+  const view: View = isView(viewParam) ? viewParam : 'active';
   const [hours, setHours] = useState(24);
+  const [query, setQuery] = useState('');
+
+  const all = useCampaigns({ limit: 50 });
+  const reviews = useMappingReviews({ status: 'open', limit: 50 });
+  const reviewRecord = asRecord(reviews.data);
+  const openReviews = num(reviewRecord.total)
+    ?? (Array.isArray(reviewRecord.items) ? reviewRecord.items.length : Array.isArray(reviews.data) ? reviews.data.length : 0);
+  const total = num(asRecord(all.data).total);
+
+  function setView(next: View) {
+    setParams(prev => {
+      const p = new URLSearchParams(prev);
+      if (next === 'active') p.delete('view');
+      else p.set('view', next);
+      return p;
+    }, { replace: true });
+  }
+
+  const options: SegmentOption<View>[] = [
+    { value: 'active', label: 'Active' },
+    { value: 'paused', label: 'Paused' },
+    { value: 'ended', label: 'Ended' },
+    { value: 'all', label: 'All campaigns' },
+    { value: 'review', label: 'Review', badge: openReviews },
+    { value: 'attribution', label: 'Attribution' },
+    { value: 'exploration', label: 'Exploration' },
+  ];
+  const listView = view === 'active' || view === 'paused' || view === 'ended' || view === 'all';
+  const status = STATUS_VIEWS[view];
 
   return (
-    <div className="p-8 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-text-primary">Campaigns</h1>
-          <p className="text-sm text-text-secondary mt-0.5">
-            Conversion funnels, drop-off rates, attribution channels
-          </p>
+    <GlassPage>
+      <div className="flex flex-col gap-4" data-testid="aether-campaigns">
+        {/* Header */}
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <span className="flex flex-col gap-1">
+            <h1 className="text-[clamp(26px,4.4vw,32px)] font-medium leading-[1.1] tracking-[-0.64px]">Campaigns</h1>
+            <span className="max-w-[560px] text-[14px] leading-[1.45]" style={{ color: 'var(--ae-mute)' }}>
+              Imported from the systems that run them, then normalized here. Aether observes them. It never edits, pauses or launches anything at the source.
+            </span>
+          </span>
+          <span className="flex w-full flex-wrap gap-2 sm:w-auto">
+            {listView && <GlassSearch value={query} onChange={setQuery} placeholder="Search campaigns" label="Search campaigns" />}
+            <PrimaryButton onClick={() => void navigate('/campaign-intelligence/sources')} data-testid="campaigns-import">
+              Import from a source
+            </PrimaryButton>
+            <SecondaryButton onClick={() => void navigate('/campaign-intelligence/campaigns/new')}>Custom campaign</SecondaryButton>
+          </span>
         </div>
-        <div className="flex items-center gap-2">
-          {([6, 24, 72] as const).map(h => (
-            <Button
-              key={h}
-              variant={hours === h ? 'primary' : 'ghost'}
-              size="sm"
-              onClick={() => setHours(h)}
-            >
-              {h}h
-            </Button>
-          ))}
+
+        <IntelligenceStrip openReviews={openReviews} />
+
+        <OverviewBand hours={hours} onHours={setHours} />
+
+        {/* View chips */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <SegmentedTabs label="Campaign views" options={options} value={view} onChange={setView} />
+          {total !== null && (
+            <span className="text-[13px]" style={{ color: 'var(--ae-mute)' }}>
+              {compact(total)} canonical campaign{total === 1 ? '' : 's'} imported
+            </span>
+          )}
         </div>
+
+        <div className="ae-rise flex flex-col gap-3" key={view} role="tabpanel">
+          {listView && <CampaignList {...(status ? { status } : {})} query={query} />}
+          {view === 'review' && <ReviewQueue />}
+          {view === 'attribution' && <AttributionView />}
+          {view === 'exploration' && (
+            <div className="ae-legacy">
+              <CampaignExplorationTab />
+            </div>
+          )}
+        </div>
+
+        <PlatformMix hours={hours} />
+
       </div>
-
-      {/* Campaign Intelligence overview */}
-      <CampaignIntelligenceStrip />
-
-      {/* Tabs */}
-      <Tabs defaultValue="overview">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="active">Active</TabsTrigger>
-          <TabsTrigger value="all">All campaigns</TabsTrigger>
-          <TabsTrigger value="attribution">Attribution</TabsTrigger>
-          <TabsTrigger value="exploration">Exploration</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="overview">
-          <OverviewTab hours={hours} />
-        </TabsContent>
-
-        <TabsContent value="active">
-          <CampaignListTab status="active" />
-        </TabsContent>
-
-        <TabsContent value="all">
-          <CampaignListTab />
-        </TabsContent>
-
-        <TabsContent value="attribution">
-          <AttributionOverviewTab />
-        </TabsContent>
-
-        <TabsContent value="exploration">
-          <CampaignExplorationTab />
-        </TabsContent>
-      </Tabs>
-    </div>
+    </GlassPage>
   );
 }

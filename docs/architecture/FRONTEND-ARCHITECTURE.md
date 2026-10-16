@@ -45,7 +45,7 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:4e6fbb63440ee54e7f6460e859e283b9ec5d7d4980d401bce991cc74cb601ccf"
+  "apps/aether-web/src/": "sha256:ab6add1ae6ce35670de79264631eaac84057f0b315163d94abaa43371774e893"
   "apps/kyber-web/src/": "sha256:df447130af2090e329c0620134a1b1dee8caf8597ac360b30f6862e74f3e6781"
   "packages/ui/core/src/": "sha256:01c95e007bc50d0b7378c5cb5274fd5e5d60b51f9575e5c28bf8549ab9cefde1"
 ---
@@ -389,15 +389,55 @@ counts, imported campaigns, connection health with brand marks, the graph
 readiness stages, the event-type mix, and attention items derived from the
 activation record, failing syncs and failed readiness checks. Each section shows
 an explicit empty or unavailable state rather than illustrative data.
-Explore composes the shared context bar, time rail, and collapsed Noesis context
-strip around the existing server-backed graph canvas, loading/error/empty
-states, table/path modes, and inspector. The lens dock reports availability
-from the generated lens/projection registries; it remains non-executing until
-the graph query seam accepts canonical lens identifiers, so a visible lens
-never implies a filter was applied. Selecting a real graph node synchronizes
-the shared GraphContext focus and URL, and entity nodes can open the existing
-Profile360 route. The Noesis strip links to the existing Noesis surface rather
-than synthesizing recommendations.
+Explore (Graph) composes the shared context bar, time rail, and collapsed Noesis
+context strip around the existing server-backed graph canvas, loading/error/empty
+states, table/path modes, and inspector. Above the explorer, the design's
+workspace draws GraphPage's own graph read (passed up through `onGraphData`, no
+second request) as a left-to-right flow (sources → people and devices → agents
+and wallets → organizations, top objects per lane with the remainder counted)
+and a globe dot map of located objects; objects without a location are counted
+as not reported, never placed. Value, Activity, Authority, Risk and Time lenses
+and the replay scrubber enable only when the read carries the fields they need
+(value, relationships, delegation/approval links, risk scores, timestamps) and
+otherwise say what is missing. The lens dock reports availability from the
+generated lens/projection registries; it remains non-executing until the graph
+query seam accepts canonical lens identifiers, so a visible lens never implies a
+filter was applied. Selecting a real graph node synchronizes the shared
+GraphContext focus and URL, and entity nodes can open the existing Profile360
+route. The Noesis strip links to the existing Noesis surface rather than
+synthesizing recommendations.
+
+The remaining nav pages follow the same design rules as Home: every figure comes
+from an existing read, loading, empty and unavailable states are distinct, and
+design elements without a backing read are omitted or empty-stated.
+
+- **Profiles** (`/users`) lists real profiles (search, sort, List /
+  Relationship Map / Activity via `?view=`); a row expands in place with its
+  graph relationships, and `?profile=<id>` opens with that profile expanded.
+  **Profile 360** (`/users/:id`) has an identity hero and Overview, Timeline,
+  Journeys, Agents, Network and Identity tabs (`?tab=`; legacy `relationships`
+  and `graph` map to Network), with every earlier signal tab kept under "More
+  signals". Both render their own `GlassPage` (frameless routes).
+- **Campaigns** (`/campaigns`, `/campaign-intelligence`) shows campaign cards,
+  platform KPIs, and Active / Paused / Ended / All / Review / Attribution /
+  Exploration views (`?view=`). **Campaign 360** (`/campaigns/:id`) keeps its
+  `?tab=` sections and adds KPI-driven breakdowns from attribution
+  `dimension_rollups` and a Sources tab. **Geography** (`/geo`) draws geo
+  summary children on a dot map (lat/lon when present, else ISO2 or country
+  name; unplaceable regions are listed) with entity-density, conversion and
+  anomaly lenses. These routes are frameless.
+- **Value** (`/value-review`) has Overview, Sources, Campaigns, Customers and
+  Outcomes tabs over value-created events, the outcome ledger and campaign
+  overviews; only Campaigns has a 7/30/90-day window because only that read
+  accepts one. Agents value is empty-stated until value is attributed to agents.
+- **Agents** (`/agent-access`) is a read-only directory with an open-agent view
+  (Overview, Authority, Exposure, Lifecycle); the selected agent and view live
+  in the URL.
+- **Settings** groups the existing `/settings/*` sections into the design's
+  Workspace, Connections & Data, Members & Access, Billing & Usage, Security &
+  Governance and Personal groups; groups without their own route open at
+  `/settings?section=<group>` and show read-only data or link to the existing
+  pages, marking unbuilt controls as not available yet.
 
 Activation joins its server-owned lifecycle state with the typed tenant
 readiness snapshot to show the current stage, next permitted action, graph

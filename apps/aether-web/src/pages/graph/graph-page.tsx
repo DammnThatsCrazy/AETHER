@@ -445,9 +445,22 @@ export interface GraphPageProps {
   readonly onClusterSelected?: (cluster: GraphCluster) => void;
   /** Optional host synchronization for canonical relationship selection. */
   readonly onEdgeSelected?: (edge: GraphEdge) => void;
+  /**
+   * Optional host read-through of this page's graph read, so a containing
+   * workspace can draw other views of the same objects without a second
+   * request. Fired whenever the read's status or contents change.
+   */
+  readonly onGraphData?: (data: GraphReadSnapshot) => void;
 }
 
-export function GraphPage({ embedded = false, onObjectSelected, onClusterSelected, onEdgeSelected }: GraphPageProps = {}) {
+export interface GraphReadSnapshot {
+  readonly status: 'loading' | 'ready' | 'error';
+  readonly nodes: readonly GraphNode[];
+  readonly edges: readonly GraphEdge[];
+  readonly clusters: readonly GraphCluster[];
+}
+
+export function GraphPage({ embedded = false, onObjectSelected, onClusterSelected, onEdgeSelected, onGraphData }: GraphPageProps = {}) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const deepLinkedEntity = searchParams.get('entity') ?? searchParams.get('selected_entity');
@@ -654,6 +667,10 @@ export function GraphPage({ embedded = false, onObjectSelected, onClusterSelecte
     [nodes],
   );
   const explorationStatus = status ?? (error ? 'error' : isLoading ? 'loading' : 'ready');
+  const readStatus: GraphReadSnapshot['status'] = tenant.error || error ? 'error' : tenant.loading || isLoading ? 'loading' : 'ready';
+  useEffect(() => {
+    onGraphData?.({ status: readStatus, nodes, edges, clusters });
+  }, [onGraphData, readStatus, nodes, edges, clusters]);
 
   if (tenant.error || error) {
     return (

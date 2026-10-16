@@ -339,8 +339,15 @@ const HAPPY_ROUTES: Record<string, unknown> = {
   '/v1/capability-authorizations': AUTHORIZATIONS,
 };
 
-function renderPage() {
-  return render(<MemoryRouter><AgentAccessPage /></MemoryRouter>);
+function renderPage(initial = '/agent-access') {
+  return render(<MemoryRouter initialEntries={[initial]}><AgentAccessPage /></MemoryRouter>);
+}
+
+/** Select an agent in the directory, then open it (the design's list → open flow). */
+async function openAgent(agentId: string): Promise<void> {
+  await userEvent.click(await screen.findByTestId(`agent-row-${agentId}`));
+  await userEvent.click(within(screen.getByTestId('agent-summary')).getByText('Open agent →'));
+  await waitFor(() => expect(screen.getByTestId('agent-open-view')).toBeInTheDocument());
 }
 
 /** The `<div>` wrapping one labelled count, so assertions are scoped to it. */
@@ -367,7 +374,7 @@ describe('Agent Access page', () => {
     renderPage();
 
     await waitFor(() =>
-      expect(screen.getByRole('heading', { name: 'Agent Access' })).toBeInTheDocument(),
+      expect(screen.getByRole('heading', { name: 'Agents' })).toBeInTheDocument(),
     );
     await waitFor(() =>
       expect(within(stat('agents-observed')).getByText('2')).toBeInTheDocument(),
@@ -496,11 +503,7 @@ describe('Agent Access page', () => {
   it('renders tri-state authorization: null is Unknown, never a denial', async () => {
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('Observed agents')).toBeInTheDocument());
-    await userEvent.selectOptions(
-      screen.getByLabelText('Agent to inspect'),
-      'agent-alpha',
-    );
+    await openAgent('agent-alpha');
 
     await waitFor(() => expect(screen.getByText('Access profile')).toBeInTheDocument());
 
@@ -522,11 +525,8 @@ describe('Agent Access page', () => {
   it('renders an unknown blast radius as unknown exposure, not zero exposure', async () => {
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('Observed agents')).toBeInTheDocument());
-    await userEvent.selectOptions(
-      screen.getByLabelText('Agent to inspect'),
-      'agent-alpha',
-    );
+    await openAgent('agent-alpha');
+    await userEvent.click(screen.getByTestId('agent-tab-exposure'));
 
     await waitFor(() =>
       expect(screen.getByText('Exposure is UNKNOWN, not zero')).toBeInTheDocument(),
@@ -545,5 +545,55 @@ describe('Agent Access page', () => {
     expect(
       screen.getAllByText(/no observed agent-to-server installation/i).length,
     ).toBeGreaterThan(1);
+  });
+
+  it('lists observed agents by provider and filters them by search', async () => {
+    renderPage();
+
+    const network = await screen.findByTestId('agent-network');
+    expect(within(network).getByText('acme')).toBeInTheDocument();
+    expect(within(network).getByTestId('agent-row-agent-alpha')).toBeInTheDocument();
+    // The summary card states the agent's real counts, not a sparkline or "live" counter.
+    const summary = screen.getByTestId('agent-summary');
+    expect(within(summary).getByText('41')).toBeInTheDocument();
+    expect(within(summary).getByText('Agent 360 →')).toHaveAttribute('href', '/agents/agent-alpha');
+
+    await userEvent.type(screen.getByLabelText('Search agents'), 'nobody');
+    expect(within(screen.getByTestId('agent-network')).getByText('No agents match.')).toBeInTheDocument();
+  });
+
+  it('splits reach by tri-state authorization on the Authority tab', async () => {
+    renderPage();
+    await openAgent('agent-alpha');
+    await userEvent.click(screen.getByTestId('agent-tab-authority'));
+
+    const columns = await screen.findByTestId('agent-authority-columns');
+    await waitFor(() => expect(within(columns).getByText('read_file')).toBeInTheDocument());
+    // write_file's authorization read was unavailable: "Not determined", never a denial.
+    expect(within(columns).getByText('write_file')).toBeInTheDocument();
+    expect(within(columns).getByText('Not determined')).toBeInTheDocument();
+    expect(within(columns).getByText('None in observed reach')).toBeInTheDocument();
+    expect(await screen.findByText('Authorizations granted to this agent')).toBeInTheDocument();
+  });
+
+  it('builds the lifecycle only from recorded timestamps and returns to the list', async () => {
+    renderPage();
+    await openAgent('agent-alpha');
+    await userEvent.click(screen.getByTestId('agent-tab-lifecycle'));
+
+    const lifecycle = await screen.findByTestId('agent-lifecycle');
+    expect(within(lifecycle).getByText('First observed')).toBeInTheDocument();
+    expect(within(lifecycle).getByText('Last observed')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(lifecycle).getByText('Authorization recorded for capability cap_aaa')).toBeInTheDocument(),
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Agents' }));
+    expect(await screen.findByTestId('agent-network')).toBeInTheDocument();
+  });
+
+  it('opens an agent directly from a shared link', async () => {
+    renderPage('/agent-access?agent=agent-alpha&view=agent&tab=exposure');
+    expect(await screen.findByText('Exposure is UNKNOWN, not zero')).toBeInTheDocument();
   });
 });

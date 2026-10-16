@@ -45,6 +45,7 @@ const runtime = vi.hoisted(() => {
       state: 'ready' as 'no_data' | 'building' | 'ready',
       blocking: [] as readonly string[],
     },
+    graphData: null as unknown,
   };
 });
 
@@ -91,13 +92,20 @@ vi.mock('@aether/ui/exploration', () => ({
   useExplorationFilters: () => runtime.filters,
 }));
 
-vi.mock('@aether-app/pages/graph/graph-page', () => ({
-  GraphPage: ({ embedded, onObjectSelected, onClusterSelected, onEdgeSelected }: {
+vi.mock('@aether-app/pages/graph/graph-page', async () => {
+  const { useEffect } = await import('react');
+  return {
+  GraphPage: ({ embedded, onObjectSelected, onClusterSelected, onEdgeSelected, onGraphData }: {
     embedded?: boolean;
+    onGraphData?: (data: unknown) => void;
     onObjectSelected?: (node: { id: string; kind: string; label: string; metadata: Record<string, unknown> }) => void;
     onClusterSelected?: (cluster: { id: string; label: string; nodeIds: string[]; size: number }) => void;
     onEdgeSelected?: (edge: { id: string; source: string; target: string; relationType: string; interactionClass: string; weight: number; metadata: Record<string, unknown> }) => void;
-  }) => (
+  }) => {
+    useEffect(() => {
+      if (runtime.graphData) onGraphData?.(runtime.graphData);
+    }, [onGraphData]);
+    return (
     <div data-testid="real-graph-page" data-graph-embedded={embedded ? 'true' : 'false'}>
       <button type="button">Real graph canvas</button>
       <button type="button">Real first-click inspector</button>
@@ -108,14 +116,17 @@ vi.mock('@aether-app/pages/graph/graph-page', () => ({
       <button type="button" onClick={() => onClusterSelected?.({ id: 'cluster-1', label: 'Cluster one', nodeIds: ['entity-3'], size: 1 })}>Select cluster</button>
       <button type="button" onClick={() => onEdgeSelected?.({ id: 'edge-1', source: 'entity-3', target: 'entity-4', relationType: 'DELEGATES', interactionClass: 'H2A', weight: 1, metadata: {} })}>Select edge</button>
     </div>
-  ),
-}));
+    );
+  },
+  };
+});
 
 afterEach(cleanup);
 
 beforeEach(() => {
   runtime.readiness = { data: { checks: [] }, isLoading: false, error: null };
   runtime.maturity = { state: 'ready', blocking: [] };
+  runtime.graphData = null;
 });
 
 import { ExplorePage } from '@aether-app/pages/explore/explore-page';
@@ -252,5 +263,105 @@ describe('ExplorePage graph-first workspace', () => {
     expect(screen.getByTestId('graph-maturity-building')).toHaveTextContent('identity_resolution_verified');
     expect(screen.getByTestId('graph-maturity-building')).toHaveTextContent('graph_projection_verified');
     expect(screen.getByTestId('real-graph-page')).toBeInTheDocument();
+  });
+});
+
+const node = (id: string, kind: string, label: string, metadata: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) => ({ id, kind, label, metadata, ...extra });
+const edge = (id: string, source: string, target: string, relationType: string, metadata: Record<string, unknown> = {}) => ({
+  id, source, target, relationType, interactionClass: 'H2A', weight: 1, metadata,
+});
+
+describe('ExplorePage graph views (flow, globe, lenses, replay)', () => {
+  it('shows a loading state until the composed graph read reports back', () => {
+    renderWorkspace();
+    expect(screen.getByTestId('graph-visual-loading')).toHaveTextContent('Reading the graph');
+    expect(screen.queryByTestId('graph-flow')).not.toBeInTheDocument();
+  });
+
+  it('marks the views unavailable (never empty) when the graph read fails', async () => {
+    runtime.graphData = { status: 'error', nodes: [], edges: [], clusters: [] };
+    renderWorkspace();
+    expect(await screen.findByTestId('graph-visual-error')).toHaveTextContent('graph read failed');
+    expect(screen.queryByTestId('graph-visual-empty')).not.toBeInTheDocument();
+  });
+
+  it('says the read is empty and links to a real setup route', async () => {
+    runtime.graphData = { status: 'ready', nodes: [], edges: [], clusters: [] };
+    renderWorkspace();
+    expect(await screen.findByTestId('graph-visual-empty')).toHaveTextContent('No objects in this graph read yet');
+    await userEvent.click(screen.getByRole('button', { name: /Connect a source/ }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/activation');
+  });
+
+  it('draws the left-to-right flow from real nodes and disables lenses the read cannot support', async () => {
+    runtime.graphData = {
+      status: 'ready',
+      nodes: [
+        node('p1', 'entity', 'Person one', { city: 'Atlanta', country: 'US', latitude: 33.75, longitude: -84.39 }, { riskScore: 0.8 }),
+        node('a1', 'Agent', 'Agent one'),
+        node('o1', 'Organization', 'Store one', { city: 'Manchester', country: 'UK' }),
+      ],
+      edges: [edge('e1', 'p1', 'a1', 'DELEGATES'), edge('e2', 'p1', 'o1', 'PAID_MERCHANT')],
+      clusters: [],
+    };
+    renderWorkspace();
+
+    const flow = await screen.findByTestId('graph-flow');
+    expect(flow.querySelector('[data-flow-node="p1"]')).toHaveTextContent('Person one');
+    expect(flow.querySelector('[data-flow-node="a1"]')).toHaveTextContent('Agent one');
+    expect(flow.querySelector('[data-flow-column="people"]')).toHaveTextContent('1');
+    // Value and time are absent from this read, so their lenses cannot apply.
+    expect(document.querySelector('[data-lens="value"]')).toBeDisabled();
+    expect(document.querySelector('[data-lens="time"]')).toBeDisabled();
+    expect(document.querySelector('[data-lens="risk"]')).not.toBeDisabled();
+    expect(screen.getByTestId('graph-lens-note')).toHaveTextContent('Not in this read: Value, Time');
+    expect(screen.getByTestId('graph-replay-unavailable')).toBeInTheDocument();
+
+    await userEvent.click(document.querySelector('[data-lens="risk"]') as HTMLElement);
+    expect(screen.getByTestId('graph-lens-panel')).toHaveTextContent('Highest risk');
+
+    await userEvent.click(flow.querySelector('[data-flow-node="p1"]') as HTMLElement);
+    const selected = screen.getByTestId('graph-selected-panel');
+    expect(selected).toHaveTextContent('Person one');
+    expect(screen.getByRole('button', { name: 'Open profile →' })).toBeInTheDocument();
+  });
+
+  it('pins located places on the globe and counts objects without a location as unknown', async () => {
+    runtime.graphData = {
+      status: 'ready',
+      nodes: [
+        node('p1', 'entity', 'Person one', { city: 'Atlanta', country: 'US', latitude: 33.75, longitude: -84.39 }),
+        node('p2', 'entity', 'Person two'),
+      ],
+      edges: [],
+      clusters: [],
+    };
+    renderWorkspace();
+    await screen.findByTestId('graph-flow');
+    await userEvent.click(screen.getByRole('button', { name: 'Globe' }));
+
+    expect(document.querySelector('[data-globe-place="Atlanta, US"]')).not.toBeNull();
+    expect(screen.getByTestId('graph-globe-unknown')).toHaveTextContent('Location not reported for 1 object');
+    await userEvent.click(screen.getByRole('button', { name: /Atlanta, US/ }));
+    expect(screen.getByTestId('graph-place-panel')).toHaveTextContent('1 object in this read');
+    expect(screen.getByRole('button', { name: /Person one/ })).toBeInTheDocument();
+  });
+
+  it('offers a replay scrubber only when the read carries timestamps', async () => {
+    runtime.graphData = {
+      status: 'ready',
+      nodes: [node('p1', 'entity', 'Person one'), node('a1', 'Agent', 'Agent one'), node('o1', 'Organization', 'Store')],
+      edges: [
+        edge('e1', 'p1', 'a1', 'DELEGATES', { valid_from: '2026-09-01T00:00:00Z' }),
+        edge('e2', 'a1', 'o1', 'PAYS', { valid_from: '2026-09-20T00:00:00Z' }),
+      ],
+      clusters: [],
+    };
+    renderWorkspace();
+    const replay = await screen.findByTestId('graph-replay');
+    expect(replay).toHaveTextContent('2026-09-01');
+    expect(replay).toHaveTextContent('2026-09-20');
+    expect(document.querySelector('[data-lens="time"]')).not.toBeDisabled();
+    expect(screen.queryByTestId('graph-replay-unavailable')).not.toBeInTheDocument();
   });
 });

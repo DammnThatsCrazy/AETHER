@@ -1,8 +1,9 @@
 /**
- * Agent Access — the tenant view of agent capability access.
+ * Agents — the tenant view of observed agents and their capability access
+ * (Claude Design handoff: Aether Agents).
  *
- * Answers, in order: what can my agents reach, what is authorized, and what
- * should I look at first.
+ * Answers, in order: who is acting, what can they reach, what is authorized,
+ * and what should I look at first.
  *
  * Every number on this page comes from the backend. Where the backend says a
  * count could not be computed it arrives as `null` with a `missing_inputs`
@@ -11,13 +12,17 @@
  * (`truncated` / `sampled` / `counts.scope: "scanned_window_only"`) the caveat is
  * rendered next to the number rather than the number being presented as a total.
  * Loading, error, empty and unknown are four visually distinct states.
+ *
+ * The page is read-only: it observes agents, reach and authorizations; it does
+ * not grant or revoke anything.
  */
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
-  Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState,
-  ErrorState, LoadingState,
+  Badge, DataTable, EmptyState, ErrorState, Icon, LoadingState,
 } from '@aether/ui';
+import { BrandMark } from '@aether-app/components/brand-mark';
+import { ChoiceChip, Eyebrow, LinkButton, PrimaryButton, TonePill, type Tone } from '@aether-app/components/ae-ui';
 import { NotEnabledOrError } from '@aether-app/components/domain-intelligence';
 import {
   useAccessInventory,
@@ -27,10 +32,12 @@ import {
   useCapabilityAuthorizations,
   useCapabilityCatalog,
   useCapabilityRiskFindings,
+  type AgentProfileIndexEntry,
   type CapabilityAuthorization,
   type ReachedCapability,
 } from '@aether-app/features/agent-access';
 import {
+  AccessCard,
   AuthorizedBadge,
   CountStat,
   PartialNotice,
@@ -40,7 +47,10 @@ import {
   UnknownValue,
   authorizationStateVariant,
   isUnknownCount,
+  recencyOf,
+  relativeTime,
   riskVariant,
+  type Recency,
 } from './agent-access-shared';
 
 const DOMAIN_LABEL = 'Agent Access Intelligence';
@@ -50,6 +60,8 @@ function text(value: unknown, fallback = 'Not recorded'): string {
   if (value === null || value === undefined || value === '') return fallback;
   return String(value);
 }
+
+const MUTE = { color: 'var(--ae-mute)' } as const;
 
 // ── Inventory summary ────────────────────────────────────────────────────────
 
@@ -76,7 +88,7 @@ function InventorySummary({
         />
       ) : null}
       <PartialNotice title="These totals are bounded" reasons={boundedReasons} />
-      <dl className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+      <dl className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
         <CountStat label="Agents observed" value={counts.agents} reasons={reasons} />
         <CountStat label="Servers observed" value={counts.servers} reasons={reasons} />
         <CountStat label="Capabilities observed" value={counts.capabilities} reasons={reasons} />
@@ -88,9 +100,7 @@ function InventorySummary({
         />
         <CountStat label="Active authorizations" value={counts.authorizations_active} reasons={reasons} />
       </dl>
-      {summary.summary ? (
-        <p className="text-xs text-text-secondary">{summary.summary}</p>
-      ) : null}
+      {summary.summary ? <p className="text-[12px]" style={MUTE}>{summary.summary}</p> : null}
       <ObservedCapabilities />
     </>
   );
@@ -122,25 +132,29 @@ function ObservedCapabilities() {
   }
 
   return (
-    <Card>
-      <CardHeader><CardTitle>Observed capabilities</CardTitle></CardHeader>
-      <CardContent className="space-y-2">
-        <p className="text-[11px] text-warning">
-          Showing up to {CATALOG_PAGE_LIMIT} capabilities. This list is page-bounded and the
-          catalog API does not report a total, so it is not the size of your inventory.
-        </p>
+    <AccessCard title="Observed capabilities">
+      <p className="text-[11px]" style={{ color: 'var(--ae-amber)' }}>
+        Showing up to {CATALOG_PAGE_LIMIT} capabilities. This list is page-bounded and the
+        catalog API does not report a total, so it is not the size of your inventory.
+      </p>
+      <div className="overflow-x-auto">
         <DataTable
           columns={[
             { key: 'tool', header: 'Tool', render: r => text(r.tool_name, 'Not recorded') },
-            { key: 'provider', header: 'Provider', render: r => text(r.provider, 'Not recorded') },
+            {
+              key: 'provider',
+              header: 'Provider',
+              render: r => (
+                <span className="flex items-center gap-2">
+                  {r.provider ? <BrandMark token={r.provider} size={20} markSize={12} /> : null}
+                  {text(r.provider, 'Not recorded')}
+                </span>
+              ),
+            },
             {
               key: 'server',
               header: 'Server',
-              render: r => (
-                <span className="font-mono">
-                  {text(r.server_name ?? r.server_url, 'Not recorded')}
-                </span>
-              ),
+              render: r => <span className="ae-mono">{text(r.server_name ?? r.server_url, 'Not recorded')}</span>,
             },
             { key: 'kind', header: 'Kind', render: r => text(r.capability_kind, 'unknown') },
             {
@@ -159,15 +173,15 @@ function ObservedCapabilities() {
               render: r =>
                 isUnknownCount(r.observation_count)
                   ? <UnknownValue />
-                  : <span>{r.observation_count}</span>,
+                  : <span className="ae-mono">{r.observation_count}</span>,
             },
             { key: 'last', header: 'Last observed', render: r => text(r.last_seen_at) },
           ]}
           data={rows}
           keyExtractor={r => r.capability_id}
         />
-      </CardContent>
-    </Card>
+      </div>
+    </AccessCard>
   );
 }
 
@@ -211,10 +225,10 @@ function FindingsSection() {
   const identity = data.identity;
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       <PartialNotice title="This scan did not cover everything" reasons={boundedReasons} />
 
-      <dl className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <dl className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
         <CountStat
           label="Findings"
           value={data.counts.total}
@@ -244,9 +258,9 @@ function FindingsSection() {
       </dl>
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-text-secondary">By risk level:</span>
+        <span className="text-[12px]" style={MUTE}>By risk level:</span>
         {byRiskLevel.length === 0 ? (
-          <span className="text-xs text-text-muted">None</span>
+          <span className="text-[12px]" style={MUTE}>None</span>
         ) : (
           byRiskLevel.map(([level, count]) => (
             <Badge key={level} variant={riskVariant(level)}>
@@ -254,27 +268,26 @@ function FindingsSection() {
             </Badge>
           ))
         )}
-        <span className="text-[11px] text-text-muted">
+        <span className="text-[11px]" style={{ color: 'var(--ae-faint)' }}>
           Counts by observed level — there is deliberately no composite risk score.
         </span>
       </div>
 
-      <Card>
-        <CardHeader><CardTitle>Findings, highest risk first</CardTitle></CardHeader>
-        <CardContent>
-          {rows.length === 0 ? (
-            boundedReasons.length > 0 ? (
-              <p className="text-xs text-text-secondary py-6 text-center">
-                No findings in the scanned window. The scan did not cover the whole inventory,
-                so this is not a clean bill of health.
-              </p>
-            ) : (
-              <EmptyState
-                title="No risk findings"
-                description="Every observed capability was examined and none produced a finding."
-              />
-            )
+      <AccessCard title="Findings, highest risk first">
+        {rows.length === 0 ? (
+          boundedReasons.length > 0 ? (
+            <p className="py-6 text-center text-[12px]" style={MUTE}>
+              No findings in the scanned window. The scan did not cover the whole inventory,
+              so this is not a clean bill of health.
+            </p>
           ) : (
+            <EmptyState
+              title="No risk findings"
+              description="Every observed capability was examined and none produced a finding."
+            />
+          )
+        ) : (
+          <div className="overflow-x-auto">
             <DataTable
               columns={[
                 {
@@ -286,26 +299,26 @@ function FindingsSection() {
                     </Badge>
                   ),
                 },
-                { key: 'code', header: 'Code', render: r => <span className="font-mono">{r.finding.code}</span> },
+                { key: 'code', header: 'Code', render: r => <span className="ae-mono">{r.finding.code}</span> },
                 {
                   key: 'capability',
                   header: 'Capability',
-                  render: r => <span className="font-mono">{text(r.finding.capability_id, 'Not attributed')}</span>,
+                  render: r => <span className="ae-mono">{text(r.finding.capability_id, 'Not attributed')}</span>,
                 },
                 { key: 'summary', header: 'Summary', render: r => text(r.finding.summary, '') },
                 {
                   key: 'evidence',
                   header: 'Evidence',
-                  render: r => <span className="font-mono text-[10px]">{text(r.finding.evidence, '')}</span>,
+                  render: r => <span className="ae-mono text-[10px]">{text(r.finding.evidence, '')}</span>,
                 },
                 { key: 'source', header: 'Source', render: r => text(r.finding.source, 'unknown') },
               ]}
               data={rows}
               keyExtractor={r => r.key}
             />
-          )}
-        </CardContent>
-      </Card>
+          </div>
+        )}
+      </AccessCard>
     </div>
   );
 }
@@ -322,7 +335,7 @@ function ReachTable({
 }) {
   if (capabilities.length === 0) {
     return (
-      <p className="text-xs text-text-muted py-4 text-center">
+      <p className="py-4 text-center text-[12px]" style={MUTE}>
         {evidenceOnly
           ? 'No capability evidence was retained for this subject. This is not a claim that it reaches nothing.'
           : 'No capabilities are within this agent’s observed reach.'}
@@ -332,48 +345,50 @@ function ReachTable({
   return (
     <>
       {evidenceOnly ? (
-        <p className="text-[11px] text-warning mb-2">
+        <p className="mb-2 text-[11px]" style={{ color: 'var(--ae-amber)' }}>
           Evidence we hold — not a complete list, and not a total.
         </p>
       ) : null}
-      <DataTable
-        columns={[
-          {
-            key: 'capability',
-            header: 'Capability',
-            render: r => <span className="font-mono">{r.capability_id}</span>,
-          },
-          { key: 'tool', header: 'Tool', render: r => text(r.tool_name, 'Not recorded') },
-          { key: 'provider', header: 'Provider', render: r => text(r.provider, 'Not recorded') },
-          { key: 'server', header: 'Server', render: r => <span className="font-mono">{text(r.server_key, 'Not recorded')}</span> },
-          {
-            key: 'basis',
-            header: 'Basis',
-            render: r => (
-              <Badge variant={r.basis === 'invoked' ? 'info' : 'default'}>
-                {r.basis === 'invoked' ? 'observed invoked' : 'server reachable'}
-              </Badge>
-            ),
-          },
-          {
-            key: 'risk',
-            header: 'Risk',
-            render: r =>
-              r.latest_risk_level === null || r.latest_risk_level === undefined ? (
-                <UnknownValue />
-              ) : (
-                <Badge variant={riskVariant(r.latest_risk_level)}>{r.latest_risk_level}</Badge>
+      <div className="overflow-x-auto">
+        <DataTable
+          columns={[
+            {
+              key: 'capability',
+              header: 'Capability',
+              render: r => <span className="ae-mono">{r.capability_id}</span>,
+            },
+            { key: 'tool', header: 'Tool', render: r => text(r.tool_name, 'Not recorded') },
+            { key: 'provider', header: 'Provider', render: r => text(r.provider, 'Not recorded') },
+            { key: 'server', header: 'Server', render: r => <span className="ae-mono">{text(r.server_key, 'Not recorded')}</span> },
+            {
+              key: 'basis',
+              header: 'Basis',
+              render: r => (
+                <Badge variant={r.basis === 'invoked' ? 'info' : 'default'}>
+                  {r.basis === 'invoked' ? 'observed invoked' : 'server reachable'}
+                </Badge>
               ),
-          },
-          {
-            key: 'authorized',
-            header: 'Authorized',
-            render: r => <AuthorizedBadge authorized={r.authorized} />,
-          },
-        ]}
-        data={capabilities}
-        keyExtractor={r => r.capability_id}
-      />
+            },
+            {
+              key: 'risk',
+              header: 'Risk',
+              render: r =>
+                r.latest_risk_level === null || r.latest_risk_level === undefined ? (
+                  <UnknownValue />
+                ) : (
+                  <Badge variant={riskVariant(r.latest_risk_level)}>{r.latest_risk_level}</Badge>
+                ),
+            },
+            {
+              key: 'authorized',
+              header: 'Authorized',
+              render: r => <AuthorizedBadge authorized={r.authorized} />,
+            },
+          ]}
+          data={capabilities}
+          keyExtractor={r => r.capability_id}
+        />
+      </div>
     </>
   );
 }
@@ -393,72 +408,145 @@ function AgentProfilePanel({ agentId }: { readonly agentId: string }) {
   const counts = data.counts;
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle>Access profile</CardTitle>
-          <Link className="text-xs font-medium text-text-primary underline" to={`/agents/${encodeURIComponent(agentId)}`}>
-            Open Agent 360
-          </Link>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {!known ? (
-          <UnknownNotice
-            title="This agent’s access profile is UNKNOWN, not empty"
-            detail="Every count below is unknown because it could not be computed. An agent id we have never observed is indistinguishable from another tenant’s, by design."
-            reasons={reasons}
-          />
-        ) : null}
+    <AccessCard
+      title="Access profile"
+      aside={
+        <Link className="ae-focus text-[12px] hover:underline" style={{ color: 'var(--ae-blue-ink)' }} to={`/agents/${encodeURIComponent(agentId)}`}>
+          Open Agent 360
+        </Link>
+      }
+    >
+      {!known ? (
+        <UnknownNotice
+          title="This agent’s access profile is UNKNOWN, not empty"
+          detail="Every count below is unknown because it could not be computed. An agent id we have never observed is indistinguishable from another tenant’s, by design."
+          reasons={reasons}
+        />
+      ) : null}
 
-        <dl className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          <CountStat testId="agent-access-stat-profile-servers-observed" label="Servers observed" value={counts['servers_observed']} reasons={reasons} />
-          <CountStat testId="agent-access-stat-profile-capabilities-reachable" label="Capabilities reachable" value={counts['capabilities_reachable']} reasons={reasons} />
-          <CountStat testId="agent-access-stat-profile-capabilities-invoked" label="Capabilities invoked" value={counts['capabilities_invoked']} reasons={reasons} />
-          <CountStat testId="agent-access-stat-profile-capabilities-authorized" label="Capabilities authorized" value={counts['capabilities_authorized']} reasons={reasons} />
-          <CountStat testId="agent-access-stat-profile-capabilities-unauthorized" label="Capabilities unauthorized" value={counts['capabilities_unauthorized']} reasons={reasons} />
-          <CountStat
-            testId="agent-access-stat-profile-observations-recorded"
-            label="Observations recorded"
-            value={data.observation.observations_recorded}
-            reasons={reasons}
-            hint="Bounded-window observation count, not an exactly-once total."
-          />
-        </dl>
+      <dl className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+        <CountStat testId="agent-access-stat-profile-servers-observed" label="Servers observed" value={counts['servers_observed']} reasons={reasons} />
+        <CountStat testId="agent-access-stat-profile-capabilities-reachable" label="Capabilities reachable" value={counts['capabilities_reachable']} reasons={reasons} />
+        <CountStat testId="agent-access-stat-profile-capabilities-invoked" label="Capabilities invoked" value={counts['capabilities_invoked']} reasons={reasons} />
+        <CountStat testId="agent-access-stat-profile-capabilities-authorized" label="Capabilities authorized" value={counts['capabilities_authorized']} reasons={reasons} />
+        <CountStat testId="agent-access-stat-profile-capabilities-unauthorized" label="Capabilities unauthorized" value={counts['capabilities_unauthorized']} reasons={reasons} />
+        <CountStat
+          testId="agent-access-stat-profile-observations-recorded"
+          label="Observations recorded"
+          value={data.observation.observations_recorded}
+          reasons={reasons}
+          hint="Bounded-window observation count, not an exactly-once total."
+        />
+      </dl>
 
-        <dl className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-          <div>
-            <dt className="text-text-secondary">First observed</dt>
-            <dd className="text-text-primary font-mono">{text(data.observation.first_seen_at)}</dd>
-          </div>
-          <div>
-            <dt className="text-text-secondary">Last observed</dt>
-            <dd className="text-text-primary font-mono">{text(data.observation.last_seen_at)}</dd>
-          </div>
-          <div>
-            <dt className="text-text-secondary">Providers observed</dt>
-            <dd className="text-text-primary">
-              {data.identity.providers_observed.length > 0
-                ? data.identity.providers_observed.join(', ')
-                : 'Not recorded'}
-            </dd>
-          </div>
-        </dl>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-text-secondary">Risk by observed level:</span>
-          <RiskLevelCounts known={data.risk.known} byLevel={data.risk.by_latest_risk_level} />
-        </div>
-        {data.risk.note ? <p className="text-[11px] text-text-muted">{data.risk.note}</p> : null}
-
+      <dl className="grid gap-3 text-[12px]" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
         <div>
-          <h3 className="text-xs font-semibold text-text-secondary mb-1">Reachable capabilities</h3>
+          <dt style={MUTE}>First observed</dt>
+          <dd className="ae-mono">{text(data.observation.first_seen_at)}</dd>
+        </div>
+        <div>
+          <dt style={MUTE}>Last observed</dt>
+          <dd className="ae-mono">{text(data.observation.last_seen_at)}</dd>
+        </div>
+        <div>
+          <dt style={MUTE}>Providers observed</dt>
+          <dd>
+            {data.identity.providers_observed.length > 0
+              ? data.identity.providers_observed.join(', ')
+              : 'Not recorded'}
+          </dd>
+        </div>
+      </dl>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[12px]" style={MUTE}>Risk by observed level:</span>
+        <RiskLevelCounts known={data.risk.known} byLevel={data.risk.by_latest_risk_level} />
+      </div>
+      {data.risk.note ? <p className="text-[11px]" style={{ color: 'var(--ae-faint)' }}>{data.risk.note}</p> : null}
+
+      <div>
+        <Eyebrow>Reachable capabilities</Eyebrow>
+        <div className="mt-1.5">
           <ReachTable capabilities={data.reach.capabilities} evidenceOnly={!known} />
         </div>
+      </div>
 
-        {data.summary ? <p className="text-xs text-text-secondary">{data.summary}</p> : null}
-      </CardContent>
-    </Card>
+      {data.summary ? <p className="text-[12px]" style={MUTE}>{data.summary}</p> : null}
+    </AccessCard>
+  );
+}
+
+// ── Per-agent authority ──────────────────────────────────────────────────────
+
+const AUTHORITY_COLUMNS: ReadonlyArray<{ key: 'yes' | 'unknown' | 'no'; label: string; tone: Tone }> = [
+  { key: 'yes', label: 'Authorized', tone: 'sage' },
+  { key: 'unknown', label: 'Not determined', tone: 'mute' },
+  { key: 'no', label: 'Reached, not authorized', tone: 'ember' },
+];
+
+function AgentAuthorityPanel({ agentId }: { readonly agentId: string }) {
+  const profile = useAgentProfile(agentId);
+  const grants = useCapabilityAuthorizations({ agent_id: agentId });
+  const reach = profile.data?.reach.capabilities ?? [];
+  const columns = {
+    yes: reach.filter(c => c.authorized === true),
+    unknown: reach.filter(c => c.authorized === null || c.authorized === undefined),
+    no: reach.filter(c => c.authorized === false),
+  };
+
+  return (
+    <div className="flex flex-col gap-[18px]">
+      <AccessCard title="What this agent can reach, by authorization" testId="agent-authority-columns">
+        {profile.error ? (
+          <ErrorState message={profile.error} onRetry={profile.refetch} />
+        ) : !profile.data ? (
+          <LoadingState lines={3} />
+        ) : reach.length === 0 ? (
+          <p className="text-[12px]" style={MUTE}>
+            {profile.data.profile_known
+              ? 'No capabilities are within this agent’s observed reach.'
+              : 'No reach evidence was retained for this agent. This is not a claim that it reaches nothing.'}
+          </p>
+        ) : (
+          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))' }}>
+            {AUTHORITY_COLUMNS.map(col => (
+              <div key={col.key} className="flex flex-col gap-1.5 rounded-[14px] px-3.5 py-3" style={{ background: 'var(--ae-glass-card)', border: '1px solid var(--ae-edge-soft)' }}>
+                <span className="flex items-center justify-between gap-2">
+                  <TonePill tone={col.tone}>{col.label}</TonePill>
+                  <span className="ae-mono text-[12px]" style={MUTE}>{columns[col.key].length}</span>
+                </span>
+                {columns[col.key].length === 0 ? (
+                  <span className="text-[12px]" style={{ color: 'var(--ae-faint)' }}>None in observed reach</span>
+                ) : (
+                  columns[col.key].map(c => (
+                    <span key={c.capability_id} className="flex min-w-0 flex-col text-[12px] leading-tight">
+                      <span className="truncate">{text(c.tool_name, c.capability_id)}</span>
+                      <span className="ae-mono truncate text-[10px]" style={MUTE}>{text(c.server_key, 'server not recorded')}</span>
+                    </span>
+                  ))
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <span className="text-[11px]" style={{ color: 'var(--ae-faint)' }}>
+          Not determined means the authorization read was unavailable for that capability — it is never shown as a denial.
+        </span>
+      </AccessCard>
+
+      <AccessCard title="Authorizations granted to this agent">
+        {grants.error ? (
+          <ErrorState message={grants.error} onRetry={grants.refetch} />
+        ) : !grants.data ? (
+          <LoadingState lines={3} />
+        ) : grants.data.items.length === 0 ? (
+          <p className="text-[12px]" style={MUTE}>No explicit authorization is recorded for this agent. Observed reach is not authorization.</p>
+        ) : (
+          <AuthorizationRows items={grants.data.items} />
+        )}
+        <span className="text-[11px]" style={{ color: 'var(--ae-faint)' }}>Aether reads authorizations here; it does not grant or revoke them from this page.</span>
+      </AccessCard>
+    </div>
   );
 }
 
@@ -477,72 +565,149 @@ function BlastRadiusPanel({ agentId }: { readonly agentId: string }) {
   const counts = data.counts;
 
   return (
-    <Card>
-      <CardHeader><CardTitle>Blast radius</CardTitle></CardHeader>
-      <CardContent className="space-y-3">
-        {!known ? (
-          <UnknownNotice
-            title="Exposure is UNKNOWN, not zero"
-            detail="Every count below could not be computed. Do not read this as no exposure."
-            reasons={reasons}
-          />
-        ) : null}
+    <AccessCard title="Blast radius">
+      {!known ? (
+        <UnknownNotice
+          title="Exposure is UNKNOWN, not zero"
+          detail="Every count below could not be computed. Do not read this as no exposure."
+          reasons={reasons}
+        />
+      ) : null}
 
-        <dl className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          <CountStat testId="agent-access-stat-blast-servers-reachable" label="Servers reachable" value={counts['servers_reachable']} reasons={reasons} />
-          <CountStat testId="agent-access-stat-blast-capabilities-exposed" label="Capabilities exposed" value={counts['capabilities_exposed']} reasons={reasons} />
-          <CountStat testId="agent-access-stat-blast-capabilities-invoked" label="Capabilities invoked" value={counts['capabilities_invoked']} reasons={reasons} />
-          <CountStat testId="agent-access-stat-blast-capabilities-authorized" label="Capabilities authorized" value={counts['capabilities_authorized']} reasons={reasons} />
-          <CountStat testId="agent-access-stat-blast-capabilities-unauthorized" label="Capabilities unauthorized" value={counts['capabilities_unauthorized']} reasons={reasons} />
-        </dl>
+      <dl className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+        <CountStat testId="agent-access-stat-blast-servers-reachable" label="Servers reachable" value={counts['servers_reachable']} reasons={reasons} />
+        <CountStat testId="agent-access-stat-blast-capabilities-exposed" label="Capabilities exposed" value={counts['capabilities_exposed']} reasons={reasons} />
+        <CountStat testId="agent-access-stat-blast-capabilities-invoked" label="Capabilities invoked" value={counts['capabilities_invoked']} reasons={reasons} />
+        <CountStat testId="agent-access-stat-blast-capabilities-authorized" label="Capabilities authorized" value={counts['capabilities_authorized']} reasons={reasons} />
+        <CountStat testId="agent-access-stat-blast-capabilities-unauthorized" label="Capabilities unauthorized" value={counts['capabilities_unauthorized']} reasons={reasons} />
+      </dl>
 
-        <div>
-          <h3 className="text-xs font-semibold text-text-secondary mb-1">
-            Servers {known ? 'reached' : 'observed (evidence)'}
-          </h3>
-          {data.servers.length === 0 ? (
-            <p className="text-xs text-text-muted">
-              {known ? 'No servers within observed reach.' : 'No server evidence retained.'}
-            </p>
-          ) : (
-            <ul className="flex flex-wrap gap-1.5">
-              {data.servers.map(server => (
-                <li key={server}>
-                  <Badge variant="default" className="font-mono">{server}</Badge>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      <div>
+        <Eyebrow>Servers {known ? 'reached' : 'observed (evidence)'}</Eyebrow>
+        {data.servers.length === 0 ? (
+          <p className="mt-1.5 text-[12px]" style={MUTE}>
+            {known ? 'No servers within observed reach.' : 'No server evidence retained.'}
+          </p>
+        ) : (
+          <ul className="mt-1.5 flex flex-wrap gap-1.5">
+            {data.servers.map(server => (
+              <li key={server}>
+                <Badge variant="default" className="font-mono">{server}</Badge>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
-        <div>
-          <h3 className="text-xs font-semibold text-text-secondary mb-1">Capabilities within reach</h3>
+      <div>
+        <Eyebrow>Capabilities within reach</Eyebrow>
+        <div className="mt-1.5">
           <ReachTable capabilities={data.capabilities ?? []} evidenceOnly={!known} />
         </div>
+      </div>
 
-        {data.summary ? <p className="text-xs text-text-secondary">{data.summary}</p> : null}
-      </CardContent>
-    </Card>
+      {data.summary ? <p className="text-[12px]" style={MUTE}>{data.summary}</p> : null}
+    </AccessCard>
   );
 }
 
-// ── Drill-down ───────────────────────────────────────────────────────────────
+// ── Per-agent lifecycle ──────────────────────────────────────────────────────
 
-function AgentDrillDown() {
+interface LifecycleEntry {
+  readonly at: string;
+  readonly label: string;
+  readonly tone: Tone;
+}
+
+function AgentLifecyclePanel({ agent, agentId }: { readonly agent: AgentProfileIndexEntry | undefined; readonly agentId: string }) {
+  const grants = useCapabilityAuthorizations({ agent_id: agentId });
+  const entries: LifecycleEntry[] = [];
+  if (agent?.first_seen_at) entries.push({ at: agent.first_seen_at, label: 'First observed', tone: 'sage' });
+  for (const g of grants.data?.items ?? []) {
+    const scope = g.capability_id ? `capability ${g.capability_id}` : g.server_ref ? `server ${g.server_ref}` : text(g.scope, 'scope not recorded');
+    if (g.created_at) entries.push({ at: g.created_at, label: `Authorization recorded for ${scope}`, tone: 'blue' });
+    if (g.ends_at) entries.push({ at: g.ends_at, label: `Authorization for ${scope} ends`, tone: 'amber' });
+    if (g.revoked_at) entries.push({ at: g.revoked_at, label: `Authorization for ${scope} revoked`, tone: 'ember' });
+  }
+  if (agent?.last_seen_at) entries.push({ at: agent.last_seen_at, label: 'Last observed', tone: 'blue' });
+  entries.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+
+  return (
+    <AccessCard title="Lifecycle" testId="agent-lifecycle">
+      {grants.error ? <ErrorState message={grants.error} onRetry={grants.refetch} /> : null}
+      {entries.length === 0 ? (
+        <p className="text-[12px]" style={MUTE}>No lifecycle timestamps were recorded for this agent.</p>
+      ) : (
+        <ol className="flex flex-col">
+          {entries.map((e, i) => (
+            <li key={`${e.at}-${e.label}-${i}`} className="flex items-start gap-3 pb-3">
+              <span className="mt-1 flex flex-col items-center">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: `var(--ae-${e.tone})` }} />
+              </span>
+              <span className="flex flex-col leading-tight">
+                <span className="text-[13px]">{e.label}</span>
+                <span className="ae-mono text-[11px]" style={MUTE}>{e.at}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+      <span className="text-[11px]" style={{ color: 'var(--ae-faint)' }}>Built from observation and authorization timestamps only; agent creation and termination are not reported.</span>
+    </AccessCard>
+  );
+}
+
+// ── Agent directory (list view) ──────────────────────────────────────────────
+
+const RECENCY_FILTERS: ReadonlyArray<{ key: 'all' | Recency; label: string }> = [
+  { key: 'all', label: 'All' },
+  { key: 'today', label: 'Seen today' },
+  { key: 'week', label: 'Seen this week' },
+  { key: 'quiet', label: 'Quiet' },
+];
+
+const RECENCY_TONE: Record<Recency, Tone> = { today: 'sage', week: 'blue', quiet: 'mute', unknown: 'mute' };
+const RECENCY_LABEL: Record<Recency, string> = { today: 'seen today', week: 'this week', quiet: 'quiet', unknown: 'not observed' };
+
+function countText(value: number | null | undefined): string {
+  return isUnknownCount(value) ? 'Unknown' : String(value);
+}
+
+function AgentDirectory({
+  query,
+  selectedId,
+  onSelect,
+  onOpen,
+}: {
+  readonly query: string;
+  readonly selectedId: string;
+  readonly onSelect: (id: string) => void;
+  readonly onOpen: (id: string) => void;
+}) {
   const profiles = useAgentProfiles();
-  const [selectedAgentId, setSelectedAgentId] = useState('');
+  const [filter, setFilter] = useState<'all' | Recency>('all');
+  const items = useMemo(() => profiles.data?.items ?? [], [profiles.data]);
+  const now = Date.now();
+
+  const filtered = items.filter(a => {
+    const matchesQuery = !query || a.agent_id.toLowerCase().includes(query.toLowerCase())
+      || a.providers_observed.some(p => p.toLowerCase().includes(query.toLowerCase()));
+    const matchesFilter = filter === 'all' || recencyOf(a.last_seen_at, now) === filter;
+    return matchesQuery && matchesFilter;
+  });
+  const groups = useMemo(() => {
+    const byProvider = new Map<string, AgentProfileIndexEntry[]>();
+    for (const agent of filtered) {
+      const provider = agent.providers_observed[0] ?? '';
+      byProvider.set(provider, [...(byProvider.get(provider) ?? []), agent]);
+    }
+    return [...byProvider.entries()].sort((a, b) => b[1].length - a[1].length);
+  }, [filtered]);
 
   if (profiles.isLoading && !profiles.data) return <LoadingState lines={4} />;
   if (profiles.error) return <ErrorState message={profiles.error} onRetry={profiles.refetch} />;
   const data = profiles.data;
   if (!data) return <LoadingState lines={4} />;
-
-  const boundedReasons: string[] = [];
-  if (data.truncated || data.complete === false || data.counts?.scope === 'scanned_window_only') {
-    boundedReasons.push(
-      'The agent scan hit its limit — this list covers the scanned window only, not every observed agent.',
-    );
-  }
 
   if (data.items.length === 0) {
     return (
@@ -553,92 +718,226 @@ function AgentDrillDown() {
     );
   }
 
+  const boundedReasons: string[] = [];
+  if (data.truncated || data.complete === false || data.counts?.scope === 'scanned_window_only') {
+    boundedReasons.push(
+      'The agent scan hit its limit — this list covers the scanned window only, not every observed agent.',
+    );
+  }
+
+  const selected = items.find(a => a.agent_id === selectedId) ?? filtered[0];
+
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter agents by last observed">
+          {RECENCY_FILTERS.map(f => (
+            <ChoiceChip key={f.key} size="sm" selected={filter === f.key} onClick={() => setFilter(f.key)}>{f.label}</ChoiceChip>
+          ))}
+        </div>
+        <span className="text-[12px]" style={MUTE}>
+          <span className="ae-mono" style={{ color: 'var(--ae-ink)' }}>{countText(data.counts?.agents_observed)}</span> agents in this list
+          {data.counts?.scope === 'scanned_window_only' ? ' · scanned window only' : ''}
+        </span>
+      </div>
       <PartialNotice title="This agent list is bounded" reasons={boundedReasons} />
 
-      <dl className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <CountStat
-          label="Agents in this list"
-          value={data.counts?.agents_observed}
-          partialReason={data.counts?.scope === 'scanned_window_only' ? 'scanned window only' : undefined}
-          hint="An agent absent from this list is one we have not observed, not one without access."
-        />
-      </dl>
+      <div className="grid gap-[18px]" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))' }}>
+        <AccessCard title="Agent network" aside={<span className="text-[11px]" style={MUTE}>grouped by observed provider</span>} testId="agent-network">
+          {filtered.length === 0 ? (
+            <p className="text-[12px]" style={MUTE}>No agents match.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {groups.map(([provider, agents]) => (
+                <div key={provider || 'none'} className="flex flex-col">
+                  <span className="flex items-center gap-2 px-1 py-1 text-[12px]">
+                    {provider ? <BrandMark token={provider} size={20} markSize={12} /> : <Icon name="circle-help" decorative size="sm" />}
+                    <span>{provider || 'Provider not recorded'}</span>
+                    <span className="ae-mono" style={{ color: 'var(--ae-faint)' }}>{agents.length}</span>
+                  </span>
+                  <div className="ml-[18px] flex flex-col border-l pl-2" style={{ borderColor: 'var(--ae-edge)' }}>
+                    {agents.map(agent => {
+                      const recency = recencyOf(agent.last_seen_at, now);
+                      const isSel = selected?.agent_id === agent.agent_id;
+                      return (
+                        <button
+                          key={agent.agent_id}
+                          type="button"
+                          aria-pressed={isSel}
+                          onClick={() => onSelect(agent.agent_id)}
+                          onDoubleClick={() => onOpen(agent.agent_id)}
+                          className="ae-focus flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] hover:bg-[var(--ae-glass-card)]"
+                          style={{ background: isSel ? 'var(--ae-blue-tint)' : undefined }}
+                          data-testid={`agent-row-${agent.agent_id}`}
+                        >
+                          <span style={{ color: 'var(--ae-sage)' }}><Icon name="bot" decorative size="sm" /></span>
+                          <span className="ae-mono min-w-0 flex-1 truncate">{agent.agent_id}</span>
+                          <TonePill tone={RECENCY_TONE[recency]}>{RECENCY_LABEL[recency]}</TonePill>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </AccessCard>
 
-      <div className="flex flex-col gap-1 max-w-md">
-        <label htmlFor="agent-access-agent-select" className="text-xs text-text-secondary">
-          Agent to inspect
-        </label>
-        <select
-          id="agent-access-agent-select"
-          value={selectedAgentId}
-          onChange={event => setSelectedAgentId(event.target.value)}
-          className="bg-surface-raised text-text-primary border border-border-default rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-border-focus"
-        >
-          <option value="">Select an observed agent…</option>
-          {data.items.map(agent => (
-            <option key={agent.agent_id} value={agent.agent_id}>
-              {agent.agent_id}
-            </option>
-          ))}
-        </select>
+        {selected ? (
+          <AccessCard title={<span className="ae-mono">{selected.agent_id}</span>} aside={<TonePill tone={RECENCY_TONE[recencyOf(selected.last_seen_at, now)]}>{RECENCY_LABEL[recencyOf(selected.last_seen_at, now)]}</TonePill>} testId="agent-summary">
+            <span className="text-[12px]" style={MUTE}>
+              {selected.providers_observed.length ? `via ${selected.providers_observed.join(', ')}` : 'provider not recorded'}
+            </span>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: 'Servers', value: selected.servers_observed },
+                { label: 'Capabilities', value: selected.capabilities_on_installations },
+                { label: 'Observations', value: selected.observations_recorded },
+              ].map(k => (
+                <div key={k.label} className="flex flex-col gap-0.5 rounded-[12px] px-3 py-2" style={{ background: 'var(--ae-glass-card)', border: '1px solid var(--ae-edge-soft)' }}>
+                  {isUnknownCount(k.value) ? <UnknownValue /> : <span className="ae-mono text-[18px]">{k.value}</span>}
+                  <span className="text-[11px]" style={MUTE}>{k.label}</span>
+                </div>
+              ))}
+            </div>
+            {selected.servers.length > 0 && (
+              <ul className="flex flex-wrap gap-1.5">
+                {selected.servers.slice(0, 6).map(s => (
+                  <li key={s}><Badge variant="default" className="font-mono">{s}</Badge></li>
+                ))}
+              </ul>
+            )}
+            <span className="text-[12px]" style={MUTE}>
+              Last observed {relativeTime(selected.last_seen_at, now)} · first observed {relativeTime(selected.first_seen_at, now)}
+            </span>
+            <div className="flex flex-wrap items-center gap-3">
+              <PrimaryButton onClick={() => onOpen(selected.agent_id)} data-testid="agent-open">Open agent →</PrimaryButton>
+              <Link className="ae-focus text-[12px] hover:underline" style={{ color: 'var(--ae-blue-ink)' }} to={`/agents/${encodeURIComponent(selected.agent_id)}`}>
+                Agent 360 →
+              </Link>
+            </div>
+          </AccessCard>
+        ) : null}
       </div>
 
-      <Card>
-        <CardHeader><CardTitle>Observed agents</CardTitle></CardHeader>
-        <CardContent>
-          <DataTable
-            columns={[
-              { key: 'agent', header: 'Agent', render: r => <span className="font-mono">{r.agent_id}</span> },
-              {
-                key: 'servers',
-                header: 'Servers',
-                render: r => (isUnknownCount(r.servers_observed) ? <UnknownValue /> : <span>{r.servers_observed}</span>),
-              },
-              {
-                key: 'capabilities',
-                header: 'Capabilities on installations',
-                render: r =>
-                  isUnknownCount(r.capabilities_on_installations)
-                    ? <UnknownValue />
-                    : <span>{r.capabilities_on_installations}</span>,
-              },
-              {
-                key: 'observations',
-                header: 'Observations',
-                render: r =>
-                  isUnknownCount(r.observations_recorded)
-                    ? <UnknownValue />
-                    : <span>{r.observations_recorded}</span>,
-              },
-              { key: 'first', header: 'First observed', render: r => text(r.first_seen_at) },
-              { key: 'last', header: 'Last observed', render: r => text(r.last_seen_at) },
-            ]}
-            data={data.items}
-            keyExtractor={r => r.agent_id}
-            onRowClick={r => setSelectedAgentId(r.agent_id)}
-          />
-        </CardContent>
-      </Card>
+      {data.note ? <p className="text-[11px]" style={{ color: 'var(--ae-faint)' }}>{data.note}</p> : null}
+    </div>
+  );
+}
 
-      {data.note ? <p className="text-[11px] text-text-muted">{data.note}</p> : null}
+// ── Open agent view ──────────────────────────────────────────────────────────
 
-      {selectedAgentId ? (
-        <div className="space-y-3">
-          <AgentProfilePanel agentId={selectedAgentId} />
-          <BlastRadiusPanel agentId={selectedAgentId} />
-        </div>
-      ) : (
-        <p className="text-xs text-text-secondary">
-          Select an agent to see its observed profile and blast radius.
-        </p>
-      )}
+const AGENT_TABS = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'authority', label: 'Authority' },
+  { key: 'exposure', label: 'Exposure' },
+  { key: 'lifecycle', label: 'Lifecycle' },
+] as const;
+type AgentTab = (typeof AGENT_TABS)[number]['key'];
+
+function AgentOpenView({
+  agentId,
+  tab,
+  onTab,
+  onBack,
+}: {
+  readonly agentId: string;
+  readonly tab: AgentTab;
+  readonly onTab: (tab: AgentTab) => void;
+  readonly onBack: () => void;
+}) {
+  const profiles = useAgentProfiles();
+  const agent = profiles.data?.items.find(a => a.agent_id === agentId);
+  const recency = recencyOf(agent?.last_seen_at);
+
+  return (
+    <div className="ae-rise flex flex-col gap-[18px]" data-testid="agent-open-view">
+      <span className="flex items-center gap-1 text-[13px]" style={MUTE}>
+        <LinkButton onClick={onBack} tone="mute" className="text-[13px]">Agents</LinkButton>
+        <span>/</span>
+        <span className="ae-mono" style={{ color: 'var(--ae-ink)' }}>{agentId}</span>
+      </span>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full" style={{ background: 'var(--ae-sage-tint)', color: 'var(--ae-sage)' }}>
+            <Icon name="bot" decorative size="md" />
+          </span>
+          <span className="flex flex-col leading-tight">
+            <span className="ae-mono text-[22px] font-medium">{agentId}</span>
+            <span className="text-[13px]" style={MUTE}>
+              {agent ? `${RECENCY_LABEL[recency]} · ${agent.providers_observed.length ? `via ${agent.providers_observed.join(', ')}` : 'provider not recorded'}` : 'observed agent'}
+            </span>
+          </span>
+        </span>
+        <Link className="ae-card ae-focus rounded-full px-3 py-1.5 text-[12px]" to={`/agents/${encodeURIComponent(agentId)}`}>
+          Agent 360 →
+        </Link>
+      </div>
+      <div className="ae-scroll-none -mx-1 flex gap-1.5 overflow-x-auto px-1" role="group" aria-label="Agent views">
+        {AGENT_TABS.map(t => (
+          <ChoiceChip key={t.key} selected={tab === t.key} onClick={() => onTab(t.key)} data-testid={`agent-tab-${t.key}`}>{t.label}</ChoiceChip>
+        ))}
+      </div>
+      <div className="ae-rise" key={tab}>
+        {tab === 'overview' && <AgentProfilePanel agentId={agentId} />}
+        {tab === 'authority' && <AgentAuthorityPanel agentId={agentId} />}
+        {tab === 'exposure' && <BlastRadiusPanel agentId={agentId} />}
+        {tab === 'lifecycle' && <AgentLifecyclePanel agent={agent} agentId={agentId} />}
+      </div>
     </div>
   );
 }
 
 // ── Authorizations ───────────────────────────────────────────────────────────
+
+function AuthorizationRows({ items }: { readonly items: readonly CapabilityAuthorization[] }) {
+  const rows = items.map((authorization: CapabilityAuthorization, index: number) => ({
+    authorization,
+    key: authorization.authorization_id ?? `authorization-${index}`,
+  }));
+  return (
+    <div className="overflow-x-auto">
+      <DataTable
+        columns={[
+          {
+            key: 'agent',
+            header: 'Agent',
+            render: r => <span className="ae-mono">{text(r.authorization.agent_id, 'Not recorded')}</span>,
+          },
+          {
+            key: 'scope',
+            header: 'Scope',
+            render: r => (
+              <span className="ae-mono">
+                {r.authorization.capability_id
+                  ? `capability: ${r.authorization.capability_id}`
+                  : r.authorization.server_ref
+                    ? `server: ${r.authorization.server_ref}`
+                    : text(r.authorization.scope, 'Not recorded')}
+              </span>
+            ),
+          },
+          {
+            key: 'state',
+            header: 'State',
+            render: r =>
+              r.authorization.state
+                ? (
+                  <Badge variant={authorizationStateVariant(r.authorization.state)}>
+                    {r.authorization.state}
+                  </Badge>
+                )
+                : <UnknownValue />,
+          },
+          { key: 'starts', header: 'Starts', render: r => text(r.authorization.starts_at, 'Immediately') },
+          { key: 'ends', header: 'Ends', render: r => text(r.authorization.ends_at, 'No end date') },
+        ]}
+        data={rows}
+        keyExtractor={r => r.key}
+      />
+    </div>
+  );
+}
 
 function AuthorizationsSection() {
   const authorizations = useCapabilityAuthorizations();
@@ -659,62 +958,36 @@ function AuthorizationsSection() {
     );
   }
 
-  const rows = data.items.map((authorization: CapabilityAuthorization, index: number) => ({
-    authorization,
-    key: authorization.authorization_id ?? `authorization-${index}`,
-  }));
-
   return (
-    <Card>
-      <CardHeader><CardTitle>Capability authorizations</CardTitle></CardHeader>
-      <CardContent>
-        <DataTable
-          columns={[
-            {
-              key: 'agent',
-              header: 'Agent',
-              render: r => <span className="font-mono">{text(r.authorization.agent_id, 'Not recorded')}</span>,
-            },
-            {
-              key: 'scope',
-              header: 'Scope',
-              render: r => (
-                <span className="font-mono">
-                  {r.authorization.capability_id
-                    ? `capability: ${r.authorization.capability_id}`
-                    : r.authorization.server_ref
-                      ? `server: ${r.authorization.server_ref}`
-                      : text(r.authorization.scope, 'Not recorded')}
-                </span>
-              ),
-            },
-            {
-              key: 'state',
-              header: 'State',
-              render: r =>
-                r.authorization.state
-                  ? (
-                    <Badge variant={authorizationStateVariant(r.authorization.state)}>
-                      {r.authorization.state}
-                    </Badge>
-                  )
-                  : <UnknownValue />,
-            },
-            { key: 'starts', header: 'Starts', render: r => text(r.authorization.starts_at, 'Immediately') },
-            { key: 'ends', header: 'Ends', render: r => text(r.authorization.ends_at, 'No end date') },
-          ]}
-          data={rows}
-          keyExtractor={r => r.key}
-        />
-      </CardContent>
-    </Card>
+    <AccessCard title="Capability authorizations">
+      <AuthorizationRows items={data.items} />
+    </AccessCard>
   );
 }
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
+function isAgentTab(value: string | null): value is AgentTab {
+  return AGENT_TABS.some(t => t.key === value);
+}
+
 export function AgentAccessPage() {
   const inventory = useAccessInventory();
+  const [params, setParams] = useSearchParams();
+  const [query, setQuery] = useState('');
+  const agentId = params.get('agent') ?? '';
+  const open = params.get('view') === 'agent' && agentId !== '';
+  const rawTab = params.get('tab');
+  const tab: AgentTab = isAgentTab(rawTab) ? rawTab : 'overview';
+
+  const update = (next: Record<string, string | null>) => {
+    const merged = new URLSearchParams(params);
+    for (const [k, v] of Object.entries(next)) {
+      if (v === null) merged.delete(k);
+      else merged.set(k, v);
+    }
+    setParams(merged);
+  };
 
   if (inventory.isLoading && !inventory.data) return <LoadingState lines={6} className="p-8" />;
   if (inventory.error) {
@@ -734,16 +1007,48 @@ export function AgentAccessPage() {
   // backend was actually able to compute that. `summary_known: false` is unknown,
   // and must never fall through to this branch.
   const nothingObserved = summary?.summary_known === true && summary.observed_any === false;
+  const counts = summary?.summary_known ? summary.counts : null;
+
+  if (open) {
+    return (
+      <AgentOpenView
+        agentId={agentId}
+        tab={tab}
+        onTab={next => update({ tab: next })}
+        onBack={() => update({ view: null, tab: null })}
+      />
+    );
+  }
 
   return (
-    <div className="p-6 space-y-8">
-      <header>
-        <h1 className="text-xl font-semibold text-text-primary">Agent Access</h1>
-        <p className="text-sm text-text-secondary mt-1">
-          What your agents have been observed reaching, what is authorized, and what to look at
-          first. Everything here is derived from observation — it is not a proof of total reach,
-          and anything that could not be computed reads as “Unknown”, never as zero.
-        </p>
+    <div className="ae-rise flex min-w-0 flex-col gap-[18px]" data-testid="aether-agents">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex max-w-[640px] flex-col gap-1">
+          <h1 className="text-[32px] font-medium leading-tight tracking-[-0.64px]">Agents</h1>
+          <p className="text-[14px]" style={MUTE}>
+            Who is acting, what they can reach, and within what authority. Everything here is derived
+            from observation — it is not a proof of total reach, and anything that could not be
+            computed reads as “Unknown”, never as zero.
+          </p>
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          <input
+            type="search"
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+            placeholder="Search agents"
+            aria-label="Search agents"
+            className="ae-focus min-w-[220px] rounded-full px-4 py-2 text-[13px] outline-none"
+            style={{ border: '1px solid var(--ae-edge)', background: 'var(--ae-glass-card)', color: 'var(--ae-ink)' }}
+          />
+          {counts ? (
+            <span className="flex flex-wrap justify-end gap-x-3.5 gap-y-1 text-[12px]" style={MUTE} data-testid="agents-counters">
+              <span><span className="ae-mono" style={{ color: 'var(--ae-ink)' }}>{countText(counts.agents)}</span> agents</span>
+              <span><span className="ae-mono" style={{ color: 'var(--ae-ink)' }}>{countText(counts.authorizations_active)}</span> active authorizations</span>
+              <span><span className="ae-mono" style={{ color: 'var(--ae-ink)' }}>{countText(counts.capabilities)}</span> capabilities</span>
+            </span>
+          ) : null}
+        </div>
       </header>
 
       {nothingObserved ? (
@@ -753,6 +1058,19 @@ export function AgentAccessPage() {
         />
       ) : (
         <>
+          <Section
+            id="agent-access-agents"
+            title="Who is acting"
+            description="Observed agents. Select one for a summary, then open it for its profile, authority, exposure and lifecycle."
+          >
+            <AgentDirectory
+              query={query}
+              selectedId={agentId}
+              onSelect={id => update({ agent: id })}
+              onOpen={id => update({ agent: id, view: 'agent', tab: 'overview' })}
+            />
+          </Section>
+
           <Section
             id="agent-access-inventory"
             title="Inventory"
@@ -775,14 +1093,6 @@ export function AgentAccessPage() {
             description="Explicit capability authorizations. Observed reach is not authorization."
           >
             <AuthorizationsSection />
-          </Section>
-
-          <Section
-            id="agent-access-agents"
-            title="Per-agent access"
-            description="Select an observed agent for its profile and blast radius."
-          >
-            <AgentDrillDown />
           </Section>
         </>
       )}

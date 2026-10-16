@@ -27,7 +27,7 @@ reviewed_source_commits:
 source_hashes:
   "services/api/actions/": "sha256:d43501fd20dc2010654eaef70a37ddf86aed6c018a20e9a9148f4bf8d1f1bb44"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
-  "services/api/billing/": "sha256:0740c89ed3bf089b8ded5f9a319b7670a0afb18bda8f58a69a11a03c2a0a5d75"
+  "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:be5c00bffaa216ecd12b669cb41ee011c177800fbc7d70c5e9bd4c1b4c3f6e76"
   "services/api/governance/": "sha256:b47a6fe0cec45cf306bfb4399a2b361df4f4bd1a4f0f897ed003a3db2d4a0dd3"
   "services/api/graph/": "sha256:bda39e64fa30ae40f4acbf0fa85092aa50d7cb601037bdcd6870b241ea09fe13"
@@ -358,7 +358,7 @@ are returned in customer or operator responses.
 | `/v1/billing/usage` | GET | API key | Caller tenant usage events for a requested or current billing window |
 | `/v1/billing/usage/summary` | GET | API key | Caller tenant usage dimensions, including non-billable visibility meters |
 | `/v1/billing/invoice-previews` | GET | API key | Caller-safe invoice previews with internal pricing notes removed |
-| `/v1/billing/value-created` | GET | API key | Caller-safe value-created events for value-based billing review |
+| `/v1/billing/value-created` | GET | API key | Caller-safe value-created events for value-based billing review; optional `start`/`end` window, `truncated` flags a bounded read |
 | `/v1/billing/payment-status` | GET | API key | Caller-safe payment status and active provider mode |
 
 ### Kyber revenue-operations billing (`/v1/admin/kyber/revops/*`, admin permission required)

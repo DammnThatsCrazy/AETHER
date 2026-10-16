@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useMemo, useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   Badge, Button, Card, CardContent, CardHeader,
   DataTable, EmptyState, ErrorState, EvidenceDrawer, FreshnessIndicator,
-  GlyphIcon, LoadingState, Modal, ModalBody, ModalFooter, ModalHeader,
-  Skeleton, StatusIndicator, Tabs, TabsContent, TabsList, TabsTrigger,
-  TerminalSeparator, TimeWindowSelector, formatUSD, formatCount, formatDecimal, useTimeContext, useToast,
+  GlyphIcon, Icon, LoadingState, Modal, ModalBody, ModalFooter, ModalHeader,
+  TerminalSeparator, formatUSD, formatCount, formatDecimal, useTimeContext, useToast,
 } from '@aether/ui';
 import type { TimeWindow } from '@aether/ui';
 import { TruthBanner } from '@aether/ui/exploration';
@@ -18,7 +18,7 @@ import {
   useUserTier, useUserAssetComposition, useUserPnl, useUserTradingProfile,
   useUserFunnel, useUserTimeToConvert, useUserJourneyEconomics, useUserDevicePerformance,
   useUserProtocolMetrics, useUserGovernanceActivity,
-  useUserQuality, useUserDataFreshness, useUserWeb2Profile,
+  useUserQuality, useUserDataFreshness, useUserWeb2Profile, useUserTimeline,
 } from '@aether-app/features/users/use-user-profile';
 import { useUnifiedJourney, TouchpointEvidenceInspector } from '@aether-app/features/journey';
 import { Profile360IdentityPanel } from '@aether-app/features/identity/Profile360IdentityPanel';
@@ -36,16 +36,18 @@ import {
   useTenantIntegrationReadiness,
 } from '@aether-app/features/integrations';
 import type { TenantReadinessItem } from '@aether-app/features/integrations';
+import { GlassPage } from '@aether-app/components/app-shell';
+import {
+  Bar, ChoiceChip, InlineNotice, LinkButton, MetricTile, PrimaryButton, SecondaryButton, TonePill, toneColor,
+  type Tone,
+} from '@aether-app/components/ae-ui';
+import {
+  NETWORK_GROUPS, ago, asList, asRecord, humanize, identifierGroups, initials, profileIdentity, profileNetwork, str, timelineEvents,
+  type ProfileIdentity,
+} from './profile-model';
+import { ProfileNetworkMap, neighbourHref } from './profile-network-map';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
-
-function asRecord(v: unknown): Record<string, unknown> {
-  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
-}
-
-function asList(v: unknown): unknown[] {
-  return Array.isArray(v) ? v : [];
-}
 
 function fmt(v: unknown, fallback = '—'): string {
   if (v === null || v === undefined || v === '') return fallback;
@@ -89,40 +91,45 @@ function fmtDuration(ms: number | undefined | null): string {
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
-function scoreBadge(score: number | undefined, label: string, invert = false) {
-  if (score === undefined) return null;
-  const pct = Math.round(score * 100);
-  const v = invert
-    ? (score >= 0.7 ? 'danger' : score >= 0.4 ? 'warning' : 'success')
-    : (score >= 0.7 ? 'success' : score >= 0.4 ? 'warning' : 'danger');
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs text-text-secondary">{label}</span>
-      <Badge variant={v} size="sm">{pct}</Badge>
-    </div>
-  );
-}
-
 // ── Section wrapper ────────────────────────────────────────────────────────────
+// Glass section card (design: Profile 360 v2 cards). Loading, unavailable and
+// populated are distinct: an unavailable read is never rendered as empty.
 
-function Section({ title, children, loading, error }: { title: string; children: React.ReactNode; loading?: boolean; error?: string | null }) {
-  if (loading) return <LoadingState lines={4} />;
-  if (error) return <p className="text-xs text-danger">{error}</p>;
+function Section({ title, children, loading, error, action, testId }: {
+  title: string;
+  children: React.ReactNode;
+  loading?: boolean;
+  error?: string | null;
+  action?: ReactNode;
+  testId?: string;
+}) {
   return (
-    <div className="space-y-3">
-      <h3 className="text-sm font-medium text-text-secondary uppercase tracking-wide">{title}</h3>
-      {children}
-    </div>
+    <section className="ae-card flex min-w-0 flex-col gap-3 rounded-[20px] px-5 py-4" data-testid={testId}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="ae-eyebrow">{title}</h3>
+        {action}
+      </div>
+      {loading
+        ? <LoadingState lines={4} />
+        : error
+          ? <InlineNotice tone="amber">This read is unavailable right now: {error}</InlineNotice>
+          : children}
+    </section>
   );
 }
 
 function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="bg-surface-raised border border-border-default rounded-md px-3 py-2">
-      <p className="text-xs text-text-secondary">{label}</p>
-      <p className="text-sm font-medium text-text-primary mt-0.5">{value}</p>
+    <div className="flex min-w-0 flex-col gap-0.5 rounded-[12px] px-3 py-2" style={{ background: 'var(--ae-glass-card)', border: '1px solid var(--ae-edge-soft)' }}>
+      <span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>{label}</span>
+      <div className="break-words text-[13px] font-medium">{value}</div>
     </div>
   );
+}
+
+/** Muted sentence used for honest empty / not-reported states inside cards. */
+function Quiet({ children }: { children: ReactNode }) {
+  return <p className="text-[13px] leading-relaxed" style={{ color: 'var(--ae-mute)' }}>{children}</p>;
 }
 
 // ── Communications tab (Communications Intelligence) ─────────────────────────
@@ -309,103 +316,440 @@ export function SemanticSentimentSection({ userId }: { userId: string }) {
 
 // ── Overview tab ──────────────────────────────────────────────────────────────
 
-function OverviewTab({ userId }: { userId: string }) {
+export type ProfileTab =
+  | 'overview' | 'timeline' | 'journeys' | 'agents' | 'network' | 'identity'
+  | 'sessions' | 'communications' | 'social' | 'wallets' | 'financials' | 'behavioral'
+  | 'attribution' | 'outcomes' | 'defi' | 'funnel' | 'protocols' | 'insights';
+
+function scoreTone(score: number, invert: boolean): Tone {
+  const good = invert ? score < 0.4 : score >= 0.7;
+  const mid = invert ? score < 0.7 : score >= 0.4;
+  return good ? 'sage' : mid ? 'amber' : 'ember';
+}
+
+function ScoreRow({ label, value, invert = false }: { label: string; value: unknown; invert?: boolean }) {
+  const n = value === null || value === undefined || value === '' ? null : Number(value);
+  if (n === null || !Number.isFinite(n)) return null;
+  const tone = scoreTone(n, invert);
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="flex items-baseline justify-between text-[13px]">
+        <span>{label}</span>
+        <span className="ae-mono" style={{ color: toneColor(tone) }}>{Math.round(n * 100)}</span>
+      </span>
+      <Bar value={Math.round(n * 100)} color={toneColor(tone)} height={3} />
+    </div>
+  );
+}
+
+function OverviewTab({ userId, identity, onTab }: { userId: string; identity: ProfileIdentity; onTab: (t: ProfileTab) => void }) {
+  const navigate = useNavigate();
   const { data: summary, isLoading: sl, error: se } = useUserProfile(userId);
   const { data: intel, isLoading: il, error: ie } = useUserIntelligence(userId);
   const { data: ids, isLoading: idl, error: ide } = useUserIdentifiers(userId);
-  const { data: platforms, isLoading: pl } = useUserPlatforms(userId);
-  const { data: rewardsData, isLoading: rl } = useUserRewards(userId);
+  const { data: platforms, isLoading: pl, error: ple } = useUserPlatforms(userId);
+  const { data: rewardsData, isLoading: rl, error: rle } = useUserRewards(userId);
+  const { data: journeysData, isLoading: jl, error: je } = useUserJourneys(userId);
+  const { data: graphData, isLoading: gl, error: ge } = useUserGraph(userId);
+  const { data: timelineData, isLoading: tl, error: te } = useUserTimeline(userId, { limit: 50 });
 
   const s = asRecord(summary);
   const i = asRecord(intel);
-  const idData = asRecord(ids);
   const pList = asList(asRecord(platforms).platforms ?? platforms);
   const r = asRecord(rewardsData);
+  const journeys = asList(asRecord(journeysData).items ?? asRecord(journeysData).journeys ?? journeysData);
+  const network = useMemo(() => profileNetwork(graphData, userId), [graphData, userId]);
+  const agents = network.nodes.filter(n => n.group === 'agents');
+  const groups = identifierGroups(ids);
+  const events = useMemo(() => timelineEvents(timelineData), [timelineData]);
+
+  const activity: Array<[string, string | null]> = [
+    ['Sessions (7d)', s.sessions_7d == null ? null : fmt(s.sessions_7d)],
+    ['Sessions (30d)', s.sessions_30d == null ? null : fmt(s.sessions_30d)],
+    ['Active days (30d)', s.active_days_30d == null ? null : fmt(s.active_days_30d)],
+    ['Events (30d)', s.events_30d == null ? null : fmt(s.events_30d)],
+    ['Avg session', s.avg_session_duration_ms == null ? null : fmtDuration(s.avg_session_duration_ms as number)],
+    ['First seen', s.first_seen_at ? relTime(s.first_seen_at as string) : null],
+    ['Recency', s.last_seen_at ? relTime(s.last_seen_at as string) : null],
+  ];
+  const reportedActivity = activity.filter(([, v]) => v !== null);
+  const hasScores = ['trust_score', 'risk_score', 'anomaly_score'].some(k => i[k] !== undefined && i[k] !== null);
+  const hasRewards = ['tier', 'points_balance', 'rewards_earned', 'campaigns_participated'].some(k => r[k] !== undefined && r[k] !== null);
 
   return (
-    <div className="space-y-6">
-      <ProfileExplorationPanel entityId={userId} />
-
-      {/* Scores */}
-      <Section title="Intelligence scores" loading={il} error={ie}>
-        <div className="grid grid-cols-3 gap-3">
-          {scoreBadge(i.trust_score as number, 'Trust')}
-          {scoreBadge(i.risk_score as number, 'Risk', true)}
-          {scoreBadge(i.anomaly_score as number, 'Anomaly', true)}
+    <div className="flex flex-col gap-3.5" data-testid="profile-overview">
+      {/* Activity tiles (summary read) */}
+      {sl ? <LoadingState lines={2} /> : se ? (
+        <InlineNotice tone="amber">Activity totals are unavailable right now.</InlineNotice>
+      ) : reportedActivity.length > 0 ? (
+        <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }} data-testid="profile-activity">
+          {reportedActivity.map(([label, value]) => <MetricTile key={label} label={label} value={value} />)}
+          {!!s.churn_risk && (
+            <MetricTile label="Churn risk" value={fmt(s.churn_risk)} tone={s.churn_risk === 'low' ? 'sage' : s.churn_risk === 'churned' ? 'ember' : 'amber'} />
+          )}
         </div>
-      </Section>
+      ) : (
+        <Quiet>Session and event totals are not reported for this profile yet.</Quiet>
+      )}
 
-      {/* Semantic sentiment (Profile360 semantic dimension) */}
-      <SemanticSentimentSection userId={userId} />
+      <div className="grid items-start gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(360px, 100%), 1fr))' }}>
+        <Section title="Intelligence scores" loading={il} error={ie} testId="profile-scores">
+          {hasScores ? (
+            <div className="flex flex-col gap-2.5">
+              <ScoreRow label="Trust" value={i.trust_score} />
+              <ScoreRow label="Risk" value={i.risk_score} invert />
+              <ScoreRow label="Anomaly" value={i.anomaly_score} invert />
+            </div>
+          ) : (
+            <Quiet>No trust, risk or anomaly score has been computed for this profile yet.</Quiet>
+          )}
+          <LinkButton onClick={() => onTab('behavioral')}>Why is this profile notable? →</LinkButton>
+        </Section>
 
-      {/* Summary stats */}
-      <Section title="Activity summary" loading={sl} error={se}>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Stat label="Sessions (7d)" value={fmt(s.sessions_7d)} />
-          <Stat label="Sessions (30d)" value={fmt(s.sessions_30d)} />
-          <Stat label="Recency" value={fmt(s.last_seen_at ? relTime(s.last_seen_at as string) : undefined)} />
-          <Stat label="Churn risk" value={
-            s.churn_risk
-              ? <Badge variant={s.churn_risk === 'low' ? 'success' : s.churn_risk === 'churned' ? 'danger' : 'warning'} size="sm">{fmt(s.churn_risk)}</Badge>
-              : '—'
-          } />
-          <Stat label="First seen" value={relTime(s.first_seen_at as string | undefined)} />
-          <Stat label="Avg session" value={fmtDuration(s.avg_session_duration_ms as number | undefined)} />
-          <Stat label="Active days (30d)" value={fmt(s.active_days_30d)} />
-          <Stat label="Events (30d)" value={fmt(s.events_30d)} />
-        </div>
-      </Section>
+        {/* Semantic sentiment (Profile360 semantic dimension) */}
+        <SemanticSentimentSection userId={userId} />
 
-      {/* Loyalty */}
-      <Section title="Loyalty & rewards" loading={rl}>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Stat label="Tier" value={r.tier ? <Badge variant="warning" size="sm">{fmt(r.tier)}</Badge> : '—'} />
-          <Stat label="Points" value={fmt(r.points_balance)} />
-          <Stat label="Rewards earned" value={fmt(r.rewards_earned)} />
-          <Stat label="Campaigns" value={fmt(r.campaigns_participated)} />
-        </div>
-      </Section>
-
-      {/* Platforms */}
-      <Section title="Platforms" loading={pl}>
-        <div className="flex flex-wrap gap-2">
-          {pList.length === 0
-            ? <p className="text-xs text-text-muted">No platform data</p>
-            : pList.map((p, i) => {
-                const pr = asRecord(p);
-                const name = fmt(pr.platform ?? p);
+        <Section
+          title={journeys.length > 0 ? `Journeys · ${journeys.length}` : 'Journeys'}
+          loading={jl}
+          error={je}
+          action={<LinkButton onClick={() => onTab('journeys')}>All journeys →</LinkButton>}
+          testId="profile-journeys-card"
+        >
+          {journeys.length === 0 ? (
+            <Quiet>No cross-session journeys have been tracked for this profile yet.</Quiet>
+          ) : (
+            <div className="flex flex-col">
+              {journeys.slice(0, 3).map((j, ji) => {
+                const jr = asRecord(j);
+                const rate = jr.completion_rate == null ? null : Number(jr.completion_rate);
+                const status = str(jr.status);
                 return (
-                  <div key={i} className="bg-surface-raised border border-border-default rounded-md px-3 py-2 text-xs">
-                    <span className="font-medium text-text-primary">{name}</span>
-                    {pr.session_count !== undefined && (
-                      <span className="text-text-secondary ml-2">{fmt(pr.session_count)} sessions</span>
-                    )}
+                  <div key={ji} className="flex flex-wrap items-center justify-between gap-2 border-t py-2 text-[13px] first:border-t-0" style={{ borderColor: 'var(--ae-edge)' }}>
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <span>Journey {ji + 1}</span>
+                      {!!jr.entry_channel && <TonePill tone="blue">{fmt(jr.entry_channel)}</TonePill>}
+                      {!!jr.converted && <TonePill tone="sage">converted</TonePill>}
+                      {status && <TonePill tone={status === 'completed' ? 'sage' : status === 'abandoned' ? 'ember' : 'amber'}>{status}</TonePill>}
+                    </span>
+                    <span className="ae-mono text-[12px]" style={{ color: 'var(--ae-mute)' }}>
+                      {rate !== null && Number.isFinite(rate) ? `${Math.round(rate * 100)}% complete · ` : ''}{relTime(jr.started_at as string)}
+                    </span>
                   </div>
                 );
-              })
-          }
-        </div>
-      </Section>
+              })}
+            </div>
+          )}
+          <LinkButton onClick={() => void navigate(`/users/${encodeURIComponent(userId)}/journey`)}>Open journey explorer →</LinkButton>
+        </Section>
 
-      {/* Identifiers */}
-      <Section title="Identifiers" loading={idl} error={ide}>
-        <div className="space-y-2">
-          {(['wallets', 'emails', 'devices', 'sessions', 'social_handles', 'customer_ids'] as const).map(kind => {
-            const items = asList(idData[kind]);
-            if (items.length === 0) return null;
-            return (
-              <div key={kind} className="flex items-start gap-2">
-                <span className="text-xs text-text-secondary w-24 flex-shrink-0 capitalize">{kind.replace('_', ' ')}</span>
-                <div className="flex flex-wrap gap-1">
-                  {items.slice(0, 6).map((v, i) => (
-                    <code key={i} className="text-xs bg-surface-overlay border border-border-default rounded px-1.5 py-0.5 text-text-primary break-all">{fmt(v)}</code>
+        <Section
+          title={network.links.length > 0 ? `Network · ${network.links.length} relationships` : 'Network'}
+          loading={gl}
+          error={ge}
+          action={<LinkButton onClick={() => onTab('network')}>Connections →</LinkButton>}
+          testId="profile-network-card"
+        >
+          {network.nodes.length === 0 ? (
+            <Quiet>No relationships are recorded in the graph for this profile yet.</Quiet>
+          ) : (
+            <>
+              <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-[5px]">
+                {NETWORK_GROUPS.map(g => {
+                  const count = network.nodes.filter(n => n.group === g.key).length;
+                  return count > 0 ? <div key={g.key} style={{ flex: count, background: g.color }} /> : null;
+                })}
+              </div>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12px]" style={{ color: 'var(--ae-mute)' }}>
+                {NETWORK_GROUPS.map(g => {
+                  const count = network.nodes.filter(n => n.group === g.key).length;
+                  return count > 0 ? <span key={g.key}><span style={{ color: g.color }}>●</span> {g.label.toLowerCase()} {count}</span> : null;
+                })}
+              </div>
+              {network.byClass.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {network.byClass.map(c => <TonePill key={c.cls} tone="mute">{c.cls} {c.count}</TonePill>)}
+                </div>
+              )}
+            </>
+          )}
+        </Section>
+
+        <Section
+          title={agents.length > 0 ? `Agents · ${agents.length}` : 'Agents'}
+          loading={gl}
+          error={ge}
+          action={<LinkButton onClick={() => onTab('agents')}>Agents →</LinkButton>}
+          testId="profile-agents-card"
+        >
+          {agents.length === 0 ? (
+            <Quiet>
+              No agents act for this profile in the relationship graph.
+              {identity.counts.agents ? ` The profile summary lists ${identity.counts.agents} owned agent configuration${identity.counts.agents === 1 ? '' : 's'}.` : ''}
+            </Quiet>
+          ) : (
+            <div className="flex flex-col">
+              {agents.slice(0, 3).map(a => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => void navigate(neighbourHref(a).to)}
+                  className="ae-focus flex items-center gap-2.5 border-t py-2 text-left text-[13px] first:border-t-0"
+                  style={{ borderColor: 'var(--ae-edge)' }}
+                >
+                  <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full" style={{ background: 'var(--ae-solar-wash)', color: 'var(--ae-solar-ink)' }}>
+                    <Icon name="bot" decorative size="sm" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{a.label}</span>
+                  <span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>{a.kind ? humanize(a.kind) : 'agent'}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </Section>
+
+        <Section
+          title="Identity"
+          loading={idl}
+          error={ide}
+          action={<LinkButton onClick={() => onTab('identity')}>Identity →</LinkButton>}
+          testId="profile-identity-card"
+        >
+          {groups.length === 0 ? (
+            <Quiet>No identifiers (email, device, wallet, customer id) are linked to this profile yet.</Quiet>
+          ) : (
+            <div className="flex flex-col">
+              {groups.map(g => (
+                <div key={g.kind} className="flex items-start gap-3 border-t py-2 text-[13px] first:border-t-0" style={{ borderColor: 'var(--ae-edge)' }}>
+                  <span className="w-28 flex-none capitalize" style={{ color: 'var(--ae-mute)' }}>{humanize(g.kind)}</span>
+                  <span className="ae-mono min-w-0 flex-1 break-all text-[12px]">{g.values[0]}</span>
+                  {g.values.length > 1 && <TonePill tone="mute">+{g.values.length - 1}</TonePill>}
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+
+        <Section
+          title="Recent activity"
+          loading={tl}
+          error={te}
+          action={<LinkButton onClick={() => onTab('timeline')}>Full timeline →</LinkButton>}
+          testId="profile-recent-activity"
+        >
+          {events.length === 0 ? (
+            <Quiet>No events have been recorded for this profile yet.</Quiet>
+          ) : (
+            <div className="flex flex-col">
+              {events.slice(0, 5).map(e => (
+                <div key={e.key} className="flex items-baseline justify-between gap-3 border-t py-2 text-[13px] first:border-t-0" style={{ borderColor: 'var(--ae-edge)' }}>
+                  <span className="min-w-0 truncate">{humanize(e.type)}{e.source ? <span style={{ color: 'var(--ae-mute)' }}> · {e.source}</span> : null}</span>
+                  <span className="ae-mono flex-none text-[11px]" style={{ color: 'var(--ae-mute)' }}>{ago(e.at) ?? 'time not reported'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+
+        <Section title="Loyalty & rewards" loading={rl} error={rle}>
+          {hasRewards ? (
+            <div className="grid grid-cols-2 gap-2.5">
+              <Stat label="Tier" value={r.tier ? <TonePill tone="solar">{fmt(r.tier)}</TonePill> : '—'} />
+              <Stat label="Points" value={fmt(r.points_balance)} />
+              <Stat label="Rewards earned" value={fmt(r.rewards_earned)} />
+              <Stat label="Campaigns" value={fmt(r.campaigns_participated)} />
+            </div>
+          ) : (
+            <Quiet>No loyalty or reward activity is reported for this profile.</Quiet>
+          )}
+        </Section>
+
+        <Section title="Platforms" loading={pl} error={ple}>
+          <div className="flex flex-wrap gap-2">
+            {pList.length === 0
+              ? <Quiet>No platform data</Quiet>
+              : pList.map((p, pi) => {
+                  const pr = asRecord(p);
+                  const name = fmt(pr.platform ?? p);
+                  return (
+                    <span key={pi} className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px]" style={{ border: '1px solid var(--ae-edge)' }}>
+                      <span className="font-medium">{name}</span>
+                      {pr.session_count !== undefined && (
+                        <span style={{ color: 'var(--ae-mute)' }}>{fmt(pr.session_count)} sessions</span>
+                      )}
+                    </span>
+                  );
+                })
+            }
+          </div>
+        </Section>
+      </div>
+
+      <div className="ae-legacy">
+        <ProfileExplorationPanel entityId={userId} />
+      </div>
+    </div>
+  );
+}
+
+// ── Timeline tab ──────────────────────────────────────────────────────────────
+
+function TimelineTab({ userId }: { userId: string }) {
+  const [limit, setLimit] = useState(50);
+  const [type, setType] = useState<string | null>(null);
+  const { data, isLoading, error } = useUserTimeline(userId, { limit });
+  const events = useMemo(() => timelineEvents(data), [data]);
+  const types = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const e of events) counts.set(e.type, (counts.get(e.type) ?? 0) + 1);
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+  }, [events]);
+  const shown = type ? events.filter(e => e.type === type) : events;
+
+  return (
+    <Section
+      title={events.length > 0 ? `Timeline · ${events.length} latest events` : 'Timeline'}
+      loading={isLoading}
+      error={error}
+      testId="profile-timeline"
+    >
+      {events.length === 0 ? (
+        <Quiet>No events have been recorded for this profile yet. Events appear here once an SDK or connected source sends activity for it.</Quiet>
+      ) : (
+        <>
+          {types.length > 1 && (
+            <div className="flex flex-wrap gap-1.5">
+              <ChoiceChip size="sm" selected={type === null} onClick={() => setType(null)}>All</ChoiceChip>
+              {types.map(([t, n]) => (
+                <ChoiceChip key={t} size="sm" selected={type === t} onClick={() => setType(t)}>{humanize(t)} · {n}</ChoiceChip>
+              ))}
+            </div>
+          )}
+          <ol className="flex flex-col">
+            {shown.map(e => (
+              <li key={e.key} className="grid gap-x-3" style={{ gridTemplateColumns: 'minmax(64px, 90px) 14px 1fr' }}>
+                <span className="ae-mono pt-0.5 text-right text-[11px]" style={{ color: 'var(--ae-mute)' }}>{ago(e.at) ?? '—'}</span>
+                <span className="flex flex-col items-center">
+                  <span className="mt-1 h-2.5 w-2.5 rounded-full" style={{ background: 'var(--ae-blue)' }} />
+                  <span className="w-px flex-1" style={{ background: 'var(--ae-edge)' }} />
+                </span>
+                <div className="min-w-0 pb-3.5">
+                  <div className="text-[14px] font-medium">{humanize(e.type)}</div>
+                  <div className="truncate text-[12px]" style={{ color: 'var(--ae-mute)' }}>
+                    {[e.source, e.detail, e.at ? new Date(e.at).toLocaleString() : null].filter(Boolean).join(' · ') || 'no further detail reported'}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ol>
+          {events.length >= limit && limit < 500 && (
+            <LinkButton onClick={() => setLimit(500)}>Load older events →</LinkButton>
+          )}
+        </>
+      )}
+    </Section>
+  );
+}
+
+// ── Agents tab ────────────────────────────────────────────────────────────────
+
+function AgentsTab({ userId, identity, summary }: { userId: string; identity: ProfileIdentity; summary: unknown }) {
+  const navigate = useNavigate();
+  const { data, isLoading, error } = useUserGraph(userId);
+  const network = useMemo(() => profileNetwork(data, userId), [data, userId]);
+  const agents = network.nodes.filter(n => n.group === 'agents');
+  const counts = asRecord(asRecord(asRecord(summary).snapshot).counts);
+  const countTiles: Array<[string, unknown]> = [
+    ['Owned agents', counts.agents],
+    ['Agent executions', counts.agent_executions],
+    ['Active delegations granted', counts.active_delegations_granted],
+    ['Active delegations received', counts.active_delegations_received],
+  ];
+  const reported = countTiles.filter(([, v]) => typeof v === 'number');
+
+  return (
+    <div className="flex flex-col gap-3.5" data-testid="profile-agents">
+      {reported.length > 0 && (
+        <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+          {reported.map(([label, v]) => <MetricTile key={label} label={label} value={String(v)} />)}
+        </div>
+      )}
+      <Section
+        title={`Agents acting for ${identity.name}`}
+        loading={isLoading}
+        error={error}
+        action={<LinkButton onClick={() => void navigate('/agent-access')}>Agent access →</LinkButton>}
+      >
+        {agents.length === 0 ? (
+          <Quiet>No agents are linked to this profile in the relationship graph. Agents appear here once an agent acts on this profile's behalf or is delegated authority by it.</Quiet>
+        ) : (
+          <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(300px, 100%), 1fr))' }}>
+            {agents.map(a => {
+              const links = network.links.filter(l => l.other === a.id);
+              return (
+                <div key={a.id} className="flex flex-col gap-2 rounded-[16px] px-4 py-3" style={{ background: 'var(--ae-glass-card)', border: '1px solid var(--ae-edge)' }} data-agent={a.id}>
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full" style={{ background: 'var(--ae-solar-wash)', color: 'var(--ae-solar-ink)' }}>
+                      <Icon name="bot" decorative size="sm" />
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                      <span className="truncate text-[14px] font-medium">{a.label}</span>
+                      <span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>{a.kind ? humanize(a.kind) : 'agent'}{a.trust !== null ? ` · trust ${Math.round(a.trust * 100)}` : ''}</span>
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {links.length === 0 && <TonePill tone="mute">no direct edge reported</TonePill>}
+                    {links.map(l => (
+                      <TonePill key={l.id} tone={l.inferred ? 'amber' : 'solar'}>
+                        {l.relation ? humanize(l.relation) : 'related'}{l.interactionClass ? ` · ${l.interactionClass}` : ''}{l.confidence !== null ? ` · ${Math.round(l.confidence * 100)}%` : ''}{l.inferred ? ' · inferred' : ''}
+                      </TonePill>
+                    ))}
+                  </div>
+                  <LinkButton onClick={() => void navigate(neighbourHref(a).to)}>Open agent →</LinkButton>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Section>
+    </div>
+  );
+}
+
+// ── Identity tab ──────────────────────────────────────────────────────────────
+
+function IdentityTab({ userId, onTab }: { userId: string; onTab: (t: ProfileTab) => void }) {
+  const { data: ids, isLoading, error } = useUserIdentifiers(userId);
+  const groups = identifierGroups(ids);
+  return (
+    <div className="flex flex-col gap-3.5" data-testid="profile-identity">
+      {/* Identity: the canonical entity, confidence and the evidence behind it */}
+      <div className="ae-legacy">
+        <Profile360IdentityPanel userId={userId} />
+      </div>
+      <Section
+        title="Identifiers"
+        loading={isLoading}
+        error={error}
+        action={<LinkButton onClick={() => onTab('sessions')}>Sessions & devices →</LinkButton>}
+      >
+        {groups.length === 0 ? (
+          <Quiet>No identifiers are linked to this profile yet.</Quiet>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {groups.map(g => (
+              <div key={g.kind} className="flex flex-wrap items-start gap-2">
+                <span className="w-28 flex-none text-[12px] capitalize" style={{ color: 'var(--ae-mute)' }}>{humanize(g.kind)}</span>
+                <div className="flex min-w-0 flex-1 flex-wrap gap-1">
+                  {g.values.slice(0, 12).map((v, vi) => (
+                    <code key={vi} className="ae-mono break-all rounded-md px-1.5 py-0.5 text-[12px]" style={{ background: 'var(--ae-glass-card)', border: '1px solid var(--ae-edge-soft)' }}>{v}</code>
                   ))}
-                  {items.length > 6 && <span className="text-xs text-text-muted">+{items.length - 6} more</span>}
+                  {g.values.length > 12 && <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>+{g.values.length - 12} more</span>}
                 </div>
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        )}
       </Section>
     </div>
   );
@@ -915,15 +1259,17 @@ function AttributionTab({ userId }: { userId: string }) {
   );
 }
 
-// ── Relationships / Graph tab ─────────────────────────────────────────────────
+// ── Network tab (relationships / graph) ───────────────────────────────────────
 
-function RelationshipsTab({ userId }: { userId: string }) {
+function NetworkTab({ userId, rootLabel }: { userId: string; rootLabel: string }) {
   const timeCtx = useTimeContext();
+  const navigate = useNavigate();
   const { data: graphData, isLoading: gl, error: ge } = useUserGraph(userId);
 
   const g = asRecord(graphData);
   const edges = asList(g.edges);
   const nodes = asList(g.nodes);
+  const network = useMemo(() => profileNetwork(graphData, userId), [graphData, userId]);
 
   type Row = Record<string, unknown>;
 
@@ -936,9 +1282,17 @@ function RelationshipsTab({ userId }: { userId: string }) {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Identity: the canonical entity, confidence and the evidence behind it */}
-      <Profile360IdentityPanel userId={userId} />
+    <div className="flex flex-col gap-3.5" data-testid="profile-network">
+      <Section
+        title={network.links.length > 0 ? `Network · ${network.links.length} relationships` : 'Network'}
+        loading={gl}
+        error={ge}
+        action={<LinkButton onClick={() => void navigate(`/explore?entity=${encodeURIComponent(userId)}`)}>Open in Graph →</LinkButton>}
+      >
+        {network.nodes.length === 0
+          ? <Quiet>No relationships are recorded in the graph for this profile yet. They appear once events, identity matches or transfers connect it to other people, agents, wallets or devices.</Quiet>
+          : <ProfileNetworkMap network={network} rootLabel={rootLabel} />}
+      </Section>
 
       {/* Relationship edges */}
       <Section title="Relationship edges (H2H / H2A / A2H / A2A)" loading={gl} error={ge}>
@@ -979,8 +1333,6 @@ function RelationshipsTab({ userId }: { userId: string }) {
     </div>
   );
 }
-
-// ── Profile page ──────────────────────────────────────────────────────────────
 
 // ── Social Intelligence tab ────────────────────────────────────────────────────
 // Renders the canonical social-intelligence envelope (the Profile360
@@ -1590,27 +1942,30 @@ function ProfileIntegrationBanner() {
   const href = `/integrations?return=${encodeURIComponent(window.location.pathname + window.location.search)}`;
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       {model.connect && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-accent/30 bg-accent/5 px-3 py-2">
-          <p className="text-xs text-text-secondary">
-            <span className="font-medium text-text-primary">
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 rounded-[14px] px-3.5 py-2.5"
+          style={{ background: 'var(--ae-blue-tint)', border: '1px solid var(--ae-edge)' }}
+        >
+          <p className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>
+            <span className="font-medium" style={{ color: 'var(--ae-ink)' }}>
               {model.connect.categoryLabel}
             </span>{' '}
             isn't connected yet — connect it under Integrations to enrich this
             profile with {PROFILE_CONNECT_COPY[model.connect.category] ?? 'data'}.
           </p>
-          <Link
-            to={href}
-            className="text-xs font-medium text-accent hover:underline"
-          >
+          <Link to={href} className="ae-focus text-[12px] font-medium hover:underline" style={{ color: 'var(--ae-blue-ink)' }}>
             Connect {model.connect.categoryLabel}
           </Link>
         </div>
       )}
       {model.attention.length > 0 && (
-        <div className="space-y-1 rounded-md border border-status-warning/40 bg-status-warning/10 px-3 py-2">
-          <p className="text-xs font-medium text-text-primary">
+        <div
+          className="flex flex-col gap-1 rounded-[14px] px-3.5 py-2.5"
+          style={{ background: 'var(--ae-amber-tint)', border: '1px solid var(--ae-edge)' }}
+        >
+          <p className="text-[12px] font-medium">
             Integrations need attention
           </p>
           {model.attention.map((item) => (
@@ -1618,7 +1973,7 @@ function ProfileIntegrationBanner() {
               key={item.key}
               className="flex flex-wrap items-center justify-between gap-2"
             >
-              <p className="text-xs text-text-secondary">
+              <p className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>
                 <span className="font-medium">{item.display_name}</span>
                 {item.attention_reasons.length > 0
                   ? ` — ${item.attention_reasons
@@ -1626,10 +1981,7 @@ function ProfileIntegrationBanner() {
                       .join(', ')}`
                   : ''}
               </p>
-              <Link
-                to={href}
-                className="text-xs font-medium text-accent hover:underline"
-              >
+              <Link to={href} className="ae-focus text-[12px] font-medium hover:underline" style={{ color: 'var(--ae-amber)' }}>
                 Fix in Integrations
               </Link>
             </div>
@@ -1640,101 +1992,314 @@ function ProfileIntegrationBanner() {
   );
 }
 
+// ── Profile page (design: Aether Profile 360 v2) ─────────────────────────────
+
+const PRIMARY_TABS: ReadonlyArray<readonly [ProfileTab, string]> = [
+  ['overview', 'Overview'],
+  ['timeline', 'Timeline'],
+  ['journeys', 'Journeys'],
+  ['agents', 'Agents'],
+  ['network', 'Network'],
+  ['identity', 'Identity'],
+];
+
+const MORE_TABS: ReadonlyArray<readonly [ProfileTab, string]> = [
+  ['sessions', 'Sessions & Devices'],
+  ['communications', 'Communications'],
+  ['social', 'Social'],
+  ['wallets', 'Web3 Wallets'],
+  ['financials', 'Financials'],
+  ['behavioral', 'Behavior'],
+  ['attribution', 'Attribution'],
+  ['outcomes', 'Outcomes'],
+  ['defi', 'DeFi'],
+  ['funnel', 'Funnel'],
+  ['protocols', 'Protocols'],
+  ['insights', 'Insights'],
+];
+
+/** Older links used the legacy tab values; they land on the v2 equivalent. */
+const TAB_ALIASES: Record<string, ProfileTab> = { relationships: 'network', graph: 'network' };
+
+const ALL_TABS = new Set<string>([...PRIMARY_TABS, ...MORE_TABS].map(([k]) => k));
+
+export function resolveProfileTab(raw: string | null): ProfileTab {
+  if (!raw) return 'overview';
+  const t = TAB_ALIASES[raw] ?? raw;
+  return ALL_TABS.has(t) ? (t as ProfileTab) : 'overview';
+}
+
+const WINDOWS: ReadonlyArray<readonly [TimeWindow, string]> = [
+  ['30d', '30d'],
+  ['60d', '60d'],
+  ['90d', '90d'],
+  ['lifetime', 'Lifetime'],
+];
+
+function TabButton({ value, label, active, onSelect, small = false }: {
+  value: ProfileTab;
+  label: string;
+  active: boolean;
+  onSelect: (t: ProfileTab) => void;
+  small?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      data-tab={value}
+      onClick={() => onSelect(value)}
+      className={`ae-focus whitespace-nowrap rounded-full transition-colors ${small ? 'px-2.5 py-1 text-[12px]' : 'px-3.5 py-1.5 text-[13px]'}`}
+      style={{
+        background: active ? 'var(--ae-chip-on)' : 'transparent',
+        color: active ? 'var(--ae-chip-on-ink)' : 'var(--ae-ink)',
+        ...(small ? { border: `1px solid ${active ? 'var(--ae-chip-on)' : 'var(--ae-edge)'}` } : {}),
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function HeroPill({ tone, children, icon }: { tone: Tone; children: ReactNode; icon?: string }) {
+  return (
+    <TonePill tone={tone} className="gap-1 px-2.5 py-[3px] text-[12px]">
+      {icon && <Icon name={icon} decorative size="sm" />}
+      {children}
+    </TonePill>
+  );
+}
+
+function ProfileHero({ userId, identity, summary, loading }: {
+  userId: string;
+  identity: ProfileIdentity;
+  summary: Record<string, unknown>;
+  loading: boolean;
+}) {
+  const navigate = useNavigate();
+  const s = summary;
+  const trust = s.trust_score === undefined || s.trust_score === null ? null : Number(s.trust_score);
+  const risk = s.risk_score === undefined || s.risk_score === null ? null : Number(s.risk_score);
+  const lastSeen = ago(identity.lastSeenAt);
+  const since = identity.firstSeenAt && !Number.isNaN(Date.parse(identity.firstSeenAt))
+    ? new Date(identity.firstSeenAt).getFullYear()
+    : null;
+
+  return (
+    <div
+      className="flex flex-wrap items-center justify-between gap-4 rounded-[22px] px-[22px] py-[18px]"
+      style={{
+        background: 'var(--ae-glass-card)',
+        WebkitBackdropFilter: 'blur(20px) saturate(1.4)',
+        backdropFilter: 'blur(20px) saturate(1.4)',
+        border: '1px solid var(--ae-blue-tint)',
+        boxShadow: 'inset 0 2px 0 var(--ae-blue), var(--ae-lift)',
+      }}
+      data-testid="profile-hero"
+    >
+      <div className="flex min-w-0 items-center gap-4">
+        <span
+          className="ae-mono flex h-[60px] w-[60px] flex-none items-center justify-center rounded-full text-[20px]"
+          style={{ background: 'var(--ae-shell)', border: '2px solid var(--ae-blue)', boxShadow: '0 0 0 4px var(--ae-solar-wash)' }}
+          aria-hidden="true"
+        >
+          {initials(identity.name)}
+        </span>
+        <span className="flex min-w-0 flex-col gap-[7px]">
+          {loading ? (
+            <span className="ae-pulse block h-7 w-48 rounded-md" style={{ background: 'var(--ae-edge-soft)' }} />
+          ) : (
+            <h1
+              className={`break-all text-[clamp(22px,3vw,28px)] font-medium leading-none tracking-[-0.56px] ${identity.nameIsId ? 'ae-mono' : ''}`}
+            >
+              {identity.name}
+            </h1>
+          )}
+          <span className="flex flex-wrap gap-1.5" data-testid="profile-hero-pills">
+            {(identity.kind || identity.known !== null) && (
+              <HeroPill tone="blue">
+                {[identity.kind ? identity.kind[0]!.toUpperCase() + identity.kind.slice(1) : null, identity.known === true ? 'Known profile' : identity.known === false ? 'No entity record' : null].filter(Boolean).join(' · ')}
+              </HeroPill>
+            )}
+            {trust !== null && Number.isFinite(trust) && (
+              <HeroPill tone={trust > 0.6 ? 'sage' : 'amber'} icon="shield-check">Trust {fmtScore(trust)}</HeroPill>
+            )}
+            {risk !== null && Number.isFinite(risk) && (
+              <HeroPill tone={risk > 0.5 ? 'ember' : 'sage'}>Risk {fmtScore(risk)}</HeroPill>
+            )}
+            {lastSeen && <HeroPill tone="sage">● active {lastSeen}</HeroPill>}
+            {identity.counts.agents !== null && identity.counts.agents > 0 && (
+              <HeroPill tone="solar" icon="bot">{identity.counts.agents} agent{identity.counts.agents === 1 ? '' : 's'}</HeroPill>
+            )}
+            {identity.counts.wallets !== null && identity.counts.wallets > 0 && (
+              <HeroPill tone="mute" icon="wallet-cards">{identity.counts.wallets} wallet{identity.counts.wallets === 1 ? '' : 's'}</HeroPill>
+            )}
+            {!!s.loyalty_tier && s.loyalty_tier !== 'none' && <HeroPill tone="solar">{fmt(s.loyalty_tier)}</HeroPill>}
+            {!!s.churn_risk && (
+              <HeroPill tone={s.churn_risk === 'low' ? 'sage' : s.churn_risk === 'churned' ? 'ember' : 'amber'}>{`${fmt(s.churn_risk)} churn risk`}</HeroPill>
+            )}
+            {since !== null && <HeroPill tone="mute">since {since}</HeroPill>}
+          </span>
+          {!identity.nameIsId && (
+            <span className="ae-mono break-all text-[11px]" style={{ color: 'var(--ae-faint)' }}>{userId}</span>
+          )}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <PrimaryButton onClick={() => void navigate(`/users/${encodeURIComponent(userId)}/journey`)} data-testid="profile-view-journey">
+          View journey
+        </PrimaryButton>
+        <SecondaryButton onClick={() => void navigate(`/explore?entity=${encodeURIComponent(userId)}`)} data-testid="profile-open-graph">
+          Open in Graph
+        </SecondaryButton>
+      </div>
+    </div>
+  );
+}
+
+function Breadcrumb({ userId, name }: { userId: string; name: string | null }) {
+  return (
+    <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-[13px]" style={{ color: 'var(--ae-mute)' }}>
+      <Link
+        to={`/users?profile=${encodeURIComponent(userId)}`}
+        className="ae-focus flex items-center gap-1 hover:underline"
+        style={{ color: 'var(--ae-mute)' }}
+      >
+        <span aria-hidden="true">←</span> Profiles
+      </Link>
+      {name && (
+        <>
+          <span aria-hidden="true">/</span>
+          <span className="truncate" style={{ color: 'var(--ae-ink)' }}>{name}</span>
+        </>
+      )}
+    </nav>
+  );
+}
+
 export function UserProfilePage() {
   const { id: userId = '' } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [window, setWindow] = useState<TimeWindow>('30d');
   const { data: summary, isLoading: headerLoading, error: headerError } = useUserProfile(userId);
   const s = asRecord(summary);
+  const identity = useMemo(() => profileIdentity(summary, userId), [summary, userId]);
+  const tab = resolveProfileTab(searchParams.get('tab'));
+
+  // Tabs are part of the URL so they survive reloads, back/forward and links
+  // from elsewhere in the app (e.g. ?tab=network).
+  const selectTab = (next: ProfileTab) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'overview') params.delete('tab');
+    else params.set('tab', next);
+    setSearchParams(params);
+  };
 
   if (!userId) {
-    return <ErrorState title="No user ID" message="Please select a user from the list." />;
+    return (
+      <GlassPage>
+        <div className="ae-legacy">
+          <ErrorState title="No user ID" message="Please select a user from the list." />
+        </div>
+      </GlassPage>
+    );
   }
 
   if (headerError) {
-    return <ErrorState title="Failed to load user profile" message={headerError} className="p-8" />;
+    return (
+      <GlassPage>
+        <Breadcrumb userId={userId} name={null} />
+        <div className="ae-legacy">
+          <ErrorState title="Failed to load user profile" message={headerError} className="p-8" />
+        </div>
+      </GlassPage>
+    );
   }
 
+  const usesWindow = tab === 'social' || tab === 'defi' || tab === 'funnel' || tab === 'protocols' || tab === 'insights';
+
   return (
-    <div className="p-8 space-y-6">
-      {/* Back + header */}
-      <div className="flex items-start gap-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/users')}>← Users</Button>
-        <div className="flex-1">
-          {headerLoading ? (
-            <Skeleton className="h-6 w-48" />
-          ) : (
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-xl font-semibold text-text-primary font-mono">{userId}</h1>
-              <TimeWindowSelector value={window} onChange={setWindow} className="ml-auto" />
-              {!!s.loyalty_tier && s.loyalty_tier !== 'none' && (
-                <Badge variant="warning">{fmt(s.loyalty_tier)}</Badge>
-              )}
-              {!!s.churn_risk && (
-                <Badge variant={s.churn_risk === 'low' ? 'success' : s.churn_risk === 'churned' ? 'danger' : 'warning'}>
-                  {`${fmt(s.churn_risk)} churn risk`}
-                </Badge>
-              )}
-              {s.trust_score !== undefined && (
-                <Badge variant={Number(s.trust_score) > 0.6 ? 'success' : 'warning'}>
-                  Trust {fmtScore(s.trust_score)}
-                </Badge>
-              )}
-              {s.risk_score !== undefined && (
-                <Badge variant={Number(s.risk_score) > 0.5 ? 'danger' : 'success'}>
-                  Risk {fmtScore(s.risk_score)}
-                </Badge>
-              )}
-            </div>
-          )}
-          {!!s.last_seen_at && (
-            <p className="text-sm text-text-secondary mt-0.5">Last seen {relTime(s.last_seen_at as string)}</p>
+    <GlassPage>
+      <div className="flex min-w-0 flex-col gap-4" data-testid="profile-360">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Breadcrumb userId={userId} name={headerLoading ? null : identity.name} />
+          {usesWindow && (
+            <span className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Time window">
+              <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>Window</span>
+              {WINDOWS.map(([w, label]) => (
+                <ChoiceChip key={w} size="sm" selected={window === w} onClick={() => setWindow(w)}>{label}</ChoiceChip>
+              ))}
+            </span>
           )}
         </div>
+
+        <ProfileHero userId={userId} identity={identity} summary={s} loading={headerLoading} />
+
+        {/* Contextual integration readiness (WS-4) */}
+        <ProfileIntegrationBanner />
+
+        {/* Tabs (v2: Overview · Timeline · Journeys · Agents · Network · Identity) */}
+        <div className="flex flex-col gap-2">
+          <div
+            role="tablist"
+            aria-label="Profile sections"
+            className="flex flex-wrap gap-0.5 self-start rounded-[22px] p-[3px]"
+            style={{ background: 'var(--ae-glass-card)', border: '1px solid var(--ae-edge)' }}
+          >
+            {PRIMARY_TABS.map(([value, label]) => (
+              <TabButton key={value} value={value} label={label} active={tab === value} onSelect={selectTab} />
+            ))}
+          </div>
+          <div role="tablist" aria-label="More profile signals" className="flex flex-wrap items-center gap-1.5">
+            <span className="ae-eyebrow mr-1">More signals</span>
+            {MORE_TABS.map(([value, label]) => (
+              <TabButton key={value} value={value} label={label} active={tab === value} onSelect={selectTab} small />
+            ))}
+          </div>
+        </div>
+
+        <div role="tabpanel" aria-label={[...PRIMARY_TABS, ...MORE_TABS].find(([k]) => k === tab)?.[1]} className="ae-rise min-w-0" key={tab}>
+          {tab === 'overview' && <OverviewTab userId={userId} identity={identity} onTab={selectTab} />}
+          {tab === 'timeline' && <TimelineTab userId={userId} />}
+          {tab === 'journeys' && (
+            <div className="flex flex-col gap-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-[16px] px-4 py-3" style={{ background: 'var(--ae-glass-card)', border: '1px solid var(--ae-edge)' }}>
+                <span className="text-[13px]" style={{ color: 'var(--ae-mute)' }}>
+                  Step-by-step touchpoints, evidence and campaign context live in the journey explorer.
+                </span>
+                <Link
+                  to={`/users/${encodeURIComponent(userId)}/journey`}
+                  className="ae-focus text-[13px] font-medium hover:underline"
+                  style={{ color: 'var(--ae-blue-ink)' }}
+                  data-testid="profile-journey-explorer-link"
+                >
+                  Open journey explorer →
+                </Link>
+              </div>
+              <div className="ae-legacy flex flex-col gap-3.5">
+                <RecommendationCards userId={userId} />
+                <JourneysTab userId={userId} />
+              </div>
+            </div>
+          )}
+          {tab === 'agents' && <AgentsTab userId={userId} identity={identity} summary={summary} />}
+          {tab === 'network' && <NetworkTab userId={userId} rootLabel={identity.name} />}
+          {tab === 'identity' && <IdentityTab userId={userId} onTab={selectTab} />}
+          {tab === 'sessions' && <SessionsTab userId={userId} />}
+          {tab === 'communications' && <CommunicationsTab userId={userId} />}
+          {tab === 'social' && <SocialTab userId={userId} window={window} />}
+          {tab === 'wallets' && <WalletsTab userId={userId} />}
+          {tab === 'financials' && <FinancialsTab userId={userId} />}
+          {tab === 'behavioral' && <BehavioralTab userId={userId} />}
+          {tab === 'attribution' && <AttributionTab userId={userId} />}
+          {tab === 'outcomes' && <div className="ae-legacy"><OutcomeLedgerPanel entityId={userId} /></div>}
+          {tab === 'defi' && <DeFiTab userId={userId} window={window} />}
+          {tab === 'funnel' && <FunnelTab userId={userId} window={window} />}
+          {tab === 'protocols' && <ProtocolsTab userId={userId} window={window} />}
+          {tab === 'insights' && <InsightsTab userId={userId} window={window} />}
+        </div>
       </div>
-
-      {/* Contextual integration readiness (WS-4) */}
-      <ProfileIntegrationBanner />
-
-      {/* Tabbed content */}
-      <Tabs defaultValue="overview">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="sessions">Sessions & Devices</TabsTrigger>
-          <TabsTrigger value="journeys">Journeys</TabsTrigger>
-          <TabsTrigger value="communications">Communications</TabsTrigger>
-          <TabsTrigger value="social">Social</TabsTrigger>
-          <TabsTrigger value="wallets">Web3 Wallets</TabsTrigger>
-          <TabsTrigger value="financials">Financials</TabsTrigger>
-          <TabsTrigger value="behavioral">Behavior</TabsTrigger>
-          <TabsTrigger value="attribution">Attribution</TabsTrigger>
-          <TabsTrigger value="relationships">Graph</TabsTrigger>
-          <TabsTrigger value="outcomes">Outcomes</TabsTrigger>
-          <TabsTrigger value="defi">DeFi</TabsTrigger>
-          <TabsTrigger value="funnel">Funnel</TabsTrigger>
-          <TabsTrigger value="protocols">Protocols</TabsTrigger>
-          <TabsTrigger value="insights">Insights</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="overview"><OverviewTab userId={userId} /></TabsContent>
-        <TabsContent value="sessions"><SessionsTab userId={userId} /></TabsContent>
-        <TabsContent value="journeys">
-          <RecommendationCards userId={userId} />
-          <JourneysTab userId={userId} />
-        </TabsContent>
-        <TabsContent value="communications"><CommunicationsTab userId={userId} /></TabsContent>
-        <TabsContent value="social"><SocialTab userId={userId} window={window} /></TabsContent>
-        <TabsContent value="wallets"><WalletsTab userId={userId} /></TabsContent>
-        <TabsContent value="financials"><FinancialsTab userId={userId} /></TabsContent>
-        <TabsContent value="behavioral"><BehavioralTab userId={userId} /></TabsContent>
-        <TabsContent value="attribution"><AttributionTab userId={userId} /></TabsContent>
-        <TabsContent value="relationships"><RelationshipsTab userId={userId} /></TabsContent>
-        <TabsContent value="outcomes"><OutcomeLedgerPanel entityId={userId} /></TabsContent>
-        <TabsContent value="defi"><DeFiTab userId={userId} window={window} /></TabsContent>
-        <TabsContent value="funnel"><FunnelTab userId={userId} window={window} /></TabsContent>
-        <TabsContent value="protocols"><ProtocolsTab userId={userId} window={window} /></TabsContent>
-        <TabsContent value="insights"><InsightsTab userId={userId} window={window} /></TabsContent>
-      </Tabs>
-    </div>
+    </GlassPage>
   );
 }
