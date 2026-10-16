@@ -85,6 +85,21 @@ describe('SDK fleet helpers', () => {
     expect(sdkIdsForPlatforms(['web', 'android'])).toEqual(['web', 'android']);
   });
 
+  it('tells Web and React apart on resume by their per-SDK key labels', () => {
+    expect(sdkIdsForPlatforms(['web'], ['React wrapper · onboarding'])).toEqual(['react']);
+    expect(sdkIdsForPlatforms(['web'], ['Web SDK · onboarding', 'React wrapper · onboarding'])).toEqual(['web', 'react']);
+  });
+
+  it('gives browser SDKs publishable keys and tags server keys with the accepted platform', () => {
+    const byId = Object.fromEntries(SDK_OPTIONS.map(sdk => [sdk.id, sdk]));
+    expect(byId['web']?.keyKind).toBe('publishable');
+    expect(byId['react']?.keyKind).toBe('publishable');
+    expect(byId['ios']?.keyKind).toBe('secret');
+    expect(byId['server']?.keyPlatform).toBe('node');
+    const accepted = ['web', 'ios', 'android', 'react-native', 'node', 'other'];
+    for (const sdk of SDK_OPTIONS) expect(accepted).toContain(sdk.keyPlatform);
+  });
+
   it('uses the canonical native install coordinates and shared SDK version', () => {
     const android = SDK_OPTIONS.find(sdk => sdk.id === 'android')?.snippet ?? '';
     const ios = SDK_OPTIONS.find(sdk => sdk.id === 'ios')?.snippet ?? '';
@@ -123,7 +138,7 @@ describe('stageStatuses', () => {
         { name: 'identity_resolution_verified', status: 'pending' },
         { name: 'profile360_verified', status: 'pending' },
       ]),
-    ).toEqual(['passed', 'running', 'waiting', 'waiting', 'waiting']);
+    ).toEqual(['passed', 'running', 'waiting', 'unknown', 'unknown']);
   });
 
   it('surfaces failures and treats not_applicable as done', () => {
@@ -133,11 +148,12 @@ describe('stageStatuses', () => {
         { name: 'identity_resolution_verified', status: 'not_applicable' },
         { name: 'profile360_verified', status: 'failed' },
       ]),
-    ).toEqual(['passed', 'not_applicable', 'failed', 'waiting', 'waiting']);
+    ).toEqual(['passed', 'not_applicable', 'failed', 'unknown', 'unknown']);
   });
 
-  it('is all waiting-but-first when nothing has been recorded', () => {
-    expect(stageStatuses(null)).toEqual(['running', 'waiting', 'waiting', 'waiting', 'waiting']);
+  it('never reports progress the server did not report (loading, failed or omitted checklist)', () => {
+    expect(stageStatuses(null)).toEqual(['unknown', 'unknown', 'unknown', 'unknown', 'unknown']);
+    expect(stageStatuses([])).toEqual(['unknown', 'unknown', 'unknown', 'unknown', 'unknown']);
   });
 });
 

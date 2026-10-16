@@ -92,7 +92,8 @@ Copy invariants:
 record is `complete`, or whose operator implementation plan is live /
 value-proven / expansion-ready, is resolved to Home (`/home`). Any other tenant
 is resolved into `/activation` (workspace onboarding), which resumes at the step
-implied by the activation record. Outside production, `/?onboarding=restart`
+implied by the activation record; that redirect waits until both the activation
+and operator-plan reads have settled, so either axis can establish completion. Outside production, `/?onboarding=restart`
 walks a tester through onboarding from step 1 without resetting server state. A
 requested deep link to a protected workspace renders directly after auth and
 never passes through this resolver. The resolver holds on a loading state until

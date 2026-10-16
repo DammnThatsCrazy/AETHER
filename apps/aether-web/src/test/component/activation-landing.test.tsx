@@ -102,6 +102,20 @@ describe('Tenant landing routing', () => {
     expect(screen.getByText('HOME ROUTE')).toBeInTheDocument();
   });
 
+  it('waits for the operator-plan read before sending an incomplete tenant to onboarding', () => {
+    state.status = settled({ state: 'waiting_for_event' });
+    state.onboarding = { data: null, isLoading: true, error: null, refetch: vi.fn() };
+    const view = renderLanding('/');
+    expect(screen.queryByText('ACTIVATION ROUTE')).not.toBeInTheDocument();
+    expect(screen.queryByText('HOME ROUTE')).not.toBeInTheDocument();
+    view.unmount();
+
+    // The plan read settles as live: the tenant is complete after all.
+    state.onboarding = settled({ plan: { status: 'live' } });
+    renderLanding('/');
+    expect(screen.getByText('HOME ROUTE')).toBeInTheDocument();
+  });
+
   it('sends a tester back through onboarding with ?onboarding=restart', () => {
     state.status = settled({ state: 'complete' });
     renderLanding('/?onboarding=restart');

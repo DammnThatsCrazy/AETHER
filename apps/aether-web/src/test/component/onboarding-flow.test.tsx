@@ -20,6 +20,9 @@ const s = vi.hoisted(() => ({
   readiness: null as unknown,
   firstValue: null as unknown,
   keys: null as unknown,
+  sites: null as unknown,
+  createSite: vi.fn(),
+  createSiteKey: vi.fn(),
   m: {} as Record<string, ReturnType<typeof Object>>,
 }));
 
@@ -51,6 +54,11 @@ vi.mock('@aether-app/features/onboarding/use-workspace-setup', () => ({
   useCreateTenantApiKey: () => s.m.createTenantKey,
   useAnalyticsSummary: () => settled({ total_events: 0, unique_users: 0, total_sessions: 0 }),
   invalidateTenantApiKeys: vi.fn(),
+  useSdkSites: () => s.sites,
+  useSiteLive: () => settled({ live: false, state: 'awaiting_first_signal' }),
+  createSdkSite: (...args: unknown[]) => s.createSite(...args),
+  createSitePublishableKey: (...args: unknown[]) => s.createSiteKey(...args),
+  SDK_KEY_PERMISSIONS: ['read', 'write', 'ingest', 'analytics'],
 }));
 vi.mock('@aether-app/features/auth', () => ({ useAuth: () => ({ user: { displayName: 'Owner', email: 'o@example.test' } }) }));
 vi.mock('@aether-app/lib/env', () => ({ getEnvironment: () => 'staging' }));
@@ -120,6 +128,10 @@ beforeEach(() => {
   s.readiness = settled({ tenant_id: 't', ready: false, blocking: [], checks: [{ name: 'events_received', status: 'pending' }] });
   s.firstValue = settled({ state: 'waiting_for_event', ready: false, evidence: {} });
   s.keys = settled({ api_keys: [] });
+  s.sites = settled([]);
+  s.createSite = vi.fn().mockResolvedValue({ id: 'site_abc', name: 'Web SDK · onboarding', status: 'active' });
+  s.createSiteKey = vi.fn().mockResolvedValue({ id: 'pk1', key: 'pk_publishable123', siteId: 'site_abc', snippet: '<script data-key="pk_publishable123" data-site="site_abc"></script>' });
+  window.localStorage.clear();
   s.m = {
     complete: mutation({ state: 'complete' }),
     sendTest: mutation({ results: [{ status: 'accepted' }], state: 'event_received' }),
@@ -174,20 +186,59 @@ describe('Workspace onboarding flow', () => {
     );
   });
 
-  it('issues one key per SDK and holds Continue until the key is stored', async () => {
+  it('issues a site-bound publishable key for the Web SDK, never a secret', async () => {
     s.status = settled(activation({ intents: ['grow_revenue'], state: 'billing_pending', selected_plan_tier: 'alpha', sdk_selection: ['web'] }));
     renderFlow();
     await screen.findByTestId('onboarding-step-sdks');
 
+    expect(screen.getByTestId('generate-key-web')).toBeDisabled(); // needs the site address first
+    await userEvent.type(screen.getByTestId('site-origin-web'), 'https://www.example.com');
     await userEvent.click(screen.getByTestId('generate-key-web'));
+
     expect(s.m.selectSdks.mutate).toHaveBeenCalledWith({ platforms: ['web'] });
-    expect(s.m.createSdkKeys.mutate).toHaveBeenCalledWith({ count: 1, label: 'Web SDK · onboarding' });
-    expect(await screen.findByTestId('raw-key-web')).toHaveTextContent('ak_secretvalue1234');
+    expect(s.createSite).toHaveBeenCalledWith({ name: 'Web SDK · onboarding', origins: ['https://www.example.com'] });
+    expect(s.createSiteKey).toHaveBeenCalledWith('site_abc', 'Web SDK · onboarding');
+    expect(s.m.createSdkKeys.mutate).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('raw-key-web')).toHaveTextContent('pk_publishable123');
+    expect(screen.getByText(/data-site="site_abc"/)).toBeInTheDocument();
 
     const next = screen.getByTestId('onboarding-next');
     expect(next).toBeDisabled();
     await userEvent.click(screen.getByLabelText('I have stored this key securely'));
     expect(next).toBeEnabled();
+  });
+
+  it('issues a secret ingestion key for the Server SDK through activation', async () => {
+    s.status = settled(activation({ intents: ['grow_revenue'], state: 'billing_pending', selected_plan_tier: 'alpha', sdk_selection: ['server'] }));
+    renderFlow();
+    await screen.findByTestId('onboarding-step-sdks');
+    await userEvent.click(screen.getByTestId('generate-key-server'));
+    expect(s.m.selectSdks.mutate).toHaveBeenCalledWith({ platforms: ['server'] });
+    expect(s.m.createSdkKeys.mutate).toHaveBeenCalledWith({ count: 1, label: 'Server SDK · onboarding' });
+    expect(s.createSiteKey).not.toHaveBeenCalled();
+  });
+
+  it('issues post-activation server keys with ingest permissions and the node platform tag', async () => {
+    s.status = settled(activation({ intents: ['grow_revenue'], state: 'event_received', sdk_selection: ['server'], created_key_ids: ['k0'] }));
+    renderFlow();
+    await screen.findByTestId('onboarding-step-graph');
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    await userEvent.click(await screen.findByTestId('generate-key-server'));
+    expect(s.m.createTenantKey.mutate).toHaveBeenCalledWith({ name: 'Server SDK · onboarding', platform: 'node' });
+  });
+
+  it('does not count a key on record as stored until the visitor confirms it, and remembers the confirmation', async () => {
+    s.status = settled(activation({ intents: ['grow_revenue'], state: 'waiting_for_event', sdk_selection: ['server'], created_key_ids: ['k9'] }));
+    s.keys = settled({ api_keys: [{ id: 'k9', name: 'Server SDK · onboarding', platform: null }] });
+    const view = renderFlow();
+    await screen.findByTestId('onboarding-step-graph');
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    await screen.findByTestId('onboarding-step-sdks');
+    expect(screen.getByTestId('onboarding-next')).toBeDisabled();
+    await userEvent.click(screen.getByLabelText('I stored this key when it was issued'));
+    expect(screen.getByTestId('onboarding-next')).toBeEnabled();
+    expect(window.localStorage.getItem('aether:onboarding-key-ack:k9')).toBe('1');
+    view.unmount();
   });
 
   it('opens Home only once first value is proven, completing activation first', async () => {

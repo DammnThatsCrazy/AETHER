@@ -12,10 +12,17 @@ import {
   type ActivationStatus,
 } from '@aether-app/features/activation/use-activation';
 import {
+  createSdkSite,
+  createSitePublishableKey,
   invalidateTenantApiKeys,
   useCreateTenantApiKey,
+  useSdkSites,
+  useSiteLive,
   useTenantApiKeys,
   useTenantProfile,
+  SDK_KEY_PERMISSIONS,
+  type SdkSite,
+  type TenantApiKey,
 } from '@aether-app/features/onboarding/use-workspace-setup';
 import {
   SDK_OPTIONS,
@@ -33,45 +40,95 @@ interface RevealedKey {
   readonly id: string;
   readonly key: string;
   readonly saved: boolean;
+  readonly siteId?: string;
+  /** Server-rendered install snippet (publishable keys only). */
+  readonly snippet?: string;
+}
+
+const ACK_PREFIX = 'aether:onboarding-key-ack:';
+
+/**
+ * Whether the visitor confirmed storing a key's raw value. Persisted per key
+ * id, so a reload after issuing (when the raw value can no longer be shown)
+ * does not silently count an unconfirmed key as stored.
+ */
+export function readKeyAck(keyId: string): boolean {
+  try {
+    return window.localStorage.getItem(ACK_PREFIX + keyId) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeKeyAck(keyId: string, value: boolean): void {
+  try {
+    if (value) window.localStorage.setItem(ACK_PREFIX + keyId, '1');
+    else window.localStorage.removeItem(ACK_PREFIX + keyId);
+  } catch {
+    // Storage unavailable: the confirmation lasts for this session only.
+  }
 }
 
 function isPlanTier(value: string | null | undefined): value is ActivationPlanTier {
   return !!value && (ACTIVATION_PLAN_TIERS as readonly string[]).includes(value);
 }
 
+function parseOrigins(raw: string): string[] {
+  return raw
+    .split(/[\s,]+/)
+    .map(o => o.trim())
+    .filter(Boolean);
+}
+
 /**
  * SDK fleet state shared by the step and the flow footer: which SDKs are
- * selected, which have a key on record (by label in /v1/me/api-keys), and
- * which raw keys were revealed in this session.
+ * selected, which have a key on record (by label, across every key page),
+ * which raw keys were revealed in this session, and which were confirmed
+ * stored.
  */
 export function useSdkFleet(status: ActivationStatus | null, selected: readonly string[]) {
   const keys = useTenantApiKeys();
+  const sites = useSdkSites();
   const [revealed, setRevealed] = useState<Readonly<Record<string, RevealedKey>>>({});
-  const onRecord = (sdk: SdkOption) => (keys.data?.api_keys ?? []).find(k => k.name === sdkKeyLabel(sdk)) ?? null;
+  const [acks, setAcks] = useState<Readonly<Record<string, boolean>>>({});
+
+  const keyList: readonly TenantApiKey[] = keys.data?.api_keys ?? [];
+  const siteList: readonly SdkSite[] = sites.data ?? [];
 
   const rows = SDK_OPTIONS.filter(sdk => selected.includes(sdk.id)).map(sdk => {
+    const label = sdkKeyLabel(sdk);
     const shown = revealed[sdk.id] ?? null;
-    const record = onRecord(sdk);
+    const record = keyList.find(k => k.name === label) ?? null;
+    const site = sdk.keyKind === 'publishable' ? (siteList.find(s => s.name === label && s.status !== 'revoked') ?? null) : null;
     const issued = Boolean(shown) || Boolean(record);
-    // A key revealed in this session is ready once the visitor confirms they
-    // stored it; a key already on record was revealed in an earlier session.
-    const ready = shown ? shown.saved : Boolean(record);
-    return { sdk, shown, record, issued, ready };
+    const keyId = shown?.id ?? record?.id ?? null;
+    const acknowledged = shown ? shown.saved : keyId ? (acks[keyId] ?? readKeyAck(keyId)) : false;
+    return { sdk, shown, record, site, issued, keyId, ready: issued && acknowledged };
   });
+
+  function acknowledge(keyId: string, value: boolean) {
+    writeKeyAck(keyId, value);
+    setAcks(prev => ({ ...prev, [keyId]: value }));
+  }
 
   return {
     keys,
+    sites,
     rows,
     revealed,
     setRevealed,
+    acknowledge,
     selectedCount: rows.length,
     issuedCount: rows.filter(r => r.issued).length,
     readyCount: rows.filter(r => r.ready).length,
+    /** Whether any secret (activation-trackable) SDK key is part of the fleet. */
+    hasSecretSdk: rows.some(r => r.sdk.keyKind === 'secret'),
     live: hasReceivedEvent(status?.state),
   };
 }
 
 export type SdkFleet = ReturnType<typeof useSdkFleet>;
+type FleetRow = SdkFleet['rows'][number];
 
 export interface SdksStepProps {
   readonly status: ActivationStatus;
@@ -87,6 +144,13 @@ const BADGE: Record<'live' | 'ready' | 'issued' | 'none', { readonly label: stri
   none: { label: 'no key', tone: 'mute' },
 };
 
+function snippetFor(sdk: SdkOption, shown: RevealedKey | null, siteId: string | null): string {
+  if (shown?.snippet && sdk.id === 'web') return shown.snippet;
+  return sdk.snippet
+    .replace(/YOUR_API_KEY/g, shown ? `${shown.key.slice(0, 12)}…` : sdk.keyKind === 'publishable' ? 'pk_YOUR_PUBLISHABLE_KEY' : 'YOUR_API_KEY')
+    .replace(/YOUR_SITE_ID/g, shown?.siteId ?? siteId ?? 'site_YOUR_SITE_ID');
+}
+
 export function SdksStep({ status, selected, onToggle, fleet }: SdksStepProps) {
   const selectPlan = useSelectPlan();
   const selectSdks = useSelectSdks();
@@ -98,46 +162,67 @@ export function SdksStep({ status, selected, onToggle, fleet }: SdksStepProps) {
   const [failure, setFailure] = useState<string | null>(null);
   const [needsPlan, setNeedsPlan] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [origins, setOrigins] = useState<Readonly<Record<string, string>>>({});
 
   const signupTier = me.data?.plan?.plan_id;
 
-  async function mint(sdk: SdkOption, chosenTier?: ActivationPlanTier) {
-    setBusy(sdk.id);
-    setFailure(null);
+  /** Plan + SDK selection bookkeeping on the activation record (where the state machine allows it). */
+  async function recordSelection(chosenTier?: ActivationPlanTier): Promise<'ok' | 'needs_plan'> {
+    let route = keyMintRoute(status.state);
+    if (route === 'needs_plan') {
+      // The plan is the one chosen at signup (or picked here); never assumed.
+      const tier = chosenTier ?? (isPlanTier(signupTier) ? signupTier : null);
+      if (!tier) return 'needs_plan';
+      if (!(await selectPlan.mutate({ plan_tier: tier }))) throw new Error('Could not record your plan.');
+      setNeedsPlan(false);
+      route = 'select_then_activation';
+    }
+    if (route === 'select_then_activation' || canRecordSdkSelection(status.state)) {
+      if (!(await selectSdks.mutate({ platforms: platformsFor(selected) }))) throw new Error('Could not record the SDK selection.');
+    }
+    return 'ok';
+  }
+
+  async function mintPublishable(row: FleetRow): Promise<RevealedKey> {
+    const label = sdkKeyLabel(row.sdk);
+    let site = row.site;
+    if (!site) {
+      const list = parseOrigins(origins[row.sdk.id] ?? '');
+      if (!list.length) throw new Error(`Enter the site address ${row.sdk.short} runs on, e.g. https://example.com.`);
+      site = await createSdkSite({ name: label, origins: list });
+    }
+    const pk = await createSitePublishableKey(site.id, label);
+    return { id: pk.id, key: pk.key, saved: false, siteId: pk.siteId, snippet: pk.snippet };
+  }
+
+  async function mintSecret(sdk: SdkOption): Promise<RevealedKey> {
     const label = sdkKeyLabel(sdk);
+    const route = keyMintRoute(status.state);
+    if (route === 'select_then_activation' || route === 'activation' || route === 'needs_plan') {
+      const result = await createSdkKeys.mutate({ count: 1, label });
+      const key = result?.keys[0];
+      if (!key) throw new Error('Could not issue a key.');
+      return { id: key.id, key: key.key, saved: false };
+    }
+    const created = await createTenantKey.mutate({ name: label, platform: sdk.keyPlatform });
+    if (!created) throw new Error('Could not issue a key.');
+    return { id: created.id, key: created.key || created.api_key, saved: false };
+  }
+
+  async function mint(row: FleetRow, chosenTier?: ActivationPlanTier) {
+    setBusy(row.sdk.id);
+    setFailure(null);
     try {
-      let route = keyMintRoute(status.state);
-      if (route === 'blocked') {
+      if (keyMintRoute(status.state) === 'blocked') {
         setFailure(status.waiting_reason ?? 'Activation is paused. Resolve the blocker before issuing keys.');
         return;
       }
-      if (route === 'needs_plan') {
-        // The plan is the one chosen at signup (or picked here); never assumed.
-        const tier = chosenTier ?? (isPlanTier(signupTier) ? signupTier : null);
-        if (!tier) {
-          setNeedsPlan(true);
-          return;
-        }
-        if (!(await selectPlan.mutate({ plan_tier: tier }))) throw new Error(selectPlan.error ?? 'Could not record your plan.');
-        setNeedsPlan(false);
-        route = 'select_then_activation';
+      if ((await recordSelection(chosenTier)) === 'needs_plan') {
+        setNeedsPlan(true);
+        return;
       }
-      let raw: { id: string; key: string } | null = null;
-      if (route === 'select_then_activation' || route === 'activation') {
-        if (route === 'select_then_activation' || canRecordSdkSelection(status.state)) {
-          const recorded = await selectSdks.mutate({ platforms: platformsFor(selected) });
-          if (!recorded) throw new Error(selectSdks.error ?? 'Could not record the SDK selection.');
-        }
-        const result = await createSdkKeys.mutate({ count: 1, label });
-        const key = result?.keys[0];
-        if (!key) throw new Error(createSdkKeys.error ?? 'Could not issue a key.');
-        raw = { id: key.id, key: key.key };
-      } else {
-        const created = await createTenantKey.mutate({ name: label, platform: sdk.platform });
-        if (!created) throw new Error(createTenantKey.error ?? 'Could not issue a key.');
-        raw = { id: created.id, key: created.key || created.api_key };
-      }
-      fleet.setRevealed(prev => ({ ...prev, [sdk.id]: { id: raw.id, key: raw.key, saved: false } }));
+      const raw = row.sdk.keyKind === 'publishable' ? await mintPublishable(row) : await mintSecret(row.sdk);
+      fleet.setRevealed(prev => ({ ...prev, [row.sdk.id]: raw }));
       invalidateTenantApiKeys();
     } catch (e) {
       setFailure(e instanceof Error ? e.message : 'Could not issue a key.');
@@ -146,14 +231,16 @@ export function SdksStep({ status, selected, onToggle, fleet }: SdksStepProps) {
     }
   }
 
-  async function revokeAndReissue(sdk: SdkOption, keyId: string) {
-    setBusy(sdk.id);
+  async function revokeAndReissue(row: FleetRow) {
+    if (!row.keyId) return;
+    setBusy(row.sdk.id);
     setFailure(null);
     try {
-      await api.settings.revokeKey(keyId);
+      await api.settings.revokeKey(row.keyId);
+      fleet.acknowledge(row.keyId, false);
       fleet.setRevealed(prev => {
         const next = { ...prev };
-        delete next[sdk.id];
+        delete next[row.sdk.id];
         return next;
       });
       invalidateTenantApiKeys();
@@ -162,7 +249,7 @@ export function SdksStep({ status, selected, onToggle, fleet }: SdksStepProps) {
       setBusy(null);
       return;
     }
-    await mint(sdk);
+    await mint({ ...row, shown: null, record: null, keyId: null, issued: false, ready: false });
   }
 
   async function copy(sdkId: string, value: string) {
@@ -183,21 +270,9 @@ export function SdksStep({ status, selected, onToggle, fleet }: SdksStepProps) {
         step={3}
         kicker="SDKs and keys"
         title="Add your SDKs"
-        description="Select every surface you run. Each SDK gets its own key, so every app, device and server can be rotated and revoked on its own."
+        description="Select every surface you run. Each SDK gets its own key, so every app, device and server can be rotated and revoked on its own. Browser SDKs get a publishable key bound to your site."
         summary={`${fleet.selectedCount} SDK${fleet.selectedCount === 1 ? '' : 's'} · ${fleet.issuedCount} key${fleet.issuedCount === 1 ? '' : 's'} · ${fleet.live ? 'events arriving' : 'awaiting first event'}`}
       />
-
-      <div className="flex flex-wrap justify-center gap-1.5" aria-label="Key permissions">
-        {['read', 'write', 'ingest', 'analytics'].map(scope => (
-          <span
-            key={scope}
-            className="ae-mono rounded-full border px-2.5 py-1 text-[12px]"
-            style={{ color: 'var(--ae-blue-ink)', borderColor: 'var(--ae-blue)', background: 'var(--ae-blue-tint)' }}
-          >
-            {scope}
-          </span>
-        ))}
-      </div>
 
       {needsPlan && (
         <Panel className="flex w-full max-w-[640px] flex-col items-center gap-3 p-5 text-center">
@@ -214,7 +289,7 @@ export function SdksStep({ status, selected, onToggle, fleet }: SdksStepProps) {
                 disabled={busy !== null}
                 onClick={() => {
                   const first = fleet.rows.find(r => !r.issued);
-                  if (first) void mint(first.sdk, tier);
+                  if (first) void mint(first, tier);
                 }}
               >
                 {tier}
@@ -230,7 +305,7 @@ export function SdksStep({ status, selected, onToggle, fleet }: SdksStepProps) {
         {SDK_OPTIONS.map(sdk => {
           const on = selected.includes(sdk.id);
           const row = fleet.rows.find(r => r.sdk.id === sdk.id);
-          const badge = !row ? null : fleet.live && row.issued ? BADGE.live : row.ready ? BADGE.ready : row.issued ? BADGE.issued : BADGE.none;
+          const badge = !row ? null : row.ready ? BADGE.ready : row.issued ? BADGE.issued : BADGE.none;
           return (
             <button
               key={sdk.id}
@@ -253,7 +328,7 @@ export function SdksStep({ status, selected, onToggle, fleet }: SdksStepProps) {
               >
                 {on ? '✓' : ''}
               </span>
-              <BrandMark token={sdk.mark} label={sdk.name} size={44} markSize={26} />
+              <BrandMark token={sdk.mark} size={44} markSize={26} />
               <span className="flex flex-col leading-snug">
                 <span className="text-[14px] font-medium">{sdk.name}</span>
                 <span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>{sdk.description}</span>
@@ -265,103 +340,192 @@ export function SdksStep({ status, selected, onToggle, fleet }: SdksStepProps) {
       </div>
 
       <div className="flex w-full max-w-[640px] flex-col gap-3">
-        {fleet.rows.map(({ sdk, shown, record, issued }) => (
-          <Panel key={sdk.id} className="flex min-w-0 flex-col gap-3" style={{ padding: 'clamp(14px,2.6vw,20px)' }}>
-            <div className="flex items-center gap-3">
-              <BrandMark token={sdk.mark} label={sdk.name} size={32} markSize={20} />
-              <span className="flex min-w-0 flex-1 flex-col leading-tight">
-                <span className="text-[14px] font-medium">{sdk.name}</span>
-                <span className="ae-mono text-[11px]" style={{ color: 'var(--ae-mute)' }}>{sdkKeyLabel(sdk)}</span>
-              </span>
-            </div>
-
-            {!issued && (
-              <PrimaryButton disabled={busy !== null} onClick={() => void mint(sdk)} data-testid={`generate-key-${sdk.id}`}>
-                {busy === sdk.id ? 'Issuing key…' : `Generate key for ${sdk.short}`}
-              </PrimaryButton>
-            )}
-
-            {shown && (
-              <div className="flex flex-col gap-2.5">
-                <div className="flex items-center gap-2 rounded-lg px-3 py-2.5" style={{ background: 'var(--ae-code)', color: 'var(--ae-code-ink)' }}>
-                  <code className="ae-mono flex-1 select-all break-all text-[12px] leading-snug" data-testid={`raw-key-${sdk.id}`}>{shown.key}</code>
-                  <button
-                    type="button"
-                    onClick={() => void copy(sdk.id, shown.key)}
-                    className="ae-focus flex-none rounded px-2.5 py-1 text-[11px]"
-                    style={{ background: '#2a2a2f', color: '#e8e6e1' }}
-                  >
-                    {copied === sdk.id ? 'Copied' : 'Copy'}
-                  </button>
-                </div>
-                <span className="text-[12px] leading-snug" style={{ color: 'var(--ae-amber)' }}>
-                  {sdk.platform === 'server' ? 'Secret key, server-side only' : 'Write key for this SDK'} · shown once, stored as a hash.
-                </span>
-                <label className="flex cursor-pointer items-center gap-2.5 text-[13px]">
-                  <input
-                    type="checkbox"
-                    checked={shown.saved}
-                    onChange={e => fleet.setRevealed(prev => ({ ...prev, [sdk.id]: { ...shown, saved: e.target.checked } }))}
-                    className="h-[18px] w-[18px] accent-[var(--ae-blue)]"
-                  />
-                  I have stored this key securely
-                </label>
-              </div>
-            )}
-
-            {!shown && record && (
-              <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>
-                Key on record · the raw value was shown once when it was issued.
-              </span>
-            )}
-
-            <pre
-              className="ae-mono m-0 whitespace-pre-wrap break-all rounded-lg px-3.5 py-3 text-[12px] leading-relaxed"
-              style={{ background: 'rgba(127,127,127,.08)', color: 'var(--ae-ink)' }}
-            >
-              {sdk.snippet.replace(/YOUR_API_KEY/g, shown ? `${shown.key.slice(0, 12)}…` : 'YOUR_API_KEY')}
-            </pre>
-
-            {issued && (
-              <div
-                className="flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5"
-                style={{
-                  background: fleet.live ? 'var(--ae-sage-tint)' : 'var(--ae-card)',
-                  borderColor: fleet.live ? 'var(--ae-sage)' : 'var(--ae-edge-soft)',
-                }}
-              >
-                <span className={fleet.live ? '' : 'ae-pulse'} style={{ color: fleet.live ? 'var(--ae-sage)' : 'var(--ae-faint)' }}>
-                  {fleet.live ? '●' : '○'}
-                </span>
-                <span className="flex flex-1 flex-col leading-snug">
-                  <span className="text-[13px] font-medium">{fleet.live ? 'Events are arriving' : 'Awaiting first event'}</span>
-                  <span className="ae-mono text-[11px]" style={{ color: 'var(--ae-mute)' }}>
-                    {fleet.live
-                      ? 'first event received for this workspace'
-                      : testResult
-                        ? `test event ${testResult.status}${testResult.reason ? ` · ${testResult.reason}` : ''}`
-                        : 'install the snippet, or send a test event'}
-                  </span>
-                </span>
-                {!fleet.live && (
-                  <LinkButton onClick={() => void sendTest.mutate({ event_type: 'onboarding_test_event', properties: { source: 'onboarding', sdk: sdk.id } })}>
-                    {sendTest.isLoading ? 'Sending…' : 'Send test event'}
-                  </LinkButton>
-                )}
-              </div>
-            )}
-
-            {issued && (record || shown) && (
-              <LinkButton
-                className="self-start"
-                onClick={() => void revokeAndReissue(sdk, (shown?.id ?? record?.id) as string)}
-              >
-                Revoke and generate a new key
-              </LinkButton>
-            )}
-          </Panel>
+        {fleet.rows.map(row => (
+          <SdkPanel
+            key={row.sdk.id}
+            row={row}
+            busy={busy}
+            copied={copied}
+            origin={origins[row.sdk.id] ?? ''}
+            onOrigin={value => setOrigins(prev => ({ ...prev, [row.sdk.id]: value }))}
+            onMint={() => void mint(row)}
+            onRevoke={() => void revokeAndReissue(row)}
+            onCopy={value => void copy(row.sdk.id, value)}
+            onAck={value => {
+              if (row.shown) fleet.setRevealed(prev => ({ ...prev, [row.sdk.id]: { ...row.shown!, saved: value } }));
+              if (row.keyId) fleet.acknowledge(row.keyId, value);
+            }}
+            tenantLive={fleet.live}
+            testLabel={sendTest.isLoading ? 'Sending…' : 'Send test event'}
+            testResult={testResult ? `test event ${testResult.status}${testResult.reason ? ` · ${testResult.reason}` : ''}` : null}
+            onTest={() => void sendTest.mutate({ event_type: 'onboarding_test_event', properties: { source: 'onboarding', sdk: row.sdk.id } })}
+          />
         ))}
       </div>
+
+      <div className="flex flex-wrap justify-center gap-1.5" aria-label="Secret key permissions">
+        <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>Server and app keys can</span>
+        {SDK_KEY_PERMISSIONS.map(scope => (
+          <span
+            key={scope}
+            className="ae-mono rounded-full border px-2.5 py-0.5 text-[12px]"
+            style={{ color: 'var(--ae-blue-ink)', borderColor: 'var(--ae-blue)', background: 'var(--ae-blue-tint)' }}
+          >
+            {scope}
+          </span>
+        ))}
+        <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>· browser keys can only ingest for their site</span>
+      </div>
     </div>
+  );
+}
+
+function SdkPanel({
+  row,
+  busy,
+  copied,
+  origin,
+  onOrigin,
+  onMint,
+  onRevoke,
+  onCopy,
+  onAck,
+  tenantLive,
+  testLabel,
+  testResult,
+  onTest,
+}: {
+  readonly row: FleetRow;
+  readonly busy: string | null;
+  readonly copied: string | null;
+  readonly origin: string;
+  readonly onOrigin: (value: string) => void;
+  readonly onMint: () => void;
+  readonly onRevoke: () => void;
+  readonly onCopy: (value: string) => void;
+  readonly onAck: (value: boolean) => void;
+  readonly tenantLive: boolean;
+  readonly testLabel: string;
+  readonly testResult: string | null;
+  readonly onTest: () => void;
+}) {
+  const { sdk, shown, record, site, issued, ready } = row;
+  const publishable = sdk.keyKind === 'publishable';
+  const siteId = shown?.siteId ?? site?.id ?? null;
+  const siteLive = useSiteLive(publishable && issued ? siteId : null);
+  const live = publishable ? siteLive.data?.live === true : tenantLive;
+  const liveDetail = publishable
+    ? siteLive.data
+      ? live
+        ? `site ${siteId} · loader reporting`
+        : `site ${siteId} · ${siteLive.data.state.replace(/_/g, ' ')}`
+      : `GET /v1/sdk/sites/${siteId ?? '{site_id}'}/live`
+    : live
+      ? 'first event received for this workspace'
+      : (testResult ?? 'install the snippet, or send a test event');
+
+  return (
+    <Panel className="flex min-w-0 flex-col gap-3" style={{ padding: 'clamp(14px,2.6vw,20px)' }}>
+      <div className="flex items-center gap-3">
+        <BrandMark token={sdk.mark} size={32} markSize={20} />
+        <span className="flex min-w-0 flex-1 flex-col leading-tight">
+          <span className="text-[14px] font-medium">{sdk.name}</span>
+          <span className="ae-mono text-[11px]" style={{ color: 'var(--ae-mute)' }}>
+            {sdkKeyLabel(sdk)} · {publishable ? 'publishable, site-bound' : 'secret'}
+          </span>
+        </span>
+      </div>
+
+      {!issued && publishable && !site && (
+        <label className="flex flex-col gap-1 text-[12px]" style={{ color: 'var(--ae-mute)' }}>
+          Site address the {sdk.short} SDK runs on
+          <input
+            value={origin}
+            onChange={e => onOrigin(e.target.value)}
+            placeholder="https://www.example.com"
+            data-testid={`site-origin-${sdk.id}`}
+            className="ae-mono rounded border px-3 py-2 text-[13px] outline-none focus:border-[var(--ae-blue)]"
+            style={{ background: 'var(--ae-raised)', borderColor: 'var(--ae-edge)', color: 'var(--ae-ink)' }}
+          />
+        </label>
+      )}
+
+      {!issued && (
+        <PrimaryButton
+          disabled={busy !== null || (publishable && !site && origin.trim() === '')}
+          onClick={onMint}
+          data-testid={`generate-key-${sdk.id}`}
+        >
+          {busy === sdk.id ? 'Issuing key…' : `Generate ${publishable ? 'publishable ' : ''}key for ${sdk.short}`}
+        </PrimaryButton>
+      )}
+
+      {shown && (
+        <div className="flex items-center gap-2 rounded-lg px-3 py-2.5" style={{ background: 'var(--ae-code)', color: 'var(--ae-code-ink)' }}>
+          <code className="ae-mono flex-1 select-all break-all text-[12px] leading-snug" data-testid={`raw-key-${sdk.id}`}>{shown.key}</code>
+          <button
+            type="button"
+            onClick={() => onCopy(shown.key)}
+            className="ae-focus flex-none rounded px-2.5 py-1 text-[11px]"
+            style={{ background: '#2a2a2f', color: '#e8e6e1' }}
+          >
+            {copied === sdk.id ? 'Copied' : 'Copy'}
+          </button>
+        </div>
+      )}
+      {shown && (
+        <span className="text-[12px] leading-snug" style={{ color: 'var(--ae-amber)' }}>
+          {publishable
+            ? 'Publishable key, bound to this site · visible in your page, still shown here only once.'
+            : sdk.platform === 'server'
+              ? 'Secret key, server-side only · shown once, stored as a hash.'
+              : 'Secret key for this app · shown once, stored as a hash.'}
+        </span>
+      )}
+      {!shown && record && (
+        <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>
+          Key on record · the raw value was shown once when it was issued. If you did not store it, revoke it and issue a new one.
+        </span>
+      )}
+      {issued && (
+        <label className="flex cursor-pointer items-center gap-2.5 text-[13px]">
+          <input
+            type="checkbox"
+            checked={ready}
+            onChange={e => onAck(e.target.checked)}
+            className="h-[18px] w-[18px] accent-[var(--ae-blue)]"
+          />
+          {shown ? 'I have stored this key securely' : 'I stored this key when it was issued'}
+        </label>
+      )}
+
+      <pre
+        className="ae-mono m-0 whitespace-pre-wrap break-all rounded-lg px-3.5 py-3 text-[12px] leading-relaxed"
+        style={{ background: 'rgba(127,127,127,.08)', color: 'var(--ae-ink)' }}
+      >
+        {snippetFor(sdk, shown, siteId)}
+      </pre>
+
+      {issued && (
+        <div
+          className="flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5"
+          style={{ background: live ? 'var(--ae-sage-tint)' : 'var(--ae-card)', borderColor: live ? 'var(--ae-sage)' : 'var(--ae-edge-soft)' }}
+          data-testid={`sdk-live-${sdk.id}`}
+        >
+          <span className={live ? '' : 'ae-pulse'} style={{ color: live ? 'var(--ae-sage)' : 'var(--ae-faint)' }}>{live ? '●' : '○'}</span>
+          <span className="flex flex-1 flex-col leading-snug">
+            <span className="text-[13px] font-medium">{live ? 'live' : 'awaiting first signal'}</span>
+            <span className="ae-mono text-[11px]" style={{ color: 'var(--ae-mute)' }}>{liveDetail}</span>
+          </span>
+          {!live && !publishable && <LinkButton onClick={onTest}>{testLabel}</LinkButton>}
+        </div>
+      )}
+
+      {issued && row.keyId && (
+        <LinkButton className="self-start" onClick={onRevoke}>
+          Revoke and generate a new key
+        </LinkButton>
+      )}
+    </Panel>
   );
 }

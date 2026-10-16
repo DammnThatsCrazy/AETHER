@@ -12,6 +12,7 @@ const STAGE_TONE: Record<StageStatus, { readonly color: string; readonly label: 
   waiting: { color: 'var(--ae-faint)', label: 'waiting' },
   failed: { color: 'var(--ae-ember)', label: 'needs attention' },
   not_applicable: { color: 'var(--ae-faint)', label: 'not applicable' },
+  unknown: { color: 'var(--ae-faint)', label: 'not reported' },
 };
 
 function count(value: number | undefined): string {
@@ -28,6 +29,12 @@ export interface GraphStepProps {
   readonly sdkNames: readonly { readonly mark: string; readonly name: string }[];
   readonly keysOnRecord: number;
   readonly built: boolean;
+  /**
+   * Browser-only fleets hold publishable site keys. The activation lifecycle
+   * proves first value only after one of its own ingestion keys exists, so
+   * such a fleet cannot complete activation from this step yet.
+   */
+  readonly needsIngestionKey?: boolean;
   readonly onSendTestEvent: () => void;
   readonly sendingTestEvent: boolean;
   readonly canSendTestEvent: boolean;
@@ -55,6 +62,12 @@ export function GraphStep(props: GraphStepProps) {
       />
 
       {halted && props.status.waiting_reason && <InlineNotice tone="amber">{props.status.waiting_reason}</InlineNotice>}
+      {props.needsIngestionKey && (
+        <InlineNotice tone="blue">
+          Your site keys report installs per site. To finish activation, add the Server SDK (or a mobile SDK) in the previous
+          step: activation confirms its first event through an ingestion key.
+        </InlineNotice>
+      )}
       {props.readinessError && (
         <InlineNotice tone="amber">Graph checks are temporarily unavailable. Activation state below is still current.</InlineNotice>
       )}

@@ -77,6 +77,11 @@ export function TenantLanding() {
 
   if (!activation.data) return <LoadingState lines={6} className="p-8" />;
 
+  // Either axis can establish completion, so an incomplete activation record
+  // is not enough on its own: hold until the operator-plan read has settled
+  // (data or error) before sending the tenant to onboarding.
+  if (!onboarding.data && !onboarding.error) return <LoadingState lines={6} className="p-8" />;
+
   return <Navigate to={INCOMPLETE_ACTIVATION_ROUTE} replace />;
 }
 

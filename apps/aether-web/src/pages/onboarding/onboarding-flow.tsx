@@ -146,12 +146,16 @@ export function OnboardingFlow() {
     }
   }, [temporal.data, temporal.error]);
 
+  // SDK selection resumes from the recorded platforms, told apart by the
+  // per-SDK key labels (Web and React share the `web` platform).
+  const keyNames = fleet.keys.data?.api_keys.map(k => k.name);
   useEffect(() => {
     if (seeded.current.sdks || !status.data) return;
+    if (!keyNames && !fleet.keys.error) return;
     seeded.current.sdks = true;
-    const fromRecord = sdkIdsForPlatforms(status.data.sdk_selection);
+    const fromRecord = sdkIdsForPlatforms(status.data.sdk_selection, keyNames ?? []);
     setSdks(fromRecord.length ? fromRecord : ['web']);
-  }, [status.data]);
+  }, [status.data, keyNames, fleet.keys.error]);
 
   // Re-evaluate first value while the graph step is open (the GET reconciles
   // from durable Bronze evidence), and refresh the readiness checklist.
@@ -458,6 +462,9 @@ export function OnboardingFlow() {
                   sdkNames={SDK_OPTIONS.filter(s => sdks.includes(s.id)).map(s => ({ mark: s.mark, name: s.name }))}
                   keysOnRecord={(fleet.keys.data?.api_keys ?? []).length}
                   built={built}
+                  needsIngestionKey={
+                    !built && (status.data.created_key_ids ?? []).length === 0 && !hasReceivedEvent(status.data.state) && fleet.issuedCount > 0 && !fleet.hasSecretSdk
+                  }
                   canSendTestEvent={(status.data.created_key_ids ?? []).length > 0 || (fleet.keys.data?.api_keys ?? []).length > 0}
                   sendingTestEvent={sendTest.isLoading}
                   onSendTestEvent={() =>

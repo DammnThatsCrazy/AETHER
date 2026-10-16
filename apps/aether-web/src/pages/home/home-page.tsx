@@ -248,7 +248,7 @@ export function HomePage() {
                         <span className="ae-mono w-4 text-center" style={{ color }}>{s === 'passed' ? '✓' : stage.glyph}</span>
                         {stage.label}
                       </span>
-                      <span className="ae-mono text-[11px]" style={{ color }}>{s.replace('_', ' ')}</span>
+                      <span className="ae-mono text-[11px]" style={{ color }}>{s === 'unknown' ? 'not reported' : s.replace('_', ' ')}</span>
                     </span>
                     <Bar value={s === 'passed' || s === 'not_applicable' ? 100 : s === 'running' ? null : 0} color={s === 'failed' ? 'var(--ae-ember)' : 'var(--ae-sage)'} height={3} />
                   </div>

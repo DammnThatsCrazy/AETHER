@@ -134,6 +134,14 @@ export interface SdkOption {
   readonly mark: string;
   /** Backend SourcePlatform this SDK reports as. */
   readonly platform: SourcePlatform;
+  /**
+   * `publishable`: browser code is public, so the SDK gets a site-bound `pk_`
+   * key (/v1/sdk/sites). `secret`: an `ak_` ingestion key for code that is not
+   * served to visitors.
+   */
+  readonly keyKind: 'publishable' | 'secret';
+  /** Platform tag accepted by POST /v1/me/api-keys (web|ios|android|react-native|node|other). */
+  readonly keyPlatform: string;
   readonly snippet: string;
 }
 
@@ -148,7 +156,9 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     description: 'Browser · npm or CDN tag',
     mark: 'javascript',
     platform: 'web',
-    snippet: "npm install @aether/web\n\nimport aether from '@aether/web';\naether.init({ apiKey: 'YOUR_API_KEY' });",
+    keyKind: 'publishable',
+    keyPlatform: 'web',
+    snippet: "npm install @aether/web\n\nimport aether from '@aether/web';\naether.init({ apiKey: 'YOUR_API_KEY', siteId: 'YOUR_SITE_ID' });",
   },
   {
     id: 'react',
@@ -157,7 +167,9 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     description: 'AetherProvider and hooks · React 18+',
     mark: 'react',
     platform: 'web',
-    snippet: "npm install @aether/web react\n\n<AetherProvider config={{ apiKey: 'YOUR_API_KEY' }}>\n  <App />\n</AetherProvider>",
+    keyKind: 'publishable',
+    keyPlatform: 'web',
+    snippet: "npm install @aether/web react\n\n<AetherProvider config={{ apiKey: 'YOUR_API_KEY', siteId: 'YOUR_SITE_ID' }}>\n  <App />\n</AetherProvider>",
   },
   {
     id: 'react-native',
@@ -166,6 +178,8 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     description: 'iOS and Android through one bridge',
     mark: 'react',
     platform: 'react-native',
+    keyKind: 'secret',
+    keyPlatform: 'react-native',
     snippet: "npm install @aether/react-native\n\n<AetherProvider config={{ apiKey: 'YOUR_API_KEY' }}>\n  <App />\n</AetherProvider>",
   },
   {
@@ -175,6 +189,8 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     description: 'Swift package or CocoaPods · iOS 14+',
     mark: 'apple',
     platform: 'ios',
+    keyKind: 'secret',
+    keyPlatform: 'ios',
     snippet: `pod 'AetherSDK', '= ${SDK_VERSION}'\n\nlet config = AetherConfig(apiKey: \"YOUR_API_KEY\")\nAether.shared.initialize(config: config)`,
   },
   {
@@ -184,6 +200,8 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     description: 'Kotlin · Maven',
     mark: 'android',
     platform: 'android',
+    keyKind: 'secret',
+    keyPlatform: 'android',
     snippet: `implementation("io.aether:sdk-android:${SDK_VERSION}")\n\nval config = AetherConfig(apiKey = "YOUR_API_KEY")\nAether.initialize(application, config)`,
   },
   {
@@ -193,6 +211,8 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     description: 'Node.js · server-side events',
     mark: 'nodedotjs',
     platform: 'server',
+    keyKind: 'secret',
+    keyPlatform: 'node',
     snippet: "npm install @aether/server\n\n// Server-side only. Never ship this key to a browser.\nconst aether = new AetherServerSDK({ writeKey: process.env.AETHER_API_KEY });",
   },
 ];
@@ -211,9 +231,19 @@ export function platformsFor(selected: readonly string[]): SourcePlatform[] {
   return out;
 }
 
-/** SDK ids to preselect from the backend's recorded platform selection. */
-export function sdkIdsForPlatforms(platforms: readonly string[]): string[] {
-  return SDK_OPTIONS.filter(sdk => sdk.id !== 'react' && platforms.includes(sdk.platform)).map(sdk => sdk.id);
+/**
+ * SDK ids to preselect on resume. SDKs that share a backend platform (Web and
+ * React both report `web`) are told apart by their per-SDK key labels; a
+ * recorded platform with no labelled key restores its primary SDK.
+ */
+export function sdkIdsForPlatforms(platforms: readonly string[], keyNames: readonly string[] = []): string[] {
+  const labelled = SDK_OPTIONS.filter(sdk => keyNames.includes(sdkKeyLabel(sdk))).map(sdk => sdk.id);
+  const restored = new Set(labelled);
+  for (const platform of platforms) {
+    const owners = SDK_OPTIONS.filter(sdk => sdk.platform === platform);
+    if (owners.length && !owners.some(sdk => restored.has(sdk.id))) restored.add(owners[0]!.id);
+  }
+  return SDK_OPTIONS.filter(sdk => restored.has(sdk.id)).map(sdk => sdk.id);
 }
 
 /**
@@ -253,7 +283,7 @@ export function canRecordSdkSelection(state: ActivationState): boolean {
 
 // ── Graph build (tenant readiness checks) ───────────────────────────────────
 
-export type StageStatus = 'passed' | 'running' | 'waiting' | 'failed' | 'not_applicable';
+export type StageStatus = 'passed' | 'running' | 'waiting' | 'failed' | 'not_applicable' | 'unknown';
 
 export interface GraphStage {
   readonly check: string;
@@ -271,9 +301,11 @@ export const GRAPH_STAGES: readonly GraphStage[] = [
 ];
 
 /**
- * Stage status from the server checklist. A pending check is "running" only
- * when every earlier stage has passed (work is actually flowing into it);
- * otherwise it is "waiting". No client-side percentages are invented.
+ * Stage status from the server checklist. An explicitly `pending` check is
+ * "running" only when every earlier stage has passed (work is actually
+ * flowing into it); otherwise it is "waiting". A check the server did not
+ * report (checklist loading, failed, or omitting it) is "unknown" — never
+ * presented as in progress. No client-side percentages are invented.
  */
 export function stageStatuses(checks: ReadonlyArray<{ readonly name: string; readonly status: string }> | null | undefined): StageStatus[] {
   const byName = new Map((checks ?? []).map(c => [c.name, c.status]));
@@ -284,6 +316,7 @@ export function stageStatuses(checks: ReadonlyArray<{ readonly name: string; rea
     if (raw === 'passed') status = 'passed';
     else if (raw === 'not_applicable') status = 'not_applicable';
     else if (raw === 'failed') status = 'failed';
+    else if (raw === undefined) status = 'unknown';
     else status = upstreamDone ? 'running' : 'waiting';
     if (status !== 'passed' && status !== 'not_applicable') upstreamDone = false;
     return status;
