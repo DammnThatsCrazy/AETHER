@@ -107,7 +107,6 @@ def test_role_trusts_only_this_repositorys_pull_requests_main_and_development():
         "subjects": [
             "repo:DammnThatsCrazy/AETHER:pull_request",
             "repo:DammnThatsCrazy/AETHER:ref:refs/heads/main",
-            "repo:DammnThatsCrazy/AETHER:ref:refs/heads/Development",
             "repo:DammnThatsCrazy/AETHER:ref:refs/heads/development",
         ],
     }

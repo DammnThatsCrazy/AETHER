@@ -2,7 +2,7 @@ name: Immutable delivery
 
 on:
   # Staging delivery follows the persistent `staging` branch. Work reaches it by
-  # promotion from Development. Production is never deployed by a push: it is an
+  # promotion from development. Production is never deployed by a push: it is an
   # explicit dispatch of an approved immutable build (see `environment`).
   push:
     branches: [staging]

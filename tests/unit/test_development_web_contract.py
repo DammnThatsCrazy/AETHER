@@ -29,13 +29,9 @@ def test_it_runs_only_for_pushes_to_development() -> None:
     workflow = _workflow()
     triggers = workflow.get("on", workflow.get(True))  # PyYAML reads bare `on:` as True
     assert set(triggers) == {"push", "workflow_dispatch"}
-    # Both spellings during the Development -> development rename (see
-    # docs/engineering/ci-v2/migration-runbook.md); drop "Development" afterwards.
-    assert triggers["push"]["branches"] == ["Development", "development"]
+    assert triggers["push"]["branches"] == ["development"]
     assert "pull_request" not in triggers and "pull_request_target" not in triggers
-    assert workflow["jobs"]["deploy"]["if"] == (
-        "contains(fromJSON('[\"refs/heads/Development\",\"refs/heads/development\"]'), github.ref)"
-    )
+    assert workflow["jobs"]["deploy"]["if"] == "github.ref == 'refs/heads/development'"
 
 
 def test_workflow_token_and_concurrency_are_minimal() -> None:

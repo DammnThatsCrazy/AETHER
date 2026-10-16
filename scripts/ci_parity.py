@@ -6,7 +6,7 @@ cutover. For each commit C it compares the PR-lane suites the legacy
 `check_router.py` selects for C^..C with the suites `ci_select.py` selects, and
 reports any suite the legacy router selected that V2 did not (a selection gap).
 
-    python scripts/ci_parity.py --rev origin/Development --count 25
+    python scripts/ci_parity.py --rev origin/development --count 25
 """
 from __future__ import annotations
 

@@ -25,7 +25,6 @@ trust:
   subjects:
     - repo:DammnThatsCrazy/AETHER:pull_request
     - repo:DammnThatsCrazy/AETHER:ref:refs/heads/main
-    - repo:DammnThatsCrazy/AETHER:ref:refs/heads/Development
     - repo:DammnThatsCrazy/AETHER:ref:refs/heads/development
 statements:
   - sid: DiscoverPreviewAndStagingApps
