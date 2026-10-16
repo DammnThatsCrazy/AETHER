@@ -580,7 +580,7 @@ key. GETs require `read`; state-changing POSTs require `write`. Full behavior:
 | `POST` | `/v1/activation/sdk-selection` | write | Body `{ "platforms": ["web", …] }`. |
 | `POST` | `/v1/activation/create-sdk-keys` | write | Body `{ "count": 1, "label": "…" }`. Returns raw key(s) **once**. |
 | `POST` | `/v1/activation/test-event` | write | Sends a canonical event through `/v1/batch`; per-event `accepted \| duplicate \| rejected`. |
-| `GET`  | `/v1/activation/first-value` | read | `{ "state", "ready", "evidence" }` from real Bronze rows. |
+| `GET`  | `/v1/activation/first-value` | read | `{ "state", "ready", "evidence" }` from real Bronze rows written by any tenant ingestion path (SDK and site-key events, connector syncs, imports). SDK keys are not a prerequisite. |
 | `POST` | `/v1/activation/complete` | write | `409` unless state is `first_value_ready`. |
 
 ### Intent-driven activation (WS-3)

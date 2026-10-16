@@ -154,7 +154,8 @@ export function OnboardingFlow() {
     if (!keyNames && !fleet.keys.error) return;
     seeded.current.sdks = true;
     const fromRecord = sdkIdsForPlatforms(status.data.sdk_selection, keyNames ?? []);
-    setSdks(fromRecord.length ? fromRecord : ['web']);
+    // Nothing is preselected: every SDK is the visitor's choice.
+    setSdks(fromRecord);
   }, [status.data, keyNames, fleet.keys.error]);
 
   // Re-evaluate first value while the graph step is open (the GET reconciles
@@ -186,9 +187,9 @@ export function OnboardingFlow() {
 
   const nextAllowed = useMemo(() => {
     if (step === 1) return name.trim().length > 0 && goals.length > 0;
-    // Activation confirms first value only through an SDK key, so this step is
-    // required: at least one SDK, every selected SDK's key issued and stored.
-    if (step === 3) return fleet.selectedCount > 0 && fleet.readyCount === fleet.selectedCount;
+    // Every SDK is optional (activation proves first value from any ingestion
+    // path). Whatever is selected must have its key issued and stored.
+    if (step === 3) return fleet.readyCount === fleet.selectedCount;
     if (step === 4) return built;
     return true;
   }, [step, name, goals, fleet.selectedCount, fleet.readyCount, built]);
@@ -204,7 +205,7 @@ export function OnboardingFlow() {
           : 'Optional. You can connect sources later.'
         : step === 3
           ? fleet.selectedCount === 0
-            ? 'Pick at least one SDK. Activation confirms its first event through an SDK key.'
+            ? 'Optional. Events from connected sources, imports or the API also build your graph.'
             : fleet.readyCount === fleet.selectedCount
               ? ''
               : `${fleet.readyCount} of ${fleet.selectedCount} keys ready. Generate and confirm each key.`
@@ -453,6 +454,7 @@ export function OnboardingFlow() {
                   status={status.data}
                   selected={sdks}
                   onToggle={id => setSdks(prev => (prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]))}
+                  onSelectAll={all => setSdks(all ? SDK_OPTIONS.map(sdk => sdk.id) : [])}
                   fleet={fleet}
                 />
               )}
@@ -466,10 +468,7 @@ export function OnboardingFlow() {
                   sdkNames={SDK_OPTIONS.filter(s => sdks.includes(s.id)).map(s => ({ mark: s.mark, name: s.name }))}
                   keysOnRecord={(fleet.keys.data?.api_keys ?? []).length}
                   built={built}
-                  needsIngestionKey={
-                    !built && (status.data.created_key_ids ?? []).length === 0 && !hasReceivedEvent(status.data.state) && fleet.issuedCount > 0 && !fleet.hasSecretSdk
-                  }
-                  canSendTestEvent={(status.data.created_key_ids ?? []).length > 0 || (fleet.keys.data?.api_keys ?? []).length > 0}
+                  canSendTestEvent
                   sendingTestEvent={sendTest.isLoading}
                   onSendTestEvent={() =>
                     void sendTest

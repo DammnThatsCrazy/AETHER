@@ -178,13 +178,36 @@ describe('Workspace onboarding flow', () => {
     expect(s.m.updateOrg.mutate).toHaveBeenCalledWith({ name: 'Ridgeline' });
   });
 
-  it('requires at least one SDK key before building the graph', async () => {
-    s.status = settled(activation({ intents: ['grow_revenue'], state: 'billing_pending', selected_plan_tier: 'alpha', sdk_selection: ['web'] }));
+  it('lets every SDK be skipped: nothing is preselected and Continue works with none', async () => {
+    s.status = settled(activation({ intents: ['grow_revenue'], state: 'billing_pending', selected_plan_tier: 'alpha', sdk_selection: [] }));
     renderFlow();
+    // No SDKs recorded: the flow resumes at Sources, which is itself skippable.
+    await screen.findByTestId('onboarding-step-sources');
+    await userEvent.click(screen.getByTestId('onboarding-next'));
     await screen.findByTestId('onboarding-step-sdks');
-    await userEvent.click(screen.getByRole('button', { name: /Web SDK/ })); // deselect the only SDK
-    expect(screen.getByTestId('onboarding-next')).toBeDisabled();
-    expect(screen.getByTestId('onboarding-hint')).toHaveTextContent('Pick at least one SDK');
+    for (const id of ['web', 'react', 'react-native', 'ios', 'android', 'server']) {
+      expect(document.querySelector(`[data-sdk="${id}"]`)).toHaveAttribute('aria-pressed', 'false');
+    }
+    expect(screen.getByTestId('onboarding-next')).toBeEnabled();
+    expect(screen.getByTestId('onboarding-hint')).toHaveTextContent('Optional');
+    await userEvent.click(screen.getByTestId('onboarding-next'));
+    expect(await screen.findByTestId('onboarding-step-graph')).toBeInTheDocument();
+  });
+
+  it('selects every SDK at once, and clears them again', async () => {
+    s.status = settled(activation({ intents: ['grow_revenue'], state: 'billing_pending', selected_plan_tier: 'alpha', sdk_selection: [] }));
+    renderFlow();
+    // No SDKs recorded: the flow resumes at Sources, which is itself skippable.
+    await screen.findByTestId('onboarding-step-sources');
+    await userEvent.click(screen.getByTestId('onboarding-next'));
+    await screen.findByTestId('onboarding-step-sdks');
+    await userEvent.click(screen.getByRole('button', { name: 'Select all' }));
+    for (const id of ['web', 'react', 'react-native', 'ios', 'android', 'server']) {
+      expect(document.querySelector(`[data-sdk="${id}"]`)).toHaveAttribute('aria-pressed', 'true');
+    }
+    expect(screen.getByTestId('onboarding-next')).toBeDisabled(); // keys still to issue
+    await userEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(screen.getByTestId('onboarding-next')).toBeEnabled();
   });
 
   it('connects a recommended source through the connect-action state machine', async () => {

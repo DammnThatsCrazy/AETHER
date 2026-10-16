@@ -361,9 +361,9 @@ activation intents as goals, tenant temporal-default timezone when that feature
 is enabled), **Sources** (the server's recommended connect plan per experience
 category, connected from a pop-over that follows `POST /v1/activation/connect-action`
 next actions; CSV files go through the imports pipeline and finish on the
-Imports review page), **SDKs and keys** (required, because activation confirms
-first value only through an SDK key: at least one SDK, every selected key issued
-and confirmed stored; one key per SDK, labelled
+Imports review page; every source is optional and can be skipped), **SDKs and
+keys** (optional: nothing is preselected, any or all SDKs can be selected, and
+every selected key must be issued and confirmed stored; one key per SDK, labelled
 `<SDK> · onboarding`. Browser SDKs (Web, React) register a site with its
 origins through `POST /v1/sdk/sites` and get a site-bound `pk_` publishable key
 from `POST /v1/sdk/sites/{site_id}/keys`, with per-site liveness from
@@ -372,9 +372,9 @@ SDKs get a secret `ak_` ingestion key through activation `create-sdk-keys` while
 the state machine allows it, otherwise through `/v1/me/api-keys` with explicit
 `read/write/ingest/analytics` permissions. Raw keys are shown once, and a key
 counts as ready only after the visitor confirms storing it (remembered per key
-id in the browser). A browser-only fleet cannot complete activation, because
-activation proves first value only after one of its own ingestion keys exists;
-the Graph step says so), and **Graph** (stages from `/v1/tenant/readiness` checks, 24-hour counts
+id in the browser). Activation proves first value from any ingestion path —
+SDK or site-key events, connector syncs, imports — so skipping SDKs never blocks
+completion), and **Graph** (stages from `/v1/tenant/readiness` checks, 24-hour counts
 from `/v1/analytics/dashboard/summary`; "Open home" is enabled only once first
 value is ready, and completes activation first). The step a visitor resumes at
 is derived from the activation record, with SDK selections told apart by

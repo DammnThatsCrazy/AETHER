@@ -121,8 +121,6 @@ export function useSdkFleet(status: ActivationStatus | null, selected: readonly 
     selectedCount: rows.length,
     issuedCount: rows.filter(r => r.issued).length,
     readyCount: rows.filter(r => r.ready).length,
-    /** Whether any secret (activation-trackable) SDK key is part of the fleet. */
-    hasSecretSdk: rows.some(r => r.sdk.keyKind === 'secret'),
     live: hasReceivedEvent(status?.state),
   };
 }
@@ -134,6 +132,8 @@ export interface SdksStepProps {
   readonly status: ActivationStatus;
   readonly selected: readonly string[];
   readonly onToggle: (id: string) => void;
+  /** Select every SDK (true) or clear the selection (false). */
+  readonly onSelectAll: (all: boolean) => void;
   readonly fleet: SdkFleet;
 }
 
@@ -151,7 +151,7 @@ function snippetFor(sdk: SdkOption, shown: RevealedKey | null, siteId: string | 
     .replace(/YOUR_SITE_ID/g, shown?.siteId ?? siteId ?? 'site_YOUR_SITE_ID');
 }
 
-export function SdksStep({ status, selected, onToggle, fleet }: SdksStepProps) {
+export function SdksStep({ status, selected, onToggle, onSelectAll, fleet }: SdksStepProps) {
   const selectPlan = useSelectPlan();
   const selectSdks = useSelectSdks();
   const createSdkKeys = useCreateSdkKeys();
@@ -270,7 +270,7 @@ export function SdksStep({ status, selected, onToggle, fleet }: SdksStepProps) {
         step={3}
         kicker="SDKs and keys"
         title="Add your SDKs"
-        description="Select every surface you run. Each SDK gets its own key, so every app, device and server can be rotated and revoked on its own. Browser SDKs get a publishable key bound to your site."
+        description="Optional. Select any surface you run, all of them, or none. Each SDK gets its own key, so every app, device and server can be rotated and revoked on its own. Browser SDKs get a publishable key bound to your site."
         summary={`${fleet.selectedCount} SDK${fleet.selectedCount === 1 ? '' : 's'} · ${fleet.issuedCount} key${fleet.issuedCount === 1 ? '' : 's'} · ${fleet.live ? 'events arriving' : 'awaiting first event'}`}
       />
 
@@ -300,6 +300,12 @@ export function SdksStep({ status, selected, onToggle, fleet }: SdksStepProps) {
       )}
 
       {failure && <InlineNotice tone="ember">{failure}</InlineNotice>}
+
+      <div className="flex items-center gap-3 text-[12px]">
+        <LinkButton onClick={() => onSelectAll(true)}>Select all</LinkButton>
+        <span style={{ color: 'var(--ae-faint)' }}>·</span>
+        <LinkButton tone="mute" onClick={() => onSelectAll(false)}>Clear</LinkButton>
+      </div>
 
       <div className="grid w-full max-w-[760px] gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(150px, 100%), 1fr))' }}>
         {SDK_OPTIONS.map(sdk => {
