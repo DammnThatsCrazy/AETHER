@@ -62,7 +62,9 @@ disposition. The old full `make ci-check` PR job has been retired after the
 representative selection observation window recorded zero unexplained misses;
 it remains available for local, trusted-main, nightly, and release evidence but
 does not determine mergeability. Hosted p50/p95 timing is measured separately
-by `ci-runtime-report.yml`; its report remains `INSUFFICIENT_SAMPLES` until at
+by `ci-runtime-report.yml`, which times `classify` through `ci / verdict` on
+completed non-draft `ci.yml` pull-request runs (cancelled and draft runs are
+ignored); its report remains `INSUFFICIENT_SAMPLES` until at
 least 20 completed adaptive PR authority runs are available, so local timing
 must not be presented as hosted timing evidence.
 
@@ -325,7 +327,10 @@ static gates plus the tests no suite runs (which need a Python extra), the pnpm
 proof-package builds, the functionality-proof gating jobs, Slither, the Access Kit
 container smoke (pnpm, Python or Docker), the always-on control gates that replace
 `universal-fast`, and the selected Node and backend image builds. `verdict`
-uploads one tiny diagnostic artifact, `ci-verdict-evidence`. Diagnostic artifact
+uploads one tiny diagnostic artifact, `ci-verdict-evidence`, only for a passing
+non-draft run. A manual `workflow_dispatch` replay chooses its own diff base, so it
+publishes under the name `ci / verdict (manual replay)` and uploads no evidence;
+it can never satisfy the required context. Diagnostic artifact
 uploads in workflows that never download artifacts are `continue-on-error` with
 seven-day retention so a storage quota failure cannot fail a run whose tests
 passed. `release-gate.yml` is the on-demand `make release-gate`. See
