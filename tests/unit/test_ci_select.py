@@ -161,3 +161,14 @@ def test_provider_identity_evidence_tests_trigger_the_check() -> None:
 def test_node_checks_still_default_to_node() -> None:
     c = {c["id"]: c for c in sel("apps/kyber-web/src/a.tsx")["checks"]}["kyber-web-e2e"]
     assert c["node"] is True and c["python_extra"] is None
+
+
+def test_no_check_command_mixes_pytest_conftest_trees() -> None:
+    """services/api/tests and tests/ conftest files cannot share one pytest session."""
+    for check in RULES["checks"]:
+        for cmd in check["run"]:
+            if "pytest" not in cmd:
+                continue
+            roots = {a.split("/")[0] + ("/" + a.split("/")[1] if a.startswith("services/") else "")
+                     for a in cmd.split() if a.startswith(("tests/", "services/"))}
+            assert len(roots) <= 1, f"{check['id']}: one pytest call spans {sorted(roots)}"

@@ -90,5 +90,8 @@ checks:
     python_extra: "dev,backend"
     run: ["python scripts/ci_check_identity_continuity.py",
           "python scripts/generate_contracts.py --check",
-          "python -m pytest services/api/tests/providers/test_identity_evidence.py services/api/tests/providers/test_commerce_identity_evidence.py tests/unit/test_identity_continuity_calibration_workflow.py -v",
+          # Separate sessions: services/api/tests and tests/ each have a conftest.py that
+          # cannot be imported together (pytest ImportPathMismatchError).
+          "python -m pytest services/api/tests/providers/test_identity_evidence.py services/api/tests/providers/test_commerce_identity_evidence.py -v",
+          "python -m pytest tests/unit/test_identity_continuity_calibration_workflow.py -v",
           "python scripts/identity_confidence_calibration_evaluation.py --help > /dev/null"]
