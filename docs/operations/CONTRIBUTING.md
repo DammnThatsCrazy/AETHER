@@ -20,7 +20,7 @@ source_hashes:
   "AGENTS.md": "sha256:fe5904e111571d3a5121f31ecbeca3897036aa54d64a45d3ca24cfea99de2da8"
   "Makefile": "sha256:fddce509fd710303082f6c218dc99cdf4af96b1229824967084e4b1359c99c6d"
   "config/unread_settings_flags.yaml": "sha256:3587b913f93df944cd4d53287db9f5b656042ae645aa50eb040adb1700f7583a"
-  "docs/reference/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:233cc129f3e9eda2da82fdf21f6bd256a0c915659473da0da9b1e672cf60d51b"
+  "docs/reference/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:e87d161d1801f01c85c9b9176cd388e9cae2bbbeff2f10dddecc61e2b33c168f"
   "scripts/repo_doctor.py": "sha256:ede16d7c6bb91a82d7318665dbbcbd52b33cc86f79c8255f07498e4908126d1b"
   "scripts/validate_settings_flags.py": "sha256:d5ec3062bec02a6b4eacf8c0ada966c4e7dc2630fafdb807eee84816c9bde695"
 ---

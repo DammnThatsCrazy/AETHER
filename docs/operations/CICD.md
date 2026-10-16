@@ -29,13 +29,13 @@ reviewed_source_commits:
   - commit: "c71ebc5cb"
     reason: "Reviewed Access Kit container workflow cadence: pull requests build on ready_for_review, with explicit dispatch and development/main push lanes for targeted or post-landing builds; no staging wake or deployment is added."
 source_hashes:
-  ".github/workflows/": "sha256:6392f43791ebc4d2a9d5396c59471aab2d3785ba45aded5026dd226c7b3a3dce"
-  "config/delivery_workflow_authority.yaml": "sha256:f9f6f8d8892aefe2b04ef6f2adbc95e5d514efbca7d8a833cf141a1ed17e7038"
+  ".github/workflows/": "sha256:880e81a82106f854cfdd522886de0232ed1479a906a69015d3611cd446b39be7"
+  "config/delivery_workflow_authority.yaml": "sha256:2412ea1ace2008760b340ce12d9922d2256d1ffa6daff9dbd96d04fb7c6acad8"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
   "infra/aws/terraform/modules/ecr/main.tf": "sha256:f880cb8a6a4dfec313b115d89e6714906dcfcf3dc1cd4496945d7e86814d6407"
   "infra/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
-  "infra/aws/terraform/modules/secrets/main.tf": "sha256:f872d926ac84a0bf3c473a69b9362d7bb72d3e36d0fa91ea2febc1f5b63d66e1"
+  "infra/aws/terraform/modules/secrets/main.tf": "sha256:29607ea44951c132385a375626cb9dafd213a9f26fb87ce8d1694b6fd74524da"
   "infra/cicd/aether-cicd/README.md": "sha256:36a2b231349b26f17f945f32a223d35f482acc9fd82ccbcde4a728b1fa9e05a9"
   "infra/cicd/aether-cicd/main.py": "sha256:45ea58ecdc9250e8bedffcd9d9a369b1025c5dc7a1da23d38e0f6c1670494c0f"
   "infra/cicd/aether-cicd/quality_gates/": "sha256:c5f18dd825882b733505e259192deb3fd3293fe308c471a6a0a27ff5c3c4dce9"
@@ -52,13 +52,12 @@ Internal reference for Aether's delivery pipeline.
 
 ## Current verification authority
 
-For an ordinary pull request, `.github/workflows/repo-consistency.yml` owns one
-blocking status: `verification / disposition`, started once when the PR is
-finalized with the `ready_for_review` event. Draft pushes are an accumulation
-phase and do not start hosted PR CI. The workflow classifies the
-changed paths with the Impact Graph, runs the universal-fast checks, selects
-the affected test suites and build workspaces, and publishes one machine-readable
-disposition. The old full `make ci-check` PR job has been retired after the
+For an ordinary pull request, `.github/workflows/ci.yml` owns one blocking
+status: `ci / verdict`, started when the PR is finalized with the
+`ready_for_review` event and rerun on every new head SHA. Draft pushes are an
+accumulation phase and run nothing. The workflow classifies the changed paths
+with `scripts/ci_select.py`, runs the always-on control gates, selects the
+affected test suites, checks and build workspaces, and publishes one verdict. The old full `make ci-check` PR job has been retired after the
 representative selection observation window recorded zero unexplained misses;
 it remains available for local, trusted-main, nightly, and release evidence but
 does not determine mergeability. Hosted p50/p95 timing is measured separately
@@ -144,6 +143,13 @@ When the operator supplies `staging_secret_names`, reconciliation first checks
 the exact Secrets Manager names, staging CMK, and `AWSCURRENT` metadata, then
 imports only the reviewed Terraform addresses. It never calls
 `get-secret-value`; secret materialization remains a separate secure bootstrap.
+The active and previous identity-verification keys are provisioned by that
+bootstrap. `identity_verification_secrets_enabled` gates both API and worker
+task mounts and is bound into the reviewed Terraform plan. Before a plan or
+apply mounts them, the promotion workflow verifies both Secrets Manager
+`AWSCURRENT` versions using metadata only. For first-time setup, apply with the
+input false, populate both values, then generate a fresh plan with it true.
+CI validates the secret references and never reads the key values.
 The full-lane release requires the Kyber Google workforce contract and passes
 only the public client identifier into the Kyber bundle; its client secret is
 backend-only and is mounted from Secrets Manager at task start. The pilot lane
@@ -312,10 +318,10 @@ roll-forward.
 `.github/workflows/ci.yml` (check `ci / verdict`; GitHub exposes the job name
 as the required status context, so the `verdict` job is named exactly that) is
 the declared pull-request authority in `config/verification_policy.yaml`, replacing the
-`verification / disposition` DAG. **Transition state:** `repo-consistency.yml`
-still exists and still reports `verification / disposition` until it is deleted
-in the cutover PR, and the repository ruleset must require `ci / verdict`
-(and drop the old check) before that deletion merges.
+`verification / disposition` DAG. The legacy `repo-consistency.yml`,
+`aether-test.yml`, `kyber-e2e.yml` and `identity-continuity-gates.yml` workflows
+were deleted in the CI V2 cutover; the repository ruleset must require
+`ci / verdict` and no longer require `verification / disposition`.
 
 Draft pull requests run nothing: `verdict` passes with a note, and the first run
 starts at `ready_for_review` and then on every new head SHA. It also runs on
@@ -370,8 +376,7 @@ to `staging`, and `staging` to `main`, with merge commits, so after a promotion
 `development` is an ancestor of `staging` and `staging` is an ancestor of `main`. Every merge to `main`
 deploys the production web app (`amplify-status-production.yml`); production
 backend delivery stays a deliberate, approved promotion. Push-time verification
-(`repo-consistency`, the Aether and Kyber suites, functionality proof,
-infrastructure plan and production-equivalent CI) runs on all three branches so
+(`ci`, functionality proof, infrastructure plan and production-equivalent CI) runs on all three branches so
 each gate has its own evidence; `repo-health`, whose integration authority gates
 delivery, runs on `staging` and `main`.
 
@@ -617,10 +622,17 @@ and release preflights.
 | `staging-ttl-guard.yml` | hourly schedule; dispatch | Enforces the staging awake lease. Runs no Terraform at all; it can scale ECS to zero and clamp both ECS autoscaling bounds (`MinCapacity` and `MaxCapacity`) to zero for staging targets, which can only reduce running compute. **Not armed without `AWS_STAGING_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or enforce the TTL, reports it is a NO-OP and exits green — staging may still be running and will NOT be guarded; that is NOT a claim that staging is asleep. The moment the role is wired it enforces exactly as before, fail-closed in both directions. | no |
 | `staging-business-hours.yml` | weekday schedule (08:15 and 17:00 New York time); dispatch | Keeps staging awake during New York business hours for demos. Runs no Terraform and holds no AWS credentials: it dispatches `staging-lifecycle.yml` `plan-wake`, then `apply-wake` with that run's reviewed `plan_run_id`/`plan_checksum`, in the morning, and `apply-sleep` in the evening, so every lifecycle and `terraform-promote.yml` check still applies. One cron per New York UTC offset; only the matching one acts. Manual `transition=wake`/`sleep` covers out-of-hours demos. While the repository variable `STAGING_WAKE_HOLD` is `true`, the scheduled wake is skipped (sleep and manual wake are never held). | no (delegates) |
 
-| `repo-consistency.yml` | PR finalization (`ready_for_review`) / push to `development`, `staging` or `main` | Classifies changed paths with the verification router, builds the Impact Graph-selected workspaces in dependency order, binds the selected workspace archive and any selected backend image into one immutable candidate, verifies and materializes that candidate in the consumer job (the backend image archive is kept for one day, because only that in-run consumer reads it), executes the universal and affected verification checks, and publishes the single blocking `verification / disposition` evidence. Draft pushes do not start this workflow. The broad `make ci-check` job is intentionally absent from the PR path after the completed selection observation window. | no |
-| `identity-continuity-gates.yml` | PR finalization (`ready_for_review`); `workflow_dispatch` | Runs supplementary identity contract, routing, merge-safety, split, projection, UX, and proof-pack checks. It installs the Python test environment for pytest gates and builds proof contracts, fixtures, runner, and reporting packages in dependency order. Gate 7 uploads its proof report. These results inform promotion and release review but are not required merge checks and do not replace `verification / disposition`. | no |
 | `production-status.yml` | 12-hourly schedule; dispatch | `scripts/production_status.py --strict` + readiness scorecard artifact. | no |
 | `production-equivalent-ci.yml` | PR finalization (`ready_for_review`) / push / schedule / dispatch | Runs a cheap Impact Graph classifier for every triggered event. On finalized PRs it provisions the Postgres + Redis real stack only for persistence-impacting backend/infrastructure changes, production-equivalent tests, or unresolved paths. Its real-stack steps include the ingestion smoke and concurrency tests, the measurement/attribution repository tests, and the provider rights revocation fence tests. Pushes to `development`, `staging` and `main`, nightly runs, and explicit dispatch retain full real-stack coverage. The lane remains non-blocking and is not a required merge check. | no |
+| `ci.yml` | `pull_request` on non-draft PRs (`opened`, `synchronize`, `reopened`, `ready_for_review`); merge queue; push to `development`, `staging` or `main`; `workflow_dispatch` (manual replay) | The single blocking pull-request authority. `classify` selects suites and checks with `scripts/ci_select.py`; `suites` runs sharded registry workers; `checks` runs path-selected non-suite commands (always-on control gates, diff-selected builds, typechecks, browser e2e, identity, functionality-proof, Slither, Access Kit container); `verdict` publishes the required status `ci / verdict`. Draft PRs run nothing, and a manual replay publishes as `ci / verdict (manual replay)`. | no |
+| `release-gate.yml` | `workflow_dispatch` only | `make release-gate` plus the staging preflight dry run. Release-only; never evaluated on a normal PR or push. | no |
+
+`terraform-promote.yml` records the `identity_verification_secrets_enabled`
+input in its reviewed plan. It checks both identity-key secrets have
+`AWSCURRENT` versions before planning or applying a task revision that mounts
+them. `staging-lifecycle.yml` carries the same value through wake and sleep
+plan/apply handoffs. Initial setup uses a first apply with the input false,
+securely populates both keys, then creates a fresh plan with it true.
 
 Staging delivery and lifecycle workflows carry the same explicit
 `deployment_lane` token (`full` or `pilot`) through the immutable release,
@@ -827,8 +839,8 @@ component usage are documented in [`docs/product/brand-system/`](../product/bran
 These thresholds live in `infra/cicd/aether-cicd/quality_gates/`, which is part of the
 reference model — they are not enforced by any workflow in
 `.github/workflows/`. The normal pull-request gate that actually blocks a merge
-is the `verification / disposition` status published by
-`repo-consistency.yml`; the required-check catalog in
+is the `ci / verdict` status published by
+`ci.yml`; the required-check catalog in
 `config/required_release_checks.yaml` governs path-scoped SDK checks and
 release-only evidence, and is validated by `make validate-required-release-checks`.
 
@@ -900,10 +912,11 @@ pull requests.
 
 ## Repo consistency gate
 
-In addition to the eight deploy-oriented stages above, a dedicated
-**Repo Consistency** workflow (`.github/workflows/repo-consistency.yml`)
-publishes the blocking `verification / disposition` status when a PR is
-finalized (`ready_for_review`) and on pushes to `main`. It enforces:
+In addition to the eight deploy-oriented stages above, the **ci** workflow
+(`.github/workflows/ci.yml`) publishes the blocking `ci / verdict` status for
+non-draft PRs (from `ready_for_review`) and on pushes to `development`,
+`staging` and `main`. Through its always-on control gates, the `docs` suite and
+selected suites and checks it enforces:
 
 - version alignment (`pyproject.toml` is canonical)
 - generated docs freshness (`docs/_generated/` diff check)

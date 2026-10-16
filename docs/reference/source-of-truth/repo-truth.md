@@ -103,7 +103,7 @@ blocking PR authority and specialized workflows supplementary.
 | `docs/source-of-truth/`, `docs/sdks/`, `docs/connectors/`, `docs/security/` | `docs/reference/source-of-truth/`, `docs/reference/sdks/`, `docs/reference/connectors/`, `docs/reference/security/` |
 | `docs/releases/`, `docs/generated/` | `docs/operations/releases/`, `docs/_generated/` |
 | Root `contracts/` | `packages/contracts/` (policy) and `packages/shared/contracts/` (registries) |
-| `ci.yml`, `docs.yml`, `contracts.yml`, `sdk.yml`, `connectors.yml`, `release.yml`, `version-consistency.yml` | `repo-consistency.yml` (terminal authority) plus the existing specialized workflows; individual gates run through `make repo-doctor` |
+| `ci.yml`, `docs.yml`, `contracts.yml`, `sdk.yml`, `connectors.yml`, `release.yml`, `version-consistency.yml` | `ci.yml` (terminal authority, `ci / verdict`) plus the existing specialized workflows; individual gates run through `make repo-doctor` |
 | `turbo.json`, `pnpm docs:check` and similar scripts | `pnpm-workspace.yaml` and `make` targets (`docs-check`, `repo-doctor`, `verification-disposition`) |
 | TypeScript validators under `scripts/**` | Python validators: `validate_root_layout.py`, `check_deprecated_language.py`, `bump_version.py --check`, `validate_sdk_parity.py`, `validate_contracts.py` |
 

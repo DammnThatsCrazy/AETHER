@@ -13,7 +13,13 @@ since_version: 0.1.0
 Per-workflow disposition for everything that runs on pull requests today. A
 workflow is deleted or loses its PR trigger only when its unique invariant is
 covered by a V2 suite or check **and** hosted `ci / verdict` runs have shown the
-replacement catches it. Nothing here is retired yet; the dispositions below are decided.
+replacement catches it. **Cutover executed:** `repo-consistency.yml`,
+`aether-test.yml`, `kyber-e2e.yml` and `identity-continuity-gates.yml` are
+deleted; the cutover was approved on less hosted evidence than the original
+~30-PR bar (see the parity report for what was measured). `functionality-proof`,
+`access-kit-container` and `repo-health` lost their PR triggers, `contract-tests`
+was removed from `smart-contract-analysis.yml`, and `pr-size` was dropped. The
+dispositions below record what was decided and why.
 
 Disposition key: **retire** (after parity), **convert** (move its checks into
 `ci.yml` as path-selected `checks`), **move tier** (nightly or release), **retain**.
@@ -31,7 +37,7 @@ Disposition key: **retire** (after parity), **convert** (move its checks into
 | `infrastructure.yml` | `plan` (`terraform validate`/plan), credential readiness | Infra validity; no automatic apply | none | **Retain** (becomes `infra.yml`): needs `setup-terraform`, plugin caching and the remote-plan dispatch flow; already path-filtered to `infra/aws/**`, no apply. Supplementary evidence, not a merge authority |
 | `access-kit-container.yml` | `build-and-smoke` (`npm pack`, Docker build) | Access Kit packaging | none | check `access-kit-container` (shadow: `npm pack`, buildx, container smoke via `scripts/ci_access_kit_smoke.sh`). Retire the PR trigger after parity; push and dispatch runs stay |
 | `frontend-preview.yml` | preview deploys | Preview environments | n/a | **Retain** (`preview.yml`) |
-| `repo-consistency.yml` | 10-job DAG, `verification / disposition` | Current merge authority | `ci / verdict`; see the job map below | **Retire last**, after the ruleset requires `ci / verdict` and the push-time `release-gate` job has a home |
+| `repo-consistency.yml` | 10-job DAG, `verification / disposition` | Current merge authority | `ci / verdict`; see the job map below | **Deleted** in the cutover. Its control validators and builds are checks `control-gates` and `build-selected`; `release-gate` moved to `release-gate.yml` (it was dispatch-only) |
 
 Out of scope for this phase: staging, terraform-promote, deploy and publish
 workflows. They are privileged operations, not PR verification.
@@ -61,7 +67,7 @@ the workflow file; check it when retiring.
 - `aether-test.yml` and suite `frontend-aether` both run the `aether-web` tests.
 - `kyber-e2e.yml` component tests and suite `frontend-kyber-component`.
 
-## Why nothing is deleted yet
+## Why checks came before deletion
 
 The first V2 version only ran registry suites. The hosted check above shows
 workflows also protect invariants outside the registry, so deleting them first
@@ -83,4 +89,13 @@ or release gate. Closed by this change unless noted:
 | `build-backend-image` | `docker build services/api` | check `build-selected` (same script); the image is not saved |
 | `candidate-verification` | verified the immutable archive of the two builds above | **Retired with the archives.** `deploy.yml` builds the release candidate; no workflow downloads the PR run's archives |
 | `publish-evidence` | `verification / disposition` | `ci / verdict` |
-| `release-gate` | `make release-gate` and staging preflight dry-run on push to `development`, `staging`, `main` | **Not yet ported.** `ci.yml` has no `push` trigger; needs a push-time home before this workflow can go |
+| `release-gate` | `make release-gate` and staging preflight dry-run on push to `development`, `staging`, `main` | **Ported unchanged** to `release-gate.yml`; it was `workflow_dispatch`-only, not push-time |
+
+## Accepted overlap after the cutover
+
+- Slither runs twice on smart-contract PRs: as check `contracts-slither` under
+  `ci / verdict`, and in `smart-contract-analysis.yml`, which stays for the SARIF
+  upload to code scanning. Remove the workflow's `pull_request` trigger if the
+  duplicate cost outweighs the PR annotations.
+- `sdk-release-validation.yml` keeps its `sdk-js` job because the release-check
+  catalog names it, even though the `sdk-*` suites cover the same tests.

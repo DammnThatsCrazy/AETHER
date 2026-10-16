@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Static identity-continuity checks (CI V2 port of Gates 1 and 6).
 
-Ported from .github/workflows/identity-continuity-gates.yml so the same
+Ported from the retired identity-continuity-gates workflow so the same
 invariants run under `ci / verdict`:
 
   Gate 1  every identity contract exists, parses as JSON, and index.json lists

@@ -22,7 +22,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  ".github/workflows/repo-health.yml": "sha256:95b9655d007b99c9ee67ba5d12c4c15fcb7b824d6f12b64e8374447614c974d3"
+  ".github/workflows/repo-health.yml": "sha256:1ef1036fd95b794296b848347ef8bac011a0be5e98f85e270eaffb66ffdd66d5"
   ".pre-commit-config.yaml": "sha256:a632647a19dc64181aa9c9dfc2a9c1b3f4180c88b45094a4b461bc53f6c30191"
   "Makefile": "sha256:fddce509fd710303082f6c218dc99cdf4af96b1229824967084e4b1359c99c6d"
   "scripts/docs_drift.py": "sha256:6ff727e23ae244f41c014307b4a3361ebe521508bd74a7161a745394db12022c"
@@ -205,9 +205,8 @@ before pushing.
 **CI** — documentation consistency is implemented by two workflows with
 different authority scopes:
 
-- `.github/workflows/repo-health.yml` — advisory docs/size signals on finalized
-  PRs (`ready_for_review`) and
-  the trusted-main/nightly documentation runners. Its `docs-sync` write path is
+- `.github/workflows/repo-health.yml` — the trusted-main/nightly documentation
+  runners (it has no pull-request trigger). Its `docs-sync` write path is
   restricted to pushes to `main`.
 - `.github/workflows/ci.yml` — the normal PR authority named `ci / verdict`; it
   starts at PR finalization (`ready_for_review`) and runs the `docs` suite when

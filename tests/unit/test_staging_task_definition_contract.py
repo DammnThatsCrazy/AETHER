@@ -15,10 +15,12 @@ checker = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(checker)
 
 
-def _client(*, pilot: bool = True):
+def _client(*, pilot: bool = True, identity_verification_secrets_enabled: bool = True):
     secret_names = checker.COMMON_SECRET_ENV | (
         checker.PILOT_PRICE_SECRET_ENV if pilot else checker.KYBER_SECRET_ENV
     )
+    if not identity_verification_secrets_enabled:
+        secret_names -= checker.IDENTITY_VERIFICATION_SECRET_ENV
     secrets = {
         name: (
             "arn:aws:secretsmanager:us-east-1:111122223333:secret:rds!cluster-aether-staging"
@@ -132,6 +134,36 @@ def test_full_lane_rejects_email_based_operator_admission():
 
     errors = checker.contract_errors(lane="full", client=with_operator_emails)
     assert any("PLATFORM_OPERATOR_EMAILS is set outside the pilot lane" in error for error in errors)
+
+
+def test_identity_verification_mounts_follow_the_reviewed_enablement_flag():
+    assert checker.contract_errors(
+        lane="pilot",
+        client=_client(identity_verification_secrets_enabled=False),
+        identity_verification_secrets_enabled=False,
+    ) == []
+
+    original = _client(identity_verification_secrets_enabled=False)
+
+    def unexpectedly_mounted(args: list[str]) -> dict[str, Any]:
+        payload = original(args)
+        if args[:2] == ["ecs", "describe-task-definition"]:
+            container = payload["taskDefinition"]["containerDefinitions"][0]
+            container["secrets"].append({
+                "name": "IDENTITY_VERIFICATION_TOKEN_KEY",
+                "valueFrom": (
+                    "arn:aws:secretsmanager:us-east-1:111122223333:secret:"
+                    "aether/identity-verification-token-key"
+                ),
+            })
+        return payload
+
+    errors = checker.contract_errors(
+        lane="pilot",
+        client=unexpectedly_mounted,
+        identity_verification_secrets_enabled=False,
+    )
+    assert any("identity verification secret mounts are present while disabled" in error for error in errors)
 
 
 def test_pilot_rejects_old_full_lane_mounts():

@@ -500,6 +500,7 @@ module "ecs" {
   platform_operator_emails     = var.deployment_lane == "pilot" ? var.platform_operator_emails : []
   platform_operator_tenant_ids = var.platform_operator_tenant_ids
   deployment_lane              = var.deployment_lane
+  identity_verification_secrets_enabled = var.identity_verification_secrets_enabled
   email_enabled                = var.email_enabled
   self_signup_enabled          = local.self_signup_enabled
   email_sender_domain          = var.email_sender_domain

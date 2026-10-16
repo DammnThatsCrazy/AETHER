@@ -283,6 +283,12 @@ variable "deployment_lane" {
   }
 }
 
+variable "identity_verification_secrets_enabled" {
+  type        = bool
+  description = "Mount identity verification key secrets into ECS tasks after their current versions have been populated."
+  default     = false
+}
+
 variable "stripe_billing_enabled" {
   type        = bool
   description = "Whether the task receives the complete self-service Stripe billing contract."

@@ -29,6 +29,12 @@ variable "deployment_lane" {
   }
 }
 
+variable "identity_verification_secrets_enabled" {
+  type        = bool
+  description = "Mount the identity verification active and previous keys only after both Secrets Manager secrets have AWSCURRENT versions."
+  default     = false
+}
+
 # Backend releases are always pinned to an immutable digest. The optional ML
 # digest is unused today because staging and production run ML inline and do
 # not provision a dedicated ML image.

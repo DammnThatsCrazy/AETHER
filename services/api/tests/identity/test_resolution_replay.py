@@ -24,7 +24,7 @@ from repositories.repos import reset_in_memory_stores  # noqa: E402
 from identity.identity.audit import IdentityAuditWriter  # noqa: E402
 from identity.identity.conflicts import IdentityConflictManager  # noqa: E402
 from identity.identity.graph_writer import IdentityGraphWriter  # noqa: E402
-from identity.identity.hashing import hash_email  # noqa: E402
+from identity.identity.hashing import hash_email, hash_wallet  # noqa: E402
 from identity.identity.metrics import IdentityMetrics  # noqa: E402
 from identity.identity.models import (  # noqa: E402
     ConfidenceTier,
@@ -333,3 +333,108 @@ async def test_replay_trigger_cannot_be_reused_for_different_evidence():
     second = await replay.request_replay(**{**args, "identifier_hash": "different-hash"})
     assert second["status"] == "error"
     assert second["error"] == "trigger_id_reused_with_different_evidence"
+
+
+@pytest.mark.asyncio
+async def test_stale_in_progress_replay_claim_can_be_reclaimed():
+    resolver, repo = _build_resolver()
+    replay = ResolutionReplayService(resolver=resolver, repo=repo)
+    trigger_id = "ev-stale-claim"
+    key = f"{TENANT}:{trigger_id}:1.0.0"
+    await replay._jobs.insert(key, {
+        "tenant_id": TENANT,
+        "trigger_id": trigger_id,
+        "policy_version": "1.0.0",
+        "status": "in_progress",
+    })
+
+    active = await replay.request_replay(
+        tenant_id=TENANT,
+        identifier_type="email",
+        identifier_hash=hash_email("stale@example.com", TENANT),
+        trigger_type="verification_evidence",
+        trigger_id=trigger_id,
+        consent_snapshot=LINK_CONSENT,
+    )
+    assert active["status"] == "in_progress"
+
+    replay._jobs._store[key]["updated_at"] = "2000-01-01T00:00:00+00:00"
+    reclaimed = await replay.request_replay(
+        tenant_id=TENANT,
+        identifier_type="email",
+        identifier_hash=hash_email("stale@example.com", TENANT),
+        trigger_type="verification_evidence",
+        trigger_id=trigger_id,
+        consent_snapshot=LINK_CONSENT,
+    )
+
+    assert reclaimed["status"] == "complete"
+    assert (await replay._jobs.find_by_id(key))["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_fresh_wallet_proof_replaces_revoked_proof_alias_but_not_observed_alias():
+    resolver, repo = _build_resolver()
+    wallet_hash = hash_wallet("0x" + "1" * 40, "eip155:1")
+    entity_id = "entity-wallet-reproof"
+    subject_id = "site:app-a:anon-wallet-reproof"
+    await repo.create_subject(TENANT, entity_id, EntityType.ANONYMOUS_VISITOR)
+    await repo.upsert_alias(
+        TENANT, entity_id, IdentitySignalType.ANONYMOUS_ID, subject_id,
+        confidence_tier=ConfidenceTier.STRONG,
+    )
+    revoked_proof = await repo.upsert_alias(
+        TENANT, entity_id, IdentitySignalType.WALLET_SIGNATURE_VERIFIED, wallet_hash,
+        confidence_tier=ConfidenceTier.STRONG,
+    )
+    await repo.revoke_alias(revoked_proof["id"])
+    replay = ResolutionReplayService(resolver=resolver, repo=repo)
+
+    fresh = await replay.request_replay(
+        tenant_id=TENANT,
+        identifier_type="wallet",
+        identifier_hash=wallet_hash,
+        trigger_type="wallet_verification_evidence",
+        trigger_id="wallet-reproof-fresh",
+        chain_namespace="eip155:1",
+        subject_hint_id="anon-wallet-reproof",
+        identity_namespace="site:app-a",
+        consent_snapshot=LINK_CONSENT,
+    )
+
+    assert fresh["status"] == "complete"
+    active_proofs = await repo.find_aliases_by_signal(
+        TENANT, IdentitySignalType.WALLET_SIGNATURE_VERIFIED, wallet_hash
+    )
+    assert any(alias.get("canonical_entity_id") == entity_id for alias in active_proofs)
+
+    observed_hash = hash_wallet("0x" + "2" * 40, "eip155:1")
+    observed_entity = "entity-wallet-revoked-observed"
+    observed_subject = "site:app-a:anon-wallet-observed"
+    await repo.create_subject(TENANT, observed_entity, EntityType.ANONYMOUS_VISITOR)
+    await repo.upsert_alias(
+        TENANT, observed_entity, IdentitySignalType.ANONYMOUS_ID, observed_subject,
+        confidence_tier=ConfidenceTier.STRONG,
+    )
+    observed_alias = await repo.upsert_alias(
+        TENANT, observed_entity, IdentitySignalType.WALLET_ADDRESS, observed_hash,
+        confidence_tier=ConfidenceTier.STRONG,
+    )
+    await repo.revoke_alias(observed_alias["id"])
+    blocked = await replay.request_replay(
+        tenant_id=TENANT,
+        identifier_type="wallet",
+        identifier_hash=observed_hash,
+        trigger_type="wallet_verification_evidence",
+        trigger_id="wallet-reproof-observed-revoked",
+        chain_namespace="eip155:1",
+        subject_hint_id="anon-wallet-observed",
+        identity_namespace="site:app-a",
+        consent_snapshot=LINK_CONSENT,
+    )
+
+    assert blocked["status"] == "complete"
+    assert blocked["decision"] == "blocked"
+    assert await repo.find_aliases_by_signal(
+        TENANT, IdentitySignalType.WALLET_SIGNATURE_VERIFIED, observed_hash
+    ) == []
