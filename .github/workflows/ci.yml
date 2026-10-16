@@ -172,25 +172,14 @@ jobs:
           PY
 
   verdict:
-    name: verdict
+    # GitHub exposes the job name as the status-check context, so the name is the
+    # required context itself (the legacy authority did the same).
+    name: ci / verdict
     needs: [classify, suites, checks]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - name: Record verdict evidence
-        env:
-          RESULTS: ${{ toJson(needs) }}
-        run: |
-          mkdir -p ci-evidence
-          printf '{"sha":"%s","event":"%s","needs":%s}\n' "$GITHUB_SHA" "$GITHUB_EVENT_NAME" "$RESULTS" > ci-evidence/ci-verdict.json
-      - uses: actions/upload-artifact@v4
-        # Diagnostic only: a storage-quota failure must not fail a run whose checks passed.
-        continue-on-error: true
-        with:
-          name: ci-verdict-evidence
-          path: ci-evidence/ci-verdict.json
-          retention-days: 7
       - name: Evaluate the planned job set
         env:
           DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft }}
@@ -218,3 +207,18 @@ jobs:
             # A legitimate no-op is only an empty selection with suites skipped.
             [ "$SUITES" = skipped ] && [ "$MODE" = empty ] || { echo "no workers for mode '$MODE' is not a valid no-op"; exit 1; }
           fi
+      - name: Record verdict evidence
+        if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+        env:
+          RESULTS: ${{ toJson(needs) }}
+        run: |
+          mkdir -p ci-evidence
+          printf '{"sha":"%s","event":"%s","needs":%s}\n' "$GITHUB_SHA" "$GITHUB_EVENT_NAME" "$RESULTS" > ci-evidence/ci-verdict.json
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+        # Diagnostic only: a storage-quota failure must not fail a run whose checks passed.
+        continue-on-error: true
+        with:
+          name: ci-verdict-evidence
+          path: ci-evidence/ci-verdict.json
+          retention-days: 7

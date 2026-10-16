@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 AUTHORITY = (
     "name: ci\non:\n  pull_request:\n    types: [opened, synchronize, reopened, ready_for_review]\n"
-    "jobs:\n  verdict:\n    name: verdict\n"
+    "jobs:\n  verdict:\n    name: ci / verdict\n"
 )
 
 
@@ -60,7 +60,7 @@ def test_authority_types_are_pinned(tmp_path: Path) -> None:
 
 
 def test_authority_check_name_is_pinned(tmp_path: Path) -> None:
-    errors = _fixture(tmp_path, {"ci.yml": AUTHORITY.replace("name: verdict", "name: summary")})
+    errors = _fixture(tmp_path, {"ci.yml": AUTHORITY.replace("name: ci / verdict", "name: verdict")})
     assert any("ci / verdict" in e for e in errors)
 
 

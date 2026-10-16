@@ -79,9 +79,10 @@ def validate_workflow_cadence(root: Path = ROOT) -> list[str]:
             authority_seen = True
             jobs = document.get("jobs") or {}
             verdict = jobs.get("verdict") or {}
-            if f"{document.get('name')} / {verdict.get('name')}" != NORMAL_PR_STATUS:
+            # GitHub exposes the job name as the status-check context.
+            if verdict.get("name") != NORMAL_PR_STATUS:
                 errors.append(
-                    f"{relative}: workflow name and verdict job must produce the check {NORMAL_PR_STATUS!r}"
+                    f"{relative}: the verdict job must be named {NORMAL_PR_STATUS!r}"
                 )
 
     if not authority_seen:
