@@ -399,6 +399,21 @@ class TestWebhookHandling:
                 err = e
             assert err is not None
 
+    def test_webhook_route_returns_503_when_secret_not_configured(self, monkeypatch):
+        """A missing webhook secret is a deployment error, not a bad signature."""
+        self._setup(monkeypatch)
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "")
+        with backend_path():
+            _reload_settings()
+            wh = importlib.import_module("governance.admin.webhook_routes")
+
+            class _Req:
+                async def body(self):
+                    return b"{}"
+
+            resp = asyncio.run(wh.stripe_webhook(_Req(), stripe_signature="t=1,v1=x"))
+            assert resp.status_code == 503
+
     def test_subscription_updated_active_sets_plan_tier(self, monkeypatch):
         self._setup(monkeypatch)
         with backend_path():
