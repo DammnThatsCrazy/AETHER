@@ -5,7 +5,7 @@ section: home
 visibility: P
 audience: [exec, buyer, dev-senior]
 status: stable
-since_version: "8.12.0"
+since_version: "0.1.0"
 estimated_read_minutes: 2
 toc_depth: 2
 canonical_owner: strategy@olympus

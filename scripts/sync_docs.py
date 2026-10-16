@@ -137,7 +137,7 @@ def _frontmatter(
         "visibility: I",
         "audience: [" + ", ".join(audience) + "]",
         "status: stable",
-        'since_version: "8.8.0"',
+        'since_version: "0.1.0"',
         "source_files:",
     ]
     for sf in source_files:
