@@ -173,8 +173,10 @@ jobs:
 
   verdict:
     # GitHub exposes the job name as the status-check context, so the name is the
-    # required context itself (the legacy authority did the same).
-    name: ci / verdict
+    # required context itself (the legacy authority did the same). A manual replay
+    # chooses its own diff base and may select nothing, so it publishes under a
+    # different name and can never satisfy the required context.
+    name: ${{ github.event_name == 'workflow_dispatch' && 'ci / verdict (manual replay)' || 'ci / verdict' }}
     needs: [classify, suites, checks]
     if: always()
     runs-on: ubuntu-latest
@@ -208,14 +210,14 @@ jobs:
             [ "$SUITES" = skipped ] && [ "$MODE" = empty ] || { echo "no workers for mode '$MODE' is not a valid no-op"; exit 1; }
           fi
       - name: Record verdict evidence
-        if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+        if: github.event_name != 'workflow_dispatch' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
         env:
           RESULTS: ${{ toJson(needs) }}
         run: |
           mkdir -p ci-evidence
           printf '{"sha":"%s","event":"%s","needs":%s}\n' "$GITHUB_SHA" "$GITHUB_EVENT_NAME" "$RESULTS" > ci-evidence/ci-verdict.json
       - uses: actions/upload-artifact@v4
-        if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+        if: github.event_name != 'workflow_dispatch' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
         # Diagnostic only: a storage-quota failure must not fail a run whose checks passed.
         continue-on-error: true
         with:

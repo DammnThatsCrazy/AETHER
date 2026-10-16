@@ -67,3 +67,17 @@ def test_authority_check_name_is_pinned(tmp_path: Path) -> None:
 def test_missing_authority_is_an_error(tmp_path: Path) -> None:
     errors = _fixture(tmp_path, {"other.yml": _other("[ready_for_review]")})
     assert any("ci.yml" in e for e in errors)
+
+
+DISPATCH_NAME = "${{ github.event_name == 'workflow_dispatch' && 'ci / verdict (manual replay)' || 'ci / verdict' }}"
+
+
+def test_manual_replays_publish_under_a_different_context(tmp_path: Path) -> None:
+    """A workflow_dispatch run picks its own diff base, so it must not satisfy `ci / verdict`."""
+    assert _fixture(tmp_path, {"ci.yml": AUTHORITY.replace("name: ci / verdict", f"name: {DISPATCH_NAME!r}")}) == []
+
+
+def test_other_conditional_verdict_names_are_rejected(tmp_path: Path) -> None:
+    sneaky = "${{ github.event_name == 'push' && 'x' || 'ci / verdict' }}"
+    errors = _fixture(tmp_path, {"ci.yml": AUTHORITY.replace("name: ci / verdict", f"name: {sneaky!r}")})
+    assert any("ci / verdict" in e for e in errors)

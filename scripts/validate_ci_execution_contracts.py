@@ -79,10 +79,19 @@ def validate_workflow_cadence(root: Path = ROOT) -> list[str]:
             authority_seen = True
             jobs = document.get("jobs") or {}
             verdict = jobs.get("verdict") or {}
-            # GitHub exposes the job name as the status-check context.
-            if verdict.get("name") != NORMAL_PR_STATUS:
+            # GitHub exposes the job name as the status-check context. Manual
+            # replays choose their own diff base, so they must publish under a
+            # different name; the name is therefore a dispatch-conditional
+            # expression whose only other value is the required context.
+            name = str(verdict.get("name"))
+            expected = (
+                "${{ github.event_name == 'workflow_dispatch' && "
+                f"'{NORMAL_PR_STATUS} (manual replay)' || '{NORMAL_PR_STATUS}' }}}}"
+            )
+            if name not in (NORMAL_PR_STATUS, expected):
                 errors.append(
-                    f"{relative}: the verdict job must be named {NORMAL_PR_STATUS!r}"
+                    f"{relative}: the verdict job must be named {NORMAL_PR_STATUS!r} "
+                    "(manual replays may only differ by the dispatch-conditional name)"
                 )
 
     if not authority_seen:
