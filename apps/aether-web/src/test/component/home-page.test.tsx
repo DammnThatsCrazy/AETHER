@@ -58,6 +58,18 @@ describe('Home', () => {
     expect(screen.getByText('Nothing needs you right now.')).toBeInTheDocument();
   });
 
+  it('marks unavailable reads as unavailable, never as empty', async () => {
+    s.summary = { data: null, isLoading: false, error: 'analytics offline', refetch: vi.fn() };
+    s.integrations = { data: null, isLoading: false, error: 'integrations offline', refetch: vi.fn() };
+    s.readiness = { data: null, isLoading: false, error: 'readiness offline', refetch: vi.fn() };
+    renderHome();
+    expect(screen.getByText('Event totals are unavailable right now.')).toBeInTheDocument();
+    expect(screen.getByText('Connections are unavailable right now.')).toBeInTheDocument();
+    expect(screen.getByText('Readiness checks are temporarily unavailable.')).toBeInTheDocument();
+    expect(screen.queryByText('No sources connected yet.')).not.toBeInTheDocument();
+    expect(document.querySelector('[data-stage="events_received"]')).toHaveAttribute('data-stage-status', 'unknown');
+  });
+
   it('renders real reads: event mix, connections with marks, attention items and campaigns', async () => {
     s.activation = settled({ state: 'waiting_for_event', waiting_reason: 'no_events_received_yet' });
     s.summary = settled({

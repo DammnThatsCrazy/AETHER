@@ -147,6 +147,36 @@ beforeEach(() => {
 });
 
 describe('Workspace onboarding flow', () => {
+  it('holds on a loading state until the activation record is read', () => {
+    s.status = { data: null, isLoading: true, error: null, refetch: vi.fn() };
+    renderFlow();
+    expect(document.querySelector('.animate-pulse, .aether-skeleton')).not.toBeNull();
+    expect(screen.queryByTestId('onboarding-step-workspace')).not.toBeInTheDocument();
+  });
+
+  it('reports an unavailable activation read instead of guessing a step', async () => {
+    s.status = { data: null, isLoading: false, error: 'activation offline', refetch: vi.fn() };
+    renderFlow();
+    expect(await screen.findByText(/Setup status is unavailable/)).toBeInTheDocument();
+    expect(screen.queryByTestId('onboarding-step-sdks')).not.toBeInTheDocument();
+  });
+
+  it('shows an empty connect plan as a prompt to pick goals, not as zero sources', async () => {
+    s.status = settled(activation({ intents: ['grow_revenue'] }));
+    s.plan = settled({ tenant_id: 't', needs_selection: true, selected_intents: [], categories: [] });
+    renderFlow();
+    await screen.findByTestId('onboarding-step-sources');
+    expect(screen.getByText(/Pick at least one goal so Aether can recommend sources/)).toBeInTheDocument();
+  });
+
+  it('reports an unavailable connect plan with a retry', async () => {
+    s.status = settled(activation({ intents: ['grow_revenue'] }));
+    s.plan = { data: null, isLoading: false, error: 'plan offline', refetch: vi.fn() };
+    renderFlow();
+    await screen.findByTestId('onboarding-step-sources');
+    expect(screen.getByText(/Could not load your recommended sources/)).toBeInTheDocument();
+  });
+
   it('saves the workspace and goals, then moves to Sources', async () => {
     renderFlow();
     expect(await screen.findByTestId('onboarding-step-workspace')).toBeInTheDocument();

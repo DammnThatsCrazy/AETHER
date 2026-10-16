@@ -639,7 +639,7 @@ const cases: RouteStateCase[] = [
     errorText: 'Unable to load Usage & Plan',
   },
   {
-    route: '/onboarding',
+    route: '/onboarding/implementation',
     Page: OnboardingPage,
     empty: () => { providerState.onboarding = 'empty'; },
     fail: () => { providerState.onboarding = 'error'; },
