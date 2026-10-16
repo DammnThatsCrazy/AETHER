@@ -29,7 +29,7 @@ reviewed_source_commits:
   - commit: "c71ebc5cb"
     reason: "Reviewed Access Kit container workflow cadence: pull requests build on ready_for_review, with explicit dispatch and development/main push lanes for targeted or post-landing builds; no staging wake or deployment is added."
 source_hashes:
-  ".github/workflows/": "sha256:9adef47cb8a8188e046c608399085c4b21862b1f513917c3c4d4586f519ec42f"
+  ".github/workflows/": "sha256:a6c076b155ff8fc2e344f2c31b9e2776457ed1ae133401f02077dbcdd70ecaa7"
   "config/delivery_workflow_authority.yaml": "sha256:f9f6f8d8892aefe2b04ef6f2adbc95e5d514efbca7d8a833cf141a1ed17e7038"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
@@ -315,7 +315,8 @@ runtime, runs path-selected non-suite `checks` (aether-web typecheck, kyber-web
 Playwright e2e, and the identity-continuity static gates plus the tests no suite
 runs, which need a Python extra; the pnpm proof-package builds, the
 functionality-proof gating jobs, Slither, and the Access Kit container smoke,
-which need pnpm, Python, or Docker), uploads no artifacts, and is **not** a required status.
+which need pnpm, Python, or Docker; the always-on control gates that replace
+`universal-fast`; and the selected Node and backend image builds), uploads no artifacts, and is **not** a required status.
 `verification / disposition` stays the merge authority until the parity report
 clears the cutover. Diagnostic artifact uploads in workflows that never
 download artifacts are `continue-on-error` with seven-day retention so a storage
