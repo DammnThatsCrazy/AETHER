@@ -16,7 +16,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Request
 
-from shared.common.common import APIResponse, ForbiddenError, NotFoundError
+from shared.common.common import APIResponse, BadRequestError, ForbiddenError, NotFoundError
 from shared.logger.logger import get_logger
 
 from connectors.integrations.data_rights.models import (
@@ -25,7 +25,14 @@ from connectors.integrations.data_rights.models import (
     GrantStatus,
     PolicyCheckRequest,
 )
-from connectors.integrations.data_rights.service import data_rights_service
+from connectors.integrations.data_rights.service import (
+    GrantClassificationError,
+    data_rights_service,
+)
+from shared.integration_contracts.source_relationship import (
+    OPERATOR_RELATIONSHIPS,
+    TENANT_SELF_SERVICE_RELATIONSHIPS,
+)
 
 logger = get_logger("aether.service.data_rights.routes")
 
@@ -102,7 +109,14 @@ async def create_grant(body: DataRightsGrantCreate, request: Request):
         raise ForbiddenError("Cannot create grants for other tenants")
 
     actor = _actor(request)
-    grant = await data_rights_service.create_grant(body, granted_by_user_id=actor)
+    if body.source_relationship not in TENANT_SELF_SERVICE_RELATIONSHIPS:
+        raise ForbiddenError(
+            "Tenants may grant only personal_account or organization_system sources"
+        )
+    try:
+        grant = await data_rights_service.create_grant(body, granted_by_user_id=actor)
+    except GrantClassificationError as exc:
+        raise BadRequestError(exc.reason) from exc
 
     return APIResponse(data=grant.model_dump()).to_dict()
 
@@ -174,6 +188,19 @@ async def admin_list_grants(
         "items": [g.model_dump() for g in grants],
         "count": len(grants),
     }).to_dict()
+
+
+@admin_router.post("/grants")
+async def admin_create_grant(body: DataRightsGrantCreate, request: Request):
+    """Operator: onboard an Olympus, partner, public-reference or internal source grant."""
+    operator = _require_operator(request)
+    if body.source_relationship not in OPERATOR_RELATIONSHIPS:
+        raise ForbiddenError("Tenant sources are granted by the tenant's own admin")
+    try:
+        grant = await data_rights_service.create_grant(body, granted_by_user_id=operator.actor_id)
+    except GrantClassificationError as exc:
+        raise BadRequestError(exc.reason) from exc
+    return APIResponse(data=grant.model_dump()).to_dict()
 
 
 @admin_router.post("/grants/{grant_id}/revoke")
