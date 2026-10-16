@@ -31,12 +31,29 @@ from connectors.provider_runtime.rights_admission import (
     ProviderRawRightsDenied,
     ProviderRawRightsEvidence,
     provider_account_source_id,
+    raw_retention_use,
 )
 from shared.integration_contracts.events import make_raw_record
+from shared.integration_contracts.source_relationship import OLYMPUS_SOURCE_TENANT_ID
 
 PROVIDER = "shopify.orders.catalog"
 CONNECTION = "connection-fence"
 ACCOUNT = "shop-fence"
+
+PROFILES = {
+    "organization_system": dict(
+        connector_class="tenant_byod_data", raw_data_owner="tenant",
+        source_relationship="organization_system", tenant_lake_allowed=True,
+    ),
+    "partner_feed": dict(
+        connector_class="partner_feed", raw_data_owner="partner",
+        source_relationship="partner_feed", contract_id="contract-fence", tenant_lake_allowed=True,
+    ),
+    "olympus_source": dict(
+        connector_class="olympus_provider", raw_data_owner="olympus_labs",
+        source_relationship="olympus_source", olympus_baseline_allowed=True,
+    ),
+}
 
 
 class FencedAdmission(ProviderRawRightsAdmission):
@@ -52,14 +69,18 @@ class FencedAdmission(ProviderRawRightsAdmission):
         self.after_admit = after_admit
 
     async def admit(self, record):
+        use = raw_retention_use(self._grant)
         evidence = ProviderRawRightsEvidence(
             tenant_id=record.tenant_id,
             source_id=self._grant.source_id,
             source_grant_ref=self._grant.data_rights_grant_id,
             rights_decision_ref=f"rdec_{record.idempotency_key}",
             decision_identity=f"rdid_{record.idempotency_key}",
+            requested_use=use,
+            destination=use,
             policy_version="irrl-2",
             evaluated_at="2026-10-09T00:00:00+00:00",
+            source_relationship=self._grant.source_relationship,
         )
         if self.after_admit is not None:
             await self.after_admit(record)
@@ -73,14 +94,17 @@ class FencedAdmission(ProviderRawRightsAdmission):
 class Env:
     service: Any  # DataRightsService bound to the store under test
     tenant: str
+    profile: str = "organization_system"
+    provider: str = PROVIDER
+    connection: str = CONNECTION
 
     def record(self, n: int):
         return make_raw_record(
-            provider_identity=PROVIDER,
+            provider_identity=self.provider,
             provider_record_id=f"order-{n}",
             provider_record_type="order",
             tenant_id=self.tenant,
-            connection_id=CONNECTION,
+            connection_id=self.connection,
             account_id=ACCOUNT,
             stream_id="orders",
             payload={"id": f"order-{n}"},
@@ -90,14 +114,11 @@ class Env:
         return await self.service.create_grant(
             DataRightsGrantCreate(
                 tenant_id=self.tenant,
-                source_id=provider_account_source_id(CONNECTION, ACCOUNT),
-                connector_id=PROVIDER,
-                connector_class="tenant_byod_data",
+                source_id=provider_account_source_id(self.connection, ACCOUNT),
+                connector_id=self.provider,
                 data_category="customer",
                 data_sensitivity="sensitive_pii",
-                raw_data_owner="tenant",
-                source_relationship="organization_system",
-                tenant_lake_allowed=True,
+                **PROFILES[self.profile],
             ),
             "tenant-admin",
         )
@@ -111,7 +132,7 @@ class Env:
 
     async def rows(self) -> int:
         return await BronzeRepository("provider_records").count(
-            filters={"tenant_id": self.tenant, "source": PROVIDER}
+            filters={"tenant_id": self.tenant, "source": self.provider}
         )
 
     def store(self, admission, repository=None):
@@ -123,6 +144,17 @@ class Env:
 
 def new_tenant() -> str:
     return f"tenant-fence-{uuid.uuid4().hex[:12]}"
+
+
+def new_env(service: Any, profile: str = "organization_system") -> Env:
+    """Olympus grants share one reserved tenant, so they get a unique provider and connection."""
+    if profile == "olympus_source":
+        suffix = uuid.uuid4().hex[:8]
+        return Env(
+            service=service, tenant=OLYMPUS_SOURCE_TENANT_ID, profile=profile,
+            provider=f"dune.fence{suffix}.query_read", connection=f"connection-fence-{suffix}",
+        )
+    return Env(service=service, tenant=new_tenant(), profile=profile)
 
 
 async def revocation_waits_for_an_in_flight_write(env: Env) -> None:
