@@ -37,7 +37,8 @@ until the parity report clears the cutover.
    `checks` runs path-selected non-suite commands declared under `checks:` in
    `config/ci/ownership.yaml` (type checks, browser e2e, the identity-continuity
    static gates, the pnpm proof packages, functionality-proof, Slither, the Access
-   Kit container); a check may need npm, pnpm, Python extras, or a combination.
+   Kit container, the always-on control gates, and the selected builds); a check may
+   need npm, pnpm, Python extras, or a combination.
    A broad-safe selection runs all of them.
 5. `verdict` runs with `if: always()` and fails on a failed, cancelled or
    unexpectedly skipped required job (suites or checks). The only valid no-op

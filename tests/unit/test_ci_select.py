@@ -126,7 +126,7 @@ def test_workers_shard_long_groups_without_mixing_profiles() -> None:
 
 def test_kyber_change_selects_e2e_check_but_not_aether_typecheck() -> None:
     ids = [c["id"] for c in sel("apps/kyber-web/src/a.tsx")["checks"]]
-    assert ids == ["kyber-web-e2e"]
+    assert "kyber-web-e2e" in ids and "aether-web-typecheck" not in ids
 
 
 def test_broad_safe_selects_every_check() -> None:
@@ -134,8 +134,9 @@ def test_broad_safe_selects_every_check() -> None:
     assert ids == {c["id"] for c in RULES["checks"]}
 
 
-def test_docs_only_selects_no_checks() -> None:
-    assert sel("README.md")["checks"] == []
+def test_docs_only_selects_only_always_on_checks() -> None:
+    always = {c["id"] for c in RULES["checks"] if c.get("always")}
+    assert {c["id"] for c in sel("README.md")["checks"]} == always
 
 
 def test_malformed_check_rule_is_an_error() -> None:
@@ -179,3 +180,20 @@ def test_proof_package_change_selects_pnpm_check() -> None:
     assert c["identity-proof-packages"]["pnpm"] is True
     assert c["identity-proof-packages"]["node"] is False
     assert sel("apps/kyber-web/src/a.tsx")["checks"][0]["pnpm"] is False
+
+
+def test_control_gates_run_on_docs_only_changes() -> None:
+    r = sel("docs/operations/CICD.md")
+    assert r["mode"] == "docs-only"
+    assert "control-gates" in [c["id"] for c in r["checks"]]
+    assert "build-selected" not in [c["id"] for c in r["checks"]]
+
+
+def test_control_gates_skip_empty_selection() -> None:
+    assert ci_select.select([], RULES, SUITES)["checks"] == []
+
+
+def test_build_selected_needs_history_and_python() -> None:
+    c = {c["id"]: c for c in sel("services/api/main.py")["checks"]}
+    assert c["build-selected"]["base"] is True and c["build-selected"]["python"] is True
+    assert c["control-gates"]["node"] is False and c["control-gates"]["python"] is True
