@@ -57,10 +57,3 @@ checks:
     supplementary_pr_evidence: true
     runner_class: ubuntu
     evidence_artifact: smart-contract-analysis-evidence
-  - id: smart-contract-tests
-    workflow: .github/workflows/smart-contract-analysis.yml
-    job: contract-tests
-    applicability: [smart_contracts]
-    supplementary_pr_evidence: true
-    runner_class: ubuntu
-    evidence_artifact: contract-tests-evidence

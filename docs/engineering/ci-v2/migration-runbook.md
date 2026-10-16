@@ -89,6 +89,22 @@ the `development` web deploy were not firing for `development` between the
 rename and the merge of #793. #793 has merged and the cleanup is complete, so
 only the lowercase spelling remains.
 
+## Required-status cutover (admin)
+
+The `verdict` job is named `ci / verdict`; GitHub requires status checks by job
+name, so that is the exact context to require.
+
+1. Settings > Rules > the `development` ruleset (and the `staging` and `main`
+   rulesets): add the required status check `ci / verdict`.
+2. Remove the required check `verification / disposition`. The workflow that
+   produced it is deleted, so while it stays required no PR is mergeable.
+3. If a merge queue is enabled, the `ci` workflow already runs on `merge_group`.
+4. A `workflow_dispatch` replay publishes `ci / verdict (manual replay)`, which
+   never satisfies the requirement.
+
+Do steps 1 and 2 before merging the deletion PR. The PR that deletes the legacy
+workflows cannot satisfy `verification / disposition` itself.
+
 ## Rollback
 
 Before step 5, both spellings work in the repo and in AWS, so renaming back is

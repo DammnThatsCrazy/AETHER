@@ -609,30 +609,30 @@ entries:
     classification: core
     state: converge
     authority: >-
-      .github/workflows/repo-consistency.yml (verification / disposition) with
-      workers selected by config/test_suites.yaml
+      .github/workflows/ci.yml (ci / verdict) with suites and checks selected by
+      scripts/ci_select.py from config/ci/ownership.yaml and config/test_suites.yaml
     current:
-      - .github/workflows/repo-consistency.yml
+      - .github/workflows/ci.yml
+      - config/ci/ownership.yaml
       - config/test_suites.yaml
       - config/verification_policy.yaml
     duplicates: []
     retire: >-
-      ready_for_review as an independent trigger on the other ten workflows:
-      each becomes a worker of the canonical plan or moves to staging, nightly or
-      release. #734's R5 audit found no safe removal yet, so each needs selection
-      and evidence parity first (for example Hardhat contract-path selection).
+      ready_for_review as an independent trigger on the remaining supplementary
+      workflows where a ci.yml check or suite now covers their unique invariant
+      (functionality-proof, access-kit-container, smart-contract-analysis
+      contract-tests, repo-health lint-docs and pr-size). The legacy
+      repo-consistency, aether-test, kyber-e2e and identity-continuity-gates
+      workflows were deleted in the CI V2 cutover.
     consumers:
-      - .github/workflows/aether-test.yml
-      - .github/workflows/kyber-e2e.yml
       - .github/workflows/frontend-preview.yml
       - .github/workflows/production-equivalent-ci.yml
       - .github/workflows/smart-contract-analysis.yml
       - .github/workflows/sdk-release-validation.yml
       - .github/workflows/repo-health.yml
       - .github/workflows/infrastructure.yml
-      - .github/workflows/identity-continuity-gates.yml
       - .github/workflows/functionality-proof.yml
-    compatibility: the stable "verification / disposition" check name; unique security evidence (Slither/SARIF, coverage thresholds)
+    compatibility: the stable "ci / verdict" check name; unique security evidence (Slither/SARIF, coverage thresholds)
     mechanism: adapter
     parity_evidence: null
     usage_evidence: null

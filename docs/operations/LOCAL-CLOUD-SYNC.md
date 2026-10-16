@@ -73,6 +73,6 @@ This repo enforces the rule through:
 | Orchestrator | `scripts/repo_doctor.py` |
 | Makefile gate | `make repo-doctor` / `make ci-check` |
 | Pre-commit hooks | `.pre-commit-config.yaml` |
-| GitHub Actions | `.github/workflows/repo-consistency.yml` |
+| GitHub Actions | `.github/workflows/ci.yml` |
 | Cloud environment | `.devcontainer/devcontainer.json` |
 | Agent instructions | `CLAUDE.md` |

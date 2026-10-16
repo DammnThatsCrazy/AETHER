@@ -25,9 +25,9 @@ publishes the stable `ci / verdict` status once the PR is non-draft (it starts a
 `ready_for_review` and reruns on every new head SHA). Draft pushes are an
 accumulation phase and run nothing. It runs the always-on control gates, the
 suites and checks selected by `scripts/ci_select.py`, and the selected builds.
-The older `verification / disposition` workflow (`repo-consistency.yml`) is
-legacy and no longer decides merges; `scripts/verification_disposition.py`
-remains the local equivalent. The legacy `make ci-check` PR execution was
+The older `verification / disposition` workflow (`repo-consistency.yml`) was
+deleted in the CI V2 cutover; `scripts/verification_disposition.py` remains the
+local equivalent. The legacy `make ci-check` PR execution was
 retired after the representative observation window; the command remains available
 for local, trusted-main, nightly, and release evidence but is not part of the PR
 disposition or branch-protection decision.

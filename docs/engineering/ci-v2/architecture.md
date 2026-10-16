@@ -12,9 +12,10 @@ since_version: 0.1.0
 
 CI V2 replaces the multi-job evidence DAG behind `verification / disposition`
 with one workflow, `.github/workflows/ci.yml`, and one stable check,
-`ci / verdict`. It is in **shadow phase**: it runs on every new PR head SHA and
-merge-queue SHA, but `verification / disposition` remains the merge authority
-until the parity report clears the cutover.
+`ci / verdict`. It is the pull-request authority: it runs for non-draft PRs (from
+`ready_for_review`, then every head SHA), merge-queue SHAs and pushes to
+`development`, `staging` and `main`. The legacy workflows were deleted in the
+cutover; see the retirement ledger.
 
 ## How a PR is classified
 
@@ -32,7 +33,7 @@ until the parity report clears the cutover.
      packages) and any **unclassified** path select every PR-lane suite;
    - a selector error fails the `classify` job, which fails the verdict.
 4. `suites` runs workers grouped by (dependency profile, runtime class) and
-   sharded by the registry's `expected_runtime_seconds` (about 300 s per worker)
+   sharded by the registry's `expected_runtime_seconds` (about 450 s per worker; at 300 s a broad change used 17 workers, at 450 s it uses 14 with the same longest worker, and 600 s would save one more worker but add about two minutes to the critical path)
    through `scripts/suite_worker.py`. No artifacts are uploaded or downloaded.
    `checks` runs path-selected non-suite commands declared under `checks:` in
    `config/ci/ownership.yaml` (type checks, browser e2e, the identity-continuity

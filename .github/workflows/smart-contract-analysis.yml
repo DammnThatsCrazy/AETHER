@@ -1,8 +1,10 @@
 name: Smart Contract Static Analysis
 
-# Runs Slither and the Hardhat contract test suite on PR finalization or push
-# to main when packages/contracts/smart-contracts/** is touched. Draft pushes remain an
-# implementation phase and do not start hosted CI.
+# Runs Slither on PR finalization or push to main when
+# packages/contracts/smart-contracts/** is touched. The Hardhat contract tests run
+# as the `smart-contracts` suite under ci.yml; Slither also runs there as the
+# `contracts-slither` check, and this workflow keeps the SARIF upload to code
+# scanning.
 #
 # Slither findings are uploaded as a SARIF artifact for reviewer triage.
 # Hard failure is reserved for HIGH / CRITICAL severity; MEDIUM and below
@@ -125,48 +127,3 @@ jobs:
           retention-days: 7
           name: smart-contract-analysis-evidence
           path: release-evidence/smart-contract-analysis.json
-
-  contract-tests:
-    # packages/contracts/smart-contracts/test/ was not run by any gate. This job closes that gap
-    # by running the Hardhat contract test suite (npm test -> `hardhat test`)
-    # on the same triggers as Slither.
-    name: Hardhat contract test suite
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    defaults:
-      run:
-        working-directory: packages/contracts/smart-contracts
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node.js (for Hardhat / solc)
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: 'packages/contracts/smart-contracts/package-lock.json'
-
-      - name: Install Node dependencies
-        run: npm ci --ignore-scripts
-
-      - name: Compile contracts (Hardhat)
-        run: npx hardhat compile
-        env:
-          REPORT_GAS: false
-
-      - name: Run Hardhat contract test suite
-        run: npm test
-
-      - name: Record contract-tests evidence
-        run: |
-          mkdir -p ../release-evidence
-          printf '{"sha":"%s","job":"contract-tests"}\n' "$GITHUB_SHA" > ../release-evidence/contract-tests.json
-
-      - uses: actions/upload-artifact@v4
-        continue-on-error: true  # diagnostic upload; must not decide the verdict
-        with:
-          retention-days: 7
-          name: contract-tests-evidence
-          path: release-evidence/contract-tests.json
