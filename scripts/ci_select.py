@@ -132,7 +132,8 @@ def _result(mode, paths, selected, reasons, suites, checks=None, rules=None) -> 
     return {
         "checks": [
             {"id": i, "why": why, "setup": by_id[i].get("setup", []), "run": by_id[i]["run"],
-             "env": by_id[i].get("env", {})}
+             "env": by_id[i].get("env", {}), "node": by_id[i].get("node", True),
+             "python_extra": by_id[i].get("python_extra")}
             for i, why in sorted((checks or {}).items())
         ],
         "schema_version": 1,

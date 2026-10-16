@@ -716,6 +716,7 @@ suites:
       "scripts/run_pytest_files.py",
       "tests/unit/test_api_contracts.py",
       "tests/unit/test_ci_select.py",
+      "tests/unit/test_ci_check_identity_continuity.py",
       "tests/unit/test_capability_contract.py",
       "tests/unit/test_ci_runtime_budgets.py",
       "tests/unit/test_customer_settings_contract.py",

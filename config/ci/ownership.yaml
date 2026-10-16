@@ -74,3 +74,21 @@ checks:
     run: ["npm run test:integration --workspace=apps/kyber-web",
           "npm run test:e2e --workspace=apps/kyber-web"]
     env: {CI: "true"}
+  - id: identity-continuity
+    replaces: identity-continuity-gates.yml
+    # Gates 1 and 6 (static) plus the Gate 2/3 tests that no registry suite runs.
+    # Gates 2-5 and the pytest half of Gate 7 are already covered by the
+    # backend-identity and backend-computation suites. The pnpm proof-package
+    # half of Gate 7 is not ported yet (see the retirement ledger).
+    include: ["services/api/identity/**", "services/api/tests/identity/**",
+              "services/api/tests/providers/**", "packages/shared/contracts/identity/**",
+              "apps/aether-web/src/features/identity/**", "scripts/generate_contracts.py",
+              "scripts/identity_confidence_calibration_evaluation.py",
+              "scripts/ci_check_identity_continuity.py",
+              "tests/unit/test_identity_continuity_calibration_workflow.py"]
+    node: false
+    python_extra: "dev,backend"
+    run: ["python scripts/ci_check_identity_continuity.py",
+          "python scripts/generate_contracts.py --check",
+          "python -m pytest services/api/tests/providers/test_identity_evidence.py services/api/tests/providers/test_commerce_identity_evidence.py tests/unit/test_identity_continuity_calibration_workflow.py -v",
+          "python scripts/identity_confidence_calibration_evaluation.py --help > /dev/null"]

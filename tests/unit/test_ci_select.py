@@ -142,3 +142,22 @@ def test_malformed_check_rule_is_an_error() -> None:
     bad = {**RULES, "checks": [{"id": "x", "include": ["a/**"]}]}  # no `run`
     with pytest.raises(ValueError):
         ci_select.select(["a/b.ts"], bad, SUITES)
+
+
+def test_identity_change_selects_python_backed_identity_check() -> None:
+    r = sel("services/api/identity/identity/routes.py")
+    chk = {c["id"]: c for c in r["checks"]}
+    assert "identity-continuity" in chk
+    assert chk["identity-continuity"]["node"] is False
+    assert chk["identity-continuity"]["python_extra"] == "dev,backend"
+    assert "backend-identity" in r["suites"]  # the suite and the check both run
+
+
+def test_provider_identity_evidence_tests_trigger_the_check() -> None:
+    ids = [c["id"] for c in sel("services/api/tests/providers/test_identity_evidence.py")["checks"]]
+    assert "identity-continuity" in ids
+
+
+def test_node_checks_still_default_to_node() -> None:
+    c = {c["id"]: c for c in sel("apps/kyber-web/src/a.tsx")["checks"]}["kyber-web-e2e"]
+    assert c["node"] is True and c["python_extra"] is None
