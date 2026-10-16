@@ -32,7 +32,25 @@ def _signed_webhook_record(body: str, extra_headers: dict | None = None) -> dict
     ).hexdigest()
     headers = {"x-aether-signature": sig, "x-aether-timestamp": ts}
     headers.update(extra_headers or {})
-    return {"signing_secret": _WEBHOOK_SECRET, "headers": headers}
+    return {"headers": headers}
+
+
+async def _resolve_secret(job: dict) -> str | None:
+    return _WEBHOOK_SECRET if job.get("provider_config", {}).get("secret_ref") else None
+
+
+async def _bind_delivery(link_repo, receipt_repo, job_repo, *, tenant_id: str, delivery_id: str, **link) -> None:
+    """Store the delivery chain the callback's delivery_id resolves through."""
+    job_id, receipt_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await job_repo.insert(job_id, {
+        "tenant_id": tenant_id, "provider_config": {"secret_ref": f"notif_channel:{job_id}"},
+    })
+    await receipt_repo.insert(receipt_id, {"tenant_id": tenant_id, "job_id": job_id})
+    link_id = str(uuid.uuid4())
+    await link_repo.insert(link_id, {
+        "id": link_id, "tenant_id": tenant_id, "provider": "webhook",
+        "external_id": delivery_id, "receipt_id": receipt_id, **link,
+    })
 
 
 class _MemRepo:
@@ -91,6 +109,13 @@ class _SuggestionRepo:
     async def find_by_id(self, record_id: str) -> dict | None:
         return self._store.get(record_id)
 
+    async def patch(self, record_id: str, tenant_id: str, data: dict) -> dict:
+        record = self._store.get(record_id)
+        if record is None or record.get("tenant_id") != tenant_id:
+            raise KeyError(record_id)
+        record.update(data)
+        return record
+
 
 # ─── Tests ───────────────────────────────────────────────────────────────────
 
@@ -114,10 +139,13 @@ async def test_generic_webhook_delivered_outcome():
         }
     }
 
+    receipt_repo, job_repo = _MemRepo(), _MemRepo()
+    await _bind_delivery(link_repo, receipt_repo, job_repo, tenant_id=tenant_id, delivery_id=delivery_id)
+
     inbox_id = str(uuid.uuid4())
     await inbox_repo.insert(inbox_id, {
         "id": inbox_id,
-        "tenant_id": tenant_id,
+        "tenant_id": "",
         "provider": "webhook",
         **_signed_webhook_record(
             json.dumps(callback_payload),
@@ -139,6 +167,9 @@ async def test_generic_webhook_delivered_outcome():
         outcome_repo=outcome_repo,
         link_repo=link_repo,
         router=router,
+        receipt_repo=receipt_repo,
+        job_repo=job_repo,
+        secret_resolver=_resolve_secret,
     )
     processed = await processor.process_pending()
 
@@ -150,6 +181,8 @@ async def test_generic_webhook_delivered_outcome():
     outcomes = list(outcome_repo._store.values())
     assert len(outcomes) == 1
     assert outcomes[0]["provider"] == "webhook"
+    assert outcomes[0]["tenant_id"] == tenant_id
+    assert outcomes[0]["external_id"] == delivery_id
     assert outcomes[0]["raw_payload"]["event_type"] == "delivered"
 
 
@@ -167,30 +200,26 @@ async def test_generic_webhook_acknowledged_routes_to_suggestion():
     external_id = "ext-ref-001"
     suggestion_id = str(uuid.uuid4())
 
-    await suggestion_repo.update(suggestion_id, {"outcome_state": "pending"})
+    await suggestion_repo.update(suggestion_id, {"outcome_state": "pending", "tenant_id": tenant_id})
 
-    link_id = str(uuid.uuid4())
-    await link_repo.insert(link_id, {
-        "id": link_id,
-        "tenant_id": tenant_id,
-        "provider": "webhook",
-        "external_id": external_id,
-        "resource_type": "suggestion",
-        "resource_id": suggestion_id,
-        "intent_id": "intent-wh-1",
-        "sync_status": "pending",
-    })
+    receipt_repo, job_repo = _MemRepo(), _MemRepo()
+    await _bind_delivery(
+        link_repo, receipt_repo, job_repo, tenant_id=tenant_id, delivery_id=external_id,
+        resource_type="suggestion", resource_id=suggestion_id,
+        intent_id="intent-wh-1", sync_status="pending",
+    )
 
     callback_payload = {
         "event_data": {
             "event_type": "acknowledged",
+            "delivery_id": external_id,
         }
     }
 
     inbox_id = str(uuid.uuid4())
     await inbox_repo.insert(inbox_id, {
         "id": inbox_id,
-        "tenant_id": tenant_id,
+        "tenant_id": "",
         "provider": "webhook",
         **_signed_webhook_record(json.dumps(callback_payload)),
         "raw_body": json.dumps(callback_payload),
@@ -207,13 +236,18 @@ async def test_generic_webhook_acknowledged_routes_to_suggestion():
         outcome_repo=outcome_repo,
         link_repo=link_repo,
         router=router,
+        receipt_repo=receipt_repo,
+        job_repo=job_repo,
+        secret_resolver=_resolve_secret,
     )
     await processor.process_pending()
 
-    # Outcome event created
+    # Outcome event created and routed to the bound suggestion
     outcomes = list(outcome_repo._store.values())
     assert len(outcomes) == 1
     assert outcomes[0]["raw_payload"]["event_type"] == "acknowledged"
+    suggestion = await suggestion_repo.find_by_id(suggestion_id)
+    assert suggestion["outcome_state"] == "executed"
 
 
 @pytest.mark.asyncio

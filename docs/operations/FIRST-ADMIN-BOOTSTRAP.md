@@ -23,14 +23,14 @@ reviewed_source_commits:
   - commit: "609a3ad37"
     reason: "Reviewed the optional session_required guard on the SSO callback. This page now explains its CLI-only fail-closed behavior while preserving browser sign-in and first-admin bootstrap behavior."
 source_hashes:
-  ".github/workflows/infrastructure.yml": "sha256:0b75f5f3df587ea210008ef2bd79babf74c832dd6746a5a218411dae3a90d5ad"
-  ".github/workflows/staging-lifecycle.yml": "sha256:ab0d86125cd2be277ba7e0a40a4dbc9fdd5db1480ff1c7cb816adf4874a55ae9"
-  ".github/workflows/terraform-promote.yml": "sha256:804e3b437274475d5125b4dbf6c3988ff9387909af73a5aeb5690713cf310adf"
-  "infra/aws/terraform/modules/ecs/main.tf": "sha256:b639e5e6742dd68587e00123e3ed7cc2d2c8679a6bedc23d3967891a9d0db1a5"
+  ".github/workflows/infrastructure.yml": "sha256:94f3ca18d86f2d5b9e56a319bc7d41db56d524c009458b50bfe226e59d2f9a53"
+  ".github/workflows/staging-lifecycle.yml": "sha256:9a9a30a08991de719b73cb0da935e322837f0f9a124f7a566d48e5d5be25fd00"
+  ".github/workflows/terraform-promote.yml": "sha256:a4c235b5777e0dc0ec1e41faabe964314fa751d9c4239d60f156517e3c7eb84c"
+  "infra/aws/terraform/modules/ecs/main.tf": "sha256:fcfc016058554a533e9e328101cf4cd726a1e8e61f94cb7599717f12275792c1"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
-  "services/api/repositories/repos.py": "sha256:4763340370ea7ef9e43d91b1156def3188a83114efa832e0a289f267957206e6"
-  "services/api/tenancy/auth/routes.py": "sha256:33de1a272f8eaf4ee635f01044703bf25888d45d27c5623ee5ca3bbbe003c9a5"
+  "services/api/repositories/repos.py": "sha256:0526f10f7486f0e40a6b808400feaf9f65c787880ea5858c4db6b5f348645959"
+  "services/api/tenancy/auth/routes.py": "sha256:28646c94b30efa7f437fe477209cb7877202c0692caf8076689b7bc407bf7c76"
 ---
 
 # AETHER first-admin bootstrap
@@ -53,6 +53,12 @@ requires all of the following:
 2. `FIRST_ADMIN_BOOTSTRAP_TOKEN`, injected from
    `aether/first-admin-bootstrap-token` in Secrets Manager, in the request
    header `X-Aether-First-Admin-Bootstrap-Token`.
+   This credential is distinct from the identity verification key, which is
+   separately mounted for wallet proof and checked by hosted preflight. The
+   identity-key mounts are gated by the reviewed
+   `identity_verification_secrets_enabled` Terraform input; first-time setup
+   populates both key secrets before creating the plan that enables those
+   mounts.
 3. `FIRST_ADMIN_BOOTSTRAP_EMAIL` set to the approved operator address.
 4. A backend running with the staging database and cache available.
 5. The durable marker is unclaimed for a new bootstrap. If a prior request
@@ -70,7 +76,8 @@ claimed credential.
 
 The bootstrap tenant is the platform's own administrative tenant, so in
 staging it is a **platform operator** (top plan, no burst limit, quota metering
-or extraction budget; see [Access Control](../architecture/ACCESS-CONTROL.md#platform-operators)).
+or extraction budget, and access to the operator-only `/v1/admin/**` and
+`/v1/diagnostics/**` routes; see [Access Control](../architecture/ACCESS-CONTROL.md#platform-operators)).
 Signing in to `app.staging` through Auth0 with the bootstrap email, verified by
 the identity provider, links that Auth0 identity to the admin user and lands in
 this tenant. Use **Continue with Olympus sign-in** on the login page (Auth0

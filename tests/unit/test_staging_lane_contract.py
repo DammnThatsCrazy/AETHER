@@ -274,6 +274,20 @@ def test_pilot_runtime_wiring_requires_annual_mounts_when_enabled():
     ) == []
 
 
+def test_identity_verification_secret_mount_is_guarded_by_explicit_enablement():
+    ecs = (ROOT / "infra/aws/terraform/modules/ecs/main.tf").read_text(
+        encoding="utf-8"
+    )
+    variables = (ROOT / "infra/aws/terraform/modules/ecs/variables.tf").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'var.identity_verification_secrets_enabled ? {' in ecs
+    assert 'IDENTITY_VERIFICATION_TOKEN_KEY = lookup(var.secret_arns, "identity-verification-token-key", "")' in ecs
+    assert 'var.identity_verification_secrets_enabled && lookup(var.companion_secret_arns' in ecs
+    assert 'variable "identity_verification_secrets_enabled"' in variables
+
+
 def test_aws_staging_preflight_covers_every_mounted_secret_without_values():
     contract = _load()
     assert contract.aws_staging_secret_errors(

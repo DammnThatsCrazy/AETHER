@@ -13,6 +13,10 @@ A tenant is an operator only through a signal a tenant cannot grant itself:
 * in staging, the tenant bound by the single-use first-admin bootstrap record,
   which is by construction the platform's own administrative tenant.
 
+Platform-wide admin and diagnostics routes admit only an admin of an operator
+tenant (``governance/security/request_context.py``); its members and viewers
+keep the plan and quota treatment above but not that access.
+
 People reach that tenant through ``PLATFORM_OPERATOR_EMAILS``: a verified
 sign-in from a listed email with no user or invitation yet joins it as owner
 (``services/api/tenancy/auth/sso_membership.py``).
@@ -81,6 +85,22 @@ async def platform_operator_tenant_id() -> Optional[str]:
     return await _staging_bootstrap_tenant_id()
 
 
+def warn_if_no_platform_operator_tenants() -> None:
+    """Warn at startup when a deployed environment names no operator tenant.
+
+    Admin and diagnostics routes then admit only Kyber operators (and, in
+    staging, the first-admin bootstrap tenant), so operator tooling that holds
+    an Aether API key is refused.
+    """
+    if settings.env.value == "local" or settings.security_governance.platform_operator_tenant_ids:
+        return
+    logger.warning(
+        "PLATFORM_OPERATOR_TENANT_IDS is empty in %s: admin and diagnostics routes "
+        "admit no configured platform operator tenant",
+        settings.env.value,
+    )
+
+
 def is_platform_operator_email(email: Optional[str]) -> bool:
     """True when ``email`` is on the deployment's PLATFORM_OPERATOR_EMAILS list.
 
@@ -102,4 +122,5 @@ __all__ = [
     "is_platform_operator_email",
     "platform_operator_tenant_id",
     "reset_platform_operator_cache",
+    "warn_if_no_platform_operator_tenants",
 ]

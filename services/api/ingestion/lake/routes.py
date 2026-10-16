@@ -17,6 +17,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
+from governance.security.request_context import require_platform_operator
 from shared.common.common import APIResponse, BadRequestError
 from shared.logger.logger import get_logger, metrics
 from repositories.lake import (
@@ -250,6 +251,8 @@ async def query_gold(domain: str, entity_id: str, request: Request):
 async def check_quality(domain: str, request: Request):
     """Run data quality checks on a domain's Bronze tier."""
     request.state.tenant.require_permission("admin")
+    # Bronze quality checks span every tenant's rows.
+    require_platform_operator(request)
 
     repo = _BRONZE_REPOS.get(domain)
     if not repo:

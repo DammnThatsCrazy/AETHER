@@ -22,14 +22,14 @@ canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  ".github/workflows/repo-health.yml": "sha256:5ee5ceb622f995d8e3797226ab7b185a1f2bed6b7e49a22b18ec88a8a3ea9ad3"
+  ".github/workflows/repo-health.yml": "sha256:1ef1036fd95b794296b848347ef8bac011a0be5e98f85e270eaffb66ffdd66d5"
   ".pre-commit-config.yaml": "sha256:a632647a19dc64181aa9c9dfc2a9c1b3f4180c88b45094a4b461bc53f6c30191"
-  "Makefile": "sha256:e3626597e10f801f292d5dafece6e2e25172f88300dd6a04d43564b3a2edbee4"
+  "Makefile": "sha256:fddce509fd710303082f6c218dc99cdf4af96b1229824967084e4b1359c99c6d"
   "scripts/docs_drift.py": "sha256:6ff727e23ae244f41c014307b4a3361ebe521508bd74a7161a745394db12022c"
   "scripts/docs_extract/run_all.py": "sha256:404445eba05d12de88af585f79839b7496a1658411a110e606c46d5ed7e8c338"
   "scripts/docs_idempotency.py": "sha256:fe8628ef3a9b9d824645a5db062857754d2984b0f3f4d866b571df6232302f17"
-  "scripts/docs_schema.json": "sha256:1a062b35ae5b18e85a10efedaa56708de3d9a332808cac699456ce6bb112fc74"
-  "scripts/sync_docs.py": "sha256:7d204e746dd583d1839d2f86a44bc7fa212c3a8c5b9d5f46a062a04f586be457"
+  "scripts/docs_schema.json": "sha256:4bca1171f04d0804189a63a818dfa0fb671cfa130a7d982b2bc55b624499b5a0"
+  "scripts/sync_docs.py": "sha256:5926b4e418067063a721fd8a0a875a114ca0b7ba6d0112d6beab7ee850471e49"
   "scripts/validate_contracts.py": "sha256:00b5fcb85c2e9c749d647d488784dcd762de9b372f42b9e9f03355e46b5bc096"
   "scripts/validate_docs.py": "sha256:6402a54386b9610be8d5acaad9bde294cad4a293a19507309df3a3f05d54b5e9"
   "scripts/validate_frontmatter.py": "sha256:bca720067d28914df95e3b34b78551aec334d1bfc09a085515728fe55900325b"
@@ -205,14 +205,12 @@ before pushing.
 **CI** — documentation consistency is implemented by two workflows with
 different authority scopes:
 
-- `.github/workflows/repo-health.yml` — advisory docs/size signals on finalized
-  PRs (`ready_for_review`) and
-  the trusted-main/nightly documentation runners. Its `docs-sync` write path is
+- `.github/workflows/repo-health.yml` — the trusted-main/nightly documentation
+  runners (it has no pull-request trigger). Its `docs-sync` write path is
   restricted to pushes to `main`.
-- `.github/workflows/repo-consistency.yml` — the normal PR authority named
-  `verification / disposition`; it starts at PR finalization (`ready_for_review`)
-  and runs the selected documentation check when
-  the Impact Graph requires it. Its full `make ci-check` execution is retired
+- `.github/workflows/ci.yml` — the normal PR authority named `ci / verdict`; it
+  starts at PR finalization (`ready_for_review`) and runs the `docs` suite when
+  documentation or its inputs change. Its full `make ci-check` execution is retired
   from PRs after the observation window, while the same broad command remains
   available for trusted-main/nightly/release evidence.
 

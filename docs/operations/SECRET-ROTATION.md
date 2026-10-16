@@ -8,11 +8,25 @@ status: stable
 since_version: "0.1.0"
 source_files:
   - scripts/generate_secrets.py
+  - scripts/bootstrap_aws_secrets.py
+  - scripts/lib/preflight_env.py
+  - services/api/identity/identity/hashing.py
+  - infra/aws/terraform/modules/ecs/main.tf
+  - infra/aws/terraform/modules/secrets/main.tf
+  - infra/aws/terraform/modules/secrets/outputs.tf
+  - infra/aws/terraform/modules/secrets/rotation.tf
 canonical_owner: security@aether
 estimated_read_minutes: 2
 toc_depth: 3
 source_hashes:
-  "scripts/generate_secrets.py": "sha256:f48ff16c09c5268f4522158e4db008fb45cbb5d9cb2ae77dc0e61604969f92d7"
+  "infra/aws/terraform/modules/ecs/main.tf": "sha256:fcfc016058554a533e9e328101cf4cd726a1e8e61f94cb7599717f12275792c1"
+  "infra/aws/terraform/modules/secrets/main.tf": "sha256:29607ea44951c132385a375626cb9dafd213a9f26fb87ce8d1694b6fd74524da"
+  "infra/aws/terraform/modules/secrets/outputs.tf": "sha256:5c5a051e56e3e00f811c86663f6a2e8a9f8fd34df133723fef76e7ea1338f816"
+  "infra/aws/terraform/modules/secrets/rotation.tf": "sha256:c6c06da21c6ccd01468741102529c59a17ffc0e0b9c230df08d49869a3858589"
+  "scripts/bootstrap_aws_secrets.py": "sha256:ae5e53eee269aad3fa855ad2b2494d99738b32532fe6101cf9d2f86134f81d9c"
+  "scripts/generate_secrets.py": "sha256:87ad1b16ee37272dafe3467aa79ac879dc326a1db23af087489148951372cb30"
+  "scripts/lib/preflight_env.py": "sha256:e465c85941e68d7e0375827096a51a2783a03e99606d137090a4bec9582fbc94"
+  "services/api/identity/identity/hashing.py": "sha256:9e3d2bcced4fa600c259006295afddb39832caeb203321506d3caa5d9e723660"
 ---
 # Secret Rotation Runbook
 
@@ -53,6 +67,21 @@ the real value comes from the Stripe Dashboard.
 | Oracle signer key | `ORACLE_SIGNER_PRIVATE_KEY` | Reward proof generation | Signer address changes |
 | Grafana admin | `GRAFANA_ADMIN_PASSWORD` | Grafana dashboard | Grafana logins invalidated |
 | Stripe webhook | `STRIPE_WEBHOOK_SECRET` | Stripe webhook verification | Pending webhooks fail signature |
+| Identity verification binding | `IDENTITY_VERIFICATION_TOKEN_KEY` | Verification token digests and encrypted wallet replay subjects | Keep the previous key available to decrypt existing evidence during rotation |
+
+AWS ECS provisions `aether/identity-verification-token-key` and injects it into
+API and worker tasks as `IDENTITY_VERIFICATION_TOKEN_KEY`. The companion secret
+`aether/identity-verification-token-key-previous` is injected as
+`IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS`; initialize it to the active value
+when setting up the deployment, then set it to the old value whenever the
+active key is replaced. The AWS bootstrap script seeds both with one generated
+value initially and preserves existing values on a normal rerun. A rotation
+must provide both values explicitly so the old active value remains available.
+The Terraform promotion workflow mounts these keys only when
+`identity_verification_secrets_enabled=true`, and checks both AWSCURRENT
+versions before creating or applying that task revision. On first rollout,
+apply with the setting false, populate the secrets, then make a fresh reviewed
+plan with the setting true. The metadata check never reads secret values.
 
 ## JWT_SECRET Rotation
 
@@ -79,6 +108,30 @@ the real value comes from the Stripe Dashboard.
 5. Verify: `GET /v1/providers/keys` returns valid keys
 
 **Rollback:** Restore original key. No data loss since keys are stored encrypted.
+
+## IDENTITY_VERIFICATION_TOKEN_KEY Rotation
+
+**Impact:** This key protects verification token digests and encrypted wallet
+replay subjects. Existing ciphertext must remain decryptable so evidence replay
+and revocation continue to work. Active challenges also accept the previous key
+during the overlap window; newly issued challenge digests use the active key.
+
+**Procedure:**
+1. Generate a new high-entropy secret (at least 32 random bytes).
+2. Set `IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS` (the companion secret) to
+   the old active value, then replace `IDENTITY_VERIFICATION_TOKEN_KEY` with
+   the new value. `bootstrap_aws_secrets.py` writes the companion first. Keep
+   the optional key ID variables aligned if you set them; a blank previous ID
+   defaults to `previous`.
+3. Deploy and verify new wallet evidence is written with the new active key
+   and existing evidence still decrypts.
+4. Keep the previous key until evidence encrypted under it has been re-encrypted
+   or expired. Then remove both previous-key variables.
+
+During rotation, both versioned and legacy unversioned wallet-subject ciphertext
+can be decrypted with the active/previous key pair. If an old wallet evidence
+row has no encrypted subject, its subject cannot be recovered by key rotation;
+reuse a cached completed replay or collect a new wallet proof.
 
 ## WATERMARK_SECRET_KEY Rotation
 

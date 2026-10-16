@@ -27,6 +27,7 @@ from identity.population.routes import (
     entity_memberships,
     explain_membership,
     get_group,
+    get_members,
     group_intelligence,
     remove_member,
 )
@@ -157,6 +158,7 @@ async def test_cross_tenant_read_routes_reject():
 
     for call in (
         lambda: get_group(group["id"], req_b),
+        lambda: get_members(group["id"], req_b, limit=100, min_confidence=0.0),
         lambda: group_intelligence(group["id"], req_b),
         lambda: compare_groups(req_b, group_a=group["id"], group_b=group["id"]),
         lambda: explain_membership("entity_x", group["id"], req_b),
@@ -191,3 +193,5 @@ async def test_owner_can_read_group():
     group = await _group("tenant_a")
     resp = await get_group(group["id"], _request("tenant_a"))
     assert resp["data"]["id"] == group["id"]
+    members = await get_members(group["id"], _request("tenant_a"), limit=100, min_confidence=0.0)
+    assert members["data"]["population_id"] == group["id"]

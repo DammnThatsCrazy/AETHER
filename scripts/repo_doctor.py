@@ -480,6 +480,16 @@ def _run_docs_only(args: argparse.Namespace) -> int:
             "Consent-purpose docs are registry-derived (no hardcoded count)",
             "use registry-derived language; canonical source is packages/shared/contracts/consent-registry.json",
         ),
+        (
+            [sys.executable, "scripts/validate_root_layout.py"],
+            "Root layout matches the canonical repository shape",
+            "move legacy material under docs/archive/ or update scripts/validate_root_layout.py with repo-truth.md",
+        ),
+        (
+            [sys.executable, "scripts/check_deprecated_language.py"],
+            "Deprecated product language only appears in the archive",
+            "use the canonical term from docs/reference/source-of-truth/naming-truth.md",
+        ),
     ]
     for cmd, name, remediation in docs_gates:
         run(cmd, name=name, results=results, stop_on_failure=stop, remediation=remediation)
@@ -594,7 +604,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         name="Single verification authority policy",
         results=results,
         stop_on_failure=stop,
-        remediation="repair config/verification_policy.yaml and keep verification / disposition as the only blocking PR status",
+        remediation="repair config/verification_policy.yaml and keep ci / verdict as the only blocking PR status",
     )
 
 
@@ -793,6 +803,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         ([sys.executable, "scripts/validate_docs.py"], "Docs version drift validation", "python scripts/bump_version.py <canonical-version>"),
         ([sys.executable, "scripts/validate_frontmatter.py"], "Docs frontmatter validity", "fix the reported frontmatter errors"),
         ([sys.executable, "scripts/validate_consent_registry_docs.py"], "Consent-purpose docs are registry-derived (no hardcoded count)", "use registry-derived language; canonical source is packages/shared/contracts/consent-registry.json"),
+        ([sys.executable, "scripts/validate_root_layout.py"], "Root layout matches the canonical repository shape", "move legacy material under docs/archive/ or update scripts/validate_root_layout.py with repo-truth.md"),
+        ([sys.executable, "scripts/check_deprecated_language.py"], "Deprecated product language only appears in the archive", "use the canonical term from docs/reference/source-of-truth/naming-truth.md"),
     ]
     for cmd, name, remediation in docs_gates:
         run(cmd, name=name, results=results, stop_on_failure=stop, remediation=remediation)

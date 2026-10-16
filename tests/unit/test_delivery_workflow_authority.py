@@ -14,7 +14,7 @@ def test_delivery_authority_rejects_non_github_workflow_path(tmp_path: Path):
     source = (ROOT / "config/delivery_workflow_authority.yaml").read_text(encoding="utf-8")
     bad = tmp_path / "authority.yaml"
     bad.write_text(
-        source.replace(".github/workflows/repo-consistency.yml", "scripts/not-a-workflow.py", 1),
+        source.replace(".github/workflows/ci.yml", "scripts/not-a-workflow.py", 1),
         encoding="utf-8",
     )
     errors = validate(config_path=bad, root=ROOT)

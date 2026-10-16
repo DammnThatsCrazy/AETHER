@@ -743,7 +743,7 @@ class WebhookGateway:
         raw persistence. Both the connection selection and account discovery
         record must identify exactly one selected account.
         """
-        from connectors.providers.shopify.auth import _validated_shop_domain
+        from connectors.providers.shopify.auth import _stored_shop_domain, _validated_shop_domain
 
         normalized_domain = _validated_shop_domain(shop_domain)
         if not normalized_domain:
@@ -772,7 +772,7 @@ class WebhookGateway:
             selected = {str(value) for value in (connection.selected_accounts or [])}
             config_domain_value = (connection.config or {}).get("shop_domain")
             config_domain = (
-                _validated_shop_domain(str(config_domain_value)) if config_domain_value else None
+                _stored_shop_domain(config_domain_value) if config_domain_value else None
             )
             for account in account_rows:
                 if (

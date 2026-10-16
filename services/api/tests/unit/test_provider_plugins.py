@@ -389,6 +389,90 @@ def test_woocommerce_site_host_is_the_ssrf_chokepoint():
         assert _site_host(_context(config={"site_url": bad})) == ""
 
 
+_WOO_CRED = {"consumer_key": "ck_synth", "consumer_secret": "cs_synth"}
+_WOO_CONFIG = {"site_url": "https://synth-store.example.com"}
+
+
+def _woo_network(ip: str, response=None):
+    import contextlib
+    from unittest.mock import AsyncMock, patch
+
+    import httpx
+
+    send = AsyncMock(return_value=response or httpx.Response(200, json=[]))
+    stack = contextlib.ExitStack()
+    stack.enter_context(patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", (ip, 443))]))
+    stack.enter_context(patch.object(httpx.AsyncClient, "send", send))
+    return stack, send
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ip", ["10.0.0.5", "169.254.169.254", "100.64.0.1", "::ffff:127.0.0.1"])
+async def test_woocommerce_rejects_non_public_destination(ip):
+    from connectors.providers.woocommerce.auth import WooCommerceAuthAdapter
+    from connectors.providers.woocommerce.pull import WooCommercePullAdapter
+    from shared.integration_contracts.results import AdapterStatus
+
+    stack, send = _woo_network(ip)
+    with stack:
+        probe = await WooCommerceAuthAdapter().test(_context(config=_WOO_CONFIG, credential=_WOO_CRED))
+        pulled = await WooCommercePullAdapter(provider_identity="woocommerce.admin.orders_read").fetch(
+            _pull_context(config=_WOO_CONFIG, credential=_WOO_CRED), cursor=None
+        )
+    for result in (probe, pulled):
+        assert result.success is False
+        assert result.status == AdapterStatus.PERMANENT_ERROR
+        assert result.error_code == "site_url_not_public"
+    send.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_woocommerce_retries_site_that_does_not_resolve():
+    import contextlib
+    import socket
+    from unittest.mock import AsyncMock, patch
+
+    import httpx
+
+    from connectors.providers.woocommerce.auth import WooCommerceAuthAdapter
+    from connectors.providers.woocommerce.pull import WooCommercePullAdapter
+    from shared.integration_contracts.results import AdapterStatus
+
+    send = AsyncMock(side_effect=AssertionError("connection attempted"))
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(
+            patch("socket.getaddrinfo", side_effect=socket.gaierror(socket.EAI_AGAIN, "temporary failure"))
+        )
+        stack.enter_context(patch.object(httpx.AsyncClient, "send", send))
+        probe = await WooCommerceAuthAdapter().test(_context(config=_WOO_CONFIG, credential=_WOO_CRED))
+        pulled = await WooCommercePullAdapter(provider_identity="woocommerce.admin.orders_read").fetch(
+            _pull_context(config=_WOO_CONFIG, credential=_WOO_CRED), cursor=None
+        )
+    for result in (probe, pulled):
+        assert result.success is False
+        assert result.status == AdapterStatus.RETRYABLE_ERROR
+        assert result.retryable is True
+        assert result.error_code == "site_url_unresolved"
+    send.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_woocommerce_connects_to_validated_address():
+    import httpx
+
+    from connectors.providers.woocommerce.auth import WooCommerceAuthAdapter
+
+    stack, send = _woo_network("93.184.216.34", httpx.Response(200, json={"namespace": "wc/v3"}))
+    with stack:
+        result = await WooCommerceAuthAdapter().test(_context(config=_WOO_CONFIG, credential=_WOO_CRED))
+    assert result.success is True
+    request = send.call_args.args[0]
+    assert request.url.host == "93.184.216.34"
+    assert request.url.path == "/wp-json/wc/v3"
+    assert request.headers["host"] == "synth-store.example.com"
+    assert request.headers["authorization"].startswith("Basic ")
+
+
 @pytest.mark.parametrize(
     "family,expected_base",
     [

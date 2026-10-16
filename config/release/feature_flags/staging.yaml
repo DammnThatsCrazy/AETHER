@@ -3,7 +3,7 @@ environment: staging
 profile: staging
 release:
   platform_version: 0.1.0-alpha.0
-  sdk_release_target: 1.0.0-alpha.0
+  sdk_release_target: 0.1.0-alpha.0
   production_claim: false
   seven_day_cost_observation_required: true
   first_release_posture: alpha_foundation
@@ -291,7 +291,7 @@ mobile:
   distribution_posture: design_partner_dev_only
   react_native_sdk:
     release_policy: conditional_on_gate_pass
-    intended_release: 1.0.0-alpha.0
+    intended_release: 0.1.0-alpha.0
     required_gates:
       - scripts/validate_sdk_release_alignment.py
       - scripts/release/sdk_conformance.py

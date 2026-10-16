@@ -94,3 +94,43 @@ def test_bootstrap_refuses_to_update_a_secret_pending_deletion():
 
     assert client.put_calls == []
     assert client.create_calls == []
+
+
+def test_identity_key_rotation_writes_previous_companion_before_active_key():
+    keys = list(bootstrap._ENV_VAR_TO_SECRET_PATH)
+
+    assert keys.index("IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS") < keys.index(
+        "IDENTITY_VERIFICATION_TOKEN_KEY"
+    )
+
+
+def test_identity_only_bootstrap_targets_the_key_pair(monkeypatch):
+    class _Boto3:
+        def client(self, *_args, **_kwargs):
+            return _Client(None)
+
+    client = _Client(None)
+    monkeypatch.setattr(bootstrap, "_generate_all", lambda: {
+        "IDENTITY_VERIFICATION_TOKEN_KEY": "same-generated-key",
+        "IDENTITY_VERIFICATION_TOKEN_KEY_PREVIOUS": "same-generated-key",
+        "JWT_SECRET": "must-not-be-written",
+    })
+    monkeypatch.setitem(__import__("sys").modules, "boto3", _Boto3())
+    monkeypatch.setattr(_Boto3, "client", lambda _self, *_args, **_kwargs: client)
+
+    bootstrap.run(
+        env="staging",
+        from_env=None,
+        set_overrides={},
+        dry_run=False,
+        aws_region="us-east-1",
+        skip_manual=True,
+        kms_key_id="alias/aether-staging-secrets",
+        only_identity_verification_keys=True,
+    )
+
+    assert [call["Name"] for call in client.create_calls] == [
+        "aether/identity-verification-token-key-previous",
+        "aether/identity-verification-token-key",
+    ]
+    assert all("SecretString" in call for call in client.create_calls)

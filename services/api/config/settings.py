@@ -1440,15 +1440,18 @@ class DeliveryConfig:
     batch_size: int = _env_int("DELIVERY_WORKER_BATCH_SIZE", 10)
     poll_interval_seconds: float = float(_env("DELIVERY_WORKER_POLL_INTERVAL_S", "5"))
 
-    # Webhook signing secret (for outbound X-Aether-Signature)
-    webhook_signing_secret: str = _env("DELIVERY_WEBHOOK_SIGNING_SECRET", "")
-
     # Inbound Linear webhook HMAC secret (system-level default; the inbox
     # processor resolves per-row secrets first, then falls back to this).
     linear_webhook_secret: str = _env("DELIVERY_LINEAR_WEBHOOK_SECRET", "")
 
     # Inbound Jira webhook HMAC secret (same resolution order as Linear).
     jira_webhook_secret: str = _env("DELIVERY_JIRA_WEBHOOK_SECRET", "")
+
+    # Public inbound routes without a per-connection provider secret yet, so
+    # off unless explicitly enabled; when off, the route answers 404 and
+    # persists nothing.
+    inbound_jira_webhook_enabled: bool = _env_bool("INBOUND_JIRA_WEBHOOK_ENABLED", False)
+    inbound_telegram_callback_enabled: bool = _env_bool("INBOUND_TELEGRAM_CALLBACK_ENABLED", False)
 
 
 # ---------------------------------------------------------------------------

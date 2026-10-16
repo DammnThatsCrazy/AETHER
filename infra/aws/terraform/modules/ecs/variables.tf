@@ -266,6 +266,12 @@ variable "platform_operator_emails" {
   default     = []
 }
 
+variable "platform_operator_tenant_ids" {
+  type        = list(string)
+  description = "Tenant ids that run the platform; the only tenants admitted to admin and diagnostics routes besides Kyber operators."
+  default     = []
+}
+
 variable "deployment_lane" {
   type        = string
   description = "Deployment overlay selected by the reviewed staging plan."
@@ -275,6 +281,12 @@ variable "deployment_lane" {
     condition     = contains(["full", "pilot"], var.deployment_lane)
     error_message = "deployment_lane must be full or pilot."
   }
+}
+
+variable "identity_verification_secrets_enabled" {
+  type        = bool
+  description = "Mount identity verification key secrets into ECS tasks after their current versions have been populated."
+  default     = false
 }
 
 variable "stripe_billing_enabled" {

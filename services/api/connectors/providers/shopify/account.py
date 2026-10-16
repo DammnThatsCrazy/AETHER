@@ -3,8 +3,10 @@
 Shopify has ONE account per shop: the shop itself. Discovery returns a single
 :class:`ProviderAccount` keyed ``shop:{shop_domain}``. REST structural
 discovery can return a deterministic domain-derived account without live auth;
-a live ``/shop.json`` lookup is attempted for REST credentials and may fall
-back to the domain-derived account. GraphQL requires an authenticated ``shop
+a live ``/shop.json`` lookup is attempted for REST credentials. A transient
+lookup failure (transport error, 429, 5xx, or no shop id) is a retryable
+discovery failure; other non-200 answers fall back to the domain-derived
+account. GraphQL requires an authenticated ``shop
 { id }`` lookup; a failed lookup is a typed discovery failure because v2
 object identity cannot use a mutable domain as its account key.
 """
@@ -115,18 +117,29 @@ async def _fetch_shop_account(
         auth = None
     else:
         auth = httpx.BasicAuth(cred.get("api_key", ""), cred.get("password", ""))
+    # A transient lookup failure must stay retryable: the domain-derived
+    # fallback has no shop id, so selection would later fail permanently.
     try:
         async with _http_client() as client:
             response = await client.get(url, headers=headers, auth=auth)
-        if response.status_code != 200:
-            return None
-        shop = (response.json() or {}).get("shop") or {}
-    except Exception:  # noqa: BLE001 - any failure degrades to domain-derived
+    except Exception as exc:  # noqa: BLE001 - any lookup failure is retryable
+        raise _ShopifyAccountFailure(AdapterStatus.RETRYABLE_ERROR, "shop_lookup_unavailable") from exc
+    if response.status_code == 429:
+        raise _ShopifyAccountFailure(AdapterStatus.RATE_LIMITED, "shop_lookup_rate_limited")
+    if response.status_code >= 500:
+        raise _ShopifyAccountFailure(AdapterStatus.RETRYABLE_ERROR, "shop_lookup_unavailable")
+    if response.status_code != 200:
         return None
+    try:
+        shop = (response.json() or {}).get("shop") or {}
+    except (ValueError, AttributeError):
+        shop = {}
+    if not isinstance(shop, dict) or shop.get("id") is None:
+        raise _ShopifyAccountFailure(AdapterStatus.RETRYABLE_ERROR, "shop_identity_missing")
     return ProviderAccount(
         account_id=f"shop:{shop_domain}",
         display_name=str(shop.get("name") or shop_domain),
-        external_id=str(shop.get("id")) if shop.get("id") is not None else None,
+        external_id=str(shop["id"]),
         currency=shop.get("currency"),
         metadata={
             "shop_domain": shop_domain,

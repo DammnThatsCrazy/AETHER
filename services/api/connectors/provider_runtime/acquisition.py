@@ -37,10 +37,17 @@ from connectors.provider_runtime.errors import (
 )
 
 
+_SHOPIFY_ORDERS_IDENTITY = "shopify.admin.orders_read"
+# Connection states in which a tenant no longer holds its selected shop.
+_RELEASED_STATES = frozenset({
+    ConnectionState.REVOKED, ConnectionState.DISABLED, ConnectionState.FAILED,
+})
+
+
 def _shopify_graphql(connection: ProviderConnection) -> bool:
     """Only the opt-in Shopify v2 path requires immutable shop evidence."""
     return (
-        connection.provider_identity == "shopify.admin.orders_read"
+        connection.provider_identity == _SHOPIFY_ORDERS_IDENTITY
         and str(connection.config.get("orders_api") or "rest").lower() == "graphql"
     )
 
@@ -157,8 +164,61 @@ def _build_context(
 class AcquisitionCoordinator:
     """Drives account discovery/selection for a provider plugin."""
 
-    def __init__(self, *, accounts=None) -> None:
+    def __init__(self, *, accounts=None, connections=None) -> None:
         self.accounts = accounts if accounts is not None else ProviderAccountRepository()
+        self._connections = connections
+
+    def _connection_repo(self):
+        if self._connections is None:
+            from connectors.provider_runtime.connection import ProviderConnectionRepository
+
+            self._connections = ProviderConnectionRepository()
+        return self._connections
+
+    async def _require_unheld_live_shop(
+        self, connection: ProviderConnection, account_id: str
+    ) -> None:
+        """A Shopify shop is selectable only with live identity from discovery
+        and only while no other tenant holds it selected."""
+        selected = await self.accounts.find(f"{connection.connection_id}:{account_id}")
+        if (
+            selected is None
+            or selected.tenant_id != connection.tenant_id
+            or selected.connection_id != connection.connection_id
+            or selected.provider_identity != connection.provider_identity
+            or not selected.external_id
+        ):
+            raise ProviderConfigurationInvalid(
+                "Live Shopify shop identity from account discovery is required before selection"
+            )
+        if _shopify_graphql(connection) and not _verified_shop_account(connection, selected):
+            raise ProviderConfigurationInvalid(
+                "Verified Shopify GraphQL account discovery is required before selection"
+            )
+        shop_domain = selected.metadata.get("shop_domain")
+        rows = await self.accounts.find_many(
+            filters={"provider_identity": connection.provider_identity}, limit=10000,
+        )
+        for row in rows:
+            other = _account_from_row(row)
+            if other is None or other.tenant_id == connection.tenant_id:
+                continue
+            same_shop = other.external_id == selected.external_id or (
+                shop_domain and other.metadata.get("shop_domain") == shop_domain
+            )
+            if not same_shop:
+                continue
+            holder = await self._connection_repo().find(other.connection_id)
+            provider_account_id = other.account_id.removeprefix(f"{other.connection_id}:")
+            if (
+                holder is not None
+                and holder.tenant_id == other.tenant_id
+                and provider_account_id in (holder.selected_accounts or [])
+                and holder.state not in _RELEASED_STATES
+            ):
+                raise ProviderConfigurationInvalid(
+                    "This Shopify shop is already connected to another account"
+                )
 
     async def discover_accounts(
         self,
@@ -247,18 +307,8 @@ class AcquisitionCoordinator:
         manifest_requires_selection = bool(
             getattr(accounts_spec, "selection_required", False)
         )
-        if _shopify_graphql(connection):
-            selected = await self.accounts.find(f"{connection.connection_id}:{account_id}")
-            if (
-                selected is None
-                or selected.tenant_id != connection.tenant_id
-                or selected.connection_id != connection.connection_id
-                or selected.provider_identity != connection.provider_identity
-                or not _verified_shop_account(connection, selected)
-            ):
-                raise ProviderConfigurationInvalid(
-                    "Verified Shopify GraphQL account discovery is required before selection"
-                )
+        if connection.provider_identity == _SHOPIFY_ORDERS_IDENTITY:
+            await self._require_unheld_live_shop(connection, account_id)
         account = plugin.account()
         if account is None:
             # Registered plugin without the account capability — typed

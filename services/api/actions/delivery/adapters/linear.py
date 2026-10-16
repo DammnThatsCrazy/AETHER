@@ -31,6 +31,12 @@ mutation IssueCreate($input: IssueCreateInput!) {
       identifier
       url
       title
+      team {
+        id
+        organization {
+          id
+        }
+      }
     }
   }
 }

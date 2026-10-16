@@ -12,8 +12,8 @@ source_hashes:
   "services/api/intelligence/noesis/flags.py": "sha256:6069ab729ca23b7a1d4c2be58ef12b39b7761ee7c96d35c0db8253158253f877"
   "services/api/intelligence/noesis/models.py": "sha256:acfdf6d9368c68ccd7820f22654014242ef04bc3db362a843efd42d059019c42"
   "services/api/intelligence/noesis/provider.py": "sha256:a391409eba9cc92102f93082ded535354fad7c73ba34f4c7e4c7d7444b930244"
-  "services/api/intelligence/noesis/routes.py": "sha256:c92b4fcdf40733cca6ea33c3a4945e0df912d366b3fc6bf8187c739d296d1162"
-  "services/api/intelligence/noesis/service.py": "sha256:5a7360182491137d7f53e1072173896024dc07ae3c8b230d35a517ecc76e5b06"
+  "services/api/intelligence/noesis/routes.py": "sha256:aab16a72c04293078fb629ed0d15518e19a6a681ae4081293599ec3be3d6ea76"
+  "services/api/intelligence/noesis/service.py": "sha256:8fabd5d42c648b233edacb81e5ae231a823ca05bbe25da25252f89119619f9db"
 ---
 
 # Noesis
@@ -170,7 +170,9 @@ All rejections return a safe `NoesisResponse` with intent `rejected` and a clear
 
 ## Tenant isolation and RBAC
 
-Noesis reads `request.state.tenant`, requires the existing `read` permission, and computes an effective tenant scope before planning. Aether requests always use the authenticated tenant and reject any different `tenant_id`. Kyber requests may only query another tenant when the caller is an admin or has operator-style permission. Repository filters and graph result filtering are applied with the effective tenant id before composing the answer.
+Noesis reads `request.state.tenant`, requires the existing `read` permission, and computes an effective tenant scope before planning. Aether requests always use the authenticated tenant and reject any different `tenant_id`. Kyber requests may only query another tenant when the caller is a Kyber operator. Repository filters and graph result filtering are applied with the effective tenant id before composing the answer; a graph vertex with no tenant tag is treated as outside every tenant.
+
+Conversations belong to the caller that started them. Turns and the conversation index are keyed by the caller's own tenant and user id plus the `conversation_id`, so `GET /v1/noesis/conversations` and `GET /v1/noesis/conversations/{conversation_id}` return only the caller's own conversations, and a query only extends a conversation the caller owns. An operator querying another tenant keeps the conversation under the operator's tenant and user, never in the target tenant's namespace.
 
 ## LLM text-to-query seam
 

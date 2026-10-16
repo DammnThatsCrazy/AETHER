@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { LoadingState } from '@aether/ui';
 import { RequireAuth } from '@aether-app/features/auth';
-import { AppShell } from '@aether-app/components/app-shell';
+import { AppShell, GlassPage } from '@aether-app/components/app-shell';
 import { CallbackPage } from '@aether-app/pages/callback';
 import { LoginPage } from '@aether-app/pages/login/login-page';
 import { DataRetentionPage } from '@aether-app/pages/legal/data-retention-page';
@@ -30,10 +30,12 @@ const MePage = lazy(() => import('@aether-app/pages/me/me-page').then(m => ({ de
 const NotificationCenterPage = lazy(() => import('@aether-app/pages/notifications/notification-center-page').then(m => ({ default: m.NotificationCenterPage })));
 const GeoPage = lazy(() => import('@aether-app/pages/geo').then(m => ({ default: m.GeoPage })));
 const OnboardingPage = lazy(() => import('@aether-app/pages/onboarding').then(m => ({ default: m.OnboardingPage })));
-// Canonical guided activation: intent-driven connect over the shared connect
-// contracts, re-using the proven classic activation steps (plan/SDK/keys/test
-// event/first value) as its finish path (see activation-page.tsx). /activate is
-// a compatibility alias that redirects here.
+// Canonical workspace onboarding (Workspace → Sources → SDKs and keys → Graph),
+// rendered full screen at /activation. It drives the same activation, connect
+// plan, imports and readiness endpoints as the guided page below, which stays
+// reachable at /activation/guided for the detailed per-step view.
+const OnboardingFlow = lazy(() => import('@aether-app/pages/onboarding').then(m => ({ default: m.OnboardingFlow })));
+const HomePage = lazy(() => import('@aether-app/pages/home/home-page').then(m => ({ default: m.HomePage })));
 const ActivatePage = lazy(() => import('@aether-app/pages/activation/activate-page').then(m => ({ default: m.ActivatePage })));
 const AuditExportsPage = lazy(() => import('@aether-app/pages/audit-exports').then(m => ({ default: m.AuditExportsPage })));
 const ValueReviewPage = lazy(() => import('@aether-app/pages/value-review').then(m => ({ default: m.ValueReviewPage })));
@@ -65,14 +67,20 @@ const InteropMessagePage = lazy(() => import('@aether-app/pages/interop').then(m
 const TenantActivationDashboard = lazy(() => import('@aether-app/features/identity/TenantActivationDashboard').then(m => ({ default: m.TenantActivationDashboard })));
 const IdentityReviewQueue = lazy(() => import('@aether-app/features/identity/IdentityReviewQueue').then(m => ({ default: m.IdentityReviewQueue })));
 
-function PageSuspense({ children }: { readonly children: React.ReactNode }) {
-  return (
+/**
+ * Lazy page boundary. Pages not yet rebuilt to the new design are framed in
+ * the shell's glass panel (`ae-legacy` neutralises their own full-page
+ * background); rebuilt pages pass `frameless` and render their own frame.
+ */
+function PageSuspense({ children, frameless = false }: { readonly children: React.ReactNode; readonly frameless?: boolean }) {
+  const content = (
     <ErrorBoundary>
       <Suspense fallback={<LoadingState lines={5} className="p-8" />}>
         {children}
       </Suspense>
     </ErrorBoundary>
   );
+  return frameless ? content : <GlassPage className="ae-legacy">{content}</GlassPage>;
 }
 
 /**
@@ -106,6 +114,21 @@ export function AppRouter() {
       {/* Public legal pages */}
       <Route path="/legal/data-retention" element={<DataRetentionPage />} />
 
+      {/* Workspace onboarding — authenticated, full screen (its own setup rail,
+          no app sidebar). Signup/confirmation lands here via /onboarding. */}
+      <Route
+        path="/activation"
+        element={
+          <RequireAuth>
+            <PageSuspense frameless>
+              <OnboardingFlow />
+            </PageSuspense>
+          </RequireAuth>
+        }
+      />
+      <Route path="/activate" element={<RedirectPreservingQuery to="/activation" />} />
+      <Route path="/onboarding" element={<RedirectPreservingQuery to="/activation" />} />
+
       {/* All authenticated routes */}
       <Route
         path="*"
@@ -114,11 +137,10 @@ export function AppRouter() {
             <AppShell>
               <Routes>
                 <Route path="/" element={<AuthenticatedTenantLanding />} />
-                {/* Canonical guided activation (intent → recommended connect plan →
-                    credentials/sync → classic first-value finish). /activate is the
-                    compatibility alias and redirects here. */}
-                <Route path="/activation" element={<PageSuspense><ActivatePage /></PageSuspense>} />
-                <Route path="/activate" element={<RedirectPreservingQuery to="/activation" />} />
+                <Route path="/home" element={<PageSuspense frameless><HomePage /></PageSuspense>} />
+                {/* Detailed guided activation (intent → recommended connect plan →
+                    credentials/sync → classic first-value finish). */}
+                <Route path="/activation/guided" element={<PageSuspense><ActivatePage /></PageSuspense>} />
                 <Route path="/identity/activation" element={<PageSuspense><TenantActivationDashboard /></PageSuspense>} />
                 <Route path="/identity/reviews" element={<PageSuspense><IdentityReviewQueue /></PageSuspense>} />
                 <Route path="/users" element={<PageSuspense><UsersPage /></PageSuspense>} />
@@ -149,7 +171,7 @@ export function AppRouter() {
                 <Route path="/settings/webhooks" element={<PageSuspense><SettingsPage /></PageSuspense>} />
                 <Route path="/settings/integrations/connectors" element={<PageSuspense><ConnectorsPage /></PageSuspense>} />
                 <Route path="/notifications" element={<PageSuspense><NotificationCenterPage /></PageSuspense>} />
-                <Route path="/onboarding" element={<PageSuspense><OnboardingPage /></PageSuspense>} />
+                <Route path="/onboarding/implementation" element={<PageSuspense><OnboardingPage /></PageSuspense>} />
                 <Route path="/billing" element={<PageSuspense><BillingPage /></PageSuspense>} />
                 <Route path="/usage-plan" element={<PageSuspense><UsagePlanPage /></PageSuspense>} />
                 <Route path="/me" element={<PageSuspense><MePage /></PageSuspense>} />

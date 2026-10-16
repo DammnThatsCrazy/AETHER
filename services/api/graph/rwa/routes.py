@@ -55,6 +55,14 @@ logger = get_logger("aether.service.rwa")
 router = APIRouter(prefix="/v1/rwa", tags=["RWA Intelligence"])
 
 
+async def _require_owned_asset(asset_id: str, tenant_id: str) -> dict:
+    """The caller's asset, or 404 — a foreign asset id reads as missing."""
+    asset = await asset_repo.for_tenant(tenant_id).find_by_id(asset_id)
+    if not asset:
+        raise NotFoundError("RWA asset")
+    return asset
+
+
 class HolderCreate(BaseModel):
     asset_id: str
     entity_id: str
@@ -87,22 +95,21 @@ async def list_assets(
     """List registered RWA assets."""
     tenant = request.state.tenant
     tenant.require_permission("read")
-    filters: dict = {"tenant_id": tenant.tenant_id}
+    filters: dict = {}
     if asset_class:
         filters["asset_class"] = asset_class
     if chain:
         filters["chain"] = chain
-    assets = await asset_repo.find_many(filters=filters, limit=limit)
+    assets = await asset_repo.for_tenant(tenant.tenant_id).find_many(filters=filters, limit=limit)
     return APIResponse(data={"assets": assets, "count": len(assets)}).to_dict()
 
 
 @router.get("/assets/{asset_id}")
 async def get_asset(asset_id: str, request: Request):
     """Get full asset details."""
-    request.state.tenant.require_permission("read")
-    asset = await asset_repo.find_by_id(asset_id)
-    if not asset:
-        raise NotFoundError("RWA asset")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    asset = await _require_owned_asset(asset_id, tenant.tenant_id)
     return APIResponse(data=asset).to_dict()
 
 
@@ -115,6 +122,7 @@ async def create_policy(body: PolicyCreate, request: Request):
     """Register a compliance/transfer-restriction policy for an asset."""
     tenant = request.state.tenant
     tenant.require_permission("write")
+    await _require_owned_asset(body.asset_id, tenant.tenant_id)
     result = await register_policy(body, tenant.tenant_id)
     return APIResponse(data=result).to_dict()
 
@@ -122,8 +130,10 @@ async def create_policy(body: PolicyCreate, request: Request):
 @router.get("/assets/{asset_id}/policies")
 async def get_policies(asset_id: str, request: Request):
     """Get all policies for an asset."""
-    request.state.tenant.require_permission("read")
-    policies = await policy_repo.find_many(filters={"asset_id": asset_id}, limit=100)
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    await _require_owned_asset(asset_id, tenant.tenant_id)
+    policies = await policy_repo.for_tenant(tenant.tenant_id).find_many(filters={"asset_id": asset_id}, limit=100)
     return APIResponse(data={"asset_id": asset_id, "policies": policies, "count": len(policies)}).to_dict()
 
 
@@ -132,8 +142,9 @@ async def simulate_transfer_endpoint(body: PolicySimulation, request: Request):
     """Simulate whether a transfer would violate any policy."""
     tenant = request.state.tenant
     tenant.require_permission("read")
+    await _require_owned_asset(body.asset_id, tenant.tenant_id)
     result = await simulate_transfer(
-        body.asset_id, body.from_entity, body.to_entity, body.amount, tenant.tenant_id
+        body.asset_id, body.from_entity, body.to_entity, tenant.tenant_id, body.amount
     )
     return APIResponse(data=result).to_dict()
 
@@ -147,6 +158,7 @@ async def create_cashflow(body: CashflowEventCreate, request: Request):
     """Record a cashflow event (coupon, dividend, redemption, etc.)."""
     tenant = request.state.tenant
     tenant.require_permission("write")
+    await _require_owned_asset(body.asset_id, tenant.tenant_id)
     result = await record_cashflow(body, tenant.tenant_id)
     return APIResponse(data=result).to_dict()
 
@@ -158,11 +170,13 @@ async def get_cashflows(
     limit: int = Query(100, ge=1, le=1000),
 ):
     """Get cashflow history for an asset."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    await _require_owned_asset(asset_id, tenant.tenant_id)
     filters: dict = {"asset_id": asset_id}
     if cashflow_type:
         filters["cashflow_type"] = cashflow_type
-    cashflows = await cashflow_repo.find_many(filters=filters, limit=limit)
+    cashflows = await cashflow_repo.for_tenant(tenant.tenant_id).find_many(filters=filters, limit=limit)
     return APIResponse(data={"asset_id": asset_id, "cashflows": cashflows, "count": len(cashflows)}).to_dict()
 
 
@@ -181,7 +195,7 @@ async def get_exposure(
     tenant = request.state.tenant
     tenant.require_permission("read")
     result = await compute_exposure(
-        entity_id, entity_type, include_inferred, include_beneficial, tenant.tenant_id
+        entity_id, tenant.tenant_id, entity_type, include_inferred, include_beneficial
     )
     return APIResponse(data=result).to_dict()
 
@@ -193,16 +207,20 @@ async def get_exposure(
 @router.get("/assets/{asset_id}/reserve-credibility")
 async def reserve_credibility(asset_id: str, request: Request):
     """Score reserve/backing credibility for an asset."""
-    request.state.tenant.require_permission("read")
-    result = await score_reserve_credibility(asset_id, request.state.tenant.tenant_id)
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    await _require_owned_asset(asset_id, tenant.tenant_id)
+    result = await score_reserve_credibility(asset_id, tenant.tenant_id)
     return APIResponse(data=result).to_dict()
 
 
 @router.get("/assets/{asset_id}/redemption-pressure")
 async def redemption_pressure(asset_id: str, request: Request):
     """Score redemption pressure on an asset."""
-    request.state.tenant.require_permission("read")
-    result = await score_redemption_pressure(asset_id, request.state.tenant.tenant_id)
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    await _require_owned_asset(asset_id, tenant.tenant_id)
+    result = await score_redemption_pressure(asset_id, tenant.tenant_id)
     return APIResponse(data=result).to_dict()
 
 
@@ -215,6 +233,7 @@ async def register_holder(body: HolderCreate, request: Request):
     """Register a holder record for an asset."""
     tenant = request.state.tenant
     tenant.require_permission("write")
+    await _require_owned_asset(body.asset_id, tenant.tenant_id)
     record = {
         "id": str(uuid.uuid4()),
         "asset_id": body.asset_id,
@@ -238,6 +257,8 @@ async def get_holders(
     limit: int = Query(100, ge=1, le=1000),
 ):
     """Get holders for an asset."""
-    request.state.tenant.require_permission("read")
-    holders = await holder_repo.find_many(filters={"asset_id": asset_id}, limit=limit)
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    await _require_owned_asset(asset_id, tenant.tenant_id)
+    holders = await holder_repo.for_tenant(tenant.tenant_id).find_many(filters={"asset_id": asset_id}, limit=limit)
     return APIResponse(data={"asset_id": asset_id, "holders": holders, "count": len(holders)}).to_dict()

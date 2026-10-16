@@ -10,6 +10,8 @@ source_files:
   - services/api/main.py
   - services/api/config/settings.py
   - services/api/actions/agent/deployment_routes.py
+  - services/api/actions/delivery/adapters/webhook.py
+  - services/api/actions/delivery/outcome_processor.py
   - services/api/actions/agent_marketplace/catalog.py
   - services/api/actions/agent_marketplace/lineage.py
   - services/api/actions/agent_marketplace/projection.py
@@ -22,6 +24,8 @@ source_files:
   - services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py
   - services/api/alembic/versions/20261011_agent_delegated_to_namespace.py
   - services/api/repositories/repos.py
+  - services/api/repositories/tenant_row_keys.py
+  - services/api/graph/platform_vertex_owners.py
   - services/api/value/x402/provenance.py
   - services/api/workers/profile360_workers/workers.py
   - services/api/workers/runtime/roles.py
@@ -40,17 +44,21 @@ source_hashes:
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/actions/agent_marketplace/lineage.py": "sha256:bfe247f42c3360f30b3f4fa92b1f39e95f654be0862303d6f74b9fb2363e6566"
   "services/api/actions/agent_marketplace/projection.py": "sha256:92a5f5e457beebde9d161bf26f40ccb39fc5b76bc8ae4abfccc3e572b3c29de0"
+  "services/api/actions/delivery/adapters/webhook.py": "sha256:e3ecc854d8b57fa74ba2a88b0867a81e40ce3f2a1a08dc675dd525085c3bc7f5"
+  "services/api/actions/delivery/outcome_processor.py": "sha256:41f3f3623ba08361567fe7b17b13b6f39592358b5b0384ff9df52a66d305e79e"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/config/settings.py": "sha256:4d2921c8c3a93e5cf0e3ab4eab9172770642684dd20858221481608af2ef69d5"
-  "services/api/connectors/provider_runtime/": "sha256:5769171596f5a3c50af0a39ed9ec1b6fcddd4f67ee352d05d85ddc708cd84302"
+  "services/api/config/settings.py": "sha256:120775873521c402933065c3073b8f2d242589bca26b095f982952f6bb392f42"
+  "services/api/connectors/provider_runtime/": "sha256:96d47e6fee2e0fff4c6b3b3a9bb28c89414a7af87ed137bb489845519434f5d9"
+  "services/api/graph/platform_vertex_owners.py": "sha256:838aad5b76eb7470349ad42fafa95a01e840491736dba059cc3e0c2eef1b68b1"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
-  "services/api/main.py": "sha256:f76824db10962390701e0356564ecb69e7fc5c81f25fff6e51c685da359aeb75"
-  "services/api/repositories/repos.py": "sha256:4763340370ea7ef9e43d91b1156def3188a83114efa832e0a289f267957206e6"
+  "services/api/main.py": "sha256:52e672c1c82e17907041ba173b1fb7cee68bfb03b158eb370fd4f25b584cc726"
+  "services/api/repositories/repos.py": "sha256:0526f10f7486f0e40a6b808400feaf9f65c787880ea5858c4db6b5f348645959"
+  "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
-  "services/api/workers/profile360_workers/workers.py": "sha256:0c79f5ee2cc03eb0ae92d8690a8622b8ebaea245dc047c7643107fe909d7170a"
+  "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
   "services/api/workers/runtime/roles.py": "sha256:061fee9712dee6e5354ba7bc8162eeb06a909e526e6ed45d1dee9a4afe9c63b2"
   "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
@@ -405,6 +413,62 @@ All data access goes through `BaseRepository` (asyncpg PostgreSQL) which provide
 
 All stores support horizontal scaling natively through their backend implementations.
 
+A repository write replaces an existing row only when the row's `tenant_id`
+column matches the writing tenant, and graph vertex writes never change a
+vertex's owner; both raise a `409 Conflict` with the generic `Conflict` text
+instead. Rolling out that rule runs the idempotent steps in
+`services/api/repositories/tenant_row_keys.py` twice: once through migration
+`20261015_tenant_owned_row_keys` before the API and workers roll to the new
+code, and once more after the rollout has finished, to pick up rows old pods
+wrote meanwhile. Alembic never re-runs an applied revision, so the second run
+uses the module directly:
+
+```bash
+# Before the rollout: the usual migration (RUN_MIGRATIONS=1 one-off task)
+alembic upgrade head
+
+# After the rollout, from a host that can reach the database:
+DATABASE_URL=postgresql://... make tenant-row-keys
+# or as a one-off task of the API image (the entrypoint builds DATABASE_URL):
+python -m repositories.tenant_row_keys
+```
+
+The steps backfill empty tenant columns and re-key per-tenant rows
+(`behavior_profiles`, `journey_chains`, `profiles`, `behavioral_signals`,
+`event_envelopes`, x402 objects), and mark `chain:`, card catalog and
+derivatives venue/market vertices in the Postgres graph backend `platform`
+owned. Shared recommendation evidence vertices (`policy:`, `profile360:`,
+`graph:`) are not relabelled; new writes use `{tenant}:`-prefixed ids and the
+old vertices are left in place. While old pods are still
+serving, they cannot read re-keyed x402 objects, profiles or signals by id
+(lists still work) and they write behavior snapshots, journey chains, profiles
+and replay envelopes under the old ids. New pods still read an x402 row stored
+under its bare id when it belongs to the tenant. A burst of `409`s on updates
+after a deploy usually means the migration was skipped: rows whose tenant lives
+only in their JSON cannot be updated until it runs. The run time grows with the
+number of rows that have an empty tenant column.
+
+The steps do not touch a Neptune graph. On a Neptune lane, relabel the existing
+`chain:`, card catalog and derivatives venue/market vertices once, after the
+migration, or the platform writers of those vertices keep failing with
+`409 Conflict`:
+
+```bash
+NEPTUNE_ENDPOINT=... make graph-platform-owners           # dry run: lists the vertices
+NEPTUNE_ENDPOINT=... make graph-platform-owners APPLY=1   # writes the platform owner
+# or in the API image: python -m graph.platform_vertex_owners [--apply]
+```
+
+Derivatives venue and market vertices are written only from the registry
+tables. Nothing in the application creates registry rows, so after rows are
+added (or after the relabel above), project them; tenant account and position
+edges to a venue or market appear only once its vertex exists:
+
+```bash
+DATABASE_URL=postgresql://... make derivatives-registry-graph
+# or in the API image: python -m value.derivatives.registry_graph
+```
+
 ---
 
 ## Kafka Consumer Lag Spike
@@ -535,6 +599,7 @@ The handler uses an idempotency claim: it inserts `event_id` into `stripe_webhoo
 | Symptom | Likely Cause | Next Step |
 |---------|-------------|-----------|
 | 400 responses | Invalid `Stripe-Signature` — webhook secret mismatch | Verify `STRIPE_WEBHOOK_SECRET` matches the endpoint secret in Stripe Dashboard |
+| 503 responses (`stripe_webhook_config_errors`) | `STRIPE_WEBHOOK_SECRET` empty or Stripe SDK missing — server misconfiguration, not a bad signature | Populate `stripe-webhook-secret` for that environment and redeploy; Stripe retries automatically |
 | 500 responses, then 200 on retry | Transient DB error or downstream unavailability | Monitor — retries self-heal; check DB health |
 | 500 responses, not recovering | Tenant not found in `tenant_billing_accounts` | Tenant was not provisioned before subscription creation; manually upsert the billing account row |
 | Event appears stuck in DB | Idempotency claim not released (process killed mid-handler) | Run: `DELETE FROM stripe_webhook_events WHERE event_id = '<id>';` |
@@ -549,6 +614,54 @@ stripe events resend <evt_xxxxxxxx> --webhook-endpoint=<we_xxxxxxxx>
 ### Escalation
 
 If an event type is consistently failing after 3 Stripe retry cycles (Stripe retries over 72 hours with exponential backoff), investigate the specific handler (`_handle_<event_type>` in `services/api/governance/admin/webhook_routes.py`) and consider adding the event to a dead-letter queue for manual reprocessing.
+
+---
+
+## Outbound Webhook Signing and Callback Dead Letters
+
+The outbound webhook adapter signs a delivery only with the secret named by the
+job's `provider_config.secret_ref` (copied from the channel's `credentials_ref`).
+A job without one is sent unsigned: the adapter logs `webhook_unsigned` and
+increments `delivery_webhook_unsigned_total`. An outcome callback for such a
+delivery can never verify, so the inbox processor dead-letters it with
+`signature_unverified`. A callback that matches no stored delivery (or
+deliveries in more than one tenant) is dead-lettered with `unbound_delivery`.
+Both increment `delivery_inbox_dead_lettered_total{provider,reason}`; the
+callback route still answers 200. The Jira inbound webhook and the Telegram
+callback have no per-connection secret yet, so they answer 404 until
+`INBOUND_JIRA_WEBHOOK_ENABLED` / `INBOUND_TELEGRAM_CALLBACK_ENABLED` is set to
+`true`.
+
+### Before deploying
+
+List webhook jobs still to be sent and active webhook channels that carry no
+secret reference, and give each channel a signing secret first:
+
+```sql
+-- Webhook jobs that would be sent unsigned
+SELECT id, tenant_id, data->>'state' AS state
+FROM delivery_jobs
+WHERE data->>'provider_adapter' = 'webhook'
+  AND data->>'state' IN ('queued', 'leased', 'failed')
+  AND COALESCE(data->'provider_config'->>'secret_ref', '') = '';
+
+-- Active webhook channels whose new jobs would carry no secret_ref
+SELECT id, tenant_id, channel_name
+FROM user_notification_channels
+WHERE channel_type = 'webhook'
+  AND active IS NOT FALSE
+  AND COALESCE(credentials_ref, '') = '';
+```
+
+### After deploying
+
+A rising `delivery_webhook_unsigned_total`, or
+`delivery_inbox_dead_lettered_total{reason="signature_unverified"}` for
+`provider="webhook"`, means a channel is still unsigned: rerun the queries
+above. A rising `reason="unbound_delivery"` points to callbacks for deliveries
+Aether does not hold (wrong endpoint, deleted delivery, or a shared id).
+Inbox rows written before `received_at` was recorded are judged against their
+`created_at`, so a pre-deploy backlog drains instead of being rejected as stale.
 
 ---
 

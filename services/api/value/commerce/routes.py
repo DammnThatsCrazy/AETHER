@@ -48,7 +48,7 @@ async def record_hire(body: AgentHireRecord, request: Request):
 async def fee_elimination_report(request: Request, period: str = "all"):
     """Get fee elimination report showing savings from crypto payments vs cards."""
     request.state.tenant.require_permission("commerce:read")
-    report = await _service.get_fee_elimination_report(period)
+    report = await _service.get_fee_elimination_report(period, request.state.tenant.tenant_id)
     return APIResponse(data=report.model_dump()).to_dict()
 
 
@@ -109,7 +109,7 @@ async def order_payment_reconciliation(
 async def agent_spend_history(agent_id: str, request: Request):
     """Get spending history for a specific agent."""
     request.state.tenant.require_permission("commerce:read")
-    result = await _service.get_agent_spend(agent_id)
+    result = await _service.get_agent_spend(agent_id, request.state.tenant.tenant_id)
     return APIResponse(data=result).to_dict()
 
 

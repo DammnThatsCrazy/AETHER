@@ -97,7 +97,7 @@ They are governed only by code review, tests, or narrative docs:
 - **Ingestion replay + normalization spine** (`services/api/ingestion/ingestion/replay.py`,
   `spine.py`) — feature-flag-gated behavior with test coverage; no schema.
 - **Backend HTTP routes generally** (`docs/archive/legacy-architecture/backend/**/routes/**`) —
-  covered by `docs/reference/BACKEND-API.md` (generated) and route tests, not by a
+  covered by `docs/reference/BACKEND-API.md` (source-linked) and route tests, not by a
   request/response JSON Schema per endpoint.
 - **Deployment profiles / Terraform topology**
   (`config/deployment_profiles.yaml`, `config/terraform_resource_contracts.yaml`)

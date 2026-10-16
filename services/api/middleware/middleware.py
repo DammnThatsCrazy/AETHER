@@ -612,9 +612,13 @@ def register_middleware(app: FastAPI) -> None:
                 return JSONResponse(status_code=e.code.value, content=e.to_dict())
             request.state.tenant = context
             request.state.tenant_id = context.tenant_id
+            platform_operator = await is_platform_operator(context.tenant_id)
+            request.state.platform_operator = platform_operator
             # PR 2 route policy hook (observe by default; enforced mode denies
-            # unclassified / Kyber-mismatch routes). Never raises.
-            _policy_denial = _evaluate_route_policy(request, route_template, context)
+            # unclassified / Kyber-mismatch / platform-operator routes). Never raises.
+            _policy_denial = _evaluate_route_policy(
+                request, route_template, context, platform_operator=platform_operator
+            )
             if _policy_denial is not None:
                 return await _finalize_access_response(request, JSONResponse(
                     status_code=_policy_denial.code.value, content=_policy_denial.to_dict()
@@ -624,8 +628,6 @@ def register_middleware(app: FastAPI) -> None:
             # They get every service and skip the customer controls below
             # (burst limit, monthly quota/overage metering, ML extraction
             # budget). External tenants are unaffected.
-            platform_operator = await is_platform_operator(context.tenant_id)
-            request.state.platform_operator = platform_operator
             if platform_operator:
                 plan_tier = PlanTier.OMEGA
                 context.plan_tier = PlanTier.OMEGA
@@ -1161,8 +1163,14 @@ def _evaluate_kyber_capability(request: Request, path: str, pol) -> Optional[Aet
     return None
 
 
-def _evaluate_route_policy(request: Request, path: str, context) -> Optional[AetherError]:
+def _evaluate_route_policy(
+    request: Request, path: str, context, *, platform_operator: bool = False
+) -> Optional[AetherError]:
     """Apply the canonical route policy and return a stable denial.
+
+    ``platform_operator`` is the caller's ``is_platform_operator`` result,
+    resolved by the async middleware before this synchronous check. Only an
+    admin of that tenant passes a platform-operator route.
 
     In enforced mode any evaluator error is itself denied.  This deliberately
     avoids the old fail-open exception handler.  Local observe mode retains
@@ -1215,6 +1223,22 @@ def _evaluate_route_policy(request: Request, path: str, context) -> Optional[Aet
             denial = _evaluate_kyber_capability(request, path, pol)
             if denial is not None:
                 return denial
+        if pol.platform_operator_required:
+            from governance.security.request_context import (
+                is_kyber_operator,
+                is_platform_operator_admin,
+            )
+            if not (
+                is_platform_operator_admin(context, platform_operator)
+                or is_kyber_operator(context, request=request)
+            ):
+                if rr.route_registry_enforced:
+                    return ForbiddenError("ROUTE_POLICY_PLATFORM_OPERATOR_REQUIRED")
+                logger.warning(f"route policy: non-operator on platform route {path}")
+                try:
+                    metrics.increment("route_policy_platform_operator_observed")
+                except Exception:
+                    pass
         if context is None:
             if pol.requires_auth:
                 return ForbiddenError("ROUTE_POLICY_AUTH_REQUIRED")

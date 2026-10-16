@@ -38,6 +38,9 @@ class FakeGraph:
         self.queries: list[str] = []
         self.fail_with = fail_with
 
+    async def get_vertex(self, vertex_id):
+        return None
+
     async def add_vertex(self, vertex):
         if self.fail_with:
             raise self.fail_with

@@ -91,7 +91,9 @@ const apiKeySchema = z.object({
   name: z.string(),
   tier: z.string(),
   permissions: z.array(z.string()),
-  platform: z.string().nullable(),
+  // Keys minted by the activation flow are stored without a platform tag;
+  // read an absent field as "no platform" rather than rejecting the page.
+  platform: z.string().nullish(),
   last_used_at: z.string().nullable(),
 });
 

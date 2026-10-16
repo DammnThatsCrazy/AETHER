@@ -11,10 +11,10 @@ canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  "services/api/identity/profile/aggregator.py": "sha256:a901c1088e387bb967d425b1aed3673fc3942b7b6bf017648c78aad860bfe04b"
+  "services/api/identity/profile/aggregator.py": "sha256:228b48e5b06d6f4355c1d5fda2363ef5e3265570e750863bd7fd98941a41109f"
   "services/api/identity/profile/intelligence.py": "sha256:63e2e79507cb46e63b3e1f7cb606db7da2cb9e8e283d70cc9a478e5251e5d7e0"
   "services/api/identity/profile/read_result.py": "sha256:be38b15f1b60afa0743471e48ac1e9dfddfddd42880b4f78e6e848761b72d056"
-  "services/api/identity/profile/routes.py": "sha256:db152bc22effffbb626e2de110e7b369c05be76efd543316045fabd54066b70a"
+  "services/api/identity/profile/routes.py": "sha256:73c002b436a26ade807bfa2b0ff77a2ee574021ce86dadbdf4ff055b821c0dce"
   "services/api/replay/reconciliation/coverage.py": "sha256:f0d8fa44c1570a9fbf06e7a10c4e5ca1fbc0dc5f6f4549096d8d845b9cec94c9"
   "services/api/replay/reconciliation/expectations.py": "sha256:ccc747594faf8575f23c9726c02a3f50a9370715950c4a801926b2eaaa999c00"
   "services/api/value/card_linked_payments/profile_summary.py": "sha256:ec9e72fb5b100e02f42f03c4c6c392a249a43f9a3c5449381f348e689b7216de"
@@ -317,6 +317,14 @@ result on it before returning. Legacy rows with no `tenant_id` at all are
 permitted (they pre-date the multi-tenant rollout) but the aggregator
 inherits the existing `_compose_graph` alignment audit so operators can
 backfill them. Cross-tenant rows are silently dropped, never surfaced.
+The drill endpoint is stricter: an object, or the agent or wallet whose related
+rows it would expand, must carry the caller's `tenant_id`; a row with no tenant
+answers `found: false`.
+Behavior snapshots and journey chains are stored per tenant (row id
+`{tenant}:{entity}`, chain id `journey_chain:{tenant}:{entity}`) and read with
+`find_for_entity(tenant_id, entity_id)`, so the same entity id in two tenants
+has two independent snapshots; the profile workers keep their rolling counters
+per `(tenant, entity)` as well.
 
 The graph aggregator additionally respects the existing alignment audit
 counters (`cross_tenant_neighbors_excluded`,

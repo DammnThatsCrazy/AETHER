@@ -35,8 +35,7 @@ async def _store_channel_config(tenant_id: str, default_channel: str,
     }
     if bot_token:
         vault = ProvidersRepository()
-        await vault.insert(f"slack:bot:{tenant_id}", {"api_key": bot_token})
-        record["bot_token_ref"] = f"slack:bot:{tenant_id}"
+        await vault.insert(f"slack_bot_token:{tenant_id}", {"api_key": bot_token, "tenant_id": tenant_id})
     await repo.insert(tenant_id, record)
 
 
@@ -159,3 +158,66 @@ async def test_missing_bot_token_returns_false():
         ok = await svc.send("t5", "connector.error", {"connector_type": "stripe"})
 
     assert ok is False
+
+
+# ── Test 6: Bot token resolves only from the tenant's own vault record ───────
+
+
+def _route_request(tenant_id: str):
+    from types import SimpleNamespace
+
+    tenant = SimpleNamespace(tenant_id=tenant_id, require_permission=lambda _perm: None)
+    return SimpleNamespace(state=SimpleNamespace(tenant=tenant))
+
+
+@pytest.mark.asyncio
+async def test_slack_notify_route_ignores_caller_supplied_bot_token_ref():
+    await _store_channel_config("other_tenant", "#other", bot_token="xoxb-other-tenant")
+
+    from connectors.integrations.connectors.routes import (
+        SlackChannelConfigBody,
+        configure_slack_notify,
+        test_slack_notify,
+    )
+
+    body = SlackChannelConfigBody.model_validate(
+        {"default_channel": "#own", "bot_token_ref": "slack_bot_token:other_tenant"}
+    )
+    await configure_slack_notify(body, _route_request("own_tenant"))
+    stored = await BaseRepository("slack_channel_configs").find_by_id("own_tenant")
+    assert "bot_token_ref" not in stored
+
+    post = AsyncMock(return_value=True)
+    with patch("connectors.integrations.slack_notify._post_message", new=post), \
+         patch("connectors.integrations.slack_notify.slack_notify._is_live", return_value=True):
+        result = await test_slack_notify(_route_request("own_tenant"))
+    assert result["data"]["delivered"] is False
+    post.assert_not_awaited()
+
+    await ProvidersRepository().insert(
+        "slack_bot_token:own_tenant", {"api_key": "xoxb-own-tenant", "tenant_id": "own_tenant"}
+    )
+    with patch("connectors.integrations.slack_notify._post_message", new=post), \
+         patch("connectors.integrations.slack_notify.slack_notify._is_live", return_value=True):
+        result = await test_slack_notify(_route_request("own_tenant"))
+    assert result["data"]["delivered"] is True
+    assert post.await_args.args[:2] == ("xoxb-own-tenant", "#own")
+
+
+@pytest.mark.asyncio
+async def test_stored_bot_token_ref_and_untagged_vault_rows_are_not_used():
+    await ProvidersRepository().insert("slack_bot_token:own_tenant", {"api_key": "xoxb-untagged"})
+    await ProvidersRepository().insert(
+        "slack_bot_token:other_tenant", {"api_key": "xoxb-other-tenant", "tenant_id": "other_tenant"}
+    )
+    await BaseRepository("slack_channel_configs").insert("own_tenant", {
+        "tenant_id": "own_tenant", "default_channel": "#own", "enabled": True,
+        "bot_token_ref": "slack_bot_token:other_tenant",
+    })
+
+    from connectors.integrations.slack_notify import SlackNotificationService
+    svc = SlackNotificationService()
+    with patch("connectors.integrations.slack_notify._post_message",
+               new=AsyncMock(side_effect=AssertionError("must not post"))), \
+         patch.object(svc, "_is_live", return_value=True):
+        assert await svc.send("own_tenant", "connector.error", {"connector_type": "stripe"}) is False

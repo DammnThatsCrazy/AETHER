@@ -22,13 +22,13 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
-  "services/api/repositories/repos.py": "sha256:4763340370ea7ef9e43d91b1156def3188a83114efa832e0a289f267957206e6"
-  "services/api/shared/graph/graph.py": "sha256:ba64bad46f1938851c0a84f0ceef56b0603c549176bdc0f65d261f670afa4e7d"
-  "services/api/shared/graph/relationship_layers.py": "sha256:592a96efb98c32148e7f6911beef348f49dbf2b6db8430e4d403969d62430ba6"
+  "services/api/repositories/repos.py": "sha256:0526f10f7486f0e40a6b808400feaf9f65c787880ea5858c4db6b5f348645959"
+  "services/api/shared/graph/graph.py": "sha256:64b26a20675cf95e9954605e2ab381181d637f3c89493e6ca9523dd893522e3a"
+  "services/api/shared/graph/relationship_layers.py": "sha256:0d36b34a5c4496e15afa03da596d019d70492fb607184a87e737bd9f949cb2b0"
   "services/api/value/x402/economic_mutations.py": "sha256:bdd180a936e048840636f221fdee3b142c0babab5d8e2bcc59b4a51983198f51"
   "services/api/value/x402/lifecycle_mapper.py": "sha256:77066a174bdf8e3feed32e1a7b81feb321983975b5cd9e6116a4fa5a588c473e"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
-  "services/api/workers/profile360_workers/workers.py": "sha256:0c79f5ee2cc03eb0ae92d8690a8622b8ebaea245dc047c7643107fe909d7170a"
+  "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
 ---
 
 # Graph Projection Model
@@ -70,6 +70,25 @@ tenant-tagged edges for both `tenantId` and legacy `tenant_id`, including edges
 to shared endpoints. It fails closed on a backend error and never removes
 unscoped/system graph data.
 
+## Vertex ownership on writes
+
+A vertex write never changes the vertex's owner: the backends and
+`GraphMutationGateway` refuse a write whose `tenant_of` differs from the stored
+vertex's (`VertexOwnershipError`), and a write whose two tenant spellings
+disagree. `chain:` vertices are `platform`-owned registry vertices; the interop
+topology and card-linked flows only add edges to them. The interop projector
+links a gateway to the registry's CAIP-2 chain vertex (a numeric
+`native_chain_id` is an EVM chain id, `chain:eip155:{id}`) only when that
+platform vertex exists; otherwise it drops the `CONNECTS_CHAIN` edge, logs it
+and counts `interop_chain_link_skipped`, so no edge points at a missing vertex.
+The card catalog
+(`card_program:`, `card_issuer:`, `payment_network:`) is written as `platform`
+by `build_catalog_mutations`, with `build_flow_mutations` linking a flow to it.
+Vertices written before these owners existed are relabelled to `platform` by
+`make tenant-row-keys` (Postgres backend) or `make graph-platform-owners`
+(Neptune; a dry run unless `APPLY=1`). The refusal carries the generic
+`Conflict` text, which does not say the vertex exists in another tenant.
+
 ## Tenant scoping on reads
 
 The tenant a vertex or edge belongs to is resolved through
@@ -80,7 +99,10 @@ while edge producers write snake_case `tenant_id` (`build_edge_properties`,
 canonical spelling for new writes and for the Neptune predicate; `tenant_of`
 means existing rows in both spellings resolve without a backfill. An absent or
 empty tenant property resolves to `None`, which callers must treat as "not this
-tenant" rather than as a wildcard.
+tenant" rather than as a wildcard. The relationship-layer helpers
+(`get_layer_subgraph`, `get_cross_layer_paths` in
+`shared/graph/relationship_layers.py`) take a required `tenant_id` and keep only
+neighbours whose `tenant_of` equals it; an empty tenant raises.
 
 Per-tenant reads use `GraphClient.get_vertices_for_tenant(tenant_id, limit)`,
 which puts the predicate **inside** the query — Neptune

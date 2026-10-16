@@ -12,9 +12,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
-import ipaddress
 import json
-import socket
 import time
 import urllib.parse
 from abc import ABC, abstractmethod
@@ -22,23 +20,17 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from shared.logger.logger import get_logger, metrics
+from shared.security.ssrf import DestinationResolutionError, UnsafeDestinationError, send_public_request
 
 logger = get_logger("aether.notification.channel_gateway")
 
-# Private/reserved IP ranges that outbound webhook calls must not reach.
-_BLOCKED_NETWORKS = [
-    ipaddress.ip_network("10.0.0.0/8"),
-    ipaddress.ip_network("172.16.0.0/12"),
-    ipaddress.ip_network("192.168.0.0/16"),
-    ipaddress.ip_network("127.0.0.0/8"),
-    ipaddress.ip_network("169.254.0.0/16"),   # link-local (AWS metadata)
-    ipaddress.ip_network("::1/128"),
-    ipaddress.ip_network("fc00::/7"),
-]
-
-
 def _validate_webhook_url(url: str, *, require_hostname: str | None = None) -> None:
-    """Raise ValueError if url is not a safe, externally-reachable HTTPS endpoint."""
+    """Raise ValueError unless url is HTTPS (and on *require_hostname*, when given).
+
+    Whether the host resolves only to public addresses is checked by
+    ``send_public_request`` on every attempt, so a resolver failure stays
+    retryable and the event loop never blocks on DNS here.
+    """
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme != "https":
         raise ValueError(f"Webhook URL must use HTTPS (got scheme {parsed.scheme!r})")
@@ -49,17 +41,7 @@ def _validate_webhook_url(url: str, *, require_hostname: str | None = None) -> N
         raise ValueError(
             f"Webhook hostname must be {require_hostname!r} (got {hostname!r})"
         )
-    try:
-        addr = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
-    except socket.gaierror as exc:
-        raise ValueError(f"Webhook hostname DNS resolution failed: {exc}") from exc
-    for _, _, _, _, sockaddr in addr:
-        ip = ipaddress.ip_address(sockaddr[0])
-        for net in _BLOCKED_NETWORKS:
-            if ip in net:
-                raise ValueError(
-                    f"Webhook URL resolves to a private/reserved address ({ip})"
-                )
+
 
 try:
     import httpx
@@ -166,8 +148,9 @@ class ChannelGateway(ABC):
         for attempt in range(MAX_RETRIES):
             t0 = time.monotonic()
             try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    resp = await client.post(url, json=payload, headers=headers or {})
+                resp = await send_public_request(
+                    "POST", url, json=payload, headers=headers or {}, timeout=10.0, max_redirects=0
+                )
                 latency_ms = (time.monotonic() - t0) * 1000
                 if resp.status_code in (200, 201, 204):
                     self._circuit.record_success()
@@ -186,6 +169,8 @@ class ChannelGateway(ABC):
                 # 4xx (except 429) — no retry
                 return resp.status_code, {}
             except Exception as exc:
+                if isinstance(exc, UnsafeDestinationError) and not isinstance(exc, DestinationResolutionError):
+                    raise
                 self._circuit.record_failure()
                 if attempt == MAX_RETRIES - 1:
                     raise
@@ -568,6 +553,10 @@ class WebhookChannelGateway(ChannelGateway):
         except Exception:
             creds = {"url": credentials}
         url = creds.get("url", "")
+        try:
+            _validate_webhook_url(url)
+        except ValueError as exc:
+            return DeliveryResult(success=False, channel_type="webhook", error=str(exc))
         secret = creds.get("secret", "")
         payload = {"schema_version": "1.0", "type": "test", "message": "Aether notification channel test"}
         body_str = json.dumps(payload)

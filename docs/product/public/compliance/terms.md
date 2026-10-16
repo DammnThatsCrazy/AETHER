@@ -5,7 +5,7 @@ section: compliance
 visibility: P
 audience: [exec, buyer, security, compliance]
 status: beta
-since_version: "8.12.0"
+since_version: "0.1.0"
 estimated_read_minutes: 4
 toc_depth: 3
 canonical_owner: legal@olympus

@@ -4,70 +4,38 @@ Provides SSRF protection, timestamp tolerance, constant-time comparison,
 idempotency key generation, and header sanitization helpers shared across
 the delivery pipeline.
 
-SSRF protection is implemented directly here (stdlib only) so this module
-can be imported without pulling in the full adapter dependency chain.
+SSRF protection delegates to :mod:`shared.security.ssrf`, the single
+resolver-level check for tenant-configured outbound destinations. It is
+imported lazily so the other helpers stay importable without the ``shared``
+package import chain.
 """
 
 from __future__ import annotations
 
 import hashlib
 import hmac
-import ipaddress
-import socket
 import time
-from urllib.parse import urlparse
-
-# Private / loopback / link-local ranges that must never be reachable outbound.
-# Mirrors the list in adapters/webhook.py — keep in sync if ranges change.
-_BLOCKED_NETWORKS = [
-    ipaddress.ip_network("127.0.0.0/8"),     # loopback
-    ipaddress.ip_network("10.0.0.0/8"),       # RFC 1918
-    ipaddress.ip_network("172.16.0.0/12"),    # RFC 1918
-    ipaddress.ip_network("192.168.0.0/16"),   # RFC 1918
-    ipaddress.ip_network("169.254.0.0/16"),   # link-local / cloud metadata
-    ipaddress.ip_network("::1/128"),           # IPv6 loopback
-    ipaddress.ip_network("fc00::/7"),          # IPv6 ULA
-    ipaddress.ip_network("fe80::/10"),         # IPv6 link-local
-    ipaddress.ip_network("0.0.0.0/8"),         # unspecified
-]
 
 
 # ─── SSRF Protection ────────────────────────────────────────────────────────
 
 def validate_webhook_url(url: str, allow_private: bool = False) -> None:
-    """SSRF protection. Resolves hostname DNS, checks all IPs against RFC 1918 blocklist.
+    """SSRF protection: every address the URL's host resolves to must be public.
 
     Args:
         url: The URL to validate.
-        allow_private: If True, skip private-range checks (local/test use only).
+        allow_private: If True, skip the check (local/test use only).
     """
     if allow_private:
         return
 
     from actions.delivery.adapters.base import SSRFBlockedError
-
-    parsed = urlparse(url)
-    hostname = parsed.hostname
-    if not hostname:
-        raise SSRFBlockedError(f"Cannot parse hostname from URL: {url!r}")
+    from shared.security.ssrf import UnsafeDestinationError, resolve_public_addresses
 
     try:
-        infos = socket.getaddrinfo(hostname, None)
-    except socket.gaierror as exc:
-        raise SSRFBlockedError(f"DNS resolution failed for {hostname!r}: {exc}")
-
-    for info in infos:
-        addr_str = info[4][0]
-        try:
-            addr = ipaddress.ip_address(addr_str)
-        except ValueError:
-            continue
-        for network in _BLOCKED_NETWORKS:
-            if addr in network:
-                raise SSRFBlockedError(
-                    f"Webhook URL {url!r} resolves to blocked address {addr_str!r} "
-                    f"(matches {network}). SSRF protection active."
-                )
+        resolve_public_addresses(url)
+    except UnsafeDestinationError as exc:
+        raise SSRFBlockedError(str(exc)) from exc
 
 
 # ─── Constant-Time Comparison ────────────────────────────────────────────────

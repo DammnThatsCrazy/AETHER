@@ -6,7 +6,7 @@ visibility: P
 audience: [dev-senior, architect, ops]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/repositories/repos.py, services/api/repositories/lake.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py]
+source_files: [services/api/repositories/repos.py, services/api/repositories/tenant_row_keys.py, services/api/repositories/lake.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py]
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
@@ -18,7 +18,8 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
-  "services/api/repositories/repos.py": "sha256:4763340370ea7ef9e43d91b1156def3188a83114efa832e0a289f267957206e6"
+  "services/api/repositories/repos.py": "sha256:0526f10f7486f0e40a6b808400feaf9f65c787880ea5858c4db6b5f348645959"
+  "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
 ---
 
 # PostgreSQL / Repository Subsystem
@@ -114,7 +115,7 @@ table and caches it. Writes and filters are then bound to the migrated types:
 | `investigations` | `InvestigationRepository` | Investigation service |
 | `governance_decisions` | `GovernanceRepository` | Governance service |
 | `event_replay_jobs` | `EventReplayRepository` | Events replay worker |
-| `event_envelopes` | `EventEnvelopeRepository` | Events service |
+| `event_envelopes` | `EventEnvelopeRepository` (rows keyed `{tenant}:{envelope id}`) | Events service |
 | `providers` | `ProvidersRepository` | BYOK vault — encrypted channel credentials |
 | `notification_intelligence_events` | `NotificationIntelligenceRepository` | Notification intelligence pipeline |
 | `tenant_notification_configs` | `TenantNotificationConfigRepository` | Per-tenant notification routing config |
@@ -220,13 +221,50 @@ does not claim that either has been applied.
   `_column_renames`, or the `_payload_column` key. A retry deletes nothing. The
   `consent.erasure` completeness planes use it for the identity, Profile 360,
   Gold feature, connector and replay stores
-  (`docs/reference/privacy/dsr-erasure-coverage.md`).
+  (`docs/reference/privacy/dsr-erasure-coverage.md`). `DeletionPlan.execute`
+  (`shared/privacy/retention.py`) uses it for `HARD_DELETE` and `EDGE_SEVER`
+  steps whenever the store adapter provides it, so a plan only deletes its own
+  tenant's rows; a plan with no tenant fails those steps instead of deleting
+  unscoped. Adapters without it (the externalized Bronze adapter, which is bound
+  to one tenant when it is built) keep `delete_by_entity`.
+
+- **Row ownership on write:** `BaseRepository.insert` and `update` read the
+  record's tenant from `tenant_id` or `tenantId` and only replace a row whose
+  `COALESCE(tenant_id, '')` column equals it (the predicate is part of the
+  `ON CONFLICT ... DO UPDATE` / `UPDATE` statement, and the in-memory store
+  applies the same rule). A write that would replace another tenant's row, or
+  a row with no tenant when the record names one, changes nothing and raises
+  `ConflictError` with the generic `Conflict` text, which neither names the
+  owner nor says the id exists elsewhere, so a client-chosen id (such as a
+  flows `wallet_id`) belongs to the first tenant that writes it. Repositories whose rows are not tenant-owned
+  set `_tenant_guard = False`: `users` (an SSO re-invite moves a user to
+  another tenant), `tenants`, `first_admin_bootstrap` and the Dune feed tables.
+  Records whose natural id is unique only within a tenant use
+  `tenant_record_id(tenant_id, natural_id)` (`{tenant}:{id}`) as the row id:
+  `behavior_profiles` and `journey_chains` (`find_for_entity(tenant_id,
+  entity_id)`), `profiles` (`IdentityRepository`, keyed by the SDK user id,
+  which also stays in `user_id`), `behavioral_signals` written by
+  `SignalRepository` (the signal id stays in `signal_id`; `get_signal(tenant_id,
+  signal_id)` reads one), `event_envelopes` (the envelope id stays in
+  `envelope_id`) and the x402 commerce collections. Migration
+  `20261015_tenant_owned_row_keys` runs the idempotent steps in
+  `repositories/tenant_row_keys.py`: it backfills empty tenant columns from the
+  row JSON, re-keys existing rows of those tables, deletes `behavior_profiles` /
+  `journey_chains` rows whose JSON tenant differs from the column (the profile
+  workers recompute them), marks seeded Web3 registry rows with no tenant
+  as `system`, and marks `chain:`, card catalog and derivatives venue/market
+  graph vertices `platform` owned. `make tenant-row-keys` (or `python -m repositories.tenant_row_keys`
+  in the API image) runs the same steps again after a rollout. Other rows with
+  no tenant are left in place and stay unreadable to tenant-scoped reads.
 
 - **Tenant-owned repositories:** `TenantOwnedRepository` (a `BaseRepository`
   subclass) is for registries whose ids come from the caller, such as the Web3
-  and cross-domain registries. `upsert(record_id, data, tenant_id)` stamps the
+  and cross-domain registries, and for rows that routes read back by an id the
+  caller supplies: expectation and behavioral signals and the RWA asset,
+  policy, cashflow, exposure and holder stores. `upsert(record_id, data, tenant_id)` stamps the
   row with the tenant, merges into that tenant's own row (keeping `created_at`),
-  and raises `ConflictError` rather than overwrite a row another tenant owns.
+  and raises `ConflictError` rather than overwrite a row another tenant owns
+  or adopt a row that has no tenant.
   Reads only work on a view bound with `for_tenant(tenant_id)`; an unbound
   instance raises. A repository may list `_shared_tenants` (the platform `system`
   tenant for seeded reference data such as chains and protocols), whose rows

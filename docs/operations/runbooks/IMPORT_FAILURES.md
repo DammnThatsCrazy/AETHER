@@ -22,8 +22,8 @@ source_hashes:
   "services/api/ingestion/imports/service.py": "sha256:6d9c346282442e8af10b462367ebb187ca0d574521fe5f13b2f68152aeeacd98"
   "services/api/repositories/graph_mutation_ledger.py": "sha256:b347022c798f92360a89fb13cae1a2086792510cd37cb9b92c3ddc9988640f31"
   "services/api/repositories/imports_repo.py": "sha256:6bdc0f6089e66d63b93456e5cf99b79653b896a338e3548f19551c48ae3c4f0e"
-  "services/api/shared/graph/graph.py": "sha256:ba64bad46f1938851c0a84f0ceef56b0603c549176bdc0f65d261f670afa4e7d"
-  "services/api/shared/graph/mutation_gateway.py": "sha256:a8ca036dfcd27dc2627ff4643c529a3c024719d087f8da339e9e8382d228ffa9"
+  "services/api/shared/graph/graph.py": "sha256:64b26a20675cf95e9954605e2ab381181d637f3c89493e6ca9523dd893522e3a"
+  "services/api/shared/graph/mutation_gateway.py": "sha256:0539972689a73905af7f29440cfc4331883b8979ba2c7e8293cd876fb74e07ea"
 ---
 
 # Runbook — Tenant Import Failures
@@ -144,6 +144,13 @@ already projected edge owned by this commit is repaired in the ledger without
 being projected again. Do not delete graph rows or edit ledger rows manually.
 If the referenced ledger row is missing or has no durable `rdec_*` reference,
 the retry fails closed; escalate the durable ledger/rights evidence for review.
+
+If the commit fails with a `Conflict` raised by a graph vertex write
+(`VertexOwnershipError`), a mapped vertex id already exists in the graph under
+another tenant, under no tenant, or with `tenantId` and `tenant_id` naming
+different tenants. Graph writes never change a vertex's owner, so a requeue
+fails the same way. Do not edit the vertex; escalate with the vertex id so its
+ownership can be reviewed.
 
 ### Import commit denied by consent policy (`import_consent_policy_denied`)
 The WS-B3 T-class commit gate runs **before any Bronze write** (after staging,

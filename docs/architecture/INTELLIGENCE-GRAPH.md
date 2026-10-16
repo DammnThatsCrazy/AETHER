@@ -49,15 +49,15 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/graph/web3/classifier.py": "sha256:4ced74981c964a8e2442071071289d7d28dbd6bf4042200ce05934cdbd781a0e"
-  "services/api/graph/web3/routes.py": "sha256:c2c28dc79b3fe70ca030a2cfa74456b7ccdafd9b86941cc02a5954d82d24f95d"
+  "services/api/graph/web3/routes.py": "sha256:6d3077772a8453f0000b066927ef3bed015bf65b165cf2eacd3f31b512efdb01"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
-  "services/api/repositories/repos.py": "sha256:4763340370ea7ef9e43d91b1156def3188a83114efa832e0a289f267957206e6"
-  "services/api/shared/graph/": "sha256:2d13450f7cd08908bf73466bfbbe8200b1d49225f54431173f12ce1e89a31d03"
+  "services/api/repositories/repos.py": "sha256:0526f10f7486f0e40a6b808400feaf9f65c787880ea5858c4db6b5f348645959"
+  "services/api/shared/graph/": "sha256:d546cc1d95ecc2a8ef5eb8d79d7accde685e354aabe41d148130903651b86ec7"
   "services/api/value/x402/economic_mutations.py": "sha256:bdd180a936e048840636f221fdee3b142c0babab5d8e2bcc59b4a51983198f51"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
-  "services/api/workers/profile360_workers/workers.py": "sha256:0c79f5ee2cc03eb0ae92d8690a8622b8ebaea245dc047c7643107fe909d7170a"
+  "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
 ---
 # Unified On-Chain Intelligence Graph v0.1.0-alpha.0
 
@@ -79,6 +79,50 @@ Tenant-scoped erasure is a first-class graph operation. The cleanup path uses
 tenant-tagged edges (including edges touching a shared endpoint) and fails
 closed when the configured graph backend cannot complete the operation; system
 vertices and unscoped edges are never selected.
+
+Vertex writes keep their owner. Every backend (in-memory, Postgres
+`ON CONFLICT ... WHERE`, Neptune owner-filtered `upsert_vertex`) and
+`GraphMutationGateway.apply` (before any ledger write, in every mode) compare
+the stored vertex's tenant with the incoming one: they must be equal, a vertex
+with no tenant can only be rewritten by a write naming none, and a vertex whose
+`tenantId` and `tenant_id` disagree is rejected. The gateway also refuses a
+write made for any scope other than the vertex's owner, so one tenant cannot
+rewrite another tenant's vertex even when the owner property is left unchanged.
+A refused write raises
+`VertexOwnershipError` (a `ConflictError` with the generic `Conflict` text, so
+a reused client-chosen id such as an agent id does not reveal that the vertex
+exists in another tenant). User vertices written for the legacy profile
+endpoint and agent lifecycle events use the tenant-scoped id
+`{tenant}:user:{user_id}` (`user_vertex_id`), so the same SDK user id in two
+tenants names two vertices. Recommendation evidence vertices derived from names
+every tenant shares (`policy:{family}`, `profile360:{entity}`, `graph:{entity}`)
+are likewise written as `{tenant}:{id}` (`tenant_vertex_id`); the stored
+evidence `source_id` keeps the bare id. Vertices written under the bare ids
+before this change are left in place, as are pre-`{tenant}:user:` user
+vertices. A recommendation link whose vertex another scope owns is skipped,
+logged and counted as `intelligence_graph_vertex_conflict_total`, and the
+recommendation's other links are still written. `platform` and `public` vertices
+(asset registry `chain:` / `asset:` vertices, card catalog vertices,
+derivatives `market_venue:` / `derivative_market:` vertices, interop
+topology) can only be created or changed by a write made for that scope; a
+tenant writer only adds edges to them. An interop scan writes the topology as
+`public` whatever tenant it scans, and a tenant's interop messages only add
+that tenant's edges. Interop links a gateway to a `chain:` vertex, or a tenant
+message to an interop vertex, only when that vertex exists with its reference
+owner (otherwise the edge is skipped and counted as
+`interop_chain_link_skipped` / `interop_reference_link_skipped`). Derivatives
+account and position projections link to venue and market vertices only once
+they exist as `platform` and never to another tenant's account (otherwise the
+edge is skipped and counted as `derivatives_graph_link_skipped`). Venue and
+market vertices are written only by `make derivatives-registry-graph`
+(`value.derivatives.registry_graph`), which projects the venue and market
+registry rows as `platform` and rewrites only vertices that are missing or
+differ; run it after registry rows are added, since nothing in the application
+creates them. On Neptune, `make
+graph-platform-owners` (a dry run unless `APPLY=1`) relabels existing `chain:`,
+card catalog and derivatives venue/market vertices to the `platform` owner; the Postgres backend is
+relabelled by `make tenant-row-keys`. Ledger replay rebuilds state without the
+check, since it replays writes that were already accepted.
 
 The same normalization is enforced on graph reads. Traversal entry points
 validate the requested anchor before searching, reject an anchor with missing
@@ -370,8 +414,8 @@ New columns: `agent_task_frequency`, `avg_confidence_delta`, `hiring_depth`, `x4
 |--------|------|-------------|
 | `POST` | `/v1/commerce/payments` | Record a payment event between any two participants |
 | `POST` | `/v1/commerce/hires` | Record an agent hiring another agent for a task |
-| `GET` | `/v1/commerce/fees/report` | Aggregate fee analysis across agents for a time range |
-| `GET` | `/v1/commerce/agent/{id}/spend` | Total spend breakdown for a specific agent |
+| `GET` | `/v1/commerce/fees/report` | Aggregate fee analysis across the caller's tenant's payments for a time range |
+| `GET` | `/v1/commerce/agent/{id}/spend` | Total spend breakdown for a specific agent, from the caller's tenant's payments |
 
 ### On-Chain Service (L0)
 
@@ -380,7 +424,7 @@ New columns: `agent_task_frequency`, `avg_confidence_delta`, `hiring_depth`, `x4
 | `POST` | `/v1/onchain/actions` | Submit an `ActionRecord` for chain activity |
 | `GET` | `/v1/onchain/actions/{agent_id}` | Retrieve all action records for an agent |
 | `GET` | `/v1/onchain/contracts/{address}` | Tenant-scoped contract metadata + bytecode risk score; optional `chain_id` resolves cross-chain address ambiguity |
-| `POST` | `/v1/onchain/listener/configure` | Configure chain listener filters per project |
+| `POST` | `/v1/onchain/listener/configure` | Configure chain listener filters per project (platform operator) |
 
 ### x402 Service (L3b)
 
@@ -399,6 +443,8 @@ Full graph traversal, path-finding, and overlay services via `GraphTraversalEngi
 | `POST` | `/v1/graph/traverse` | BFS traversal from a root vertex — depth, edge-type, and tenant-scope filters |
 | `POST` | `/v1/graph/path` | Shortest-path (Dijkstra) between two vertices |
 | `POST` | `/v1/graph/temporal` | Temporal BFS — traverse edges created within a time window |
+
+The start, `from`/`to` and anchor vertices of `traverse`, `path` and `temporal` are fetched with `get_vertex_for_tenant`: an id outside the request's tenant comes back as a bare placeholder node, never with the other tenant's properties.
 | `POST` | `/v1/graph/overlay` | Fetch all vertices matching type/tenant predicates (uses `get_all_vertices()`) |
 | `POST` | `/v1/graph/filter` | Filter vertices by risk level, relationship type, or property predicate |
 | `GET` | `/v1/graph/contracts` | List smart-contract vertices visible in the tenant's graph |
@@ -434,8 +480,8 @@ spur prefixes; equal-cost alternatives are ordered with a stable tie-breaker.
 | `POST` | `/v1/agent/tasks/{id}/lifecycle` | Update task state (`started`, `paused`, `completed`, `failed`) |
 | `POST` | `/v1/agent/tasks/{id}/decision` | Log an agent decision with reasoning and confidence |
 | `POST` | `/v1/agent/tasks/{id}/feedback` | Submit ground truth feedback and compute `confidence_delta` |
-| `GET` | `/v1/agent/{id}/graph` | Full subgraph for an agent (nodes, edges, action records) |
-| `GET` | `/v1/agent/{id}/trust` | Current trust score with component breakdown |
+| `GET` | `/v1/agent/{id}/graph` | Subgraph for an agent within the caller's tenant (404 unless the agent's vertex belongs to it; neighbours tagged with another tenant, or with none, are omitted) |
+| `GET` | `/v1/agent/{id}/trust` | Current trust score with component breakdown (404 unless the agent's vertex belongs to the caller's tenant) |
 | `POST` | `/v1/agent/{id}/a2h` | Record an agent-to-human interaction (notification, recommendation, delivery, escalation) |
 
 ## Configuration
@@ -594,6 +640,9 @@ Centralized error tracking with automatic classification, circuit breakers, and 
 | `POST` | `/v1/diagnostics/errors/{fingerprint}/resolve` | Mark an error as resolved |
 | `POST` | `/v1/diagnostics/errors/{fingerprint}/suppress` | Suppress alerts for a known error |
 | `GET` | `/v1/diagnostics/circuit-breakers` | List all circuit breaker states |
+
+These endpoints report platform-wide state, so they admit only platform
+operators (see [Access Control](ACCESS-CONTROL.md#platform-operators)).
 
 ### Error Classification
 

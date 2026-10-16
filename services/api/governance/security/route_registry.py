@@ -2,9 +2,9 @@
 
 Derives a :class:`RoutePolicy` for any mounted route from the catalog at
 ``config/route_registry.yaml``. Authorization becomes a protocol: a route's
-classification (public/authed, tenant-scoped, Kyber-operator-required, sensitive,
-audit-required, risk) is computed here rather than being implicit in scattered
-handler logic.
+classification (public/authed, tenant-scoped, Kyber-operator-required,
+platform-operator-required, sensitive, audit-required, risk) is computed here
+rather than being implicit in scattered handler logic.
 
 `classify(path)` returns ``None`` when the route's 2-segment prefix is not in the
 catalog's ``known_prefixes`` — the default-deny signal that
@@ -71,6 +71,8 @@ class RoutePolicy:
     minimum_disclosure: Optional[str] = None
     #: Action class this route performs (0 = read).
     action_class: int = 0
+    #: Platform-wide route: a customer owner's role admin is not enough.
+    platform_operator_required: bool = False
 
 
 @dataclass(frozen=True)
@@ -251,6 +253,34 @@ def declaration_path_params(template: str, path: str) -> dict[str, str]:
     return params
 
 
+@lru_cache(maxsize=1)
+def _platform_operator_exemptions() -> tuple[frozenset[str], tuple[re.Pattern[str], ...]]:
+    templates = frozenset(str(t) for t in (_catalog().get("platform_operator_exempt_routes") or []))
+    return templates, tuple(_template_regex(t) for t in templates if "{" in t)
+
+
+def platform_operator_required(path: str) -> bool:
+    """True when ``path`` (a template or a concrete path) is a platform-wide route.
+
+    Public paths and ``/kyber`` routes are never platform-operator-required: the
+    former need no principal and the latter keep the narrower Kyber gate.
+    """
+    seg = _segments(path)
+    if is_public_path(path) or "/kyber" in path or "kyber" in seg:
+        return False
+    cat = _catalog()
+    segments = set(cat.get("platform_operator_segments", []) or [])
+    prefixes = cat.get("platform_operator_prefixes", []) or []
+    if not (segments.intersection(seg)
+            or any(path == p or path.startswith(p.rstrip("/") + "/") for p in prefixes)):
+        return False
+    templates, patterns = _platform_operator_exemptions()
+    if path in templates:
+        return False
+    # Template placeholders are literal text, never a concrete segment value.
+    return "{" in path or not any(p.match(path) for p in patterns)
+
+
 def mounted_route_inventory(routes: Iterable[object]) -> list[dict]:
     """Return the canonical policy inventory for mounted FastAPI routes.
 
@@ -411,4 +441,5 @@ def classify(path: str, method: Optional[str] = None) -> Optional[RoutePolicy]:
         required_capability=decl.capability if decl else None,
         minimum_disclosure=decl.disclosure if decl else None,
         action_class=decl.action_class if decl else 0,
+        platform_operator_required=platform_operator_required(path),
     )

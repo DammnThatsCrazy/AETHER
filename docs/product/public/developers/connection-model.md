@@ -5,7 +5,7 @@ section: developer
 visibility: P
 audience: [dev-junior, dev-senior, architect]
 status: stable
-since_version: "8.12.0"
+since_version: "0.1.0"
 estimated_read_minutes: 5
 toc_depth: 3
 canonical_owner: sdk@aether

@@ -45,6 +45,7 @@ The architecture reset is in progress, so this target describes the intended sha
 
 **Understand the system**
 
+- [Architecture gateway](ARCHITECTURE.md)
 - [Current architecture and target direction](docs/architecture/ARCHITECTURE.md)
 - [Aether root architecture target](docs/architecture/AETHER_ROOT_ARCHITECTURE.md)
 - [Architecture reset plan and proof requirements](docs/architecture/blueprints/architecture-reset/README.md)
@@ -58,8 +59,12 @@ The architecture reset is in progress, so this target describes the intended sha
 
 **Develop**
 
-- [Local development setup](docs/operations/LOCAL-DEVELOPMENT.md)
+- [Local development setup](docs/operations/local-development.md) and [`DEVELOPMENT.md`](DEVELOPMENT.md)
 - [Contribution guide](CONTRIBUTING.md)
+
+**Releases**
+
+- Current version is in [`VERSION`](VERSION); see [`RELEASES.md`](RELEASES.md) and [`CHANGELOG.md`](CHANGELOG.md)
 
 The repository's consistency system is `scripts/repo_doctor.py` and the root `Makefile`. Follow the relevant guidance above when changing code or documentation; a single focused check is not proof of PR merge-readiness.
 

@@ -65,7 +65,7 @@ See per-connector pages: [Slack](SLACK-CONNECTOR.md),
 Connectors now support bidirectional operation:
 
 - **Slack, Linear, Jira** — full outbound delivery: `DeliveryWorker` calls the concrete provider API, persists a `ProviderReceipt` with a real `external_id`, and creates an `ExternalResourceLink`. Provider webhooks feed back as `ExternalOutcomeEvent` records that update the suggestion outcome state and emit graph edges.
-- **Generic signed webhook** — versioned, HMAC-SHA256-signed outbound POST. Outcome callbacks return via `POST /v1/webhooks/aether/callback`.
+- **Generic signed webhook** — versioned, HMAC-SHA256-signed outbound POST. Outcome callbacks return via `POST /v1/notifications/webhooks/aether/callback`.
 - **CRM / Marketing** — fail-closed. Require a concrete `crm_provider` / `marketing_provider` config; planned for a future release.
 - **Agent Assist** — publishes a Kafka `AGENT_ASSIST_ACTION_QUEUED` event and records a receipt with an internal `agent-assist:{id}` external ID.
 

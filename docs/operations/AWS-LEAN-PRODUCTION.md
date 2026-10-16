@@ -26,18 +26,18 @@ reviewed_source_commits:
   - commit: "609a3ad37"
     reason: "Reviewed the linked root main.tf change; it updates the Auth0 section comment only. The dedicated Native CLI client change does not alter lean AWS topology, deployment lane, or runtime settings described here."
 source_hashes:
-  ".github/workflows/infrastructure.yml": "sha256:0b75f5f3df587ea210008ef2bd79babf74c832dd6746a5a218411dae3a90d5ad"
-  ".github/workflows/terraform-promote.yml": "sha256:804e3b437274475d5125b4dbf6c3988ff9387909af73a5aeb5690713cf310adf"
+  ".github/workflows/infrastructure.yml": "sha256:94f3ca18d86f2d5b9e56a319bc7d41db56d524c009458b50bfe226e59d2f9a53"
+  ".github/workflows/terraform-promote.yml": "sha256:a4c235b5777e0dc0ec1e41faabe964314fa751d9c4239d60f156517e3c7eb84c"
   "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
   "config/runtime_deployment.yaml": "sha256:cd65f4902ed9062c2526bd9b83b99e2c0ecc58f012a3fa1c90ba9660b874a332"
   "config/terraform_resource_contracts.yaml": "sha256:b1414be3c53b0309d484b8029aadf336618bd88d94d31de72ed0f54865493d59"
   "infra/aws/terraform/DECOMMISSION.md": "sha256:7d1aa3e9fd042bbb27d8173ea690f41747eee0ea91c5ddcab6c85a5edd688ea6"
-  "infra/aws/terraform/main.tf": "sha256:11831622e9a0aa866f14cfb7b4de0e4744b12f15804141d956f96a0a2ac82b8f"
+  "infra/aws/terraform/main.tf": "sha256:4d67fde198b1c7c6cae30fbb32725cee6a89b894b29449e9ac1e380f6d26d3a5"
   "infra/aws/terraform/moved.tf": "sha256:3a816e2a5b402a98a89d949b1801bd6c3cd99242a26cc17039c6d140faa3a342"
   "infra/aws/terraform/profiles.tf": "sha256:da63e1f50e4030924713679445e3c365883a23821ac78df83bebe14436c67f60"
-  "infra/aws/terraform/profiles/production.tfvars": "sha256:8e0db028aacace222470b10506e75e3f7689ba2ce02f0106566243981917c7a7"
+  "infra/aws/terraform/profiles/production.tfvars": "sha256:85f0417ff14534587c2210d4164adc3e9e775170f01495f62c2884c6f308c36c"
   "infra/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:65c25850344e2b70121207e64f5883d48677feaab93d3a39d6f7aa474908d8d8"
-  "infra/aws/terraform/variables.tf": "sha256:5eed310106c5621fc91dc3961c3e2194a03c6d0181fa494df5ad376112638cdb"
+  "infra/aws/terraform/variables.tf": "sha256:ca0ecdd26f0d7212e4ab11cd7361af4ae6e562915a9f36b7e5d76cb97c1a4b6e"
 ---
 
 # AWS Lean Production
@@ -79,10 +79,18 @@ amplify_domain_name             = "olympuslabsml.com"
 squarespace_hosted_zone_enabled = false
 status_api_url                  = "https://api.olympuslabsml.com/health"
 enable_tfmcp_in_lean             = false
+platform_operator_tenant_ids     = []
 ```
 
 `backend_image_digest` and `ml_image_digest` have **no defaults**. Every plan
 must pin the exact digests from an approved release manifest.
+
+`platform_operator_tenant_ids` becomes `PLATFORM_OPERATOR_TENANT_IDS` on the API
+task. Production has no first-admin bootstrap tenant, so while the list is empty
+no Aether tenant reaches the operator-only `/v1/admin/**` and
+`/v1/diagnostics/**` routes; set the reviewed operator tenant ids before
+relying on operator tooling there. `make ops-readiness`, part of
+`make release-gate`, fails while the list is empty.
 
 `profiles.tf` derives every resource toggle from `var.deployment_profile`, and
 `main.tf` wires those locals into module `count` and module inputs. The
@@ -392,6 +400,14 @@ rejected before AWS credentials are assumed. The job then produces an
 | `reviewed.cost.txt` | cost-model report |
 
 The plan identity table is written to the job summary for the reviewer.
+
+`identity_verification_secrets_enabled` is recorded in the reviewed plan and
+controls whether ECS task definitions mount the active and previous identity
+verification keys. It defaults to true, and the workflow requires both
+Secrets Manager entries to have `AWSCURRENT` versions before planning or
+applying that revision. For an initial deployment, set it false for the first
+plan and apply, populate both values with the secure bootstrap, then generate a
+fresh reviewed plan with it true.
 
 The reviewed plan supplies the API and Kyber application origins separately to
 the ECS module. Kyber's Google workforce client ID and secret remain mounted

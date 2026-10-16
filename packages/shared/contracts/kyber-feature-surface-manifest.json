@@ -35,14 +35,6 @@
       "minimum_disclosure": "D0"
     },
     {
-      "feature_id": "root",
-      "aether_route": "/",
-      "tenant_parity_required": false,
-      "parity_exception_reason": "redirect only",
-      "kyber_mirror_route": null,
-      "minimum_disclosure": "D0"
-    },
-    {
       "feature_id": "activation",
       "aether_route": "/activation",
       "tenant_parity_required": false,
@@ -55,6 +47,38 @@
       "aether_route": "/activate",
       "tenant_parity_required": false,
       "parity_exception_reason": "tenant self-serve guided activation wizard (WS-3 intent-driven goals-to-plan); same class as /activation and /onboarding",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "onboarding",
+      "aether_route": "/onboarding",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "tenant self-setup wizard; no operator equivalent",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "root",
+      "aether_route": "/",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "redirect only",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "home",
+      "aether_route": "/home",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "workspace landing that composes reads owned by other surfaces (tenant readiness, analytics summary, tenant integrations, campaigns); it holds no data of its own, so parity is carried by those surfaces' entries",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "activation-guided",
+      "aether_route": "/activation/guided",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "detailed view of the tenant self-serve activation wizard; same class as /activation",
       "kyber_mirror_route": null,
       "minimum_disclosure": "D0"
     },
@@ -371,10 +395,10 @@
       "minimum_disclosure": "D0"
     },
     {
-      "feature_id": "onboarding",
-      "aether_route": "/onboarding",
+      "feature_id": "onboarding-implementation",
+      "aether_route": "/onboarding/implementation",
       "tenant_parity_required": false,
-      "parity_exception_reason": "tenant self-setup wizard; no operator equivalent",
+      "parity_exception_reason": "the tenant's view of its operator implementation checklist; operators manage the plan itself in Kyber, so there is no tenant mirror (same class as /onboarding)",
       "kyber_mirror_route": null,
       "minimum_disclosure": "D0"
     },

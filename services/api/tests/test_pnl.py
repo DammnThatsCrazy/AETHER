@@ -79,10 +79,15 @@ class _MockProvider:
 
 @pytest.mark.asyncio
 async def test_calculator_empty_data_returns_zeros():
+    class _OneWallet:
+        async def find_many(self, filters=None, **_kw):
+            return [{"address": "0xe1"}]
+
     calc = PNLCalculator(
         clickhouse_client=_MockClickHouse(rows=[]),
         coingecko_provider=_MockProvider(),
         moralis_provider=_MockProvider(),
+        wallet_repo=_OneWallet(),
     )
     result = await calc.compute("e1", "t1", window_days=30)
     assert result.realized_pnl_usd == Decimal("0")

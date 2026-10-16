@@ -36,9 +36,9 @@ webhooks).
 | Info disclosure | Secret/cross-tenant leak | Sanitization, tenant isolation, aggregate-only Kyber |
 | DoS | Request floods | Per-plan rate limits + quota |
 | Elevation | Tenant → operator | Fail-closed operator gate; break-glass + approval |
+| SSRF | Tenant-configured outbound URL (webhook, ticketing/CRM base URL, RPC endpoint, store URL, crawl target) | Every resolved address must be globally routable (mapped/NAT64/6to4/Teredo unwrapped); connection pinned to a validated address (the next validated address is tried only when a connection cannot be established); redirects re-validated or refused, with credentials dropped on a host change or an `https`→`http` downgrade; a resolver failure is retryable, a non-public answer is final |
 
 ## Open items
 
-SSRF coverage on outbound dispatch (allowlist), connector credential rotation
-cadence, and a formal external review — see
+Connector credential rotation cadence and a formal external review — see
 [Penetration-Test Readiness](../operations/PENETRATION-TEST-READINESS.md).

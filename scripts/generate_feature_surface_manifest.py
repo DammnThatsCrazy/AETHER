@@ -49,6 +49,16 @@ NON_SURFACE: dict[str, str] = {
     "/onboarding": "tenant self-setup wizard; no operator equivalent",
     "/activation": "tenant self-serve activation wizard; no operator mirror (same class as /onboarding)",
     "/activate": "tenant self-serve guided activation wizard (WS-3 intent-driven goals-to-plan); same class as /activation and /onboarding",
+    "/activation/guided": "detailed view of the tenant self-serve activation wizard; same class as /activation",
+    "/onboarding/implementation": (
+        "the tenant's view of its operator implementation checklist; operators "
+        "manage the plan itself in Kyber, so there is no tenant mirror (same class as /onboarding)"
+    ),
+    "/home": (
+        "workspace landing that composes reads owned by other surfaces (tenant "
+        "readiness, analytics summary, tenant integrations, campaigns); it holds "
+        "no data of its own, so parity is carried by those surfaces' entries"
+    ),
     "/identity/activation": (
         "tenant identity-activation dashboard (setup status for the tenant's own "
         "identity features); same class as /activation and /onboarding, so no "

@@ -21,12 +21,12 @@ output "rotation_lambda_arn" {
 output "companion_secret_arns" {
   description = <<-EOT
     ARNs of companion *-previous secrets populated during zero-downtime rotation.
-    Wire these into the ECS task definition as JWT_SECRET_PREVIOUS and
-    BYOK_ENCRYPTION_KEY_PREVIOUS so the backend accepts both old and new
-    secrets during the rotation window.
+    Wire these into ECS as the matching *_PREVIOUS variables so the backend
+    can read records protected by the prior key during the rotation window.
   EOT
   value = {
-    "jwt-secret-previous"          = aws_secretsmanager_secret.jwt_secret_previous.arn
-    "byok-encryption-key-previous" = aws_secretsmanager_secret.byok_key_previous.arn
+    "jwt-secret-previous"                         = aws_secretsmanager_secret.jwt_secret_previous.arn
+    "byok-encryption-key-previous"                = aws_secretsmanager_secret.byok_key_previous.arn
+    "identity-verification-token-key-previous" = aws_secretsmanager_secret.identity_verification_token_key_previous.arn
   }
 }

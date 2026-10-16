@@ -6,10 +6,10 @@ Pins two closures:
    entirely when ``SLACK_SIGNING_SECRET`` was unset. Outside local it now
    rejects instead.
 
-2. Linear / Jira / generic-webhook inbox rows never carry a stored secret
-   (that would persist plaintext at rest), so the inbox processor's
-   verification could never succeed — every row stayed ``verified: False``
-   forever. The processor now falls back to configured delivery secrets.
+2. Linear / Jira inbox rows never carry a stored secret (that would persist
+   plaintext at rest), so the inbox processor resolves the configured delivery
+   secrets. Aether delivery callbacks verify only with the bound channel's
+   secret, never a platform-wide one.
 """
 
 from __future__ import annotations
@@ -100,9 +100,11 @@ async def test_slack_callback_still_verifies_bad_signature(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_linear_inbox_row_verifies_via_configured_secret(monkeypatch):
+    import time
+
     secret = "linear-inbound-secret"
     _set_delivery(monkeypatch, linear_webhook_secret=secret)
-    body = b'{"action":"update","type":"Issue"}'
+    body = b'{"action":"update","type":"Issue","webhookTimestamp":%d}' % int(time.time() * 1000)
     signature = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
 
     inbox = {
@@ -156,19 +158,22 @@ async def test_jira_inbox_row_verifies_via_configured_secret(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_generic_webhook_verifies_via_configured_secret(monkeypatch):
+async def test_generic_webhook_verifies_only_with_the_channel_secret(monkeypatch):
     import time
 
-    secret = "generic-callback-secret"
-    _set_delivery(monkeypatch, webhook_signing_secret=secret)
+    platform_secret = "generic-callback-secret"
     ts = str(int(time.time()))
     body = '{"outcome":"delivered"}'
-    signature = hmac.new(secret.encode(), f"{ts}.{body}".encode(), hashlib.sha256).hexdigest()
 
-    inbox = {
-        "id": "in-5",
-        "provider": "webhook",
-        "headers": {"X-Aether-Signature": f"sha256={signature}", "X-Aether-Timestamp": ts},
-        "raw_body": body,
-    }
-    assert await _processor()._verify_signature(inbox) is True
+    def _signed(secret: str) -> dict:
+        signature = hmac.new(secret.encode(), f"{ts}.{body}".encode(), hashlib.sha256).hexdigest()
+        return {
+            "id": "in-5",
+            "provider": "webhook",
+            "headers": {"X-Aether-Signature": f"sha256={signature}", "X-Aether-Timestamp": ts},
+            "raw_body": body,
+        }
+
+    processor = _processor()
+    assert await processor._verify_signature(_signed(platform_secret)) is False
+    assert await processor._verify_signature(_signed("channel-secret"), secret="channel-secret") is True

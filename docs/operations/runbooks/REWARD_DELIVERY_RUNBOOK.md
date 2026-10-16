@@ -11,8 +11,8 @@ source_files:
   - services/api/value/rewards/rails.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/api/value/rewards/delivery_outbox.py": "sha256:9fd28e34c6f74df4c5f77b8ed3ca0966214dfbdb3686b5f497d30f0701b44480"
-  "services/api/value/rewards/rails.py": "sha256:19bef0ee7898b64d6cfd848eb5a1c26f592c1a265c384124590af4abf6c89dad"
+  "services/api/value/rewards/delivery_outbox.py": "sha256:02cc0babff609631153f2a84ffdf8f7ed670a5d23e29a18f3a58f708c02389f9"
+  "services/api/value/rewards/rails.py": "sha256:f9141675fa00dd5b1a00c0789b747e646b392b64561b770f4d9a7f0dff51d2a9"
 ---
 
 # Reward Delivery Runbook
@@ -65,6 +65,18 @@ The SSRF/transport check runs BEFORE a durable job is written, so a blocked
 destination (private IP, plain-HTTP outside local) never becomes a job. A
 `ValueError: webhook destination rejected` at enqueue is correct hardening, not
 an outage.
+
+Delivery then connects only to an address that passed the check and never
+follows a redirect. If the host resolves to a non-public address at send time
+(DNS changed after enqueue), the attempt fails as `SSRF-blocked destination`,
+which the sender classifies as fatal, so the job dead-letters instead of
+retrying.
+
+A host that does not resolve at all (resolver timeout or temporary DNS failure)
+is not a blocked destination: enqueue keeps the job, and a send fails as
+`destination could not be resolved`, which the sender classifies as retryable.
+The `rewards_actions_failed_total` reason label is `unresolved` for these and
+`ssrf_blocked` for refused destinations.
 
 ## Webhook signing secret could not be resolved
 

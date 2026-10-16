@@ -165,6 +165,20 @@ def _validated_shop_domain(shop_domain: str) -> Optional[str]:
     return host
 
 
+def _stored_shop_domain(value: object) -> Optional[str]:
+    """Normalize a stored shop domain for matching; ``None`` when invalid.
+
+    Stored config may carry ``https://``, a trailing slash or upper case; the
+    result is still the bare allowlisted ``{shop}.myshopify.com`` host.
+    """
+    from shared.security.ssrf import validated_https_host
+
+    raw = str(value or "").strip().rstrip("/")
+    return _validated_shop_domain(
+        validated_https_host(raw, allow_suffixes=("myshopify.com",)) or ""
+    )
+
+
 def _raw_shop_domain(context: AcquisitionContext) -> str:
     """Raw, UNVALIDATED tenant-supplied shop domain (credential or config)."""
     cred = _credential_dict(context)

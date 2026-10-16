@@ -8,7 +8,7 @@ status: experimental
 since_version: 0.1.0
 source_files: [services/api/journeys/comms/routes.py, services/api/journeys/comms/ingest.py, services/api/connectors/integrations/connectors/routes.py, services/api/connectors/integrations/providers/payment_rails/webhook_endpoints.py, services/api/connectors/integrations/providers/payment_rails/signature_verify.py]
 source_hashes:
-  "services/api/connectors/integrations/connectors/routes.py": "sha256:f3f63c100a16ead6edf6c8806c5d7f74e12c01f16b72be83eaf99165088f7826"
+  "services/api/connectors/integrations/connectors/routes.py": "sha256:d537cd13e0607f0d8e9c9db85797bdfcf42cb450815883dee6a44c8cca987a5e"
   "services/api/connectors/integrations/providers/payment_rails/signature_verify.py": "sha256:45848e154923bd4fa5709d52a1a6d858cdfbdfb36ece7446b61df7163eb5f7e4"
   "services/api/connectors/integrations/providers/payment_rails/webhook_endpoints.py": "sha256:050445ded102390adceb94fe01203eecd04b3602874f32f1e6e87cbc3f21e10a"
   "services/api/journeys/comms/ingest.py": "sha256:5d3bb421d821198b564cd5ad5faa940d4de4de334711c186043366bf2623ad68"
@@ -64,7 +64,12 @@ Tenant administrators mint and manage endpoints for each comms connector:
 The legacy header-based connector webhook route
 (`POST /v1/integrations/webhooks/{connector}` with `X-Aether-Tenant-ID`) is
 **permanently denied for comms connectors**; it remains only for non-comms
-connectors. Configure your comms provider to POST to the minted
+connectors. Shopify deliveries on that route never use the tenant header: the
+tenant comes from the shop domain (`X-Shopify-Shop-Domain`, else the body
+`domain`; the two must agree when both are present), which must match exactly
+one enabled Shopify binding whose own secret then verifies the HMAC over the
+raw body. Every denial on the legacy route returns the same generic
+`400`. Configure your comms provider to POST to the minted
 `/comms/{connector}/{endpoint_id}` URL instead.
 
 ## Endpoint

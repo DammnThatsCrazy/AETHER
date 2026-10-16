@@ -22,6 +22,27 @@ vi.mock('@aether-app/components/decision-intelligence-panel', () => ({
   DecisionIntelligencePanel: () => <div>DECISION INTELLIGENCE</div>,
 }));
 
+// Home's own workspace reads (readiness, activation, connections, keys, event
+// summary, campaigns) are settled as empty here so this suite only exercises
+// the model-routing surface.
+vi.mock('@aether-app/features/activation/use-tenant-readiness', () => ({
+  useTenantReadiness: () => ({ data: null, isLoading: false, error: null, refetch: vi.fn() }),
+}));
+vi.mock('@aether-app/features/activation/use-activation', () => ({
+  useActivationStatus: () => ({ data: null, isLoading: false, error: null, refetch: vi.fn() }),
+}));
+vi.mock('@aether-app/features/integrations', () => ({
+  useTenantIntegrations: () => ({ data: null, isLoading: false, error: null, refetch: vi.fn() }),
+}));
+vi.mock('@aether-app/features/onboarding/use-workspace-setup', () => ({
+  useAnalyticsSummary: () => ({ data: null, isLoading: false, error: null, refetch: vi.fn() }),
+  useOrganizationProfile: () => ({ data: null, isLoading: false, error: null, refetch: vi.fn() }),
+  useTenantApiKeys: () => ({ data: null, isLoading: false, error: null, refetch: vi.fn() }),
+}));
+vi.mock('@aether-app/lib/api/endpoints', () => ({
+  api: { campaigns: { list: () => Promise.resolve({ campaigns: [], total: 0 }) } },
+}));
+
 // Authenticated tenant context — the panel's `tenantId` label derives from this.
 vi.mock('@aether-app/features/auth', () => ({
   useAuth: () => ({

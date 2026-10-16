@@ -50,8 +50,8 @@ def billing_routes(monkeypatch):
 def make_request(tenant_id: str = "t-001", role: str = "admin"):
     """Build a request whose tenant_id matches the path tenant by default.
 
-    Pass a different `tenant_id` (or set role!="admin") to simulate a
-    cross-tenant call that should be rejected by `_enforce_tenant_scope`.
+    Pass a different `tenant_id` to simulate a cross-tenant call that
+    `_enforce_tenant_scope` rejects unless the caller is a platform operator.
     """
     role_obj = SimpleNamespace(value=role)
     tenant = SimpleNamespace(
@@ -93,7 +93,7 @@ async def test_get_subscription_returns_state(billing_routes):
 @pytest.mark.asyncio
 async def test_get_subscription_404(billing_routes):
     with pytest.raises(Exception) as exc:
-        await billing_routes.get_subscription("ghost", make_request())
+        await billing_routes.get_subscription("ghost", make_request(tenant_id="ghost"))
     assert "not found" in str(exc.value).lower()
 
 
@@ -118,7 +118,7 @@ async def test_change_plan_invalid_tier(billing_routes):
 async def test_change_plan_unknown_tenant_404(billing_routes):
     body = billing_routes.ChangePlanRequest(plan_tier="beta")
     with pytest.raises(Exception) as exc:
-        await billing_routes.change_plan("ghost", body, make_request())
+        await billing_routes.change_plan("ghost", body, make_request(tenant_id="ghost"))
     assert "not found" in str(exc.value).lower()
 
 
@@ -199,9 +199,19 @@ async def test_cancel_rejects_cross_tenant_call(billing_routes):
 
 
 @pytest.mark.asyncio
-async def test_admin_role_may_act_cross_tenant(billing_routes):
-    """Callers with admin role bypass tenant scoping (matches existing helper)."""
+async def test_customer_admin_role_may_not_act_cross_tenant(billing_routes):
+    """Every customer owner holds role admin; that never reaches another tenant."""
     await seed_account(tenant_id="t-001")
-    admin_req = make_request(tenant_id="t-admin", role="admin")
-    res = await billing_routes.get_subscription("t-001", admin_req)
+    admin_req = make_request(tenant_id="t-002", role="admin")
+    with pytest.raises(Exception) as exc:
+        await billing_routes.get_subscription("t-001", admin_req)
+    assert "denied" in str(exc.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_platform_operator_may_act_cross_tenant(billing_routes):
+    await seed_account(tenant_id="t-001")
+    operator_req = make_request(tenant_id="t-operator", role="admin")
+    operator_req.state.platform_operator = True
+    res = await billing_routes.get_subscription("t-001", operator_req)
     assert res["data"]["tenant_id"] == "t-001"

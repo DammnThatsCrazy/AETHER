@@ -249,6 +249,35 @@ def require_kyber_operator(request: Request):  # noqa: ANN201
     return operator_actor(request)
 
 
+def is_platform_operator_admin(tenant, platform_operator: bool) -> bool:  # noqa: ANN001
+    """An admin of a platform operator tenant; its members and viewers are not."""
+    return platform_operator is True and tenant is not None and tenant.has_permission("admin")
+
+
+def is_platform_operator_request(request: Request) -> bool:
+    """True when the caller runs the platform rather than consumes it.
+
+    An admin of a platform operator tenant (``request.state.platform_operator``,
+    resolved by the auth middleware from ``is_platform_operator``) or a Kyber
+    operator. A customer owner's role admin, which passes every
+    ``require_permission()`` check, never passes this one.
+    """
+    state = getattr(request, "state", None)
+    tenant = getattr(state, "tenant", None)
+    if is_platform_operator_admin(tenant, getattr(state, "platform_operator", False)):
+        return True
+    return is_kyber_operator(tenant, request=request)
+
+
+def require_platform_operator(request: Request) -> None:
+    """Fail-closed gate for routes that act on other tenants or platform state."""
+    if is_platform_operator_request(request):
+        return
+    if getattr(getattr(request, "state", None), "tenant", None) is None:
+        raise UnauthorizedError("authentication required")
+    raise ForbiddenError("Platform operator access required")
+
+
 def context_capabilities(ctx: Any) -> frozenset[str]:
     """Capability ids held by a resolved Kyber access context."""
     raw = getattr(ctx, "capabilities", None)

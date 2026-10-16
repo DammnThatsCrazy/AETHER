@@ -16,7 +16,7 @@ name: Development web
 
 on:
   push:
-    branches: [Development]
+    branches: [development]
     paths:
       - "apps/aether-web/**"
       - "packages/shared/**"
@@ -40,8 +40,8 @@ env:
 jobs:
   deploy:
     name: Deploy the Development build
-    # The role trusts only Development and main; the build must be Development.
-    if: github.ref == 'refs/heads/Development'
+    # The role trusts only development and main; the build must be development.
+    if: github.ref == 'refs/heads/development'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

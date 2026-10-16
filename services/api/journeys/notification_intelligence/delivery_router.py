@@ -112,7 +112,9 @@ class DeliveryRouter:
                 f"when constructing DeliveryRouter. credentials_ref={credentials_ref!r}"
             )
         try:
-            record = await self._providers_repo.find_by_id(credentials_ref)
+            record = await self._providers_repo.find_for_tenant(
+                channel.get("tenant_id") or "", credentials_ref
+            )
             if record:
                 return record.get("api_key", "")
         except Exception as exc:

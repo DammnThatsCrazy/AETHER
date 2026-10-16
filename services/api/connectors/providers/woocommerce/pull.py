@@ -37,9 +37,13 @@ from shared.integration_contracts.results import (
     RateLimitInfo,
 )
 
+from shared.security.ssrf import UnsafeDestinationError
+
 from connectors.providers.woocommerce.auth import (
     _base_url,
     _credential_dict,
+    _get,
+    _destination_refused,
     _raw_site_url,
     _safe_json,
     _site_host,
@@ -47,18 +51,10 @@ from connectors.providers.woocommerce.auth import (
 
 # WooCommerce caps per_page at 100; values above it are truncated server-side.
 _MAX_PER_PAGE = 100
-_REQUEST_TIMEOUT_SECONDS = 10.0
 
 
 # Cursor scheme: after:<iso> | after:<iso>:page:<n> | page:<n> (see module docstring).
 CURSOR_SCHEME = "after:<iso> (date_modified window) | after:<iso>:page:<n> | page:<n>"
-
-
-def _http_client():
-    """Lazy httpx client factory (backend pattern). Tests patch this seam."""
-    import httpx
-
-    return httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS)
 
 
 def _parse_cursor(cursor: Optional[str]) -> tuple[Optional[str], int]:
@@ -170,8 +166,7 @@ class WooCommercePullAdapter:
                 error_code="site_url_invalid",
                 retryable=False,
                 data={
-                    "detail": "site_url is not a valid public https host "
-                    "(structural gate; resolver-level check required at live-auth time)"
+                    "detail": "site_url is not a valid public https host"
                 },
             )
         missing = [
@@ -192,15 +187,10 @@ class WooCommercePullAdapter:
         params = _build_params(cursor, limit)
         url = f"{base}/orders?" + urllib.parse.urlencode(params)
 
-        import httpx
-
         try:
-            async with _http_client() as client:
-                response = await client.get(
-                    url,
-                    headers={"Accept": "application/json"},
-                    auth=httpx.BasicAuth(cred["consumer_key"], cred["consumer_secret"]),
-                )
+            response = await _get(url, cred)
+        except UnsafeDestinationError as exc:
+            return _destination_refused(exc)
         except Exception as exc:  # noqa: BLE001 - network failures are classified
             return AdapterResult(
                 success=False,
