@@ -60,6 +60,31 @@ _HONEST_HALT_STATES: frozenset[ActivationState] = frozenset(
 
 _ALL_STATES: frozenset[ActivationState] = frozenset(ActivationState)
 
+# States from which durable first-event evidence may move a record forward:
+# every pre-completion state of the flow (not the honest-halt states, and not
+# not_started, which _load_or_create always advances past).
+_FIRST_EVIDENCE_FROM: frozenset[ActivationState] = frozenset(
+    {
+        S.account_verified,
+        S.plan_selected,
+        S.billing_pending,
+        S.billing_active,
+        S.sdk_selected,
+        S.keys_created,
+        S.waiting_for_event,
+    }
+)
+
+# Durable Bronze stores written by the tenant's own ingestion paths, read in
+# order. ``sdk_events`` keeps its ``source == "sdk"`` filter (SDK and
+# publishable site-key events); the others hold only tenant ingestion.
+_FIRST_VALUE_STORES: tuple[tuple[str, dict[str, Any]], ...] = (
+    ("sdk_events", {"source": "sdk"}),
+    ("provider_records", {}),
+    ("connector_events", {}),
+    ("tenant_import", {}),
+)
+
 
 class ActivationService:
     """Drives the self-serve activation lifecycle for a tenant."""
@@ -79,7 +104,11 @@ class ActivationService:
         ),
         S.keys_created: frozenset({S.sdk_selected, S.waiting_for_event}),
         S.waiting_for_event: frozenset({S.keys_created, S.event_received}),
-        S.event_received: frozenset({S.keys_created, S.waiting_for_event}),
+        # First value can be proved from any tenant ingestion path (SDK keys,
+        # publishable site keys, connector syncs, imports), so a real event may
+        # arrive before -- or without -- the SDK key step. Every connector and
+        # SDK is optional; only durable evidence moves this state.
+        S.event_received: _FIRST_EVIDENCE_FROM,
         S.first_value_ready: frozenset({S.event_received, S.waiting_for_event}),
         S.complete: frozenset({S.first_value_ready}),
         S.manual_pending: _ALL_STATES,
@@ -325,35 +354,46 @@ class ActivationService:
     # ── First-value evidence (durable Bronze read) ───────────────────────────
 
     async def _reconcile_first_value(self, record: dict[str, Any]) -> dict[str, Any]:
-        """Derive first-value state from the durable Bronze ``sdk_events`` rows.
+        """Derive first-value state from durable Bronze rows.
 
-        No rows  -> waiting_for_event (nothing has arrived yet).
+        Evidence is a durable row in any store the tenant's own ingestion paths
+        write (``_FIRST_VALUE_STORES``): SDK and publishable site-key events,
+        connector syncs, or committed imports. Every connector and SDK is
+        optional, so none of them is privileged.
+
+        No rows  -> waiting_for_event once keys exist (nothing has arrived yet);
+                    earlier records are left as they are.
         >=1 row  -> event_received then first_value_ready, with REAL
                     event_id / batch_id / received_at stored in the evidence
                     dict. The durable Bronze row IS the confirmation — there is
                     no hard-coded success.
 
-        State is only moved when the record is at a point in the flow that can
-        legally reach first value (keys created onward); an early record with a
-        stray row is left untouched rather than force-transitioned.
+        State is only moved from a pre-completion flow state
+        (``_FIRST_EVIDENCE_FROM``); honest-halt states are never
+        force-transitioned.
         """
         tenant_id = record["tenant_id"]
         current = ActivationState(record["state"])
-        reachable = {S.keys_created, S.waiting_for_event, S.event_received, S.first_value_ready}
+        reachable = _FIRST_EVIDENCE_FROM | {S.event_received, S.first_value_ready}
         if current not in reachable:
             return record
 
-        bronze = BronzeRepository("sdk_events")
-        rows = await bronze.find_many(
-            filters={"tenant_id": tenant_id, "source": "sdk"},
-            limit=1,
-            sort_by="created_at",
-            sort_order="desc",
-        )
+        rows: list[dict[str, Any]] = []
+        store = ""
+        for store, extra in _FIRST_VALUE_STORES:
+            rows = await BronzeRepository(store).find_many(
+                filters={"tenant_id": tenant_id, **extra},
+                limit=1,
+                sort_by="created_at",
+                sort_order="desc",
+            )
+            if rows:
+                break
         if not rows:
             if current == S.keys_created:
                 self.advance(record, S.waiting_for_event, reason="no_bronze_rows")
-            record["waiting_reason"] = "no_events_received_yet"
+            if current in {S.keys_created, S.waiting_for_event}:
+                record["waiting_reason"] = "no_events_received_yet"
             return record
 
         row = rows[0]
@@ -372,7 +412,7 @@ class ActivationService:
             "event_id": event_id,
             "batch_id": batch_id,
             "received_at": received_at,
-            "source": "bronze_sdk_events",
+            "source": f"bronze_{store}",
             "bronze_id": row.get("id"),
             "confirmed": True,
         }

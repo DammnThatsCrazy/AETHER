@@ -29,14 +29,14 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:0740c89ed3bf089b8ded5f9a319b7670a0afb18bda8f58a69a11a03c2a0a5d75"
   "services/api/connectors/": "sha256:be5c00bffaa216ecd12b669cb41ee011c177800fbc7d70c5e9bd4c1b4c3f6e76"
-  "services/api/governance/": "sha256:f0fb64d3cc3dccc64070ee90276d01de955a457ea04fd3cc8d538a19c64c2fdc"
+  "services/api/governance/": "sha256:b47a6fe0cec45cf306bfb4399a2b361df4f4bd1a4f0f897ed003a3db2d4a0dd3"
   "services/api/graph/": "sha256:bda39e64fa30ae40f4acbf0fa85092aa50d7cb601037bdcd6870b241ea09fe13"
   "services/api/identity/": "sha256:4a96035d9625725df833799f19f36e4137e9ba2dab121bb9eb78e7e5833fc79a"
   "services/api/ingestion/": "sha256:1e13d282a2ef03b1673b631a9e564e27ed09690a695531674ed26967559eda0a"
   "services/api/intelligence/": "sha256:9b583b5a699e01018b213383848636ee011384fa9f6115d1cda00977dfdb3e58"
   "services/api/journeys/": "sha256:8db7d48b7f8247ab5adfde2fef24d3d7d4d6b2b4b7b721fd1129e836c9ad5301"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
-  "services/api/tenancy/": "sha256:228120a11b8e6c3fec9405ed272e61de894b658274a33da129facc9c074a8224"
+  "services/api/tenancy/": "sha256:81d3908e2cb30a15c04c6167a603f489a1b5bac57ec02743a042b52301bc52b0"
   "services/api/value/": "sha256:fe86fc00610841af79232a37540d9027778742c64d4cc820dfaac888018a88b6"
   "services/api/workers/": "sha256:62b80fbcf0fed7df62c169f9ec263635d26e65da656162f01f4fe70e65236ad4"
 ---
@@ -580,7 +580,7 @@ key. GETs require `read`; state-changing POSTs require `write`. Full behavior:
 | `POST` | `/v1/activation/sdk-selection` | write | Body `{ "platforms": ["web", …] }`. |
 | `POST` | `/v1/activation/create-sdk-keys` | write | Body `{ "count": 1, "label": "…" }`. Returns raw key(s) **once**. |
 | `POST` | `/v1/activation/test-event` | write | Sends a canonical event through `/v1/batch`; per-event `accepted \| duplicate \| rejected`. |
-| `GET`  | `/v1/activation/first-value` | read | `{ "state", "ready", "evidence" }` from real Bronze rows. |
+| `GET`  | `/v1/activation/first-value` | read | `{ "state", "ready", "evidence" }` from real Bronze rows written by any tenant ingestion path (SDK and site-key events, connector syncs, imports). SDK keys are not a prerequisite. |
 | `POST` | `/v1/activation/complete` | write | `409` unless state is `first_value_ready`. |
 
 ### Intent-driven activation (WS-3)
