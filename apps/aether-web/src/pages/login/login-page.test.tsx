@@ -150,21 +150,19 @@ describe("resolvePostAuthRedirect", () => {
   });
 
   it("falls back to the tenant home for empty or foreign redirect values", () => {
-    expect(resolvePostAuthRedirect(null)).toBe("/settings");
-    expect(resolvePostAuthRedirect("")).toBe("/settings");
-    expect(resolvePostAuthRedirect("//evil.example")).toBe("/settings");
-    expect(resolvePostAuthRedirect("https://evil.example")).toBe("/settings");
+    expect(resolvePostAuthRedirect(null)).toBe("/");
+    expect(resolvePostAuthRedirect("")).toBe("/");
+    expect(resolvePostAuthRedirect("//evil.example")).toBe("/");
+    expect(resolvePostAuthRedirect("https://evil.example")).toBe("/");
   });
 
   it("rejects backslash-authority and control-character redirect variants", () => {
     // URL parsers normalize `/\…` into a `//` scheme-relative authority and a
     // leading `\` into a path escape; both must stay on the tenant home.
-    expect(resolvePostAuthRedirect("\\evil.example")).toBe("/settings");
-    expect(resolvePostAuthRedirect("/\\evil.example")).toBe("/settings");
-    expect(resolvePostAuthRedirect("/\\\\evil.example")).toBe("/settings");
-    expect(resolvePostAuthRedirect("/settings\\@evil.example")).toBe("/settings");
-    expect(resolvePostAuthRedirect("/settings\r\nLocation:https://evil.example")).toBe(
-      "/settings",
-    );
+    expect(resolvePostAuthRedirect("\\evil.example")).toBe("/");
+    expect(resolvePostAuthRedirect("/\\evil.example")).toBe("/");
+    expect(resolvePostAuthRedirect("/\\\\evil.example")).toBe("/");
+    expect(resolvePostAuthRedirect("/settings\\@evil.example")).toBe("/");
+    expect(resolvePostAuthRedirect("/settings\r\nLocation:https://evil.example")).toBe("/");
   });
 });

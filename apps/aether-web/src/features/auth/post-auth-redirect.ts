@@ -4,7 +4,7 @@
  * protocol-relative `//…`, a `/…\…` form that URL parsers normalize into an
  * authority, or any embedded backslash/control character) — RequireAuth builds
  * it from the visitor's own deep link, and anything else falls back to the
- * tenant home so a hand-built `/login?redirect=…` link can never push the
+ * tenant root ("/", which resolves to onboarding or Home) so a hand-built `/login?redirect=…` link can never push the
  * browser to a foreign origin.
  *
  * Shared by the login and signup pages (and re-exported from login-page for
@@ -22,7 +22,7 @@ export function resolvePostAuthRedirect(raw: string | null): string {
   ) {
     return raw;
   }
-  return "/settings";
+  return "/";
 }
 
 /** Self-serve plans the pricing page can hand off (shared/plans/catalog.py). */

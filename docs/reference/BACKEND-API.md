@@ -36,7 +36,7 @@ source_hashes:
   "services/api/intelligence/": "sha256:9b583b5a699e01018b213383848636ee011384fa9f6115d1cda00977dfdb3e58"
   "services/api/journeys/": "sha256:8db7d48b7f8247ab5adfde2fef24d3d7d4d6b2b4b7b721fd1129e836c9ad5301"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
-  "services/api/tenancy/": "sha256:228120a11b8e6c3fec9405ed272e61de894b658274a33da129facc9c074a8224"
+  "services/api/tenancy/": "sha256:81d3908e2cb30a15c04c6167a603f489a1b5bac57ec02743a042b52301bc52b0"
   "services/api/value/": "sha256:fe86fc00610841af79232a37540d9027778742c64d4cc820dfaac888018a88b6"
   "services/api/workers/": "sha256:62b80fbcf0fed7df62c169f9ec263635d26e65da656162f01f4fe70e65236ad4"
 ---
@@ -580,7 +580,7 @@ key. GETs require `read`; state-changing POSTs require `write`. Full behavior:
 | `POST` | `/v1/activation/sdk-selection` | write | Body `{ "platforms": ["web", …] }`. |
 | `POST` | `/v1/activation/create-sdk-keys` | write | Body `{ "count": 1, "label": "…" }`. Returns raw key(s) **once**. |
 | `POST` | `/v1/activation/test-event` | write | Sends a canonical event through `/v1/batch`; per-event `accepted \| duplicate \| rejected`. |
-| `GET`  | `/v1/activation/first-value` | read | `{ "state", "ready", "evidence" }` from real Bronze rows. |
+| `GET`  | `/v1/activation/first-value` | read | `{ "state", "ready", "evidence" }` from real Bronze rows written by any tenant ingestion path (SDK and site-key events, connector syncs, imports). SDK keys are not a prerequisite. |
 | `POST` | `/v1/activation/complete` | write | `409` unless state is `first_value_ready`. |
 
 ### Intent-driven activation (WS-3)

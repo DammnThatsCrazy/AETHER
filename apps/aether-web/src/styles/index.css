@@ -1,5 +1,6 @@
 @import '@aether/ui/styles/tokens.css';
 @import "./tokens.css";
+@import "./glass.css";
 
 @tailwind base;
 @tailwind components;
