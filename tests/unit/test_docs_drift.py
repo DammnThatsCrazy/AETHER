@@ -658,3 +658,27 @@ def test_real_backlog_registry_loads_and_matches_tracked_docs(dd):
     tracked = {str(p.relative_to(dd.ROOT)) for p in dd.tracked_docs()}
     unknown = sorted(p for p in backlog if p not in tracked)
     assert unknown == [], f"backlog entries for untracked docs: {unknown}"
+
+
+def test_unmarked_source_linked_doc_is_listed_without_failing_strict(dd, tmp_path, monkeypatch, capsys):
+    (tmp_path / "src.py").write_text("x = 1\n", encoding="utf-8")
+    unmarked = tmp_path / "docs" / "unmarked.md"
+    hashed = tmp_path / "docs" / "hashed.md"
+    unmarked.parent.mkdir()
+    unmarked.write_text("---\nsource_files:\n  - src.py\n---\n# Unmarked\n", encoding="utf-8")
+    monkeypatch.setattr(dd, "ROOT", tmp_path)
+    hashed.write_text(
+        "---\nsource_files:\n  - src.py\nsource_hashes:\n"
+        f"  src.py: {dd.source_content_hash('src.py')}\n---\n# Hashed\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(dd, "tracked_docs", lambda skip_dirs=None: [hashed, unmarked])
+    monkeypatch.setattr(dd, "load_review_backlog", lambda: {})
+    monkeypatch.setattr(sys, "argv", ["docs_drift.py", "--strict"])
+
+    assert dd.is_unmarked(unmarked) and not dd.is_unmarked(hashed)
+    assert dd.main() == 0
+    out = capsys.readouterr().out
+    assert "1 clean" in out and "1 unmarked (advisory)" in out
+    assert "UNMARKED (advisory" in out
+    assert "  - docs/unmarked.md" in out and "docs/hashed.md" not in out

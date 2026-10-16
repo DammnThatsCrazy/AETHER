@@ -96,7 +96,8 @@ export type ConnectorClass =
   | "tenant_byod_data"
   | "byok_gateway"
   | "action_notifier"
-  | "dual_role";
+  | "dual_role"
+  | "partner_feed";
 
 export const ConnectorClass = {
   OLYMPUS_PROVIDER: "olympus_provider" as const,
@@ -104,6 +105,7 @@ export const ConnectorClass = {
   BYOK_GATEWAY: "byok_gateway" as const,
   ACTION_NOTIFIER: "action_notifier" as const,
   DUAL_ROLE: "dual_role" as const,
+  PARTNER_FEED: "partner_feed" as const,
 } satisfies Record<string, ConnectorClass>;
 
 // ── Connector role ─────────────────────────────────────────────────────────────

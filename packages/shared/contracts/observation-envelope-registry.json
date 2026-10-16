@@ -50,9 +50,10 @@
       "name": "source",
       "kind": "object",
       "required": true,
-      "description": "Ingress source provenance (Invariant #7): which adapter/path/provider observed this.",
+      "description": "Ingress source provenance (Invariant #7): which adapter/path/provider observed this. source_relationship is server-stamped (descriptive, never authorizing); canonical vocabulary in services/api/shared/integration_contracts/source_relationship.py.",
       "fields": [
         { "name": "source_type", "type": "source_type", "required": true },
+        { "name": "source_relationship", "type": "source_relationship", "required": false },
         { "name": "source_provider", "type": "string", "required": false },
         { "name": "source_instance", "type": "string", "required": false },
         { "name": "source_native_id", "type": "string", "required": false },
@@ -149,6 +150,17 @@
         { "name": "normalization_version", "type": "string", "required": false },
         { "name": "validation_version", "type": "string", "required": false }
       ]
+    },
+    {
+      "name": "rights",
+      "kind": "object",
+      "required": false,
+      "description": "Server-owned Rights Authority references: governed source scope, DataRightsGrant ids, and rdec_ RightsDecision ids. References only; consent decision ids stay in privacy.policy_decisions. Omitted for consent-only sources.",
+      "fields": [
+        { "name": "source_id", "type": "string", "required": false },
+        { "name": "source_grant_refs", "type": "array[string]", "required": false },
+        { "name": "rights_decision_refs", "type": "array[string]", "required": false }
+      ]
     }
   ],
   "passthrough_blocks": {
@@ -171,6 +183,16 @@
       "import",
       "harness",
       "replay"
+    ],
+    "source_relationships": [
+      "personal_account",
+      "organization_system",
+      "first_party_application",
+      "partner_feed",
+      "olympus_source",
+      "public_reference",
+      "internal_system",
+      "unclassified"
     ],
     "identifier_types": [
       "anonymous_id",

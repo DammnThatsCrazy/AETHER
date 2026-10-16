@@ -10,7 +10,7 @@ source_files: [packages/shared/contracts/consent-registry.json, services/api/sha
 canonical_owner: platform@aether
 source_hashes:
   "packages/shared/contracts/consent-registry.json": "sha256:f147d3df7c63735b59103d2432b0a2fa37699b3494f6a2b95c397025dc54ec76"
-  "services/api/shared/auth/auth.py": "sha256:26b570c6eeb17ab53db612a14ffe5146b1eb2a76ea102b2c297a3a4a9b5544aa"
+  "services/api/shared/auth/auth.py": "sha256:aab180081211c0d518db2c392a850ab10cd7341c643a1e3303d8f91647167e50"
   "services/api/shared/privacy/consent_enforcement.py": "sha256:1508745af0a8b2085f109d69050e49524bfcffc93d62316529056bf76fb67bd1"
 ---
 

@@ -16,9 +16,12 @@ import pytest
 from pydantic import ValidationError
 
 from shared.observation.envelope import (
+    SOURCE_RELATIONSHIPS,
     CorrelationBlock,
     ObservationBlock,
+    PrivacyBlock,
     ProvenanceBlock,
+    RightsReferenceBlock,
     SourceBlock,
     SubjectRef,
     TemporalBlock,
@@ -255,3 +258,107 @@ def test_settings_flag_exists_and_defaults_off() -> None:
     assert cfg.enabled is False
     # The dataclass field is wired to the documented env var (default OFF).
     assert "AETHER_OBSERVATION_ENVELOPE_ENABLED" in inspect.getsource(settings_module.ObservationEnvelopeConfig)
+
+
+@pytest.mark.parametrize("relationship", SOURCE_RELATIONSHIPS)
+def test_every_source_relationship_accepted(relationship):
+    assert SourceBlock(source_type="sdk", source_relationship=relationship).source_relationship == relationship
+
+
+def test_unknown_source_relationship_rejected():
+    with pytest.raises(ValidationError):
+        SourceBlock(source_type="sdk", source_relationship="tenant_admin")
+
+
+def test_source_relationship_is_optional_during_migration():
+    block = SourceBlock(source_type="connector")
+    assert block.source_relationship is None
+    assert "source_relationship" not in block.model_dump(exclude_none=True)
+
+
+def _envelope(**blocks):
+    now = datetime(2026, 10, 15, tzinfo=timezone.utc)
+    return UniversalObservationEnvelope(
+        observation=ObservationBlock(
+            observation_id="obs-1", observation_type="track",
+            occurred_at=now, received_at=now, ingested_at=now, schema_version="1.0.0",
+        ),
+        tenancy=TenancyBlock(tenant_id="t1"),
+        source=SourceBlock(source_type="connector", source_relationship="organization_system"),
+        **blocks,
+    )
+
+
+def test_rights_block_carries_multiple_references():
+    rights = RightsReferenceBlock(
+        source_id="provider-account:conn_1:shop-1",
+        source_grant_refs=["drg_1"],
+        rights_decision_refs=["rdec_lake", "rdec_graph"],
+    )
+    persisted = _envelope(rights=rights).to_bronze_additive()
+    assert persisted["rights"]["rights_decision_refs"] == ["rdec_lake", "rdec_graph"]
+
+
+def test_consent_only_observation_omits_rights_block():
+    assert "rights" not in _envelope().to_bronze_additive()
+
+
+def test_rights_block_rejects_consent_decision_ids():
+    with pytest.raises(ValidationError):
+        RightsReferenceBlock(rights_decision_refs=["cpd_123"])
+
+
+def test_privacy_block_rejects_rights_decision_ids():
+    with pytest.raises(ValidationError):
+        PrivacyBlock(policy_decisions=["rdec_123"])
+
+
+def test_grant_refs_require_a_governed_source_id():
+    with pytest.raises(ValidationError):
+        RightsReferenceBlock(source_grant_refs=["drg_1"])
+
+
+def test_rights_block_refuses_copied_rights_payload():
+    with pytest.raises(ValidationError):
+        RightsReferenceBlock(source_id="s", contract_terms={"price": 1})
+
+
+def test_pre_existing_stored_envelope_still_validates():
+    stored = _envelope().to_bronze_additive()
+    stored["source"].pop("source_relationship")
+    assert UniversalObservationEnvelope(**stored).rights is None
+
+
+def test_sdk_envelope_is_first_party_with_server_provider_and_instance():
+    env = oe.build_sdk_observation_envelope(
+        _core_normalized(), source_provider="web", source_instance="site:site_123",
+    )
+    assert env.source.source_type == "sdk"
+    assert env.source.source_relationship == "first_party_application"
+    assert env.source.source_provider == "web"
+    assert env.source.source_instance == "site:site_123"
+
+
+def test_client_supplied_source_claims_are_ignored():
+    normalized = _core_normalized()
+    normalized["source_relationship"] = "olympus_source"
+    normalized["properties"] = {"source_relationship": "partner_feed", "source_instance": "evil"}
+    normalized["context"] = {
+        **(normalized.get("context") or {}),
+        "library": {"name": "@aether/access-kit", "version": "0.1.0"},
+        "surface": "mcp",
+        "source_instance": "site:other",
+    }
+    env = oe.build_sdk_observation_envelope(normalized, source_instance="site:site_123")
+    assert env.source.source_relationship == "first_party_application"
+    assert env.source.source_instance == "site:site_123"
+    assert env.source.source_provider is None
+
+
+@pytest.mark.parametrize("platform,expected", [
+    ("web", "web"), ("server", "server"), ("ios", "ios"), ("android", "android"),
+    ("react_native", "react_native"), (None, None), ("", None), ("desktop", None),
+    ("react-native", "react_native"), ("node", "server"), ("other", None),
+])
+def test_sdk_source_provider_only_accepts_known_platforms(platform, expected):
+    assert oe.sdk_source_provider(platform) == expected

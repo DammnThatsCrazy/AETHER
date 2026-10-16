@@ -38,6 +38,7 @@ from connectors.integrations.data_rights.service import (
     effective_learning_authority,
     resolve_structured_rights,
 )
+from shared.integration_contracts.source_relationship import OLYMPUS_SOURCE_TENANT_ID
 
 # Expected exact members (UPPER_SNAKE) and values (snake_case) — other streams
 # AST-parse models.py for EXACTLY these; do not rename/extend/omit.
@@ -436,13 +437,14 @@ def test_structured_rights_explicit_grant_round_trips():
 async def test_service_legacy_grant_preserves_policy_behavior():
     svc = DataRightsService()
     body = DataRightsGrantCreate(
-        tenant_id="tenant_abc",
+        tenant_id=OLYMPUS_SOURCE_TENANT_ID,
         source_id="src_001",
         connector_id="dune_api",
         connector_class="olympus_provider",  # baseline auto-set True, training forced False
         data_category="onchain",
         data_sensitivity="unclassified",
         raw_data_owner="olympus_labs",
+        source_relationship="olympus_source",
         model_training_allowed=False,
         olympus_baseline_allowed=False,
     )

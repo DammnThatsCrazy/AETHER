@@ -64,12 +64,14 @@ class ConnectorClass(str, Enum):
     Layer 4 — BYOK_GATEWAY: Tenant-owned credential gateway (credential control only)
     Layer 5 — ACTION_NOTIFIER: Outbound action connectors (Slack, Jira actions)
     DUAL_ROLE: Connector with both ingest and action capabilities (modeled as separate capabilities)
+    PARTNER_FEED: Contract-bound partner stream; every right set explicitly by the partner contract workflow.
     """
     OLYMPUS_PROVIDER = "olympus_provider"
     TENANT_BYOD_DATA = "tenant_byod_data"
     BYOK_GATEWAY = "byok_gateway"
     ACTION_NOTIFIER = "action_notifier"
     DUAL_ROLE = "dual_role"
+    PARTNER_FEED = "partner_feed"
 
 
 class ConnectorRole(str, Enum):

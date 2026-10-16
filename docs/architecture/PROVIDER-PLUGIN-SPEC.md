@@ -19,7 +19,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "services/api/connectors/provider_runtime/": "sha256:96d47e6fee2e0fff4c6b3b3a9bb28c89414a7af87ed137bb489845519434f5d9"
+  "services/api/connectors/provider_runtime/": "sha256:7b305b72716ad006af0d0b7ab8f65899f65e6daca49f5b93c28b5b7094233d10"
   "services/api/connectors/providers/shopify/": "sha256:4019dd90b0864d3f2b76fc1fac7a4a98bf10e98bfe41ae6c437c248f80814b09"
   "services/api/shared/integration_contracts/capabilities.py": "sha256:0549328cc36de3ad566dcc2bbdf2792cab4eafbf3a6785141485d5cdf0058b6f"
   "services/api/shared/integration_contracts/events.py": "sha256:3db66be3c58959b1ac01cebaee21559d19069abf617ed8086c474f3161f5a80e"
@@ -209,7 +209,12 @@ All use permissions default to false. The canonical Data Rights service stores
 grants and append-only lifecycle events in the migration-owned repository;
 staging/production admission also requires the durable schema to be available.
 Missing, ambiguous, revoked, expired, or cross-tenant grants deny before raw
-payload or webhook-body persistence.
+payload or webhook-body persistence. The grant's rights-source class picks the
+retention use (`tenant_byod_data` to `tenant_lake`, `olympus_provider` to
+`olympus_baseline` only under the reserved `olympus` grant tenant, `partner_feed`
+to either by grant tenant; other classes are denied), and its `source_relationship` can only deny. Accountless records are
+scoped to a manifest-declared `provider-stream:{connection_id}:{stream_id}`.
+Plugins never choose the class, the scope, or the use.
 A revocation that commits after admission but before the write also denies: the
 store holds the admitting grant (shared lock; revocation takes it exclusively)
 across the final grant re-read and the Bronze insert, so a revoked grant never

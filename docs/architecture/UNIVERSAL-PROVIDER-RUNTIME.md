@@ -20,12 +20,12 @@ estimated_read_minutes: 14
 toc_depth: 3
 source_hashes:
   "services/api/config/settings.py": "sha256:120775873521c402933065c3073b8f2d242589bca26b095f982952f6bb392f42"
-  "services/api/connectors/provider_runtime/": "sha256:96d47e6fee2e0fff4c6b3b3a9bb28c89414a7af87ed137bb489845519434f5d9"
+  "services/api/connectors/provider_runtime/": "sha256:7b305b72716ad006af0d0b7ab8f65899f65e6daca49f5b93c28b5b7094233d10"
   "services/api/connectors/providers/": "sha256:086060aa67b187df1b1ea59ab1d556fd0bca1df379b3162447117f3ecbff7aeb"
   "services/api/connectors/providers/shopify/": "sha256:4019dd90b0864d3f2b76fc1fac7a4a98bf10e98bfe41ae6c437c248f80814b09"
   "services/api/main.py": "sha256:52e672c1c82e17907041ba173b1fb7cee68bfb03b158eb370fd4f25b584cc726"
   "services/api/shared/commerce_contracts/": "sha256:d526680b50a3c4c5d334545c38df8872f1a1ab67d681a0fb61311323a8ade5b9"
-  "services/api/shared/integration_contracts/": "sha256:54a124b718666f272272a9845ada4e8720cce2b81981b981db40a4e88674149e"
+  "services/api/shared/integration_contracts/": "sha256:c0bc85bcebb1c5a7b4f2fcdd57dce8d3137c07d0db1be200da8c296a295e63a6"
   "services/api/shared/rate_limit/feature_gate.py": "sha256:52ba44636beee6c43f7dde3b200edfd562bbd70cfd2ed21163d33149b8bab29c"
 ---
 
@@ -241,6 +241,23 @@ tenant-scoped repository. Staging/production raw admission also checks that the
 database and required schema are available, and fails closed when they are not.
 Omitted use permissions default to false. This persistence change does not
 enable the provider runtime or alter environment flags.
+
+**Admission by rights-source class.** The grant's `connector_class` chooses the
+retention use: `tenant_byod_data` retains to `tenant_lake`, `olympus_provider`
+to `olympus_baseline` only when the grant tenant is the reserved `olympus` scope
+(otherwise it is denied), and `partner_feed` to `olympus_baseline` when the grant
+tenant is the reserved `olympus` scope, otherwise `tenant_lake`. Every other
+class is denied. The grant's `source_relationship` is descriptive and can only
+deny: an inconsistent relationship and class pairing refuses admission, and a
+consistent one authorizes nothing. Legacy grants without a relationship
+(`unclassified`) still admit only as `tenant_byod_data`. The source scope is
+`provider-account:{connection_id}:{account_id}` for records naming an account;
+accountless records resolve to `provider-stream:{connection_id}:{stream_id}`
+only when the capability manifest declares that stream. The event bridge never
+forwards `olympus`-scope evidence into the tenant pipeline, and a replay dry run
+counts such events as not admitted; the evidence stays in raw storage for
+governed replay. The revocation fence below applies to every class.
+See `docs/architecture/target/source-authority.md`.
 
 **Revocation fence.** Admission decides at one instant and Bronze is written
 later. `RawProviderRecordStore` therefore holds the admitting grant

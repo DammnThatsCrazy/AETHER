@@ -33,6 +33,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = ROOT / "services" / "api"
 SCENARIOS = BACKEND_ROOT / "tests" / "provider_runtime" / "rights_fence_scenarios.py"
+PROFILES = ("organization_system", "partner_feed", "olympus_source")
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -83,7 +84,7 @@ def _require_real_stack() -> str:
     return database_url
 
 
-async def _cleanup(database_url: str, tenant_id: str) -> None:
+async def _cleanup(database_url: str, tenant_id: str, source: str) -> None:
     import asyncpg
 
     try:
@@ -91,14 +92,16 @@ async def _cleanup(database_url: str, tenant_id: str) -> None:
     except Exception:
         return
     try:
-        await conn.execute("DELETE FROM bronze_provider_records WHERE tenant_id = $1", tenant_id)
+        await conn.execute(
+            "DELETE FROM bronze_provider_records WHERE tenant_id = $1 AND data->>'source' = $2", tenant_id, source
+        )
         # Grant events are append-only by trigger; grants are left in place and are
-        # tenant-scoped to a unique per-run tenant.
+        # scoped to a unique per-run tenant (or, for Olympus, a unique connection).
     finally:
         await conn.close()
 
 
-def _run_scenario(name: str) -> None:
+def _run_scenario(name: str, profile: str) -> None:
     database_url = _require_real_stack()
 
     async def main() -> None:
@@ -109,23 +112,25 @@ def _run_scenario(name: str) -> None:
                 repository.DataRightsGrantRepository(pool_provider=repos.get_pool)
             )
             assert await repos.get_pool() is not None, "expected a real asyncpg pool"
-            tenant = scenarios.new_tenant()
-            env = scenarios.Env(service=service, tenant=tenant)
+            env = scenarios.new_env(service, profile)
             try:
                 await getattr(scenarios, name)(env)
             finally:
-                await _cleanup(database_url, tenant)
+                await _cleanup(database_url, env.tenant, env.provider)
 
     asyncio.run(main())
 
 
-def test_revocation_waits_for_an_in_flight_write():
-    _run_scenario("revocation_waits_for_an_in_flight_write")
+@pytest.mark.parametrize("profile", PROFILES)
+def test_revocation_waits_for_an_in_flight_write(profile):
+    _run_scenario("revocation_waits_for_an_in_flight_write", profile)
 
 
-def test_a_write_after_a_committed_revocation_is_denied():
-    _run_scenario("a_write_after_a_committed_revocation_is_denied")
+@pytest.mark.parametrize("profile", PROFILES)
+def test_a_write_after_a_committed_revocation_is_denied(profile):
+    _run_scenario("a_write_after_a_committed_revocation_is_denied", profile)
 
 
-def test_no_record_is_retained_after_revocation_returns():
-    _run_scenario("no_record_is_retained_after_revocation_returns")
+@pytest.mark.parametrize("profile", PROFILES)
+def test_no_record_is_retained_after_revocation_returns(profile):
+    _run_scenario("no_record_is_retained_after_revocation_returns", profile)

@@ -118,6 +118,9 @@ class TenantContext:
     # another. None means unscoped, which is only reachable for non-publishable
     # credentials — the mint path refuses to issue an unscoped publishable key.
     site_ids: Optional[list[str]] = None
+    # SDK platform recorded on the API key at mint time (server-side, never from
+    # the request). None for keys minted without one.
+    credential_platform: Optional[str] = None
 
     def has_permission(self, permission: str) -> bool:
         if self.role == Role.ADMIN:
@@ -378,6 +381,7 @@ class APIKeyValidator:
         permissions: Optional[list[str]] = None,
         key_class: str = KEY_CLASS_SECRET,
         site_ids: Optional[list[str]] = None,
+        platform: Optional[str] = None,
     ) -> str:
         """Register a new API key. Returns the key hash for reference."""
         key_hash = self.hash_key(api_key)
@@ -392,6 +396,7 @@ class APIKeyValidator:
             # unconfined legacy key for the entry's whole TTL.
             "key_class": key_class,
             "site_ids": list(site_ids) if site_ids else None,
+            "platform": platform,
             "created_at": utc_now(),
         }
         if self._cache:
@@ -475,6 +480,7 @@ async def _lookup_api_key_from_db(key_hash: str) -> Optional[dict]:
             "permissions": record.get("permissions", []),
             "key_class": record.get("key_class", KEY_CLASS_SECRET),
             "site_ids": record.get("site_ids"),
+            "platform": record.get("platform"),
         }
     except Exception:
         return None
@@ -522,6 +528,7 @@ def _build_context_from_key_data(key_data: dict) -> TenantContext:
         permissions=key_data.get("permissions", []),
         credential_class=credential_class,
         site_ids=list(site_ids) if site_ids else None,
+        credential_platform=key_data.get("platform"),
     )
 
 

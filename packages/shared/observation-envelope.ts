@@ -38,6 +38,19 @@ export const SOURCE_TYPES = [
 ] as const;
 export type SourceType = (typeof SOURCE_TYPES)[number];
 
+/** Source relationship (descriptive provenance; never a permission). */
+export const SOURCE_RELATIONSHIPS = [
+  'personal_account',
+  'organization_system',
+  'first_party_application',
+  'partner_feed',
+  'olympus_source',
+  'public_reference',
+  'internal_system',
+  'unclassified',
+] as const;
+export type SourceRelationship = (typeof SOURCE_RELATIONSHIPS)[number];
+
 /** Subject identifier types (blueprint §6 identifier-type vocabulary). */
 export const IDENTIFIER_TYPES = [
   'anonymous_id',
@@ -110,6 +123,7 @@ export interface TenancyBlock {
 
 export interface SourceBlock {
   source_type: SourceType;
+  source_relationship?: SourceRelationship;
   source_provider?: string;
   source_instance?: string;
   source_native_id?: string;
@@ -178,6 +192,12 @@ export interface LineageBlock {
   validation_version?: string;
 }
 
+export interface RightsReferenceBlock {
+  source_id?: string;
+  source_grant_refs?: readonly string[];
+  rights_decision_refs?: readonly string[];
+}
+
 /** Passthrough A-side sub-envelope (registry passthrough_blocks). */
 export type AetherSubEnvelope = Record<string, unknown>;
 
@@ -201,4 +221,5 @@ export interface UniversalObservationEnvelope {
   provenance?: ProvenanceBlock;
   quality?: QualityBlock;
   lineage?: LineageBlock;
+  rights?: RightsReferenceBlock;
 }

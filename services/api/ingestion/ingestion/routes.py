@@ -127,6 +127,7 @@ async def ingest_single_event(
         # apply here — otherwise a key bound to one site could forge install
         # signals for another by posting to the deprecated path instead.
         declared_site=getattr(request, "headers", {}).get("X-Aether-Site"),
+        credential_platform=getattr(tenant, "credential_platform", None),
     )
     result = resp.events[0]
     return APIResponse(
@@ -197,6 +198,7 @@ async def ingest_batch_events(
         # apply here — otherwise a key bound to one site could forge install
         # signals for another by posting to the deprecated path instead.
         declared_site=getattr(request, "headers", {}).get("X-Aether-Site"),
+        credential_platform=getattr(tenant, "credential_platform", None),
     )
     accepted_event_ids = [r.id for r in resp.events if r.status == "accepted"]
     return APIResponse(
