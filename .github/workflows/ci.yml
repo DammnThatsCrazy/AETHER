@@ -1,13 +1,16 @@
 name: ci
 
-# CI V2 (shadow phase). One workflow, one stable verdict check: `ci / verdict`.
-# Runs on every new PR head SHA (and merge queue SHAs). It is NOT yet a required
-# status; `verification / disposition` stays the merge authority until the
-# parity report in docs/engineering/ci-v2/ clears the cutover.
+# CI V2: the single pull-request authority. One workflow, one stable verdict
+# check: `ci / verdict`. Draft pull requests are the accumulation phase and run
+# nothing; the first run starts on `ready_for_review` and then on every new head
+# SHA. Also runs on merge-queue SHAs, on pushes to the three long-lived branches,
+# and on demand.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
+  push:
+    branches: [development, staging, main]
   workflow_dispatch:
     inputs:
       base:
@@ -25,6 +28,8 @@ concurrency:
 jobs:
   classify:
     name: classify
+    # Draft pull requests are the accumulation phase: no hosted verification.
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -45,9 +50,11 @@ jobs:
       - name: Select affected suites
         id: select
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || inputs.base }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || inputs.base }}
           HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
         run: |
+          # A push that creates a branch has an all-zero "before"; fall back to the parent.
+          case "$BASE" in 0000000000000000000000000000000000000000) BASE="$HEAD^";; esac
           python scripts/ci_select.py --base "$BASE" --head "$HEAD" \
             --output selection.json --github-output
           echo "base=$BASE" >> "$GITHUB_OUTPUT"
@@ -171,8 +178,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
+      - name: Record verdict evidence
+        env:
+          RESULTS: ${{ toJson(needs) }}
+        run: |
+          mkdir -p ci-evidence
+          printf '{"sha":"%s","event":"%s","needs":%s}\n' "$GITHUB_SHA" "$GITHUB_EVENT_NAME" "$RESULTS" > ci-evidence/ci-verdict.json
+      - uses: actions/upload-artifact@v4
+        # Diagnostic only: a storage-quota failure must not fail a run whose checks passed.
+        continue-on-error: true
+        with:
+          name: ci-verdict-evidence
+          path: ci-evidence/ci-verdict.json
+          retention-days: 7
       - name: Evaluate the planned job set
         env:
+          DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft }}
           CLASSIFY: ${{ needs.classify.result }}
           SUITES: ${{ needs.suites.result }}
           CHECKS: ${{ needs.checks.result }}
@@ -180,6 +201,10 @@ jobs:
           HAS_WORKERS: ${{ needs.classify.outputs.has_workers }}
           MODE: ${{ needs.classify.outputs.mode }}
         run: |
+          if [ "$DRAFT" = true ]; then
+            echo "draft pull request: accumulation phase, verification starts at ready_for_review"
+            exit 0
+          fi
           echo "classify=$CLASSIFY suites=$SUITES checks=$CHECKS has_workers=$HAS_WORKERS has_checks=$HAS_CHECKS mode=$MODE"
           [ "$CLASSIFY" = success ] || { echo "classification did not succeed"; exit 1; }
           if [ "$HAS_CHECKS" = true ]; then

@@ -118,10 +118,8 @@ def validate(root: Path = ROOT) -> list[str]:
             errors.append("branch_protection.normal_pr_authority must be a non-empty check id")
         elif authority not in ids:
             errors.append(f"branch protection names unknown normal PR authority {authority!r}")
-        if status != "verification / disposition":
-            errors.append(
-                "branch_protection.normal_pr_status must be 'verification / disposition'"
-            )
+        if status != "ci / verdict":
+            errors.append("branch_protection.normal_pr_status must be 'ci / verdict'")
         if isinstance(authority, str) and pr_blocking_ids != [authority]:
             errors.append(
                 "branch protection must declare exactly one PR merge blocker, "
