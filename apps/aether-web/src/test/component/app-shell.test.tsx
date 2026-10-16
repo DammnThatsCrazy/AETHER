@@ -5,6 +5,7 @@ import { AppShell } from '@aether-app/components/app-shell';
 
 const state = vi.hoisted(() => ({
   capabilities: null as { release: { excluded_domains: string[] }; feature_flags: Record<string, boolean> } | null,
+  integrations: null as { items: Array<Record<string, unknown>> } | null,
 }));
 
 vi.mock('@aether/ui', async () => {
@@ -26,13 +27,19 @@ vi.mock('@aether-app/features/demo-seed/use-demo-seed-status', () => ({
   useDemoSeedStatus: () => ({ data: null }),
 }));
 
+vi.mock('@aether-app/features/integrations', () => ({
+  useTenantIntegrations: () => ({ data: state.integrations, isLoading: false, error: null, refetch: vi.fn() }),
+}));
+
 describe('Aether authenticated shell', () => {
   beforeEach(() => {
     state.capabilities = {
       release: { excluded_domains: [] },
       feature_flags: { connectors_enabled: true },
     };
+    state.integrations = null;
     sessionStorage.setItem('aether-session', 'present');
+    window.innerWidth = 1280;
   });
 
   it('maps the available target destinations to existing routes and keeps unbuilt destinations non-links', () => {
@@ -43,27 +50,63 @@ describe('Aether authenticated shell', () => {
     );
 
     const navigation = screen.getByRole('navigation');
-    expect(within(navigation).getAllByRole('link').map(link => link.textContent)).toEqual([
+    expect(within(navigation).getAllByRole('link').map(link => link.getAttribute('aria-label'))).toEqual([
+      'Home',
       'Graph',
       'Profiles',
+      'Agents',
+      'Campaigns',
+      'Geography',
+      'Value',
       'Connectors',
       'Settings',
     ]);
-    for (const label of ['Snapshot', 'Journeys', 'Signals', 'Lenses', 'Value']) {
+    for (const label of ['Syndicates', 'Relationships', 'Communications', 'Journeys', 'Episodes', 'Signals', 'Risk']) {
       expect(within(navigation).getByLabelText(`${label} (not ready)`)).toHaveAttribute('aria-disabled', 'true');
       expect(within(navigation).queryByRole('link', { name: label })).not.toBeInTheDocument();
     }
-    expect(within(navigation).getByRole('link', { name: 'Graph' })).toHaveAttribute('href', '/explore');
-    expect(within(navigation).getByRole('link', { name: 'Profiles' })).toHaveAttribute('href', '/users');
-    expect(within(navigation).getByRole('link', { name: 'Connectors' })).toHaveAttribute(
-      'href',
-      '/settings/integrations',
-    );
-    expect(within(navigation).getByRole('link', { name: 'Settings' })).toHaveAttribute(
-      'href',
-      '/settings',
-    );
+    const hrefs: Record<string, string> = {
+      Home: '/home',
+      Graph: '/explore',
+      Profiles: '/users',
+      Agents: '/agent-access',
+      Campaigns: '/campaigns',
+      Geography: '/geo',
+      Value: '/value-review',
+      Connectors: '/settings/integrations',
+      Settings: '/settings',
+    };
+    for (const [name, href] of Object.entries(hrefs)) {
+      expect(within(navigation).getByRole('link', { name })).toHaveAttribute('href', href);
+    }
+    expect(within(navigation).getByRole('link', { name: 'Graph' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByText('WORKSPACE')).toBeInTheDocument();
+  });
+
+  it('flags Settings with an amber dot only when a configured connection is failing', () => {
+    state.integrations = { items: [{ id: 'i1', enabled: true, sync_status: 'sync_failed' }] };
+    const { container } = render(
+      <MemoryRouter initialEntries={['/home']}>
+        <AppShell><div>WORKSPACE</div></AppShell>
+      </MemoryRouter>,
+    );
+    const settings = within(container).getByRole('link', { name: 'Settings' });
+    expect(settings.querySelector('span[style*="--ae-amber"]')).not.toBeNull();
+  });
+
+  it('collapses to an icon rail and remembers the choice', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    render(
+      <MemoryRouter initialEntries={['/home']}>
+        <AppShell><div>WORKSPACE</div></AppShell>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('Home')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+    expect(screen.queryByText('Home')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/home');
+    expect(window.localStorage.getItem('aether:rail-expanded')).toBe('0');
+    window.localStorage.removeItem('aether:rail-expanded');
   });
 
   it('hides Connectors when its backend capability is disabled, while keeping available routes', () => {

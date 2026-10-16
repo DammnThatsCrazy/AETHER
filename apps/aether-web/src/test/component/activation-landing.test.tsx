@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { ThemeProvider } from '@aether/ui';
 import { TenantLanding } from '@aether-app/app/tenant-landing';
 import { ActivationPage } from '@aether-app/pages/activation/activation-page';
@@ -40,19 +40,21 @@ vi.mock('@aether-app/features/activation/use-activation', () => ({
   useCompleteActivation: () => state.mutation,
 }));
 
-function renderLanding(initial = '/', scopeId?: string) {
+function ActivationRoute() {
+  const location = useLocation();
+  return <div>ACTIVATION ROUTE{location.search}</div>;
+}
+
+function renderLanding(initial = '/') {
   return render(
     <ThemeProvider>
       <MemoryRouter initialEntries={[initial]}>
         <Routes>
-          <Route
-            path="/"
-            element={scopeId ? <TenantLanding scopeId={scopeId} /> : <TenantLanding />}
-          />
-          <Route path="/activation" element={<div>ACTIVATION ROUTE</div>} />
+          <Route path="/" element={<TenantLanding />} />
+          <Route path="/activation" element={<ActivationRoute />} />
+          <Route path="/home" element={<div>HOME ROUTE</div>} />
           <Route path="/explore" element={<div>EXPLORE WORKSPACE</div>} />
           <Route path="/settings" element={<div>SETTINGS ROUTE</div>} />
-          <Route path="/campaigns" element={<div>CAMPAIGNS ROUTE</div>} />
         </Routes>
       </MemoryRouter>
     </ThemeProvider>,
@@ -69,64 +71,46 @@ function renderActivation() {
   );
 }
 
+const settled = (data: unknown) => ({ data, isLoading: false, error: null, refetch: vi.fn() });
+
 describe('Tenant landing routing', () => {
   beforeEach(() => {
-    state.onboarding = { data: null, isLoading: false, error: null, refetch: vi.fn() };
-    window.localStorage.clear();
+    state.onboarding = settled(null);
+    state.status = settled(null);
   });
 
-  it('routes an incomplete tenant to /activation', () => {
-    state.onboarding = {
-      data: { plan: { status: 'in_progress' } },
-      isLoading: false,
-      error: null,
-      refetch: vi.fn(),
-    };
+  it('routes a tenant whose activation is incomplete to the workspace onboarding', () => {
+    state.status = settled({ state: 'waiting_for_event' });
+    state.onboarding = settled({ plan: { status: 'in_progress' } });
     renderLanding('/');
     expect(screen.getByText('ACTIVATION ROUTE')).toBeInTheDocument();
-    expect(screen.queryByText('HOME WORKSPACE')).not.toBeInTheDocument();
+    expect(screen.queryByText('HOME ROUTE')).not.toBeInTheDocument();
   });
 
-  it('routes a completed tenant to the canonical Explore workspace by default', () => {
-    state.onboarding = {
-      data: { plan: { status: 'live' } },
-      isLoading: false,
-      error: null,
-      refetch: vi.fn(),
-    };
+  it('routes a tenant with completed self-serve activation to Home', () => {
+    state.status = settled({ state: 'complete' });
     renderLanding('/');
-    expect(screen.getByText('EXPLORE WORKSPACE')).toBeInTheDocument();
+    expect(screen.getByText('HOME ROUTE')).toBeInTheDocument();
     expect(screen.queryByText('ACTIVATION ROUTE')).not.toBeInTheDocument();
+    expect(screen.queryByText('EXPLORE WORKSPACE')).not.toBeInTheDocument();
   });
 
-  it('returns a completed tenant to their last useful workspace (scope-scoped)', () => {
-    state.onboarding = {
-      data: { plan: { status: 'live' } },
-      isLoading: false,
-      error: null,
-      refetch: vi.fn(),
-    };
-    window.localStorage.setItem('aether:last-workspace:acme@example.com', '/campaigns');
-    renderLanding('/', 'acme@example.com');
-    expect(screen.getByText('CAMPAIGNS ROUTE')).toBeInTheDocument();
-    expect(screen.queryByText('HOME WORKSPACE')).not.toBeInTheDocument();
+  it('routes an operator-onboarded tenant whose plan is live to Home', () => {
+    state.status = settled({ state: 'account_verified' });
+    state.onboarding = settled({ plan: { status: 'live' } });
+    renderLanding('/');
+    expect(screen.getByText('HOME ROUTE')).toBeInTheDocument();
   });
 
-  it('never restores a last workspace from a different user account', () => {
-    state.onboarding = {
-      data: { plan: { status: 'live' } },
-      isLoading: false,
-      error: null,
-      refetch: vi.fn(),
-    };
-    window.localStorage.setItem('aether:last-workspace:other@example.com', '/campaigns');
-    renderLanding('/', 'acme@example.com');
-    expect(screen.getByText('EXPLORE WORKSPACE')).toBeInTheDocument();
-    expect(screen.queryByText('CAMPAIGNS ROUTE')).not.toBeInTheDocument();
+  it('sends a tester back through onboarding with ?onboarding=restart', () => {
+    state.status = settled({ state: 'complete' });
+    renderLanding('/?onboarding=restart');
+    expect(screen.getByText('ACTIVATION ROUTE?onboarding=restart')).toBeInTheDocument();
+    expect(screen.queryByText('HOME ROUTE')).not.toBeInTheDocument();
   });
 
   it('shows a loading state without misrouting while status resolves', () => {
-    state.onboarding = { data: null, isLoading: true, error: null, refetch: vi.fn() };
+    state.status = { data: null, isLoading: true, error: null, refetch: vi.fn() };
     renderLanding('/');
     expect(document.querySelector('.animate-pulse, .aether-skeleton')).not.toBeNull();
     expect(screen.queryByText('ACTIVATION ROUTE')).not.toBeInTheDocument();
@@ -135,6 +119,7 @@ describe('Tenant landing routing', () => {
   });
 
   it('never routes to /settings on a status error', () => {
+    state.status = { data: null, isLoading: false, error: 'activation offline', refetch: vi.fn() };
     state.onboarding = { data: null, isLoading: false, error: 'onboarding offline', refetch: vi.fn() };
     renderLanding('/');
     expect(screen.getByText('HOME WORKSPACE')).toBeInTheDocument();

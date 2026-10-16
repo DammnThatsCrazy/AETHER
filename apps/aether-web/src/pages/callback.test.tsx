@@ -61,9 +61,9 @@ describe("CallbackPage destination", () => {
     expect(sessionLogin).toHaveBeenCalledTimes(1);
   });
 
-  it("lands on the tenant home when nothing was remembered", async () => {
+  it("lands on the tenant root (onboarding or Home) when nothing was remembered", async () => {
     renderCallback();
 
-    expect((await screen.findByTestId("landing")).textContent).toBe("/settings");
+    expect((await screen.findByTestId("landing")).textContent).toBe("/");
   });
 });
