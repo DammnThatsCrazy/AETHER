@@ -5,7 +5,7 @@ section: reference
 visibility: I
 audience: [dev-senior, ops, architect]
 status: stable
-since_version: "8.8.0"
+since_version: "0.1.0"
 source_files:
   - scripts/sync_docs.py
 canonical_owner: platform@aether
