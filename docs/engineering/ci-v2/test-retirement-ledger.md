@@ -13,7 +13,7 @@ since_version: 0.1.0
 Per-workflow disposition for everything that runs on pull requests today. A
 workflow is deleted or loses its PR trigger only when its unique invariant is
 covered by a V2 suite or check **and** hosted `ci / verdict` runs have shown the
-replacement catches it. Nothing here is retired yet.
+replacement catches it. Nothing here is retired yet; the dispositions below are decided.
 
 Disposition key: **retire** (after parity), **convert** (move its checks into
 `ci.yml` as path-selected `checks`), **move tier** (nightly or release), **retain**.
@@ -22,14 +22,14 @@ Disposition key: **retire** (after parity), **convert** (move its checks into
 |---|---|---|---|---|
 | `aether-test.yml` | `test`: typecheck + `npm test` for `apps/aether-web` | Type safety of `aether-web` | suite `frontend-aether` + check `aether-web-typecheck` (shadow) | **Retire** after parity. Node 20 -> 22 |
 | `kyber-e2e.yml` | `e2e`: component, integration, Playwright for `apps/kyber-web` | Browser-level operator flows; integration tests are not in the PR lane | suite `frontend-kyber-component` + check `kyber-web-e2e` (shadow) | **Retire** after parity. Node 18 -> 22 |
-| `identity-continuity-gates.yml` | Gates 1-7 (contract, routing, merge safety, split, projection, UX, proof pack) | Identity merge safety and explainability proofs | **Mapped gate by gate** (below). Gates 2-5 and the pytest half of Gate 7 are already run by suites `backend-identity` and `backend-computation`; Gates 1 and 6 and the uncovered tests are ported to check `identity-continuity` (shadow) | **Retire** after parity, once the pnpm half of Gate 7 is ported or accepted as covered |
-| `functionality-proof.yml` | 13 pnpm jobs: lint, typecheck, test, contracts, sdk, smoke, connectors, integration, graph, e2e, build | Unique TypeScript proof assertions (PR #741 work) | suite `functionality-proof-ts` covers the vitest portion only | **Retain**; map each job (lint/typecheck/build/smoke/e2e) before any retirement |
-| `production-equivalent-ci.yml` | `classify-impact`, `real-stack-ingestion-smoke` (conditional) | Real Postgres/Redis ingestion behaviour | none (needs service containers) | **Retain** as the targeted-integration tier; schedule stays |
-| `repo-health.yml` | `pr-size`, `lint-docs`; other jobs mostly main/schedule | Docs consistency on PRs | suite `docs` covers `lint-docs` | **Move tier**: PR jobs retire, main/schedule jobs become `nightly.yml` |
-| `sdk-release-validation.yml` | `sdk-js`, `android` (Gradle), `ios` (macOS) | Native SDK builds and wire compatibility | suites `sdk-*` cover JS tests only | **Retain** (becomes `sdk-release.yml`); native jobs stay path-filtered |
-| `smart-contract-analysis.yml` | `slither`, `contract-tests` | Static analysis of contracts | `contract-tests` runs `npm test`, which duplicates suite `smart-contracts` | **Retain** `slither`; **retire** `contract-tests` once V2 is required (known duplicate execution) |
-| `infrastructure.yml` | `plan` (`terraform validate`/plan), credential readiness | Infra validity; no automatic apply | none | **Retain** (becomes `infra.yml`) |
-| `access-kit-container.yml` | `build-and-smoke` (`npm pack`, Docker build) | Access Kit packaging | none | **Retain** (folds into `package-release.yml`) |
+| `identity-continuity-gates.yml` | Gates 1-7 (contract, routing, merge safety, split, projection, UX, proof pack) | Identity merge safety and explainability proofs | **Mapped gate by gate** (below). Gates 2-5 and the pytest half of Gate 7 are already run by suites `backend-identity` and `backend-computation`; Gates 1 and 6 and the uncovered tests are ported to check `identity-continuity` (shadow) | **Retire** after parity. Gate 7's pnpm half is now check `identity-proof-packages` (shadow); no other workflow ran `@aether/proof-reporting`, so `functionality-proof.yml` could not stand in for it |
+| `functionality-proof.yml` | 13 pnpm jobs: lint, typecheck, test, contracts, sdk, smoke, connectors, integration, graph, e2e, build | Unique TypeScript proof assertions (PR #741 work) | suite `functionality-proof-ts` covers the vitest portion only | **Convert**: gating jobs (lint, typecheck, test, contracts, sdk, fixtures, runner, build) are check `functionality-proof` (shadow, same commands and build env). `smoke-web`/`smoke-server` end in `\|\| echo` and cannot fail, so they gate nothing and are dropped. `graph` repeats the `integration` command. `e2e` (Playwright, `@aether/kyber`) moves to post-merge `push` runs; it is outside the PR lane today for forks and is covered for PRs by `kyber-web-e2e`. Retire the PR trigger after parity |
+| `production-equivalent-ci.yml` | `classify-impact`, `real-stack-ingestion-smoke` (conditional) | Real Postgres/Redis ingestion behaviour | none (needs service containers) | **Retain**, unchanged: Postgres/Redis service containers do not fit the `checks` matrix. It keeps its own impact-graph gate (`classify-impact`), so it only runs for affected changes, plus the nightly schedule. Supplementary evidence, not a merge authority |
+| `repo-health.yml` | `pr-size`, `lint-docs`; other jobs mostly main/schedule | Docs consistency on PRs | suite `docs` covers `lint-docs` | **Retire** `lint-docs` (suite `docs` runs `make docs-check`) and `pr-size` (soft warning at 600 lines, never fails; not ported). Main/schedule jobs stay and become `nightly.yml` |
+| `sdk-release-validation.yml` | `sdk-js`, `android` (Gradle), `ios` (macOS) | Native SDK builds and wire compatibility | suites `sdk-*` cover JS tests only | **Retain** (becomes `sdk-release.yml`): Android Gradle and iOS `xcodebuild` need Android SDK/macOS runners and are slow and costly, so they stay path-filtered to `packages/sdk/{android,ios}/**` and release-relevant paths. `sdk-js` duplicates suites `sdk-*` and retires with the cutover |
+| `smart-contract-analysis.yml` | `slither`, `contract-tests` | Static analysis of contracts | `contract-tests` runs `npm test`, which duplicates suite `smart-contracts` | `slither` -> check `contracts-slither` (shadow, `--fail-high`); SARIF upload to code scanning stays in the retained `push: main` run. **Retire** `contract-tests` once V2 is required (duplicate of suite `smart-contracts`) |
+| `infrastructure.yml` | `plan` (`terraform validate`/plan), credential readiness | Infra validity; no automatic apply | none | **Retain** (becomes `infra.yml`): needs `setup-terraform`, plugin caching and the remote-plan dispatch flow; already path-filtered to `infra/aws/**`, no apply. Supplementary evidence, not a merge authority |
+| `access-kit-container.yml` | `build-and-smoke` (`npm pack`, Docker build) | Access Kit packaging | none | check `access-kit-container` (shadow: `npm pack`, buildx, container smoke via `scripts/ci_access_kit_smoke.sh`). Retire the PR trigger after parity; push and dispatch runs stay |
 | `frontend-preview.yml` | preview deploys | Preview environments | n/a | **Retain** (`preview.yml`) |
 | `repo-consistency.yml` | 10-job DAG, `verification / disposition` | Current merge authority | `ci / verdict` | **Retire last**, after the ruleset requires `ci / verdict` |
 
@@ -48,10 +48,9 @@ Every command in `identity-continuity-gates.yml` was compared with what V2 runs.
 | 4 Split | `test_bad_merge_split.py`, `computation/test_identity_restatement.py` | `backend-identity`, `backend-computation` |
 | 5 Projection | `test_projection_restatement*.py` | `backend-identity` |
 | 6 UX explainability | frontend identity files exist; backend explainability and route markers present | check `identity-continuity` (same script) |
-| 7 Proof pack | `make bootstrap`, `generate_contracts.py --check`, pnpm builds and tests of `@aether/proof-contracts`, `-fixtures`, `-runner`, `-reporting`, identity pytest | pytest half: `backend-identity`, `backend-computation`, and the twin check. **The pnpm proof-package builds and the `@aether/proof-reporting` test are not ported.** |
+| 7 Proof pack | `make bootstrap`, `generate_contracts.py --check`, pnpm builds and tests of `@aether/proof-contracts`, `-fixtures`, `-runner`, `-reporting`, identity pytest | pytest half: `backend-identity`, `backend-computation`, and the twin check. pnpm half: check `identity-proof-packages` (`@aether/proof-contracts`, `-fixtures`, `-runner`, `-reporting` builds and the 24 `@aether/proof-reporting` tests) |
 
-Before this workflow can be deleted, the pnpm half of Gate 7 needs a V2 home
-(or an explicit decision that `functionality-proof.yml` covers it). A unit test
+All seven gates now have a V2 home. A unit test
 in the repo, `test_identity_continuity_calibration_workflow.py`, may reference
 the workflow file; check it when retiring.
 
