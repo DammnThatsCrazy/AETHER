@@ -3,11 +3,15 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   AetherLockup,
   DemoTenantBanner,
+  Icon,
+  NavigationIcon,
   useTheme,
   useBuildInfo,
   useCapabilities,
   resolveDestinationAvailability,
   type CapabilityRequirement,
+  type IconName,
+  type NavigationIconProps,
 } from '@aether/ui';
 import { useAuth } from '@aether-app/features/auth';
 import { SESSION_KEY } from '@aether-app/features/auth/auth-context';
@@ -17,15 +21,23 @@ import { persistLastWorkspace } from '@aether-app/features/workspace/last-worksp
 import { AeBackdrop } from './ae-backdrop';
 import { readStoredFlag, useViewportWidth, writeStoredFlag } from './use-viewport-width';
 
-/** Domain glyph tint, per the design system's domain colours. */
+/** Domain icon tint, per the design system's domain colours. */
 type Tint = 'blue' | 'sage' | 'amber' | 'solar' | 'ember' | 'mute';
+
+/**
+ * Canonical semantic icon for a nav entry: a navigation destination when the
+ * brand package defines one for the route, otherwise a semantic icon name.
+ */
+type NavIcon =
+  | { readonly destination: NavigationIconProps['destination']; readonly name?: never }
+  | { readonly name: IconName; readonly destination?: never };
 
 interface RouteNavEntry {
   readonly kind: 'route';
   readonly label: string;
   /** Existing tenant route. Navigation does not create or grant this route. */
   readonly to: string;
-  readonly glyph: string;
+  readonly icon: NavIcon;
   readonly tint?: Tint;
   /** Backend capability required; excluded domain / off flag hides the link. */
   readonly requirement?: CapabilityRequirement;
@@ -36,7 +48,7 @@ interface RouteNavEntry {
 interface PendingNavEntry {
   readonly kind: 'not_ready';
   readonly label: string;
-  readonly glyph: string;
+  readonly icon: NavIcon;
   readonly tint?: Tint;
 }
 
@@ -49,30 +61,30 @@ type NavEntry = RouteNavEntry | PendingNavEntry;
  */
 export const NAV_GROUPS: ReadonlyArray<readonly NavEntry[]> = [
   [
-    { kind: 'route', to: '/home', label: 'Home', glyph: '●', tint: 'blue' },
-    { kind: 'route', to: '/explore', label: 'Graph', glyph: '◇', tint: 'blue' },
+    { kind: 'route', to: '/home', label: 'Home', icon: { name: 'panels-top-left' }, tint: 'blue' },
+    { kind: 'route', to: '/explore', label: 'Graph', icon: { destination: 'aether-graph' }, tint: 'blue' },
   ],
   [
-    { kind: 'route', to: '/users', label: 'Profiles', glyph: '○', tint: 'blue' },
-    { kind: 'route', to: '/agent-access', label: 'Agents', glyph: '◈', tint: 'sage' },
-    { kind: 'not_ready', label: 'Syndicates', glyph: '◎', tint: 'blue' },
-    { kind: 'not_ready', label: 'Relationships', glyph: '↔' },
-    { kind: 'route', to: '/campaigns', label: 'Campaigns', glyph: '◫', tint: 'amber' },
-    { kind: 'not_ready', label: 'Communications', glyph: '✉', tint: 'amber' },
-    { kind: 'not_ready', label: 'Journeys', glyph: '⇢' },
-    { kind: 'not_ready', label: 'Episodes', glyph: '◌' },
-    { kind: 'route', to: '/geo', label: 'Geography', glyph: '⌖', tint: 'sage' },
+    { kind: 'route', to: '/users', label: 'Profiles', icon: { destination: 'aether-users' }, tint: 'blue' },
+    { kind: 'route', to: '/agent-access', label: 'Agents', icon: { destination: 'aether-agent-access' }, tint: 'sage' },
+    { kind: 'not_ready', label: 'Syndicates', icon: { name: 'users-round' }, tint: 'blue' },
+    { kind: 'not_ready', label: 'Relationships', icon: { name: 'share-2' } },
+    { kind: 'route', to: '/campaigns', label: 'Campaigns', icon: { destination: 'aether-campaigns' }, tint: 'amber' },
+    { kind: 'not_ready', label: 'Communications', icon: { name: 'messages-square' }, tint: 'amber' },
+    { kind: 'not_ready', label: 'Journeys', icon: { name: 'route' } },
+    { kind: 'not_ready', label: 'Episodes', icon: { name: 'history' } },
+    { kind: 'route', to: '/geo', label: 'Geography', icon: { name: 'map-pinned' }, tint: 'sage' },
   ],
   [
-    { kind: 'not_ready', label: 'Signals', glyph: '≋', tint: 'solar' },
-    { kind: 'route', to: '/value-review', label: 'Value', glyph: '◉', tint: 'sage' },
-    { kind: 'not_ready', label: 'Risk', glyph: '△', tint: 'ember' },
+    { kind: 'not_ready', label: 'Signals', icon: { name: 'radio-tower' }, tint: 'solar' },
+    { kind: 'route', to: '/value-review', label: 'Value', icon: { destination: 'aether-value-review' }, tint: 'sage' },
+    { kind: 'not_ready', label: 'Risk', icon: { name: 'shield-alert' }, tint: 'ember' },
   ],
   [
-    { kind: 'route', to: '/settings/integrations', label: 'Connectors', glyph: '⇄', requirement: { flag: 'connectors_enabled' } },
-    { kind: 'route', to: '/settings', label: 'Settings', glyph: '⚙', end: true },
-    { kind: 'route', to: '/identity/activation', label: 'Identity status', glyph: '⬡', requirement: { flag: 'tenant_identity_activation_dashboard_enabled' } },
-    { kind: 'route', to: '/identity/reviews', label: 'Identity reviews', glyph: '☰', requirement: { flag: 'identity_manual_review_enabled' } },
+    { kind: 'route', to: '/settings/integrations', label: 'Connectors', icon: { destination: 'aether-integrations' }, requirement: { flag: 'connectors_enabled' } },
+    { kind: 'route', to: '/settings', label: 'Settings', icon: { destination: 'aether-settings' }, end: true },
+    { kind: 'route', to: '/identity/activation', label: 'Identity status', icon: { name: 'fingerprint' }, requirement: { flag: 'tenant_identity_activation_dashboard_enabled' } },
+    { kind: 'route', to: '/identity/reviews', label: 'Identity reviews', icon: { name: 'list-checks' }, requirement: { flag: 'identity_manual_review_enabled' } },
   ],
 ];
 
@@ -87,18 +99,23 @@ const TINT_VAR: Record<Tint, string> = {
 
 const RAIL_PREF_KEY = 'aether:rail-expanded';
 
-function NavGlyph({ glyph, tint, dot }: { readonly glyph: string; readonly tint?: Tint | undefined; readonly dot?: string | undefined }) {
+function NavGlyph({ icon, tint, dot }: { readonly icon: NavIcon; readonly tint?: Tint | undefined; readonly dot?: string | undefined }) {
   return (
     <span
       aria-hidden="true"
-      className="ae-mono relative w-5 flex-none text-center text-[14px]"
+      className="relative flex w-5 flex-none items-center justify-center"
       style={{ color: TINT_VAR[tint ?? 'mute'] }}
     >
-      {glyph}
+      {icon.destination ? (
+        <NavigationIcon destination={icon.destination} decorative size="sm" className="text-current" />
+      ) : (
+        <Icon name={icon.name} decorative size="sm" className="text-current" />
+      )}
       {dot && (
         <span
-          className="absolute rounded-full"
-          style={{ right: -6, bottom: -4, width: 7, height: 7, background: dot, border: '1.5px solid var(--ae-shell)' }}
+          data-nav-dot
+          className="absolute -bottom-1 -right-1.5 h-[7px] w-[7px] rounded-full"
+          style={{ background: dot, border: '1.5px solid var(--ae-shell)' }}
         />
       )}
     </span>
@@ -133,10 +150,10 @@ function NavItem({ entry, expanded, dot, onNavigate }: NavItemProps) {
         <>
           <span
             aria-hidden="true"
-            className="absolute rounded-r-[3px]"
-            style={{ left: -10, top: 9, bottom: 9, width: 3, background: isActive ? 'var(--ae-blue)' : 'transparent' }}
+            className="absolute -left-2.5 bottom-[9px] top-[9px] w-[3px] rounded-r-[3px]"
+            style={{ background: isActive ? 'var(--ae-blue)' : 'transparent' }}
           />
-          <NavGlyph glyph={entry.glyph} tint={entry.tint} dot={dot} />
+          <NavGlyph icon={entry.icon} tint={entry.tint} dot={dot} />
           {expanded && <span className="flex-1">{entry.label}</span>}
         </>
       )}
@@ -153,7 +170,7 @@ function NotReadyNavItem({ entry, expanded }: { readonly entry: PendingNavEntry;
       className="relative flex h-[38px] flex-none cursor-not-allowed items-center gap-3 whitespace-nowrap rounded-xl text-[14px] opacity-55"
       style={{ padding: expanded ? '0 12px' : 0, justifyContent: expanded ? 'flex-start' : 'center', color: 'var(--ae-mute)' }}
     >
-      <NavGlyph glyph={entry.glyph} tint={entry.tint} />
+      <NavGlyph icon={entry.icon} tint={entry.tint} />
       {expanded && (
         <>
           <span className="flex-1">{entry.label}</span>

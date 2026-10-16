@@ -93,7 +93,7 @@ describe('Home', () => {
 
     const connections = screen.getByTestId('home-connections');
     expect(within(connections).getByText('Shopify')).toBeInTheDocument();
-    expect(connections.querySelector('[data-brand-mark="shopify"]')).not.toBeNull();
+    expect(connections.querySelector('[data-provider="shopify"][data-provider-mark="reviewed-local"]')).not.toBeNull();
 
     expect(await screen.findByText('Spring Upgrade')).toBeInTheDocument();
     expect(document.querySelector('[data-stage="identity_resolution_verified"]')).toHaveAttribute('data-stage-status', 'failed');
