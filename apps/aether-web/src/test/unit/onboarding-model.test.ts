@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SDK_VERSION } from '@aether/shared';
 import type { ActivationStatus } from '@aether-app/features/activation/use-activation';
 import {
   authenticationLabel,
@@ -82,6 +83,13 @@ describe('SDK fleet helpers', () => {
 
   it('restores selections from recorded platforms without inventing React', () => {
     expect(sdkIdsForPlatforms(['web', 'android'])).toEqual(['web', 'android']);
+  });
+
+  it('uses the canonical native install coordinates and shared SDK version', () => {
+    const android = SDK_OPTIONS.find(sdk => sdk.id === 'android')?.snippet ?? '';
+    const ios = SDK_OPTIONS.find(sdk => sdk.id === 'ios')?.snippet ?? '';
+    expect(android).toContain(`implementation("io.aether:sdk-android:${SDK_VERSION}")`);
+    expect(ios).toContain(`pod 'AetherSDK', '= ${SDK_VERSION}'`);
   });
 
   it('gives every SDK its own key label', () => {

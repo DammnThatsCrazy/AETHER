@@ -1,4 +1,4 @@
-import type { SourcePlatform } from '@aether/shared';
+import { SDK_VERSION, type SourcePlatform } from '@aether/shared';
 import type { ActivationState, ActivationStatus } from '@aether-app/features/activation/use-activation';
 
 /**
@@ -137,9 +137,9 @@ export interface SdkOption {
   readonly snippet: string;
 }
 
-// Install + init snippets mirror the repo quickstarts (docs/SDKS.md,
-// SDK-IOS.md, SDK-ANDROID.md, SDK-WEB2-QUICKSTART.md) and the classic
-// activation steps; YOUR_API_KEY is replaced by the issued key's prefix.
+// Install + init snippets mirror the repo SDK references (docs/reference/
+// SDK-IOS.md, SDK-ANDROID.md, SDKS.md); native versions come from the shared
+// SDK_VERSION. YOUR_API_KEY is replaced by the issued key's prefix.
 export const SDK_OPTIONS: readonly SdkOption[] = [
   {
     id: 'web',
@@ -175,7 +175,7 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     description: 'Swift package or CocoaPods · iOS 14+',
     mark: 'apple',
     platform: 'ios',
-    snippet: "pod 'AetherSDK'\n\nlet config = AetherConfig(apiKey: \"YOUR_API_KEY\")\nAether.shared.initialize(config: config)",
+    snippet: `pod 'AetherSDK', '= ${SDK_VERSION}'\n\nlet config = AetherConfig(apiKey: \"YOUR_API_KEY\")\nAether.shared.initialize(config: config)`,
   },
   {
     id: 'android',
@@ -184,7 +184,7 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     description: 'Kotlin · Maven',
     mark: 'android',
     platform: 'android',
-    snippet: 'implementation("com.aether:sdk:0.1.0-alpha.0")\n\nval config = AetherConfig(apiKey = "YOUR_API_KEY")\nAether.initialize(application, config)',
+    snippet: `implementation("io.aether:sdk-android:${SDK_VERSION}")\n\nval config = AetherConfig(apiKey = "YOUR_API_KEY")\nAether.initialize(application, config)`,
   },
   {
     id: 'server',
