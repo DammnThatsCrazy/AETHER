@@ -172,3 +172,10 @@ def test_no_check_command_mixes_pytest_conftest_trees() -> None:
             roots = {a.split("/")[0] + ("/" + a.split("/")[1] if a.startswith("services/") else "")
                      for a in cmd.split() if a.startswith(("tests/", "services/"))}
             assert len(roots) <= 1, f"{check['id']}: one pytest call spans {sorted(roots)}"
+
+
+def test_proof_package_change_selects_pnpm_check() -> None:
+    c = {c["id"]: c for c in sel("tests/e2e/proof/packages/reporting/src/markdown.ts")["checks"]}
+    assert c["identity-proof-packages"]["pnpm"] is True
+    assert c["identity-proof-packages"]["node"] is False
+    assert sel("apps/kyber-web/src/a.tsx")["checks"][0]["pnpm"] is False
