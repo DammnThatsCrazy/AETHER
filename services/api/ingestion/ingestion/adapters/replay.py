@@ -48,7 +48,6 @@ from shared.observation.envelope import (
     LineageBlock,
     ObservationBlock,
     ProvenanceBlock,
-    SourceBlock,
     UniversalObservationEnvelope,
 )
 from shared.temporal.instant import coerce_utc_lenient
@@ -149,13 +148,14 @@ class ReplayIngressAdapter(UniversalIngressAdapter):
             ingested_at=replay_ingested,
             schema_version=envelope.observation.schema_version,
         )
-        source = SourceBlock(
-            source_type="replay",
-            source_provider=original_family,
-            source_instance=original_source.source_instance,
-            source_native_id=observation_id,
-            ingress_path=ingress,
-        )
+        # Copy rather than rebuild so every original source field (relationship,
+        # instance, and any added later) survives replay unless overridden here.
+        source = original_source.model_copy(update={
+            "source_type": "replay",
+            "source_provider": original_family,
+            "source_native_id": observation_id,
+            "ingress_path": ingress,
+        })
         provenance = ProvenanceBlock(
             adapter=self.adapter_id,
             adapter_version=self.adapter_version,

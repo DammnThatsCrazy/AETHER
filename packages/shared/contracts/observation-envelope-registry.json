@@ -150,6 +150,17 @@
         { "name": "normalization_version", "type": "string", "required": false },
         { "name": "validation_version", "type": "string", "required": false }
       ]
+    },
+    {
+      "name": "rights",
+      "kind": "object",
+      "required": false,
+      "description": "Server-owned Rights Authority references: governed source scope, DataRightsGrant ids, and rdec_ RightsDecision ids. References only; consent decision ids stay in privacy.policy_decisions. Omitted for consent-only sources.",
+      "fields": [
+        { "name": "source_id", "type": "string", "required": false },
+        { "name": "source_grant_refs", "type": "array[string]", "required": false },
+        { "name": "rights_decision_refs", "type": "array[string]", "required": false }
+      ]
     }
   ],
   "passthrough_blocks": {

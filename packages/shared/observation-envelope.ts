@@ -192,6 +192,12 @@ export interface LineageBlock {
   validation_version?: string;
 }
 
+export interface RightsReferenceBlock {
+  source_id?: string;
+  source_grant_refs?: readonly string[];
+  rights_decision_refs?: readonly string[];
+}
+
 /** Passthrough A-side sub-envelope (registry passthrough_blocks). */
 export type AetherSubEnvelope = Record<string, unknown>;
 
@@ -215,4 +221,5 @@ export interface UniversalObservationEnvelope {
   provenance?: ProvenanceBlock;
   quality?: QualityBlock;
   lineage?: LineageBlock;
+  rights?: RightsReferenceBlock;
 }

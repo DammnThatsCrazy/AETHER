@@ -179,3 +179,21 @@ def test_custom_ingress_path_is_honoured() -> None:
     )
     assert envelope is not None
     assert envelope.source.ingress_path == "/v1/kyber/ingest/replay"
+
+
+def test_replay_preserves_source_relationship_and_rights_references() -> None:
+    stored = sdk_build(_flat_normalized()).to_bronze_additive()  # type: ignore[union-attr]
+    stored["source"]["source_relationship"] = "first_party_application"
+    stored["rights"] = {
+        "source_id": "provider-account:conn_1:shop-1",
+        "source_grant_refs": ["drg_1"],
+        "rights_decision_refs": ["rdec_1"],
+    }
+    normalized = dict(_flat_normalized())
+    normalized["observation_envelope"] = stored
+    envelope = ADAPTER.build_observation_envelope(_with_replay(normalized))
+    assert envelope is not None
+    d = envelope.to_bronze_additive()
+    assert d["source"]["source_type"] == "replay"
+    assert d["source"]["source_relationship"] == "first_party_application"
+    assert d["rights"] == stored["rights"]

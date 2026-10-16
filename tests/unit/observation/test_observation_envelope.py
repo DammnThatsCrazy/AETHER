@@ -19,7 +19,9 @@ from shared.observation.envelope import (
     SOURCE_RELATIONSHIPS,
     CorrelationBlock,
     ObservationBlock,
+    PrivacyBlock,
     ProvenanceBlock,
+    RightsReferenceBlock,
     SourceBlock,
     SubjectRef,
     TemporalBlock,
@@ -272,3 +274,56 @@ def test_source_relationship_is_optional_during_migration():
     block = SourceBlock(source_type="connector")
     assert block.source_relationship is None
     assert "source_relationship" not in block.model_dump(exclude_none=True)
+
+
+def _envelope(**blocks):
+    now = datetime(2026, 10, 15, tzinfo=timezone.utc)
+    return UniversalObservationEnvelope(
+        observation=ObservationBlock(
+            observation_id="obs-1", observation_type="track",
+            occurred_at=now, received_at=now, ingested_at=now, schema_version="1.0.0",
+        ),
+        tenancy=TenancyBlock(tenant_id="t1"),
+        source=SourceBlock(source_type="connector", source_relationship="organization_system"),
+        **blocks,
+    )
+
+
+def test_rights_block_carries_multiple_references():
+    rights = RightsReferenceBlock(
+        source_id="provider-account:conn_1:shop-1",
+        source_grant_refs=["drg_1"],
+        rights_decision_refs=["rdec_lake", "rdec_graph"],
+    )
+    persisted = _envelope(rights=rights).to_bronze_additive()
+    assert persisted["rights"]["rights_decision_refs"] == ["rdec_lake", "rdec_graph"]
+
+
+def test_consent_only_observation_omits_rights_block():
+    assert "rights" not in _envelope().to_bronze_additive()
+
+
+def test_rights_block_rejects_consent_decision_ids():
+    with pytest.raises(ValidationError):
+        RightsReferenceBlock(rights_decision_refs=["cpd_123"])
+
+
+def test_privacy_block_rejects_rights_decision_ids():
+    with pytest.raises(ValidationError):
+        PrivacyBlock(policy_decisions=["rdec_123"])
+
+
+def test_grant_refs_require_a_governed_source_id():
+    with pytest.raises(ValidationError):
+        RightsReferenceBlock(source_grant_refs=["drg_1"])
+
+
+def test_rights_block_refuses_copied_rights_payload():
+    with pytest.raises(ValidationError):
+        RightsReferenceBlock(source_id="s", contract_terms={"price": 1})
+
+
+def test_pre_existing_stored_envelope_still_validates():
+    stored = _envelope().to_bronze_additive()
+    stored["source"].pop("source_relationship")
+    assert UniversalObservationEnvelope(**stored).rights is None

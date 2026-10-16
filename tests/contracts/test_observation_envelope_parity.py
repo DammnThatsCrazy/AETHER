@@ -105,6 +105,7 @@ TS_INTERFACE_FOR_BLOCK = {
     "provenance": "ProvenanceBlock",
     "quality": "QualityBlock",
     "lineage": "LineageBlock",
+    "rights": "RightsReferenceBlock",
 }
 
 
@@ -212,7 +213,7 @@ def test_registry_required_leafs_present_in_py() -> None:
 def test_every_pydantic_model_is_extra_forbid() -> None:
     """extra=forbid must be configured on every envelope model class."""
     py_bodies = _py_class_bodies()
-    assert len(py_bodies) == 11, f"expected 11 model classes, found: {sorted(py_bodies)}"
+    assert len(py_bodies) == 12, f"expected 12 model classes, found: {sorted(py_bodies)}"
     for name, body in py_bodies.items():
         assert "extra=\"forbid\"" in body, f"{name} missing ConfigDict(extra=\"forbid\")"
 
@@ -222,7 +223,7 @@ def test_model_classes_imported_from_barrel() -> None:
     init_text = (REPO_ROOT / "services/api/shared/observation/__init__.py").read_text(encoding="utf-8")
     for name in ("UniversalObservationEnvelope", "ObservationBlock", "TenancyBlock", "SourceBlock",
                  "SubjectRef", "TemporalBlock", "CorrelationBlock", "PrivacyBlock", "ProvenanceBlock",
-                 "QualityBlock", "LineageBlock", "SOURCE_TYPES", "IDENTIFIER_TYPES", "CREDENTIAL_CLASSES",
+                 "QualityBlock", "LineageBlock", "RightsReferenceBlock", "SOURCE_TYPES", "IDENTIFIER_TYPES", "CREDENTIAL_CLASSES",
                  "TRUST_CLASSES", "SOURCE_RELATIONSHIPS"):
         assert name in init_text, f"{name} not re-exported from shared/observation/__init__.py"
 
