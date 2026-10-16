@@ -11,8 +11,8 @@ source_files:
   - services/api/actions/agent/mutation_commit.py
 canonical_owner: platform@aether
 source_hashes:
-  "services/api/actions/agent/mutation_commit.py": "sha256:a21c56718996d2637fe0978c5d5a4d11de491be2c9ea1594d1595afaf864087c"
-  "services/api/actions/agent/runtime_repository.py": "sha256:58209dbc9455991f64bb67462ef8bfbcd7d7167077c11a5fdcf44feda642914b"
+  "services/api/actions/agent/mutation_commit.py": "sha256:738e936f630f69091a278cece603ae64e35be3c074d3b740f0e84f582bff5cfc"
+  "services/api/actions/agent/runtime_repository.py": "sha256:0a51a3e4d3b004770b094fcf60f21a7f661d52ba56a69afe9a40315490a268a8"
 ---
 
 # Agent Runtime & Mutation Review Runbook
@@ -51,7 +51,17 @@ review disabled, `commit_approved_mutations`/`rollback_mutation` refuse
    preserves the error string; nothing is half-applied.
 4. **Validator/CIS block**: a `GraphWriteValidator` rejection or a CIS
    `quarantine` band skips the graph write and quarantines the mutation.
-5. Commit is idempotent — a duplicate commit does not re-apply.
+5. **Gateway outcome**: the graph mutation gateway's result is authoritative.
+   A write it blocks quarantines the mutation (`graph_gateway_blocked`, with the
+   violations); a write it does not apply marks it `failed_commit`. Neither
+   advances the canonical version nor reports a commit. The gateway outcome is
+   stored on the mutation as `gateway_outcome`, including for committed writes.
+6. Commit is idempotent — a duplicate commit does not re-apply. Each staged edge
+   carries a replay identity tied to its own staged mutation, so distinct
+   approved changes to the same edge tuple do not collide in the mutation
+   ledger. Re-submitting an objective with the same idempotency key and the
+   same content returns the existing objective; reusing the key for changed
+   content is a conflict.
 
 ## Rollback
 
@@ -60,7 +70,8 @@ GRAPH BACK to verify absence. A committed vertex always carries the committing
 tenant's `tenant_id`, and the vertex drop only matches a vertex that tenant
 owns (`tenantId` or `tenant_id`), so a rollback never removes another tenant's
 vertex; a vertex it could not drop stays present and opens a repair task. If the inverse errors or the artifact is still
-present, the mutation is marked `rollback_repair_required` and a durable repair
+present, or its absence cannot be confirmed (`verification_unavailable`), the
+mutation is marked `rollback_repair_required` and a durable repair
 task is opened — a rollback that could not fully restore state is never reported
 as a clean undo. Successful rollbacks are idempotent.
 

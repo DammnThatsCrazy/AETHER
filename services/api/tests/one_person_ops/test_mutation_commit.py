@@ -241,22 +241,28 @@ async def test_invalid_mutation_class_fails_before_graph(review_commit_enabled):
 
 # ── Rollback ───────────────────────────────────────────────────────────────
 
-async def test_rollback_marks_rolled_back_with_best_effort_inverse(review_commit_enabled):
+async def test_rollback_requires_confirmed_absence_before_reporting_success(review_commit_enabled):
     tenant = tenant_id()
     graph = FakeGraph()
     batch = await _approved_batch(tenant, [VERTEX_MUTATION])
     await commit_approved_mutations(tenant, batch["batch_id"], "operator", graph=graph)
     mutation_id = batch["mutation_ids"][0]
     rolled = await rollback_mutation(tenant, mutation_id, "operator", graph=graph)
-    assert rolled["status"] == "rolled_back"
+    assert rolled["status"] == "rollback_repair_required"
     assert rolled["rolled_back_by"] == "operator"
     assert rolled["rollback"]["inverse_applied"] is True
+    assert rolled["rollback"]["verified"] is False
+    assert rolled["rollback"]["verification"]["confirmed"] is False
+    assert rolled["rollback"]["repair_required"] is True
     assert any("drop()" in q and "v-1" in q for q in graph.queries)
+    repairs = await _runtime_repo.list_repair_tasks(tenant, status="open")
+    assert len(repairs) == 1
+    assert repairs[0]["reason"] == "verification_unavailable"
     events = await _runtime_repo.events_for_tenant(tenant, limit=100)
-    assert any(e["event_type"] == "mutation.rolled_back" for e in events)
+    assert any(e["event_type"] == "mutation.rollback_repair_required" for e in events)
     # Idempotent second rollback.
     again = await rollback_mutation(tenant, mutation_id, "operator", graph=graph)
-    assert again["status"] == "rolled_back"
+    assert again["status"] == "rollback_repair_required"
 
 
 async def test_rollback_requires_committed_status(review_commit_enabled):
