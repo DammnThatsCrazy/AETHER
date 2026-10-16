@@ -12,7 +12,7 @@ toc_depth: 2
 source_files: [scripts/staging_preflight.py, scripts/lib/preflight_env.py, scripts/lib/preflight_dynamodb.py, scripts/lib/preflight_redis.py, scripts/lib/preflight_results.py, services/api/ingestion/gateway/readiness.py]
 source_hashes:
   "scripts/lib/preflight_dynamodb.py": "sha256:fb2c96646af2b24fc6add4b9463ce3ed19a8ae7ff77161be41eb464cb61ffa15"
-  "scripts/lib/preflight_env.py": "sha256:bb3694db01643e3490dd3263725e39639ddbac697d43c32c190e69184bc79cc6"
+  "scripts/lib/preflight_env.py": "sha256:e465c85941e68d7e0375827096a51a2783a03e99606d137090a4bec9582fbc94"
   "scripts/lib/preflight_redis.py": "sha256:418ac3a2e776cfb96572e3b78864a65e96c34c70cfdd838fb3a90b2bf18ee117"
   "scripts/lib/preflight_results.py": "sha256:ce8f40edac30f24e6be3a9840d43c906436059055525cb2fba8df44c5165da86"
   "scripts/staging_preflight.py": "sha256:d18e7929deaedc6ad3ecf261d6cde3d3e59136f49515642dfc87b8e8f7026e28"
@@ -34,7 +34,9 @@ Validates the target environment before traffic. Checks:
   fail-closed `__post_init__` guards run: `AETHER_ENV ∈ {staging,production}`,
   no in-memory store, no localhost/wildcard CORS, no placeholder secrets
   (`changeme`/`dev-secret`/`test-secret`/…), and a selected durable cache
-  anchor. Staging uses `CACHE_BACKEND=dynamodb` plus
+  anchor. `IDENTITY_VERIFICATION_TOKEN_KEY` is required for hosted identity
+  proof; its previous-key companion remains mounted through key rotation while
+  stored evidence depends on it. Staging uses `CACHE_BACKEND=dynamodb` plus
   `DYNAMODB_CACHE_TABLE`; Redis profiles use `REDIS_URL` or `REDIS_HOST`.
   This is the load-bearing check (`scripts/lib/preflight_env.py`). It also
   imports the complete backend API graph under the candidate environment so

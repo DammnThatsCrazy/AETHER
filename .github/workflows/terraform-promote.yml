@@ -19,6 +19,11 @@ on:
         options: [full, pilot]
         default: full
         required: true
+      identity_verification_secrets_enabled:
+        description: "Mount identity verification keys into ECS only after both Secrets Manager versions have been populated."
+        type: boolean
+        default: true
+        required: false
       action:
         type: choice
         options: [plan, apply]
@@ -236,6 +241,7 @@ jobs:
       TF_VAR_enable_access_mcp: ${{ inputs.enable_access_mcp }}
       TF_VAR_enable_access_mcp_oauth: ${{ inputs.enable_access_mcp_oauth }}
       TF_VAR_enable_access_continuations: ${{ inputs.enable_access_continuations }}
+      TF_VAR_identity_verification_secrets_enabled: ${{ inputs.identity_verification_secrets_enabled }}
       TF_VAR_access_mcp_image_digest: ${{ inputs.access_mcp_image_digest }}
       TF_VAR_access_mcp_desired_count: ${{ inputs.access_mcp_desired_count }}
       TF_VAR_access_mcp_allowed_origins: ${{ inputs.access_mcp_allowed_origins || '[]' }}
@@ -501,6 +507,9 @@ jobs:
           else
             echo "Verified ${PROFILE} plan credentials resolve to the encrypted role ARN in the expected account."
           fi
+      - name: Verify identity verification key versions before mounting
+        if: inputs.identity_verification_secrets_enabled
+        run: python scripts/release/check_identity_verification_secrets.py
       - name: Require immutable image digests
         env:
           PROFILE: ${{ inputs.profile }}
@@ -547,6 +556,7 @@ jobs:
           STAGING_STATE: ${{ inputs.staging_state }}
           STAGING_LISTENER_TARGET_GROUP_ARN: ${{ inputs.staging_listener_target_group_arn }}
           DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
           COMMIT_SHA: ${{ github.sha }}
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
           TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
@@ -683,12 +693,14 @@ jobs:
           # apply consumes the stored plan and cannot reshape it.
           printf '%s\n' "${STAGING_STATE}" > reviewed.staging-state
           printf '%s\n' "${DEPLOYMENT_LANE}" > reviewed.deployment-lane
+          printf '%s\n' "${IDENTITY_VERIFICATION_SECRETS_ENABLED}" > reviewed.identity-verification-secrets-enabled
           terraform plan -input=false -lock-timeout=5m \
             -var-file="profiles/${PROFILE}.tfvars" \
             -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
             -var "ml_image_digest=${ML_IMAGE_DIGEST}" \
             -var "staging_state=${STAGING_STATE}" \
             -var "deployment_lane=${DEPLOYMENT_LANE}" \
+            -var "identity_verification_secrets_enabled=${IDENTITY_VERIFICATION_SECRETS_ENABLED}" \
             -var "staging_listener_target_group_arn=${STAGING_LISTENER_TARGET_GROUP_ARN}" \
             -out=reviewed.tfplan
           terraform show -json reviewed.tfplan > plan-raw.json
@@ -766,6 +778,7 @@ jobs:
             echo "| field | value |"
             echo "| --- | --- |"
             echo "| profile | $(cat reviewed.profile) |"
+            echo "| identity verification secrets mounted | $(cat reviewed.identity-verification-secrets-enabled) |"
             echo "| commit | $(cat reviewed.commit) |"
             echo "| state key | $(cat reviewed.state-key) |"
             echo "| terraform version | $(cat reviewed.terraform-version) |"
@@ -900,6 +913,7 @@ jobs:
         env:
           PROFILE: ${{ inputs.profile }}
           DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
           STAGING_LISTENER_TARGET_GROUP_ARN: ${{ inputs.staging_listener_target_group_arn }}
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
           TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
@@ -910,6 +924,7 @@ jobs:
             reviewed.tfplan reviewed.tfplan.json reviewed.tfplan.txt \
             reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
             reviewed.deployment-lane \
+            reviewed.identity-verification-secrets-enabled \
             reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
             reviewed.state-bucket reviewed.state-lock-table \
             reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
@@ -937,6 +952,16 @@ jobs:
           reviewed_deployment_lane="$(cat reviewed.deployment-lane)"
           if [ "$reviewed_deployment_lane" != "$DEPLOYMENT_LANE" ]; then
             echo "::error::plan was reviewed for deployment_lane=${reviewed_deployment_lane}, dispatched for ${DEPLOYMENT_LANE}"
+            exit 1
+          fi
+
+          reviewed_identity_secrets="$(cat reviewed.identity-verification-secrets-enabled)"
+          case "$reviewed_identity_secrets" in
+            true|false) ;;
+            *) echo '::error::reviewed identity verification secret setting is invalid'; exit 1 ;;
+          esac
+          if [ "$reviewed_identity_secrets" != "$IDENTITY_VERIFICATION_SECRETS_ENABLED" ]; then
+            echo '::error::identity verification secret setting differs between reviewed plan and apply dispatch'
             exit 1
           fi
 
@@ -1031,6 +1056,7 @@ jobs:
             printf 'listener_target_group_arn=%s\n' "$reviewed_listener_arn"
             printf 'deployment_lane=%s\n' "$reviewed_deployment_lane"
             printf 'staging_state=%s\n' "$reviewed_staging_state"
+            printf 'identity_verification_secrets_enabled=%s\n' "$reviewed_identity_secrets"
           } >> "$GITHUB_OUTPUT"
 
       - name: Require secret-preflight bypass to be backed by an asleep reviewed plan
@@ -1156,6 +1182,9 @@ jobs:
           else
             echo "Verified ${PROFILE} apply credentials resolve to the encrypted role ARN in the expected account."
           fi
+      - name: Verify identity verification key versions before mounting
+        if: steps.reviewed.outputs.identity_verification_secrets_enabled == 'true'
+        run: python scripts/release/check_identity_verification_secrets.py
       - name: Recheck the reviewed Access Kit MCP image scan before apply
         env:
           AWS_REGION: us-east-1
@@ -1757,6 +1786,7 @@ jobs:
         if: inputs.profile == 'staging'
         env:
           DEPLOYMENT_LANE: ${{ inputs.deployment_lane || 'full' }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ steps.reviewed.outputs.identity_verification_secrets_enabled }}
         run: |
           set -euo pipefail
           # Terraform and the delivery workflow must converge the registered
@@ -1767,7 +1797,8 @@ jobs:
           # previous revision until delivery rolls it, so the gate checks each
           # family's latest ACTIVE revision, which is what delivery clones.
           python scripts/release/check_staging_task_definition_contract.py \
-            --lane "$DEPLOYMENT_LANE" --revision family-latest
+            --lane "$DEPLOYMENT_LANE" --revision family-latest \
+            --identity-verification-secrets-enabled "$IDENTITY_VERIFICATION_SECRETS_ENABLED"
       - name: Verify applied staging ECS cache IAM permissions
         if: inputs.profile == 'staging'
         working-directory: infra/aws/terraform

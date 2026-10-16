@@ -63,6 +63,9 @@ class WalletVerificationChallengeRequest(BaseModel):
     """Issue a proof tied to one consented anonymous identity subject."""
 
     anonymous_id: str = Field(..., min_length=1, max_length=512)
+    tenant_app_key: Optional[str] = Field(
+        None, description="Authenticated app scope used to bind the SDK identity alias"
+    )
     wallet_address: str = Field(..., min_length=1, max_length=512)
     chain_namespace: str = Field(..., min_length=1, max_length=128)
 

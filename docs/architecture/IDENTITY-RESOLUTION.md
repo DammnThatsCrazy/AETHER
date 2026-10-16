@@ -35,7 +35,7 @@ source_hashes:
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/identity/identity/": "sha256:2566b352ea2884841210af37d0f59b5db84bdab22ccd2c75273b6ab1092e67af"
+  "services/api/identity/identity/": "sha256:1b372150e8ae9b7e46d60336bacf35dcca6f895ce9a0999bb97d0f9784378fe7"
   "services/api/identity/profile/aggregator.py": "sha256:228b48e5b06d6f4355c1d5fda2363ef5e3265570e750863bd7fd98941a41109f"
   "services/api/identity/profile/composer.py": "sha256:aae09f67a164f0e2b940676e52841ff325f36650ac4b1c022cc2a60a31505c20"
   "services/api/ingestion/ingestion/batch.py": "sha256:fbb659145f6cf52cff5af991099fb2cd78bd306729b6144a3ddb93bb8dbdda45"
@@ -215,6 +215,31 @@ suppression and contradictory deterministic identifiers. A signature proves
 key control for this challenge; it does not prove exclusive ownership, custody,
 or payment authorization. Sui transaction execution evidence remains separate,
 and Sui wallet-signature formats are not accepted by this flow.
+
+The optional `tenant_app_key` request field selects a registered SDK site for a
+tenant-wide secret credential; the site must belong to the tenant and be
+active. Site-bound credentials may select only an already-bound site. Wallet
+proofs use the same `site:<site_id>` identity namespace as SDK batch ingestion,
+or `tenant:<tenant_id>` when a tenant-wide credential supplies no site. Durable
+evidence encrypts the replay subject with versioned key IDs and supports an
+active/previous key overlap. `POST /v1/identity/evidence/{evidence_id}/replay`
+returns a cached completed result for legacy evidence without a subject only
+when the summary has no `internal_error` reason; otherwise it requires a fresh
+proof rather than inferring identity. Resolver `internal_error` outcomes leave
+replay jobs failed and retryable when replay inputs can be recovered. Legacy
+completed jobs recording `internal_error` are not considered successful cache
+entries.
+Replay claims use a renewable lease and fencing token: a crashed or cancelled
+worker's stale claim can be reclaimed, while the prior owner cannot overwrite
+the successor's result. Issuance, retry, revocation, and proof-derived alias
+cleanup are serialized per tenant and identifier. Revoking or expiring evidence
+removes its verified alias only after no unexpired active proof remains for
+that identifier. Revoked evidence is never replayed as affirmative
+verification. A subsequent fresh proof may establish a new verified alias,
+while a revoked observed alias or suppression still vetoes linking. Reversing
+an earlier entity merge requires the explicit identity split workflow. If
+alias cleanup fails, the revoke or expiry path reports failure and can be
+retried; it does not report cleanup complete while the alias remains active.
 
 ### Edge Types
 
