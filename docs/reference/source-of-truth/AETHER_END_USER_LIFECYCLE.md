@@ -75,27 +75,30 @@ Copy invariants:
 
 | Route | Role | Resolution/redirect rule |
 |---|---|---|
-| `/login` | Auth front door for the tenant app | After auth the tenant resolver takes over |
-| `/activation` | Intent-driven activation machine | Incomplete tenants land here (resolver) |
-| `/activate` | Legacy alias of `/activation` | Redirects to `/activation` during compatibility |
+| `/login` | Auth front door for the tenant app | After auth the tenant resolver takes over (post-auth fallback is `/`) |
+| `/activation` | Workspace onboarding (Workspace → Sources → SDKs and keys → Graph) over the activation machine | Incomplete tenants land here (resolver); signup lands here via `/onboarding` |
+| `/activate`, `/onboarding` | Aliases of `/activation` | Redirect to `/activation`, preserving query |
+| `/activation/guided` | Detailed guided activation page | Reached by link; not a resolver target |
+| `/home` | Home | Complete tenants land here (resolver) |
 | `/settings` | Settings shell | Hosts nested sections |
 | `/settings/integrations` | Integrations manager (canonical) | Legacy `/integrations` redirects here during compatibility |
-| `/campaigns` | Campaign 360 | Workspace destination; complete tenants return to their last useful workspace (root = Home) |
+| `/campaigns` | Campaign 360 | Workspace destination |
 | `/profiles` | Profile 360 | Commerce/profile evidence visible post-sync |
 | `/campaign-intelligence/sources` | Campaign sources directory | Connect is via Settings/Integrations advertising group |
 | `/campaign-intelligence/mapping-review` | Mapping Review queue | Exception-driven; linked from campaign-quality readiness |
 | `/campaign-intelligence/quality` | Campaign-quality readiness gate | Discloses open reviews and links into Mapping Review |
 
-**Tenant-landing resolver contract.** An incomplete tenant (no activation
-intent, no commerce/advertising/comms evidence) is resolved into `/activation`
-(the canonical guided activation surface). A complete tenant (live /
-value-proven / expansion-ready evidence) is resolved back into their **last
-useful workspace** when the session remembers one (scope-scoped per user,
-persisted only for real workspace routes — never for `/activation`, `/activate`,
-auth, or legal paths); otherwise they land on the workspace root (Home). A
+**Tenant-landing resolver contract.** A tenant whose self-serve activation
+record is `complete`, or whose operator implementation plan is live /
+value-proven / expansion-ready, is resolved to Home (`/home`). Any other tenant
+is resolved into `/activation` (workspace onboarding), which resumes at the step
+implied by the activation record. Outside production, `/?onboarding=restart`
+walks a tester through onboarding from step 1 without resetting server state. A
 requested deep link to a protected workspace renders directly after auth and
-never passes through this resolver. The resolver never strands a tenant, never
-routes to the operator `/settings` surface, and never routes by guesswork.
+never passes through this resolver. The resolver holds on a loading state until
+the activation read settles, never strands a tenant (a failed read renders
+Home), never routes to the operator `/settings` surface, and never routes by
+guesswork.
 
 ## 3. Connection-state projection
 
