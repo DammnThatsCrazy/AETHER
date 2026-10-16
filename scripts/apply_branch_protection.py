@@ -37,7 +37,7 @@ def main() -> None:
     args = parser.parse_args()
 
     required_status_checks = [
-        "verification / disposition",  # publish-evidence in repo-consistency.yml
+        "ci / verdict",  # verdict job in ci.yml
     ]
 
     payload = {

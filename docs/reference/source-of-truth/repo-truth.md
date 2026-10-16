@@ -95,7 +95,7 @@ document in the same change.
 
 The repository truth reset blueprint named paths and tooling that this
 repository covers with existing mechanisms. They are intentionally not
-duplicated, because `AGENTS.md` makes `verification / disposition` the single
+duplicated, because `AGENTS.md` makes `ci / verdict` the single
 blocking PR authority and specialized workflows supplementary.
 
 | Blueprint item | Where it lives here |

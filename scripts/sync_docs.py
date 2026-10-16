@@ -269,8 +269,8 @@ def write_automation() -> None:
         "",
         "## Workflow enforcement",
         "",
-        "- `.github/workflows/repo-consistency.yml` owns the blocking `verification / "
-        "disposition` status for finalized pull requests (`ready_for_review`); the retired legacy full "
+        "- `.github/workflows/ci.yml` owns the blocking `ci / verdict` status for "
+        "non-draft pull requests (it starts at `ready_for_review`); the retired legacy full "
         "gate remains available through local, trusted-main, nightly, and release "
         "commands but is not a PR job.",
         "- `.github/workflows/repo-health.yml` keeps finalized-PR docs/size signals advisory "

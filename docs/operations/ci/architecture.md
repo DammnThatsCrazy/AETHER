@@ -24,10 +24,13 @@ mechanics behind it.
 
 The completed change is finalized by marking the PR ready for review. That
 `ready_for_review` event, and pushes to `main`, trigger
-`.github/workflows/repo-consistency.yml` ("Repo Consistency"). Draft PR pushes
-are an accumulation phase and do not start hosted CI. Its terminal job,
-`publish-evidence`, is named **`verification / disposition`** — this is the one
-required status check for normal PRs. The workflow has four jobs that run in
+`.github/workflows/ci.yml` ("ci"), whose terminal job is named
+**`ci / verdict`** — the one required status check for normal PRs. Draft PR
+pushes are an accumulation phase and run nothing. The remainder of this page
+describes the legacy `repo-consistency.yml` pipeline (terminal job
+`publish-evidence`, `verification / disposition`), which no longer decides merges
+and is retired by the CI V2 cutover; see `docs/engineering/ci-v2/architecture.md`
+for the replacement. The workflow has four jobs that run in
 sequence:
 
 1. **`classify-change`** ("impact authority") — checks out full history,
@@ -96,7 +99,7 @@ descendant workers alive and contaminate the next verification run.
 
 | Scope | Workflow / job | Authority |
 |---|---|---|
-| PR finalization (`ready_for_review`) and every push to `main` | `repo-consistency.yml` → `publish-evidence` (`verification / disposition`) | **Blocking.** The only required status check for normal PRs. |
+| Non-draft PRs (from `ready_for_review`, then every push), merge-queue SHAs, and pushes to `development`, `staging` and `main` | `ci.yml` → `verdict` (`ci / verdict`) | **Blocking.** The only required status check for normal PRs. |
 | PR finalization (`ready_for_review`) | `repo-health.yml` → `pr-size` | Advisory (`continue-on-error` on finalized PRs). Warns above 600 meaningful changed lines; never blocks. |
 | PR finalization (`ready_for_review`) | `repo-health.yml` → `lint-docs` | Advisory on finalized PRs (`continue-on-error`), but the same `make docs-check` is enforced as part of `verification-disposition`'s routing where docs are affected. On non-PR trusted events it still just reports. |
 | Push to `main` only | `repo-health.yml` → `main-integration` | Blocking for that job, but scoped to `push` on `main` — it is a post-merge integration authority, not a PR gate. It rebuilds the impact graph against the pre-merge SHA and runs `make integration-durable`. |
@@ -117,7 +120,7 @@ Keep architecture and engineering work in a draft PR while the blueprint is
 being executed. Integrate all slices, perform clarification and architecture
 review, remediate findings, update ownership-required surfaces and docs, and
 run focused local checks. Then mark the PR ready for review once. Specialized
-workflows may add finalization evidence, but only `verification / disposition`
+workflows may add finalization evidence, but only `ci / verdict`
 determines normal-PR mergeability. A failed terminal authority may be rerun
 after a material remediation; intermediate pushes do not create another CI
 cycle.
