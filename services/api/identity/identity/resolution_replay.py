@@ -238,7 +238,9 @@ class ResolutionReplayService:
 
         This supports evidence written before wallet subjects were durably
         encrypted. Such rows cannot reproduce the original evidence
-        fingerprint, but an already completed job has a safe cached outcome.
+        fingerprint, but an already completed successful job has a safe cached
+        outcome. Legacy jobs completed with an internal resolver error are not
+        successful cache entries and require reverification.
         """
         key = f"{tenant_id}:{trigger_id}:{policy_version}"
         existing = await self._jobs.find_by_id(key)
@@ -251,6 +253,8 @@ class ResolutionReplayService:
         ):
             return None
         summary = existing.get("summary") or {}
+        if "internal_error" in (summary.get("reason_codes") or []):
+            return None
         return {
             "status": "noop",
             "idempotent": True,

@@ -785,6 +785,38 @@ async def test_legacy_wallet_evidence_uses_cached_success_or_requires_reverifica
     retry = await service.retry_evidence_replay(tenant_id, failed_id)
     assert retry == {"status": "reverification_required"}
 
+    internal_error_id = "legacy-wallet-internal-error"
+    await evidence_repo.insert(internal_error_id, {
+        "id": internal_error_id,
+        "tenant_id": tenant_id,
+        "identifier_type": "wallet",
+        "identifier_hash": "legacy-wallet-hash-3",
+        "status": "active",
+        "policy_version": "1.0.0",
+        "metadata": {"chain_namespace": "eip155:1"},
+    })
+    await replay._jobs.insert(
+        f"{tenant_id}:{internal_error_id}:1.0.0",
+        {
+            "tenant_id": tenant_id,
+            "trigger_id": internal_error_id,
+            "policy_version": "1.0.0",
+            "status": "completed",
+            "summary": {
+                "decision": "create",
+                "canonical_entity_id": "entity-legacy-error",
+                "reason_codes": ["internal_error"],
+            },
+        },
+    )
+    internal_error_retry = await service.retry_evidence_replay(
+        tenant_id, internal_error_id
+    )
+    assert internal_error_retry == {"status": "reverification_required"}
+    error_row = await evidence_repo.get_for_tenant(tenant_id, internal_error_id)
+    assert error_row is not None
+    assert error_row.get("canonical_entity_id") is None
+
 
 def test_wallet_subject_binding_decrypts_across_key_rotation(monkeypatch):
     monkeypatch.setenv("IDENTITY_VERIFICATION_TOKEN_KEY", "wallet-old-key-material")
