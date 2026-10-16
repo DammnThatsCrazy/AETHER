@@ -181,6 +181,7 @@ class DataRightsGrantRepository:
             occurred_at=grant.granted_at,
             event_id=grant.audit_event_id,
         )
+        event["source_relationship"] = grant.source_relationship
         pool = await self._pool()
         if pool is None:
             self._local_grants[grant.data_rights_grant_id] = grant

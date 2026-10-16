@@ -31,6 +31,7 @@ from connectors.integrations.data_rights.models import (
     GeneratedOutputRights,
     GrantStatus,
     LearningAuthority,
+    LegalBasis,
     OlympusDerivationRights,
     PolicyCheckResult,
     SourceUseAuthority,
@@ -39,6 +40,13 @@ from connectors.integrations.data_rights.models import (
     TerminationAuthority,
 )
 from connectors.integrations.data_rights.repository import DataRightsGrantRepository
+from shared.integration_contracts.source_relationship import (
+    OLYMPUS_SOURCE_TENANT_ID,
+    REQUIRED_RAW_DATA_OWNER,
+    TENANT_SELF_SERVICE_RELATIONSHIPS,
+    UNCLASSIFIED,
+    relationship_consistent,
+)
 
 logger = get_logger("aether.service.data_rights")
 
@@ -234,6 +242,41 @@ def resolve_structured_rights(grant: DataRightsGrant) -> Dict[str, Any]:
     return grant.structured_rights()
 
 
+class GrantClassificationError(ValueError):
+    """A grant's source relationship conflicts with its owner, class, scope or basis."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def validate_grant_classification(body: DataRightsGrantCreate) -> None:
+    """Reject grants whose relationship does not match owner, class, scope and basis."""
+    rel = body.source_relationship
+    if rel == UNCLASSIFIED:
+        raise GrantClassificationError("unclassified_grant_creation_forbidden")
+    if body.raw_data_owner != REQUIRED_RAW_DATA_OWNER[rel]:
+        raise GrantClassificationError("raw_data_owner_mismatch")
+    if not relationship_consistent(rel, body.connector_class):
+        raise GrantClassificationError("rights_class_mismatch")
+    olympus_scope = body.tenant_id == OLYMPUS_SOURCE_TENANT_ID
+    if rel in ("olympus_source", "internal_system") and not olympus_scope:
+        raise GrantClassificationError("olympus_scope_required")
+    if (rel in TENANT_SELF_SERVICE_RELATIONSHIPS or rel == "first_party_application") and olympus_scope:
+        raise GrantClassificationError("tenant_scope_required")
+    if rel == "personal_account":
+        if (
+            not body.subject_ref
+            or not body.consent_basis
+            or body.legal_basis == LegalBasis.OPERATOR_POLICY.value
+        ):
+            raise GrantClassificationError("personal_account_requires_subject_consent")
+    elif body.subject_ref:
+        raise GrantClassificationError("subject_ref_requires_personal_account")
+    if rel == "partner_feed" and not body.contract_id:
+        raise GrantClassificationError("partner_feed_requires_contract")
+
+
 class DataRightsService:
     """Canonical data-rights ledger with local-memory and durable backends."""
 
@@ -260,6 +303,7 @@ class DataRightsService:
         - olympus_baseline_allowed is set to True (Olympus owns the data)
         - model_training_allowed remains False (requires explicit compliance review)
         """
+        validate_grant_classification(body)
         grant_id = f"drg_{uuid.uuid4().hex}"
         now = _utc_now()
         audit_id = _audit_event_id()
@@ -303,6 +347,8 @@ class DataRightsService:
             commercial_reuse_allowed=body.commercial_reuse_allowed,
             legal_basis=body.legal_basis,
             consent_basis=body.consent_basis,
+            subject_ref=body.subject_ref,
+            source_relationship=body.source_relationship,
             granted_by_user_id=granted_by_user_id,
             granted_at=now,
             expires_at=body.expires_at,

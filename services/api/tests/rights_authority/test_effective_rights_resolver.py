@@ -103,7 +103,8 @@ async def test_ambiguous_active_grants_are_denied_instead_of_selecting_first():
         "connector_class": "tenant_byod_data",
         "data_category": "customer",
         "data_sensitivity": "sensitive_pii",
-        "raw_data_owner": "tenant_abc",
+        "raw_data_owner": "tenant",
+        "source_relationship": "organization_system",
         "tenant_lake_allowed": True,
     }
     await service.create_grant(DataRightsGrantCreate(**body), granted_by_user_id="admin_1")

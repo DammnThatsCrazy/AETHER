@@ -96,6 +96,7 @@ class Env:
                 data_category="customer",
                 data_sensitivity="sensitive_pii",
                 raw_data_owner="tenant",
+                source_relationship="organization_system",
                 tenant_lake_allowed=True,
             ),
             "tenant-admin",
