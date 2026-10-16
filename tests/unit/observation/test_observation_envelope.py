@@ -327,3 +327,38 @@ def test_pre_existing_stored_envelope_still_validates():
     stored = _envelope().to_bronze_additive()
     stored["source"].pop("source_relationship")
     assert UniversalObservationEnvelope(**stored).rights is None
+
+
+def test_sdk_envelope_is_first_party_with_server_provider_and_instance():
+    env = oe.build_sdk_observation_envelope(
+        _core_normalized(), source_provider="web", source_instance="site:site_123",
+    )
+    assert env.source.source_type == "sdk"
+    assert env.source.source_relationship == "first_party_application"
+    assert env.source.source_provider == "web"
+    assert env.source.source_instance == "site:site_123"
+
+
+def test_client_supplied_source_claims_are_ignored():
+    normalized = _core_normalized()
+    normalized["source_relationship"] = "olympus_source"
+    normalized["properties"] = {"source_relationship": "partner_feed", "source_instance": "evil"}
+    normalized["context"] = {
+        **(normalized.get("context") or {}),
+        "library": {"name": "@aether/access-kit", "version": "0.1.0"},
+        "surface": "mcp",
+        "source_instance": "site:other",
+    }
+    env = oe.build_sdk_observation_envelope(normalized, source_instance="site:site_123")
+    assert env.source.source_relationship == "first_party_application"
+    assert env.source.source_instance == "site:site_123"
+    assert env.source.source_provider is None
+
+
+@pytest.mark.parametrize("platform,expected", [
+    ("web", "web"), ("server", "server"), ("ios", "ios"), ("android", "android"),
+    ("react_native", "react_native"), (None, None), ("", None), ("desktop", None),
+    ("react-native", "react_native"), ("node", "server"), ("other", None),
+])
+def test_sdk_source_provider_only_accepts_known_platforms(platform, expected):
+    assert oe.sdk_source_provider(platform) == expected

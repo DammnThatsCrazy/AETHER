@@ -50,6 +50,8 @@ class SdkIngressAdapter(UniversalIngressAdapter):
         normalized: Mapping[str, Any],
         *,
         ingress_path: Optional[str] = None,
+        source_provider: Optional[str] = None,
+        source_instance: Optional[str] = None,
     ) -> Optional[UniversalObservationEnvelope]:
         """Delegate to the canonical SDK mapping (single implementation).
 
@@ -74,6 +76,8 @@ class SdkIngressAdapter(UniversalIngressAdapter):
         envelope = _build_sdk_observation_envelope(
             normalized,
             ingress_path=ingress_path or DEFAULT_SDK_INGRESS_PATH,
+            source_provider=source_provider,
+            source_instance=source_instance,
         )
         try:
             if envelope is not None and trace is not None:
