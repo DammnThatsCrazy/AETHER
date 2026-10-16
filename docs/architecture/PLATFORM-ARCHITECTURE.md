@@ -39,8 +39,8 @@ reviewed_source_commits:
   - commit: "40af67902"
     reason: "Reviewed the optional server-returned consent, usage, and audit references for accepted batch observations. The contracts preserve the existing intake and authority boundaries."
 source_hashes:
-  "packages/shared/": "sha256:bfb8407a75f46c537455d50127048f40ddbf1feb7f40a7e08427a7ec8321549a"
-  "scripts/generate_feature_surface_manifest.py": "sha256:9ab5609184818157683093d5cd2ab5472e5df3f2b0134dc692b2bbce96465ca9"
+  "packages/shared/": "sha256:db290855eff15728d3c0ed6a69be316b9eb51c966ec8759a9af5d217affd6d19"
+  "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
