@@ -520,6 +520,12 @@ class EffectiveRightsResolver:
         await self._repo.record(decision, identity_key=identity)
         return decision
 
+    async def governing_grant(
+        self, tenant_id: str, source_id: str,
+    ) -> Optional[DataRightsGrant]:
+        """The grant this resolver would decide on for a tenant/source pair."""
+        return await self._grant_loader(tenant_id, source_id)
+
     async def _default_grant_loader(
         self, tenant_id: str, source_id: str,
     ) -> Optional[DataRightsGrant]:

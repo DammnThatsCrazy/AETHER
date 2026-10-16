@@ -18,6 +18,8 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
+from shared.integration_contracts.source_relationship import RawDataOwner, SourceRelationship
+
 
 class GrantStatus(str, Enum):
     ACTIVE = "active"
@@ -308,6 +310,9 @@ class DataRightsGrant(BaseModel):
     data_category: str
     data_sensitivity: str
     raw_data_owner: str
+    # Descriptive classification of the governed source; never widens a right.
+    # Rows written before classification omit it and read as "unclassified".
+    source_relationship: SourceRelationship = "unclassified"
 
     # ── Write permissions — all fail closed ──────────────────────────────────
     tenant_lake_allowed: bool = False
@@ -426,7 +431,8 @@ class DataRightsGrantCreate(BaseModel):
     source_manifest_id: Optional[str] = None
     data_category: str
     data_sensitivity: str = "unclassified"
-    raw_data_owner: str
+    raw_data_owner: RawDataOwner
+    source_relationship: SourceRelationship
     tenant_lake_allowed: bool = False
     tenant_graph_allowed: bool = False
     tenant_insights_allowed: bool = False

@@ -47,6 +47,17 @@ ENVELOPE_SCHEMA_VERSION = "1.0.0"
 _USER_ID_TRUST_FALLBACK = "CLIENT_HINT"
 _ANONYMOUS_ID_TRUST = "OBSERVED"
 
+SDK_PLATFORMS: tuple[str, ...] = ("web", "server", "ios", "android", "react_native")
+SDK_SOURCE_RELATIONSHIP = "first_party_application"
+_KEY_PLATFORM_ALIASES = {"react-native": "react_native", "node": "server"}
+
+
+def sdk_source_provider(platform: Optional[str]) -> Optional[str]:
+    """SDK platform from the credential record; unknown values are not stamped."""
+    # Key records store the mint route's spellings, not the envelope vocabulary.
+    platform = _KEY_PLATFORM_ALIASES.get(platform, platform)
+    return platform if platform in SDK_PLATFORMS else None
+
 
 def _parse_dt(value: Optional[str]) -> Optional[datetime]:
     """Parse an ISO-8601 instant; server stamps are UTC, client claims keep
@@ -80,8 +91,14 @@ def build_sdk_observation_envelope(
     normalized: Mapping[str, Any],
     *,
     ingress_path: str = "/v1/batch",
+    source_provider: Optional[str] = None,
+    source_instance: Optional[str] = None,
 ) -> Optional[UniversalObservationEnvelope]:
     """Map an accepted, validated SDK event to a UniversalObservationEnvelope.
+
+    ``source_provider``/``source_instance`` come from the authenticated
+    credential and server-stamped site namespace; nothing in ``normalized``
+    can set source fields.
 
     Returns None (not raise) when the normalized payload cannot supply the
     envelope's required core — callers degrade to the flat path with a warning
@@ -204,6 +221,9 @@ def build_sdk_observation_envelope(
         tenancy=TenancyBlock(tenant_id=str(tenant_id)),
         source=SourceBlock(
             source_type="sdk",
+            source_relationship=SDK_SOURCE_RELATIONSHIP,
+            source_provider=source_provider,
+            source_instance=source_instance,
             ingress_path=ingress_path,
         ),
         subjects=subjects,

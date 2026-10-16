@@ -37,7 +37,6 @@ CONTROL_PLANE_SCRIPTS = (
     "scripts/validate_ci_performance_policy.py",
     "scripts/validate_ci_execution_contracts.py",
     "scripts/validate_execution_plan.py",
-    "scripts/verify_candidate_evidence.py",
 )
 
 # These are application/runtime packages, not CI planning dependencies.  Keep

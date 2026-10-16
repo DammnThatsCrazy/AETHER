@@ -39,7 +39,7 @@ MUTATION_STATUSES = {
     # Rollback verification outcomes (see mutation_commit.rollback_mutation):
     # rolled_back            → inverse applied AND verified absent from the graph
     # rollback_repair_required → inverse issued but graph still shows the artifact
-    #                            (a durable repair task is opened for the operator)
+    #                            or verification is unavailable (durable repair task)
     "rollback_repair_required",
 }
 # How long an operator approval remains valid before a commit must be re-approved.
@@ -93,6 +93,28 @@ def _age_seconds(iso_ts: str | None) -> float:
 def stable_idempotency_key(tenant_id: str, payload: dict[str, Any]) -> str:
     raw = json.dumps({"tenant_id": tenant_id, "payload": payload}, sort_keys=True, default=str)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def objective_request_fingerprint(
+    tenant_id: str,
+    goal: str,
+    objective_type: str,
+    severity: str,
+    priority: int,
+    payload: dict[str, Any],
+) -> str:
+    """Hash the semantic objective request bound to its idempotency key.
+
+    Payloads are sanitized before hashing to match the durable representation;
+    secret-shaped values are never needed to distinguish objective retries.
+    """
+    return stable_idempotency_key(tenant_id, {
+        "goal": goal,
+        "objective_type": objective_type,
+        "severity": severity,
+        "priority": priority,
+        "payload": sanitize_payload(payload),
+    })
 
 
 def target_key_for(target: dict[str, Any] | None) -> str:
@@ -230,9 +252,27 @@ class AgentRuntimeRepository:
     ) -> dict[str, Any]:
         existing = await self.objectives.find(tenant_id=tenant_id, idempotency_key=idempotency_key)
         if existing:
+            fingerprint = objective_request_fingerprint(
+                tenant_id, goal, objective_type, severity, priority, payload,
+            )
+            for row in existing:
+                recorded_fingerprint = objective_request_fingerprint(
+                    tenant_id,
+                    str(row.get("goal", "")),
+                    str(row.get("type", "")),
+                    str(row.get("severity", "")),
+                    int(row.get("priority", 0) or 0),
+                    row.get("payload") if isinstance(row.get("payload"), dict) else {},
+                )
+                if recorded_fingerprint != fingerprint:
+                    raise ConflictError(
+                        "Idempotency key was already used for different objective content",
+                        details={"kind": "idempotency_conflict", "resource": "objective"},
+                    )
             return existing[0]
 
         now = utc_now()
+        safe_payload = sanitize_payload(payload)
         objective = {
             "objective_id": new_id("obj"),
             "tenant_id": tenant_id,
@@ -241,7 +281,7 @@ class AgentRuntimeRepository:
             "severity": severity,
             "priority": priority,
             "status": "queued",
-            "payload": sanitize_payload(payload),
+            "payload": safe_payload,
             "opened_by": opened_by,
             "idempotency_key": idempotency_key,
             "created_at": now,

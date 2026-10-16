@@ -18,7 +18,7 @@ reviewed_source_commits:
 source_hashes:
   "services/api/ingestion/imports/commit.py": "sha256:8c9a53efb8ff51e7a28a301ca2d047d91c8732bc49782608ac547c1f596a9cf8"
   "services/api/ingestion/imports/kyber_routes.py": "sha256:72539f001ee0853b94b1c2abce5d8f2eb98231b2676bf124e6f9c2e84bdeb749"
-  "services/api/ingestion/imports/rights_admission.py": "sha256:32d5bcdec7c74afc55e6c86e45b89f6930169a912bf185099d90fe27db3f3f7a"
+  "services/api/ingestion/imports/rights_admission.py": "sha256:43f3777f5334afd0c48355ff9c16b807174c57036c63a40ca3b988a2a29fbaa1"
   "services/api/ingestion/imports/service.py": "sha256:6d9c346282442e8af10b462367ebb187ca0d574521fe5f13b2f68152aeeacd98"
   "services/api/repositories/graph_mutation_ledger.py": "sha256:b347022c798f92360a89fb13cae1a2086792510cd37cb9b92c3ddc9988640f31"
   "services/api/repositories/imports_repo.py": "sha256:6bdc0f6089e66d63b93456e5cf99b79653b896a338e3548f19551c48ae3c4f0e"
@@ -184,7 +184,11 @@ CSV commit also requires durable allowed Rights Authority decisions for
 grant for the exact tenant and import `source_id`. The grant is held against
 revocation while the commit writes. This admission runs before identity,
 Bronze, Silver, or graph writes; import approval and consent checks do not
-replace the required source grant.
+replace the required source grant. The grant must be a tenant or subject
+source (`personal_account`, `organization_system`, or a legacy unclassified
+grant); a partner, Olympus, public-reference or internal grant never admits an
+import commit (`source_relationship_mismatch`). If the grant store cannot be read
+for that check, the commit is refused with `rights_authority_unavailable`.
 
 Inspect the tenant-scoped import detail and its
 `session.rights_admissions[commit_id]` history for the attempt status,

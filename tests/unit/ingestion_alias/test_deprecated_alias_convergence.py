@@ -405,6 +405,25 @@ def test_kill_flag_on_returns_410(handler):
         assert env.repos._IN_MEMORY_STORES.get("bronze_sdk_events", {}) == {}
 
 
+@pytest.mark.parametrize("handler", ["ingest_single_event", "ingest_batch_events"])
+def test_alias_routes_stamp_the_credential_platform_on_the_envelope(handler):
+    with _fresh() as env:
+        object.__setattr__(
+            env.settings, "observation_envelope",
+            dataclasses.replace(env.settings.observation_envelope, enabled=True),
+        )
+        producer = _FakeProducer()
+        req = _FakeRequest("t1")
+        # Key records store the mint route's spelling; the envelope uses its own.
+        req.state.tenant.credential_platform = "react-native"
+        event = env.routes.SDKEvent(**_legacy("track"))
+        body = event if handler == "ingest_single_event" else env.routes.BatchEventsRequest(events=[event])
+        _run(getattr(env.routes, handler)(body, req, producer=producer))
+        assert len(producer.published) == 1
+        source = producer.published[0].payload["observation_envelope"]["source"]
+        assert source["source_provider"] == "react_native"
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # 4. Direct ingest_events() — accepted / rejected / duplicate counts preserved
 # ═══════════════════════════════════════════════════════════════════════════

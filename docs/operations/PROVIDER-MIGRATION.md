@@ -22,7 +22,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "services/api/connectors/integrations/connectors/base.py": "sha256:c30c8cf70873be7e5974db3d4199779c4d0baa5ca5facef32157245111c5073e"
+  "services/api/connectors/integrations/connectors/base.py": "sha256:f3de7cbfb6f60ba8866ea567090df4a59b8546b494106b3ef58b5792b5b48269"
   "services/api/connectors/integrations/connectors/registry.py": "sha256:6930e4008db461965dc9c6e0888b7ce204095872d3a7f038cf65eb75fa89fa17"
   "services/api/connectors/providers/amazon/": "sha256:96d3a75625cab54ea0f8e395c3bfc9c72a15b6b98a8a8fd0cc9880e4413ee185"
   "services/api/connectors/providers/ebay/": "sha256:7596f8b9c516ae389f508bc8bad7404839dc1297249bdf7da9280734dea0f5b2"

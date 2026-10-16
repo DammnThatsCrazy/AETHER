@@ -329,11 +329,12 @@ async def list_invoice_previews(request: Request):
 async def list_value_created(request: Request, start: Optional[str] = None, end: Optional[str] = None):
     tenant = _require_tenant(request)
     if start and end:
-        values = await _value_events.list_for_tenant_period(tenant.tenant_id, start, end)
+        values, truncated = await _value_events.list_for_tenant_period(tenant.tenant_id, start, end)
     else:
         values = await _value_events.find_many(filters={"tenant_id": tenant.tenant_id}, limit=100)
+        truncated = len(values) >= 100
     customer_safe = [{k: v.get(k) for k in ("value_event_id", "tenant_id", "source_type", "source_id", "value_type", "value_amount", "currency", "confidence", "attribution_notes", "occurred_at")} for v in values]
-    return APIResponse(data={"tenant_id": tenant.tenant_id, "items": customer_safe, "count": len(customer_safe)}).to_dict()
+    return APIResponse(data={"tenant_id": tenant.tenant_id, "items": customer_safe, "count": len(customer_safe), "truncated": truncated}).to_dict()
 
 
 @kyber_revops_router.get("/overview")

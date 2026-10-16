@@ -143,13 +143,13 @@ export function AppRouter() {
                 <Route path="/activation/guided" element={<PageSuspense><ActivatePage /></PageSuspense>} />
                 <Route path="/identity/activation" element={<PageSuspense><TenantActivationDashboard /></PageSuspense>} />
                 <Route path="/identity/reviews" element={<PageSuspense><IdentityReviewQueue /></PageSuspense>} />
-                <Route path="/users" element={<PageSuspense><UsersPage /></PageSuspense>} />
-                <Route path="/users/:id" element={<PageSuspense><UserProfilePage /></PageSuspense>} />
+                <Route path="/users" element={<PageSuspense frameless><UsersPage /></PageSuspense>} />
+                <Route path="/users/:id" element={<PageSuspense frameless><UserProfilePage /></PageSuspense>} />
                 <Route path="/users/:profileId/journey" element={<PageSuspense><JourneyExplorerPage /></PageSuspense>} />
-                <Route path="/campaigns" element={<PageSuspense><CampaignsPage /></PageSuspense>} />
-                <Route path="/campaigns/:id" element={<PageSuspense><CampaignDetail360Page /></PageSuspense>} />
+                <Route path="/campaigns" element={<PageSuspense frameless><CampaignsPage /></PageSuspense>} />
+                <Route path="/campaigns/:id" element={<PageSuspense frameless><CampaignDetail360Page /></PageSuspense>} />
                 {/* Campaign Intelligence */}
-                <Route path="/campaign-intelligence" element={<PageSuspense><CampaignsPage /></PageSuspense>} />
+                <Route path="/campaign-intelligence" element={<PageSuspense frameless><CampaignsPage /></PageSuspense>} />
                 <Route path="/campaign-intelligence/registry" element={<PageSuspense><CampaignRegistryPage /></PageSuspense>} />
                 <Route path="/campaign-intelligence/sources" element={<PageSuspense><CampaignSourcesPage /></PageSuspense>} />
                 <Route path="/campaign-intelligence/mapping-review" element={<PageSuspense><MappingReviewPage /></PageSuspense>} />
@@ -175,8 +175,8 @@ export function AppRouter() {
                 <Route path="/billing" element={<PageSuspense><BillingPage /></PageSuspense>} />
                 <Route path="/usage-plan" element={<PageSuspense><UsagePlanPage /></PageSuspense>} />
                 <Route path="/me" element={<PageSuspense><MePage /></PageSuspense>} />
-                <Route path="/geo" element={<PageSuspense><GeoPage /></PageSuspense>} />
-                <Route path="/geo/:level/:geoId" element={<PageSuspense><GeoPage /></PageSuspense>} />
+                <Route path="/geo" element={<PageSuspense frameless><GeoPage /></PageSuspense>} />
+                <Route path="/geo/:level/:geoId" element={<PageSuspense frameless><GeoPage /></PageSuspense>} />
                 <Route path="/audit-exports" element={<PageSuspense><AuditExportsPage /></PageSuspense>} />
                 <Route path="/value-review" element={<PageSuspense><ValueReviewPage /></PageSuspense>} />
                 <Route path="/security" element={<PageSuspense><SecurityPage /></PageSuspense>} />

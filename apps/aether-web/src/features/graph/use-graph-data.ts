@@ -112,6 +112,10 @@ function mapGraphEdge(raw: unknown, idx: number): GraphEdge | null {
     return null;
   }
   const confidence = typeof r.confidence === 'number' ? r.confidence : 0.5;
+  const metadata = asRecord(r.properties ?? r.metadata);
+  // The graph contract carries an edge's validity start beside its
+  // properties; keep it so time-aware views can replay the relationship.
+  const validFrom = typeof r.validFrom === 'string' ? r.validFrom : null;
   return {
     id: String(r.id ?? r.edge_id ?? `edge-${fromId}-${toId}-${idx}`),
     source: fromId,
@@ -119,7 +123,7 @@ function mapGraphEdge(raw: unknown, idx: number): GraphEdge | null {
     relationType: edgeType,
     interactionClass: layer,
     weight: typeof r.weight === 'number' ? r.weight : confidence,
-    metadata: asRecord(r.properties ?? r.metadata),
+    metadata: validFrom && metadata.valid_from === undefined ? { ...metadata, valid_from: validFrom } : metadata,
   };
 }
 

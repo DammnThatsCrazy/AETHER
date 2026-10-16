@@ -377,6 +377,7 @@ vi.mock('@aether-app/features/users/use-user-profile', () => {
     useUserQuality: query,
     useUserDataFreshness: query,
     useUserWeb2Profile: query,
+    useUserTimeline: query,
   };
 });
 
@@ -509,8 +510,8 @@ const cases: RouteStateCase[] = [
     Page: UsersPage,
     empty: () => mocks.entitiesList.mockResolvedValue({ entities: [] }),
     fail: () => mocks.entitiesList.mockRejectedValue(new Error('entities offline')),
-    emptyText: 'No users found',
-    errorText: 'Failed to load users',
+    emptyText: 'No profiles found',
+    errorText: 'Failed to load profiles',
   },
   {
     route: '/users/user-local',

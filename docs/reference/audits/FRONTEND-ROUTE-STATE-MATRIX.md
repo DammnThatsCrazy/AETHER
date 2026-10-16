@@ -20,12 +20,12 @@ permission/capability gating (`G`). A failed request never counts as empty.
 
 | Route | Primary API dependencies | Critical | L | E | R | P | G | Current test evidence |
 |---|---|---:|:---:|:---:|:---:|:---:|:---:|---|
-| `/users` | entities and profile summaries | yes | I | A | A | — | I | parameterized route-state family |
-| `/users/:id` | Profile360, identity, graph, trust, risk | yes | I | A | A | — | I | parameterized route-state family |
+| `/users` | entities and profile summaries | yes | A | A | A | A | I | route-state family and `users-page.test.tsx` |
+| `/users/:id` | Profile360, identity, graph, trust, risk | yes | I | A | A | A | I | route-state family and `user-profile-page.test.tsx` |
 | `/users/:profileId/journey` | profile-scoped journey and campaign evidence | yes | I | A | A | — | I | parameterized route-state family |
-| `/campaigns` | campaigns and attribution | yes | I | A | A | — | I | parameterized route-state family |
-| `/campaigns/:id` | campaign detail and touchpoints | yes | I | A | A | — | I | parameterized route-state family |
-| `/campaign-intelligence` | campaigns and attribution | yes | I | A | A | — | I | parameterized route-state family |
+| `/campaigns` | campaigns and attribution | yes | A | A | A | A | I | route-state family and `campaigns-page.test.tsx` |
+| `/campaigns/:id` | campaign detail and touchpoints | yes | I | A | A | A | I | route-state family and `campaign-360-page.test.tsx` |
+| `/campaign-intelligence` | campaigns and attribution | yes | A | A | A | A | I | route-state family and `campaigns-page.test.tsx` |
 | `/campaign-intelligence/registry` | campaign registry | no | I | A | A | — | I | parameterized route-state family |
 | `/campaign-intelligence/sources` | campaign sources | no | I | A | A | — | I | parameterized route-state family |
 | `/campaign-intelligence/mapping-review` | mapping review | no | I | A | A | — | I | parameterized route-state family |
@@ -36,7 +36,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/compare` | comparison definitions, runs, preflight, findings | no | I | A | I | A | I | `comparison-page.test.tsx` |
 | `/noesis` | Noesis conversations and answers | no | I | A | A | A | I | `noesis-page.test.tsx`, `noesis-workspace.test.tsx` |
 | `/agents/:agentId` | Agent 360 profile and evidence-linked operations | no | I | — | I | — | — | gap |
-| `/settings` | tenant profile, notifications, keys | yes | I | A | A | — | I | parameterized route-state family |
+| `/settings` | tenant profile, notifications, keys | yes | A | A | A | A | I | route-state family and `settings-shell.test.tsx` |
 | `/settings/notifications` | notification preferences | yes | I | A | A | — | I | parameterized route-state family |
 | `/settings/data-exchange` | data-exchange settings, capabilities, artifact history | no | I | A | A | A | A | `data-exchange-section.test.tsx`, `data-exchange.spec.ts` |
 | `/settings/integrations` | tenant integration catalog and connections | yes | I | A | A | A | I | `settings-integrations-section.test.tsx` |
@@ -186,10 +186,10 @@ The denominator is the 152 data-bearing route patterns above: 65 Aether and
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 22 / 152 (14.5%) | tracked for every route |
+| Explicit loading-state assertions | 26 / 152 (17.1%) | tracked for every route |
 | Empty-state assertions | 138 / 152 (90.8%) | at least 90% overall |
 | Error/unavailable assertions | 118 / 152 (77.6%) | 100% of critical routes |
-| Populated-state assertions | 46 / 152 (30.3%) | tracked for every route |
+| Populated-state assertions | 52 / 152 (34.2%) | tracked for every route |
 | Critical routes with both empty and error assertions | 71 / 71 (100%) | 71 / 71 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,

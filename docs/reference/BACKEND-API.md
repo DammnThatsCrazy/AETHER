@@ -25,18 +25,18 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:5957395ab9ed34f2d80d4c30f1da81442cf68e6f3c33b8238fa46e97c4edb8fd"
+  "services/api/actions/": "sha256:d43501fd20dc2010654eaef70a37ddf86aed6c018a20e9a9148f4bf8d1f1bb44"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
-  "services/api/billing/": "sha256:0740c89ed3bf089b8ded5f9a319b7670a0afb18bda8f58a69a11a03c2a0a5d75"
-  "services/api/connectors/": "sha256:be5c00bffaa216ecd12b669cb41ee011c177800fbc7d70c5e9bd4c1b4c3f6e76"
+  "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
+  "services/api/connectors/": "sha256:de063914d18133748b4ebb6e3e3e4b02161c739ae7996bccb87fe6188a9bca97"
   "services/api/governance/": "sha256:b47a6fe0cec45cf306bfb4399a2b361df4f4bd1a4f0f897ed003a3db2d4a0dd3"
   "services/api/graph/": "sha256:bda39e64fa30ae40f4acbf0fa85092aa50d7cb601037bdcd6870b241ea09fe13"
   "services/api/identity/": "sha256:4a96035d9625725df833799f19f36e4137e9ba2dab121bb9eb78e7e5833fc79a"
-  "services/api/ingestion/": "sha256:1e13d282a2ef03b1673b631a9e564e27ed09690a695531674ed26967559eda0a"
+  "services/api/ingestion/": "sha256:94973da02b8255278b43b93cd68c2e86d99c37c534dd81742c95187a27aa8361"
   "services/api/intelligence/": "sha256:9b583b5a699e01018b213383848636ee011384fa9f6115d1cda00977dfdb3e58"
   "services/api/journeys/": "sha256:8db7d48b7f8247ab5adfde2fef24d3d7d4d6b2b4b7b721fd1129e836c9ad5301"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
-  "services/api/tenancy/": "sha256:81d3908e2cb30a15c04c6167a603f489a1b5bac57ec02743a042b52301bc52b0"
+  "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
   "services/api/value/": "sha256:fe86fc00610841af79232a37540d9027778742c64d4cc820dfaac888018a88b6"
   "services/api/workers/": "sha256:62b80fbcf0fed7df62c169f9ec263635d26e65da656162f01f4fe70e65236ad4"
 ---
@@ -358,7 +358,7 @@ are returned in customer or operator responses.
 | `/v1/billing/usage` | GET | API key | Caller tenant usage events for a requested or current billing window |
 | `/v1/billing/usage/summary` | GET | API key | Caller tenant usage dimensions, including non-billable visibility meters |
 | `/v1/billing/invoice-previews` | GET | API key | Caller-safe invoice previews with internal pricing notes removed |
-| `/v1/billing/value-created` | GET | API key | Caller-safe value-created events for value-based billing review |
+| `/v1/billing/value-created` | GET | API key | Caller-safe value-created events for value-based billing review; optional `start`/`end` window, `truncated` flags a bounded read |
 | `/v1/billing/payment-status` | GET | API key | Caller-safe payment status and active provider mode |
 
 ### Kyber revenue-operations billing (`/v1/admin/kyber/revops/*`, admin permission required)
@@ -3342,12 +3342,14 @@ Feature-flagged (`AETHER_CONNECTOR_DATA_RIGHTS_ENABLED`). Tenant API key require
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/v1/integrations/data-rights` | List data rights grants for caller's tenant |
-| POST | `/v1/integrations/data-rights/grants` | Create a new data rights grant |
+| POST | `/v1/integrations/data-rights/grants` | Create a tenant-source grant; `source_relationship` (`personal_account` or `organization_system`) and a matching `raw_data_owner` are required |
 | GET | `/v1/integrations/data-rights/grants/{grant_id}` | Get one grant |
 | POST | `/v1/integrations/data-rights/grants/{grant_id}/revoke` | Revoke a grant (immediate denial) |
 | POST | `/v1/integrations/data-rights/policy-check` | Run a named policy check against a grant |
 
 All permission fields default to false, including tenant-lake, tenant-graph, and tenant-insights uses. A create request must explicitly grant each intended use. Grant records and append-only create/revoke lifecycle events persist through the canonical tenant-scoped rights repository; tenant grant reads and revocations are scoped in the repository itself. This persistence does not change feature-flag defaults or enable provider ingestion.
+
+Every grant carries a `source_relationship` (legacy rows read `unclassified` and cannot be created). The tenant route accepts only `personal_account` and `organization_system`: any operator relationship (`partner_feed`, `olympus_source`, `public_reference`, `internal_system`) returns 403, the reserved `olympus` scope is refused, and a failed classification (`raw_data_owner` not matching the relationship, a `connector_class` incompatible with it, `personal_account` without a subject and consent basis) returns 400. The relationship is descriptive and can only deny; it never authorizes use.
 
 ### Tenant — BYOK Key Rotate / Revoke / Verify (`/v1/providers/keys/*`)
 
@@ -3416,6 +3418,7 @@ Anti-distillation enforcement on intelligence query endpoints is activated by `A
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/v1/admin/kyber/data-rights` | All data rights grants (operator-scoped view) |
+| POST | `/v1/admin/kyber/data-rights/grants` | Onboard a `partner_feed`, `olympus_source`, `public_reference` or `internal_system` grant (Kyber operator; any other relationship returns 403, a failed classification 400). `olympus_source` and `internal_system` grants, and every `olympus_provider` grant, use the reserved `olympus` scope (otherwise 400 `olympus_scope_required`); `partner_feed` requires a `contract_id` |
 
 ---
 

@@ -29,7 +29,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+
+from shared.integration_contracts.source_relationship import SOURCE_RELATIONSHIPS
 
 # --- Curated vocabularies (mirrors of observation-envelope-registry.json) -----
 
@@ -94,6 +96,9 @@ def _require_member(value: str, allowed: frozenset[str] | tuple[str, ...], label
     return value
 
 
+RIGHTS_DECISION_REF_PREFIX = "rdec_"
+
+
 class ObservationBlock(BaseModel):
     """Envelope identity + occurrence/receipt/ingest instants + schema version."""
 
@@ -119,11 +124,16 @@ class TenancyBlock(BaseModel):
 
 
 class SourceBlock(BaseModel):
-    """Ingress source provenance (Invariant #7)."""
+    """Ingress source provenance (Invariant #7).
+
+    ``source_relationship`` is server-stamped by the adapter from validated
+    context and is never copied from a source payload.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     source_type: str
+    source_relationship: Optional[str] = None
     source_provider: Optional[str] = None
     source_instance: Optional[str] = None
     source_native_id: Optional[str] = None
@@ -133,6 +143,13 @@ class SourceBlock(BaseModel):
     @classmethod
     def _source_type_known(cls, v: str) -> str:
         return _require_member(v, SOURCE_TYPES, "source_type")
+
+    @field_validator("source_relationship")
+    @classmethod
+    def _source_relationship_known(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        return _require_member(v, SOURCE_RELATIONSHIPS, "source_relationship")
 
 
 class SubjectRef(BaseModel):
@@ -206,6 +223,14 @@ class PrivacyBlock(BaseModel):
     DNT: Optional[bool] = None
     policy_decisions: list[str] = []
 
+    @field_validator("policy_decisions")
+    @classmethod
+    def _no_rights_decisions(cls, v: list[str]) -> list[str]:
+        mixed = [ref for ref in v if ref.startswith(RIGHTS_DECISION_REF_PREFIX)]
+        if mixed:
+            raise ValueError(f"rights decision ids belong in rights.rights_decision_refs: {mixed}")
+        return v
+
 
 class ProvenanceBlock(BaseModel):
     """Ingress trust evidence: credential class + signature disposition + the
@@ -247,6 +272,32 @@ class LineageBlock(BaseModel):
     validation_version: Optional[str] = None
 
 
+class RightsReferenceBlock(BaseModel):
+    """Server-owned references to the Rights Authority records governing this
+    observation. References only: never grant terms, contracts, or owner PII.
+    Absent on consent-only sources that no DataRightsGrant governs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_id: Optional[str] = None
+    source_grant_refs: list[str] = []
+    rights_decision_refs: list[str] = []
+
+    @field_validator("rights_decision_refs")
+    @classmethod
+    def _rights_decisions_only(cls, v: list[str]) -> list[str]:
+        foreign = [ref for ref in v if not ref.startswith(RIGHTS_DECISION_REF_PREFIX)]
+        if foreign:
+            raise ValueError(f"rights_decision_refs accepts only {RIGHTS_DECISION_REF_PREFIX} ids: {foreign}")
+        return v
+
+    @model_validator(mode="after")
+    def _grants_name_their_source(self) -> "RightsReferenceBlock":
+        if self.source_grant_refs and not self.source_id:
+            raise ValueError("source_grant_refs require source_id")
+        return self
+
+
 class UniversalObservationEnvelope(BaseModel):
     """Canonical observation after adapters, before the gateway.
 
@@ -278,6 +329,7 @@ class UniversalObservationEnvelope(BaseModel):
     provenance: Optional[ProvenanceBlock] = None
     quality: Optional[QualityBlock] = None
     lineage: Optional[LineageBlock] = None
+    rights: Optional[RightsReferenceBlock] = None
 
     def to_bronze_additive(self) -> dict:
         """JSON-safe additive persistence dict (excludes unset optionals)."""

@@ -204,6 +204,7 @@ async def test_shopify_sync_with_canonical_tenant_rights_retains_normalizes_and_
         source_id="provider-account:conn-golden:shop-golden",
         connector_id=ShopifyOrdersPlugin().identity().key,
         connector_class="tenant_byod_data",
+        source_relationship="organization_system",
         data_category="customer",
         data_sensitivity="sensitive_pii",
         raw_data_owner="tenant",
@@ -276,6 +277,18 @@ async def test_shopify_sync_with_canonical_tenant_rights_retains_normalizes_and_
     assert graph_decision.allowed is True
     assert graph_decision.tenant_id == "tenant-golden"
     assert graph_decision.source_grant_refs == [grant.data_rights_grant_id]
+
+    # A graph write is governed by its own decision, never the raw tenant_lake one.
+    assert graph_decision.decision_id != rights_evidence["rights_decision_ref"]
+    assert rights_evidence["source_relationship"] == "organization_system"
+
+    from tenancy.rights_authority.source_lineage import trace_source_authority
+
+    trace = await trace_source_authority(graph_decision.decision_id, tenant_id="tenant-golden")
+    assert trace is not None
+    assert trace.source_relationship == "organization_system"
+    assert trace.source_id == rights_evidence["source_id"]
+    assert trace.source_grant_ref == rights_evidence["source_grant_ref"]
 
     # Route fields below are local test fixtures. Production route provisioning
     # remains an explicit integration/cutover decision.
