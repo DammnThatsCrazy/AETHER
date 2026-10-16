@@ -37,6 +37,7 @@ def test_account_scope_wins_when_record_names_an_account():
 
 
 def test_declared_stream_scope_for_accountless_records():
+    # Scope resolution never authorizes; admission denies without a stream grant.
     assert provider_source_id(_record(), stream_lookup=_streams) == "provider-stream:conn_1:activity"
 
 
@@ -73,8 +74,3 @@ def test_replayed_record_resolves_the_same_source_id():
     assert provider_source_id(record, stream_lookup=_streams) == provider_source_id(
         replayed, stream_lookup=_streams,
     )
-
-
-def test_accountless_record_resolves_only_to_its_stream_scope():
-    # Scope resolution never authorizes; admission denies without a stream grant.
-    assert provider_source_id(_record(), stream_lookup=_streams) == "provider-stream:conn_1:activity"

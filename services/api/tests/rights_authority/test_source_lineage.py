@@ -59,3 +59,18 @@ async def test_untraceable_decisions_return_none(tenant, row):
     assert await trace_source_authority(
         "rdec_graph", tenant_id=tenant, decision_repository=_repo(**row), grant_lookup=_lookup,
     ) is None
+
+
+@pytest.mark.asyncio
+async def test_default_decision_repository_refuses_a_cross_tenant_ref():
+    from tenancy.rights_authority.repositories import rights_decision_repository
+
+    await rights_decision_repository.record(
+        {"decision_id": "rdec_lineage_scope", "tenant_id": "tenant-1", "source_grant_refs": ["drg_1"]},
+    )
+    assert (await trace_source_authority(
+        "rdec_lineage_scope", tenant_id="tenant-1", grant_lookup=_lookup,
+    )).source_grant_ref == "drg_1"
+    assert await trace_source_authority(
+        "rdec_lineage_scope", tenant_id="tenant-2", grant_lookup=_lookup,
+    ) is None

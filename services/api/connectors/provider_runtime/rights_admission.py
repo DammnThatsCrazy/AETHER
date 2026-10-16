@@ -319,7 +319,7 @@ class ProviderRawRightsAdmission:
 
     async def _stored_admission(
         self, record: RawProviderRecord,
-    ) -> tuple[ProviderRawRightsEvidence, Any, str, Any]:
+    ) -> ProviderRawRightsEvidence:
         raw_evidence = (record.metadata or {}).get(PROVIDER_RAW_RIGHTS_METADATA_KEY)
         try:
             stored = ProviderRawRightsEvidence.model_validate(raw_evidence)
@@ -351,7 +351,7 @@ class ProviderRawRightsAdmission:
             or decision_row.get("source_grant_refs") != [stored.source_grant_ref]
         ):
             self._deny("admission_evidence_mismatch")
-        return stored, request, identity, decision_row
+        return stored
 
     async def verify_persisted(
         self,
@@ -360,7 +360,7 @@ class ProviderRawRightsAdmission:
         current_admission: ProviderRawRightsEvidence,
     ) -> None:
         """Validate stored evidence against the append-only decision authority."""
-        stored, _request, _identity, _row = await self._stored_admission(record)
+        stored = await self._stored_admission(record)
         if (
             stored.source_grant_ref != current_admission.source_grant_ref
             or stored.policy_version != current_admission.policy_version
@@ -370,7 +370,7 @@ class ProviderRawRightsAdmission:
 
     async def authorize_replay(self, record: RawProviderRecord) -> None:
         """Require the original allow record and a fresh, same-grant, same-use allow."""
-        stored, _request, _identity, _row = await self._stored_admission(record)
+        stored = await self._stored_admission(record)
         current = await self.admit(record)
         if current.source_grant_ref != stored.source_grant_ref:
             self._deny("grant_changed")

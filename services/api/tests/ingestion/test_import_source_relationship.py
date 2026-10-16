@@ -60,11 +60,29 @@ async def test_tenant_and_legacy_import_grants_admit(relationship):
 
 
 @pytest.mark.asyncio
-async def test_partner_grant_cannot_admit_an_import():
+async def test_personal_account_import_grant_admits():
     grant = _grant(
-        connector_class="partner_feed", raw_data_owner="partner",
-        source_relationship="partner_feed", contract_id="ctr_1",
+        source_relationship="personal_account", raw_data_owner="subject",
+        subject_ref="person_1", consent_basis="explicit_opt_in",
     )
+    evidence = await _admit(grant)
+    assert evidence.source_grant_ref == "drg_import"
+
+
+# olympus_source and internal_system grants are built directly: grant creation
+# refuses them outside the Olympus scope, so this covers a store that holds one.
+NON_IMPORT_GRANTS = {
+    "partner_feed": dict(connector_class="partner_feed", raw_data_owner="partner", contract_id="ctr_1"),
+    "olympus_source": dict(connector_class="olympus_provider", raw_data_owner="olympus_labs"),
+    "internal_system": dict(connector_class="olympus_provider", raw_data_owner="olympus_labs"),
+    "public_reference": dict(connector_class="tenant_byod_data", raw_data_owner="public"),
+}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("relationship", sorted(NON_IMPORT_GRANTS))
+async def test_non_tenant_grant_cannot_admit_an_import(relationship):
+    grant = _grant(source_relationship=relationship, **NON_IMPORT_GRANTS[relationship])
     with pytest.raises(ImportRightsDenied) as exc:
         await _admit(grant)
     assert "source_relationship_mismatch" in exc.value.evidence.reason_codes

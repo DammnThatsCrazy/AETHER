@@ -9,6 +9,7 @@ import pytest
 
 from config.settings import Environment, settings
 from connectors.integrations.data_rights.models import DataRightsGrant, GrantStatus
+from connectors.provider_runtime import rights_admission as rights_admission_module
 from connectors.provider_runtime.rights_admission import (
     PROVIDER_RAW_RIGHTS_METADATA_KEY,
     ProviderRawRightsAdmission,
@@ -124,8 +125,6 @@ async def test_allowed_classes_admit_with_class_derived_use(tenant, changes, exp
         ("tenant-1", {"connector_class": "byok_gateway"}),
         ("tenant-1", {"connector_class": "tenant_import"}),
         ("tenant-1", {"source_relationship": "unclassified", "connector_class": "partner_feed", "contract_id": "c"}),
-        # Olympus-class evidence under a customer tenant must never reach that tenant's pipeline.
-        ("tenant-1", dict(OLYMPUS, source_relationship="public_reference", raw_data_owner="public")),
     ],
 )
 @pytest.mark.asyncio
@@ -134,6 +133,22 @@ async def test_denials_fail_closed(tenant, changes):
     admission, _ = _admission(_grant(record, **changes))
     with pytest.raises(ProviderRawRightsDenied):
         await admission.admit(record)
+
+
+@pytest.mark.asyncio
+async def test_olympus_class_grant_under_customer_tenant_has_no_retention_use(monkeypatch):
+    # Olympus-class evidence under a customer tenant must never reach that tenant's pipeline.
+    reasons = []
+    monkeypatch.setattr(
+        rights_admission_module.metrics, "increment",
+        lambda name, labels=None, **kw: reasons.append((labels or {}).get("reason")),
+    )
+    record = _record()
+    grant = _grant(record, **dict(OLYMPUS, source_relationship="public_reference", raw_data_owner="public"))
+    admission, _ = _admission(grant)
+    with pytest.raises(ProviderRawRightsDenied):
+        await admission.admit(record)
+    assert reasons == ["no_raw_retention_use"]
 
 
 @pytest.mark.asyncio

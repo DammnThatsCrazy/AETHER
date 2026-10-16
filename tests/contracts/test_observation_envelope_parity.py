@@ -223,8 +223,8 @@ def test_model_classes_imported_from_barrel() -> None:
     init_text = (REPO_ROOT / "services/api/shared/observation/__init__.py").read_text(encoding="utf-8")
     for name in ("UniversalObservationEnvelope", "ObservationBlock", "TenancyBlock", "SourceBlock",
                  "SubjectRef", "TemporalBlock", "CorrelationBlock", "PrivacyBlock", "ProvenanceBlock",
-                 "QualityBlock", "LineageBlock", "RightsReferenceBlock", "SOURCE_TYPES", "IDENTIFIER_TYPES", "CREDENTIAL_CLASSES",
-                 "TRUST_CLASSES", "SOURCE_RELATIONSHIPS"):
+                 "QualityBlock", "LineageBlock", "RightsReferenceBlock", "SOURCE_TYPES",
+                 "IDENTIFIER_TYPES", "CREDENTIAL_CLASSES", "TRUST_CLASSES", "SOURCE_RELATIONSHIPS"):
         assert name in init_text, f"{name} not re-exported from shared/observation/__init__.py"
 
 

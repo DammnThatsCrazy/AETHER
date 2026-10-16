@@ -305,6 +305,9 @@ class DataRightsService:
         For Olympus provider sources (connector_class=olympus_provider):
         - olympus_baseline_allowed is set to True (Olympus owns the data)
         - model_training_allowed remains False (requires explicit compliance review)
+
+        Raises GrantClassificationError when the source relationship does not
+        match the owner, class, scope or basis; validated before any write.
         """
         validate_grant_classification(body)
         grant_id = f"drg_{uuid.uuid4().hex}"

@@ -33,6 +33,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = ROOT / "services" / "api"
 SCENARIOS = BACKEND_ROOT / "tests" / "provider_runtime" / "rights_fence_scenarios.py"
+PROFILES = ("organization_system", "partner_feed", "olympus_source")
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -120,16 +121,16 @@ def _run_scenario(name: str, profile: str) -> None:
     asyncio.run(main())
 
 
-@pytest.mark.parametrize("profile", ["organization_system", "partner_feed", "olympus_source"])
+@pytest.mark.parametrize("profile", PROFILES)
 def test_revocation_waits_for_an_in_flight_write(profile):
     _run_scenario("revocation_waits_for_an_in_flight_write", profile)
 
 
-@pytest.mark.parametrize("profile", ["organization_system", "partner_feed", "olympus_source"])
+@pytest.mark.parametrize("profile", PROFILES)
 def test_a_write_after_a_committed_revocation_is_denied(profile):
     _run_scenario("a_write_after_a_committed_revocation_is_denied", profile)
 
 
-@pytest.mark.parametrize("profile", ["organization_system", "partner_feed", "olympus_source"])
+@pytest.mark.parametrize("profile", PROFILES)
 def test_no_record_is_retained_after_revocation_returns(profile):
     _run_scenario("no_record_is_retained_after_revocation_returns", profile)

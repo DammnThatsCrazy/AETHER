@@ -31,7 +31,10 @@ async def trace_source_authority(
     decision_repository: Any = None,
     grant_lookup: Any = None,
 ) -> Optional[SourceAuthorityTrace]:
-    """Return the governing source for a decision, or None when it is not source-governed."""
+    """Return the governing source for a decision, or None when it is not source-governed.
+
+    Revoked or expired grants still trace: lineage is historical, not an authorization.
+    """
     if decision_repository is None:
         from tenancy.rights_authority.repositories import rights_decision_repository as decision_repository
     if grant_lookup is None:

@@ -147,7 +147,10 @@ class _ImportGrantService:
         return grant
 
     async def get_grant(self, grant_id, *, tenant_id=None):
-        return self.grant
+        grant = self.grant
+        if grant is None or grant.data_rights_grant_id != grant_id or grant.tenant_id != tenant_id:
+            return None
+        return grant
 
     def hold_grant_unrevoked(self, grant_id, *, tenant_id):
         from contextlib import asynccontextmanager
