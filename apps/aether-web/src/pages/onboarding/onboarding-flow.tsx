@@ -186,7 +186,9 @@ export function OnboardingFlow() {
 
   const nextAllowed = useMemo(() => {
     if (step === 1) return name.trim().length > 0 && goals.length > 0;
-    if (step === 3) return fleet.selectedCount === 0 || fleet.readyCount === fleet.selectedCount;
+    // Activation confirms first value only through an SDK key, so this step is
+    // required: at least one SDK, every selected SDK's key issued and stored.
+    if (step === 3) return fleet.selectedCount > 0 && fleet.readyCount === fleet.selectedCount;
     if (step === 4) return built;
     return true;
   }, [step, name, goals, fleet.selectedCount, fleet.readyCount, built]);
@@ -202,7 +204,7 @@ export function OnboardingFlow() {
           : 'Optional. You can connect sources later.'
         : step === 3
           ? fleet.selectedCount === 0
-            ? 'Optional. You can send events through the API.'
+            ? 'Pick at least one SDK. Activation confirms its first event through an SDK key.'
             : fleet.readyCount === fleet.selectedCount
               ? ''
               : `${fleet.readyCount} of ${fleet.selectedCount} keys ready. Generate and confirm each key.`
@@ -214,9 +216,11 @@ export function OnboardingFlow() {
 
   async function saveWorkspace(): Promise<boolean> {
     const trimmed = name.trim();
-    if (org.data && trimmed && trimmed !== org.data.name) {
+    // Save whenever the name differs from the stored profile, including when
+    // the profile read failed: an edited name is never dropped silently.
+    if (trimmed && trimmed !== org.data?.name) {
       if (!(await updateOrg.mutate({ name: trimmed }))) {
-        setStepError('Could not save the workspace name. Try again.');
+        setStepError('Could not save the workspace name. Try again, or ask the workspace owner to rename it in Settings.');
         return false;
       }
     }

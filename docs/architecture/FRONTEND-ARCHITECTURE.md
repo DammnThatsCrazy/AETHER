@@ -361,7 +361,9 @@ activation intents as goals, tenant temporal-default timezone when that feature
 is enabled), **Sources** (the server's recommended connect plan per experience
 category, connected from a pop-over that follows `POST /v1/activation/connect-action`
 next actions; CSV files go through the imports pipeline and finish on the
-Imports review page), **SDKs and keys** (one key per SDK, labelled
+Imports review page), **SDKs and keys** (required, because activation confirms
+first value only through an SDK key: at least one SDK, every selected key issued
+and confirmed stored; one key per SDK, labelled
 `<SDK> · onboarding`. Browser SDKs (Web, React) register a site with its
 origins through `POST /v1/sdk/sites` and get a site-bound `pk_` publishable key
 from `POST /v1/sdk/sites/{site_id}/keys`, with per-site liveness from

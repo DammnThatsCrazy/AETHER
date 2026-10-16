@@ -35,6 +35,7 @@ export function CsvImportPanel() {
   const [rowCount, setRowCount] = useState<number>(0);
 
   async function handleFile(file: File | undefined) {
+    if (input.current) input.current.value = '';
     if (!file) return;
     setPhase('uploading');
     setError(null);
@@ -55,6 +56,8 @@ export function CsvImportPanel() {
 
   async function remove() {
     const id = importId;
+    // Clear the native input too, or re-picking the same file fires no change.
+    if (input.current) input.current.value = '';
     setPhase('idle');
     setSchema(null);
     setImportId(null);

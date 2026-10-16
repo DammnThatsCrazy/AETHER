@@ -107,6 +107,14 @@ describe('SDK fleet helpers', () => {
     expect(ios).toContain(`pod 'AetherSDK', '= ${SDK_VERSION}'`);
   });
 
+  it('ships snippets that import what they use', () => {
+    const byId = Object.fromEntries(SDK_OPTIONS.map(sdk => [sdk.id, sdk.snippet]));
+    expect(byId['react']).toContain("import { AetherProvider } from '@aether/web/react';");
+    expect(byId['react-native']).toContain("import { AetherProvider } from '@aether/react-native';");
+    expect(byId['server']).toContain("import { AetherServerSDK } from '@aether/server';");
+    expect(byId['web']).toContain("import aether from '@aether/web';");
+  });
+
   it('gives every SDK its own key label', () => {
     const labels = SDK_OPTIONS.map(sdkKeyLabel);
     expect(new Set(labels).size).toBe(SDK_OPTIONS.length);

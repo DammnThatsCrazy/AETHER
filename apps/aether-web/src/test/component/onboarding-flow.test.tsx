@@ -166,6 +166,27 @@ describe('Workspace onboarding flow', () => {
     expect(s.m.saveTz.mutate).toHaveBeenCalledWith({ timezone: 'Europe/London', current: { business_time_zone: 'UTC' } });
   });
 
+  it('saves an edited workspace name even when the profile read failed', async () => {
+    s.org = { data: null, isLoading: false, error: 'not found', refetch: vi.fn() };
+    renderFlow();
+    await screen.findByTestId('onboarding-step-workspace');
+    await userEvent.clear(screen.getByLabelText('Workspace name'));
+    await userEvent.type(screen.getByLabelText('Workspace name'), 'Ridgeline');
+    await userEvent.click(screen.getByRole('button', { name: /Grow revenue/ }));
+    await userEvent.click(screen.getByTestId('onboarding-next'));
+    await screen.findByTestId('onboarding-step-sources');
+    expect(s.m.updateOrg.mutate).toHaveBeenCalledWith({ name: 'Ridgeline' });
+  });
+
+  it('requires at least one SDK key before building the graph', async () => {
+    s.status = settled(activation({ intents: ['grow_revenue'], state: 'billing_pending', selected_plan_tier: 'alpha', sdk_selection: ['web'] }));
+    renderFlow();
+    await screen.findByTestId('onboarding-step-sdks');
+    await userEvent.click(screen.getByRole('button', { name: /Web SDK/ })); // deselect the only SDK
+    expect(screen.getByTestId('onboarding-next')).toBeDisabled();
+    expect(screen.getByTestId('onboarding-hint')).toHaveTextContent('Pick at least one SDK');
+  });
+
   it('connects a recommended source through the connect-action state machine', async () => {
     s.status = settled(activation({ intents: ['grow_revenue'] }));
     renderFlow();

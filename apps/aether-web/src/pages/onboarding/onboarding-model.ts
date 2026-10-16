@@ -169,7 +169,7 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     platform: 'web',
     keyKind: 'publishable',
     keyPlatform: 'web',
-    snippet: "npm install @aether/web react\n\n<AetherProvider config={{ apiKey: 'YOUR_API_KEY', siteId: 'YOUR_SITE_ID' }}>\n  <App />\n</AetherProvider>",
+    snippet: "npm install @aether/web react\n\nimport { AetherProvider } from '@aether/web/react';\n\n<AetherProvider config={{ apiKey: 'YOUR_API_KEY', siteId: 'YOUR_SITE_ID' }}>\n  <App />\n</AetherProvider>",
   },
   {
     id: 'react-native',
@@ -180,7 +180,7 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     platform: 'react-native',
     keyKind: 'secret',
     keyPlatform: 'react-native',
-    snippet: "npm install @aether/react-native\n\n<AetherProvider config={{ apiKey: 'YOUR_API_KEY' }}>\n  <App />\n</AetherProvider>",
+    snippet: "npm install @aether/react-native\n\nimport { AetherProvider } from '@aether/react-native';\n\n<AetherProvider config={{ apiKey: 'YOUR_API_KEY' }}>\n  <App />\n</AetherProvider>",
   },
   {
     id: 'ios',
@@ -213,7 +213,7 @@ export const SDK_OPTIONS: readonly SdkOption[] = [
     platform: 'server',
     keyKind: 'secret',
     keyPlatform: 'node',
-    snippet: "npm install @aether/server\n\n// Server-side only. Never ship this key to a browser.\nconst aether = new AetherServerSDK({ writeKey: process.env.AETHER_API_KEY });",
+    snippet: "npm install @aether/server\n\nimport { AetherServerSDK } from '@aether/server';\n\n// Server-side only. Never ship this key to a browser.\n// AETHER_API_KEY=YOUR_API_KEY\nconst aether = new AetherServerSDK({ writeKey: process.env.AETHER_API_KEY });",
   },
 ];
 
