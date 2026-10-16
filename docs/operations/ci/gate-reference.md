@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior, ops]
 status: stable
 since_version: "0.1.0"
-source_files: [Makefile, .github/workflows/repo-consistency.yml, .github/workflows/repo-health.yml]
+source_files: [Makefile, .github/workflows/ci.yml, .github/workflows/release-gate.yml, .github/workflows/repo-health.yml]
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 2
@@ -25,9 +25,9 @@ gates — not that every target runs on every PR.
 
 | Command | What it checks | When it runs | Blocking? |
 |---|---|---|---|
-| `make verification-disposition BASE=<base> EXECUTE=1` | Runs `scripts/verification_disposition.py`: selects the minimum verification lane via the impact graph and executes it. | Once at PR finalization (`ready_for_review`) and on pushes to `main`, via `repo-consistency.yml`; locally after the implementation/review workflow is complete. | **Yes — the single normal-PR authority.** |
-| `make ci-check` | `scripts/repo_doctor.py --ci`: full repo consistency, fails if any generator produces a diff. | On demand for local/trusted-main/nightly/release evidence; not run as a PR gate step by `repo-consistency.yml`. | No — broad evidence, reported separately, never a second PR blocker. |
-| `make release-gate` | `repo_doctor.py --ci` + `production_status.py --strict` + `ops_readiness.py` + founding-tenant/control-spine, cost, delivery, SDK, and security/supply-chain checks (see below). | Manual `workflow_dispatch` of `repo-consistency.yml` (`release-gate` job); locally when a PR claims release readiness. | Yes, but **release-only** — never evaluated on a normal PR. |
+| `make verification-disposition BASE=<base> EXECUTE=1` | Runs `scripts/verification_disposition.py`: selects the minimum verification lane via the impact graph and executes it. | Locally, once, after the implementation/review workflow is complete. It is the local counterpart of the hosted authority `ci / verdict` (`ci.yml`), which runs for non-draft PRs. | **Local pre-PR check.** The single hosted normal-PR authority is `ci / verdict`. |
+| `make ci-check` | `scripts/repo_doctor.py --ci`: full repo consistency, fails if any generator produces a diff. | On demand for local/trusted-main/nightly/release evidence; not run as a PR gate step by `ci.yml`. | No — broad evidence, reported separately, never a second PR blocker. |
+| `make release-gate` | `repo_doctor.py --ci` + `production_status.py --strict` + `ops_readiness.py` + founding-tenant/control-spine, cost, delivery, SDK, and security/supply-chain checks (see below). | Manual `workflow_dispatch` of `release-gate.yml`; locally when a PR claims release readiness. | Yes, but **release-only** — never evaluated on a normal PR. |
 | `make repo-doctor` | `scripts/repo_doctor.py --check`: full repo consistency validation, no mutations. | Ad hoc / local development; underlies `docs-check`, `ci-check`, and `release-gate`. | Not standalone — insufficient alone per `CLAUDE.md` ("must not claim a PR is complete based only on ... `make repo-doctor` alone"). |
 | `make repo-doctor-fix` | `scripts/repo_doctor.py --fix`: regenerates generated docs and syncs, then validates. | Local remediation when `repo-doctor`/`docs-check` reports drift; also what `AGENTS.md`/`CLAUDE.md` mandate for fixing generated-doc drift. | N/A (mutating, not a gate). |
 
@@ -35,11 +35,11 @@ gates — not that every target runs on every PR.
 
 | Command | What it checks | When it runs | Blocking? |
 |---|---|---|---|
-| `make docs-check` | `scripts/repo_doctor.py --check --docs-only`: docs-focused validation with shared consistency preflight. | `repo-health.yml` → `lint-docs` job, on finalized PRs (`ready_for_review`) and trusted non-PR events. | Advisory on PRs (`continue-on-error: true`); not a required check. |
+| `make docs-check` | `scripts/repo_doctor.py --check --docs-only`: docs-focused validation with shared consistency preflight. | `ci.yml` → the `docs` suite when docs or their inputs change on a PR; `repo-health.yml` → `lint-docs` on trusted pushes and nightly. | Blocking through `ci / verdict` on PRs; advisory on trusted events. |
 | `make docs-generate` (alias `docs-fix`) | `scripts/repo_doctor.py --fix --docs-only`: regenerates generated and sync-managed docs (never authored source-linked docs). | Local, before running the disposition, when docs/generator/contract inputs changed. | N/A (mutating). Required step per PR template before the disposition run. |
 | `make docs-generate-changed DOCS_CHANGED="docs/a.md docs/b.md"` | `scripts/docs_drift.py --update --path ...`: updates reviewed source-linked docs whose declared `source_files` content changed. The optional allowlist must name tracked source-linked pages and rejects unknown paths. | Local, after reviewing stale source-linked docs. | N/A (mutating) — must follow, never precede, human review of the diff. |
 | `make docs-verify-idempotent` | `scripts/docs_idempotency.py`: proves two documentation-generation passes produce identical output. | Part of `ci-check`'s generator-idempotency coverage. | Part of the `ci-check` broad-evidence bundle. |
-| `python scripts/docs_drift.py --strict` | Source-linked docs drift detection against declared `source_files`. | Failure diagnostics in `repo-health.yml` → `lint-docs`; ad hoc. | Advisory (diagnostic), feeds into `docs-check`. |
+| `python scripts/docs_drift.py --strict` | Source-linked docs drift detection against declared `source_files`. | Failure diagnostics in `repo-health.yml` → `lint-docs`; ad hoc. The `ci.yml` `docs` suite runs `make docs-check`. | Advisory (diagnostic), feeds into `docs-check`. |
 | `make validate-frontmatter` | YAML frontmatter on `docs/*.md` against `scripts/docs_schema.json`. | Part of `docs-check` / `repo-doctor`. | Part of the docs gate bundle. |
 
 ## Contract, SDK, and version gates
@@ -50,7 +50,7 @@ gates — not that every target runs on every PR.
 | `python scripts/validate_sdk_release_alignment.py` | SDK/release alignment. | Part of `make release-gate`. | Release-only. |
 | `python scripts/bump_version.py --check` | `pyproject.toml` is the canonical version source; checks alignment. | Local / ad hoc, whenever `pyproject.toml` changes. | Required by `CLAUDE.md` when the version surface changes; not a separate CI job. |
 | `make validate-impact-graph` | Validates `config/impact_graph.json` and router bindings. | `repo-health.yml` → `main-integration`; ad hoc. | Blocking for `main-integration` (push to `main`). |
-| `make validate-telemetry-contracts` | Repository-owned telemetry event contracts. | `repo-consistency.yml` → `classify-change` job at PR finalization and on pushes to `main`. | Yes — part of the blocking `classify-change` job. |
+| `make validate-telemetry-contracts` | Repository-owned telemetry event contracts. | `ci.yml` → check `control-gates` (the router `fast` lane) on every non-draft PR. | Yes — part of the blocking `ci / verdict`. |
 | `make validate-verification-policy` | The single normal-PR verification authority policy is internally consistent. | Ad hoc / local. | Advisory unless invoked as part of a gate. |
 
 ## Test lanes (impact-graph routed)
@@ -76,10 +76,10 @@ gates — not that every target runs on every PR.
 
 | Command | What it checks | When it runs | Blocking? |
 |---|---|---|---|
-| `npm run lint` / `npm run typecheck` / `npm run build` / `npm run test` | TypeScript lint, type-check, build, unit tests. | `repo-health.yml` → `typescript` (nightly/dispatch). | Blocking for that job only; not a PR gate directly (the impact-graph-selected build in `repo-consistency.yml` covers PR-scoped builds). |
+| `npm run lint` / `npm run typecheck` / `npm run build` / `npm run test` | TypeScript lint, type-check, build, unit tests. | `repo-health.yml` → `typescript` (nightly/dispatch). | Blocking for that job only; not a PR gate directly (the diff-selected build in `ci.yml`, check `build-selected`, covers PR-scoped builds). |
 | `npm run validate:ts-public-exports` | TypeScript public export/package boundary validation. | `repo-health.yml` → `typescript` (nightly/dispatch). | Same. |
-| `make frontend-data-truth` | Enforces Aether/Kyber runtime source data-truth boundaries. | `repo-consistency.yml` → `selected-verification` (`npm run validate:frontend-data-truth`), at PR finalization. | **Yes — finalized PRs**, as a step ahead of the disposition run. |
-| `make frontend-branding` | Enforces canonical brand migration seams. | `repo-consistency.yml` → `selected-verification` (`npm run validate:frontend-branding`), at PR finalization. | **Yes — finalized PRs.** |
+| `make frontend-data-truth` | Enforces Aether/Kyber runtime source data-truth boundaries. | `make ci-check` / `repo_doctor.py` and local runs; not a separate step in `ci.yml`. | No — broad evidence only. |
+| `make frontend-branding` | Enforces canonical brand migration seams. | `ci.yml` → check `control-gates` (the router `frontend_branding` gate). | **Yes** — part of the blocking `ci / verdict`. |
 | `npm run deps:circular` | Circular dependency check (madge). | `repo-health.yml` → `typescript` (nightly/dispatch). | Blocking for that job only. |
 | `npm run security:secrets` / `npm run security:deps` | Secret scanning / dependency audit. | `repo-health.yml` → `typescript` (nightly/dispatch). | Blocking for that job only; see `make secret-scan` / `make supply-chain-check` for the release-gate equivalents. |
 
@@ -90,9 +90,9 @@ gates — not that every target runs on every PR.
 | `make secret-scan` | Fail-closed secret scan of tracked files. | Part of `make security-release-check`, invoked from `make release-gate`. | Release-only. |
 | `make supply-chain-check` | Fail-closed supply-chain gate: npm production CRITICAL vulns + required SBOM generation. | Part of `make release-gate`. | Release-only. |
 | `make security-release-check` | Fail-closed security gate: secrets + security-control regressions. | Part of `make release-gate`. | Release-only. |
-| `make ops-readiness` | One-person ops readiness gate (flags, stores, bridge fail-closed, approval gating). | Part of `make release-gate`. | Release-only. |
+| `make ops-readiness` | One-person ops readiness gate (flags, stores, bridge fail-closed, approval gating, production `platform_operator_tenant_ids` pinned). | Part of `make release-gate`. | Release-only. |
 | `make production-status` | Readiness scorecard + blockers. | Ad hoc; strict mode (`production_status.py --strict`) runs inside `make release-gate`. | Advisory standalone; blocking (strict) inside `release-gate`. |
-| `python scripts/staging_preflight.py --dry-run` | Staging preflight logic self-test. | `repo-health.yml` → `staging-preflight-dry-run` (nightly/dispatch); also the last step of `repo-consistency.yml`'s `release-gate` job. | Blocking within those specific jobs, not a PR gate. |
+| `python scripts/staging_preflight.py --dry-run` | Staging preflight logic self-test. | `repo-health.yml` → `staging-preflight-dry-run` (nightly/dispatch); also the last step of the `release-gate` job in `release-gate.yml`. | Blocking within those specific jobs, not a PR gate. |
 | `make integration-durable` | Production-shaped durable integration suite (requires Docker). | `repo-health.yml` → `main-integration`, push to `main` only. | Blocking for that job, post-merge only. |
 
 ## Notes

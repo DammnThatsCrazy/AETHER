@@ -15,7 +15,7 @@ from typing import Optional
 
 from datetime import datetime, timedelta
 
-from repositories.repos import BaseRepository, AnalyticsRepository
+from repositories.repos import AnalyticsRepository, TenantOwnedRepository
 from repositories.lake import silver_identity, silver_onchain, silver_social
 from shared.graph.graph import GraphClient, VertexType
 from shared.cache.cache import CacheClient
@@ -73,8 +73,11 @@ from intelligence.expectations.models import (
 logger = get_logger("aether.expectations.engine")
 
 
-class SignalRepository(BaseRepository):
-    """Stores expectation signals (absence, contradiction, deviation)."""
+class SignalRepository(TenantOwnedRepository):
+    """Stores expectation signals (absence, contradiction, deviation).
+
+    Reads go through ``signal_repo.for_tenant(tenant_id)``.
+    """
 
     def __init__(self) -> None:
         super().__init__("expectation_signals")
@@ -92,10 +95,8 @@ class SignalRepository(BaseRepository):
     ) -> list[dict]:
         return await self.find_many(filters={"population_id": population_id}, limit=limit)
 
-    async def get_signals_by_type(
-        self, signal_type: str, tenant_id: str, limit: int = 100,
-    ) -> list[dict]:
-        return await self.find_many(filters={"signal_type": signal_type, "tenant_id": tenant_id}, limit=limit)
+    async def get_signals_by_type(self, signal_type: str, limit: int = 100) -> list[dict]:
+        return await self.find_many(filters={"signal_type": signal_type}, limit=limit)
 
 
 signal_repo = SignalRepository()

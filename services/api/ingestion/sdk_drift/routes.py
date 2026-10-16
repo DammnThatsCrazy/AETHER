@@ -14,6 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
+from governance.security.request_context import require_platform_operator
 from shared.common.common import APIResponse, BadRequestError
 from shared.logger.logger import get_logger
 from shared.observability import trace_request, emit_latency
@@ -39,13 +40,15 @@ async def analyze_drift(body: DriftAnalyzeRequest, request: Request):
     Admin: run all drift checks against the most recent heartbeat for the given SDK.
 
     The caller may optionally specify a `tenant_id`; otherwise defaults to the
-    caller's own tenant.
+    caller's own tenant. Another tenant's `tenant_id` requires a platform operator.
     """
     ctx = trace_request(request, service="sdk_drift")
     caller = request.state.tenant
     caller.require_permission("admin")
 
     target_tenant = body.tenant_id or caller.tenant_id
+    if target_tenant != caller.tenant_id:
+        require_platform_operator(request)
 
     # Retrieve latest heartbeat
     health_svc = get_sdk_health_service()

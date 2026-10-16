@@ -53,3 +53,9 @@ enable_tfmcp_in_lean = false
 tfmcp_image_digest   = "" # set after build: "sha256:..."
 tfmcp_auth_token     = "" # auto-generated if empty (32+ chars)
 tfmcp_github_pat     = "" # set if Aether repo is private
+
+# Platform operator tenants (PLATFORM_OPERATOR_TENANT_IDS). Admin and
+# diagnostics routes admit only these tenants or a Kyber operator; a customer
+# owner is never one.
+# Set the reviewed operator tenant ids before relying on operator tooling here.
+platform_operator_tenant_ids = []

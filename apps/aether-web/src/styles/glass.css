@@ -1,0 +1,225 @@
+/*
+ * Aether app surface layer — Stone (light, default) and Graphite (dark) glass.
+ *
+ * Values come from the Olympus · Aether design system (colors_and_type.css)
+ * as applied in the Claude Design handoff for the tenant app (Aether Home,
+ * Aether Onboarding). The ThemeProvider toggles `.light` / `.dark` on <html>,
+ * so these variables follow the same switch as the @aether/ui tokens.
+ */
+:root,
+.light {
+  --ae-base: #f5f4f1;
+  --ae-shell: #eceae5;
+  --ae-card: #f5f4f1;
+  --ae-raised: #ffffff;
+  --ae-edge: #d8d6d0;
+  --ae-edge-soft: #e2e0da;
+  --ae-line: #c4c2bb;
+  --ae-ink: #1a1a1e;
+  --ae-mute: #6b6a65;
+  --ae-faint: #9c9b95;
+  --ae-glass: rgba(236, 234, 229, 0.62);
+  --ae-glass-card: rgba(247, 246, 243, 0.55);
+  --ae-float: 0 24px 60px -34px rgba(26, 26, 30, 0.3);
+  --ae-lift: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 10px 30px rgba(26, 26, 30, 0.06);
+  --ae-ascii: rgba(26, 26, 30, 0.11);
+  --ae-blob-a: rgba(37, 99, 235, 0.14);
+  --ae-blob-b: rgba(202, 138, 4, 0.14);
+  --ae-scrim: rgba(17, 17, 20, 0.38);
+
+  /* Accents */
+  --ae-blue: #2563eb;
+  --ae-blue-ink: #1d4ed8;
+  --ae-blue-tint: rgba(37, 99, 235, 0.12);
+  --ae-nav-active: #e4e8f0;
+  --ae-action: #3a6896;
+  --ae-sage: #15803d;
+  --ae-sage-tint: rgba(21, 128, 61, 0.12);
+  --ae-amber: #b45309;
+  --ae-amber-tint: rgba(180, 83, 9, 0.12);
+  --ae-ember: #b91c1c;
+  --ae-ember-tint: #f3e4e1;
+  --ae-solar: #ca8a04;
+  --ae-solar-ink: #8a6203;
+  --ae-solar-wash: rgba(202, 138, 4, 0.12);
+  --ae-teal: #0d9488;
+  --ae-violet: #7c3aed;
+  --ae-chip-on: #1a1a1e;
+  --ae-chip-on-ink: #f5f4f1;
+  --ae-code: #1a1a1e;
+  --ae-code-ink: #e8e6e1;
+}
+
+.dark {
+  --ae-base: #111114;
+  --ae-shell: #1a1a1e;
+  --ae-card: #1f1f24;
+  --ae-raised: #26262c;
+  --ae-edge: #2a2a2f;
+  --ae-edge-soft: #2f2f35;
+  --ae-line: #3a3a40;
+  --ae-ink: #e8e6e1;
+  --ae-mute: #a09f99;
+  --ae-faint: #74736e;
+  --ae-glass: rgba(26, 26, 30, 0.62);
+  --ae-glass-card: rgba(31, 31, 36, 0.6);
+  --ae-float: 0 24px 60px -30px rgba(0, 0, 0, 0.7);
+  --ae-lift: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 10px 30px rgba(0, 0, 0, 0.25);
+  --ae-ascii: rgba(232, 230, 225, 0.08);
+  --ae-blob-a: rgba(37, 99, 235, 0.16);
+  --ae-blob-b: rgba(202, 138, 4, 0.1);
+  --ae-scrim: rgba(0, 0, 0, 0.55);
+
+  --ae-blue-ink: #7da3f5;
+  --ae-blue-tint: rgba(37, 99, 235, 0.2);
+  --ae-nav-active: #202940;
+  --ae-sage: #16a34a;
+  --ae-sage-tint: rgba(22, 163, 74, 0.16);
+  --ae-amber: #d97706;
+  --ae-amber-tint: rgba(217, 119, 6, 0.16);
+  --ae-ember: #ef6b6b;
+  --ae-ember-tint: #3a2024;
+  --ae-solar-ink: #ca8a04;
+  --ae-solar-wash: rgba(202, 138, 4, 0.14);
+  --ae-chip-on: #e8e6e1;
+  --ae-chip-on-ink: #111114;
+  --ae-code: #0d0d10;
+}
+
+/* ── Surfaces ─────────────────────────────────────────────────────────────── */
+
+.ae-app {
+  position: relative;
+  min-height: 100vh;
+  background: var(--ae-base);
+  color: var(--ae-ink);
+  font-family: 'Geist', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.ae-glass {
+  background: var(--ae-glass);
+  -webkit-backdrop-filter: blur(28px) saturate(1.4);
+  backdrop-filter: blur(28px) saturate(1.4);
+  border: 1px solid var(--ae-edge);
+  box-shadow: var(--ae-float);
+}
+
+.ae-glass-card {
+  background: var(--ae-glass-card);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid var(--ae-edge);
+  box-shadow: var(--ae-lift);
+}
+
+.ae-card {
+  background: var(--ae-card);
+  border: 1px solid var(--ae-edge);
+}
+
+.ae-eyebrow {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ae-mute);
+}
+
+.ae-mono {
+  font-family: 'Geist Mono', ui-monospace, monospace;
+}
+
+.ae-mark-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  background: #fff;
+  border: 1px solid var(--ae-edge-soft);
+}
+
+.ae-scroll-none {
+  scrollbar-width: none;
+}
+.ae-scroll-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Primary action (design system: one blue action per view) ────────────── */
+
+.ae-btn-primary {
+  border-radius: 4px;
+  background: var(--ae-action);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background var(--aether-motion-standard, 180ms) var(--aether-ease-standard, ease);
+}
+.ae-btn-primary:hover:not(:disabled) {
+  background: #2d5478;
+}
+.ae-btn-primary:disabled {
+  background: var(--ae-edge);
+  color: var(--ae-faint);
+  cursor: not-allowed;
+}
+
+.ae-btn-secondary {
+  border-radius: 4px;
+  border: 1px solid var(--ae-edge);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ae-ink);
+}
+.ae-btn-secondary:hover:not(:disabled) {
+  background: var(--ae-edge-soft);
+}
+.ae-btn-secondary:disabled {
+  color: var(--ae-faint);
+  cursor: not-allowed;
+}
+
+.ae-focus:focus-visible {
+  outline: 2px solid var(--ae-blue);
+  outline-offset: 2px;
+}
+
+/* ── Legacy pages inside the glass shell ──────────────────────────────────── */
+/* Pages not yet rebuilt to the new design paint their own full-height opaque
+   background; inside the glass frame that would read as a slab. Let the frame
+   show through until each surface is rebuilt in its own phase. */
+.ae-legacy .min-h-screen {
+  min-height: 0;
+}
+.ae-legacy .bg-surface-base {
+  background: transparent;
+}
+
+/* ── Motion ───────────────────────────────────────────────────────────────── */
+
+@keyframes ae-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ae-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes ae-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+@keyframes ae-beat {
+  0% { transform: scale(1); opacity: 0.55; }
+  70%, 100% { transform: scale(3.2); opacity: 0; }
+}
+
+.ae-rise {
+  animation: ae-rise 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ae-spin {
+  animation: ae-spin 0.8s linear infinite;
+}
+.ae-pulse {
+  animation: ae-pulse 1.4s infinite;
+}

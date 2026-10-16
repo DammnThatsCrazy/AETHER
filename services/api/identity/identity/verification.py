@@ -36,6 +36,7 @@ from shared.logger.logger import get_logger
 
 from .evidence import EvidenceService
 from .hashing import (
+    ensure_wallet_subject_binding_key,
     hash_email,
     hash_value,
     hash_verification_token,
@@ -366,9 +367,11 @@ class WalletVerificationService:
         anonymous_id: str,
         wallet_address: str,
         chain_namespace: str,
+        identity_namespace: str = "",
         consent_snapshot: Optional[dict] = None,
     ) -> dict:
         """Persist a bounded challenge bound to a tenant and consented subject."""
+        ensure_wallet_subject_binding_key(tenant_id)
         namespace = _wallet_proof_namespace(chain_namespace)
         address = _wallet_proof_address(wallet_address, namespace)
         subject = _required_identity_value(anonymous_id, "anonymous_id")
@@ -397,6 +400,7 @@ class WalletVerificationService:
             "wallet_chain_namespace": namespace,
             "wallet_subject_hash": subject_hash,
             "wallet_proof_nonce": nonce,
+            "wallet_identity_namespace": str(identity_namespace or "").strip(),
         }
         if consent_snapshot:
             receipt_id = consent_snapshot.get("receipt_id") or consent_snapshot.get(
@@ -437,6 +441,7 @@ class WalletVerificationService:
         wallet_address: str,
         chain_namespace: str,
         signature: str,
+        identity_namespace: str = "",
         consent_snapshot: Optional[dict] = None,
     ) -> dict:
         """Consume a valid challenge and issue durable wallet proof evidence."""
@@ -476,12 +481,22 @@ class WalletVerificationService:
         if (
             namespace != context.get("wallet_chain_namespace")
             or subject_hash != context.get("wallet_subject_hash")
+            or str(identity_namespace or "").strip()
+            != str(context.get("wallet_identity_namespace") or "").strip()
             or hash_wallet(address, namespace) != record.get("identifier_hash")
         ):
-            updated = await self._challenges.increment_attempt(tenant_id, challenge_id)
+            updated = await self._challenges.record_failed_attempt(
+                tenant_id, challenge_id
+            )
             if updated and updated.get("state") == VerificationChallengeState.LOCKED.value:
                 self._metrics.record_verification_failure("locked")
                 return {"status": "locked"}
+            if updated is None:
+                current = await self._challenges.get_for_tenant(tenant_id, challenge_id)
+                if current and current.get("state") == VerificationChallengeState.LOCKED.value:
+                    return {"status": "locked"}
+                if current and current.get("state") == VerificationChallengeState.CONSUMED.value:
+                    return {"status": "already_consumed"}
             self._metrics.record_verification_failure("challenge_mismatch")
             return {"status": "invalid"}
 
@@ -495,24 +510,27 @@ class WalletVerificationService:
             issued_at=str(record.get("issued_at") or ""),
             expires_at=expires_at,
         )
-        attempts = await self._challenges.increment_attempt(tenant_id, challenge_id)
-        if attempts and attempts.get("state") == VerificationChallengeState.LOCKED.value:
-            self._metrics.record_verification_failure("locked")
-            return {"status": "locked"}
         if not _verify_wallet_message(namespace, address, message, signature):
+            attempts = await self._challenges.record_failed_attempt(
+                tenant_id, challenge_id
+            )
+            if attempts and attempts.get("state") == VerificationChallengeState.LOCKED.value:
+                self._metrics.record_verification_failure("locked")
+                return {"status": "locked"}
             self._metrics.record_verification_failure("invalid_signature")
             return {"status": "invalid"}
 
-        await self._challenges.apply_update(
-            tenant_id,
-            challenge_id,
-            {
-                "state": VerificationChallengeState.VALIDATED.value,
-                "validated_at": now.isoformat(),
-            },
+        # The verified request spends one attempt and transitions issued to
+        # consumed atomically. There is no intermediate validated write that a
+        # concurrent request could use to resurrect this challenge.
+        consumed = await self._challenges.consume_wallet_atomic(
+            tenant_id, challenge_id
         )
-        consumed = await self._challenges.consume_atomic(tenant_id, challenge_id)
         if consumed is None:
+            current = await self._challenges.get_for_tenant(tenant_id, challenge_id)
+            if current and current.get("state") == VerificationChallengeState.LOCKED.value:
+                self._metrics.record_verification_failure("locked")
+                return {"status": "locked"}
             return {"status": "already_consumed"}
 
         evidence = await self._evidence.issue_evidence(
@@ -524,6 +542,9 @@ class WalletVerificationService:
             challenge_id=challenge_id,
             source_event_id=challenge_id,
             subject_hint_id=_required_identity_value(anonymous_id, "anonymous_id"),
+            identity_namespace=str(
+                context.get("wallet_identity_namespace") or ""
+            ).strip(),
             proof_reference="server_verified_wallet_challenge",
             proof_digest=hashlib.sha256(signature.encode("utf-8")).hexdigest(),
             consent_snapshot=consent_snapshot,

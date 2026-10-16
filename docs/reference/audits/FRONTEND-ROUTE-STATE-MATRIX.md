@@ -44,9 +44,12 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/settings/sdk-fleet` | SDK fleet health, silent SDKs, remote config | no | I | A | A | A | I | `settings-sections-route-state.test.tsx` |
 | `/settings/webhooks` | webhook endpoint management | no | I | A | A | A | I | `settings-sections-route-state.test.tsx` |
 | `/settings/notification-preferences` | notification preferences (quiet hours, digest) | no | I | n/a | A | A | I | `settings-sections-route-state.test.tsx` |
-| `/onboarding` | readiness and blockers | no | I | A | A | — | I | parameterized route-state family |
-| `/activation` | canonical guided activation: intent-driven connect plan + classic first-value finish | yes | A | A | A | A | I | `activate-page-route-state.test.tsx`, `activation-landing.test.tsx` (classic fold) |
-| `/activate` | compatibility alias → `/activation` (query-preserving redirect; served by canonical ActivatePage) | yes | I | A | A | A | I | `activate-page-route-state.test.tsx` (target page) |
+| `/onboarding` | compatibility alias → `/activation` (query-preserving redirect; served by the workspace onboarding flow) | yes | I | A | A | A | I | `onboarding-flow.test.tsx` (target page) |
+| `/onboarding/implementation` | operator implementation checklist: readiness and blockers | no | I | A | A | — | I | parameterized route-state family |
+| `/activation` | workspace onboarding: goals, connect plan + connect pop-over, CSV import, per-SDK keys (publishable site keys for browsers), readiness-driven graph build | yes | A | A | A | A | I | `onboarding-flow.test.tsx` (loading, unavailable status and plan, empty plan, populated steps) |
+| `/activation/guided` | detailed guided activation: intent-driven connect plan + classic first-value finish | yes | A | A | A | A | I | `activate-page-route-state.test.tsx`, `activation-landing.test.tsx` (classic fold) |
+| `/activate` | compatibility alias → `/activation` (query-preserving redirect; served by the workspace onboarding flow) | yes | I | A | A | A | I | `onboarding-flow.test.tsx` (target page) |
+| `/home` | workspace Home: 24h analytics summary, readiness checks, tenant integrations, campaigns, activation attention items | yes | I | A | A | A | I | `home-page.test.tsx` (new workspace, unavailable reads, populated) |
 | `/identity/activation` | tenant-scoped identity activation status, SDK heartbeat, restatement and review counts | yes | A | A | A | A | A | `identity-activation-dashboard.test.tsx` (no historical data/heartbeat, failure, loading, capability gate, populated), `identity-continuity-routes.test.tsx` (mounted route) |
 | `/identity/reviews` | tenant-scoped conflict and late-binding review queue | yes | A | A | A | A | A | `identity-review-queue.test.tsx` (successful empty, failure, loading, capability gate, populated/recovery), `identity-continuity-routes.test.tsx` (mounted route) |
 | `/billing` | account, subscription, invoices | yes | I | A | A | — | I | parameterized route-state family |
@@ -178,16 +181,16 @@ permission/capability gating (`G`). A failed request never counts as empty.
 
 ## Coverage totals
 
-The denominator is the 149 data-bearing route patterns above: 62 Aether and
+The denominator is the 152 data-bearing route patterns above: 65 Aether and
 87 Kyber routes.
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 21 / 149 (14.1%) | tracked for every route |
-| Empty-state assertions | 135 / 149 (90.6%) | at least 90% overall |
-| Error/unavailable assertions | 115 / 149 (77.2%) | 100% of critical routes |
-| Populated-state assertions | 43 / 149 (28.9%) | tracked for every route |
-| Critical routes with both empty and error assertions | 68 / 68 (100%) | 68 / 68 (100%) |
+| Explicit loading-state assertions | 22 / 152 (14.5%) | tracked for every route |
+| Empty-state assertions | 138 / 152 (90.8%) | at least 90% overall |
+| Error/unavailable assertions | 118 / 152 (77.6%) | 100% of critical routes |
+| Populated-state assertions | 46 / 152 (30.3%) | tracked for every route |
+| Critical routes with both empty and error assertions | 71 / 71 (100%) | 71 / 71 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,
 generic hook state, or a successful build does not count as coverage.

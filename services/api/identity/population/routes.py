@@ -244,7 +244,9 @@ async def get_members(
     min_confidence: float = Query(0.0, ge=0.0, le=1.0),
 ):
     """List members of a group with confidence and membership evidence."""
-    request.state.tenant.require_permission("read")
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    await _require_owned_group(population_id, tenant.tenant_id)
 
     members = await membership_repo.get_members(
         population_id=population_id, limit=limit, min_confidence=min_confidence

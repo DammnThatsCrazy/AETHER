@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
+from governance.security.request_context import require_platform_operator
 from shared.common.common import APIResponse
 from shared.diagnostics.error_registry import error_registry, ErrorCategory, ErrorSeverity
 from shared.logger.logger import get_logger
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/v1/diagnostics", tags=["Diagnostics"])
 async def diagnostics_health(request: Request):
     """Quick health check — suitable for monitoring/alerting systems."""
     request.state.tenant.require_permission("admin")
+    require_platform_operator(request)
     return APIResponse(data=error_registry.health_check()).to_dict()
 
 
@@ -33,6 +35,7 @@ async def list_errors(
 ):
     """List tracked errors with optional filters."""
     request.state.tenant.require_permission("admin")
+    require_platform_operator(request)
 
     cat = ErrorCategory(category) if category else None
     sev = ErrorSeverity(severity) if severity else None
@@ -51,6 +54,7 @@ async def list_errors(
 async def diagnostics_report(request: Request):
     """Generate comprehensive diagnostics report."""
     request.state.tenant.require_permission("admin")
+    require_platform_operator(request)
     return APIResponse(data=error_registry.get_report()).to_dict()
 
 
@@ -58,6 +62,7 @@ async def diagnostics_report(request: Request):
 async def resolve_error(fingerprint: str, request: Request):
     """Mark an error as resolved by its fingerprint."""
     request.state.tenant.require_permission("admin")
+    require_platform_operator(request)
     resolved = error_registry.resolve(fingerprint)
     return APIResponse(data={"fingerprint": fingerprint, "resolved": resolved}).to_dict()
 
@@ -66,6 +71,7 @@ async def resolve_error(fingerprint: str, request: Request):
 async def suppress_error(fingerprint: str, request: Request):
     """Suppress alerts for a known error by fingerprint."""
     request.state.tenant.require_permission("admin")
+    require_platform_operator(request)
     error_registry.suppress(fingerprint)
     return APIResponse(data={"fingerprint": fingerprint, "suppressed": True}).to_dict()
 
@@ -74,6 +80,7 @@ async def suppress_error(fingerprint: str, request: Request):
 async def list_circuit_breakers(request: Request):
     """List all circuit breaker states."""
     request.state.tenant.require_permission("admin")
+    require_platform_operator(request)
     breakers = {
         key: {"state": cb.state, "failures": cb._failure_count}
         for key, cb in error_registry._circuit_breakers.items()

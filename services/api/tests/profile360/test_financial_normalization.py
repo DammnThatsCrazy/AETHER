@@ -67,6 +67,9 @@ class _NoRows:
     async def find_for_agent(self, *a, **k):
         return None
 
+    async def find_for_entity(self, *a, **k):
+        return None
+
     async def find_by_id(self, *a, **k):
         return None
 

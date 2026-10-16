@@ -34,14 +34,38 @@ returns a raw or unvalidated value.
    DNS-rebinding class is inherent to "any public host" mode. Empty-allowlist
    mode is only safe for untrusted input when paired with a resolver-level
    check (resolve → validate address → no-rebinding).
+
+The resolver-level check lives here too. :func:`resolve_public_addresses`
+resolves a URL's host and requires every resolved address to be globally
+routable (``ipaddress`` ``is_global``, not multicast), after unwrapping
+IPv4-mapped IPv6 (``::ffff:a.b.c.d``), the NAT64 well-known prefix
+(``64:ff9b::/96``), 6to4 (``2002::/16``) and Teredo (``2001::/32``) to their
+embedded IPv4. That excludes loopback, link-local
+and cloud metadata, RFC 1918, ULA, carrier-grade NAT (``100.64.0.0/10``),
+documentation and reserved ranges. A resolver failure raises
+:class:`DestinationResolutionError`, a subclass callers can retry; a non-public
+answer raises :class:`UnsafeDestinationError` and is final.
+:func:`send_public_request` resolves through the event loop and issues the
+request against a validated address (original ``Host`` header, TLS SNI and
+certificate check against the original hostname), trying the next validated
+address only when a connection cannot be established, so a second DNS answer
+can never redirect the connection. It follows at most three redirects by hand,
+re-validating every hop and dropping credentials when the host changes or
+``https`` downgrades to ``http``.
 """
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import re
+import socket
 import unicodedata
 import urllib.parse
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import httpx
 
 # Well-formed hostname: two or more ASCII labels, [a-z0-9]+hyphen, no leading/
 # trailing hyphen, no empty label. ASCII-only — closes Unicode homographs
@@ -224,6 +248,217 @@ def validated_https_host(
     return host
 
 
+class UnsafeDestinationError(ValueError):
+    """The outbound destination is malformed or not a public internet address."""
+
+
+class DestinationResolutionError(UnsafeDestinationError):
+    """The destination host could not be resolved; a later attempt may succeed.
+
+    A subclass so callers that do not tell the two apart still refuse the
+    request; callers that retry catch this before :class:`UnsafeDestinationError`.
+    """
+
+
+_NAT64_PREFIX = ipaddress.ip_network("64:ff9b::/96")
+
+
+def is_public_address(value: str) -> bool:
+    """True only for a globally routable unicast address.
+
+    IPv4-mapped, NAT64 (``64:ff9b::/96``) and 6to4 (``2002::/16``) IPv6
+    addresses are judged by the IPv4 address they embed, Teredo
+    (``2001::/32``) by both its server and client IPv4, independent of how the
+    running Python version classifies the IPv6 prefix. Unparseable input is
+    not public.
+    """
+    try:
+        addr = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    candidates = [addr]
+    if isinstance(addr, ipaddress.IPv6Address):
+        if addr.ipv4_mapped is not None:
+            candidates = [addr.ipv4_mapped]
+        elif addr in _NAT64_PREFIX:
+            candidates = [ipaddress.IPv4Address(int(addr) & 0xFFFFFFFF)]
+        elif addr.sixtofour is not None:
+            candidates = [addr.sixtofour]
+        elif addr.teredo is not None:
+            candidates = list(addr.teredo)
+    return all(c.is_global and not c.is_multicast for c in candidates)
+
+
+def _destination(url: str) -> tuple[str, int | None]:
+    try:
+        parts = urllib.parse.urlsplit(url)
+        port = parts.port
+    except (TypeError, ValueError) as exc:
+        raise UnsafeDestinationError("Cannot parse outbound URL") from exc
+    host = parts.hostname
+    if not host:
+        raise UnsafeDestinationError("Cannot parse hostname from outbound URL")
+    if parts.scheme not in ("http", "https"):
+        raise UnsafeDestinationError(f"Unsupported URL scheme {parts.scheme!r} for host {host!r}")
+    return host, port
+
+
+def _is_ip_literal(host: str) -> bool:
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return True
+
+
+def _resolution_error(host: str, exc: Exception) -> UnsafeDestinationError:
+    if isinstance(exc, UnicodeError):
+        return UnsafeDestinationError(f"Cannot encode hostname {host!r}")
+    return DestinationResolutionError(f"DNS resolution failed for {host!r}: {exc}")
+
+
+def _public_only(host: str, addresses: list[str], allow_local: bool) -> list[str]:
+    if not addresses:
+        raise DestinationResolutionError(f"No addresses resolved for {host!r}")
+    if not allow_local:
+        for address in addresses:
+            if not is_public_address(address):
+                raise UnsafeDestinationError(
+                    f"Host {host!r} resolves to non-public address {address!r}. SSRF protection active."
+                )
+    return addresses
+
+
+def _unique_addresses(infos: list[Any]) -> list[str]:
+    return list(dict.fromkeys(str(info[4][0]) for info in infos))
+
+
+def resolve_public_addresses(url: str, *, allow_local: bool = False) -> list[str]:
+    """Resolve *url*'s host and return its addresses; raise unless all are public.
+
+    Only ``http``/``https`` URLs are accepted. An IP-literal host is checked
+    without touching the resolver. With *allow_local* (local development only)
+    the addresses are returned without the public-address check. A resolver
+    failure raises :class:`DestinationResolutionError` (worth retrying); every
+    other refusal raises :class:`UnsafeDestinationError`.
+
+    This blocks on the system resolver; async code uses
+    :func:`resolve_public_addresses_async`.
+    """
+    host, port = _destination(url)
+    if _is_ip_literal(host):
+        return _public_only(host, [host], allow_local)
+    try:
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except (OSError, UnicodeError) as exc:
+        raise _resolution_error(host, exc) from exc
+    return _public_only(host, _unique_addresses(infos), allow_local)
+
+
+async def resolve_public_addresses_async(url: str, *, allow_local: bool = False) -> list[str]:
+    """:func:`resolve_public_addresses` through the event loop's resolver."""
+    host, port = _destination(url)
+    if _is_ip_literal(host):
+        return _public_only(host, [host], allow_local)
+    try:
+        infos = await asyncio.get_running_loop().getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except (OSError, UnicodeError) as exc:
+        raise _resolution_error(host, exc) from exc
+    return _public_only(host, _unique_addresses(infos), allow_local)
+
+
+_REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
+_CREDENTIAL_HEADERS = frozenset({"authorization", "proxy-authorization", "cookie"})
+MAX_REDIRECTS = 3
+
+
+async def _send_pinned(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    headers: dict[str, str],
+    body: dict[str, Any],
+    allow_local: bool,
+) -> httpx.Response:
+    """Send to each validated address in turn until one accepts the connection.
+
+    Only a failure to connect moves on to the next address: no request bytes
+    have left, so nothing is sent twice.
+    """
+    import httpx
+
+    addresses = await resolve_public_addresses_async(url, allow_local=allow_local)
+    logical = httpx.URL(url)
+    headers = {k: v for k, v in headers.items() if k.lower() != "host"}
+    requests = [
+        client.build_request(
+            method,
+            logical.copy_with(host=address.split("%")[0]),
+            headers={**headers, "Host": logical.netloc.decode("ascii")},
+            extensions={"sni_hostname": logical.host},
+            **body,
+        )
+        for address in addresses
+    ]
+    for request in requests[:-1]:
+        try:
+            return await client.send(request)
+        except (httpx.ConnectError, httpx.ConnectTimeout):
+            continue
+    return await client.send(requests[-1])
+
+
+async def send_public_request(
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    content: bytes | str | None = None,
+    json: Any = None,
+    timeout: float = 20.0,
+    max_redirects: int = MAX_REDIRECTS,
+    allow_local: bool = False,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> httpx.Response:
+    """Send one request to a tenant-configured *url*, reaching only public addresses.
+
+    The connection goes to the validated address. Redirects are followed by
+    hand, at most *max_redirects* hops (``0`` returns the redirect response),
+    each hop re-validated; ``Authorization``/``Proxy-Authorization``/``Cookie``
+    are dropped when the host changes or ``https`` downgrades to ``http``, and
+    301/302 on POST and every 303 turn into a body-less GET. A connection that
+    cannot be established moves on to the host's next validated address.
+    Raises :class:`UnsafeDestinationError` before any connection to a
+    non-public destination, :class:`DestinationResolutionError` when the host
+    cannot be resolved.
+    """
+    import httpx
+
+    headers = dict(headers or {})
+    body: dict[str, Any] = {"content": content, "json": json}
+    async with httpx.AsyncClient(transport=transport, timeout=timeout, follow_redirects=False) as client:
+        for _ in range(max_redirects + 1):
+            response = await _send_pinned(client, method, url, headers, body, allow_local)
+            location = response.headers.get("location")
+            if response.status_code not in _REDIRECT_STATUSES or not location or max_redirects == 0:
+                return response
+            next_url = urllib.parse.urljoin(url, location)
+            here, there = httpx.URL(url), httpx.URL(next_url)
+            if there.netloc != here.netloc or (here.scheme == "https" and there.scheme != "https"):
+                headers = {k: v for k, v in headers.items() if k.lower() not in _CREDENTIAL_HEADERS}
+            if response.status_code == 303 or (response.status_code in (301, 302) and method.upper() == "POST"):
+                method, body = "GET", {}
+            url = next_url
+    raise UnsafeDestinationError(f"Too many redirects (more than {max_redirects}) ending at host {httpx.URL(url).host!r}")
+
+
 __all__ = [
+    "MAX_REDIRECTS",
+    "DestinationResolutionError",
+    "UnsafeDestinationError",
+    "is_public_address",
+    "resolve_public_addresses",
+    "resolve_public_addresses_async",
+    "send_public_request",
     "validated_https_host",
 ]

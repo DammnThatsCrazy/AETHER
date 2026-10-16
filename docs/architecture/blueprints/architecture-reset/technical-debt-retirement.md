@@ -154,7 +154,9 @@ These are measurements, each tied to a ledger row.
   any PR that adds a settings field nothing reads. `ML_MODE` is the one remaining
   unread field; the release profiles pin it, so it goes with that profile
   dimension. Rows `delivery-unread-settings-flags` and
-  `delivery-unread-settings-flags-pending`.
+  `delivery-unread-settings-flags-pending`. `DELIVERY_WEBHOOK_SIGNING_SECRET`
+  followed later: callbacks now verify only with the delivering channel's own
+  secret, so the platform-wide fallback had no reader and was deleted.
 - **Backend code nothing mounts.** Import-graph reachability from `main.py`, the
   packages loaded by name and every script, workflow or Dockerfile that names a
   module (descriptive registries, docs, tests and a script's path or checklist

@@ -44,6 +44,7 @@ from repositories.repos import (  # noqa: E402
     JourneyChainRepository,
     _ProfileStore,
     reset_in_memory_stores,
+    tenant_record_id,
 )
 from repositories.typed_repo import reset_typed_in_memory_stores  # noqa: E402
 from governance.consent import erasure_jobs, erasure_planes  # noqa: E402
@@ -124,6 +125,7 @@ class World:
         self.merged_entity = f"ent-merged-{tag}"
         self.other_entity = f"ent-other-{tag}"
         self.b_entity = f"ent-b-{tag}"
+        self.wallet = f"wallet-x-{tag}"
         self.job_id = f"job_{tag}"
 
 
@@ -188,17 +190,23 @@ async def _seed_identity(world: World) -> None:
 
 
 async def _seed_graph(world: World) -> None:
-    from shared.graph.graph import Edge, Vertex, get_graph_client
+    from shared.graph.graph import Edge, Vertex, get_graph_client, user_vertex_id
 
     graph = get_graph_client()
-    for vid in (world.entity, world.other_entity, "wallet-x"):
+    for vid in (world.entity, world.other_entity, world.wallet):
         await graph.add_vertex(Vertex(vertex_type="User", vertex_id=vid,
                                       properties={"tenant_id": world.tenant}))
-    await graph.add_edge(Edge("OWNS_WALLET", world.entity, "wallet-x",
+    await graph.add_edge(Edge("OWNS_WALLET", world.entity, world.wallet,
                               {"tenant_id": world.tenant}))
     await graph.add_edge(Edge("SIMILAR_TO", world.other_entity, world.entity,
                               {"tenant_id": world.tenant}))
-    await graph.add_edge(Edge("OWNS_WALLET", world.other_entity, "wallet-x",
+    await graph.add_edge(Edge("OWNS_WALLET", world.other_entity, world.wallet,
+                              {"tenant_id": world.tenant}))
+    # The legacy profile endpoint's user vertex.
+    profile_vertex = user_vertex_id(world.tenant, USER)
+    await graph.add_vertex(Vertex(vertex_type="User", vertex_id=profile_vertex,
+                                  properties={"tenant_id": world.tenant, "user_id": USER}))
+    await graph.add_edge(Edge("USED_DEVICE", profile_vertex, world.wallet,
                               {"tenant_id": world.tenant}))
     # Same vertex id carrying another tenant's edge: never touched.
     await graph.add_edge(Edge("OWNS_WALLET", world.entity, "wallet-b",
@@ -207,8 +215,10 @@ async def _seed_graph(world: World) -> None:
 
 async def _seed_profile(world: World) -> None:
     t = world.tenant
-    await _ProfileStore().insert(USER, {"tenant_id": t, "traits": {"email": "s@x"}})
-    await _ProfileStore().insert(OTHER_USER, {"tenant_id": t, "traits": {}})
+    await _ProfileStore().insert(tenant_record_id(t, USER),
+                                 {"tenant_id": t, "user_id": USER, "traits": {"email": "s@x"}})
+    await _ProfileStore().insert(tenant_record_id(t, OTHER_USER),
+                                 {"tenant_id": t, "user_id": OTHER_USER, "traits": {}})
     await BehaviorProfileRepository().upsert_snapshot(world.entity, t, "w0", "w1")
     await BehaviorProfileRepository().upsert_snapshot(world.other_entity, t, "w0", "w1")
     await JourneyChainRepository().upsert_chain(
@@ -483,8 +493,9 @@ async def test_full_erasure_leaves_no_component_pending_and_erases_every_store()
     # identity_subjects: 2 subject rows (live + merged) + cluster_v2 + legacy
     # cluster + entities row.
     assert records("identity_subjects") == 5
-    # graph_edges: 1 identity_edges row + 2 graph edges (tenant-scoped).
-    assert records("graph_edges") == 3
+    # graph_edges: 1 identity_edges row + 2 entity graph edges + the profile
+    # user vertex's edge (tenant-scoped).
+    assert records("graph_edges") == 4
     assert records("profile360_snapshots") == 3
     assert records("feature_rows") == 1
     assert steps["feature_rows"]["artifacts_impacted"] == 1
@@ -524,7 +535,7 @@ async def _assert_stores_erased(world: World) -> None:
     from ingestion.silver.repositories.social_facts import local_rows
     from ingestion.silver.writer import _local_tables
     from shared.cache.cache import CacheKey
-    from shared.graph.graph import get_graph_client
+    from shared.graph.graph import get_graph_client, user_vertex_id
 
     t, ot = world.tenant, world.other_tenant
     repo = IdentityResolutionRepository()
@@ -539,21 +550,22 @@ async def _assert_stores_erased(world: World) -> None:
     assert await repo.find_entities_by_alias(ot, "user_id", USER) == [world.b_entity]
     assert await EntityRepository().find_by_id(world.entity) is None
     assert await EntityRepository().find_by_id(world.other_entity) is not None
-    assert await IdentityClusterRepository().list_for_entity(world.entity) == []
+    assert await IdentityClusterRepository().list_for_entity(world.entity, t) == []
 
     graph = get_graph_client()
     live = await graph.get_edges(world.entity, direction="both")
     assert [e.properties["tenant_id"] for e in live] == [ot]
+    assert await graph.get_edges(user_vertex_id(t, USER), direction="both") == []
     other_live = await graph.get_edges(world.other_entity, direction="both")
-    assert [(e.to_vertex_id) for e in other_live] == ["wallet-x"]
+    assert [(e.to_vertex_id) for e in other_live] == [world.wallet]
 
     # profile360
-    assert await _ProfileStore().find_by_id(USER) is None
-    assert await _ProfileStore().find_by_id(OTHER_USER) is not None
-    assert await BehaviorProfileRepository().find_by_id(world.entity) is None
-    assert await BehaviorProfileRepository().find_by_id(world.other_entity) is not None
-    assert await JourneyChainRepository().find_by_id(f"chain-{world.entity}") is None
-    assert await JourneyChainRepository().find_by_id(f"chain-{world.other_entity}") is not None
+    assert await _ProfileStore().find_by_id(tenant_record_id(t, USER)) is None
+    assert await _ProfileStore().find_by_id(tenant_record_id(t, OTHER_USER)) is not None
+    assert await BehaviorProfileRepository().find_for_entity(t, world.entity) is None
+    assert await BehaviorProfileRepository().find_for_entity(t, world.other_entity) is not None
+    assert await JourneyChainRepository().find_for_entity(t, world.entity) is None
+    assert await JourneyChainRepository().find_for_entity(t, world.other_entity) is not None
 
     # feature rows (Gold) + caches
     gold = _IN_MEMORY_STORES["gold_trading_profile"].values()
@@ -583,7 +595,7 @@ async def _assert_stores_erased(world: World) -> None:
     assert await artifacts.verify(ot, world.exports["other_tenant"])
 
     # replay bundles
-    envelopes = {e["id"] for e in _IN_MEMORY_STORES["event_envelopes"].values()}
+    envelopes = {e["envelope_id"] for e in _IN_MEMORY_STORES["event_envelopes"].values()}
     assert envelopes == {f"env-o-{t}", f"env-b-{t}"}
 
     # rewards retained (legal), connectors
@@ -843,8 +855,8 @@ async def test_base_repository_delete_for_tenant_where_is_tenant_scoped():
         await repo.upsert_chain(chain, entity, tenant, "j", "j", 1, "a", "b")
     assert await repo.delete_for_tenant_where("ta", "entity_id", ["e1"]) == 1
     assert await repo.delete_for_tenant_where("ta", "entity_id", ["e1"]) == 0  # idempotent
-    assert await repo.find_by_id("c3") is not None  # same entity, other tenant
-    assert await repo.find_by_id("c2") is not None
+    assert await repo.find_for_entity("tb", "e1") is not None  # same entity, other tenant
+    assert await repo.find_for_entity("ta", "e2") is not None
     assert await repo.delete_for_tenant_where("ta", "entity_id", []) == 0
     with pytest.raises(ValueError):
         await repo.delete_for_tenant_where("", "entity_id", ["e2"])

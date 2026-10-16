@@ -25,20 +25,20 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:f5e9afb088d3a8f9e93bdd981db2b6dd1fc522c67d22d37b72d20d1b720791cb"
+  "services/api/actions/": "sha256:5957395ab9ed34f2d80d4c30f1da81442cf68e6f3c33b8238fa46e97c4edb8fd"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
-  "services/api/billing/": "sha256:4dd92369eb7f8e3183dc069a284afb09450eeabbdd24a504a24401c270684e22"
-  "services/api/connectors/": "sha256:01f3d11694ce153f102de85133e514fe4548877376c05668c2ee6fe63e1ad633"
-  "services/api/governance/": "sha256:88d555a3245092c8b9359f48213c260d0e370b82d615858a14c11ac744bd48a6"
-  "services/api/graph/": "sha256:4955410983baf725cbace6872f3d013315fff1482b42e71b36ba94167a1c4e5b"
-  "services/api/identity/": "sha256:ba702f6a5f25ce0100bc118bf1b62f3a883cdaa777c56bd33c73aac72c1f003f"
-  "services/api/ingestion/": "sha256:89757f37b1e77f0bf3f55a5cb6e7a7df86ed5cfe5478010497e4e86d51333145"
-  "services/api/intelligence/": "sha256:21066dbfa991f01ee3070734c364087d7e5e538c4fda48efc8993fdb7b4ce56a"
-  "services/api/journeys/": "sha256:fcd9a0fe60b841344f6391b3265abc58a847d31e892977362515667781c43eba"
+  "services/api/billing/": "sha256:0740c89ed3bf089b8ded5f9a319b7670a0afb18bda8f58a69a11a03c2a0a5d75"
+  "services/api/connectors/": "sha256:be5c00bffaa216ecd12b669cb41ee011c177800fbc7d70c5e9bd4c1b4c3f6e76"
+  "services/api/governance/": "sha256:b47a6fe0cec45cf306bfb4399a2b361df4f4bd1a4f0f897ed003a3db2d4a0dd3"
+  "services/api/graph/": "sha256:bda39e64fa30ae40f4acbf0fa85092aa50d7cb601037bdcd6870b241ea09fe13"
+  "services/api/identity/": "sha256:4a96035d9625725df833799f19f36e4137e9ba2dab121bb9eb78e7e5833fc79a"
+  "services/api/ingestion/": "sha256:1e13d282a2ef03b1673b631a9e564e27ed09690a695531674ed26967559eda0a"
+  "services/api/intelligence/": "sha256:9b583b5a699e01018b213383848636ee011384fa9f6115d1cda00977dfdb3e58"
+  "services/api/journeys/": "sha256:8db7d48b7f8247ab5adfde2fef24d3d7d4d6b2b4b7b721fd1129e836c9ad5301"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
-  "services/api/tenancy/": "sha256:b8b5c4e0956e300494f051e9b82958da6caf3ca375b8c79f00d5b76dd061fc63"
-  "services/api/value/": "sha256:7a31f39d5aec70568ed834fc1c4b276a3d7fd2d85b61e98fdaaff6c4e6cf8ef7"
-  "services/api/workers/": "sha256:bebf5c0765768bd9b025b1847bb728c5296491d5d8cb511e4ae4a15121e09aef"
+  "services/api/tenancy/": "sha256:81d3908e2cb30a15c04c6167a603f489a1b5bac57ec02743a042b52301bc52b0"
+  "services/api/value/": "sha256:fe86fc00610841af79232a37540d9027778742c64d4cc820dfaac888018a88b6"
+  "services/api/workers/": "sha256:62b80fbcf0fed7df62c169f9ec263635d26e65da656162f01f4fe70e65236ad4"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -144,6 +144,37 @@ metered per-service for billing (see `OverageCalculator`).
 
 **Feature gating** rejects requests for services outside the tenant's
 plan with HTTP 403 and a structured `required_plan` upgrade message.
+
+### Platform-wide routes require a platform operator
+
+Every customer owner holds role `admin`, which passes every
+`require_permission(...)` check, so the `admin` permission does not separate a
+customer from the people who run the platform. The route registry
+(`config/route_registry.yaml`) marks every route with an `admin` path segment
+and every `/v1/diagnostics/**` route `platform_operator_required`. Exceptions:
+public paths (the Stripe webhook), `/kyber` routes (which keep the narrower
+Kyber operator gate), and the tenant's own SDK routes `POST
+/v1/diagnostics/sdk/heartbeat`, `GET /v1/diagnostics/sdk/health`, `GET
+/v1/diagnostics/sdk/health/{sdk_id}` and `GET /v1/diagnostics/sdk/silent`. Only
+an admin of a tenant in `PLATFORM_OPERATOR_TENANT_IDS` (plus, in staging, the
+first-admin bootstrap tenant) or a Kyber operator passes; members and viewers of
+an operator tenant, like everyone else, get `403
+ROUTE_POLICY_PLATFORM_OPERATOR_REQUIRED` when the registry is enforced.
+
+Handlers that act on another tenant or on process-global state also check for a
+platform operator themselves, so the rule holds when the registry only
+observes: tenant create/read/update, admin API-key mint/list/revoke, tenant
+deactivation and deletion, the cross-tenant delivery job list, the overage
+cycle, `PUT /v1/fraud/config`, `POST /v1/web3/seed`, `GET
+/v1/lake/quality/{domain}`, `POST /v1/onchain/listener/configure`, `POST
+/v1/x402/graph/snapshot`, `GET /v1/cis/health/global`, the global asset-registry
+writers (`POST /v1/assets/*` except `canonicalize`, `POST /v1/admin/assets/*`
+apply and register), `POST /v1/valuation/observe`, and the process-wide
+diagnostics (errors, report, health, circuit breakers, error resolve/suppress,
+observability metrics). Admin billing routes,
+SDK drift analysis, the SDK fleet read and CIS tenant governance accept another
+tenant's id only from a platform operator. A tenant manages its own account
+through `/v1/me/*`, `/v1/account/*` and `/v1/billing/*`.
 
 ### Administrative tenant cleanup
 
@@ -357,7 +388,7 @@ mapping status.
 | `/v1/admin/kyber/revops/provider-status` | GET | Provider mode, health, sync flags, invoice export mode, and mapping status without secrets |
 | `/v1/admin/kyber/revops/product-mappings` | GET | Product/price mapping catalog and mapping completeness without secrets |
 
-### Admin tenant lifecycle (admin permission required)
+### Admin tenant lifecycle (platform operator required)
 
 Deactivation and hard deletion revoke every active credential owned by the
 tenant, including durable API-key rows and contained `public_ingest_identifier`
@@ -452,7 +483,7 @@ self-service billing. The overage cycle also runs from the backend lifespan cron
 
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
-| `/v1/admin/billing/overage-cycle` | POST | Admin | Trigger the monthly overage invoice cycle |
+| `/v1/admin/billing/overage-cycle` | POST | Platform operator | Trigger the monthly overage invoice cycle |
 
 ### Kyber revenue-operations billing (`/v1/admin/kyber/revops/*`, admin permission required)
 
@@ -482,7 +513,8 @@ mapping status.
 | `/v1/admin/kyber/revops/product-mappings` | GET | Product/price mapping catalog and mapping completeness without secrets |
 
 
-The following admin tenant billing endpoints require the `billing` permission.
+The following admin tenant billing endpoints require the `billing` permission
+and, like every `/v1/admin` route, a platform operator.
 
 ### GET /v1/admin/tenants/{tenant_id}/billing
 
@@ -548,7 +580,7 @@ key. GETs require `read`; state-changing POSTs require `write`. Full behavior:
 | `POST` | `/v1/activation/sdk-selection` | write | Body `{ "platforms": ["web", …] }`. |
 | `POST` | `/v1/activation/create-sdk-keys` | write | Body `{ "count": 1, "label": "…" }`. Returns raw key(s) **once**. |
 | `POST` | `/v1/activation/test-event` | write | Sends a canonical event through `/v1/batch`; per-event `accepted \| duplicate \| rejected`. |
-| `GET`  | `/v1/activation/first-value` | read | `{ "state", "ready", "evidence" }` from real Bronze rows. |
+| `GET`  | `/v1/activation/first-value` | read | `{ "state", "ready", "evidence" }` from real Bronze rows written by any tenant ingestion path (SDK and site-key events, connector syncs, imports). SDK keys are not a prerequisite. |
 | `POST` | `/v1/activation/complete` | write | `409` unless state is `first_value_ready`. |
 
 ### Intent-driven activation (WS-3)
@@ -1333,9 +1365,9 @@ Three service groups are available when Intelligence Graph feature flags are ena
 |--------|----------|-------------|
 | POST | `/v1/commerce/payments` | Record payment + create `PAYS` edge in graph |
 | POST | `/v1/commerce/hires` | Record agent hire + create `HIRED` edge |
-| GET | `/v1/commerce/fees/report` | Fee elimination report for tenant |
+| GET | `/v1/commerce/fees/report` | Fee elimination report over the caller's tenant's payments only |
 | GET | `/v1/commerce/reconciliation/order-payments` | Tenant-scoped order/payment evidence plus an evidence-only `operationLink`; accepts optional exact `commerce_order_ref`, optional timezone-qualified `as_of`, and requires `commerce:read` |
-| GET | `/v1/commerce/agent/{id}/spend` | Agent spend history |
+| GET | `/v1/commerce/agent/{id}/spend` | Agent spend history from the caller's tenant's payments only |
 | GET | `/v1/commerce/agents/{id}/economics` | Full economic profile: budget usage, delegation policy, economic identity, and evidence-only operation links across exact-matched intent, authorization, execution, and settlement records |
 | GET | `/v1/commerce/revenue/{service_id}` | Service revenue over a time window (settled payments attributed to service) |
 | GET | `/v1/commerce/cluster/{id}/spend` | Cluster spend analytics: settled volume and unique agents |
@@ -1421,11 +1453,11 @@ Kyber operator review queue for the x402 commerce control plane. All endpoints r
 | POST | `/v1/agent/tasks/{id}/lifecycle` | Update task lifecycle state |
 | POST | `/v1/agent/tasks/{id}/decision` | Record an agent decision |
 | POST | `/v1/agent/tasks/{id}/feedback` | Submit feedback on task outcome |
-| GET | `/v1/agent/{id}/graph` | Agent's full graph neighborhood |
-| GET | `/v1/agent/{id}/trust` | Agent trust score + history |
+| GET | `/v1/agent/{id}/graph` | Agent's graph neighborhood within the caller's tenant (404 unless the agent's vertex belongs to it) |
+| GET | `/v1/agent/{id}/trust` | Agent trust score + history (404 unless the agent's vertex belongs to the caller's tenant) |
 | POST | `/v1/agent/{id}/a2h` | Record agent-to-human interaction (notification, recommendation, delivery, escalation) |
 
-### Diagnostics Service (Admin Only)
+### Diagnostics Service (Platform Operators Only)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -1442,7 +1474,9 @@ Kyber operator review queue for the x402 commerce control plane. All endpoints r
 | GET | `/v1/diagnostics/commerce/reconciliation-drift` | Payment intents with no corresponding settlement event (`commerce:read`) |
 | GET | `/v1/diagnostics/commerce/reconciliation` | Read-only reconciliation of the tenant's commerce state against Silver and the graph: rebuild counts, graph consistency and drift (`x402:read`) |
 
-All general diagnostics endpoints require `admin` permission. Commerce diagnostics require `commerce:read`.
+All diagnostics endpoints require a platform operator; general diagnostics also
+require the `admin` permission and commerce diagnostics `commerce:read`. Only
+the tenant's own SDK heartbeat, health and silent-SDK routes are open to tenants.
 
 **x402 environment & credential-only verification.** Every authorization,
 receipt, and settlement carries a credential `environment` (`sandbox` | `live`)
@@ -1562,7 +1596,7 @@ credential slot must be ACTIVE, entitlement must approve).
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/v1/intelligence/wallet/{address}/risk` | Composite wallet risk score (trust scorer + graph + features) |
+| GET | `/v1/intelligence/wallet/{address}/risk` | Composite wallet risk score (trust scorer + graph + features); features are materialized, stored and cached per tenant from that tenant's lake rows |
 | GET | `/v1/intelligence/protocol/{id}/analytics` | Protocol-level analytics from Gold tier |
 | GET | `/v1/intelligence/entity/{id}/cluster` | Identity cluster via graph relationships |
 | GET | `/v1/intelligence/alerts` | Anomaly alerts from Gold tier |
@@ -1648,6 +1682,11 @@ Core identity resolution and entity management endpoints.
 | GET | `/v1/identity/entities/{entity_id}/aliases` | List all aliases (wallets, emails, devices, sessions) for an entity |
 | GET | `/v1/identity/entities/{entity_id}/graph` | Entity subgraph (neighbors, edges, relationship types) |
 | GET | `/v1/identity/entities/{entity_id}/audit` | Full audit trail for this entity — merges, splits, signal additions |
+| POST | `/v1/identity/verification/wallet/challenges` | Issue a wallet proof challenge bound to current consent and tenant/site namespace (`write`) |
+| POST | `/v1/identity/verification/wallet/challenges/{challenge_id}/verify` | Verify and atomically consume the wallet proof challenge (`write`) |
+| GET | `/v1/identity/entities/{canonical_entity_id}/evidence` | List verification evidence bound to an entity; response is redacted (`read`) |
+| POST | `/v1/identity/evidence/{evidence_id}/replay` | Retry resolution from active, unexpired durable evidence; internal resolver errors remain retryable and legacy wallet records may require a fresh proof (`write`) |
+| POST | `/v1/identity/evidence/{evidence_id}/revoke` | Revoke verification evidence and remove its proof-derived verified alias when no unexpired active proof remains (`write`) |
 | GET | `/v1/identity/conflicts` | List entities with unresolved identity conflicts (`read`) |
 | POST | `/v1/identity/merge` | Merge two entities into a single canonical entity (`admin`) |
 | POST | `/v1/identity/split` | Split a merged entity back into its source components (`admin`) |
@@ -1656,23 +1695,29 @@ Core identity resolution and entity management endpoints.
 | POST | `/v1/identity/suppress` | Suppress an identifier hash — revokes matching aliases and blocks future resolution (`write`) |
 | DELETE | `/v1/identity/suppress/{suppression_id}` | Revoke an active suppression rule (`write`) |
 | GET | `/v1/identity/suppressions` | List active suppression rules for the authenticated tenant (`read`) |
-| GET | `/v1/identity/profiles/{user_id}` | Get stored profile for a user/entity |
+| GET | `/v1/identity/profiles/{user_id}` | Get the caller's tenant's stored profile for a user/entity (404 for another tenant's) |
 | PUT | `/v1/identity/profiles/{user_id}` | Upsert profile record for a user/entity |
-| GET | `/v1/identity/profiles/{user_id}/graph` | Profile-scoped graph view (bounded to 50 neighbors) |
-| POST | `/v1/identity/verification/wallet/challenges` | Issue a five-minute, tenant/subject/wallet/chain-bound wallet ownership message (`write`; current server-evaluated identity-link consent required) |
-| POST | `/v1/identity/verification/wallet/challenges/{challenge_id}/verify` | Verify and consume the wallet signature, then issue durable evidence and replay identity resolution (`write`; consent is re-evaluated) |
+| GET | `/v1/identity/profiles/{user_id}/graph` | Profile-scoped graph view (bounded to 50 neighbors); only neighbours tagged with the caller's tenant |
 
 **Permissions:** `read` for GET queries; `write` for resolve/profiles/wallet proof; `admin` for merge/split/recompute/conflicts.
 
 #### Wallet ownership proof
 
 Both wallet verification routes also require `identity_continuity.resolution_enabled`.
-The challenge request body is `{ "anonymous_id", "wallet_address",
-"chain_namespace" }`. The response data contains `{ "challenge_id",
-"wallet_address", "chain_namespace", "message", "expires_at" }`. To verify,
-send `{ "challenge_id", "anonymous_id", "wallet_address",
-"chain_namespace", "signature" }` to the matching challenge path. The server
-re-evaluates consent for that exact anonymous subject before verification.
+Create a challenge with `POST /v1/identity/verification/wallet/challenges` and
+`{ "anonymous_id", "wallet_address", "chain_namespace", "tenant_app_key?" }`.
+`tenant_app_key`, when supplied, is an SDK site ID selector. Tenant-wide secret
+credentials may select only an active site registered to that tenant; a
+site-bound credential may select only one of its bound sites. The resulting
+identity namespace matches ingestion (`site:<site_id>`); without an app
+selector, a tenant-wide credential uses `tenant:<tenant_id>`. The response data
+contains `{ "challenge_id", "wallet_address", "chain_namespace", "message",
+"expires_at" }`. Verify with
+`POST /v1/identity/verification/wallet/challenges/{challenge_id}/verify` and
+`{ "challenge_id", "anonymous_id", "wallet_address", "chain_namespace",
+"signature", "tenant_app_key?" }`. The selected app scope must match the
+challenge. The server re-evaluates consent for that exact anonymous subject
+before verification.
 
 Supported signatures are EVM `eip155:*` EIP-191 `personal_sign` and Solana
 Ed25519 over the exact UTF-8 message (standard Base64 signature). The consumed
@@ -1681,6 +1726,36 @@ consented anonymous subject. It proves key control for the challenge only; it
 does not authorize a transaction or establish exclusive custody. Sui
 transaction verification is a separate execution-evidence path, and Sui wallet
 signature formats are not accepted here.
+
+`GET /v1/identity/entities/{canonical_entity_id}/evidence` lists redacted
+evidence for an entity. `POST /v1/identity/evidence/{evidence_id}/replay`
+retries resolution using the durable evidence record and requires `write`.
+Its response includes `evidence_id`, `status`, `decision`,
+`canonical_entity_id`, and `error_code`; a canonical ID is returned only for
+accepted `create`, `link`, or `merge` decisions. Public errors use stable codes:
+`evidence_replay_failed`, `verification_evidence_expired`, and
+`wallet_evidence_reverification_required`. A concurrent retry returns
+`in_progress` without starting a second resolver run. The endpoint is
+unavailable while identity resolution is disabled, and expired or malformed
+evidence is marked expired without replay; after the transition, the
+proof-derived verified alias is removed only if no other unexpired active
+proof remains. Issuance, retry, revocation, and alias cleanup are serialized
+per tenant and identifier. Replay claims have a renewable lease and fencing
+token, so a stale claim left by a crashed worker can be reclaimed without
+allowing the old worker to overwrite the retry. Detailed resolver and
+repository exceptions remain in server logs. Resolver `internal_error`
+outcomes mark the replay job failed so a later request can retry; previously
+completed jobs with that recorded reason can also be reclaimed. For legacy
+wallet evidence without an encrypted subject, a previously completed replay
+returns its cached outcome only when its summary has no `internal_error`
+reason. Otherwise the endpoint returns `reverification_required` and a fresh
+wallet proof is required. Revocation
+never sends revoked proof through the affirmative replay path. When no
+unexpired active proof remains for the identifier, its verified alias is
+revoked; another active proof preserves the alias. Revocation does not
+automatically reverse an earlier entity merge, which requires the explicit
+identity split workflow. If alias cleanup fails, the revoke request reports
+failure and can be retried after repository access recovers.
 
 ---
 
@@ -1713,7 +1788,7 @@ Holistic user/entity omniview — composes data from all Aether subsystems into 
 | GET | `/v1/profile/{user_id}/campaigns` | Campaign attribution derived from analytics event stream |
 | GET | `/v1/profile/{user_id}/tier` | Entity tier (Whale/Shark/Dolphin/Fish/Shrimp) + percentile rank |
 | GET | `/v1/profile/{user_id}/asset-composition` | On-chain portfolio composition by asset category |
-| GET | `/v1/profile/{user_id}/pnl` | Realized + unrealized PNL, TVL delta |
+| GET | `/v1/profile/{user_id}/pnl` | Realized + unrealized PNL, TVL delta. 404 unless the entity row or a wallet linked to it belongs to the caller's tenant; realized PNL reads only the addresses that tenant linked to the entity, and is `null` with `data_confidence: "unavailable"` when the tenant linked no wallet to it |
 | GET | `/v1/profile/{user_id}/trading-profile` | On-chain trading behavior (pairs, protocol loyalty, gas) |
 | GET | `/v1/profile/{user_id}/location-history` | City-level location history with classification |
 | GET | `/v1/profile/{user_id}/temporal-heatmap` | 24×7 activity density matrix + streaks |
@@ -1863,7 +1938,7 @@ Macro-to-micro group intelligence. Supports segments, cohorts, clusters, communi
 | GET | `/v1/population/trends` | Group creation over time |
 | POST | `/v1/population/groups` | Create a new group (segment, cohort, cluster, community, etc.) |
 | GET | `/v1/population/groups/{id}` | Group details with member count |
-| GET | `/v1/population/groups/{id}/members` | Paginated members with `min_confidence` filter |
+| GET | `/v1/population/groups/{id}/members` | Paginated members with `min_confidence` filter (404 for a group outside the caller's tenant) |
 | POST | `/v1/population/groups/{id}/members` | Add members with basis, confidence, reason, source_tag |
 | GET | `/v1/population/groups/{id}/intelligence` | Group intelligence summary (basis distribution, avg confidence) |
 | GET | `/v1/population/compare` | Compare two groups: overlap, unique counts (`group_a`, `group_b` query params) |
@@ -1901,6 +1976,8 @@ Negative-space intelligence: what should have happened but did not. Detects abse
 
 **Permissions:** `read` for queries, `write` for triggering scans
 
+Signals belong to the tenant whose scan produced them. Entity, group and `/signal/{id}` reads return only the caller's tenant's signals; another tenant's signal id answers 404.
+
 ---
 
 ### Behavioral Continuity & Friction Service (v8.6.0)
@@ -1918,6 +1995,8 @@ Derived signals from data Aether already collects. 10 signal families detecting 
 **Signal families:** `intent_residue`, `wallet_friction`, `identity_delta`, `pre_post_continuity`, `sequence_scar`, `source_shadow`, `reward_near_miss`, `social_chain_lag`, `cex_dex_transition`, `behavioral_twin`
 
 **Permissions:** `read` for queries, `write` for triggering scans
+
+Persisted signals are read only within the caller's tenant.
 
 ---
 
@@ -1946,6 +2025,8 @@ Tokenized real-world asset observation, analysis, and scoring. Aether does NOT i
 **Policy types:** `whitelist`, `accreditation`, `jurisdiction`, `lockup`, `holder_cap`, `secondary_transfer`, `aml_kyc`
 
 **Permissions:** `write` for asset/policy/cashflow/holder creation, `read` for queries
+
+Asset, policy, cashflow, exposure and holder rows belong to the tenant that wrote them. An asset id outside the caller's tenant answers 404 on every `/v1/rwa/assets/{id}` read, on `POST /v1/rwa/simulate-transfer`, and on `POST /v1/rwa/policies`, `/cashflows` and `/holders`. `GET /v1/rwa/exposure/{entity_id}` counts only the caller's holder records.
 
 ---
 
@@ -2218,7 +2299,7 @@ Cancel a queued or running replay job. Sets `status` to `cancelled` and records 
 
 #### POST /v1/events/ingest
 
-Ingest a single `EventPipelineEnvelope` (used by the replay feed to re-introduce events into the processing pipeline). Enforces tenant isolation before accepting.
+Ingest a single `EventPipelineEnvelope` (used by the replay feed to re-introduce events into the processing pipeline). Enforces tenant isolation before accepting. The envelope is stored per tenant (row id `{tenantId}:{id}`), so two tenants can ingest the same envelope id without touching each other's envelope.
 
 **Permissions:** `write`
 
@@ -2696,7 +2777,7 @@ Unified cross-rail journey compilation — Web2, Web3, agent, x402, and campaign
 | GET | `/v1/journeys/{id}` | Get the current journey version for a journey |
 | GET | `/v1/journeys/{id}/versions` | List all versions of a journey, newest first |
 | GET | `/v1/journeys/{id}/steps` | Paginated journey steps (filterable by `family`, `status`, `session_id`, `wallet_id`, `chain_id`, `campaign_id`) |
-| GET | `/v1/journeys/{id}/economic-operations` | Exact-reference commerce operation links carried by journey-step evidence; optional timezone-qualified `as_of`; no copied amounts or inferred joins |
+| GET | `/v1/journeys/{id}/economic-operations` | Exact-reference commerce operation links carried by journey-step evidence (requires `commerce:read`); optional timezone-qualified `as_of`; no copied amounts or inferred joins |
 | GET | `/v1/journeys/{id}/steps/{step_id}` | Single step with full activity detail |
 | GET | `/v1/journeys/{id}/transitions` | Transition type summary between steps |
 | GET | `/v1/journeys/{id}/explain` | Identity evidence and confidence explanation |
@@ -2744,6 +2825,11 @@ Core entity management — create, resolve, and manage entity records and cluste
 | POST | `/v1/entities/{id}/membership` | Add an entity to a population group |
 
 **Permissions:** `write` for mutations, `read` for queries
+
+An entity id belongs to the first tenant that creates it: creating or updating
+an id another tenant already holds answers `409 Conflict` without naming the
+owner, and leaves that tenant's record unchanged. Delegation ids behave the
+same way.
 
 ---
 
@@ -2941,7 +3027,7 @@ Event-driven multi-channel operator notification pipeline. Ingests intelligence 
 | GET | `/v1/notifications/intelligence/{id}/audit` | Full append-only audit log |
 | PATCH | `/v1/notifications/intelligence/{id}/approve` | Operator approve (propagates to graph) |
 | PATCH | `/v1/notifications/intelligence/{id}/suppress` | Operator suppress |
-| PATCH | `/v1/notifications/intelligence/{id}/escalate` | Operator escalate |
+| PATCH | `/v1/notifications/intelligence/{id}/escalate` | Operator escalate (404 for a notification outside `tenantId`) |
 | PATCH | `/v1/notifications/intelligence/{id}/annotate` | Add annotation |
 | POST | `/v1/notifications/intelligence/{id}/replay` | Re-deliver to all active channels |
 | GET | `/v1/notifications/coverage` | Producer-coverage report (honest states; never "healthy" without a declared baseline) |
@@ -3010,12 +3096,14 @@ Manage automated Dune query polling schedules per tenant. All endpoints require 
 
 **Domains:** `onchain`, `governance`, `market`, `social`, `identity`, `tradfi`
 
+Run results report `ok`, `skipped` (local mode, or `credential unavailable`), or `error`; an error detail carries only the exception class and, for HTTP failures, the status code.
+
 **Required env var:**
 
 | Env var | Description | Values |
 |---------|-------------|--------|
 | `DUNE_BACKEND` | Activates the Dune polling scheduler. When unset or empty the worker runs in no-op mode (logs intent, no external API calls). Set in staging/prod. | `s3` \| `postgres` \| `clickhouse` |
-| `DUNE_API_KEY` | Dune Analytics API key. Required for live pulls. | string |
+| `DUNE_API_KEY` | Platform Dune Analytics API key, used only for platform-owned schedules. Tenant schedules resolve `api_key_ref` from the tenant's credential store and never fall back to this key. | string |
 
 ---
 
@@ -3079,7 +3167,7 @@ Redacted tenant-safe feed — no internal scoring or suppression metadata expose
 | DELETE | `/v1/notifications/channels/{id}` | Remove channel |
 | POST | `/v1/notifications/channels/{id}/test` | Send test message; sets `verified_at` on success |
 | GET | `/v1/notifications/channels/slack/connect` | Initiate Slack OAuth (returns redirect URL) |
-| GET | `/v1/notifications/channels/slack/callback` | Slack OAuth callback |
+| GET | `/v1/notifications/channels/slack/callback` | Slack OAuth callback; only the tenant and user session that started the flow can complete it, and a Slack workspace already actively connected to another tenant is rejected |
 
 ### Webhook Endpoint Configuration
 
@@ -3106,8 +3194,8 @@ identifiers, or response content.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/v1/notifications/slack/callback` | Slack Block Kit action handler (HMAC-verified) |
-| POST | `/v1/notifications/telegram/callback` | Telegram inline keyboard handler |
+| POST | `/v1/notifications/slack/callback` | Slack Block Kit action handler (HMAC-verified); acts in the notification's tenant only when the clicking Slack team is an active Slack channel of that tenant — the tenant segment of the action id is ignored |
+| POST | `/v1/notifications/telegram/callback` | Telegram inline keyboard handler; acts only on notifications owned by the authenticated caller's tenant; `404` unless `INBOUND_TELEGRAM_CALLBACK_ENABLED` is on (off by default) |
 
 ### Required Permissions
 
@@ -3386,14 +3474,64 @@ These endpoints are gated by feature flags (`FEATURE_FRAUD_NETWORKS`, `FEATURE_F
 | POST | `/v1/delivery/jobs/{id}/replay` | `kyber:operator` | Re-queue dead-letter job (Kyber only) |
 | GET | `/v1/delivery/links` | `delivery:read` | List ExternalResourceLink records for tenant |
 
-### Inbound Webhooks (`/v1/webhooks/*`)
+### Inbound Webhooks (`/v1/notifications/webhooks/*`)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/v1/webhooks/slack/interactive` | Slack signing secret | Slack interactive action callback; written to WebhookInbox before processing |
-| POST | `/v1/webhooks/linear/events` | Linear-Signature HMAC | Linear issue/event webhook; persisted to WebhookInbox and processed async |
-| POST | `/v1/webhooks/jira/events` | X-Hub-Signature-256 HMAC | Jira issue webhook; persisted to WebhookInbox and processed async |
-| POST | `/v1/webhooks/aether/callback` | X-Aether-Signature HMAC | Generic signed outcome callback from webhook delivery targets |
+| POST | `/v1/notifications/slack/callback` | Slack signing secret | Slack interactive action callback; written to WebhookInbox before processing |
+| POST | `/v1/notifications/webhooks/linear/events` | Linear-Signature HMAC (`DELIVERY_LINEAR_WEBHOOK_SECRET`) | Linear issue/event webhook; persisted to WebhookInbox and processed async |
+| POST | `/v1/notifications/webhooks/jira/events` | X-Hub-Signature-256 HMAC (`DELIVERY_JIRA_WEBHOOK_SECRET`) | Jira issue webhook; persisted to WebhookInbox and processed async; `404` unless `INBOUND_JIRA_WEBHOOK_ENABLED` is on (off by default) |
+| POST | `/v1/notifications/webhooks/aether/callback` | X-Aether-Signature HMAC (bound delivery channel secret) | Generic signed outcome callback from webhook delivery targets |
+
+The receiving tenant of an inbound outcome is never read from the request: the
+routes ignore `X-Aether-Tenant-ID` and `?tenant_id=`, and the inbox processor
+derives the tenant from the stored `ExternalResourceLink` the delivery resolves
+to, together with that link's receipt and delivery job:
+
+- Linear — the link on `data.id`; where the bound delivery stored an
+  organisation, the event's `organizationId` must match it (the issue may since
+  have moved to another team); otherwise, where it stored a team, the event's
+  team (`data.teamId`) must match. `webhookTimestamp` is required and must be
+  within 60 seconds of receipt.
+- Jira — the link on the issue key, accepted only when the `issue.self` host is
+  the Jira site the bound job created the issue on (issue keys repeat across
+  sites). The route answers `404` unless `INBOUND_JIRA_WEBHOOK_ENABLED` is on;
+  it is off by default until per-connection secrets exist.
+- Aether callback — the link on the body's `delivery_id`; the signature is
+  verified with that delivery channel's own secret (a platform-wide secret never
+  verifies), and `X-Aether-Timestamp` (unix seconds) is required within 300
+  seconds of receipt. A delivery job without a `provider_config.secret_ref` is
+  sent unsigned (counted as `delivery_webhook_unsigned_total`), so its callbacks
+  never verify.
+
+Receipt time is the inbox row's `received_at`, or its `created_at` for rows
+stored before `received_at` was recorded. A callback that matches no stored
+delivery, or deliveries in more than one tenant, is dead-lettered as
+`unbound_delivery` and never routed; one that fails verification is
+dead-lettered as `signature_unverified`. Both count in
+`delivery_inbox_dead_lettered_total{provider,reason}`. The delivery
+worker records the delivery intent's source on the link as `aether_object_type`
+/ `aether_object_id`, and an inbound outcome only changes that object: a
+`suggestion` gets its `outcome_state` (through the tenant-checked
+`SuggestionRepository.patch`), a `notification` its last external outcome
+(`last_external_outcome` / `last_outcome_at` in its `operator_context`; skipped
+when it belongs to another tenant), and an `action` delivery records
+the outcome event only. Links written before those fields existed fall back to
+their legacy `resource_type` / `resource_id` / `notification_id` keys. Ids
+carried in the provider payload are never used. Likewise, a confirmed delivery receipt
+marks the source suggestion `delivered` only within the delivery job's tenant.
+
+The legacy public connector route `POST /v1/integrations/webhooks/{connector}`
+resolves a Shopify delivery's tenant from its shop domain — the
+`X-Shopify-Shop-Domain` header, else the body `domain`, which must agree when
+both are present — and that domain must match exactly one enabled Shopify
+connector binding (stored domains are compared without scheme, trailing slash
+or case). That tenant's own secret must then verify the HMAC over the raw body.
+Other non-comms
+connectors scope the secret lookup by `X-Aether-Tenant-ID` and must verify with
+that tenant's own stored secret. Every denial past connector lookup returns the
+same generic `400 webhook rejected`, so the response does not reveal whether a
+tenant, connector, or secret exists.
 
 Comms provider webhooks (`/v1/integrations/webhooks/comms/*`, ADR-C11) use
 server-controlled durable endpoint ids; tenant ownership is resolved from the
@@ -3610,7 +3748,11 @@ Tenant connection lifecycle (`/v1/provider-connections/*`, API key + tenant requ
   and persists only non-secret account evidence. A domain-only account is not
   sufficient for v2 source-object mapping.
 - `POST /v1/provider-connections/{connection_id}/accounts/select` — select an
-  account to scope ingestion.
+  account to scope ingestion. A Shopify shop is selectable in every orders mode
+  only after discovery recorded its live shop identity (the stored credential is
+  used for discovery whenever one exists), and is rejected while another tenant
+  holds the same shop selected on a connection that is not revoked, disabled,
+  or failed.
 - `POST /v1/provider-connections/{connection_id}/sync` — trigger a sync run
   (optional `since` for backfill and optional `stream_ids` to select at most 32
   unique, nonblank stream identifiers). An omitted or empty list runs all
@@ -4086,9 +4228,11 @@ never guessed.
 route fail-closes on that flag. Registration, seed, and canonicalize
 additionally require `settings.assets.ingestion_enabled`
 (`AETHER_ASSETS_INGESTION_ENABLED`). GET routes require the base `READ`
-permission; POST register/seed/canonicalize routes require `ADMIN`. Runtime
-seeding is not enabled by default — the canonical seed ships as an ADMIN action
-(`POST /v1/assets/seed`), it is not run at startup.
+permission; POST register/seed/canonicalize routes require `ADMIN`, and the
+register and seed routes, which write the global registry every tenant reads,
+also require a platform operator. Runtime seeding is not enabled by default —
+the canonical seed ships as an operator action (`POST /v1/assets/seed`), it is
+not run at startup.
 
 ### Reference & observational reads (GET, `READ`)
 
@@ -4111,13 +4255,13 @@ seeding is not enabled by default — the canonical seed ships as an ADMIN actio
 | Method | Path | Permission | Purpose |
 |---|---|---|---|
 | POST | `/v1/assets/canonicalize` | admin | Canonicalize one native payload (`{ "native": {...} }`) into a resolution report under the resolver priority (chain+contract → namespaced id → legacy alias → symbol). Native preserved verbatim; unresolvable refs recorded unresolved on the tenant's observational table. Returns 200. |
-| POST | `/v1/assets/assets` | admin | Register a canonical asset (idempotent upsert on canonical id). Returns 201. |
-| POST | `/v1/assets/chains` | admin | Register a chain reference. Returns 201. |
-| POST | `/v1/assets/fiat` | admin | Register an ISO 4217 fiat currency **and** its `fiat:<ISO>` canonical asset. Returns 201. |
-| POST | `/v1/assets/deployments` | admin | Register a deployment; EVM contract is lowercased and the id recomputed as `deploy:<asset_id>@<chain>:<contract>`. Returns 201. |
-| POST | `/v1/assets/aliases` | admin | Register an alias row → canonical target (alias stored lowercase). Returns 201. |
-| POST | `/v1/assets/capabilities` | admin | Register an asset support capability. Returns 201. |
-| POST | `/v1/assets/seed` | admin | Run the full canonical seed: fiat → chains (+ native crypto) → x402-verified stablecoins → legacy aliases. Idempotent; rewrites the deterministic `registry_version` meta row from the digest. Returns 201. |
+| POST | `/v1/assets/assets` | admin + platform operator | Register a canonical asset (idempotent upsert on canonical id). Returns 201. |
+| POST | `/v1/assets/chains` | admin + platform operator | Register a chain reference. Returns 201. |
+| POST | `/v1/assets/fiat` | admin + platform operator | Register an ISO 4217 fiat currency **and** its `fiat:<ISO>` canonical asset. Returns 201. |
+| POST | `/v1/assets/deployments` | admin + platform operator | Register a deployment; EVM contract is lowercased and the id recomputed as `deploy:<asset_id>@<chain>:<contract>`. Returns 201. |
+| POST | `/v1/assets/aliases` | admin + platform operator | Register an alias row → canonical target (alias stored lowercase). Returns 201. |
+| POST | `/v1/assets/capabilities` | admin + platform operator | Register an asset support capability. Returns 201. |
+| POST | `/v1/assets/seed` | admin + platform operator | Run the full canonical seed: fiat → chains (+ native crypto) → x402-verified stablecoins → legacy aliases. Idempotent; rewrites the deterministic `registry_version` meta row from the digest. Returns 201. |
 
 ### Operator console — `/v1/admin/assets` (W5, default OFF)
 
@@ -4130,9 +4274,10 @@ a transfer, and `execution_by_aether` stays False.
 **Feature gating (default OFF, fail-closed).** The router mounts only when
 `settings.assets.admin_enabled` (`AETHER_ASSETS_ADMIN_ENABLED`) is true —
 otherwise the surface is absent (an ADMIN principal gets 404). Every route is
-global-ADMIN gated; the write/apply routes (`POST …/discovery/apply` and the
-register routes) additionally require the apply capability `admin_mode`
-(`AETHER_ASSETS_ADMIN_MODE`). No new migration — the console reads/writes the
+global-ADMIN gated and, as an `/v1/admin` route, platform-operator only; the
+write/apply routes (`POST …/discovery/apply` and the register routes)
+additionally require the apply capability `admin_mode`
+(`AETHER_ASSETS_ADMIN_MODE`) and check for a platform operator in the handler. No new migration — the console reads/writes the
 existing registry tables (plus the typed in-memory repos under
 `AETHER_ENV=local`).
 
@@ -4208,7 +4353,7 @@ rather than inventing one.
 
 | Method | Path | Permission | Purpose |
 |---|---|---|---|
-| POST | `/v1/valuation/observe` | admin | Record one price observation (idempotent single append path; a replay returns the existing observation). Returns 201. |
+| POST | `/v1/valuation/observe` | admin + platform operator | Record one price observation (idempotent single append path; a replay returns the existing observation). Returns 201. |
 | POST | `/v1/valuation/value` | admin | Canonicalize → value → persist one tenant snapshot at `effective_at`. Body: `{ "native", "effective_at", "reporting_asset_id"?, "deployment_id"?, "valuation_basis"?, "economic_role"?, "supersedes_snapshot_id"? }`. A `supersedes_snapshot_id` correction APPENDS a new superseding snapshot; replay of identical inputs is a no-op returning the persisted row. Returns 201. |
 | PUT | `/v1/valuation/policy` | admin | Create/update the tenant's current value policy (one row per tenant; `policy_version` advances monotonically, a re-PUT of the current policy is a no-op). Returns 200. |
 

@@ -2000,7 +2000,7 @@ async def get_profile_graph(
     profile = await repo.get_profile(tenant.tenant_id, user_id)
     if not profile:
         raise NotFoundError("Profile")
-    connections = await repo.get_graph_neighbors(user_id)
+    connections = await repo.get_graph_neighbors(user_id, tenant.tenant_id)
     return APIResponse(data={"user_id": user_id, "connections": connections}).to_dict()
 
 
@@ -2107,6 +2107,7 @@ async def revoke_siwx_session(session_id: str, request: Request) -> dict:
 #   POST /v1/identity/verification/wallet/challenges
 #   POST /v1/identity/verification/wallet/challenges/{challenge_id}/verify
 #   GET  /v1/identity/entities/{canonical_entity_id}/evidence   (redacted)
+#   POST /v1/identity/evidence/{evidence_id}/replay
 #   POST /v1/identity/evidence/{evidence_id}/revoke
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -2163,6 +2164,42 @@ async def _require_identity_link_consent(tenant_id: str, anonymous_id: str) -> d
     if not allowed or not context:
         raise BadRequestError("Identity-link consent is required")
     return context
+
+
+async def _wallet_identity_namespace(
+    tenant: Any, requested_app: Optional[str]
+) -> str:
+    """Resolve the SDK identity namespace from authenticated app bindings."""
+    tenant_id = str(getattr(tenant, "tenant_id", "") or "").strip()
+    site_ids = getattr(tenant, "site_ids", None)
+    supplied = str(requested_app or "").strip()
+    if site_ids is None:
+        # Tenant-wide secret keys may select a registered app, but the app ID
+        # is only a selector: tenant ownership and active lifecycle are checked
+        # against the server-owned site registry before it becomes identity
+        # scope. A missing selector retains the SDK's tenant-wide namespace.
+        if supplied:
+            from ingestion.sdk_distribution.sites import (
+                STATUS_ACTIVE,
+                SDKSiteRepository,
+            )
+
+            site = await SDKSiteRepository().get(tenant_id, supplied)
+            if not site or site.get("status") != STATUS_ACTIVE:
+                raise BadRequestError("Wallet proof app scope is not authorized")
+            return f"site:{supplied}"
+        if not tenant_id:
+            raise BadRequestError("Wallet proof app scope is unavailable")
+        return f"tenant:{tenant_id}"
+
+    allowed = {str(site).strip() for site in site_ids if str(site).strip()}
+    if supplied:
+        if supplied not in allowed:
+            raise BadRequestError("Wallet proof app scope is not authorized")
+        return f"site:{supplied}"
+    if len(allowed) == 1:
+        return f"site:{next(iter(allowed))}"
+    raise BadRequestError("Wallet proof app scope is required")
 
 
 # ── Request models ─────────────────────────────────────────────────────────
@@ -2281,12 +2318,16 @@ async def issue_wallet_verification_challenge(
     consent_context = await _require_identity_link_consent(
         tenant.tenant_id, body.anonymous_id
     )
+    identity_namespace = await _wallet_identity_namespace(
+        tenant, body.tenant_app_key
+    )
     try:
         result = await _get_wallet_verification_service().issue_wallet_challenge(
             tenant_id=tenant.tenant_id,
             anonymous_id=body.anonymous_id,
             wallet_address=body.wallet_address,
             chain_namespace=body.chain_namespace,
+            identity_namespace=identity_namespace,
             consent_snapshot=consent_context,
         )
     except ValueError as exc:
@@ -2310,6 +2351,9 @@ async def verify_wallet_verification_challenge(
     consent_context = await _require_identity_link_consent(
         tenant.tenant_id, body.anonymous_id
     )
+    identity_namespace = await _wallet_identity_namespace(
+        tenant, body.tenant_app_key
+    )
     if body.challenge_id != challenge_id:
         raise BadRequestError("Wallet proof challenge does not match the request")
     try:
@@ -2320,6 +2364,7 @@ async def verify_wallet_verification_challenge(
             wallet_address=body.wallet_address,
             chain_namespace=body.chain_namespace,
             signature=body.signature,
+            identity_namespace=identity_namespace,
             consent_snapshot=consent_context,
         )
     except ValueError as exc:
@@ -2361,6 +2406,45 @@ async def list_entity_verification_evidence(
         "canonical_entity_id": canonical_entity_id,
         "evidence": rows,
         "total": len(rows),
+    }).to_dict()
+
+
+@router.post("/evidence/{evidence_id}/replay")
+async def replay_verification_evidence(
+    evidence_id: str,
+    request: Request,
+) -> dict:
+    """Retry resolution from durable evidence without resupplying the subject."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    from config.settings import settings
+
+    if not settings.identity_continuity.resolution_enabled:
+        raise NotFoundError("Identity resolution is not enabled")
+    result = await _get_evidence_service().retry_evidence_replay(
+        tenant.tenant_id, evidence_id
+    )
+    if result.get("status") == "not_found":
+        raise NotFoundError("VerificationEvidence")
+    status = result.get("status")
+    decision = str(result.get("decision") or "").lower()
+    accepted_decision = decision in {"create", "link", "merge"}
+    if status == "reverification_required":
+        error_code = "wallet_evidence_reverification_required"
+    elif status == "expired_evidence":
+        error_code = "verification_evidence_expired"
+    elif status == "error":
+        error_code = "evidence_replay_failed"
+    else:
+        error_code = None
+    return APIResponse(data={
+        "evidence_id": evidence_id,
+        "status": status,
+        "decision": decision or None,
+        "canonical_entity_id": (
+            result.get("canonical_entity_id") if accepted_decision else None
+        ),
+        "error_code": error_code,
     }).to_dict()
 
 

@@ -262,6 +262,8 @@ def test_post_apply_task_definition_gate_checks_what_delivery_will_deploy():
     gate = workflow.index("Verify applied staging ECS task-definition lane")
     end = workflow.index("- name:", gate + 1)
     assert '--lane "$DEPLOYMENT_LANE" --revision family-latest' in workflow[gate:end]
+    assert '--identity-verification-secrets-enabled "$IDENTITY_VERIFICATION_SECRETS_ENABLED"' in workflow[gate:end]
+    assert "steps.reviewed.outputs.identity_verification_secrets_enabled" in workflow[gate:end]
     lifecycle = _workflow("staging-lifecycle.yml")
     assert '--lane "$DEPLOYMENT_LANE" --revision family-latest' in lifecycle
 
@@ -1056,6 +1058,29 @@ def test_terraform_promote_requires_release_digest_inputs():
     assert "ml_image_digest:" in workflow
     assert '-var "backend_image_digest=${BACKEND_IMAGE_DIGEST}"' in workflow
     assert '-var "ml_image_digest=${ML_IMAGE_DIGEST}"' in workflow
+
+
+def test_identity_verification_secrets_are_mounted_only_after_metadata_preflight():
+    workflow_doc = _workflow_yaml("terraform-promote.yml")
+    workflow = _workflow("terraform-promote.yml")
+    terraform = (ROOT / "infra/aws/terraform/modules/ecs/main.tf").read_text(
+        encoding="utf-8"
+    )
+    root_variables = (ROOT / "infra/aws/terraform/variables.tf").read_text(
+        encoding="utf-8"
+    )
+
+    trigger = workflow_doc.get("on", workflow_doc.get(True))
+    configured_input = trigger["workflow_dispatch"]["inputs"][
+        "identity_verification_secrets_enabled"
+    ]
+    assert configured_input["default"] is True
+    assert "TF_VAR_identity_verification_secrets_enabled" in workflow
+    assert "reviewed.identity-verification-secrets-enabled" in workflow
+    assert "check_identity_verification_secrets.py" in workflow
+    assert "var.identity_verification_secrets_enabled ? {" in terraform
+    assert "var.identity_verification_secrets_enabled && lookup(var.companion_secret_arns" in terraform
+    assert 'variable "identity_verification_secrets_enabled"' in root_variables
 
 
 def test_image_digest_variables_have_no_mutable_defaults():

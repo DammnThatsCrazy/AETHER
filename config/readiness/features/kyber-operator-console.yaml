@@ -27,7 +27,7 @@ repository_ceiling:
   remaining_is_repository_controlled: false
   evidence:
   - apps/kyber-web/
-  - .github/workflows/kyber-e2e.yml
+  - .github/workflows/ci.yml
   - services/api/intelligence/intelligence/routes.py
 implementation:
   state: VERIFIED

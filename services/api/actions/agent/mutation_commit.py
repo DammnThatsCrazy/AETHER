@@ -161,7 +161,7 @@ def _build_vertex(tenant_id: str, mutation: dict[str, Any]) -> Vertex:
     if not vertex_type or not vertex_id:
         raise ValueError("vertex mutations require target.vertex_type and target.vertex_id")
     properties = dict((mutation.get("diff") or {}).get("properties") or {})
-    properties.setdefault("tenant_id", tenant_id)
+    properties["tenant_id"] = tenant_id
     properties.setdefault("provenance", "staged_mutation_review")
     properties.setdefault("source_mutation_id", mutation["mutation_id"])
     return Vertex(vertex_type=vertex_type, vertex_id=vertex_id, properties=properties)
@@ -434,6 +434,15 @@ def _inverse_of(tenant_id: str, mutation: dict[str, Any]) -> dict[str, Any]:
     return (mutation.get("rollback") or {}).get("inverse") or mutation.get("commit_op") or {}
 
 
+def _owned_vertex_drop(tenant_id: str, vertex_id: str) -> str:
+    """Gremlin that drops ``vertex_id`` only while ``tenant_id`` owns it."""
+    t = _escape_gremlin(tenant_id)
+    return (
+        f"g.V('{_escape_gremlin(vertex_id)}')"
+        f".or(__.has('tenantId', '{t}'), __.has('tenant_id', '{t}')).drop()"
+    )
+
+
 def _existence_gremlin(tenant_id: str, op: dict[str, Any]) -> str:
     """Read-only count query used to VERIFY an inverse actually applied and for
     post-commit reconciliation of a committed receipt against graph state."""
@@ -517,7 +526,7 @@ async def rollback_mutation(
     inverse_error = ""
     try:
         if inverse.get("kind") == "vertex" and inverse.get("vertex_id"):
-            await client.query(f"g.V('{_escape_gremlin(str(inverse['vertex_id']))}').drop()")
+            await client.query(_owned_vertex_drop(tenant_id, str(inverse["vertex_id"])))
             inverse_applied = True
         elif inverse.get("kind") == "edge":
             idem = inverse.get("idempotency_key") or make_edge_idempotency_key(

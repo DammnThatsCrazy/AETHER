@@ -22,24 +22,24 @@ from actions.delivery.outcome_processor import WebhookInboxProcessor
 _WEBHOOK_SECRET = "test-aether-callback-secret"
 
 
+_DELIVERY_ID = "del-dead-letter"
+
+
 def _signed_webhook_record(body: str, sig_secret: str | None = None) -> dict:
-    """Headers + secret that pass the processor's real HMAC verification."""
+    """Headers that pass the processor's real HMAC verification."""
     secret = sig_secret or _WEBHOOK_SECRET
     ts = str(int(time.time()))
     sig = "sha256=" + hmac.new(
         secret.encode(), f"{ts}.{body}".encode(), hashlib.sha256
     ).hexdigest()
-    return {
-        "signing_secret": secret,
-        "headers": {"x-aether-signature": sig, "x-aether-timestamp": ts},
-    }
+    return {"headers": {"x-aether-signature": sig, "x-aether-timestamp": ts}}
 
 
 def _callback_payload() -> dict:
     return {
         "event_data": {
             "event_type": "delivered",
-            "delivery_id": str(uuid.uuid4()),
+            "delivery_id": _DELIVERY_ID,
             "recipient": "ops@example.com",
         }
     }
@@ -78,6 +78,14 @@ class _MemInboxRepo:
     def get(self, record_id: str) -> dict | None:
         return self._store.get(record_id)
 
+    async def find_by_id(self, record_id: str) -> dict | None:
+        return self._store.get(record_id)
+
+    async def find_many(self, filters: dict | None = None, limit: int = 50, **kw) -> list[dict]:
+        rows = [r for r in self._store.values()
+                if all(r.get(k) == v for k, v in (filters or {}).items())]
+        return rows[:limit]
+
 
 class _MemOutcomeRepo:
     def __init__(self, fail: bool = False):
@@ -104,6 +112,25 @@ class _OkRouter:
         return None
 
 
+async def _resolve_secret(job: dict) -> str:
+    return _WEBHOOK_SECRET
+
+
+async def _processor(inbox_repo, outcome_repo, router) -> WebhookInboxProcessor:
+    """Processor whose link/receipt/job repos hold the callback's delivery."""
+    links, receipts, jobs = _MemInboxRepo(), _MemInboxRepo(), _MemInboxRepo()
+    await jobs.insert("job-1", {"tenant_id": "t-dl", "provider_config": {"secret_ref": "ref"}})
+    await receipts.insert("rcpt-1", {"tenant_id": "t-dl", "job_id": "job-1"})
+    await links.insert("link-1", {
+        "tenant_id": "t-dl", "provider": "webhook",
+        "external_id": _DELIVERY_ID, "receipt_id": "rcpt-1",
+    })
+    return WebhookInboxProcessor(
+        inbox_repo=inbox_repo, outcome_repo=outcome_repo, link_repo=links, router=router,
+        receipt_repo=receipts, job_repo=jobs, secret_resolver=_resolve_secret,
+    )
+
+
 async def _seed_processed_webhook(inbox_repo: _MemInboxRepo) -> str:
     record_id = str(uuid.uuid4())
     body = json.dumps(_callback_payload())
@@ -123,12 +150,7 @@ class TestRoutingFailureIsRetryable:
         outcome_repo = _MemOutcomeRepo()
         record_id = await _seed_processed_webhook(inbox_repo)
 
-        processor = WebhookInboxProcessor(
-            inbox_repo=inbox_repo,
-            outcome_repo=outcome_repo,
-            link_repo=_MemInboxRepo(),
-            router=_RaisingRouter(),
-        )
+        processor = await _processor(inbox_repo, outcome_repo, _RaisingRouter())
         count = await processor.process_pending()
 
         assert count == 1
@@ -145,12 +167,7 @@ class TestRoutingFailureIsRetryable:
         outcome_repo = _MemOutcomeRepo()
         record_id = await _seed_processed_webhook(inbox_repo)
 
-        processor = WebhookInboxProcessor(
-            inbox_repo=inbox_repo,
-            outcome_repo=outcome_repo,
-            link_repo=_MemInboxRepo(),
-            router=_RaisingRouter(),
-        )
+        processor = await _processor(inbox_repo, outcome_repo, _RaisingRouter())
         await processor.process_pending()
         # Second tick still sees it as pending (claim was released).
         claims = await inbox_repo.claim_pending()
@@ -161,12 +178,7 @@ class TestRoutingFailureIsRetryable:
         outcome_repo = _MemOutcomeRepo(fail=True)
         record_id = await _seed_processed_webhook(inbox_repo)
 
-        processor = WebhookInboxProcessor(
-            inbox_repo=inbox_repo,
-            outcome_repo=outcome_repo,
-            link_repo=_MemInboxRepo(),
-            router=_OkRouter(),
-        )
+        processor = await _processor(inbox_repo, outcome_repo, _OkRouter())
         count = await processor.process_pending()
 
         assert count == 1
@@ -181,12 +193,7 @@ class TestSuccessAndTerminalDispositions:
         outcome_repo = _MemOutcomeRepo()
         record_id = await _seed_processed_webhook(inbox_repo)
 
-        processor = WebhookInboxProcessor(
-            inbox_repo=inbox_repo,
-            outcome_repo=outcome_repo,
-            link_repo=_MemInboxRepo(),
-            router=_OkRouter(),
-        )
+        processor = await _processor(inbox_repo, outcome_repo, _OkRouter())
         count = await processor.process_pending()
 
         assert count == 1
@@ -206,19 +213,12 @@ class TestSuccessAndTerminalDispositions:
             "id": record_id,
             "tenant_id": "t-dl",
             "provider": "webhook",
-            # Headers signed with the CORRECT secret, but the record stores a
-            # WRONG signing_secret → HMAC fails → unverified.
-            **_signed_webhook_record(body, sig_secret=_WEBHOOK_SECRET),
-            "signing_secret": "wrong-secret",
+            # Signed with a secret other than the bound channel's → unverified.
+            **_signed_webhook_record(body, sig_secret="wrong-secret"),
             "raw_body": body,
         })
 
-        processor = WebhookInboxProcessor(
-            inbox_repo=inbox_repo,
-            outcome_repo=outcome_repo,
-            link_repo=_MemInboxRepo(),
-            router=_OkRouter(),
-        )
+        processor = await _processor(inbox_repo, outcome_repo, _OkRouter())
         count = await processor.process_pending()
 
         assert count == 1

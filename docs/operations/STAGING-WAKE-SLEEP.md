@@ -47,14 +47,14 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:552a549e6f681c8052495a269211d0ff883686349b025b7d9b1b34525f8f4b14"
-  ".github/workflows/deploy.yml": "sha256:e9555bd68e7a994e984fd012fa290540c89e078775e4f6da8c3f5b82ed539238"
-  ".github/workflows/pilot-staging.yml": "sha256:62ec13ff1a6f2869aa42a8b2e87c3d49412a33010c5fe8a875baee42cb29cef5"
+  ".github/workflows/deploy.yml": "sha256:61018abf61f2944d9ca884637c929f0f8a8306b3803992396e7f3b552e33ddd4"
+  ".github/workflows/pilot-staging.yml": "sha256:018e96fb87aaf40a6dd781805bbb74394f92b4593334c91c22a09c5a48156db4"
   ".github/workflows/reconcile-staging-plan-role.yml": "sha256:0b3192802e7b8ad76dfb121339946c08a5f4b5efee5e8c36019145cb08df70e0"
   ".github/workflows/staging-business-hours.yml": "sha256:88f5054abd8530877c3406c752f48ebab4b272143534984c7025977bc220f00b"
-  ".github/workflows/staging-lifecycle.yml": "sha256:ab0d86125cd2be277ba7e0a40a4dbc9fdd5db1480ff1c7cb816adf4874a55ae9"
+  ".github/workflows/staging-lifecycle.yml": "sha256:9a9a30a08991de719b73cb0da935e322837f0f9a124f7a566d48e5d5be25fd00"
   ".github/workflows/staging-smoke.yml": "sha256:c9cd095386a95ef344a52bb4261a5e042fb1ca371060caa416d81f3fb884ac0e"
   ".github/workflows/staging-ttl-guard.yml": "sha256:6c6b04054ca5d8b6ce180557662b2b3379e0afc1f9f28fa22899604a22a78060"
-  ".github/workflows/terraform-promote.yml": "sha256:804e3b437274475d5125b4dbf6c3988ff9387909af73a5aeb5690713cf310adf"
+  ".github/workflows/terraform-promote.yml": "sha256:a4c235b5777e0dc0ec1e41faabe964314fa751d9c4239d60f156517e3c7eb84c"
   "config/deployment_profiles.yaml": "sha256:6d4535fd98bebf72519f2e03c5d2dfca190bfe7da63e76140073db051e3b6a66"
   "config/runtime_deployment.yaml": "sha256:cd65f4902ed9062c2526bd9b83b99e2c0ecc58f012a3fa1c90ba9660b874a332"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:b6c9ae760b6e408c63a2b4fcf277499fa4764650f32854cee9b52943a9b3e4b1"
@@ -64,10 +64,10 @@ source_hashes:
   "config/staging_secret_preflight_iam_policy.yaml": "sha256:06ad4ef9c7777eff1190d01b02536542b902692051532f640635e128d5c1403d"
   "config/staging_secret_preflight_trust_policy.json": "sha256:38c81fbb5674275998114973bd151fccb23e510d999560e14f6c3dbf591e2fc5"
   "config/terraform_plan_state_access_policy.yaml": "sha256:3ef6bc24c567f84eb9a44c8a180d0f6f14e6c4a9fabb76138cb3543e4cf150e0"
-  "infra/aws/terraform/modules/ecs/main.tf": "sha256:b639e5e6742dd68587e00123e3ed7cc2d2c8679a6bedc23d3967891a9d0db1a5"
+  "infra/aws/terraform/modules/ecs/main.tf": "sha256:fcfc016058554a533e9e328101cf4cd726a1e8e61f94cb7599717f12275792c1"
   "infra/aws/terraform/profiles.tf": "sha256:da63e1f50e4030924713679445e3c365883a23821ac78df83bebe14436c67f60"
-  "infra/aws/terraform/profiles/staging.tfvars": "sha256:34b4d565d79a786e532b9cda5295cc745e1840b7f241abf1f0608772f2a18181"
-  "infra/aws/terraform/variables.tf": "sha256:5eed310106c5621fc91dc3961c3e2194a03c6d0181fa494df5ad376112638cdb"
+  "infra/aws/terraform/profiles/staging.tfvars": "sha256:efa09f987f2178d6a4e336f99954258a63df80756d24970fa5597ac6b35a786c"
+  "infra/aws/terraform/variables.tf": "sha256:ca0ecdd26f0d7212e4ab11cd7361af4ae6e562915a9f36b7e5d76cb97c1a4b6e"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_amplify_app_contract.py": "sha256:b8ce2e914ba4878098b41c3bdfcf1ec5f0163876578610af5a5362004bc7bdfa"
   "scripts/release/check_staging_awake_lease.py": "sha256:7e13acfed4fef002cbf39b26e9e0c4e10ef4e9a4b1cf6445e44dbf0f90b6b704"
@@ -77,7 +77,7 @@ source_hashes:
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
   "scripts/release/check_staging_secret_payload_contract.py": "sha256:4108624b378be9fe306c7a24608fd6f747a7598cd175b120a524a31cd67f6e4c"
   "scripts/release/check_staging_secret_preflight_policy.py": "sha256:c1d8e7f3e28de4e0dd2fcf259cdbd3da95f2186ecee32c0dffcfca1443cd5f04"
-  "scripts/release/check_staging_task_definition_contract.py": "sha256:c50654e19fa30de91b78dc954f967301a28aa45c8cef2bbf449eeca5f96f11e9"
+  "scripts/release/check_staging_task_definition_contract.py": "sha256:3b38ca65a936f122927c214b814d9742913e6b65f7b7b9295f040fdac5e61fa3"
   "scripts/release/ensure_staging_autoscaling_target_tags.py": "sha256:2f0733c66a6df555537336d88edf30dab740b1d8c30bbaf8140bab9463cb6b00"
   "scripts/release/reconcile_staging_plan_role.py": "sha256:57bba3c35673af5cac235028f22cb716829afab7a8c2d34b3f7281ba5d2fd8ae"
   "services/api/alembic/versions/20260702_delivery_infrastructure.py": "sha256:df8a6bf971bd9db9a907414a8b7e8f0695b6a7c01aa55719e40f869509510916"
@@ -165,7 +165,15 @@ GitHub environment, checks live ECR image-pull grants, and verifies the current
 ECS task-definition/secret-mount contract. Before wake planning it also verifies
 that both live services select the staging DynamoDB cache table, that the table
 is active, and that every live task role is allowed all required cache
-operations on that table. Pilot also proves that the configured GitHub
+operations on that table. The task-definition contract checks the active
+identity-verification key and previous-key companion mount when
+`identity_verification_secrets_enabled` is true. This input is carried through
+the reviewed wake and sleep plan/apply handoffs, and the plan artifact binds
+its value so apply cannot change the secret-mount shape. The promotion workflow
+checks both Secrets Manager `AWSCURRENT` versions before it plans or applies a
+task revision with those mounts. For first-time setup, apply with the input
+false, populate both secrets, then create a fresh reviewed plan with it true.
+Pilot also proves that the configured GitHub
 credential can safely write and then remove a disposable repository secret—the
 same persistence path used only if the post-readiness admin bootstrap is needed.
 The preflight's `iam:SimulatePrincipalPolicy` call runs with the deploy-role
@@ -694,7 +702,8 @@ Steps, in order, with what each proves:
     command is allowed to turn an evidence error into a false green.
 14. **Tenant cleanup.** Every run-scoped tenant recorded by the bootstrap or
     registration marker is removed with `DELETE /v1/admin/tenants/{id}`, falling
-    back to `POST .../deactivate`. Both admin paths revoke durable API keys,
+    back to `POST .../deactivate`, using the first-admin bootstrap key, whose
+    tenant is a platform operator in staging. Both admin paths revoke durable API keys,
     invalidate and verify the Redis auth-cache entries, and revoke contained
     public ingest identifiers before deleting or deactivating the tenant. A
     successful DELETE must return a `cleanup_complete` receipt after erasing

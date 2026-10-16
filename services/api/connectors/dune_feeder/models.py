@@ -187,7 +187,7 @@ class ScheduledQueryConfig(BaseModel):
     quality_threshold: float = Field(default=0.8, ge=0.0, le=1.0, description="Minimum row quality for Bronze landing")
     schema: Optional[dict[str, str]] = Field(None, description="Optional {field: type} for quality gate")
     required_fields: Optional[list[str]] = Field(None, description="Required field names for quality gate")
-    api_key_ref: Optional[str] = Field(None, description="Vault reference for a tenant-specific Dune API key")
+    api_key_ref: Optional[str] = Field(None, description="Tenant credential-store reference for the Dune API key")
     enabled: bool = Field(default=True, description="When false, scheduler skips this config without deleting it")
     created_at: str = Field(..., description="ISO-8601 creation timestamp")
     last_run_at: Optional[str] = Field(None, description="ISO-8601 timestamp of the most recent poll attempt")
@@ -206,7 +206,7 @@ class ScheduleCreateRequest(BaseModel):
     quality_threshold: float = Field(default=0.8, ge=0.0, le=1.0)
     schema: Optional[dict[str, str]] = None
     required_fields: Optional[list[str]] = None
-    api_key_ref: Optional[str] = Field(None, description="Vault reference for a Dune API key")
+    api_key_ref: Optional[str] = Field(None, description="Credential-store reference, resolved within the caller's tenant")
     enabled: bool = True
 
 

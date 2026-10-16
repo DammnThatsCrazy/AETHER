@@ -39,8 +39,8 @@ reviewed_source_commits:
   - commit: "40af67902"
     reason: "Reviewed the optional server-returned consent, usage, and audit references for accepted batch observations. The contracts preserve the existing intake and authority boundaries."
 source_hashes:
-  "packages/shared/": "sha256:7cdc8a10e1cd74e5f6fcef8c3970e1eadb45fe6999a64b7c1748f72614d11208"
-  "scripts/generate_feature_surface_manifest.py": "sha256:9ab5609184818157683093d5cd2ab5472e5df3f2b0134dc692b2bbce96465ca9"
+  "packages/shared/": "sha256:db290855eff15728d3c0ed6a69be316b9eb51c966ec8759a9af5d217affd6d19"
+  "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
@@ -50,12 +50,12 @@ source_hashes:
   "services/api/actions/agent_marketplace/projection.py": "sha256:92a5f5e457beebde9d161bf26f40ccb39fc5b76bc8ae4abfccc3e572b3c29de0"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/config/settings.py": "sha256:4d2921c8c3a93e5cf0e3ab4eab9172770642684dd20858221481608af2ef69d5"
+  "services/api/config/settings.py": "sha256:120775873521c402933065c3073b8f2d242589bca26b095f982952f6bb392f42"
   "services/api/ingestion/ingestion/replay.py": "sha256:65f898480787b71d14c8f687351844fdf5585cd67664ff5c32699328594b24ce"
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
-  "services/api/main.py": "sha256:f76824db10962390701e0356564ecb69e7fc5c81f25fff6e51c685da359aeb75"
-  "services/api/middleware/middleware.py": "sha256:067bfb010fed2bf10eaf63efe9647d4ef0c35c59a319cfabb02c3c04b242d432"
+  "services/api/main.py": "sha256:52e672c1c82e17907041ba173b1fb7cee68bfb03b158eb370fd4f25b584cc726"
+  "services/api/middleware/middleware.py": "sha256:da6d7c92bd082a2c1823b72aca5d4bfa5c17faf0a3fb9e85fc7bd9a88a5b0654"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
   "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
@@ -99,7 +99,7 @@ entries, and operational instructions must use the canonical active paths in
 
 ```
 Providers (24)  →  /v1/lake/ingest  →  Bronze (raw, immutable)
-SDKs            →  /v1/ingest/*     →       ↓
+SDKs            →  /v1/batch        →       ↓
                                        Silver (validated, normalized)
                                             ↓
                                        Gold (features, metrics)
@@ -504,7 +504,10 @@ mesh → legacy defense layer → off); with `REQUIRE_EXTRACTION_DEFENSE=true`
 (production profiles) an unavailable defense fails closed with
 `EXTRACTION_DEFENSE_UNAVAILABLE` instead of silently passing traffic. Platform
 operator tenants (Olympus staff; see [Access Control](ACCESS-CONTROL.md#platform-operators))
-skip it, together with the burst limit and quota metering. See
+skip it, together with the burst limit and quota metering. The middleware
+resolves that operator status before the route policy, which admits only
+admins of platform operator tenants or Kyber operators to `/v1/admin/**` and
+`/v1/diagnostics/**`. See
 [Model Extraction Defense](MODEL-EXTRACTION-DEFENSE.md) for full documentation.
 
 ## Multi-Model Intelligence Harness (0.1.0-alpha.0)

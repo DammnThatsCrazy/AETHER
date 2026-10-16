@@ -79,6 +79,9 @@ class StatefulFakeGraph:
         self.raise_on_drop = raise_on_drop
         self.queries: list[str] = []
 
+    async def get_vertex(self, vertex_id):
+        return None
+
     async def add_vertex(self, vertex):
         self.vertices.add(vertex.vertex_id)
         return vertex.vertex_id

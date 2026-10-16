@@ -10,6 +10,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import JSONResponse
 
+from governance.security.request_context import require_platform_operator
 from shared.common.common import APIResponse, ForbiddenError, NotFoundError
 from shared.logger.logger import get_logger
 
@@ -274,15 +275,9 @@ async def replay_job(
 
 
 # ─── Admin: cross-tenant operator routes ────────────────────────────────────
-# These routes require operator (Kyber) credentials. No tenantId filter applied.
+# These routes require a platform operator. No tenantId filter applied.
 
 admin_router = APIRouter(prefix="/v1/admin/delivery", tags=["Delivery (Admin)"])
-
-
-def _require_operator(request: Request) -> None:
-    """Verify the caller has operator-level access (Kyber service account)."""
-    tenant = request.state.tenant
-    tenant.require_permission("operator")
 
 
 @admin_router.get("/jobs")
@@ -296,7 +291,7 @@ async def admin_list_jobs(
     page: int = Query(default=1, ge=1),
 ):
     """Cross-tenant DeliveryJob listing for Kyber operators."""
-    _require_operator(request)
+    require_platform_operator(request)
     filters: dict[str, Any] = {}
     if state:
         filters["state"] = state

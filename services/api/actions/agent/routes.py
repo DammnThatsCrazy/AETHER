@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from config.settings import settings
 from shared.common.common import APIResponse, BadRequestError, ConflictError, NotFoundError
 from shared.events.events import Event, EventProducer, Topic
-from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
+from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType, tenant_of
 from shared.graph.relationship_layers import get_cross_layer_paths, get_layer_subgraph, RelationshipLayer
 from shared.logger.logger import get_logger, metrics
 from shared.scoring.trust_score import TrustScoreComposite
@@ -1035,22 +1035,33 @@ async def submit_feedback(task_id: str, body: GroundTruthFeedback, request: Requ
     return APIResponse(data=body.model_dump()).to_dict()
 
 
+async def _require_tenant_agent(agent_id: str, tenant_id: str) -> None:
+    """404 unless the agent's graph vertex belongs to ``tenant_id``."""
+    if await _graph.get_vertex_for_tenant(tenant_id, agent_id) is None:
+        raise NotFoundError("Agent")
+
+
 @router.get("/{agent_id}/graph")
 async def get_agent_graph(agent_id: str, request: Request, layer: str = "all"):
     """Get an agent's subgraph (hired agents, contracts, payments)."""
     if not settings.intelligence_graph.enable_agent_layer:
         raise BadRequestError("Intelligence Graph agent layer is not enabled")
-    request.state.tenant.require_permission("agent:manage")
+    tenant = request.state.tenant
+    tenant.require_permission("agent:manage")
+    await _require_tenant_agent(agent_id, tenant.tenant_id)
 
     if layer != "all":
         try:
             rel_layer = RelationshipLayer(layer)
         except ValueError:
             raise BadRequestError(f"Invalid layer: {layer}. Use H2H, H2A, A2H, A2A, or all")
-        subgraph = await get_layer_subgraph(_graph, agent_id, rel_layer)
+        subgraph = await get_layer_subgraph(_graph, agent_id, rel_layer, tenant.tenant_id)
     else:
-        # Get all connected vertices
-        neighbors = await _graph.get_neighbors(agent_id, direction="both")
+        # Get all connected vertices in the caller's tenant
+        neighbors = [
+            v for v in await _graph.get_neighbors(agent_id, direction="both")
+            if tenant_of(v.properties) == tenant.tenant_id
+        ]
         subgraph = {
             "agent_id": agent_id,
             "vertices": [
@@ -1061,7 +1072,7 @@ async def get_agent_graph(agent_id: str, request: Request, layer: str = "all"):
         }
 
     # Add cross-layer paths
-    paths = await get_cross_layer_paths(_graph, agent_id)
+    paths = await get_cross_layer_paths(_graph, agent_id, tenant.tenant_id)
     subgraph["cross_layer_paths"] = paths
 
     return APIResponse(data=subgraph).to_dict()
@@ -1074,7 +1085,9 @@ async def get_agent_trust(agent_id: str, request: Request):
         raise BadRequestError("Intelligence Graph agent layer is not enabled")
     if not settings.intelligence_graph.enable_trust_scoring:
         raise BadRequestError("Intelligence Graph agent layer is not enabled")
-    request.state.tenant.require_permission("agent:manage")
+    tenant = request.state.tenant
+    tenant.require_permission("agent:manage")
+    await _require_tenant_agent(agent_id, tenant.tenant_id)
 
     score = await _trust_scorer.compute(
         entity_id=agent_id,

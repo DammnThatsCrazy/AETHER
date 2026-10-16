@@ -26,7 +26,9 @@ from typing import Any, Optional, TypeVar
 
 from shared.cache.cache import TTL, CacheClient, CacheKey
 from shared.common.common import ConflictError, NotFoundError, utc_now
-from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
+from shared.graph.graph import (
+    Edge, EdgeType, GraphClient, Vertex, VertexType, tenant_of, user_vertex_id,
+)
 from shared.logger.logger import get_logger
 from shared.temporal.instant import coerce_utc_lenient
 
@@ -234,6 +236,16 @@ def _explicit_filter_param(data_type: Optional[str], value: Any) -> Any:
     return _jsonb_text(value)
 
 
+def _row_tenant(record: dict) -> str:
+    """The tenant a record names, in either spelling; ``""`` for none."""
+    return tenant_of(record) or ""
+
+
+def _no_rows(status: Any) -> bool:
+    """True for an asyncpg ``INSERT 0 0`` / ``UPDATE 0`` command status."""
+    return isinstance(status, str) and status.endswith(" 0")
+
+
 def _matches_filters(row: dict, filters: dict) -> bool:
     """In-memory equivalent of the SQL find_many predicate.
 
@@ -280,6 +292,10 @@ class BaseRepository(ABC):
     #: Explicit-column mode only: record key → migrated column name, for
     #: records whose historical key differs from the migration's column.
     _column_renames: dict[str, str] = {}
+    #: ``insert``/``update`` only replace a row owned by the writing tenant
+    #: (``COALESCE(tenant_id, '')`` must equal the record's tenant). ``False``
+    #: only for tables whose rows are not tenant-owned.
+    _tenant_guard: bool = True
 
     def __init__(self, table_name: str) -> None:
         self.table_name = table_name
@@ -661,25 +677,44 @@ class BaseRepository(ABC):
         )
         return [r["tenant_id"] for r in rows]
 
+    def _unavailable(self) -> ConflictError:
+        # The generic conflict text: it must not tell a caller that the id
+        # exists in another tenant.
+        return ConflictError()
+
     async def insert(self, record_id: str, data: dict) -> dict:
+        """Create ``record_id`` or replace it when the stored row has the same tenant.
+
+        The tenant is read from ``tenant_id`` or ``tenantId``. A row owned by a
+        different tenant (or by none, when the record names one) is never
+        replaced: the write raises ``ConflictError`` instead.
+        """
         now = utc_now().isoformat()
         data["id"] = record_id
         data["created_at"] = now
         data["updated_at"] = now
+        tenant_id = _row_tenant(data)
 
         pool = await self._ensure_pool()
         if pool is None:
+            existing = self._store.get(record_id)
+            if self._tenant_guard and existing is not None and _row_tenant(existing) != tenant_id:
+                raise self._unavailable()
             self._store[record_id] = data
             logger.info(f"INSERT {self.table_name} id={record_id} (in-memory)")
             return data
 
         await self._ensure_table()
         if self._jsonb_mode:
-            tenant_id = data.get("tenant_id", "")
-            await pool.execute(
+            owner_check = (
+                f" WHERE COALESCE({self.table_name}.tenant_id, '') = EXCLUDED.tenant_id"
+                if self._tenant_guard else ""
+            )
+            status = await pool.execute(
                 f"""INSERT INTO {self.table_name} (id, data, tenant_id, created_at, updated_at)
                     VALUES ($1, $2::jsonb, $3, NOW(), NOW())
-                    ON CONFLICT (id) DO UPDATE SET data = $2::jsonb, updated_at = NOW()""",
+                    ON CONFLICT (id) DO UPDATE SET data = $2::jsonb, updated_at = NOW()"""
+                + owner_check,
                 record_id, json.dumps(data, default=str), tenant_id,
             )
         else:
@@ -703,12 +738,20 @@ class BaseRepository(ABC):
             update_set = ", ".join(
                 f"{c} = EXCLUDED.{c}" for c in cols if c != "id"
             )
-            await pool.execute(
+            owner_check = ""
+            if self._tenant_guard and "tenant_id" in column_types:
+                vals.append(tenant_id)
+                owner_check = (
+                    f" WHERE COALESCE({self.table_name}.tenant_id, '') = ${len(vals)}"
+                )
+            status = await pool.execute(
                 f"""INSERT INTO {self.table_name} ({col_list})
                     VALUES ({placeholders})
-                    ON CONFLICT (id) DO UPDATE SET {update_set}""",
+                    ON CONFLICT (id) DO UPDATE SET {update_set}""" + owner_check,
                 *vals,
             )
+        if _no_rows(status):
+            raise self._unavailable()
         logger.info(f"INSERT {self.table_name} id={record_id}")
         return data
 
@@ -732,7 +775,7 @@ class BaseRepository(ABC):
         if pool is None:
             existing = self._store.get(record_id)
             if existing is not None and existing.get("tenant_id") != tenant_id:
-                raise ConflictError(f"{self.table_name} ID is unavailable in this tenant")
+                raise self._unavailable()
             self._store[record_id] = data
             logger.info(f"TENANT UPSERT {self.table_name} id={record_id} (in-memory)")
             return data
@@ -772,25 +815,42 @@ class BaseRepository(ABC):
                 *vals,
             )
         if status.endswith(" 0"):
-            raise ConflictError(f"{self.table_name} ID is unavailable in this tenant")
+            raise self._unavailable()
         logger.info(f"TENANT UPSERT {self.table_name} id={record_id}")
         return data
 
     async def update(self, record_id: str, data: dict) -> dict:
+        """Merge ``data`` into ``record_id``; only the owning tenant's row changes.
+
+        The writing tenant is the one ``data`` names, else the stored record's.
+        """
         existing = await self.find_by_id_or_fail(record_id)
-        existing.update(data)
-        existing["updated_at"] = utc_now().isoformat()
+        owner = _row_tenant(existing)
+        tenant_id = _row_tenant(data) or owner
 
         pool = await self._ensure_pool()
         if pool is None:
+            if self._tenant_guard and tenant_id != owner:
+                raise self._unavailable()
+            existing.update(data)
+            existing["updated_at"] = utc_now().isoformat()
             self._store[record_id] = existing
             logger.info(f"UPDATE {self.table_name} id={record_id} (in-memory)")
             return existing
 
+        existing.update(data)
+        existing["updated_at"] = utc_now().isoformat()
         if self._jsonb_mode:
-            await pool.execute(
-                f"UPDATE {self.table_name} SET data = $1::jsonb, updated_at = NOW() WHERE id = $2",
-                json.dumps(existing, default=str), record_id,
+            owner_check = (
+                " AND COALESCE(tenant_id, '') = $3" if self._tenant_guard else ""
+            )
+            params: list[Any] = [json.dumps(existing, default=str), record_id]
+            if self._tenant_guard:
+                params.append(tenant_id)
+            status = await pool.execute(
+                f"UPDATE {self.table_name} SET data = $1::jsonb, updated_at = NOW() "
+                f"WHERE id = $2{owner_check}",
+                *params,
             )
         else:
             column_types = await self._explicit_column_types(pool)
@@ -809,10 +869,17 @@ class BaseRepository(ABC):
                 vals.append(bound)
                 idx += 1
             vals.append(record_id)
-            await pool.execute(
-                f"UPDATE {self.table_name} SET {', '.join(set_parts)} WHERE id = ${idx}",
+            owner_check = ""
+            if self._tenant_guard and "tenant_id" in column_types:
+                vals.append(tenant_id)
+                owner_check = f" AND COALESCE(tenant_id, '') = ${idx + 1}"
+            status = await pool.execute(
+                f"UPDATE {self.table_name} SET {', '.join(set_parts)} "
+                f"WHERE id = ${idx}{owner_check}",
                 *vals,
             )
+        if _no_rows(status):
+            raise self._unavailable()
         logger.info(f"UPDATE {self.table_name} id={record_id}")
         return existing
 
@@ -1039,11 +1106,10 @@ class TenantOwnedRepository(BaseRepository):
         if not tenant_id:
             raise ValueError("upsert requires a tenant_id")
         existing = await BaseRepository.find_by_id(self, record_id)
-        owner = existing.get("tenant_id") if existing is not None else None
-        if existing is not None and owner not in (None, "", tenant_id):
-            raise ConflictError(f"{self.table_name} id {record_id!r} already exists")
+        if existing is not None and existing.get("tenant_id") != tenant_id:
+            raise self._unavailable()
         row = {**data, "tenant_id": tenant_id}
-        if owner == tenant_id:
+        if existing is not None:
             return await self.for_tenant(tenant_id).update(record_id, row)
         return await self.insert(record_id, row)
 
@@ -1066,27 +1132,27 @@ class IdentityRepository:
         if cached:
             return cached
 
-        profile = await self._profiles.find_by_id(user_id)
-        if profile:
-            await self.cache.set_json(key, profile, TTL.PROFILE)
+        profile = await self._profiles.find_by_id(tenant_record_id(tenant_id, user_id))
+        if profile is None or profile.get("tenant_id") != tenant_id:
+            return None
+        await self.cache.set_json(key, profile, TTL.PROFILE)
         return profile
 
     async def upsert_profile(self, tenant_id: str, user_id: str, data: dict) -> dict:
-        existing = await self._profiles.find_by_id(user_id)
-        if existing:
-            profile = await self._profiles.update(user_id, data)
+        record_id = tenant_record_id(tenant_id, user_id)
+        row = {**data, "tenant_id": tenant_id, "user_id": user_id}
+        if await self._profiles.find_by_id(record_id):
+            profile = await self._profiles.update(record_id, row)
         else:
-            profile = await self._profiles.insert(
-                user_id, {**data, "tenant_id": tenant_id}
-            )
+            profile = await self._profiles.insert(record_id, row)
 
         from shared.graph.mutation_gateway import GraphMutationGateway
         from shared.graph.mutation_intents import vertex_intent
 
         vertex = Vertex(
             vertex_type=VertexType.USER,
-            vertex_id=user_id,
-            properties={"tenant_id": tenant_id, **data},
+            vertex_id=user_vertex_id(tenant_id, user_id),
+            properties={**data, "tenant_id": tenant_id, "user_id": user_id},
         )
         await GraphMutationGateway(graph_client=self.graph).apply(vertex_intent(
             vertex, operation="node_versioned",
@@ -1102,29 +1168,32 @@ class IdentityRepository:
         secondary_id: str,
     ) -> dict:
         """Merge two user profiles into one (identity resolution)."""
-        primary = await self._profiles.find_by_id_or_fail(primary_id)
-        secondary = await self._profiles.find_by_id_or_fail(secondary_id)
+        primary_key = tenant_record_id(tenant_id, primary_id)
+        secondary_key = tenant_record_id(tenant_id, secondary_id)
+        primary = await self._profiles.find_by_id_or_fail(primary_key)
+        secondary = await self._profiles.find_by_id_or_fail(secondary_key)
 
         for key, value in secondary.items():
             if key not in primary or primary[key] is None:
                 primary[key] = value
 
-        await self._profiles.update(primary_id, primary)
-        await self._profiles.delete(secondary_id)
+        await self._profiles.update(primary_key, primary)
+        await self._profiles.delete(secondary_key)
 
         from shared.graph.mutation_gateway import GraphMutationGateway
         from shared.graph.mutation_intents import edge_intent
 
+        secondary_vertex = user_vertex_id(tenant_id, secondary_id)
         edge = Edge(
             edge_type=EdgeType.RESOLVED_AS,
-            from_vertex_id=secondary_id,
-            to_vertex_id=primary_id,
+            from_vertex_id=secondary_vertex,
+            to_vertex_id=user_vertex_id(tenant_id, primary_id),
             properties={"tenant_id": tenant_id, "merged_at": utc_now().isoformat()},
         )
         await GraphMutationGateway(graph_client=self.graph).apply(edge_intent(
             edge, operation="identity_merged",
             tenant_id=tenant_id, actor_id="identity_repository",
-            subject_kind="entity", subject_id=secondary_id,
+            subject_kind="entity", subject_id=secondary_vertex,
             reason_code="profile_merge", causality_class="declared_reason",
         ))
 
@@ -1132,11 +1201,14 @@ class IdentityRepository:
         await self.cache.delete(CacheKey.profile(tenant_id, secondary_id))
         return primary
 
-    async def get_graph_neighbors(self, user_id: str) -> list[dict]:
-        neighbors = await self.graph.get_neighbors(user_id, direction="out")
+    async def get_graph_neighbors(self, user_id: str, tenant_id: str) -> list[dict]:
+        neighbors = await self.graph.get_neighbors(
+            user_vertex_id(tenant_id, user_id), direction="out",
+        )
         return [
             {"id": v.vertex_id, "type": v.vertex_type, "properties": v.properties}
             for v in neighbors
+            if tenant_of(v.properties) == tenant_id
         ]
 
 
@@ -1185,6 +1257,13 @@ _CANONICAL_TS_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
 def _tenant_scoped_digest(prefix: str, tenant_id: str, natural_id: str) -> str:
     digest = hashlib.sha256(f"{tenant_id}\x1f{natural_id}".encode()).hexdigest()
     return f"{prefix}_{digest[:32]}"
+
+
+def tenant_record_id(tenant_id: str, natural_id: str) -> str:
+    """Row id for a record whose natural id is unique only inside one tenant."""
+    if not tenant_id:
+        raise ValueError("a tenant-scoped record id requires a tenant_id")
+    return f"{tenant_id}:{natural_id}"
 
 
 def analytics_event_record_id(tenant_id: str, event_id: str) -> str:
@@ -1913,6 +1992,9 @@ class EnterpriseInquiryRepository(BaseRepository):
 
 class AdminRepository(BaseRepository):
     """Tenant management, billing, API key records."""
+    # Tenant records are platform state, not rows a tenant owns.
+    _tenant_guard = False
+
     def __init__(self) -> None:
         super().__init__("tenants")
 
@@ -1932,6 +2014,8 @@ class FirstAdminBootstrapRepository(BaseRepository):
     can resume after an interrupted write; a different request remains
     fail-closed.
     """
+
+    _tenant_guard = False
 
     def __init__(self) -> None:
         super().__init__("first_admin_bootstrap")
@@ -1988,6 +2072,9 @@ class UserRepository(BaseRepository):
     completes, at which point the pending row is deleted and a permanent user
     row is written with a UUID id.
     """
+    # A user is a global principal: an SSO re-invite moves it to another tenant.
+    _tenant_guard = False
+
     def __init__(self) -> None:
         super().__init__("users")
 
@@ -2529,9 +2616,11 @@ class IdentityClusterRepository(BaseRepository):
         record["unlinked_at"] = utc_now().isoformat()
         return await self.update(cluster_id, record)
 
-    async def list_for_entity(self, entity_id: str) -> list[dict]:
+    async def list_for_entity(self, entity_id: str, tenant_id: str) -> list[dict]:
+        if not tenant_id:
+            raise ValueError("list_for_entity requires a tenant_id")
         results = await self.find_many(
-            filters={"entity_id": entity_id}, limit=500,
+            filters={"entity_id": entity_id, "tenant_id": tenant_id}, limit=500,
         )
         return [r for r in results if not r.get("unlinked_at")]
 
@@ -2829,11 +2918,16 @@ class BehaviorProfileRepository(BaseRepository):
     """Derived behavior snapshots: automation_ratio, decision_latency, etc.
 
     Recomputed by the BehaviorScorer / RiskScorer / IntentInferrer workers.
-    Profile 360 endpoints read the latest snapshot per entity.
+    Profile 360 endpoints read the latest snapshot per entity. One row per
+    (tenant, entity), keyed ``{tenant_id}:{entity_id}``.
     """
 
     def __init__(self) -> None:
         super().__init__("behavior_profiles")
+
+    async def find_for_entity(self, tenant_id: str, entity_id: str) -> Optional[dict]:
+        row = await self.find_by_id(tenant_record_id(tenant_id, entity_id))
+        return row if row is not None and row.get("tenant_id") == tenant_id else None
 
     async def upsert_snapshot(
         self,
@@ -2867,18 +2961,24 @@ class BehaviorProfileRepository(BaseRepository):
             "fraud_summary": fraud_summary or {},
             "computed_at": utc_now().isoformat(),
         }
-        # One row per entity (latest snapshot wins). Use entity_id as key.
-        existing = await self.find_by_id(entity_id)
-        if existing:
-            return await self.update(entity_id, snapshot)
-        return await self.insert(entity_id, snapshot)
+        record_id = tenant_record_id(tenant_id, entity_id)
+        if await self.find_by_id(record_id):
+            return await self.update(record_id, snapshot)
+        return await self.insert(record_id, snapshot)
 
 
 class JourneyChainRepository(BaseRepository):
-    """Cross-journey memory: link multiple journeys for one entity over time."""
+    """Cross-journey memory: link multiple journeys for one entity over time.
+
+    One chain per (tenant, entity), keyed ``{tenant_id}:{entity_id}``.
+    """
 
     def __init__(self) -> None:
         super().__init__("journey_chains")
+
+    async def find_for_entity(self, tenant_id: str, entity_id: str) -> Optional[dict]:
+        row = await self.find_by_id(tenant_record_id(tenant_id, entity_id))
+        return row if row is not None and row.get("tenant_id") == tenant_id else None
 
     async def upsert_chain(
         self,
@@ -2903,10 +3003,10 @@ class JourneyChainRepository(BaseRepository):
             "spans_last_seen_at": spans_last_seen_at,
             "historical_context": historical_context or {},
         }
-        existing = await self.find_by_id(chain_id)
-        if existing:
-            return await self.update(chain_id, record)
-        return await self.insert(chain_id, record)
+        record_id = tenant_record_id(tenant_id, entity_id)
+        if await self.find_by_id(record_id):
+            return await self.update(record_id, record)
+        return await self.insert(record_id, record)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -3290,13 +3390,21 @@ class EventReplayRepository(BaseRepository):
 
 
 class EventEnvelopeRepository(BaseRepository):
-    """Durable store for ingested EventPipelineEnvelopes available for replay."""
+    """Durable store for ingested EventPipelineEnvelopes available for replay.
+
+    Envelope ids are client-chosen, so a row is keyed ``{tenantId}:{id}`` and
+    keeps the envelope's own id in ``envelope_id``.
+    """
 
     def __init__(self) -> None:
         super().__init__("event_envelopes")
 
     async def create(self, envelope: dict) -> dict:
-        return await self.insert(envelope["id"], envelope)
+        tenant_id = envelope.get("tenantId") or envelope.get("tenant_id") or ""
+        return await self.insert(
+            tenant_record_id(tenant_id, envelope["id"]),
+            {**envelope, "tenant_id": tenant_id, "envelope_id": envelope["id"]},
+        )
 
     async def list_replayable(
         self,
@@ -3344,6 +3452,18 @@ class ProvidersRepository(BaseRepository):
 
     async def list_for_tenant(self, tenant_id: str, limit: int = 100) -> list[dict]:
         return await self.find_many(filters={"tenant_id": tenant_id}, limit=limit)
+
+    async def find_for_tenant(self, tenant_id: str, provider_id: str) -> Optional[dict]:
+        """Return the credential record only when it belongs to ``tenant_id``.
+
+        Records without a tenant_id are never returned.
+        """
+        if not tenant_id or not provider_id:
+            return None
+        record = await self.find_by_id(provider_id)
+        if not record or record.get("tenant_id") != tenant_id:
+            return None
+        return record
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -3569,7 +3689,13 @@ class SignalRepository(BaseRepository):
         super().__init__("behavioral_signals")
 
     async def upsert_signal(self, signal: dict) -> dict:
-        return await self.insert(signal["signal_id"], signal)
+        # Restated signal ids are deterministic per entity, so the row id carries
+        # the tenant; ``signal_id`` keeps the id callers see.
+        return await self.insert(tenant_record_id(signal["tenant_id"], signal["signal_id"]), signal)
+
+    async def get_signal(self, tenant_id: str, signal_id: str) -> Optional[dict]:
+        row = await self.find_by_id(tenant_record_id(tenant_id, signal_id))
+        return row if row is not None and row.get("tenant_id") == tenant_id else None
 
     async def list_for_entity(
         self,
@@ -3593,7 +3719,7 @@ class SignalRepository(BaseRepository):
     async def delete_for_entity(self, entity_id: str, tenant_id: str) -> int:
         rows = await self.list_for_entity(entity_id, tenant_id, include_stale=True, limit=1000)
         for r in rows:
-            await self.delete(r["signal_id"])
+            await self.delete(r["id"])
         return len(rows)
 
 
@@ -3610,6 +3736,9 @@ class DuneBronzeRepository(BaseRepository):
     Rows are never directly mutated by operator actions — Silver promotion
     creates a copy; rollback deletes by source_tag + tenant_scope.
     """
+
+    # Platform-wide Dune feed state, not tenant-owned rows.
+    _tenant_guard = False
 
     def __init__(self) -> None:
         super().__init__("dune_bronze_records")
@@ -3645,6 +3774,9 @@ class DuneSilverRepository(BaseRepository):
     are eligible. Silver rows are still isolated from the canonical graph.
     """
 
+    # Platform-wide Dune feed state, not tenant-owned rows.
+    _tenant_guard = False
+
     def __init__(self) -> None:
         super().__init__("dune_silver_records")
 
@@ -3677,6 +3809,9 @@ class DuneGoldRepository(BaseRepository):
     Gold records are domain-level aggregates keyed by
     (source_tag, domain, query_id, tenant_scope). Still isolated from graph.
     """
+
+    # Platform-wide Dune feed state, not tenant-owned rows.
+    _tenant_guard = False
 
     def __init__(self) -> None:
         super().__init__("dune_gold_records")
@@ -3716,6 +3851,9 @@ class DuneFeederStatsRepository(BaseRepository):
     own row (key = "feeder_stats_{scope}") so tenant admins only see their own
     rejection rate and last-ingest metadata, not another tenant's activity.
     """
+
+    # Platform-wide Dune feed state, not tenant-owned rows.
+    _tenant_guard = False
 
     def __init__(self) -> None:
         super().__init__("dune_feeder_stats")

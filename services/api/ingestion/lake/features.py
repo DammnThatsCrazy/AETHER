@@ -26,23 +26,27 @@ logger = get_logger("aether.lake.features")
 
 async def materialize_wallet_features(
     wallet_address: str,
+    tenant_id: str,
     cache: Optional[CacheClient] = None,
 ) -> dict:
     """
-    Compute features for a wallet from Silver/Gold data.
+    Compute ``tenant_id``'s features for a wallet from Silver/Gold data.
     Writes to Gold tier and optionally to Redis for online serving.
+
+    Features are tenant-scoped: they read only that tenant's Silver rows (plus
+    tenant-less legacy rows) and are persisted and cached under that tenant.
     """
+    if not tenant_id:
+        raise ValueError("materialize_wallet_features requires a tenant_id")
     features: dict[str, Any] = {
         "wallet_address": wallet_address,
         "materialized_at": utc_now().isoformat(),
     }
 
-    # Gather from Silver tiers. This is a global feature job with no single
-    # owning tenant, so it reads cross-tenant explicitly (tenant_id=None).
-    onchain_records = await silver_onchain.get_entity(wallet_address, "wallet", tenant_id=None)
-    market_records = await silver_market.get_entity(wallet_address, "wallet", tenant_id=None)
-    social_records = await silver_social.get_entity(wallet_address, "wallet", tenant_id=None)
-    identity_records = await silver_identity.get_entity(wallet_address, "wallet", tenant_id=None)
+    onchain_records = await silver_onchain.get_entity(wallet_address, "wallet", tenant_id=tenant_id)
+    market_records = await silver_market.get_entity(wallet_address, "wallet", tenant_id=tenant_id)
+    social_records = await silver_social.get_entity(wallet_address, "wallet", tenant_id=tenant_id)
+    identity_records = await silver_identity.get_entity(wallet_address, "wallet", tenant_id=tenant_id)
 
     # Transaction features
     features["tx_count"] = len(onchain_records)
@@ -57,11 +61,12 @@ async def materialize_wallet_features(
         entity_type="wallet",
         value=features,
         source_tag="feature_materialization",
+        tenant_id=tenant_id,
     )
 
     # Online serving via Redis
     if cache:
-        cache_key = f"aether:features:wallet:{wallet_address}"
+        cache_key = f"aether:features:wallet:{tenant_id}:{wallet_address}"
         await cache.set_json(cache_key, features, ttl=TTL.LONG)
 
     metrics.increment("features_materialized", labels={"entity_type": "wallet"})

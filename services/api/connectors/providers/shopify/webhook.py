@@ -58,14 +58,13 @@ class ShopifyWebhookAdapter:
     def shop_domain_from_payload(
         payload: dict[str, Any], *, headers: Mapping[str, str] | None = None
     ) -> str:
-        """Return the validated shop domain carried by the signed body.
+        """Return the validated shop domain a delivery names.
 
-        The body domain is the routing candidate. The optional Shopify domain
-        header is only a consistency check and can never select a connection.
+        ``X-Shopify-Shop-Domain`` comes first (Shopify's own order webhooks
+        carry the shop only there), then the body ``domain``; when both are
+        present they must agree. Either is only a routing candidate: callers
+        must still verify the selected binding's own HMAC over the raw body.
         """
-        domain = _validated_shop_domain(str(payload.get("domain") or ""))
-        if not domain:
-            raise ValueError("missing or invalid Shopify shop domain")
         header_domains = {
             value.strip()
             for key, value in (headers or {}).items()
@@ -73,10 +72,18 @@ class ShopifyWebhookAdapter:
         }
         if len(header_domains) > 1:
             raise ValueError("conflicting Shopify shop domain headers")
-        if header_domains:
-            header_domain = _validated_shop_domain(next(iter(header_domains)))
-            if not header_domain or header_domain != domain:
-                raise ValueError("Shopify shop domain does not match its signed body")
+        header_domain = _validated_shop_domain(next(iter(header_domains))) if header_domains else None
+        if header_domains and not header_domain:
+            raise ValueError("invalid Shopify shop domain header")
+        body_value = str(payload.get("domain") or "")
+        body_domain = _validated_shop_domain(body_value) if body_value else None
+        if body_value and not body_domain:
+            raise ValueError("invalid Shopify shop domain in body")
+        if header_domain and body_domain and header_domain != body_domain:
+            raise ValueError("Shopify shop domain header does not match the body")
+        domain = header_domain or body_domain
+        if not domain:
+            raise ValueError("missing Shopify shop domain")
         return domain
 
     def parse(

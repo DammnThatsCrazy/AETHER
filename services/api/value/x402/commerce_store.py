@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
 from pydantic import BaseModel
 
+from repositories.repos import tenant_record_id
+
 from .commerce_models import (
     AccessGrant,
     ApprovalRequest,
@@ -113,23 +115,43 @@ class TenantCollection:
 # ── Postgres-backed collection ────────────────────────────────────────────────
 
 class _RepoCollection:
-    """Wraps a BaseRepository + id_field + model_class to match the TenantCollection API."""
+    """Wraps a BaseRepository + id_field + model_class to match the TenantCollection API.
+
+    Object ids (including the per-tenant seed ids such as ``fac_circle_v2``)
+    are unique only within a tenant, so each row is keyed
+    ``{tenant_id}:{object id}``; the model keeps its own id field.
+    """
 
     def __init__(self, repo: Any, id_field: str, model_class: type[BaseModel]) -> None:
         self._repo = repo
         self._id_field = id_field
         self._model_class = model_class
 
+    async def _find(self, tenant_id: str, obj_id: str) -> tuple[Optional[str], Optional[dict]]:
+        """``(row id, row)`` of the tenant's object, or ``(None, None)``.
+
+        A row keyed by the bare object id (written before rows were tenant
+        keyed, or by the demo seeder's tenant-unique ids) still resolves when
+        it belongs to ``tenant_id``.
+        """
+        for row_id in (tenant_record_id(tenant_id, obj_id), obj_id):
+            raw = await self._repo.find_by_id(row_id)
+            if raw is not None and raw.get("tenant_id") == tenant_id:
+                return row_id, raw
+        return None, None
+
     async def put(self, tenant_id: str, obj: Any) -> Any:
         data = obj.model_dump(mode="json")
-        if "tenant_id" not in data or data["tenant_id"] is None:
+        if not data.get("tenant_id"):
             data["tenant_id"] = tenant_id
-        await self._repo.insert(getattr(obj, self._id_field), data)
+        obj_id = getattr(obj, self._id_field)
+        row_id, _ = await self._find(data["tenant_id"], obj_id)
+        await self._repo.insert(row_id or tenant_record_id(data["tenant_id"], obj_id), data)
         return obj
 
     async def get(self, tenant_id: str, obj_id: str) -> Optional[Any]:
-        raw = await self._repo.find_by_id(obj_id)
-        if raw is None or raw.get("tenant_id") != tenant_id:
+        _, raw = await self._find(tenant_id, obj_id)
+        if raw is None:
             return None
         return self._model_class.model_validate(raw)
 
@@ -143,10 +165,10 @@ class _RepoCollection:
         return [self._model_class.model_validate(r) for r in raws]
 
     async def delete(self, tenant_id: str, obj_id: str) -> bool:
-        existing = await self.get(tenant_id, obj_id)
-        if existing is None:
+        row_id, _ = await self._find(tenant_id, obj_id)
+        if row_id is None:
             return False
-        await self._repo.delete(obj_id)
+        await self._repo.delete(row_id)
         return True
 
     async def erase_subject_refs(self, tenant_id: str, refs: set[str]) -> int:

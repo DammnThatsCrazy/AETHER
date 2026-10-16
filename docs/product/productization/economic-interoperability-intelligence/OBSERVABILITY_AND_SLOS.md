@@ -9,7 +9,7 @@ since_version: 0.1.0
 source_files: [services/api/journeys/notification_intelligence/consumer.py]
 canonical_owner: platform@aether
 source_hashes:
-  "services/api/journeys/notification_intelligence/consumer.py": "sha256:a3d195a687cde196be1f66ae1e43e0b56d5d8b5f4a64a039573673fbe06ebd94"
+  "services/api/journeys/notification_intelligence/consumer.py": "sha256:ac3057954385cd9bbcf0428169affdcb71ddb5fa6358070d7b11c81c77bd917f"
 ---
 
 # Observability and SLOs
@@ -23,6 +23,10 @@ source_hashes:
   `aether.derivatives.stream.gap.stalled` (P2),
   `aether.interop.message.stuck` (P2),
   `aether.interop.security.policy.changed` (P1).
+- The notification consumer drops an alert event that carries no tenant
+  (logged as `notification_dropped_no_tenant`, counted in
+  `aether_notifications_dropped_total{reason="missing_tenant"}`) instead of
+  fanning it out to channels.
 - Operator health surfaces: Kyber ops pages expose checkpoint lag,
   open gaps, unresolved variances, correlation health, and policy drift.
 

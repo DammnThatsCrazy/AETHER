@@ -34,6 +34,11 @@ on:
         options: [full, pilot]
         default: pilot
         required: true
+      identity_verification_secrets_enabled:
+        description: Mount identity verification keys after their Secrets Manager versions are populated
+        type: boolean
+        default: true
+        required: false
       confirm_runtime_wake:
         description: "Explicitly authorize starting staging ECS services (required for apply-wake/full-rehearsal)"
         type: boolean
@@ -844,6 +849,7 @@ jobs:
           GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN || github.token }}
           STAGING_STATE: awake
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
           BACKEND_IMAGE_DIGEST: ${{ steps.release.outputs.backend_image_digest }}
           STAGING_SECRETS_KMS_KEY_ARN: ${{ inputs.staging_secrets_kms_key_arn }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
@@ -913,6 +919,7 @@ jobs:
             -f profile="$STAGING_PROFILE" \
             -f action=plan \
             -f deployment_lane="$DEPLOYMENT_LANE" \
+            -f identity_verification_secrets_enabled="$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
             -f staging_state="$STAGING_STATE" \
             -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
             -f ml_image_digest="$ML_IMAGE_DIGEST" \
@@ -958,6 +965,7 @@ jobs:
         env:
           PROFILE: ${{ needs.select-profile.outputs.profile }}
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
           EXPECTED_STATE: awake
           EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
           PLAN_RUN_ID: ${{ steps.dispatch.outputs.plan_run_id }}
@@ -968,6 +976,7 @@ jobs:
             reviewed.tfplan reviewed.tfplan.json reviewed.tfplan.txt \
             reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
             reviewed.deployment-lane \
+            reviewed.identity-verification-secrets-enabled \
             reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
             reviewed.state-bucket reviewed.state-lock-table \
             reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
@@ -978,6 +987,8 @@ jobs:
           test "$(cat reviewed.profile)" = "$PROFILE"
           test "$(cat reviewed.deployment-lane)" = "$DEPLOYMENT_LANE" \
             || { echo "::error::reviewed plan lane $(cat reviewed.deployment-lane) is not ${DEPLOYMENT_LANE}"; exit 1; }
+          test "$(cat reviewed.identity-verification-secrets-enabled)" = "$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
+            || { echo '::error::reviewed plan identity verification secret setting differs from lifecycle input'; exit 1; }
           test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"
           reviewed_state_bucket="$(cat reviewed.state-bucket)"
           reviewed_state_lock_table="$(cat reviewed.state-lock-table)"
@@ -1072,6 +1083,7 @@ jobs:
         env:
           PROFILE: ${{ needs.select-profile.outputs.profile }}
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
           EXPECTED_CHECKSUM: ${{ needs.wake-plan.outputs.plan_checksum || inputs.plan_checksum }}
           EXPECTED_STATE: awake
         run: |
@@ -1081,6 +1093,7 @@ jobs:
             reviewed.tfplan reviewed.tfplan.json reviewed.tfplan.txt \
             reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
             reviewed.deployment-lane \
+            reviewed.identity-verification-secrets-enabled \
             reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
             reviewed.state-bucket reviewed.state-lock-table \
             reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
@@ -1091,6 +1104,8 @@ jobs:
           test "$(cat reviewed.profile)" = "$PROFILE"
           test "$(cat reviewed.deployment-lane)" = "$DEPLOYMENT_LANE" \
             || { echo "::error::reviewed plan lane $(cat reviewed.deployment-lane) is not ${DEPLOYMENT_LANE}"; exit 1; }
+          test "$(cat reviewed.identity-verification-secrets-enabled)" = "$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
+            || { echo '::error::reviewed plan identity verification secret setting differs from lifecycle input'; exit 1; }
           test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"
           reviewed_state_bucket="$(cat reviewed.state-bucket)"
           reviewed_state_lock_table="$(cat reviewed.state-lock-table)"
@@ -1316,6 +1331,7 @@ jobs:
           PLAN_RUN_ID: ${{ needs.wake-validate.outputs.plan_run_id }}
           PLAN_CHECKSUM: ${{ needs.wake-validate.outputs.plan_checksum }}
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
           REF_NAME: ${{ github.ref_name }}
         run: |
@@ -1331,6 +1347,7 @@ jobs:
             -f profile="$STAGING_PROFILE" \
             -f action=apply \
             -f deployment_lane="$DEPLOYMENT_LANE" \
+            -f identity_verification_secrets_enabled="$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
             -f plan_run_id="$PLAN_RUN_ID" \
             -f plan_checksum="$PLAN_CHECKSUM" 2>&1)"
           printf '%s\n' "$dispatch_output"
@@ -3007,6 +3024,7 @@ jobs:
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
           BACKEND_IMAGE_DIGEST: ${{ needs.wake-plan.outputs.backend_image_digest || inputs.backend_image_digest }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
           STAGING_SECRETS_KMS_KEY_ARN: ${{ inputs.staging_secrets_kms_key_arn }}
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
           EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
@@ -3076,6 +3094,7 @@ jobs:
             -f profile="$STAGING_PROFILE" \
             -f action=plan \
             -f deployment_lane="$DEPLOYMENT_LANE" \
+            -f identity_verification_secrets_enabled="$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
             -f staging_state=asleep \
             -f secret_preflight_required=false \
             -f backend_image_digest="$BACKEND_IMAGE_DIGEST" \
@@ -3123,6 +3142,7 @@ jobs:
         env:
           PROFILE: ${{ needs.select-profile.outputs.profile }}
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
           EXPECTED_STATE: asleep
           EXPECTED_COMMIT_SHA: ${{ inputs.intended_release_sha || github.sha }}
         run: |
@@ -3133,6 +3153,7 @@ jobs:
             reviewed.tfplan reviewed.tfplan.json reviewed.tfplan.txt \
             reviewed.tfplan.sha256 reviewed.commit reviewed.profile \
             reviewed.deployment-lane \
+            reviewed.identity-verification-secrets-enabled \
             reviewed.terraform-version reviewed.lock.sha256 reviewed.state-key \
             reviewed.state-bucket reviewed.state-lock-table \
             reviewed.created-utc reviewed.expires-utc reviewed.resources.json \
@@ -3143,6 +3164,8 @@ jobs:
           test "$(cat reviewed.profile)" = "$PROFILE"
           test "$(cat reviewed.deployment-lane)" = "$DEPLOYMENT_LANE" \
             || { echo "::error::reviewed sleep plan lane $(cat reviewed.deployment-lane) is not ${DEPLOYMENT_LANE}"; exit 1; }
+          test "$(cat reviewed.identity-verification-secrets-enabled)" = "$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
+            || { echo '::error::reviewed sleep plan identity verification secret setting differs from lifecycle input'; exit 1; }
           test "$(cat reviewed.state-key)" = "profiles/${PROFILE}/terraform.tfstate"
           reviewed_state_bucket="$(cat reviewed.state-bucket)"
           reviewed_state_lock_table="$(cat reviewed.state-lock-table)"
@@ -3253,6 +3276,7 @@ jobs:
           PLAN_RUN_ID: ${{ steps.sleep-plan.outputs.plan_run_id }}
           PLAN_CHECKSUM: ${{ steps.sleep-verify.outputs.plan_checksum }}
           DEPLOYMENT_LANE: ${{ needs.select-profile.outputs.deployment_lane }}
+          IDENTITY_VERIFICATION_SECRETS_ENABLED: ${{ inputs.identity_verification_secrets_enabled }}
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
           REF_NAME: ${{ github.ref_name }}
         run: |
@@ -3265,6 +3289,7 @@ jobs:
             -f profile="$STAGING_PROFILE" \
             -f action=apply \
             -f deployment_lane="$DEPLOYMENT_LANE" \
+            -f identity_verification_secrets_enabled="$IDENTITY_VERIFICATION_SECRETS_ENABLED" \
             -f secret_preflight_required=false \
             -f plan_run_id="$PLAN_RUN_ID" \
             -f plan_checksum="$PLAN_CHECKSUM" 2>&1)"

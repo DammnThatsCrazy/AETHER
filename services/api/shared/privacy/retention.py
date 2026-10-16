@@ -336,11 +336,18 @@ class DeletionPlan:
 
                 if behavior == DeletionBehavior.HARD_DELETE:
                     entity_field = step.get("entity_field") or "user_id"
-                    if adapter and hasattr(adapter, "delete_by_entity"):
+                    if adapter and hasattr(adapter, "delete_for_tenant_where"):
+                        count = await adapter.delete_for_tenant_where(
+                            self.tenant_id, entity_field, [self.entity_id],
+                        )
+                        step["records_affected"] = count
+                    elif adapter and hasattr(adapter, "delete_by_entity"):
                         count = await adapter.delete_by_entity(entity_field, self.entity_id)
                         step["records_affected"] = count
                     elif adapter and hasattr(adapter, "delete"):
-                        records = await adapter.find_many(filters={entity_field: self.entity_id}, limit=10000)
+                        records = await adapter.find_many(
+                            filters={entity_field: self.entity_id, "tenant_id": self.tenant_id}, limit=10000,
+                        )
                         count = 0
                         for rec in records:
                             rid = rec.get("id", "")
@@ -368,7 +375,15 @@ class DeletionPlan:
 
                 elif behavior == DeletionBehavior.EDGE_SEVER:
                     entity_field = step.get("entity_field")
-                    if adapter and hasattr(adapter, "delete_by_entity"):
+                    if adapter and hasattr(adapter, "delete_for_tenant_where"):
+                        fields = [entity_field] if entity_field else ["source_entity_id", "target_entity_id"]
+                        count = 0
+                        for field in fields:
+                            count += await adapter.delete_for_tenant_where(
+                                self.tenant_id, field, [self.entity_id],
+                            )
+                        step["records_affected"] = count
+                    elif adapter and hasattr(adapter, "delete_by_entity"):
                         if entity_field:
                             # Single-field keyed table (e.g. identity_clusters keyed by entity_id)
                             count = await adapter.delete_by_entity(entity_field, self.entity_id)

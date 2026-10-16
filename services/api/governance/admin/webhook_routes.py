@@ -52,6 +52,7 @@ from config.settings import settings
 from shared.billing import stripe_client, stripe_repository
 from shared.billing.stripe_client import get_plan_for_price_id
 from shared.auth.auth import PlanTier
+from shared.common.common import ServiceUnavailableError
 from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.service.admin.stripe_webhook")
@@ -691,6 +692,16 @@ async def stripe_webhook(
     # ── 3. Verify signature ─────────────────────────────────────────────
     try:
         event = stripe_client.construct_webhook_event(payload, stripe_signature)
+    except ServiceUnavailableError as exc:
+        # Missing webhook secret / SDK is a server misconfiguration, not a bad
+        # request: answer 503 so it is not mistaken for a signature mismatch
+        # and Stripe keeps retrying until the deployment is fixed.
+        logger.error(f"Stripe webhook cannot verify signatures: {exc}")
+        metrics.increment("stripe_webhook_config_errors")
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Stripe webhook verification is not configured"},
+        )
     except Exception as exc:
         # construct_webhook_event raises BadRequestError for invalid sig.
         logger.warning(f"Stripe webhook signature verification failed: {exc}")

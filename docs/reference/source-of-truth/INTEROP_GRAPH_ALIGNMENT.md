@@ -34,4 +34,5 @@ the public reference scope and tenant-scoped message links
 (`SENT_VIA_PATH` from originating application/wallet,
 `SECURED_BY_POLICY` when a snapshot is attached), all via
 `build_edge_properties` with idempotency keys, gated by
-`settings.interop.graph_enabled`.
+`settings.interop.graph_enabled`. Only a public-scope message writes the
+public path and application vertices; a tenant message adds edges only.

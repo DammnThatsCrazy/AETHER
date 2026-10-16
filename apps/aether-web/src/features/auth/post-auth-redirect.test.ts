@@ -31,24 +31,24 @@ describe("post-auth destination across the Auth0 round trip", () => {
   });
 
   it("falls back to the tenant home when nothing was remembered", () => {
-    expect(readPostAuthDestination()).toBe("/settings");
+    expect(readPostAuthDestination()).toBe("/");
   });
 
   it("never stores or returns an off-site destination", () => {
     rememberPostAuthDestination("//evil.example/x", 1_000);
-    expect(readPostAuthDestination(2_000)).toBe("/settings");
+    expect(readPostAuthDestination(2_000)).toBe("/");
     sessionStorage.setItem(
       "aether:post-auth-destination",
       JSON.stringify({ path: "https://evil.example", at: 1_000 }),
     );
-    expect(readPostAuthDestination(2_000)).toBe("/settings");
+    expect(readPostAuthDestination(2_000)).toBe("/");
   });
 
   it("ignores an expired or malformed entry", () => {
     rememberPostAuthDestination("/billing?plan=gamma", 0);
-    expect(readPostAuthDestination(31 * 60 * 1000)).toBe("/settings");
+    expect(readPostAuthDestination(31 * 60 * 1000)).toBe("/");
     sessionStorage.setItem("aether:post-auth-destination", "not json");
-    expect(readPostAuthDestination()).toBe("/settings");
+    expect(readPostAuthDestination()).toBe("/");
   });
 
   it("a later hand-off overwrites the earlier one", () => {

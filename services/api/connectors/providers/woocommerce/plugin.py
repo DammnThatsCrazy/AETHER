@@ -11,9 +11,10 @@ WooCommerce is the ONE follow-on family whose API host is tenant-supplied (the
 (the exception the program allows): the structural gate returns the public FQDN
 of ``site_url`` or rejects it (loopback/private/IP/metadata/port/path tricks),
 and the API path is pinned to ``/wp-json/wc/v3`` in code — never tenant input.
-The structural gate is NOT a resolver-level DNS-rebinding defense; that check is
-documented as required at live-auth time and is NOT claimed by this build (see
-``connectors.providers.woocommerce.auth``).
+Live requests add the resolver-level check: they go through
+:func:`send_public_request <shared.security.ssrf.send_public_request>`, which
+requires every resolved address to be public and connects only to a validated
+address (see ``connectors.providers.woocommerce.auth``).
 
 Readiness is ``REPLAY_VALIDATED`` at level 3 — the evidence basis is the
 offline fixture-replay determinism exercised by ``tests/unit/test_provider_plugins.py``,
@@ -120,9 +121,9 @@ class WooCommerceOrdersPlugin(_PluginBase):
             ),
             configuration=Configuration(
                 fields=[
-                    # Tenant-supplied store origin; SSRF-gated via the S1 seam
-                    # (empty allowlist — see the module docstring for the
-                    # resolver-level caveat).
+                    # Tenant-supplied store origin; structurally gated with an
+                    # empty allowlist, then resolver-checked and pinned on every
+                    # live request (see the module docstring).
                     ConfigFieldSpec(name="site_url", type="url", required=True),
                 ]
             ),

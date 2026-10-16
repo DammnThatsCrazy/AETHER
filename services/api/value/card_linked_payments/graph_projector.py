@@ -20,6 +20,7 @@ from shared.logger.logger import get_logger
 logger = get_logger("aether.card_linked.graph")
 
 _PROVENANCE = "card_linked_payments"
+PLATFORM_TENANT = "platform"
 
 
 def _now() -> str:
@@ -47,8 +48,13 @@ def _edge(edge_type: str, from_vid: str, to_vid: str, tenant_id: str,
     )
 
 
-def build_catalog_mutations(tenant_id: str, program: dict) -> tuple[list[Vertex], list[Edge]]:
-    """CardProgram + its issuer/network dimension vertices and edges."""
+def build_catalog_mutations(program: dict) -> tuple[list[Vertex], list[Edge]]:
+    """CardProgram + its issuer/network dimension vertices and edges.
+
+    The catalog is shared reference data, so every vertex and edge here is
+    owned by ``platform``; tenant flows only link to these vertices.
+    """
+    tenant_id = PLATFORM_TENANT
     program_vid = f"card_program:{program['slug']}"
     vertices = [Vertex(
         vertex_id=program_vid,
@@ -111,11 +117,9 @@ def build_flow_mutations(flow: dict) -> tuple[list[Vertex], list[Edge]]:
     program = flow.get("card_program_id")
     entity = flow.get("canonical_entity_id") or flow.get("user_id")
     if program:
+        # The platform-owned catalog vertex (build_catalog_mutations); a flow
+        # only links to it.
         program_vid = f"card_program:{program}"
-        vertices.append(Vertex(
-            vertex_id=program_vid, vertex_type=VertexType.CARD_PROGRAM,
-            properties={"tenant_id": tenant_id},
-        ))
         if entity:
             edges.append(_edge(EdgeType.USED_PROVIDER, f"user:{entity}", program_vid,
                                tenant_id, flow_id, basis=flow.get("basis", "unknown"),

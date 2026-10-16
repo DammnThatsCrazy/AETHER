@@ -1,0 +1,226 @@
+name: ci
+
+# CI V2: the single pull-request authority. One workflow, one stable verdict
+# check: `ci / verdict`. Draft pull requests are the accumulation phase and run
+# nothing; the first run starts on `ready_for_review` and then on every new head
+# SHA. Also runs on merge-queue SHAs, on pushes to the three long-lived branches,
+# and on demand.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
+  push:
+    branches: [development, staging, main]
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Base ref/sha to diff against (parity replays)
+        required: false
+        default: origin/development
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  classify:
+    name: classify
+    # Draft pull requests are the accumulation phase: no hosted verification.
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      mode: ${{ steps.select.outputs.mode }}
+      workers: ${{ steps.select.outputs.workers }}
+      has_workers: ${{ steps.select.outputs.has_workers }}
+      checks: ${{ steps.select.outputs.checks }}
+      has_checks: ${{ steps.select.outputs.has_checks }}
+      base: ${{ steps.select.outputs.base }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --quiet pyyaml
+      - name: Select affected suites
+        id: select
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || inputs.base }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+        run: |
+          # A push that creates a branch has an all-zero "before"; fall back to the parent.
+          case "$BASE" in 0000000000000000000000000000000000000000) BASE="$HEAD^";; esac
+          python scripts/ci_select.py --base "$BASE" --head "$HEAD" \
+            --output selection.json --github-output
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          d = json.load(open("selection.json"))
+          print(f"### Selection: `{d['mode']}` ({len(d['changed_files'])} files)")
+          for sid, why in d["suites"].items():
+              print(f"- `{sid}`: {why[0]}" + (f" (+{len(why)-1})" if len(why) > 1 else ""))
+          for c in d["checks"]:
+              print(f"- check `{c['id']}`: {c['why']}")
+          for r in d["reasons"][:20]:
+              print(f"- reason: {r}")
+          PY
+
+  suites:
+    name: suites (${{ matrix.worker.id }})
+    needs: classify
+    if: needs.classify.outputs.has_workers == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        worker: ${{ fromJson(needs.classify.outputs.workers) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: make bootstrap-ci-control
+      - name: Install the profile's Python extra
+        if: matrix.worker.python_extra
+        run: .venv/bin/python -m pip install -e ".[${{ matrix.worker.python_extra }}]"
+      - uses: actions/setup-node@v4
+        if: matrix.worker.node_required
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install and build Node workspace
+        if: matrix.worker.node_required
+        run: |
+          npm ci --ignore-scripts
+          npm run build --workspace=packages/shared
+      - name: Run selected suites
+        run: |
+          .venv/bin/python scripts/suite_worker.py \
+            --worker-id "${{ matrix.worker.id }}" --worker-class pooled \
+            --suite-ids '${{ toJson(matrix.worker.suite_ids) }}' \
+            --dependency-profile "${{ matrix.worker.dependency_profile }}" \
+            --runtime-class "${{ matrix.worker.runtime_class }}" \
+            --output "$RUNNER_TEMP/suite-${{ matrix.worker.id }}.json"
+
+  checks:
+    name: check (${{ matrix.check.id }})
+    needs: classify
+    if: needs.classify.outputs.has_checks == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        check: ${{ fromJson(needs.classify.outputs.checks) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ matrix.check.base && '0' || '1' }}
+      - uses: pnpm/action-setup@v4
+        if: matrix.check.pnpm
+        with:
+          version: 12.4.2
+          run_install: false
+      - uses: actions/setup-node@v4
+        if: matrix.check.node || matrix.check.pnpm
+        with:
+          node-version: "22"
+          cache: ${{ matrix.check.pnpm && 'pnpm' || 'npm' }}
+      - name: Install pnpm workspace
+        if: matrix.check.pnpm
+        run: pnpm install --frozen-lockfile
+      - name: Install and build Node workspace
+        if: matrix.check.node
+        run: |
+          npm ci --ignore-scripts
+          npm run build --workspace=packages/shared
+      - uses: actions/setup-python@v5
+        if: matrix.check.python
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Bootstrap the check's Python environment
+        if: matrix.check.python
+        run: |
+          make bootstrap-ci-control
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - name: Install the check's Python extra
+        if: matrix.check.python_extra
+        run: .venv/bin/python -m pip install -e ".[${{ matrix.check.python_extra }}]"
+      - name: Run check
+        env:
+          CHECK: ${{ toJson(matrix.check) }}
+          CI_BASE_SHA: ${{ needs.classify.outputs.base }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess, sys
+          c = json.loads(os.environ["CHECK"])
+          env = {**os.environ, **c.get("env", {})}
+          for cmd in c.get("setup", []) + c["run"]:
+              print("+", cmd, flush=True)
+              if subprocess.run(cmd, shell=True, env=env).returncode:
+                  sys.exit(1)
+          PY
+
+  verdict:
+    # GitHub exposes the job name as the status-check context, so the name is the
+    # required context itself (the legacy authority did the same). A manual replay
+    # chooses its own diff base and may select nothing, so it publishes under a
+    # different name and can never satisfy the required context.
+    name: ${{ github.event_name == 'workflow_dispatch' && 'ci / verdict (manual replay)' || 'ci / verdict' }}
+    needs: [classify, suites, checks]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Evaluate the planned job set
+        env:
+          DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft }}
+          CLASSIFY: ${{ needs.classify.result }}
+          SUITES: ${{ needs.suites.result }}
+          CHECKS: ${{ needs.checks.result }}
+          HAS_CHECKS: ${{ needs.classify.outputs.has_checks }}
+          HAS_WORKERS: ${{ needs.classify.outputs.has_workers }}
+          MODE: ${{ needs.classify.outputs.mode }}
+        run: |
+          if [ "$DRAFT" = true ]; then
+            echo "draft pull request: accumulation phase, verification starts at ready_for_review"
+            exit 0
+          fi
+          echo "classify=$CLASSIFY suites=$SUITES checks=$CHECKS has_workers=$HAS_WORKERS has_checks=$HAS_CHECKS mode=$MODE"
+          [ "$CLASSIFY" = success ] || { echo "classification did not succeed"; exit 1; }
+          if [ "$HAS_CHECKS" = true ]; then
+            [ "$CHECKS" = success ] || { echo "selected checks: $CHECKS"; exit 1; }
+          else
+            [ "$CHECKS" = skipped ] || { echo "unexpected checks result: $CHECKS"; exit 1; }
+          fi
+          if [ "$HAS_WORKERS" = true ]; then
+            [ "$SUITES" = success ] || { echo "selected suites: $SUITES"; exit 1; }
+          else
+            # A legitimate no-op is only an empty selection with suites skipped.
+            [ "$SUITES" = skipped ] && [ "$MODE" = empty ] || { echo "no workers for mode '$MODE' is not a valid no-op"; exit 1; }
+          fi
+      - name: Record verdict evidence
+        if: github.event_name != 'workflow_dispatch' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+        env:
+          RESULTS: ${{ toJson(needs) }}
+        run: |
+          mkdir -p ci-evidence
+          printf '{"sha":"%s","event":"%s","needs":%s}\n' "$GITHUB_SHA" "$GITHUB_EVENT_NAME" "$RESULTS" > ci-evidence/ci-verdict.json
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'workflow_dispatch' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+        # Diagnostic only: a storage-quota failure must not fail a run whose checks passed.
+        continue-on-error: true
+        with:
+          name: ci-verdict-evidence
+          path: ci-evidence/ci-verdict.json
+          retention-days: 7

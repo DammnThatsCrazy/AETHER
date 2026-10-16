@@ -30,7 +30,7 @@ from graph.operational_intelligence.models import (
     EventPipelineEnvelope,
     TenantScopedRequest,
 )
-from repositories.repos import EventReplayRepository, EventEnvelopeRepository
+from repositories.repos import EventReplayRepository, EventEnvelopeRepository, tenant_record_id
 
 logger = get_logger("aether.service.events")
 
@@ -191,7 +191,7 @@ async def ingest_event(
     _require(request, envelope.tenantId, "write")
     envelope_dict = envelope.model_dump()
     await _envelope_repo.create(envelope_dict)
-    _EVENTS[envelope.id] = envelope_dict
+    _EVENTS[tenant_record_id(envelope.tenantId, envelope.id)] = envelope_dict
     logger.info(
         "event_replay_ingested",
         extra={"event_id": envelope.id, "type": envelope.type, "tenant_id": envelope.tenantId},

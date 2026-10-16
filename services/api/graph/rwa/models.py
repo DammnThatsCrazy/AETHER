@@ -144,7 +144,7 @@ class PolicySimulation(BaseModel):
 # RECORD FACTORIES
 # ═══════════════════════════════════════════════════════════════════
 
-def make_rwa_asset(data: RWAAssetCreate, tenant_id: str = "") -> dict:
+def make_rwa_asset(data: RWAAssetCreate, tenant_id: str) -> dict:
     now = utc_now().isoformat()
     return {
         "id": str(uuid.uuid4()),
@@ -169,7 +169,7 @@ def make_rwa_asset(data: RWAAssetCreate, tenant_id: str = "") -> dict:
     }
 
 
-def make_policy(data: PolicyCreate, tenant_id: str = "") -> dict:
+def make_policy(data: PolicyCreate, tenant_id: str) -> dict:
     now = utc_now().isoformat()
     return {
         "id": str(uuid.uuid4()),
@@ -187,7 +187,7 @@ def make_policy(data: PolicyCreate, tenant_id: str = "") -> dict:
     }
 
 
-def make_cashflow_event(data: CashflowEventCreate, tenant_id: str = "") -> dict:
+def make_cashflow_event(data: CashflowEventCreate, tenant_id: str) -> dict:
     now = utc_now().isoformat()
     return {
         "id": str(uuid.uuid4()),

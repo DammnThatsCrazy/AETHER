@@ -1,17 +1,19 @@
 schema_version: 1
 authority: verification
-status_check: verification / disposition
+status_check: ci / verdict
 
 normal_pr:
   blocking: true
   universal_fast_lane: fast
   affected_lane: pr
   allowed_escalations: [integration, regression, release]
-  # Keep implementation PRs in draft while work accumulates. The normal PR
-  # authority starts once the completed change is explicitly finalized.
+  # Keep implementation PRs in draft while work accumulates: the authority runs
+  # nothing for a draft and starts at ready_for_review, then on every new head SHA.
+  # Every other pull_request workflow is supplementary and runs at finalization only.
   finalization_event: ready_for_review
+  authority_pr_types: [opened, synchronize, reopened, ready_for_review]
   draft_required_for_intermediate_work: true
-  blocking_workflow: .github/workflows/repo-consistency.yml
+  blocking_workflow: .github/workflows/ci.yml
 
 shadow:
   # Retired after the representative hosted PR observation window completed

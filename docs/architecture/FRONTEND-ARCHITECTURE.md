@@ -45,8 +45,8 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:d3883a59f03ae0e3544dda57821396a29a0e319e23bc5785de13ea26faf2a583"
-  "apps/kyber-web/src/": "sha256:7a31deaee6f5e047df21f6cd1115604f956f283b23e904128385824ab2fbf32a"
+  "apps/aether-web/src/": "sha256:4e6fbb63440ee54e7f6460e859e283b9ec5d7d4980d401bce991cc74cb601ccf"
+  "apps/kyber-web/src/": "sha256:df447130af2090e329c0620134a1b1dee8caf8597ac360b30f6862e74f3e6781"
   "packages/ui/core/src/": "sha256:01c95e007bc50d0b7378c5cb5274fd5e5d60b51f9575e5c28bf8549ab9cefde1"
 ---
 
@@ -96,7 +96,7 @@ the root.
   Auth0 configured, `/signup` opens Auth0's hosted sign-up
   (`screen_hint=signup`); the pricing page's `?plan=alpha|beta|gamma|delta`
   (or a validated `?redirect`, else the marketing provider hand-off's
-  `/settings/integrations?…`, else `/onboarding`) is kept in session storage
+  `/settings/integrations?…`, else `/onboarding`, an alias of `/activation`) is kept in session storage
   across the round trip (`rememberPostAuthDestination` /
   `readPostAuthDestination`, validated and expiring after 30 minutes), and
   `/callback` lands on it. `/billing?plan=<id>` starts that plan's Stripe
@@ -122,11 +122,13 @@ the root.
   Integrations scrolls to and ring-highlights (`data-handoff-focus`) the named
   provider row and, when `intent=connect` names a provider that is not yet
   engaged, shows a `You came to connect {display_name} — continue below`
-  callout; `/activation` preselects matching goal chips and highlights the
-  matching plan block on landing. Post-auth routing accepts only clean single-`/`
+  callout; `/activation` preselects matching goal chips as an unsaved draft
+  (saved when the visitor continues past the Workspace step). Post-auth routing accepts only clean single-`/`
   internal paths: login's "Create one" forwards a genuine `?redirect` into
   `/signup`, and a successful signup lands on the validated redirect, else the
-  handoff-derived `/settings/integrations?…` target, else `/settings`.
+  handoff-derived `/settings/integrations?…` target, else the tenant root `/`
+  (which resolves to onboarding or Home; login and `/callback` share this
+  fallback).
 - The intelligence **graph canvas** showing the tenant's users, organizations, and AI agents — layer/overlay toggles (H2H/H2A/A2H/A2A, risk, trust, campaign, economic, fraud), path finder with multi-hop traversal modes (Shortest / Strongest / K-Shortest), cluster panel, and cluster drill-down to Cluster360; summary strip (entity/relationship/cluster/risk-alert counts), truncation warning when entity set exceeds 200, replay mode with date picker, observation-class node styling (solid/dashed/dotted borders), Recommendation/Prediction outcome panel in Inspector, **PathInspector** panel (shown in right panel when a path is active — Overview/Hops/Evidence/Score tabs, save-to-investigation action)
 - **Cluster360** (`/clusters/:clusterId`) — 7-tab cluster surface: Overview (type, state, formation reason, confidence, risk score, properties), Members (paginated DataTable with confidence + join date), Timeline (merge/split/growth events), Economic (revenue, spend, LTV, value tier, top-member breakdown), Campaigns (attributed campaigns, top channel, conversion rate), Risk (aggregate score, fraud network link, alert count, evidence refs, high-risk members), Geography (country distribution bars, concentration score)
 - **Semantic zoom** — graph canvas supports server-backed macro→cluster→entity zoom: macro level uses a `depth: 1` query scoped to cluster node types (the backend minimum depth is 1; depth-0 is rejected); clicking a cluster fetches depth-1 member expansion via `useGraphZoom(tenantId?)`. The helper derives tenant authority from `GraphContext` and fails closed if a legacy tenant argument conflicts; the current traversal API is tenant-only until a separate workspace/environment contract migration.
@@ -135,7 +137,7 @@ the root.
 - **Social Intelligence** panels — their users' social platform presence
 - **Recommendation cards** — pending retargeting / campaign actions for the tenant to approve
 - **Suggestion feed** — OODA-driven prioritised recommendations with helpful/not helpful/dismiss feedback
-- Campaign management, attribution dashboards, Campaign 360 (`/campaigns/:id`) — per-campaign overview, population, clusters, conversions, and attribution with referral/source-class rollups; communication rates expose governed value state, sample sufficiency, Wilson uncertainty, and lineage, and the tenant UI withholds values that do not meet the registry minimum sample. Campaign 360 also hosts **Outcome 360** / **Economic 360** intelligence-projection tabs (`features/projection-360/`): they render typed projection section states for the campaign focus (available/degraded/empty …), never recomputing projection content
+- Campaign management, attribution dashboards, Campaign 360 (`/campaigns/:id`) — per-campaign overview, population, clusters, conversions, and attribution with referral/source-class rollups; communication rates expose governed value state, sample sufficiency, Wilson uncertainty, and lineage, and the tenant UI withholds values that do not meet the registry minimum sample. Campaign 360 also hosts **Outcome 360** / **Value 360** intelligence-projection tabs (`features/projection-360/`): they render typed projection section states for the campaign focus (available/degraded/empty …), never recomputing projection content
 - Profile360 and Journey Explorer source evidence — journey steps surface AI provider/product, mediation type, verification, confidence, classifier version, attribution eligibility, and attributed net revenue when backed by active credits; excluded crawler/scanner noise remains counted in journey quality metadata. Journey Explorer also renders exact-reference commerce operation links with source roles and relations, and explicitly states that the evidence does not imply settlement or add operation amounts to journey value.
 - API key management, plan management, usage metering
 - Webhook endpoint management — create, signed-test, rotate the write-only
@@ -167,7 +169,7 @@ the root.
 - **Journey Explorer** — chronological journey timeline with attribution weight annotations and an explicit backend RPC verification action for stored Web3 transaction observations; it keeps execution verification separate from payment settlement (`/measurement/journeys`)
 - **Conversion Explorer** — canonical conversion detail, revenue history, attribution drill-down (`/measurement/conversions`)
 - **Campaign Intelligence** — campaign hierarchy, performance metrics, spend/ROAS time-series (`/measurement/campaigns`)
-- **Campaign 360** — full per-campaign drill-down: overview metrics, population funnel (observed→resolved→engaged→converted→attributed), identity clusters, entities, journeys, conversions, attribution model comparison, graph anchor, quality/freshness diagnostics (`/measurement/campaigns/:campaignId`); launched via "Campaign 360 →" links in Campaign Intelligence rows and Profile360 attribution panel. Also hosts **Outcome 360** / **Economic 360** intelligence-projection tabs (`features/projection-360/`) rendering typed projection section states for the campaign focus — never recomputing projection content
+- **Campaign 360** — full per-campaign drill-down: overview metrics, population funnel (observed→resolved→engaged→converted→attributed), identity clusters, entities, journeys, conversions, attribution model comparison, graph anchor, quality/freshness diagnostics (`/measurement/campaigns/:campaignId`); launched via "Campaign 360 →" links in Campaign Intelligence rows and Profile360 attribution panel. Also hosts **Outcome 360** / **Value 360** intelligence-projection tabs (`features/projection-360/`) rendering typed projection section states for the campaign focus — never recomputing projection content
 - **Campaign Registry** (v8.11.0+) — canonical campaign list with origin/platform/status filters, alias management, external references view (`/campaign-intelligence/registry`)
 - **Campaign Sources** (v8.11.0+) — connected advertising platform sources with sync controls and connection health indicators. Adding an advertising platform is consolidated under Settings → Integrations → Advertising (the canonical connect path); this page hosts the `?connect=<family>` connect flow the advertising-row deep links open and lists sources for management and sync once connected. The flow collects the catalog credential schema (secrets + the single account id, manual selection — no discovery) and drives connect with backend-derived states only; it never claims live capability without evidence. For an existing degraded/failed/stale, disabled, or secret-missing row the same flow offers an in-place Reconnect form (`POST /v1/campaign-sources/{connector_id}/reconnect`) that swaps the stored credential set on the same row and resets health to the never-synced baseline — never offered on a healthy row and never presented as a healthy sync (`/campaign-intelligence/sources`)
 - **Mapping Review** (v8.11.0+) — unresolved/ambiguous attribution evidence queue; resolve/ignore actions create durable aliases and trigger reprocessing (`/campaign-intelligence/mapping-review`)
@@ -301,7 +303,7 @@ The platform serves e-commerce companies, SaaS businesses, financial institution
 
 **Everything starts with the graph.** A graph node is an entity — a human, an organization, an AI agent, or a system. Edges are relationships. Profiles are reachable from the Profiles destination and from selected graph nodes. The profile has tabs. Every data point on every tab traces back to a graph relationship.
 
-The graph is the primary analysis workspace after activation. Incomplete tenants first enter guided activation; completed tenants return to their last useful workspace or default to Explore. Profile tabs are drilldowns. The system compounds in value over time: more events → richer relationships → stronger attribution → better intelligence.
+The graph is the primary analysis workspace after activation. Incomplete tenants first enter workspace onboarding at `/activation`; completed tenants land on Home (`/home`), which links into Explore. Profile tabs are drilldowns. The system compounds in value over time: more events → richer relationships → stronger attribution → better intelligence.
 
 The defining moment the product must create is when an operator realizes:
 - A high-value customer is connected to a fraud cluster through 2 hops they couldn't see before
@@ -330,13 +332,63 @@ The intelligence graph is the primary analysis surface. Entity profiles are avai
 /ai-efficiency                   → AI efficiency dashboard (flag-gated; proposals only)
 ```
 
-Incomplete tenants landing at `/` are routed to `/activation`. A completed
-tenant returns to their last useful workspace, or to `/explore` when no saved
-workspace is available; requested protected deep links render directly. The
-application sidebar links to Graph (`/explore`), Profiles (`/users`), Connectors
-(`/settings/integrations`), and Settings (`/settings`). Connectors is hidden
-when its backend capability is unavailable. Snapshot, Journeys, Signals, Lenses,
-and Value remain visibly not ready instead of linking to fabricated surfaces.
+Tenants landing at `/` are routed by `app/tenant-landing.tsx`: activation state
+`complete` (or an operator implementation plan that is `live`,
+`value_proven` or `expansion_ready`) goes to Home (`/home`); anything else goes
+to workspace onboarding at `/activation`, but only after both the activation
+and operator-plan reads have settled. Requested protected deep links render
+directly. Outside production, `/?onboarding=restart` sends a tester through
+onboarding from step 1 regardless of state (server state is not reset).
+
+The authenticated shell (`components/app-shell.tsx`) is the Stone/Graphite
+glass shell from the Claude Design handoff: a collapsible rail (240px expanded,
+72px icon rail, overlay below 760px; the pin choice is remembered per browser)
+grouped as Home and Graph; Profiles (`/users`), Agents (`/agent-access`),
+Campaigns (`/campaigns`), Geography (`/geo`); Value (`/value-review`); and
+Connectors (`/settings/integrations`) and Settings (`/settings`). Connectors and
+the identity entries stay capability-gated. Syndicates, Relationships,
+Communications, Journeys, Episodes, Signals and Risk are listed as not ready
+(non-links) until their read models exist. Settings carries an amber dot only
+when `/v1/tenant-integrations` reports an enabled connection whose sync status
+failed. Pages not yet rebuilt to the new design render inside the shell's glass
+frame (`ae-legacy`); the design tokens live in `styles/glass.css` and follow the
+same `.light`/`.dark` switch as `@aether/ui` (Stone is the default theme).
+
+Workspace onboarding (`pages/onboarding/onboarding-flow.tsx`, full screen at
+`/activation`; `/onboarding` and `/activate` redirect there preserving query)
+has four steps over existing endpoints only: **Workspace** (organization name,
+activation intents as goals, tenant temporal-default timezone when that feature
+is enabled), **Sources** (the server's recommended connect plan per experience
+category, connected from a pop-over that follows `POST /v1/activation/connect-action`
+next actions; CSV files go through the imports pipeline and finish on the
+Imports review page; every source is optional and can be skipped), **SDKs and
+keys** (optional: nothing is preselected, any or all SDKs can be selected, and
+every selected key must be issued and confirmed stored; one key per SDK, labelled
+`<SDK> · onboarding`. Browser SDKs (Web, React) register a site with its
+origins through `POST /v1/sdk/sites` and get a site-bound `pk_` publishable key
+from `POST /v1/sdk/sites/{site_id}/keys`, with per-site liveness from
+`/v1/sdk/sites/{site_id}/live`; they never receive a secret key. Server and app
+SDKs get a secret `ak_` ingestion key through activation `create-sdk-keys` while
+the state machine allows it, otherwise through `/v1/me/api-keys` with explicit
+`read/write/ingest/analytics` permissions. Raw keys are shown once, and a key
+counts as ready only after the visitor confirms storing it (remembered per key
+id in the browser). Activation proves first value from any ingestion path —
+SDK or site-key events, connector syncs, imports — so skipping SDKs never blocks
+completion), and **Graph** (stages from `/v1/tenant/readiness` checks, 24-hour counts
+from `/v1/analytics/dashboard/summary`; "Open home" is enabled only once first
+value is ready, and completes activation first). The step a visitor resumes at
+is derived from the activation record, with SDK selections told apart by
+their key labels. Onboarding queries are keyed by the authenticated principal,
+and graph stages the readiness checklist does not report show as not reported
+rather than in progress. The previous guided page remains at
+`/activation/guided`, and the operator implementation checklist at
+`/onboarding/implementation`.
+
+Home (`pages/home/home-page.tsx`) shows 24-hour event, people and session
+counts, imported campaigns, connection health with brand marks, the graph
+readiness stages, the event-type mix, and attention items derived from the
+activation record, failing syncs and failed readiness checks. Each section shows
+an explicit empty or unavailable state rather than illustrative data.
 Explore composes the shared context bar, time rail, and collapsed Noesis context
 strip around the existing server-backed graph canvas, loading/error/empty
 states, table/path modes, and inspector. The lens dock reports availability
@@ -354,8 +406,7 @@ maturity score: `no_data`, `building`, and `ready` come from the named launch
 checks. Intent selection, credentials, and provider connection state show
 setup and sync progress; they do not prove that usable events reached Aether or
 that the graph is ready. First value is enabled only when the backend confirms
-evidence from real events, and completed activation offers an explicit Explore
-handoff without an automatic redirect. The tenant decision panel likewise
+evidence from real events, and completed activation hands off to Home. The tenant decision panel likewise
 separates approval from execution: it records the authenticated decision,
 creates a durable planned action, and tells the user that a configured target
 is still required before dispatch.

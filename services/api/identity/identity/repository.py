@@ -347,6 +347,8 @@ class IdentityResolutionRepository:
         alias_value_hash: str,
         *,
         include_revoked: bool = False,
+        limit: int = 50,
+        offset: int = 0,
     ) -> list[dict]:
         rows = await self._aliases.find_many(
             filters={
@@ -354,7 +356,8 @@ class IdentityResolutionRepository:
                 "alias_type": self._alias_type_str(alias_type),
                 "alias_value_hash": alias_value_hash,
             },
-            limit=50,
+            limit=limit,
+            offset=offset,
         )
         # Keep the default candidate-lookup behavior; resolver hard-veto
         # evaluation may explicitly inspect revoked tenant-local rows.

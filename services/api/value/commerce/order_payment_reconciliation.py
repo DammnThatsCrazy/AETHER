@@ -8,6 +8,8 @@ graph facts or assert processor payout settlement.
 
 from __future__ import annotations
 
+import asyncio
+import functools
 import hashlib
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -23,12 +25,35 @@ def _key(tenant_id: str, ref: str) -> str:
     return f"{tenant_id}:{digest}"
 
 
+_REFERENCE_LOCKS: dict[str, asyncio.Lock] = {}
+
+
+def _serialized(method):
+    """Serialize read-modify-write cycles per commerce reference in-process.
+
+    Concurrent order/payment/adjustment writers for one reference would
+    otherwise read the same record and the last ``set`` would drop the others.
+    This closes the race inside one process; across instances the store needs
+    a conditional write, which ``DurableStore`` does not yet offer.
+    """
+
+    @functools.wraps(method)
+    async def wrapper(self, tenant_id, *args, **kwargs):
+        ref = _required(kwargs.get("commerce_order_ref"), "commerce_order_ref")
+        lock = _REFERENCE_LOCKS.setdefault(_key(tenant_id, ref), asyncio.Lock())
+        async with lock:
+            return await method(self, tenant_id, *args, **kwargs)
+
+    return wrapper
+
+
 class CommerceOrderPaymentLedger:
     """Replay-safe ledger for exact-reference commerce reconciliation."""
 
     def __init__(self, store: DurableStore | None = None) -> None:
         self._store = store or get_store("commerce_order_payment_evidence")
 
+    @_serialized
     async def record_order(
         self,
         tenant_id: str,
@@ -91,8 +116,10 @@ class CommerceOrderPaymentLedger:
             record["state"] = "conflict"
             record["conflictReason"] = "reference_maps_to_multiple_orders"
         elif prior.get("revisionId") != order["revisionId"]:
-            prior_revision_at = str(prior.get("sourceRevisionAt") or "")
-            next_revision_at = str(order.get("sourceRevisionAt") or "")
+            # Compare instants, not strings: equivalent ISO-8601 values with
+            # different offsets do not sort chronologically as text.
+            prior_revision_at = _time_key(prior.get("sourceRevisionAt"))
+            next_revision_at = _time_key(order.get("sourceRevisionAt"))
             if next_revision_at > prior_revision_at:
                 record["order"] = order
             elif next_revision_at == prior_revision_at:
@@ -103,6 +130,7 @@ class CommerceOrderPaymentLedger:
         await self._store.set(key, record)
         return record
 
+    @_serialized
     async def record_payment(
         self,
         tenant_id: str,
@@ -173,6 +201,7 @@ class CommerceOrderPaymentLedger:
         await self._store.set(key, record)
         return record
 
+    @_serialized
     async def record_adjustment(
         self,
         tenant_id: str,
@@ -550,9 +579,10 @@ def _currency(value: str) -> str:
     return currency
 
 
-def _time_key(value: Any) -> str:
+def _time_key(value: Any) -> float:
+    """Epoch seconds, so offsets compare as instants (unparseable sorts first)."""
     parsed = coerce_utc_lenient(value)
-    return parsed.isoformat() if parsed is not None else ""
+    return parsed.timestamp() if parsed is not None else float("-inf")
 
 
 def _settlement_fingerprint(row: dict[str, Any]) -> tuple[Any, ...]:

@@ -35,10 +35,11 @@ def test_entity_create_and_list():
 def test_identifier_link_unlink():
     repo = IdentityClusterRepository()
     _run(repo.link("c1", "e1", "tenant1", "wallet", "0xabc"))
-    rows = _run(repo.list_for_entity("e1"))
+    rows = _run(repo.list_for_entity("e1", "tenant1"))
     assert len(rows) == 1
+    assert _run(repo.list_for_entity("e1", "tenant2")) == []
     _run(repo.unlink("c1"))
-    rows_after = _run(repo.list_for_entity("e1"))
+    rows_after = _run(repo.list_for_entity("e1", "tenant1"))
     assert rows_after == []
 
 
@@ -83,8 +84,9 @@ def test_behavior_snapshot_upsert():
         automation_ratio=0.5,
         decision_latency_ms=120,
     ))
-    record = _run(repo.find_by_id("e1"))
+    record = _run(repo.find_for_entity("t1", "e1"))
     assert record is not None and record["automation_ratio"] == 0.5
+    assert record["id"] == "t1:e1"
     _run(repo.upsert_snapshot(
         entity_id="e1",
         tenant_id="t1",
@@ -93,5 +95,5 @@ def test_behavior_snapshot_upsert():
         automation_ratio=0.8,
         decision_latency_ms=200,
     ))
-    record2 = _run(repo.find_by_id("e1"))
+    record2 = _run(repo.find_for_entity("t1", "e1"))
     assert record2["automation_ratio"] == 0.8

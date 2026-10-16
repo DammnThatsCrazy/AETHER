@@ -99,16 +99,16 @@ def _get_lifecycle_engine() -> LifecycleEngine:
     return LifecycleEngine(repo=_notif_repo, producer=producer, graph=graph)
 
 
-def _enqueue_notification_delivery(notif: Any) -> None:
+async def _enqueue_notification_delivery(notif: Any) -> None:
     """D7: After persisting a notification, create durable DeliveryIntent + DeliveryJobs.
 
-    Called synchronously from emit_notification() so the jobs are queued
-    before the API response is returned. Errors are logged but never raised
+    Awaited by emit_notification() so the jobs are queued before the API
+    response is returned. Errors are logged but never raised
     so the API response is always returned to the caller.
     """
     from journeys.notification_intelligence.consumer import _create_notification_delivery_jobs
     try:
-        _create_notification_delivery_jobs(notif)
+        await _create_notification_delivery_jobs(notif)
     except Exception as exc:
         logger.warning(f"_enqueue_notification_delivery failed notif={getattr(notif, 'notification_id', '?')!r}: {exc}")
 
@@ -241,7 +241,7 @@ async def emit_notification(body: EmitNotificationRequest, request: Request):
     result = await _notif_repo.create(notif_dict)
 
     # D7 fix: enqueue durable delivery jobs after persisting the notification
-    _enqueue_notification_delivery(notif)
+    await _enqueue_notification_delivery(notif)
 
     metrics.increment("aether_notifications_emitted_total",
                       labels={"tenant_id": body.tenant_id,
@@ -392,6 +392,9 @@ async def escalate_notification(notification_id: str, request: Request, tenantId
     # Escalate stays in operator_review but advances with escalation metadata
     _require(request, tenantId, "write")
     request.state.tenant.require_permission("notifications:approve")
+    row = await _notif_repo.find_by_id(notification_id)
+    if not row or row.get("tenant_id") != tenantId:
+        raise NotFoundError(f"Notification {notification_id!r} not found")
     engine = _get_lifecycle_engine()
     updated = await engine.advance(
         notification_id, NotificationLifecycleState.OPERATOR_REVIEW,
@@ -440,7 +443,7 @@ async def annotate_notification(
     return APIResponse(data=updated).to_dict()
 
 
-@router.post("/intelligence/{notification_id}/replay")
+@router.post("/intelligence/{notification_id}/replay", status_code=202)
 async def replay_notification(notification_id: str, request: Request, tenantId: str = Query(...)):
     """Re-queue a notification for delivery by creating fresh DeliveryIntent + DeliveryJobs.
 
@@ -459,7 +462,7 @@ async def replay_notification(notification_id: str, request: Request, tenantId: 
     # D5 fix: use _create_notification_delivery_jobs() — creates durable DB records
     # instead of fire-and-forget DeliveryRouter instantiated without providers_repo.
     jobs_queued = await _create_delivery_jobs_for_replay(notif)
-    return APIResponse(data={"replayed": True, "jobs_queued": jobs_queued}, status_code=202).to_dict()
+    return APIResponse(data={"replayed": True, "jobs_queued": jobs_queued}).to_dict()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -744,16 +747,16 @@ async def test_channel(channel_id: str, request: Request):
 
 
 async def _resolve_channel_credentials(channel: dict) -> str:
-    credentials_ref = channel.get("credentials_ref", "")
     from repositories.repos import ProvidersRepository
     try:
-        providers_repo = ProvidersRepository()
-        record = await providers_repo.find_by_id(credentials_ref)
+        record = await ProvidersRepository().find_for_tenant(
+            channel.get("tenant_id") or "", channel.get("credentials_ref") or ""
+        )
         if record:
-            return record.get("api_key", credentials_ref)
+            return record.get("api_key") or ""
     except Exception:
         pass
-    return credentials_ref
+    return ""
 
 
 # ── Slack OAuth ───────────────────────────────────────────────────────────────
@@ -800,6 +803,12 @@ async def slack_oauth_callback(
     state_record = await _oauth_state_repo.find_by_id(state)
     if not state_record:
         raise ForbiddenError("Invalid or expired OAuth state")
+    session = request.state.tenant
+    if (
+        session.tenant_id != state_record.get("tenant_id")
+        or (session.user_id or "") != (state_record.get("user_id") or "")
+    ):
+        raise ForbiddenError("Invalid or expired OAuth state")
 
     now_iso = _utc_now()
     if state_record.get("expires_at", "") < now_iso:
@@ -838,6 +847,8 @@ async def slack_oauth_callback(
     channel_id_val = webhook.get("channel_id", "")
     channel_name_val = webhook.get("channel", "#aether-ops")
     workspace = team.get("name", "")
+    if not team.get("id") or await _slack_team_bound_elsewhere(tenant_id, team["id"]):
+        raise ForbiddenError("This Slack workspace cannot be connected")
 
     channel_uuid = str(uuid.uuid4())
     credentials_ref = f"notif_channel:{channel_uuid}"
@@ -886,6 +897,25 @@ async def slack_oauth_callback(
         status_code=302,
         headers={"Location": f"/settings/notifications?connected=slack&channel={channel_uuid}"},
     )
+
+
+async def _active_slack_bindings(team_id: str, tenant_id: str | None = None) -> list[dict]:
+    filters: dict[str, Any] = {"channel_type": "slack", "active": True}
+    if tenant_id is not None:
+        filters["tenant_id"] = tenant_id
+    # workspace_id is nested in channel_config, so it is filtered here; a
+    # dedicated indexed column with a uniqueness constraint would also close
+    # the race between two concurrent installs.
+    rows = await _channel_repo.find_many(filters=filters, limit=10000)
+    return [r for r in rows if (r.get("channel_config") or {}).get("workspace_id") == team_id]
+
+
+async def _slack_team_bound(tenant_id: str, team_id: str) -> bool:
+    return bool(team_id) and bool(await _active_slack_bindings(team_id, tenant_id))
+
+
+async def _slack_team_bound_elsewhere(tenant_id: str, team_id: str) -> bool:
+    return any(r.get("tenant_id") != tenant_id for r in await _active_slack_bindings(team_id))
 
 
 # ── Slack Interactive Callback ────────────────────────────────────────────────
@@ -939,16 +969,20 @@ async def slack_interactive_callback(request: Request):
 
     actions = payload.get("actions", [])
     slack_user_id = payload.get("user", {}).get("id", "")
+    slack_team_id = (payload.get("team") or {}).get("id", "")
 
     for action in actions:
         action_id = action.get("action_id", "")
         parts = action_id.split(":")
         if len(parts) < 3:
             continue
-        action_type_str, notification_id, tenant_id = parts[0], parts[1], parts[2]
+        action_type_str, notification_id = parts[0], parts[1]
 
+        # The tenant is the notification's; the click must come from a Slack
+        # team that tenant has actively connected.
         row = await _notif_repo.find_by_id(notification_id)
-        if not row or row.get("tenant_id") != tenant_id:
+        tenant_id = (row or {}).get("tenant_id") or ""
+        if not tenant_id or not await _slack_team_bound(tenant_id, slack_team_id):
             continue
 
         try:
@@ -993,10 +1027,12 @@ async def slack_interactive_callback(request: Request):
 
 @router.post("/telegram/callback")
 async def telegram_callback(request: Request):
-    """Handle Telegram inline keyboard callbacks."""
-    secret_token = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-    # Validate against stored secret if present (per-channel)
-    # For simplicity, we trust the callback if it contains a valid notification_id
+    """Handle Telegram inline keyboard callbacks for the authenticated tenant."""
+    from config.settings import settings
+
+    if not settings.delivery.inbound_telegram_callback_enabled:
+        return Response(status_code=404)
+    tenant_id = getattr(getattr(request.state, "tenant", None), "tenant_id", "") or ""
     try:
         body = await request.json()
     except Exception:
@@ -1009,9 +1045,9 @@ async def telegram_callback(request: Request):
     if len(parts) < 3:
         return Response(status_code=200)
 
-    action_type_str, notification_id, tenant_id = parts[0], parts[1], parts[2]
+    action_type_str, notification_id = parts[0], parts[1]
     row = await _notif_repo.find_by_id(notification_id)
-    if not row or row.get("tenant_id") != tenant_id:
+    if not tenant_id or not row or row.get("tenant_id") != tenant_id:
         return Response(status_code=200)
 
     try:
@@ -1344,18 +1380,18 @@ async def linear_webhook(request: Request):
     """Persist Linear webhook to WebhookInbox, verify signature, return 200 immediately."""
     body_bytes = await request.body()
     linear_sig = request.headers.get("Linear-Signature", "")
-    # Prefer explicit tenant header; processor will also resolve via ExternalResourceLink
-    tenant_id = request.headers.get("X-Aether-Tenant-ID", "")
     inbox_id = str(uuid.uuid4())
     try:
         await _webhook_inbox_repo.insert(inbox_id, {
             "id": inbox_id,
-            "tenant_id": tenant_id,
+            # The processor derives the tenant from the stored issue link.
+            "tenant_id": "",
             "provider": "linear",
             "headers": _sanitize_headers(dict(request.headers)),
             "raw_body": body_bytes.decode("utf-8", errors="replace"),
             "signature": linear_sig,
             "timestamp": "",
+            "received_at": _utc_now(),
             "verified": False,
             "processed": False,
         })
@@ -1369,19 +1405,24 @@ async def linear_webhook(request: Request):
 @router.post("/webhooks/jira/events")
 async def jira_webhook(request: Request):
     """Persist Jira webhook to WebhookInbox, verify Jira signature, return 200 immediately."""
+    from config.settings import settings
+
+    if not settings.delivery.inbound_jira_webhook_enabled:
+        return Response(status_code=404)
     body_bytes = await request.body()
     jira_sig = request.headers.get("X-Hub-Signature-256", "")
-    tenant_id = request.headers.get("X-Aether-Tenant-ID", "")
     inbox_id = str(uuid.uuid4())
     try:
         await _webhook_inbox_repo.insert(inbox_id, {
             "id": inbox_id,
-            "tenant_id": tenant_id,
+            # The processor derives the tenant from the stored issue link and site.
+            "tenant_id": "",
             "provider": "jira",
             "headers": _sanitize_headers(dict(request.headers)),
             "raw_body": body_bytes.decode("utf-8", errors="replace"),
             "signature": jira_sig,
             "timestamp": "",
+            "received_at": _utc_now(),
             "verified": False,
             "processed": False,
         })
@@ -1397,22 +1438,24 @@ async def aether_callback(request: Request):
     """Inbound signed outcome callback from generic webhook adapter.
 
     Persists the callback to WebhookInbox before returning 200.
-    The WebhookInboxProcessor handles verification and normalization asynchronously.
+    The WebhookInboxProcessor handles verification and normalization
+    asynchronously; the tenant and signing secret come from the delivery the
+    body's ``delivery_id`` names.
     """
     body_bytes = await request.body()
     aether_sig = request.headers.get("X-Aether-Signature", "")
     aether_ts = request.headers.get("X-Aether-Timestamp", "")
     inbox_id = str(uuid.uuid4())
     try:
-        tenant_id = request.query_params.get("tenant_id", "")
         await _webhook_inbox_repo.insert(inbox_id, {
             "id": inbox_id,
-            "tenant_id": tenant_id,
+            "tenant_id": "",
             "provider": "webhook",
             "headers": _sanitize_headers(dict(request.headers)),
             "raw_body": body_bytes.decode("utf-8", errors="replace"),
             "signature": aether_sig,
             "timestamp": aether_ts,
+            "received_at": _utc_now(),
             "verified": False,
             "processed": False,
         })

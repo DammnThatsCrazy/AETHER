@@ -11,11 +11,11 @@ source_files: [services/api/governance/consent/erasure_jobs.py, services/api/gov
 source_hashes:
   "scripts/release/check_dsr_coverage.py": "sha256:2cca7e381e2c76b5e47e178828a8522cbc0794ffb45cdaad304d01e20f9ae1b4"
   "services/api/governance/consent/erasure_jobs.py": "sha256:c181535d6b0a3fcc2bf5b7f3d248ca9970845285413c54ac75ba9433a5c6f86c"
-  "services/api/governance/consent/erasure_planes.py": "sha256:bfed1f9c260910ea99f8cd56025e949dd15561ebe87bca63dcc7a71c68fc6c36"
+  "services/api/governance/consent/erasure_planes.py": "sha256:f993383c39a336ec26bbf1a1811839f536a00ad3ba2953669daa98bdb7fa1c97"
   "services/api/governance/dsr_propagation/models.py": "sha256:c5afa46e9327a7d48ab0583836932ffb3e8f14ce3f420d7afe404ae5afe3450f"
   "services/api/graph/web3/registries.py": "sha256:13f14a786f6da928db1526c5f01d553f21fd388805feb368c4f6c18493ebdffe"
   "services/api/shared/storage/lifecycle.py": "sha256:f5446beb697cab99031cf464d9dcdb95310ad83870036fe0e5f1baf09d16d712"
-  "services/api/value/x402/commerce_store.py": "sha256:e5bf2b6cffad86e8c21fe08669961e20b74838939bc3f8cc857572b30d0dd5d8"
+  "services/api/value/x402/commerce_store.py": "sha256:b8ad52e6ef1587e0b9439787c7d6cbc0e15c66ab05f2434e80890dae5ba44835"
 ---
 
 # DSR Erasure Coverage — Every Component, Every Store
@@ -68,8 +68,8 @@ every other plane succeeded in the same attempt; otherwise they are marked
 |---|---|---|---|
 | `identity_aliases` | `identity_aliases`, `identity_signal_observations` | hard delete (subject entities + raw `user_id`/`anonymous_id` signals) | rows deleted |
 | `identity_subjects` | `identity_subjects` (incl. merge tombstones), `identity_clusters_v2`, `identity_clusters`, `entities` | hard delete | rows deleted |
-| `graph_edges` | `identity_edges`; graph-store edges incident to the subject's vertices | hard delete; governed soft-revoke via `GraphMutationGateway` (`edge_tombstoned`) | rows deleted + edges revoked |
-| `profile360_snapshots` | `profiles`, `behavior_profiles`, `journey_chains` | hard delete | rows deleted |
+| `graph_edges` | `identity_edges`; graph-store edges incident to the subject's vertices, including the tenant's user vertex `{tenant}:user:{user_id}` | hard delete; governed soft-revoke via `GraphMutationGateway` (`edge_tombstoned`) | rows deleted + edges revoked |
+| `profile360_snapshots` | `profiles` (row id `{tenant}:{user_id}`), `behavior_profiles`, `journey_chains` | hard delete | rows deleted |
 | `feature_rows` | lake Gold `gold_*` per-entity rows (semantic Gold excluded); ML feature cache | hard delete; cache drop | rows deleted; `artifacts_impacted` = cache keys |
 | `training_datasets` | none in the backend (offline `services/ml` parquet) | assessment via `dsr_artifact_index` | `records_impacted` = training-eligible Gold rows erased; `requires_retrain` when any; indexed dataset → `requires_manual_review` |
 | `model_artifacts` | none in the backend (artifact root is offline) | assessment via `dsr_artifact_index` | indexed model → `requires_manual_review` + `requires_retrain` |

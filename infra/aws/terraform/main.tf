@@ -498,7 +498,9 @@ module "ecs" {
   # Internal staff who join the operator tenant as owner on a verified
   # sign-in. Pilot staging only; no other lane admits anyone by email.
   platform_operator_emails     = var.deployment_lane == "pilot" ? var.platform_operator_emails : []
+  platform_operator_tenant_ids = var.platform_operator_tenant_ids
   deployment_lane              = var.deployment_lane
+  identity_verification_secrets_enabled = var.identity_verification_secrets_enabled
   email_enabled                = var.email_enabled
   self_signup_enabled          = local.self_signup_enabled
   email_sender_domain          = var.email_sender_domain

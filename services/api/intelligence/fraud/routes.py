@@ -20,6 +20,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
+from governance.security.request_context import require_platform_operator
 from intelligence.fraud.engine import FraudConfig, FraudEngine, FraudResult
 from shared.decorators import api_response
 from shared.logger.logger import get_logger, metrics
@@ -214,6 +215,8 @@ async def get_config(request: Request):
 async def update_config(body: FraudConfigUpdate, request: Request):
     """Update fraud engine configuration (partial update)."""
     request.state.tenant.require_permission("admin")
+    # The engine config is process-global: every tenant's evaluations use it.
+    require_platform_operator(request)
     global _config, _engine
 
     if body.block_threshold is not None:

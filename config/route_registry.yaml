@@ -72,6 +72,26 @@ infra_domains:
   - ready
   - metrics
 
+# Platform-wide surfaces. A customer owner holds role `admin`, which passes
+# every `require_permission()` check, so it must not be what admits a caller to
+# routes that act on other tenants or on shared platform state. A route with one
+# of these path segments, or under one of these prefixes, is
+# platform_operator_required: only a tenant in PLATFORM_OPERATOR_TENANT_IDS (or
+# the staging first-admin bootstrap tenant) or a Kyber operator passes. Public
+# paths are never operator-required; `/kyber` routes keep their own, narrower
+# Kyber operator gate.
+platform_operator_segments:
+  - admin
+platform_operator_prefixes:
+  - /v1/diagnostics
+# Tenant-own routes under a platform-operator prefix, as path templates. Each
+# template mounts one method; tests/unit/test_route_registry_coverage.py pins it.
+platform_operator_exempt_routes:
+  - /v1/diagnostics/sdk/heartbeat
+  - /v1/diagnostics/sdk/health
+  - /v1/diagnostics/sdk/health/{sdk_id}
+  - /v1/diagnostics/sdk/silent
+
 # Every mounted route's 2-segment path prefix must appear here. Adding a new
 # route under a NEW prefix requires classifying it here first (default-deny).
 known_prefixes:

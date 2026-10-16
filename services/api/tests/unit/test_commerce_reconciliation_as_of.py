@@ -254,3 +254,50 @@ def test_stripe_refund_extractor_requires_explicit_order_and_payment_refs():
     missing_ref = event.model_copy(deep=True)
     missing_ref.payload["data"]["object"]["metadata"] = {}
     assert StripeOnrampAdapter.extract_commerce_adjustments(missing_ref) == []
+
+
+@pytest.mark.asyncio
+async def test_newer_revision_wins_by_instant_not_by_string():
+    ledger = CommerceOrderPaymentLedger(MemoryStore())
+    common = dict(
+        commerce_order_ref="shop:tz", provider="shopify", provider_order_id="1",
+        amount="10.00", currency="USD", occurred_at="2026-10-01T09:00:00Z",
+    )
+    # 09:00Z is later than 10:00+02:00 (08:00Z) although it sorts earlier as text.
+    await ledger.record_order(
+        "tenant-a", revision_id="r-newer", source_revision_at="2026-10-01T09:00:00Z", **common
+    )
+    record = await ledger.record_order(
+        "tenant-a", revision_id="r-older", source_revision_at="2026-10-01T10:00:00+02:00", **common
+    )
+
+    assert record["order"]["revisionId"] == "r-newer"
+
+
+@pytest.mark.asyncio
+async def test_concurrent_order_and_payment_writes_are_both_retained():
+    import asyncio
+
+    class SlowStore(MemoryStore):
+        async def get(self, key: str):
+            value = await super().get(key)
+            await asyncio.sleep(0)  # let a concurrent writer read the same row
+            return value
+
+    ledger = CommerceOrderPaymentLedger(SlowStore())
+    await asyncio.gather(
+        ledger.record_order(
+            "tenant-a", commerce_order_ref="shop:race", provider="shopify",
+            provider_order_id="1", amount="10.00", currency="USD", revision_id="r1",
+            source_revision_at="2026-10-01T10:00:00Z", occurred_at="2026-10-01T10:00:00Z",
+        ),
+        ledger.record_payment(
+            "tenant-a", commerce_order_ref="shop:race", provider="stripe",
+            provider_payment_id="pay_1", amount="10.00", currency="USD",
+            status="succeeded", occurred_at="2026-10-01T10:01:00Z",
+        ),
+    )
+
+    record = await ledger.get("tenant-a", "shop:race")
+    assert record["order"]["providerOrderId"] == "1"
+    assert "stripe:pay_1" in record["payments"]

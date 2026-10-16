@@ -222,6 +222,8 @@ class ExternalResourceLink(BaseModel):
     external_id: str
     external_url: Optional[str] = None
     resource_type: str = ""  # "issue", "ticket", "message", etc.
+    aether_object_type: str = ""  # the intent's source_type: "suggestion" | "notification" | "action"
+    aether_object_id: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: str = Field(default_factory=_now_iso)
 

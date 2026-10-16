@@ -254,12 +254,43 @@ async def ingest_connector_webhook(connector_type: str, request: Request):
 # so the middleware skips token auth.  Security is enforced inside the handler via
 # provider-native or Aether HMAC signature verification.
 #
-# Tenant routing: the tenant is resolved by looking up the connector config whose
-# stored webhook secret produces a valid signature for the incoming payload. The
-# caller provides X-Aether-Tenant-ID so we can scope the secret lookup efficiently.
-# If X-Aether-Tenant-ID is missing or verification fails, the request is rejected.
+# Tenant routing: Shopify deliveries resolve the tenant from the shop domain in
+# X-Shopify-Shop-Domain (else the body ``domain``; the two must agree when both
+# are present), which must match exactly one enabled stored Shopify binding.
+# The domain is only a routing candidate: that tenant's own secret must then
+# verify the HMAC over the raw body.
+# Other non-comms connectors still scope the secret lookup by the
+# X-Aether-Tenant-ID header; the tenant's own stored secret must then verify.
+# Every denial past connector lookup returns the same generic 400 so the
+# response never reveals whether a tenant, connector or secret exists.
 #
 # Generic Aether HMAC delivery also enforces a five-minute replay window.
+
+_WEBHOOK_REJECTED = "webhook rejected"
+
+
+async def _shopify_tenant_for(raw_body: bytes, headers: dict[str, str]) -> Optional[str]:
+    """Tenant whose single enabled Shopify binding owns the delivery's shop domain."""
+    import json as _json
+
+    from connectors.providers.shopify.auth import _stored_shop_domain
+    from connectors.providers.shopify.webhook import ShopifyWebhookAdapter
+
+    try:
+        payload = _json.loads(raw_body or b"{}")
+        domain = ShopifyWebhookAdapter.shop_domain_from_payload(payload, headers=headers)
+    except (TypeError, ValueError, AttributeError):
+        return None
+    rows = await connector_service.repo.find_many(
+        filters={"connector_type": "shopify"}, limit=10000,
+    )
+    tenants = {
+        row["tenant_id"] for row in rows
+        if row.get("enabled")
+        and _stored_shop_domain((row.get("config") or {}).get("shop_domain")) == domain
+    }
+    return tenants.pop() if len(tenants) == 1 else None
+
 
 @webhook_public_router.post("/{connector_type}")
 async def public_webhook_ingest(connector_type: str, request: Request):
@@ -268,19 +299,22 @@ async def public_webhook_ingest(connector_type: str, request: Request):
 
     - No API key required.
     - Provider-native or Aether HMAC signature verification.
-    - Tenant resolved from X-Aether-Tenant-ID header.
+    - Shopify: tenant from X-Shopify-Shop-Domain or the body domain (unique
+      stored binding), then that tenant's HMAC must verify.
+    - Other connectors: tenant from X-Aether-Tenant-ID, authenticated by that
+      tenant's stored secret.
     - Generic HMAC replay prevention: 5-minute timestamp window.
     - Idempotent: duplicate webhook event IDs are detected and skipped.
     - Comms connectors are permanently denied here — they use the server-controlled
       /comms/{connector}/{endpoint_id} route (never a tenant header, ADR-C11).
 
     Headers:
-      X-Aether-Tenant-ID: <tenant_id>       (required — set by webhook registration)
+      X-Aether-Tenant-ID: <tenant_id>       (non-Shopify connectors only)
       X-Aether-Signature: <hmac_sha256_hex>  (generic webhook only)
       X-Aether-Timestamp: <unix_epoch_int>   (generic webhook only)
       Provider-native signature headers     (declared adapter schemes)
     """
-    from shared.common.common import BadRequestError, ForbiddenError
+    from shared.common.common import BadRequestError
     from shared.logger.logger import metrics as _metrics
 
     connector = get_connector(connector_type)
@@ -301,9 +335,20 @@ async def public_webhook_ingest(connector_type: str, request: Request):
             "not the X-Aether-Tenant-ID header"
         )
 
-    tenant_id = request.headers.get("X-Aether-Tenant-ID", "").strip()
+    def _reject(reason: str) -> BadRequestError:
+        _metrics.increment("connector_webhook_rejected_total", labels={
+            "connector": connector_type, "reason": reason,
+        })
+        return BadRequestError(_WEBHOOK_REJECTED)
+
+    raw_body = await request.body()
+    headers = dict(request.headers)
+    if connector_type == "shopify":
+        tenant_id = await _shopify_tenant_for(raw_body, headers) or ""
+    else:
+        tenant_id = request.headers.get("X-Aether-Tenant-ID", "").strip()
     if not tenant_id:
-        raise BadRequestError("X-Aether-Tenant-ID header is required")
+        raise _reject("tenant_unresolved")
 
     signature = request.headers.get("X-Aether-Signature", "").strip()
     timestamp = request.headers.get("X-Aether-Timestamp", "").strip()
@@ -311,32 +356,20 @@ async def public_webhook_ingest(connector_type: str, request: Request):
         getattr(connector, "verify_webhook_signature", None)
     )
     if not uses_native_signature and (not signature or not timestamp):
-        _metrics.increment("connector_webhook_rejected_total", labels={
-            "connector": connector_type, "reason": "missing_signature",
-        })
-        raise BadRequestError("X-Aether-Signature and X-Aether-Timestamp are required")
+        raise _reject("missing_signature")
 
     # Resolve tenant's connector secret from vault
     cfg_record = await connector_service.get(tenant_id, connector_type)
     if not cfg_record or not cfg_record.get("enabled"):
-        _metrics.increment("connector_webhook_rejected_total", labels={
-            "connector": connector_type, "reason": "connector_disabled",
-        })
-        raise ForbiddenError("Connector not enabled for this tenant")
+        raise _reject("connector_disabled")
 
     from connectors.integrations.connectors.base import ConnectorConfig
-    config = ConnectorConfig(**cfg_record) if cfg_record else None
+    config = ConnectorConfig(**cfg_record)
     secret: Optional[str] = None
-    if config and config.secret_configured:
+    if config.secret_configured:
         secret = await connector_service._resolve_secret(config)
-
     if not secret:
-        _metrics.increment("connector_webhook_rejected_total", labels={
-            "connector": connector_type, "reason": "secret_missing",
-        })
-        raise ForbiddenError("Connector webhook secret not configured")
-
-    raw_body = await request.body()
+        raise _reject("secret_missing")
 
     from connectors.integrations.webhook_policy import (
         verify_provider_webhook_signature,
@@ -345,21 +378,18 @@ async def public_webhook_ingest(connector_type: str, request: Request):
     if not verify_provider_webhook_signature(
         connector,
         raw_body=raw_body,
-        headers=dict(request.headers),
+        headers=headers,
         secret=secret,
         signature=signature,
         timestamp=timestamp,
     ):
-        _metrics.increment("connector_webhook_rejected_total", labels={
-            "connector": connector_type, "reason": "invalid_signature",
-        })
-        raise BadRequestError("Webhook signature verification failed")
+        raise _reject("invalid_signature")
 
     # Signature verified — ingest the webhook
     result = await connector_service.ingest_webhook(
         connector_type, tenant_id,
         raw_body=raw_body, signature=signature, timestamp=timestamp,
-        secret=secret, headers=dict(request.headers),
+        secret=secret, headers=headers,
     )
     _metrics.increment("connector_webhook_received_total", labels={"connector": connector_type})
 
@@ -615,7 +645,6 @@ slack_notify_router = APIRouter(
 
 class SlackChannelConfigBody(BaseModel):
     default_channel: str
-    bot_token_ref: Optional[str] = None
     channel_map: Optional[dict[str, str]] = None
     templates: Optional[dict[str, str]] = None
     enabled: Optional[bool] = True
@@ -623,7 +652,10 @@ class SlackChannelConfigBody(BaseModel):
 
 @slack_notify_router.put("")
 async def configure_slack_notify(body: SlackChannelConfigBody, request: Request):
-    """Configure per-tenant Slack outbound channel mapping and templates."""
+    """Configure per-tenant Slack outbound channel mapping and templates.
+
+    The bot token is the one saved through the tenant's notification config.
+    """
     tenant_id = _tenant_id(request, "write")
     from repositories.repos import BaseRepository
     repo = BaseRepository("slack_channel_configs")
@@ -634,8 +666,6 @@ async def configure_slack_notify(body: SlackChannelConfigBody, request: Request)
         "templates": body.templates or {},
         "enabled": body.enabled if body.enabled is not None else True,
     }
-    if body.bot_token_ref:
-        record["bot_token_ref"] = body.bot_token_ref
     stored = await repo.insert(tenant_id, record)
     return APIResponse(data=_strip_secrets_shallow(stored)).to_dict()
 
