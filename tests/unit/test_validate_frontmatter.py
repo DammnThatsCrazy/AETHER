@@ -82,7 +82,7 @@ def test_minimal_payload_validates(vf, schema):
 def test_full_payload_validates(vf, schema):
     payload = _minimal_valid_payload() | {
         "status": "stable",
-        "since_version": "8.8.0",
+        "since_version": "0.1.0",
         "source_files": ["packages/shared/events.ts"],
         "flags": ["IG_X402_LAYER"],
         "prereqs": ["concepts/hybrid-model"],

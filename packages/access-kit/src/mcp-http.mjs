@@ -331,7 +331,7 @@ export function createRemoteMcpFetchHandler({ env = process.env } = {}) {
     try {
       // Validate on every MCP protocol request. The API remains the source of
       // truth for credential validity, current tenant membership, and grants.
-      await getAccountContext(tenantEnv);
+      await getAccountContext({ ...tenantEnv, AETHER_ACCESS_SURFACE: undefined });
     } catch (error) {
       const failure = authFailure(error);
       return oauthChallenge(jsonResponse(failure.status, failure.code, {
