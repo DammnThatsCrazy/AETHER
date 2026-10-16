@@ -232,10 +232,11 @@ class ImportRightsAdmission:
             try:
                 grant = await service.get_grant(grant_ref, tenant_id=tenant_id)
             except Exception:
-                grant = None
-            relationship = str(getattr(grant, "source_relationship", "") or UNCLASSIFIED)
-            if grant is None or relationship not in IMPORT_SOURCE_RELATIONSHIPS:
-                reasons.append("source_relationship_mismatch")
+                reasons.append("rights_authority_unavailable")
+            else:
+                relationship = str(getattr(grant, "source_relationship", "") or UNCLASSIFIED)
+                if grant is None or relationship not in IMPORT_SOURCE_RELATIONSHIPS:
+                    reasons.append("source_relationship_mismatch")
         evidence = self._evidence(
             tenant_id, import_id, commit_id, source, principal, decisions,
             source_grant_ref=grant_ref,

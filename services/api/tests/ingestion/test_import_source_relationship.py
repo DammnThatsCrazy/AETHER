@@ -68,3 +68,21 @@ async def test_partner_grant_cannot_admit_an_import():
     with pytest.raises(ImportRightsDenied) as exc:
         await _admit(grant)
     assert "source_relationship_mismatch" in exc.value.evidence.reason_codes
+
+
+@pytest.mark.asyncio
+async def test_grant_lookup_outage_denies_as_authority_unavailable():
+    admission = _admission(_grant())
+
+    async def unavailable(*_args, **_kwargs):
+        raise ConnectionError("grant store down")
+
+    admission._grant_service.get_grant = unavailable
+    with pytest.raises(ImportRightsDenied) as exc:
+        await admission.admit(
+            tenant_id="tenant-1", import_id="imp_1", commit_id="impc_1",
+            source_id="crm-export", actor="admin_1",
+        )
+    reasons = exc.value.evidence.reason_codes
+    assert "rights_authority_unavailable" in reasons
+    assert "source_relationship_mismatch" not in reasons

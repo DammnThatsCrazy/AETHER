@@ -20,7 +20,7 @@ estimated_read_minutes: 14
 toc_depth: 3
 source_hashes:
   "services/api/config/settings.py": "sha256:120775873521c402933065c3073b8f2d242589bca26b095f982952f6bb392f42"
-  "services/api/connectors/provider_runtime/": "sha256:5eedccb3a72559ccf5eed414dff03d39c014f9ab2b0ac623afad4a77a07ee207"
+  "services/api/connectors/provider_runtime/": "sha256:3edaf804772ff195f79dde7eb0bc07ec720271d60a8301e603c57826c56b43da"
   "services/api/connectors/providers/": "sha256:086060aa67b187df1b1ea59ab1d556fd0bca1df379b3162447117f3ecbff7aeb"
   "services/api/connectors/providers/shopify/": "sha256:4019dd90b0864d3f2b76fc1fac7a4a98bf10e98bfe41ae6c437c248f80814b09"
   "services/api/main.py": "sha256:52e672c1c82e17907041ba173b1fb7cee68bfb03b158eb370fd4f25b584cc726"
@@ -244,7 +244,8 @@ enable the provider runtime or alter environment flags.
 
 **Admission by rights-source class.** The grant's `connector_class` chooses the
 retention use: `tenant_byod_data` retains to `tenant_lake`, `olympus_provider`
-to `olympus_baseline`, and `partner_feed` to `olympus_baseline` when the grant
+to `olympus_baseline` only when the grant tenant is the reserved `olympus` scope
+(otherwise it is denied), and `partner_feed` to `olympus_baseline` when the grant
 tenant is the reserved `olympus` scope, otherwise `tenant_lake`. Every other
 class is denied. The grant's `source_relationship` is descriptive and can only
 deny: an inconsistent relationship and class pairing refuses admission, and a
@@ -253,8 +254,9 @@ consistent one authorizes nothing. Legacy grants without a relationship
 `provider-account:{connection_id}:{account_id}` for records naming an account;
 accountless records resolve to `provider-stream:{connection_id}:{stream_id}`
 only when the capability manifest declares that stream. The event bridge never
-forwards `olympus`-scope evidence into the tenant pipeline; it stays in raw
-storage for governed replay. The revocation fence below applies to every class.
+forwards `olympus`-scope evidence into the tenant pipeline, and a replay dry run
+counts such events as not admitted; the evidence stays in raw storage for
+governed replay. The revocation fence below applies to every class.
 See `docs/architecture/target/source-authority.md`.
 
 **Revocation fence.** Admission decides at one instant and Bronze is written

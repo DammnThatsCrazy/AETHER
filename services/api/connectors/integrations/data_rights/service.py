@@ -260,20 +260,23 @@ def validate_grant_classification(body: DataRightsGrantCreate) -> None:
     if not relationship_consistent(rel, body.connector_class):
         raise GrantClassificationError("rights_class_mismatch")
     olympus_scope = body.tenant_id == OLYMPUS_SOURCE_TENANT_ID
-    if rel in ("olympus_source", "internal_system") and not olympus_scope:
+    olympus_class = (
+        rel in ("olympus_source", "internal_system") or body.connector_class == "olympus_provider"
+    )
+    if olympus_class and not olympus_scope:
         raise GrantClassificationError("olympus_scope_required")
     if (rel in TENANT_SELF_SERVICE_RELATIONSHIPS or rel == "first_party_application") and olympus_scope:
         raise GrantClassificationError("tenant_scope_required")
     if rel == "personal_account":
         if (
-            not body.subject_ref
-            or not body.consent_basis
+            not (body.subject_ref or "").strip()
+            or not (body.consent_basis or "").strip()
             or body.legal_basis == LegalBasis.OPERATOR_POLICY.value
         ):
             raise GrantClassificationError("personal_account_requires_subject_consent")
     elif body.subject_ref:
         raise GrantClassificationError("subject_ref_requires_personal_account")
-    if rel == "partner_feed" and not body.contract_id:
+    if rel == "partner_feed" and not (body.contract_id or "").strip():
         raise GrantClassificationError("partner_feed_requires_contract")
 
 

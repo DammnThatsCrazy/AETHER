@@ -35,7 +35,7 @@ _RAW_RETENTION_USE_BY_CLASS = {
 
 
 class ProviderRawRightsDenied(RuntimeError):
-    """A provider record has no current, tenant-scoped storage authorization."""
+    """A provider record has no current storage authorization for its rights-source class."""
 
     def __init__(self) -> None:
         super().__init__("provider raw record has no current rights admission")
@@ -113,9 +113,11 @@ def provider_source_id(
 def raw_retention_use(grant: Any) -> Optional[str]:
     """Raw-retention use for a grant's rights-source class; None means no retention."""
     connector_class = str(getattr(grant, "connector_class", "") or "")
+    olympus_scope = str(getattr(grant, "tenant_id", "") or "") == OLYMPUS_SOURCE_TENANT_ID
     if connector_class == "partner_feed":
-        licensed_to_olympus = str(getattr(grant, "tenant_id", "") or "") == OLYMPUS_SOURCE_TENANT_ID
-        return "olympus_baseline" if licensed_to_olympus else "tenant_lake"
+        return "olympus_baseline" if olympus_scope else "tenant_lake"
+    if connector_class == "olympus_provider" and not olympus_scope:
+        return None
     return _RAW_RETENTION_USE_BY_CLASS.get(connector_class)
 
 

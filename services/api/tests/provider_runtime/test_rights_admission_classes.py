@@ -124,6 +124,8 @@ async def test_allowed_classes_admit_with_class_derived_use(tenant, changes, exp
         ("tenant-1", {"connector_class": "byok_gateway"}),
         ("tenant-1", {"connector_class": "tenant_import"}),
         ("tenant-1", {"source_relationship": "unclassified", "connector_class": "partner_feed", "contract_id": "c"}),
+        # Olympus-class evidence under a customer tenant must never reach that tenant's pipeline.
+        ("tenant-1", dict(OLYMPUS, source_relationship="public_reference", raw_data_owner="public")),
     ],
 )
 @pytest.mark.asyncio
@@ -218,7 +220,9 @@ async def test_replay_denies_when_stored_use_differs_from_current_class_use():
 def test_retention_use_table():
     base = _grant(_record())
     assert raw_retention_use(base) == "tenant_lake"
-    assert raw_retention_use(base.model_copy(update={"connector_class": "olympus_provider"})) == "olympus_baseline"
+    olympus = base.model_copy(update={"connector_class": "olympus_provider", "tenant_id": OLYMPUS_SOURCE_TENANT_ID})
+    assert raw_retention_use(olympus) == "olympus_baseline"
+    assert raw_retention_use(base.model_copy(update={"connector_class": "olympus_provider"})) is None
     assert raw_retention_use(base.model_copy(update={"connector_class": "partner_feed"})) == "tenant_lake"
     assert raw_retention_use(base.model_copy(update={"connector_class": "partner_feed", "tenant_id": OLYMPUS_SOURCE_TENANT_ID})) == "olympus_baseline"
     for cls in ("byok_gateway", "action_notifier", "dual_role", "tenant_import", ""):

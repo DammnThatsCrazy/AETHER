@@ -195,7 +195,7 @@ async def admin_create_grant(body: DataRightsGrantCreate, request: Request):
     """Operator: onboard an Olympus, partner, public-reference or internal source grant."""
     operator = _require_operator(request)
     if body.source_relationship not in OPERATOR_RELATIONSHIPS:
-        raise ForbiddenError("Tenant sources are granted by the tenant's own admin")
+        raise ForbiddenError("Relationship is not grantable through the operator route")
     try:
         grant = await data_rights_service.create_grant(body, granted_by_user_id=operator.actor_id)
     except GrantClassificationError as exc:

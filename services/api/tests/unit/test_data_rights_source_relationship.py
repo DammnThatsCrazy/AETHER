@@ -83,10 +83,17 @@ def test_raw_data_owner_is_curated_on_create():
         (dict(PERSONAL, subject_ref=None), "personal_account_requires_subject_consent"),
         (dict(PERSONAL, consent_basis=None), "personal_account_requires_subject_consent"),
         (dict(PERSONAL, legal_basis="operator_policy"), "personal_account_requires_subject_consent"),
+        (dict(PERSONAL, subject_ref="  "), "personal_account_requires_subject_consent"),
+        (dict(PERSONAL, consent_basis=" \t"), "personal_account_requires_subject_consent"),
         # The control that stops labelling an employee's personal account as organizational.
         (dict(ORG, subject_ref="employee_7"), "subject_ref_requires_personal_account"),
         (dict(PARTNER, contract_id=None), "partner_feed_requires_contract"),
+        (dict(PARTNER, contract_id="   "), "partner_feed_requires_contract"),
         (dict(OLYMPUS, tenant_id="tenant_abc"), "olympus_scope_required"),
+        (
+            dict(OLYMPUS, tenant_id="tenant_abc", source_relationship="public_reference", raw_data_owner="public"),
+            "olympus_scope_required",
+        ),
         (dict(ORG, tenant_id=OLYMPUS_SOURCE_TENANT_ID), "tenant_scope_required"),
     ],
 )

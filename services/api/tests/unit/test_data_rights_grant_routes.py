@@ -72,10 +72,12 @@ async def test_operator_creates_olympus_grant(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_operator_cannot_mint_tenant_relationships(monkeypatch):
+@pytest.mark.parametrize("relationship", ["organization_system", "unclassified", "first_party_application"])
+async def test_operator_cannot_mint_non_operator_relationships(monkeypatch, relationship):
     monkeypatch.setattr(request_context, "require_kyber_operator", lambda request: SimpleNamespace(actor_id="op_1"))
-    with pytest.raises(ForbiddenError):
-        await routes.admin_create_grant(DataRightsGrantCreate(**ORG), _request())
+    body = DataRightsGrantCreate(**dict(ORG, source_relationship=relationship))
+    with pytest.raises(ForbiddenError, match="not grantable through the operator route"):
+        await routes.admin_create_grant(body, _request())
 
 
 @pytest.mark.asyncio

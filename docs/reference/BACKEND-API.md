@@ -28,11 +28,11 @@ source_hashes:
   "services/api/actions/": "sha256:d43501fd20dc2010654eaef70a37ddf86aed6c018a20e9a9148f4bf8d1f1bb44"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
-  "services/api/connectors/": "sha256:a6a27af38650548043e8164e260a0cd3f40c142ecacee75175638df26e47d166"
+  "services/api/connectors/": "sha256:59399ea8bc716e85a3b1189ccb2ab7cdb3425298c1a1b6fcda6d66af2d30eefe"
   "services/api/governance/": "sha256:b47a6fe0cec45cf306bfb4399a2b361df4f4bd1a4f0f897ed003a3db2d4a0dd3"
   "services/api/graph/": "sha256:bda39e64fa30ae40f4acbf0fa85092aa50d7cb601037bdcd6870b241ea09fe13"
   "services/api/identity/": "sha256:4a96035d9625725df833799f19f36e4137e9ba2dab121bb9eb78e7e5833fc79a"
-  "services/api/ingestion/": "sha256:61ce3b6870511c71e36ac974f92ff608eac21af7bb23f2992381f03fdcaa6752"
+  "services/api/ingestion/": "sha256:94973da02b8255278b43b93cd68c2e86d99c37c534dd81742c95187a27aa8361"
   "services/api/intelligence/": "sha256:9b583b5a699e01018b213383848636ee011384fa9f6115d1cda00977dfdb3e58"
   "services/api/journeys/": "sha256:8db7d48b7f8247ab5adfde2fef24d3d7d4d6b2b4b7b721fd1129e836c9ad5301"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
@@ -3418,7 +3418,7 @@ Anti-distillation enforcement on intelligence query endpoints is activated by `A
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/v1/admin/kyber/data-rights` | All data rights grants (operator-scoped view) |
-| POST | `/v1/admin/kyber/data-rights/grants` | Onboard a `partner_feed`, `olympus_source`, `public_reference` or `internal_system` grant (Kyber operator; a tenant relationship returns 403, a failed classification 400). `olympus_source` and `internal_system` grants use the reserved `olympus` scope; `partner_feed` requires a `contract_id` |
+| POST | `/v1/admin/kyber/data-rights/grants` | Onboard a `partner_feed`, `olympus_source`, `public_reference` or `internal_system` grant (Kyber operator; any other relationship returns 403, a failed classification 400). `olympus_source` and `internal_system` grants, and every `olympus_provider` grant, use the reserved `olympus` scope (otherwise 400 `olympus_scope_required`); `partner_feed` requires a `contract_id` |
 
 ---
 

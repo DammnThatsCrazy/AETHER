@@ -46,7 +46,7 @@ permitted uses. Field names below match `models.py`.
 | Field | Type | Description |
 |---|---|---|
 | `data_rights_grant_id` | string | Immutable identifier for this grant (issued as `drg_…`) |
-| `tenant_id` | string or `OLYMPUS` | Scope: tenant-specific or platform-wide |
+| `tenant_id` | string, or the reserved `olympus` | Scope: a customer tenant, or the reserved Olympus scope |
 | `contract_id` | string or null | Optional governing contract/MSA reference |
 | `source_id` | string | Provider/source slug (e.g., `dune`, `tenant_byod`) |
 | `connector_id` | string | The connector instance that routed the source |
@@ -83,7 +83,7 @@ permitted uses. Field names below match `models.py`.
 
 ## Who creates which grant
 
-Tenant admins create `personal_account` and `organization_system` grants through the tenant route. `partner_feed`, `olympus_source`, `public_reference` and `internal_system` grants are created only by a Kyber operator through `POST /v1/admin/kyber/data-rights/grants`; `olympus_source` and `internal_system` use the reserved tenant `olympus`. `partner_feed` permissions default closed and need a contract reference. See `docs/architecture/target/source-authority.md`.
+Tenant admins create `personal_account` and `organization_system` grants through the tenant route. `partner_feed`, `olympus_source`, `public_reference` and `internal_system` grants are created only by a Kyber operator through `POST /v1/admin/kyber/data-rights/grants`; `olympus_source` and `internal_system` grants, and every grant with `connector_class == "olympus_provider"` (including `public_reference`), use the reserved tenant `olympus`; creation is refused with `olympus_scope_required` otherwise. `partner_feed` permissions default closed and need a contract reference. See `docs/architecture/target/source-authority.md`.
 
 ## Durable grant storage
 
@@ -289,8 +289,9 @@ the platform-level grant that covers the provider contract establishes:
 Training rights for Olympus provider data require a separate legal review and
 a specific grant with `model_training_allowed=true`. Do not assume that a
 provider contract covering data access also covers model training.
-`DataRightsService` enforces the provider overrides at creation: for
-`connector_class == "olympus_provider"`, `olympus_baseline_allowed` is set `true`
+`DataRightsService` enforces the provider overrides at creation: an
+`olympus_provider` grant must use the reserved `olympus` tenant,
+`olympus_baseline_allowed` is set `true`
 and `model_training_allowed` cannot be set directly via the API (it requires the
 compliance-review flow).
 

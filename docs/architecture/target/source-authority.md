@@ -7,6 +7,11 @@ audience: [architect, dev-senior]
 status: experimental
 source_files: [services/api/shared/integration_contracts/source_relationship.py, services/api/connectors/provider_runtime/rights_admission.py, services/api/connectors/integrations/data_rights/service.py, services/api/tenancy/rights_authority/source_lineage.py]
 since_version: "0.1.0"
+source_hashes:
+  "services/api/connectors/integrations/data_rights/service.py": "sha256:4916e76f3dbbb1056700bb20cd4bc16b535e1b6fbfc38743fcc3c59f980780f2"
+  "services/api/connectors/provider_runtime/rights_admission.py": "sha256:2f7bb87c5901b0f422dc0170a441442399987c3b4a55e342fc6ce1a10ec2033e"
+  "services/api/shared/integration_contracts/source_relationship.py": "sha256:9dce3c9e3424b976f4edea041ae39eedd82c9e8a7a25b57da20aa340c0d241f1"
+  "services/api/tenancy/rights_authority/source_lineage.py": "sha256:0755aa2ad8a9e6e37776e5baf93a234567f8978511ebf46f169f6977cde2094f"
 ---
 
 # Source Relationship and Source Authority
@@ -41,7 +46,7 @@ None of them is a "connector type".
 
 - `source_relationship` lives on the envelope `SourceBlock` (per observation) and on `DataRightsGrant` (per governed source). It is never added to `ProviderConnection` or to graph edges.
 - Retention use is chosen from the grant's rights-source class (`connector_class`), never from the relationship. The relationship can only deny.
-- Olympus-owned and Olympus-licensed sources are scoped to the reserved grant tenant `olympus`, which is never a customer tenant and never feeds the tenant pipeline.
+- Olympus-owned and Olympus-licensed sources are scoped to the reserved grant tenant `olympus`, which is never a customer tenant and never feeds the tenant pipeline. Every `olympus_provider` grant, whatever its relationship, must use that scope.
 
 ## Relationship to owner to rights class
 
@@ -58,6 +63,8 @@ A grant is created only when its `source_relationship`, curated `raw_data_owner`
 | `internal_system` | `olympus_labs` | `olympus_provider` | operator |
 | `unclassified` (legacy rows) | none | `tenant_byod_data` only | not creatable |
 
+An `olympus_provider` grant is refused with `olympus_scope_required` unless its tenant is the reserved `olympus` scope, so a `public_reference` grant on that class cannot sit under a customer tenant.
+
 ## Raw retention by rights-source class
 
 Provider raw admission picks the retention use from the grant's `connector_class`. The relationship is only checked for consistency.
@@ -65,18 +72,18 @@ Provider raw admission picks the retention use from the grant's `connector_class
 | Grant `connector_class` | Retention use (`requested_use` and destination) | Notes |
 |---|---|---|
 | `tenant_byod_data` | `tenant_lake` | the only class admitted before classification existed; legacy `unclassified` grants stay here |
-| `olympus_provider` | `olympus_baseline` | grant tenant is the reserved `olympus` scope |
+| `olympus_provider` | `olympus_baseline` when the grant tenant is `olympus`, otherwise none: denied | a stored `olympus_provider` grant under a customer tenant retains nothing |
 | `partner_feed` | `olympus_baseline` when the grant tenant is `olympus`, otherwise `tenant_lake` | a tenant partner grant never licenses another tenant |
 | `tenant_import`, `byok_gateway`, `action_notifier`, `dual_role` | none: denied | `tenant_import` is admitted only by the import path |
 
-Olympus scope: grants and connections for Olympus-owned and Olympus-licensed sources use the reserved tenant `OLYMPUS_SOURCE_TENANT_ID = "olympus"`, never a customer tenant. The provider event bridge refuses to forward batches under that tenant into the tenant pipeline, so Olympus-scope raw evidence stays available for governed replay only. The revocation fence applies to every class.
+Olympus scope: grants and connections for Olympus-owned and Olympus-licensed sources use the reserved tenant `OLYMPUS_SOURCE_TENANT_ID = "olympus"`, never a customer tenant. `olympus_baseline` is only ever chosen under that scope, and the provider event bridge refuses to forward batches under that tenant into the tenant pipeline (a replay dry run counts them as not admitted), so Olympus-scope raw evidence stays available for governed replay only. The revocation fence applies to every class.
 
 ## Who may create which grant
 
 | Route | Caller | Accepted `source_relationship` | Refusals |
 |---|---|---|---|
 | `POST /v1/integrations/data-rights/grants` | tenant admin | `personal_account`, `organization_system` | `403` for any operator relationship; the `olympus` scope is refused (`403` or `400`); `400` for a failed classification (owner or class mismatch) |
-| `POST /v1/admin/kyber/data-rights/grants` | Kyber operator | `partner_feed`, `olympus_source`, `public_reference`, `internal_system` | `403` for a non-operator or a tenant relationship; `400` for a failed classification |
+| `POST /v1/admin/kyber/data-rights/grants` | Kyber operator | `partner_feed`, `olympus_source`, `public_reference`, `internal_system` | `403` for a non-operator or any relationship outside the operator set (tenant relationships, `first_party_application`, `unclassified`); `400` for a failed classification, including `olympus_scope_required` |
 
 `source_relationship` and a curated `raw_data_owner` are required on creation; the creation audit event records the relationship. There is no Olympus superuser path: operator grants still pass the same resolver.
 
@@ -101,7 +108,7 @@ Each invariant names the tests that pin it. Test names are relative to `services
 | 4 | Provider adapters cannot authorize their own data use | `provider_runtime/test_rights_admission_classes.py::test_relationship_never_turns_a_denied_use_into_an_allow`; `provider_runtime/test_rights_admission.py::test_injected_adapters_cannot_bypass_production_durable_store_gate` |
 | 5 | A valid credential does not imply retention rights | `provider_runtime/test_rights_admission.py::test_absent_grant_denies_before_raw_admission`; `provider_runtime/test_rights_admission_classes.py::test_denials_fail_closed` |
 | 6 | BYOK does not imply data rights | `provider_runtime/test_rights_admission.py::test_byok_or_mismatched_source_grant_cannot_admit_tenant_raw_data` |
-| 7 | `olympus_source` does not provide an Olympus bypass | `unit/test_data_rights_grant_routes.py::test_tenant_cannot_claim_the_olympus_scope`; `provider_runtime/test_bridge.py::test_olympus_scope_events_never_enter_the_tenant_pipeline` |
+| 7 | `olympus_source` does not provide an Olympus bypass | `unit/test_data_rights_grant_routes.py::test_tenant_cannot_claim_the_olympus_scope`; `unit/test_data_rights_source_relationship.py::test_invalid_pairings_are_rejected`; `provider_runtime/test_rights_admission_classes.py::test_denials_fail_closed`, `::test_retention_use_table`; `provider_runtime/test_bridge.py::test_olympus_scope_events_never_enter_the_tenant_pipeline`; `provider_runtime/test_replay.py::test_dry_run_does_not_count_olympus_scope_events_as_admitted` |
 | 8 | `partner_feed` does not imply cross-tenant reuse | `provider_runtime/test_rights_admission_classes.py::test_wrong_tenant_and_wrong_source_deny`; `ingestion/test_import_source_relationship.py::test_partner_grant_cannot_admit_an_import` |
 | 9 | `public_reference` does not imply unrestricted commercial reuse | not pinned |
 | 10 | Revoked grants block subsequent provider raw writes | `provider_runtime/test_rights_admission.py::test_expired_or_revoked_grant_denies_admission`; `provider_runtime/test_rights_revocation_fence.py`; `tests/prod_equivalent/test_real_stack_rights_revocation_fence.py::test_a_write_after_a_committed_revocation_is_denied` |
@@ -111,6 +118,6 @@ Each invariant names the tests that pin it. Test names are relative to `services
 | 14 | Graph writes remain Gateway-governed | `rights_authority/test_source_lineage.py::test_graph_decision_traces_to_relationship_and_grant` (lineage only); gateway enforcement is pinned by the existing graph gateway suites, not by a test on this program |
 | 15 | Access Kit transport cannot circumvent intake, tenant, consent or rights authorities | not pinned |
 | 16 | Replays preserve original source provenance | `tests/unit/observation/test_replay_adapter.py::test_replay_preserves_source_relationship_and_rights_references`; `provider_runtime/test_provider_source_scope.py::test_replayed_record_resolves_the_same_source_id` |
-| 17 | Operator access remains purpose/governance constrained | `unit/test_data_rights_grant_routes.py::test_non_operator_is_refused`, `::test_operator_cannot_mint_tenant_relationships`; `rights_authority/test_olympus_internal.py::test_unknown_purpose_denied` |
+| 17 | Operator access remains purpose/governance constrained | `unit/test_data_rights_grant_routes.py::test_non_operator_is_refused`, `::test_operator_cannot_mint_non_operator_relationships`; `rights_authority/test_olympus_internal.py::test_unknown_purpose_denied` |
 | 18 | A `source_relationship` never contributes to an allow decision | `integration_contracts/test_source_relationship.py::test_relationship_consistency_matrix`; `provider_runtime/test_rights_admission_classes.py::test_relationship_never_turns_a_denied_use_into_an_allow` |
 | 19 | `provider-stream` scopes resolve only to manifest-declared streams | `provider_runtime/test_provider_source_scope.py::test_undeclared_or_missing_stream_denies`, `::test_no_connection_wide_fallback` |
