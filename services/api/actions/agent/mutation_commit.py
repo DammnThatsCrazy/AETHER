@@ -193,6 +193,10 @@ def _build_edge(tenant_id: str, mutation: dict[str, Any], actor: str) -> Edge:
         provenance="staged_mutation_review",
         valid_from=utc_now(),
         confidence=confidence,
+        # Tie replay identity to this immutable staged action. The previous
+        # key represented only the edge tuple and caused distinct approved
+        # changes to collide in the enforce-mode mutation ledger.
+        source_event_id=mutation["mutation_id"],
         correlation_id=mutation["mutation_id"],
         **{
             k: str(v)
@@ -362,13 +366,13 @@ async def commit_approved_mutations(
 
         try:
             if vertex is not None:
-                await gateway.apply(vertex_intent(
+                gateway_outcome = await gateway.apply(vertex_intent(
                     vertex, operation="node_created",
                     tenant_id=tenant_id, actor_kind="human", actor_id=actor,
                     correlation_id=mutation["mutation_id"],
                 ))
             elif edge is not None:
-                await gateway.apply(edge_intent(
+                gateway_outcome = await gateway.apply(edge_intent(
                     edge, operation="edge_created",
                     tenant_id=tenant_id, actor_kind="human", actor_id=actor,
                     correlation_id=mutation["mutation_id"],
@@ -384,6 +388,43 @@ async def commit_approved_mutations(
             results.append(_result(mutation_id, "failed_commit", type(exc).__name__))
             continue
 
+        gateway_receipt = {
+            "mode": gateway_outcome.mode,
+            "applied": gateway_outcome.applied,
+            "mutation_id": gateway_outcome.mutation_id,
+            "deduplicated": gateway_outcome.deduplicated,
+            "blocked": gateway_outcome.blocked,
+            "ledger_recorded": gateway_outcome.ledger_recorded,
+            "violations": list(gateway_outcome.violations or []),
+        }
+        if not gateway_outcome.applied:
+            # The gateway's result is authoritative. A blocked or deduplicated
+            # intent has not been applied by this call, so do not advance the
+            # canonical version or claim the staged action committed.
+            blocked = bool(gateway_outcome.blocked)
+            failure_status = "quarantined" if blocked else "failed_commit"
+            detail = (
+                "graph mutation gateway blocked the write"
+                if blocked
+                else "graph mutation gateway did not apply the write"
+            )
+            extra: dict[str, Any] = {
+                "gateway_outcome": gateway_receipt,
+                "commit_error": detail,
+            }
+            if blocked:
+                extra["quarantine"] = {
+                    "kind": "graph_gateway_blocked",
+                    "violations": gateway_receipt["violations"],
+                }
+            await _set_mutation_status(
+                repo, tenant_id, mutation, failure_status, actor, request_id,
+                extra=extra,
+                event_type="mutation.quarantined" if blocked else "mutation.commit_failed",
+            )
+            results.append(_result(mutation_id, failure_status, detail))
+            continue
+
         # Advance the canonical target version so any other mutation staged
         # against the prior version is now detectably stale (optimistic
         # concurrency). Recorded on the mutation for post-commit reconciliation.
@@ -396,6 +437,7 @@ async def commit_approved_mutations(
                 "commit_op": op,
                 "committed_version": committed_version,
                 "target_key": tkey,
+                "gateway_outcome": gateway_receipt,
                 # Rollback metadata: enough to attempt a best-effort inverse.
                 "rollback": {"supported": True, "inverse": op},
             },
@@ -506,9 +548,10 @@ async def rollback_mutation(
 
     Flow: attempt the inverse (vertex/edge drop) → read the graph back to
     confirm the artifact is absent → on success mark ``rolled_back`` with a
-    durable verification receipt; if the inverse errored or the artifact is
-    still present, mark ``rollback_repair_required`` and enqueue a repair task
-    for the operator. Idempotent for already-rolled-back/repair states.
+    durable verification receipt; if the inverse errored, the artifact remains,
+    or absence cannot be confirmed, mark ``rollback_repair_required`` and
+    enqueue a repair task for the operator. Idempotent for already-rolled-back
+    or repair-required states.
     """
     _require_review_enabled()
     repo = get_agent_runtime_repository()
@@ -558,21 +601,31 @@ async def rollback_mutation(
     }
 
     repair_id = ""
-    if inverse_error or present is True:
+    if inverse_error or present is True or present is None:
         # The inverse could not fully restore state — open a repair task and mark
         # the mutation for operator follow-up rather than reporting a clean undo.
         status = "rollback_repair_required"
-        reason = "inverse_error" if inverse_error else "artifact_still_present"
+        if inverse_error:
+            reason = "inverse_error"
+        elif present is True:
+            reason = "artifact_still_present"
+        else:
+            reason = "verification_unavailable"
         repair = await repo.open_repair_task(
             tenant_id, mutation, reason,
-            {"inverse": inverse, "inverse_error": inverse_error, "remaining": remaining},
+            {
+                "inverse": inverse,
+                "inverse_error": inverse_error,
+                "remaining": remaining,
+                "verification": verification,
+            },
             actor, request_id,
         )
         repair_id = repair["repair_id"]
         metrics.increment("agent_rollback_verified", labels={"result": "repair_required"})
     else:
         status = "rolled_back"
-        metrics.increment("agent_rollback_verified", labels={"result": "verified" if confirmed else "unconfirmed"})
+        metrics.increment("agent_rollback_verified", labels={"result": "verified"})
 
     await _set_mutation_status(
         repo, tenant_id, mutation, status, actor, request_id,

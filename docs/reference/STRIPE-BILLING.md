@@ -18,7 +18,7 @@ toc_depth: 3
 source_hashes:
   "scripts/validate_stripe.py": "sha256:8f4cb22ddd72665bab55def524d5575dcc3dd7c2396baada9b8027dd21384f1c"
   "services/api/billing/billing/routes.py": "sha256:97e717999096b62733e51cb853a13f1472264d3531b4abda715b179067c840e4"
-  "services/api/governance/admin/webhook_routes.py": "sha256:45e3a1c95eb19e1bc6cd80335104b6121c2d74eefb2b2de0b3cbe0abf77c8654"
+  "services/api/governance/admin/webhook_routes.py": "sha256:ad8e4412fed013423b48d2cc5c6584f25e270cf7f090038fbc797889d0c24636"
   "services/api/shared/billing/stripe_client.py": "sha256:036625098e863c9bf5ee488da84d755212494243a427a6a47d638cee8c0494d5"
   "services/api/shared/plans/catalog.py": "sha256:fb48b227d7df2f2924088bea3eac0f3b83a036becff0f36418b5e82dcc1522f8"
 ---
@@ -202,6 +202,10 @@ was shadowed by it and is deleted.
 
 Webhook idempotency: every `event_id` is recorded in `stripe_webhook_events`
 on first receipt; duplicate deliveries return 200 with `duplicate: true`.
+
+Response codes: an invalid or missing `Stripe-Signature` returns 400; a missing
+`STRIPE_WEBHOOK_SECRET` (or Stripe SDK) is a deployment error and returns 503
+(`stripe_webhook_config_errors`) so it is not mistaken for a signature mismatch.
 
 ---
 

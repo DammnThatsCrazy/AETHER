@@ -599,6 +599,7 @@ The handler uses an idempotency claim: it inserts `event_id` into `stripe_webhoo
 | Symptom | Likely Cause | Next Step |
 |---------|-------------|-----------|
 | 400 responses | Invalid `Stripe-Signature` — webhook secret mismatch | Verify `STRIPE_WEBHOOK_SECRET` matches the endpoint secret in Stripe Dashboard |
+| 503 responses (`stripe_webhook_config_errors`) | `STRIPE_WEBHOOK_SECRET` empty or Stripe SDK missing — server misconfiguration, not a bad signature | Populate `stripe-webhook-secret` for that environment and redeploy; Stripe retries automatically |
 | 500 responses, then 200 on retry | Transient DB error or downstream unavailability | Monitor — retries self-heal; check DB health |
 | 500 responses, not recovering | Tenant not found in `tenant_billing_accounts` | Tenant was not provisioned before subscription creation; manually upsert the billing account row |
 | Event appears stuck in DB | Idempotency claim not released (process killed mid-handler) | Run: `DELETE FROM stripe_webhook_events WHERE event_id = '<id>';` |
