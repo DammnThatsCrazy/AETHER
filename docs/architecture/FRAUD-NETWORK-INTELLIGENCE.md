@@ -15,8 +15,8 @@ reviewed_source_commits:
   - commit: "f63d631"
     reason: "Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required."
 source_hashes:
-  "services/api/intelligence/fraud_networks/": "sha256:b8f7d4ac084e4de118d885b2cef1b12d45c066237039600e1e754c2b04d6c8e8"
-  "services/api/repositories/repos.py": "sha256:0526f10f7486f0e40a6b808400feaf9f65c787880ea5858c4db6b5f348645959"
+  "services/api/intelligence/fraud_networks/": "sha256:5b5f524518b3d56744b81820e775aef0b8adfe7c72d89deb8face8daca5b48c5"
+  "services/api/repositories/repos.py": "sha256:d09d752ef63f4b6eb1c46fe1b1e3f8c00399f40d1a6e86fb15ebad9685459568"
 ---
 
 # Fraud Network Intelligence
@@ -56,12 +56,21 @@ Detection Pipeline
  │  5. Score cluster risk (0–100)                      │
  │  6. Score confidence (0–1)                          │
  │  7. Persist to FraudNetworkRepository               │
- │  8. Project to graph via GraphMutationGateway       │
+ │  8. Best-effort persist evidence-backed agentic     │
+ │     delegation signals to tenant-scoped Risk360     │
+ │  9. Project to graph via GraphMutationGateway       │
  │     (FRAUD_NETWORK node + MEMBER_OF_FRAUD_NETWORK   │
  │      edges, causality_class=inferred_influence)     │
- │  9. Publish FRAUD_NETWORK_CREATED event             │
+ │ 10. Publish FRAUD_NETWORK_CREATED event             │
  └─────────────────────────────────────────────────────┘
 ```
+
+The Risk360 handoff resolves source agent identifiers through explicit
+tenant-owned identity bindings before persisting assessments under canonical
+Agent entities. It retains detector and binding evidence, leaves inferred
+signals classified as inferred, and omits ambiguous, truncated, unresolved, or
+cross-tenant mappings. It does not turn a delegation match into authority or
+proof of execution.
 
 ---
 

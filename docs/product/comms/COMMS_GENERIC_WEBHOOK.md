@@ -11,7 +11,7 @@ source_hashes:
   "services/api/connectors/integrations/connectors/routes.py": "sha256:d537cd13e0607f0d8e9c9db85797bdfcf42cb450815883dee6a44c8cca987a5e"
   "services/api/connectors/integrations/providers/payment_rails/signature_verify.py": "sha256:45848e154923bd4fa5709d52a1a6d858cdfbdfb36ece7446b61df7163eb5f7e4"
   "services/api/connectors/integrations/providers/payment_rails/webhook_endpoints.py": "sha256:050445ded102390adceb94fe01203eecd04b3602874f32f1e6e87cbc3f21e10a"
-  "services/api/journeys/comms/ingest.py": "sha256:5d3bb421d821198b564cd5ad5faa940d4de4de334711c186043366bf2623ad68"
+  "services/api/journeys/comms/ingest.py": "sha256:ec0bcf7c4e6b9fe903ca9f85cc08bf6b07feb40ff762cd7bad0e72aedcb27892"
   "services/api/journeys/comms/routes.py": "sha256:c82539c0f35ba7c15a8c1a517a7ce26f1b20da5e16eba019ed9771fcd73259e8"
 ---
 
@@ -118,6 +118,11 @@ rejected and counted (`comms_webhook_signature_failures_total`).
 - `recipient_email` transits in memory only: it is hashed to a tenant-scoped
   alias before any storage (ADR-C10). Prefer sending `recipient_alias_id`
   (a hash you obtained from Aether) when possible.
+- For connector-originated events, canonical sender/recipient identities and
+  consent receipts are resolved by server-side authorities. Provider payload
+  fields cannot set canonical entity IDs or consent state. Missing identity
+  bindings remain unresolved; missing or non-matching consent evidence remains
+  unknown and is handled by the applicable fail-closed policy.
 - Up to 500 events per request.
 - Idempotency: `provider + external_id` dedupes replays end to end.
 

@@ -20,8 +20,8 @@ reviewed_source_commits:
 source_hashes:
   "packages/shared/graph-contract.ts": "sha256:662e10a7d4737ba53c673173105344ccf1720ac7e62497d36346734898575087"
   "services/api/graph/risk_overlay/": "sha256:0e4fa40ecad53abcac06d3d843d1044efff9226aa78ccef901ea0af44684a9a3"
-  "services/api/intelligence/fraud_networks/": "sha256:b8f7d4ac084e4de118d885b2cef1b12d45c066237039600e1e754c2b04d6c8e8"
-  "services/api/repositories/repos.py": "sha256:0526f10f7486f0e40a6b808400feaf9f65c787880ea5858c4db6b5f348645959"
+  "services/api/intelligence/fraud_networks/": "sha256:5b5f524518b3d56744b81820e775aef0b8adfe7c72d89deb8face8daca5b48c5"
+  "services/api/repositories/repos.py": "sha256:d09d752ef63f4b6eb1c46fe1b1e3f8c00399f40d1a6e86fb15ebad9685459568"
   "services/api/value/flow_trace/": "sha256:e91b3edfb7d6e7a8a0f89951a87f01491a52a155fe5fca8911abc7b5aa94279f"
 ---
 
@@ -88,6 +88,9 @@ POST /v1/fraud/networks/build
   ├─ Persist FraudNetwork → FraudNetworkRepository
   ├─ Persist FraudNetworkMembers → FraudNetworkMemberRepository
   ├─ Persist FraudNetworkEdges → FraudNetworkEdgeRepository
+  ├─ Best-effort Risk360 handoff for evidence-backed agentic delegation signals
+  │     resolve source agent through tenant-owned identity bindings first
+  │     persist only under one resolved canonical Agent entity
   │
   ├─ Project to graph (try/except — non-fatal)
   │     upsert_vertex(FRAUD_NETWORK)
@@ -95,6 +98,12 @@ POST /v1/fraud/networks/build
   │
   └─ publish(Topic.FRAUD_NETWORK_CREATED)
 ```
+
+The Risk360 handoff preserves the detector signal's inferred claim state and
+both network and identity-binding evidence. Unresolved, ambiguous, truncated,
+or cross-tenant agent mappings are omitted. The handoff adds risk observability;
+it does not establish delegation authority, causal contagion, or verified
+execution, and a Risk360 write failure does not fail the fraud-network build.
 
 ---
 

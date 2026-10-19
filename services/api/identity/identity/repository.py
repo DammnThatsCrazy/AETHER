@@ -63,6 +63,7 @@ def _merge_revision_lock() -> asyncio.Lock:
 
 # ── Concrete table repositories ───────────────────────────────────────────────
 
+
 class _IdentitySubjectStore(BaseRepository):
     _jsonb_mode = False
     _payload_column = "payload"
@@ -154,12 +155,14 @@ class _SourceIdentityStore(BaseRepository):
     def __init__(self) -> None:
         super().__init__("source_identities")
 
+
 class _IdentityClaimStore(BaseRepository):
     def __init__(self) -> None:
         super().__init__("identity_claims")
 
 
 # ── Main repository facade ────────────────────────────────────────────────────
+
 
 class IdentityResolutionRepository:
     """Unified repository for all identity-resolution persistence operations."""
@@ -191,16 +194,19 @@ class IdentityResolutionRepository:
         now = utc_now().isoformat()
         subject_id = subject_id or str(uuid.uuid4())
         etype = entity_type.value if isinstance(entity_type, EntityType) else str(entity_type)
-        return await self._subjects.insert(subject_id, {
-            "id": subject_id,
-            "tenant_id": tenant_id,
-            "canonical_entity_id": canonical_entity_id,
-            "entity_type": etype,
-            "status": SubjectStatus.ACTIVE.value,
-            "first_seen_at": now,
-            "last_seen_at": now,
-            "metadata": metadata or {},
-        })
+        return await self._subjects.insert(
+            subject_id,
+            {
+                "id": subject_id,
+                "tenant_id": tenant_id,
+                "canonical_entity_id": canonical_entity_id,
+                "entity_type": etype,
+                "status": SubjectStatus.ACTIVE.value,
+                "first_seen_at": now,
+                "last_seen_at": now,
+                "metadata": metadata or {},
+            },
+        )
 
     async def ensure_provisional_source_subject(
         self,
@@ -219,12 +225,8 @@ class IdentityResolutionRepository:
         """
         material = f"aether:provisional:{tenant_id}:{source_identity_id}"
         canonical_entity_id = str(uuid.uuid5(uuid.NAMESPACE_URL, material))
-        subject_id = str(uuid.uuid5(
-            uuid.NAMESPACE_URL, f"{material}:subject"
-        ))
-        existing = await self.get_subject_by_canonical_entity_id(
-            tenant_id, canonical_entity_id
-        )
+        subject_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{material}:subject"))
+        existing = await self.get_subject_by_canonical_entity_id(tenant_id, canonical_entity_id)
         if existing is not None:
             return existing
         return await self.create_subject(
@@ -411,23 +413,26 @@ class IdentityResolutionRepository:
                 return await self._aliases.update(row["id"], row)
 
         alias_id = str(uuid.uuid4())
-        return await self._aliases.insert(alias_id, {
-            "id": alias_id,
-            "tenant_id": tenant_id,
-            "canonical_entity_id": canonical_entity_id,
-            "alias_type": type_str,
-            "alias_value_hash": hash_val,
-            "alias_display_value_redacted": alias_display_value_redacted,
-            "source": source,
-            "source_event_id": source_event_id,
-            "source_platform": source_platform,
-            "confidence": confidence,
-            "confidence_tier": tier_str,
-            "consent_snapshot": consent_snapshot,
-            "first_seen_at": now,
-            "last_seen_at": now,
-            "revoked_at": None,
-        })
+        return await self._aliases.insert(
+            alias_id,
+            {
+                "id": alias_id,
+                "tenant_id": tenant_id,
+                "canonical_entity_id": canonical_entity_id,
+                "alias_type": type_str,
+                "alias_value_hash": hash_val,
+                "alias_display_value_redacted": alias_display_value_redacted,
+                "source": source,
+                "source_event_id": source_event_id,
+                "source_platform": source_platform,
+                "confidence": confidence,
+                "confidence_tier": tier_str,
+                "consent_snapshot": consent_snapshot,
+                "first_seen_at": now,
+                "last_seen_at": now,
+                "revoked_at": None,
+            },
+        )
 
     async def get_alias_by_id(self, alias_id: str) -> Optional[dict]:
         """Fetch a single alias row by its id (raw, includes revoked).
@@ -487,29 +492,34 @@ class IdentityResolutionRepository:
         # SDK/outbox delivery is at-least-once. A stable observation id makes
         # resolver retries a replacement of the same event evidence rather
         # than an additional signal row.
-        obs_id = str(uuid.uuid5(
-            uuid.NAMESPACE_URL,
-            f"aether:identity-observation:{tenant_id}:{source_event_id}:"
-            f"{signal_type.value}:{signal_value_hash}",
-        ))
+        obs_id = str(
+            uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"aether:identity-observation:{tenant_id}:{source_event_id}:"
+                f"{signal_type.value}:{signal_value_hash}",
+            )
+        )
         now = utc_now().isoformat()
-        return await self._observations.insert(obs_id, {
-            "id": obs_id,
-            "tenant_id": tenant_id,
-            "canonical_entity_id": canonical_entity_id,
-            "source_event_id": source_event_id,
-            "source_platform": source_platform,
-            "source_sdk": source_sdk,
-            "signal_type": signal_type.value,
-            # Written under both keys: `signal_hash` is the migration column name;
-            # `signal_value_hash` preserves the historical JSONB key readers use.
-            "signal_hash": signal_value_hash,
-            "signal_value_hash": signal_value_hash,
-            "raw_value_redacted": raw_value_redacted,
-            "observed_at": observed_at or now,
-            "consent_snapshot": consent_snapshot,
-            "context": context or {},
-        })
+        return await self._observations.insert(
+            obs_id,
+            {
+                "id": obs_id,
+                "tenant_id": tenant_id,
+                "canonical_entity_id": canonical_entity_id,
+                "source_event_id": source_event_id,
+                "source_platform": source_platform,
+                "source_sdk": source_sdk,
+                "signal_type": signal_type.value,
+                # Written under both keys: `signal_hash` is the migration column name;
+                # `signal_value_hash` preserves the historical JSONB key readers use.
+                "signal_hash": signal_value_hash,
+                "signal_value_hash": signal_value_hash,
+                "raw_value_redacted": raw_value_redacted,
+                "observed_at": observed_at or now,
+                "consent_snapshot": consent_snapshot,
+                "context": context or {},
+            },
+        )
 
     async def set_observations_canonical_entity(
         self, tenant_id: str, source_event_id: str, canonical_entity_id: str
@@ -586,15 +596,18 @@ class IdentityResolutionRepository:
             return await self._clusters.update(row["id"], row)
 
         cluster_id = str(uuid.uuid4())
-        return await self._clusters.insert(cluster_id, {
-            "id": cluster_id,
-            "tenant_id": tenant_id,
-            "canonical_entity_id": canonical_entity_id,
-            "cluster_version": 1,
-            "status": "active",
-            "confidence": confidence,
-            "reason_codes": reason_codes,
-        })
+        return await self._clusters.insert(
+            cluster_id,
+            {
+                "id": cluster_id,
+                "tenant_id": tenant_id,
+                "canonical_entity_id": canonical_entity_id,
+                "cluster_version": 1,
+                "status": "active",
+                "confidence": confidence,
+                "reason_codes": reason_codes,
+            },
+        )
 
     # ── Edges ─────────────────────────────────────────────────────────────
 
@@ -625,19 +638,22 @@ class IdentityResolutionRepository:
             return active[0]  # idempotent
 
         edge_id = str(uuid.uuid4())
-        return await self._edges.insert(edge_id, {
-            "id": edge_id,
-            "tenant_id": tenant_id,
-            "source_entity_id": source_entity_id,
-            "target_entity_id": target_entity_id,
-            "edge_type": edge_type.value,
-            "confidence": confidence,
-            "confidence_tier": confidence_tier.value,
-            "reason_codes": reason_codes,
-            "source_event_ids": source_event_ids,
-            "consent_snapshot": consent_snapshot,
-            "revoked_at": None,
-        })
+        return await self._edges.insert(
+            edge_id,
+            {
+                "id": edge_id,
+                "tenant_id": tenant_id,
+                "source_entity_id": source_entity_id,
+                "target_entity_id": target_entity_id,
+                "edge_type": edge_type.value,
+                "confidence": confidence,
+                "confidence_tier": confidence_tier.value,
+                "reason_codes": reason_codes,
+                "source_event_ids": source_event_ids,
+                "consent_snapshot": consent_snapshot,
+                "revoked_at": None,
+            },
+        )
 
     async def revoke_identity_edge(self, edge_id: str) -> Optional[dict]:
         row = await self._edges.find_by_id(edge_id)
@@ -646,9 +662,7 @@ class IdentityResolutionRepository:
         row["revoked_at"] = utc_now().isoformat()
         return await self._edges.update(edge_id, row)
 
-    async def get_entity_graph(
-        self, tenant_id: str, canonical_entity_id: str
-    ) -> list[dict]:
+    async def get_entity_graph(self, tenant_id: str, canonical_entity_id: str) -> list[dict]:
         as_source = await self._edges.find_many(
             filters={"tenant_id": tenant_id, "source_entity_id": canonical_entity_id},
             limit=200,
@@ -695,9 +709,7 @@ class IdentityResolutionRepository:
         callers can diff active-vs-revoked state themselves. Never cross-tenant:
         the underlying store is filtered on ``tenant_id``.
         """
-        rows = await self._edges.find_many(
-            filters={"tenant_id": tenant_id}, limit=limit
-        )
+        rows = await self._edges.find_many(filters={"tenant_id": tenant_id}, limit=limit)
         if not include_revoked:
             rows = [r for r in rows if not r.get("revoked_at")]
         return rows
@@ -728,19 +740,22 @@ class IdentityResolutionRepository:
             ):
                 raise ValueError("operator merge idempotency key is bound to another merge")
             return existing
-        return await self._merges.insert(merge_id, {
-            "id": merge_id,
-            "tenant_id": tenant_id,
-            "from_entity_id": from_entity_id,
-            "into_entity_id": into_entity_id,
-            "resulting_entity_id": resulting_entity_id,
-            "confidence": confidence,
-            "confidence_tier": confidence_tier.value,
-            "reason_codes": reason_codes,
-            "source_event_ids": source_event_ids,
-            "actor_type": actor_type,
-            "actor_id": actor_id,
-        })
+        return await self._merges.insert(
+            merge_id,
+            {
+                "id": merge_id,
+                "tenant_id": tenant_id,
+                "from_entity_id": from_entity_id,
+                "into_entity_id": into_entity_id,
+                "resulting_entity_id": resulting_entity_id,
+                "confidence": confidence,
+                "confidence_tier": confidence_tier.value,
+                "reason_codes": reason_codes,
+                "source_event_ids": source_event_ids,
+                "actor_type": actor_type,
+                "actor_id": actor_id,
+            },
+        )
 
     async def advance_resolution_revision_for_merge_once(
         self,
@@ -766,9 +781,12 @@ class IdentityResolutionRepository:
                 ):
                     return None, None
                 if merge.get("resolution_revision_after") is not None:
-                    return merge.get("resolution_revision_before"), merge.get("resolution_revision_after")
+                    return merge.get("resolution_revision_before"), merge.get(
+                        "resolution_revision_after"
+                    )
                 subjects = [
-                    row for row in self._subjects._store.values()
+                    row
+                    for row in self._subjects._store.values()
                     if row.get("tenant_id") == tenant_id
                     and row.get("canonical_entity_id") == canonical_entity_id
                 ]
@@ -801,11 +819,14 @@ class IdentityResolutionRepository:
                 merge = merge_row["data"]
                 if isinstance(merge, str):
                     import json
+
                     merge = json.loads(merge)
                 if merge.get("into_entity_id") != canonical_entity_id:
                     return None, None
                 if merge.get("resolution_revision_after") is not None:
-                    return merge.get("resolution_revision_before"), merge.get("resolution_revision_after")
+                    return merge.get("resolution_revision_before"), merge.get(
+                        "resolution_revision_after"
+                    )
                 subject_row = await conn.fetchrow(
                     "SELECT id, data FROM identity_subjects WHERE tenant_id = $1 AND data->>'canonical_entity_id' = $2 FOR UPDATE",
                     tenant_id,
@@ -816,6 +837,7 @@ class IdentityResolutionRepository:
                 subject = subject_row["data"]
                 if isinstance(subject, str):
                     import json
+
                     subject = json.loads(subject)
                 raw_before = subject.get("resolution_revision")
                 before = int(raw_before) if raw_before is not None else None
@@ -824,19 +846,22 @@ class IdentityResolutionRepository:
                 merge["resolution_revision_before"] = before
                 merge["resolution_revision_after"] = after
                 import json
+
                 await conn.execute(
                     "UPDATE identity_subjects SET data = $1::jsonb, updated_at = NOW() WHERE id = $2 AND tenant_id = $3",
-                    json.dumps(subject, default=str), subject_row["id"], tenant_id,
+                    json.dumps(subject, default=str),
+                    subject_row["id"],
+                    tenant_id,
                 )
                 await conn.execute(
                     "UPDATE identity_merge_events SET data = $1::jsonb, updated_at = NOW() WHERE id = $2 AND tenant_id = $3",
-                    json.dumps(merge, default=str), merge_event_id, tenant_id,
+                    json.dumps(merge, default=str),
+                    merge_event_id,
+                    tenant_id,
                 )
                 return before, after
 
-    async def get_merge_event_by_id(
-        self, tenant_id: str, merge_event_id: str
-    ) -> Optional[dict]:
+    async def get_merge_event_by_id(self, tenant_id: str, merge_event_id: str) -> Optional[dict]:
         """Fetch a merge event by id, tenant-scoped.
 
         Fragment-aware repair's ``restore_pre_merge_entity`` mode reads the
@@ -862,17 +887,24 @@ class IdentityResolutionRepository:
             raise ValueError("operator merge event is unavailable")
         existing = row.get("operator_decision_result")
         if existing is not None and (
-            existing.get("restatement_status") == "queued"
-            and existing.get("restatement_job_id")
+            existing.get("restatement_status") == "queued" and existing.get("restatement_job_id")
         ):
             return existing
         safe = {
             key: decision[key]
             for key in (
-                "canonical_entity_id", "decision", "confidence", "confidence_tier",
-                "reason_codes", "candidate_entity_ids", "audit_id",
-                "resolution_revision_before", "resolution_revision_after",
-                "graph_edges_written", "restatement_status", "restatement_job_id",
+                "canonical_entity_id",
+                "decision",
+                "confidence",
+                "confidence_tier",
+                "reason_codes",
+                "candidate_entity_ids",
+                "audit_id",
+                "resolution_revision_before",
+                "resolution_revision_after",
+                "graph_edges_written",
+                "restatement_status",
+                "restatement_job_id",
                 "restatement_error",
             )
             if key in decision
@@ -924,22 +956,23 @@ class IdentityResolutionRepository:
         default to None, preserving the original (non-fragment) call sites.
         """
         split_id = str(uuid.uuid4())
-        return await self._splits.insert(split_id, {
-            "id": split_id,
-            "tenant_id": tenant_id,
-            "original_entity_id": original_entity_id,
-            "resulting_entity_ids": resulting_entity_ids,
-            "reason": reason,
-            "actor_type": actor_type,
-            "actor_id": actor_id,
-            "source_merge_event_id": source_merge_event_id,
-            "fragment": fragment or {},
-            "mode": mode,
-        })
+        return await self._splits.insert(
+            split_id,
+            {
+                "id": split_id,
+                "tenant_id": tenant_id,
+                "original_entity_id": original_entity_id,
+                "resulting_entity_ids": resulting_entity_ids,
+                "reason": reason,
+                "actor_type": actor_type,
+                "actor_id": actor_id,
+                "source_merge_event_id": source_merge_event_id,
+                "fragment": fragment or {},
+                "mode": mode,
+            },
+        )
 
-    async def get_split_event_by_id(
-        self, tenant_id: str, split_event_id: str
-    ) -> Optional[dict]:
+    async def get_split_event_by_id(self, tenant_id: str, split_event_id: str) -> Optional[dict]:
         """Read one durable split event without crossing tenant boundaries."""
         row = await self._splits.find_by_id(split_event_id)
         if row is None or row.get("tenant_id") != tenant_id:
@@ -978,18 +1011,21 @@ class IdentityResolutionRepository:
         reason_codes: list[str],
     ) -> dict:
         conflict_id = str(uuid.uuid4())
-        return await self._conflicts.insert(conflict_id, {
-            "id": conflict_id,
-            "tenant_id": tenant_id,
-            "candidate_entity_ids": candidate_entity_ids,
-            "candidate_aliases": candidate_aliases,
-            "conflict_type": conflict_type,
-            "confidence": confidence,
-            "reason_codes": reason_codes,
-            "status": ConflictStatus.OPEN.value,
-            "resolved_at": None,
-            "resolved_by": None,
-        })
+        return await self._conflicts.insert(
+            conflict_id,
+            {
+                "id": conflict_id,
+                "tenant_id": tenant_id,
+                "candidate_entity_ids": candidate_entity_ids,
+                "candidate_aliases": candidate_aliases,
+                "conflict_type": conflict_type,
+                "confidence": confidence,
+                "reason_codes": reason_codes,
+                "status": ConflictStatus.OPEN.value,
+                "resolved_at": None,
+                "resolved_by": None,
+            },
+        )
 
     async def get_conflicts(
         self,
@@ -1045,21 +1081,24 @@ class IdentityResolutionRepository:
                 raise ValueError("identity audit idempotency key is bound to another decision")
             return existing
         tier_str = self._confidence_tier_str(confidence_tier)
-        return await self._audit.insert(audit_id, {
-            "id": audit_id,
-            "tenant_id": tenant_id,
-            "decision": decision,
-            "canonical_entity_id": canonical_entity_id,
-            "candidate_entity_ids": candidate_entity_ids,
-            "confidence": confidence,
-            "confidence_tier": tier_str,
-            "reason_codes": reason_codes,
-            "source_event_ids": source_event_ids,
-            "policy_result": policy_result,
-            "consent_snapshot": consent_snapshot,
-            "resolution_revision_before": resolution_revision_before,
-            "resolution_revision_after": resolution_revision_after,
-        })
+        return await self._audit.insert(
+            audit_id,
+            {
+                "id": audit_id,
+                "tenant_id": tenant_id,
+                "decision": decision,
+                "canonical_entity_id": canonical_entity_id,
+                "candidate_entity_ids": candidate_entity_ids,
+                "confidence": confidence,
+                "confidence_tier": tier_str,
+                "reason_codes": reason_codes,
+                "source_event_ids": source_event_ids,
+                "policy_result": policy_result,
+                "consent_snapshot": consent_snapshot,
+                "resolution_revision_before": resolution_revision_before,
+                "resolution_revision_after": resolution_revision_after,
+            },
+        )
 
     async def get_entity_audit(
         self, tenant_id: str, canonical_entity_id: str, limit: int = 100
@@ -1095,9 +1134,7 @@ class IdentityResolutionRepository:
         the complete history; a split moves only the selected observations back
         to the restored fragment and is reflected on the next query.
         """
-        merges = await self._merges.find_many(
-            filters={"tenant_id": tenant_id}, limit=limit
-        )
+        merges = await self._merges.find_many(filters={"tenant_id": tenant_id}, limit=limit)
         owned = {canonical_entity_id}
         changed = True
         while changed:
@@ -1119,9 +1156,7 @@ class IdentityResolutionRepository:
                 limit=limit,
             )
             event_ids.update(
-                str(row.get("source_event_id"))
-                for row in rows
-                if row.get("source_event_id")
+                str(row.get("source_event_id")) for row in rows if row.get("source_event_id")
             )
         return sorted(event_ids)[:limit]
 
@@ -1165,26 +1200,30 @@ class IdentityResolutionRepository:
         )
         now = utc_now().isoformat()
         active = [
-            r for r in existing
+            r
+            for r in existing
             if not r.get("revoked_at")
             and (not r.get("expires_at") or r.get("expires_at", "") > now)
         ]
         if active:
             return active[0]
         rule_id = str(uuid.uuid4())
-        return await self._suppressions.insert(rule_id, {
-            "id": rule_id,
-            "tenant_id": tenant_id,
-            "identifier_hash": identifier_hash,
-            "identifier_type": identifier_type,
-            "subject_id": subject_id,
-            "rule_type": rule_type,
-            "reason": reason,
-            "created_by": created_by,
-            "created_at": utc_now().isoformat(),
-            "expires_at": expires_at,
-            "revoked_at": None,
-        })
+        return await self._suppressions.insert(
+            rule_id,
+            {
+                "id": rule_id,
+                "tenant_id": tenant_id,
+                "identifier_hash": identifier_hash,
+                "identifier_type": identifier_type,
+                "subject_id": subject_id,
+                "rule_type": rule_type,
+                "reason": reason,
+                "created_by": created_by,
+                "created_at": utc_now().isoformat(),
+                "expires_at": expires_at,
+                "revoked_at": None,
+            },
+        )
 
     async def check_suppression(
         self,
@@ -1211,24 +1250,21 @@ class IdentityResolutionRepository:
             return True
         return False
 
-    async def revoke_suppression_rule(
-        self, tenant_id: str, suppression_id: str
-    ) -> Optional[dict]:
+    async def revoke_suppression_rule(self, tenant_id: str, suppression_id: str) -> Optional[dict]:
         row = await self._suppressions.find_by_id(suppression_id)
         if row is None or row.get("tenant_id") != tenant_id:
             return None
         row["revoked_at"] = utc_now().isoformat()
         return await self._suppressions.update(suppression_id, row)
 
-    async def get_suppressions(
-        self, tenant_id: str, limit: int = 50
-    ) -> list[dict]:
+    async def get_suppressions(self, tenant_id: str, limit: int = 50) -> list[dict]:
         all_rules = await self._suppressions.find_many(
             filters={"tenant_id": tenant_id}, limit=limit * 2
         )
         now = utc_now().isoformat()
         active = [
-            r for r in all_rules
+            r
+            for r in all_rules
             if not r.get("revoked_at")
             and (not r.get("expires_at") or r.get("expires_at", "") > now)
         ]
@@ -1245,29 +1281,32 @@ class IdentityResolutionRepository:
     async def create_source_identity(self, record: SourceIdentityRecord) -> dict:
         """Create a source identity record."""
         source_id = str(uuid.uuid4())
-        return await self._source_identities.insert(source_id, {
-            "id": source_id,
-            "tenant_id": record.tenant_id,
-            "source_system_id": record.source_system_id,
-            "source_kind": record.source_kind,
-            "source_namespace": record.source_namespace,
-            "external_id": record.external_id,
-            "anonymous_id": record.anonymous_id,
-            "user_id": record.user_id,
-            "device_id": record.device_id,
-            "installation_id": record.installation_id,
-            "session_id": record.session_id,
-            "account_id": record.account_id,
-            "agent_id": record.agent_id,
-            "runtime_id": record.runtime_id,
-            "source_record_id": record.source_record_id,
-            "canonical_entity_id": record.canonical_entity_id,
-            "status": "unresolved",
-            "first_seen_at": record.created_at,
-            "last_seen_at": record.created_at,
-            "created_at": record.created_at,
-            "updated_at": record.created_at,
-        })
+        return await self._source_identities.insert(
+            source_id,
+            {
+                "id": source_id,
+                "tenant_id": record.tenant_id,
+                "source_system_id": record.source_system_id,
+                "source_kind": record.source_kind,
+                "source_namespace": record.source_namespace,
+                "external_id": record.external_id,
+                "anonymous_id": record.anonymous_id,
+                "user_id": record.user_id,
+                "device_id": record.device_id,
+                "installation_id": record.installation_id,
+                "session_id": record.session_id,
+                "account_id": record.account_id,
+                "agent_id": record.agent_id,
+                "runtime_id": record.runtime_id,
+                "source_record_id": record.source_record_id,
+                "canonical_entity_id": record.canonical_entity_id,
+                "status": "unresolved",
+                "first_seen_at": record.created_at,
+                "last_seen_at": record.created_at,
+                "created_at": record.created_at,
+                "updated_at": record.created_at,
+            },
+        )
 
     async def update_source_identity(self, record: SourceIdentityRecord) -> dict:
         """Update an existing source identity record (full identifier merge)."""
@@ -1305,6 +1344,29 @@ class IdentityResolutionRepository:
     async def get_source_identity(self, source_identity_id: str) -> Optional[dict]:
         """Get a source identity by ID."""
         return await self._source_identities.find_by_id(source_identity_id)
+
+    async def get_source_identity_for_tenant(
+        self, tenant_id: str, source_identity_id: str
+    ) -> Optional[dict]:
+        """Get a source identity only through an exact tenant + ID query.
+
+        ``get_source_identity`` remains available for existing repository
+        callers that rely on the globally unique record key. Tenant-bound
+        projection paths use this method so a foreign row is excluded in the
+        authority query itself, then rechecked before it is returned.
+        """
+        rows = await self._source_identities.find_many(
+            filters={"tenant_id": tenant_id, "id": source_identity_id},
+            limit=2,
+        )
+        for row in rows:
+            if (
+                isinstance(row, dict)
+                and row.get("tenant_id") == tenant_id
+                and str(row.get("id") or "") == source_identity_id
+            ):
+                return row
+        return None
 
     async def find_source_identity_by_identifier(
         self,
@@ -1352,8 +1414,12 @@ class IdentityResolutionRepository:
         )
 
     async def find_claim(
-        self, tenant_id: str, source_identity_id: str, claim_type: str,
-        normalized_value: str, source_record_id: Optional[str] = None,
+        self,
+        tenant_id: str,
+        source_identity_id: str,
+        claim_type: str,
+        normalized_value: str,
+        source_record_id: Optional[str] = None,
     ) -> Optional[dict]:
         """Find an existing claim by source + type + value."""
         filters = {
@@ -1370,26 +1436,29 @@ class IdentityResolutionRepository:
     async def create_claim(self, record: IdentityClaimRecord) -> dict:
         """Create an identity claim record."""
         claim_id = str(uuid.uuid4())
-        return await self._claims.insert(claim_id, {
-            "id": claim_id,
-            "tenant_id": record.tenant_id,
-            "source_identity_id": record.source_identity_id,
-            "source_record_id": record.source_record_id,
-            "import_id": record.import_id,
-            "import_commit_id": record.import_commit_id,
-            "claim_type": record.claim_type,
-            "normalized_value": record.normalized_value,
-            "raw_value": record.raw_value,
-            "verification_status": record.verification_status,
-            "confidence_hint": record.confidence_hint,
-            "occurred_at": record.occurred_at,
-            "ingested_at": record.ingested_at,
-            "expires_at": record.expires_at,
-            "pii_classification": record.pii_classification,
-            "status": record.status,
-            "created_at": record.created_at,
-            "updated_at": record.created_at,
-        })
+        return await self._claims.insert(
+            claim_id,
+            {
+                "id": claim_id,
+                "tenant_id": record.tenant_id,
+                "source_identity_id": record.source_identity_id,
+                "source_record_id": record.source_record_id,
+                "import_id": record.import_id,
+                "import_commit_id": record.import_commit_id,
+                "claim_type": record.claim_type,
+                "normalized_value": record.normalized_value,
+                "raw_value": record.raw_value,
+                "verification_status": record.verification_status,
+                "confidence_hint": record.confidence_hint,
+                "occurred_at": record.occurred_at,
+                "ingested_at": record.ingested_at,
+                "expires_at": record.expires_at,
+                "pii_classification": record.pii_classification,
+                "status": record.status,
+                "created_at": record.created_at,
+                "updated_at": record.created_at,
+            },
+        )
 
     async def update_claim(self, record: IdentityClaimRecord) -> dict:
         """Update an existing claim record."""
@@ -1434,12 +1503,8 @@ class IdentityResolutionRepository:
         open_conflicts = await self._conflicts.count(
             {"tenant_id": tenant_id, "status": ConflictStatus.OPEN.value}
         )
-        recent_merges = await self._merges.find_many(
-            filters={"tenant_id": tenant_id}, limit=10
-        )
-        recent_splits = await self._splits.find_many(
-            filters={"tenant_id": tenant_id}, limit=10
-        )
+        recent_merges = await self._merges.find_many(filters={"tenant_id": tenant_id}, limit=10)
+        recent_splits = await self._splits.find_many(filters={"tenant_id": tenant_id}, limit=10)
         return {
             "tenant_id": tenant_id,
             "total_entities": total_subjects,  # canonical name for API

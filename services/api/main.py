@@ -279,6 +279,7 @@ from intelligence.intelligence.routes import kyber_admin_router, router as intel
 from intelligence.intelligence.customer_success import admin_router as customer_success_admin_router, tenant_router as value_review_router
 from intelligence.intelligence.extraction_intel import router as extraction_intel_router
 from identity.profile.routes import router as profile_router, profile360_router
+from shared.intelligence_projections.routes import router as experience360_router
 from replay.reconciliation.coverage_routes import router as sdk_coverage_router
 from identity.population.routes import router as population_router
 from intelligence.semantic_intelligence.routes import (
@@ -935,6 +936,7 @@ def create_app() -> FastAPI:
     app.include_router(pnl_router)
     app.include_router(profile_router)
     app.include_router(profile360_router)
+    app.include_router(experience360_router)  # /v1/experience360 — all catalogued frame surfaces
     app.include_router(sdk_coverage_router)
     app.include_router(population_router)
     app.include_router(semantic_intelligence_router)

@@ -25,19 +25,19 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:d43501fd20dc2010654eaef70a37ddf86aed6c018a20e9a9148f4bf8d1f1bb44"
+  "services/api/actions/": "sha256:148fef7aed4863db2ae6f38fe310bd309fcadaf93a9bc3673b960213d1945621"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
-  "services/api/connectors/": "sha256:de063914d18133748b4ebb6e3e3e4b02161c739ae7996bccb87fe6188a9bca97"
+  "services/api/connectors/": "sha256:109bad8feb3b4a918c66377c0e48abe963a289fc89290aebde73a7cc6a487a38"
   "services/api/governance/": "sha256:b47a6fe0cec45cf306bfb4399a2b361df4f4bd1a4f0f897ed003a3db2d4a0dd3"
-  "services/api/graph/": "sha256:bda39e64fa30ae40f4acbf0fa85092aa50d7cb601037bdcd6870b241ea09fe13"
-  "services/api/identity/": "sha256:4a96035d9625725df833799f19f36e4137e9ba2dab121bb9eb78e7e5833fc79a"
-  "services/api/ingestion/": "sha256:94973da02b8255278b43b93cd68c2e86d99c37c534dd81742c95187a27aa8361"
-  "services/api/intelligence/": "sha256:9b583b5a699e01018b213383848636ee011384fa9f6115d1cda00977dfdb3e58"
-  "services/api/journeys/": "sha256:8db7d48b7f8247ab5adfde2fef24d3d7d4d6b2b4b7b721fd1129e836c9ad5301"
+  "services/api/graph/": "sha256:27fd6f421f29bf28318b9cb176a8b487a6da84694f30c49933a986cc5cc6e25d"
+  "services/api/identity/": "sha256:810a90997580897145086f0bdfaaced0bba6bc009504e85f7b898afb20e3c8e7"
+  "services/api/ingestion/": "sha256:d78406f2a61f3b192307cbbc280e2f7402f4366ad48818fe99921dd23705da8c"
+  "services/api/intelligence/": "sha256:71988f5e6dab51ccc5af8ad60723f70c0b31a3a1848a1888a174c660d98a7742"
+  "services/api/journeys/": "sha256:7209a7f218d8235962bfbaa3411895ea7ef3af7a0206a86e0017a9ed43c33023"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
-  "services/api/value/": "sha256:fe86fc00610841af79232a37540d9027778742c64d4cc820dfaac888018a88b6"
+  "services/api/value/": "sha256:1b0b5863e2131a70bf1be3d74c9cf5deff39c2ccbc5b195e27fe7355712e1625"
   "services/api/workers/": "sha256:62b80fbcf0fed7df62c169f9ec263635d26e65da656162f01f4fe70e65236ad4"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -1877,6 +1877,26 @@ no write path) under its own prefix, capability-gated on `risk360.read` /
 | GET | `/v1/risk360/health` | Plane probe: risk360 provider registered + contract-compatible (`availability()` only) |
 | GET | `/v1/fraud360/{subject_kind}/{subject_id}` | Run the fraud360 projection for the requesting tenant (`subject_kind` ∈ `entity` \| `relationship` \| `agent`); 404 for an unserved kind, 503 when the provider is unregistered |
 | GET | `/v1/fraud360/health` | Plane probe: fraud360 provider registered + contract-compatible (`availability()` only) |
+
+#### Product Experience 360 frames
+
+The product catalog contains 18 distinct 360 surfaces. The shared frame route
+composes their declared slots from tenant-scoped projection and direct surface
+providers; it does not create a separate truth store or write graph state.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/experience360/frames` | Compose a product 360 frame; tenant scope comes from authenticated request state and policy runs before provider reads |
+| GET | `/v1/experience360/catalog` | Return all catalogued surfaces and technical-provider registration state |
+
+Frame responses retain slot state, evidence/provenance, freshness, quality,
+policy, and actor/authority metadata where canonical sources support them.
+Unsupported subject/provider paths and unavailable evidence remain explicit
+`unknown`, `missing`, or `degraded` states; the route does not imply that every
+catalog slot is complete. The reconstructed product contracts remain pending
+alignment with the original 360 source blueprint. All 20 technical providers
+register at application startup; 9 remain marked `implemented` and 11 remain
+`in_flight`, because registration does not promote implementation status.
 
 
 ---

@@ -34,6 +34,22 @@ class MetricDefinition(BaseModel):
 
 _DEFINITIONS: tuple[MetricDefinition, ...] = (
     MetricDefinition(
+        name="agent_execution_cost",
+        unit="usd",
+        description="Observed operating cost of an agent's executions, normalized to USD only when supported by the source evidence.",
+        lower=0.0,
+        allows_probability=False,
+        min_sample=1,
+    ),
+    MetricDefinition(
+        name="ai_execution_cost",
+        unit="usd",
+        description="Observed AI execution operating cost explicitly scoped to a campaign, normalized to USD only when supported by the source evidence.",
+        lower=0.0,
+        allows_probability=False,
+        min_sample=1,
+    ),
+    MetricDefinition(
         name="attributed_conversions",
         unit="count",
         description="Conversions credited under the active attribution model.",
@@ -142,6 +158,14 @@ _DEFINITIONS: tuple[MetricDefinition, ...] = (
         upper=1.0,
         allows_probability=False,
         min_sample=30,
+    ),
+    MetricDefinition(
+        name="entity_execution_cost",
+        unit="usd",
+        description="Observed AI execution operating cost explicitly scoped to an entity, normalized to USD only when supported by the source evidence.",
+        lower=0.0,
+        allows_probability=False,
+        min_sample=1,
     ),
     MetricDefinition(
         name="evidence_retention_rate",

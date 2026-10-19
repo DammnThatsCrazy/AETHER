@@ -36,6 +36,7 @@ class ProjectionIR:
     requested_claims: bool = False
     page: Optional[PageRequest] = None
     time_range: Optional[TimeRangeFilter] = None
+    as_of: Optional[str] = None
     incompatible_lenses: tuple[Any, ...] = field(default_factory=tuple)
 
     @property

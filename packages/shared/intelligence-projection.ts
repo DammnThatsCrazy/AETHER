@@ -52,6 +52,8 @@ export interface ProjectionRequest {
   page?: PageRequest;
   /** Optional temporal window for the projection. */
   timeRange?: TimeRangeFilter;
+  /** Exact point-in-time anchor. Providers must report the effective asOf they actually served. */
+  asOf?: string;
   /** Only render these sections (by section id). Omit to render all. */
   includeSections?: string[];
   /** Include claim envelopes in the result. */
@@ -88,6 +90,8 @@ export interface ProjectionSection {
   title?: string;
   content?: unknown;
   warnings?: string[];
+  /** Authorities that produced this section; omit to use the slot binding's declared set. */
+  canonicalAuthorityRefs?: string[];
 }
 
 /** One claim a projection makes about its subject, backed by evidence refs. */
@@ -106,6 +110,8 @@ export interface ClaimEnvelope {
    * delivery/engagement fact alone.
    */
   claimState?: EpistemicStatus;
+  /** Product frame slots this claim explicitly supports; absent means unassigned. */
+  domainSlotIds?: string[];
 }
 
 /** Engine-level (A8) degradation summary for a projection result. */

@@ -2,7 +2,7 @@
 
 Exploration surfaces whose backing plane is an intelligence projection
 (outcome360 / economic360 / infrastructure360 / temporal360 / population360 /
-geographic360) run through this adapter: it maps one registered exploration
+geographic360 / support360) run through this adapter: it maps one registered exploration
 surface to its projection id (here equal by name) and
 executes the projection through the S1 engine
 (:class:`ProjectionRuntime <shared.projection_engine.runtime.ProjectionRuntime>`
@@ -217,6 +217,12 @@ class Economic360SurfaceAdapter(ProjectionSurfaceAdapter):
     surface_id = "economic360"
 
 
+class Support360SurfaceAdapter(ProjectionSurfaceAdapter):
+    """support360 exploration surface → bounded support communication evidence."""
+
+    surface_id = "support360"
+
+
 class Infrastructure360SurfaceAdapter(ProjectionSurfaceAdapter):
     """infrastructure360 exploration surface → the infrastructure360 projection."""
 
@@ -288,5 +294,6 @@ __all__ = [
     "ProjectionSurfaceAdapter",
     "Risk360SurfaceAdapter",
     "Social360SurfaceAdapter",
+    "Support360SurfaceAdapter",
     "Temporal360SurfaceAdapter",
 ]

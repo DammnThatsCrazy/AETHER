@@ -39,15 +39,21 @@ if str(BACKEND_ROOT) not in sys.path:
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
-from journeys.communication360.contracts import CommunicationMessage  # noqa: E402
+from journeys.communication360.contracts import (  # noqa: E402
+    CommunicationConsentEvidence,
+    CommunicationMessage,
+)
 from journeys.communication360.provider import (  # noqa: E402
+    AgentIdentityRead,
     OUTPUT_SECTIONS,
     REASON_CANONICAL_SOURCE_UNAVAILABLE,
     REASON_SILVER_SOURCE_UNAVAILABLE,
+    REASON_SOURCE_READ_TRUNCATED,
     Communication360Provider,
     register_provider,
 )
-from journeys.comms.contracts import CommunicationState  # noqa: E402
+from journeys.communication360.reader import to_message  # noqa: E402
+from journeys.comms.contracts import CommunicationState, MessageCategory  # noqa: E402
 from graph.operational_intelligence.models import EvidenceRef  # noqa: E402
 from shared.contracts_models.epistemic import EpistemicStatus  # noqa: E402
 from shared.intelligence_projections import (  # noqa: E402
@@ -63,12 +69,19 @@ from shared.intelligence_projections import (  # noqa: E402
 )
 
 VALID_SECTION_STATES = {
-    "available", "degraded", "empty", "missing", "not_applicable",
-    "unknown", "suppressed", "stale",
+    "available",
+    "degraded",
+    "empty",
+    "missing",
+    "not_applicable",
+    "unknown",
+    "suppressed",
+    "stale",
 }
 
 TENANT_A = "tenant-a"
 TENANT_B = "tenant-b"
+_CATEGORY_OMITTED = object()
 
 
 # ---------------------------------------------------------------------------
@@ -90,15 +103,33 @@ class FakeSource:
         self._facts = list(facts or [])
         self._raises = raises  # "messages" | "facts" | "all"
         self.last_campaign_id: str | None = None
+        self.last_participant_entity_id: str | None = None
+        self.message_read_count = 0
+        self.fact_read_count = 0
 
-    async def messages(self, tenant_id, *, campaign_id=None, since=None, limit=None):
+    async def messages(
+        self,
+        tenant_id,
+        *,
+        campaign_id=None,
+        participant_entity_id=None,
+        since=None,
+        limit=None,
+    ):
+        self.message_read_count += 1
         if self._raises in ("messages", "all"):
             raise RuntimeError("fake boom: secret-detail")
         self.last_campaign_id = campaign_id
+        self.last_participant_entity_id = participant_entity_id
         out = [
-            m for m in self._messages
+            m
+            for m in self._messages
             if m.tenant_id == tenant_id
             and (campaign_id is None or m.campaign_id == campaign_id)
+            and (
+                participant_entity_id is None
+                or participant_entity_id in {m.sender_entity_id, m.recipient_entity_id}
+            )
         ]
         out.sort(key=lambda m: m.occurred_at)
         if limit is not None:
@@ -106,10 +137,12 @@ class FakeSource:
         return out
 
     async def facts(self, tenant_id, *, kind=None, since=None, limit=None):
+        self.fact_read_count += 1
         if self._raises in ("facts", "all"):
             raise RuntimeError("fake boom: secret-detail")
         out = [
-            r for r in self._facts
+            r
+            for r in self._facts
             if r.get("tenant_id") == tenant_id
             and (kind is None or r.get("kind") == kind)
             and (since is None or str(r.get("occurred_at") or "") >= str(since))
@@ -132,17 +165,25 @@ def _msg(
     channel: str = "email",
     occurred_at: str = "2026-09-03T10:00:00Z",
     ref_id: str | None = None,
+    sender_entity_id: str | None = None,
+    recipient_entity_id: str | None = None,
+    provider: str | None = None,
+    consent_evidence: CommunicationConsentEvidence | None = None,
 ) -> CommunicationMessage:
     return CommunicationMessage(
         message_id=mid,
         tenant_id=tenant,
         fact_id=f"fact-{mid}",
+        provider=provider,
         channel=channel,
         direction=direction,
         communication_state=CommunicationState(state),
+        sender_entity_id=sender_entity_id,
+        recipient_entity_id=recipient_entity_id,
         campaign_id=campaign_id,
         occurred_at=occurred_at,
         received_at=occurred_at,
+        consent_evidence=consent_evidence or CommunicationConsentEvidence(),
         claim_state=EpistemicStatus.OBSERVED,
         evidence_refs=[
             EvidenceRef(
@@ -215,7 +256,9 @@ def act_source() -> FakeSource:
     return FakeSource(
         facts=[
             _fact(
-                TENANT_A, "act-1", kind="communication_act",
+                TENANT_A,
+                "act-1",
+                kind="communication_act",
                 payload={
                     "campaign_id": "camp_1",
                     "act_type": "commit",
@@ -224,7 +267,9 @@ def act_source() -> FakeSource:
                 },
             ),
             _fact(
-                TENANT_A, "pb-1", kind="participant_binding",
+                TENANT_A,
+                "pb-1",
+                kind="participant_binding",
                 payload={
                     "campaign_id": "camp_1",
                     "role": "actor",
@@ -263,7 +308,12 @@ async def test_project_emits_exact_registry_sections_in_order(
 
     assert [s.id for s in result.sections] == list(OUTPUT_SECTIONS)
     assert OUTPUT_SECTIONS == (
-        "summary", "state", "timeline", "evidence", "interactions", "outcomes",
+        "summary",
+        "state",
+        "timeline",
+        "evidence",
+        "interactions",
+        "outcomes",
     )
 
 
@@ -315,13 +365,12 @@ async def test_claims_are_evidence_grounded_and_observed_capped(
     result = await provider.project(request, context)
 
     assert result.claims, "expected timeline claims"
+    assert all("communications" in (claim.domainSlotIds or []) for claim in result.claims)
     for claim in result.claims:
         assert isinstance(claim.subject, ProjectionSubject)
         assert claim.claimState is EpistemicStatus.OBSERVED  # never verified
         assert claim.claimState is not EpistemicStatus.VERIFIED
-        assert claim.evidenceRefs, (
-            f"requiresEvidence: claim {claim.id!r} must carry EvidenceRefs"
-        )
+        assert claim.evidenceRefs, f"requiresEvidence: claim {claim.id!r} must carry EvidenceRefs"
         assert claim.confidence is None or 0.0 <= claim.confidence <= 1.0
         for ref in claim.evidenceRefs:
             assert isinstance(ref, EvidenceRef)
@@ -337,6 +386,50 @@ async def test_claims_include_each_spine_message(spine_source: FakeSource) -> No
 
     claim_ids = {c.id for c in result.claims}
     assert claim_ids == {"timeline.m1", "timeline.m2", "timeline.m3"}
+
+
+@pytest.mark.parametrize(
+    ("raw_category", "expected_category"),
+    [
+        ("marketing", MessageCategory.MARKETING),
+        (_CATEGORY_OMITTED, None),
+        ("future_private_category", None),
+    ],
+    ids=["canonical", "absent", "unrecognized"],
+)
+async def test_provider_treats_message_category_as_source_fact_only(
+    raw_category: object, expected_category: MessageCategory | None
+) -> None:
+    row: dict[str, object] = {
+        "tenant_id": TENANT_A,
+        "fact_id": "fact-category",
+        "message_id": "message-category",
+        "campaign_id": "camp_1",
+        "communication_state": "delivered",
+        "occurred_at": "2026-09-03T10:00:00Z",
+    }
+    if raw_category is not _CATEGORY_OMITTED:
+        row["message_category"] = raw_category
+    message = to_message(row)
+    assert message.message_category is expected_category
+
+    provider = Communication360Provider(sources=FakeSource(messages=[message]))
+    request, context = await _make_context(ProviderRegistry())
+    result = await provider.project(request, context)
+
+    summary = next(section for section in result.sections if section.id == "summary")
+    assert summary.content["counts"]["messages_total"] == 1
+    timeline = next(section for section in result.sections if section.id == "timeline")
+    assert timeline.content["entryCount"] == 1
+    assert timeline.content["entries"][0]["messageId"] == "message-category"
+    state = next(section for section in result.sections if section.id == "state")
+    authority = next(
+        dimension
+        for dimension in state.content["dimensions"]
+        if dimension["dimension"] == "authority"
+    )
+    assert authority["state"] == "missing"
+    assert all(claim.claimState is EpistemicStatus.OBSERVED for claim in result.claims)
 
 
 # ---------------------------------------------------------------------------
@@ -375,9 +468,7 @@ async def test_empty_available_spine_timeline_is_present_empty() -> None:
 
 
 async def test_unavailable_source_degrades_summary_without_numeric() -> None:
-    provider = Communication360Provider(
-        sources=FakeSource(raises="all")
-    )
+    provider = Communication360Provider(sources=FakeSource(raises="all"))
     request, context = await _make_context(ProviderRegistry())
     result = await provider.project(request, context)
 
@@ -427,8 +518,12 @@ async def test_state_has_exactly_the_six_dimensions(spine_source: FakeSource) ->
     state = next(s for s in result.sections if s.id == "state")
     dimensions = state.content["dimensions"]
     assert [d["dimension"] for d in dimensions] == [
-        "delivery", "engagement", "campaign-context",
-        "information", "knowledge", "authority",
+        "delivery",
+        "engagement",
+        "campaign-context",
+        "information",
+        "knowledge",
+        "authority",
     ]
     for dim in dimensions:
         assert dim["state"] in VALID_SECTION_STATES, dim["dimension"]
@@ -449,7 +544,9 @@ async def test_state_dimension_delivery_counts_from_spine(
     assert delivery["state"] == "available"
     assert delivery["observed"] == 3
     assert delivery["breakdown"] == {
-        "sent": 1, "delivered": 1, "opened": 1,
+        "sent": 1,
+        "delivered": 1,
+        "opened": 1,
     }
     engagement = state.content["dimensions"][1]
     assert engagement["breakdown"] == {"opened": 1, "clicked": 0, "replied": 0}
@@ -475,16 +572,22 @@ async def test_state_canonical_dimensions_available_with_observed_rows() -> None
     source = FakeSource(
         facts=[
             _fact(
-                TENANT_A, "info-1", kind="information",
+                TENANT_A,
+                "info-1",
+                kind="information",
                 payload={"campaign_id": "camp_1", "information_id": "i1"},
             ),
             _fact(
-                TENANT_A, "know-1", kind="knowledge_state",
+                TENANT_A,
+                "know-1",
+                kind="knowledge_state",
                 actor_id="entity-1",
                 payload={"campaign_id": "camp_1", "state": "included_in_context"},
             ),
             _fact(
-                TENANT_A, "auth-1", kind="authority_evaluation",
+                TENANT_A,
+                "auth-1",
+                kind="authority_evaluation",
                 actor_id="entity-1",
                 payload={"campaign_id": "camp_1", "decision": "granted"},
             ),
@@ -572,7 +675,10 @@ async def test_dependency_state_echoes_injected_context(
     provider = Communication360Provider(sources=spine_source)
     request, context = await _make_context(reg)
     assert {d.projectionId for d in context.dependencyState} == {
-        "profile360", "relationship360", "episode360", "outcome360",
+        "profile360",
+        "relationship360",
+        "episode360",
+        "outcome360",
     }
     result = await provider.project(request, context)
 
@@ -659,12 +765,189 @@ async def test_campaign_subject_filters_spine_by_campaign_id() -> None:
     assert "camp_2" not in result.model_dump_json()
 
 
+async def test_agent_subject_filters_messages_and_canonical_facts_by_exact_actor_ref() -> None:
+    source = FakeSource(
+        messages=[
+            _msg(TENANT_A, "m-agent", sender_entity_id="agent-1"),
+            _msg(TENANT_A, "m-other", sender_entity_id="prefix-agent-1-suffix"),
+        ],
+        facts=[
+            _fact(TENANT_A, "act-agent", actor_id="agent-1"),
+            _fact(TENANT_A, "act-other", actor_id="prefix-agent-1-suffix"),
+            _fact(
+                TENANT_A,
+                "act-payload",
+                actor_id=None,
+                payload={"actor_entity_id": "agent-1"},
+            ),
+        ],
+    )
+
+    class CanonicalAgentReader:
+        async def resolve(self, tenant_id: str, source_agent_ref: str):
+            assert (tenant_id, source_agent_ref) == (TENANT_A, "agent-1")
+            return AgentIdentityRead(
+                state="resolved",
+                canonical_agent_entity_id="agent-1",
+                evidence=(
+                    EvidenceRef(
+                        id="agent-1",
+                        type="entity",
+                        source="entities",
+                        observedAt="2026-09-01T00:00:00Z",
+                    ),
+                ),
+            )
+
+    provider = Communication360Provider(
+        sources=source, agent_identity_reader=CanonicalAgentReader()
+    )
+    request, context = await _make_context(
+        ProviderRegistry(),
+        subject=ProjectionSubject(kind="agent", id="agent-1"),
+    )
+    result = await provider.project(request, context)
+
+    assert source.last_participant_entity_id == "agent-1"
+    summary = next(section for section in result.sections if section.id == "summary")
+    assert summary.content["counts"]["messages_total"] == 1
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    assert interactions.content["count"] == 2
+    assert {claim.id for claim in result.claims} == {"timeline.m-agent"}
+    assert "act-other" not in result.model_dump_json()
+
+
+async def test_agent_source_alias_resolves_before_communication_reads() -> None:
+    source = FakeSource(
+        messages=[
+            _msg(TENANT_A, "m-canonical", sender_entity_id="canonical-agent-1"),
+            _msg(TENANT_A, "m-prefix", sender_entity_id="prefix-agent-source-1"),
+        ],
+        facts=[
+            _fact(TENANT_A, "act-canonical", actor_id="canonical-agent-1"),
+            _fact(TENANT_A, "act-source-ref", actor_id="agent-source-1"),
+            _fact(TENANT_A, "act-prefix", actor_id="prefix-agent-source-1"),
+        ],
+    )
+
+    class CanonicalAgentReader:
+        async def resolve(self, tenant_id: str, source_agent_ref: str):
+            assert (tenant_id, source_agent_ref) == (TENANT_A, "agent-source-1")
+            return AgentIdentityRead(
+                state="resolved",
+                canonical_agent_entity_id="canonical-agent-1",
+                evidence=(
+                    EvidenceRef(
+                        id="binding-1",
+                        type="entity",
+                        source="agent_deployment_identity_bindings",
+                        observedAt="2026-09-01T00:00:00Z",
+                    ),
+                ),
+            )
+
+    provider = Communication360Provider(
+        sources=source, agent_identity_reader=CanonicalAgentReader()
+    )
+    request, context = await _make_context(
+        ProviderRegistry(),
+        subject=ProjectionSubject(kind="agent", id="agent-source-1"),
+    )
+
+    result = await provider.project(request, context)
+
+    assert source.last_participant_entity_id == "canonical-agent-1"
+    summary = next(section for section in result.sections if section.id == "summary")
+    assert summary.content["scope"]["identityResolutionState"] == "resolved"
+    assert summary.content["scope"]["participantEntityId"] == "canonical-agent-1"
+    timeline = next(section for section in result.sections if section.id == "timeline")
+    assert [entry["messageId"] for entry in timeline.content["entries"]] == ["m-canonical"]
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    assert interactions.content["count"] == 1
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert any(ref["id"] == "binding-1" for ref in evidence.content["evidence"])
+    assert any(ref.id == "binding-1" for ref in result.claims[0].evidenceRefs)
+    assert "act-prefix" not in result.model_dump_json()
+
+
+async def test_unresolved_agent_identity_does_not_scan_communications() -> None:
+    class NoReadSource:
+        async def messages(self, *args, **kwargs):
+            raise AssertionError("unresolved Agent identity must not read messages")
+
+        async def facts(self, *args, **kwargs):
+            raise AssertionError("unresolved Agent identity must not scan tenant facts")
+
+    class UnresolvedAgentReader:
+        async def resolve(self, tenant_id: str, source_agent_ref: str):
+            return AgentIdentityRead(state="unresolved", reason="agent_identity_binding_not_found")
+
+    provider = Communication360Provider(
+        sources=NoReadSource(), agent_identity_reader=UnresolvedAgentReader()
+    )
+    request, context = await _make_context(
+        ProviderRegistry(),
+        subject=ProjectionSubject(kind="agent", id="unbound-agent"),
+    )
+
+    result = await provider.project(request, context)
+
+    assert result.claims == []
+    assert "agent_identity_binding_not_found" in result.degradedReasons
+    summary = next(section for section in result.sections if section.id == "summary")
+    assert summary.state == "degraded"
+    assert summary.content["counts"] is None
+
+
+async def test_communication360_caps_reads_and_marks_partial_source_coverage() -> None:
+    source = FakeSource(
+        messages=[
+            _msg(TENANT_A, "m-1"),
+            _msg(TENANT_A, "m-2"),
+            _msg(TENANT_A, "m-3"),
+        ],
+        facts=[
+            _fact(TENANT_A, "act-1"),
+            _fact(TENANT_A, "act-2"),
+            _fact(TENANT_A, "act-3"),
+        ],
+    )
+    provider = Communication360Provider(sources=source)
+    request, context = await _make_context(
+        ProviderRegistry(),
+        page={"limit": 1},
+    )
+
+    result = await provider.project(request, context)
+
+    assert REASON_SOURCE_READ_TRUNCATED in result.degradedReasons
+    summary = next(section for section in result.sections if section.id == "summary")
+    assert summary.state == "degraded"
+    assert summary.content["counts"] is None
+    assert summary.content["sourceCompleteness"] == "partial"
+    state = next(section for section in result.sections if section.id == "state")
+    assert state.state == "degraded"
+    assert (
+        next(d for d in state.content["dimensions"] if d["dimension"] == "delivery")["state"]
+        == "degraded"
+    )
+    timeline = next(section for section in result.sections if section.id == "timeline")
+    assert timeline.state == "degraded"
+    assert timeline.content["sourceTruncated"] is True
+    assert timeline.content["entryCount"] == 1
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert evidence.state == "degraded"
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    assert interactions.state == "degraded"
+    assert interactions.content["sourceTruncated"] is True
+
+
 # ---------------------------------------------------------------------------
-# episode/source subjects degrade honestly instead of erroring
+# Non-message subjects use exact canonical facts and keep message state unknown.
 # ---------------------------------------------------------------------------
 
 
-async def test_episode_subject_degrades_sections_not_error() -> None:
+async def test_episode_subject_without_canonical_facts_is_missing_not_zero() -> None:
     provider = Communication360Provider(sources=FakeSource())
     request, context = await _make_context(
         ProviderRegistry(),
@@ -673,16 +956,14 @@ async def test_episode_subject_degrades_sections_not_error() -> None:
     result = await provider.project(request, context)
 
     summary = next(s for s in result.sections if s.id == "summary")
-    assert summary.state == "degraded"
+    assert summary.state == "missing"
     assert summary.content["counts"] is None
-    assert summary.content["reasons"]  # honest section-level note
+    assert "no_exact_scope_communication_facts_observed" in summary.content["reasons"]
     timeline = next(s for s in result.sections if s.id == "timeline")
-    assert timeline.state == "degraded"
-    # The note names the in-flight sibling that will enable the binding.
-    assert "episode360" in summary.content["reasons"][0]
+    assert timeline.state == "missing"
 
 
-async def test_source_subject_degrades_sections_not_error() -> None:
+async def test_source_subject_without_canonical_facts_is_missing_not_zero() -> None:
     provider = Communication360Provider(sources=FakeSource())
     request, context = await _make_context(
         ProviderRegistry(),
@@ -690,8 +971,190 @@ async def test_source_subject_degrades_sections_not_error() -> None:
     )
     result = await provider.project(request, context)
     summary = next(s for s in result.sections if s.id == "summary")
-    assert summary.state == "degraded"
+    assert summary.state == "missing"
     assert summary.content["counts"] is None
+
+
+@pytest.mark.parametrize(
+    ("subject_kind", "reference_key"),
+    [("episode", "episode_id"), ("journey", "journey_id"), ("source", "source_id")],
+)
+async def test_non_message_subjects_use_exact_tenant_canonical_communication_facts(
+    subject_kind: str, reference_key: str
+) -> None:
+    subject_id = f"{subject_kind}-canonical-1"
+    exact = _fact(
+        TENANT_A,
+        f"{subject_kind}-act-1",
+        payload={reference_key: subject_id, "act_type": "recorded"},
+    )
+    wrong_reference = _fact(
+        TENANT_A,
+        f"{subject_kind}-act-2",
+        payload={reference_key: f"{subject_id}-other", "act_type": "wrong-reference"},
+    )
+    wrong_tenant = _fact(
+        TENANT_B,
+        f"{subject_kind}-act-3",
+        payload={reference_key: subject_id, "act_type": "wrong-tenant"},
+    )
+
+    class TenantMisbehavingSource(FakeSource):
+        async def facts(self, tenant_id, *, kind=None, since=None, limit=None):
+            self.fact_read_count += 1
+            rows = [exact, wrong_reference, wrong_tenant]
+            if limit is not None:
+                rows = rows[:limit]
+            return rows
+
+    source = TenantMisbehavingSource()
+    provider = Communication360Provider(sources=source)
+    request, context = await _make_context(
+        ProviderRegistry(),
+        subject=ProjectionSubject(kind=subject_kind, id=subject_id),
+    )
+
+    result = await provider.project(request, context)
+
+    summary = next(section for section in result.sections if section.id == "summary")
+    assert summary.state == "available"
+    assert summary.content["counts"] == {
+        "messages_total": None,
+        "communication_facts_total": 1,
+        "communication_fact_kinds": {"communication_act": 1},
+    }
+    assert summary.content["sourceCompleteness"] == "canonical_facts_only"
+    timeline = next(section for section in result.sections if section.id == "timeline")
+    assert timeline.state == "available"
+    assert [entry["factId"] for entry in timeline.content["entries"]] == [f"{subject_kind}-act-1"]
+    assert timeline.content["entries"][0]["evidenceRefIds"] == [f"{subject_kind}-act-1"]
+    assert timeline.content["causalRelationsDeclared"] == []
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    assert interactions.content["count"] == 1
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert [ref["id"] for ref in evidence.content["evidence"]] == [f"{subject_kind}-act-1"]
+    assert source.message_read_count == 0
+
+
+@pytest.mark.parametrize(
+    ("subject_kind", "reference_key"),
+    [("episode", "episode_id"), ("journey", "journey_id")],
+)
+async def test_source_policy_context_preserves_exact_provider_refs_for_episode_and_journey(
+    subject_kind: str, reference_key: str
+) -> None:
+    subject_id = f"{subject_kind}-source-context"
+    fact = _fact(
+        TENANT_A,
+        f"{subject_kind}-source-fact",
+        payload={reference_key: subject_id, "provider_identity": "mail.provider.v1"},
+    )
+    source = FakeSource(facts=[fact])
+    provider = Communication360Provider(sources=source)
+    request, context = await _make_context(
+        ProviderRegistry(),
+        subject=ProjectionSubject(kind=subject_kind, id=subject_id),
+    )
+
+    result = await provider.project(request, context)
+
+    state = next(section for section in result.sections if section.id == "state")
+    source_policy = state.content["sourcePolicyContext"]
+    assert source_policy["state"] == "partial"
+    assert source_policy["sourceLineage"]["references"] == [
+        {
+            "providerIdentity": "mail.provider.v1",
+            "referenceSource": "communication360_facts.provider_identity",
+            "observedAt": fact["occurred_at"],
+            "evidenceRefs": [
+                {
+                    "id": fact["fact_id"],
+                    "type": "event",
+                    "source": "services/api/journeys/communication360/communication360_facts",
+                    "observedAt": fact["occurred_at"],
+                    "uri": f"store://communication360_facts/{fact['fact_id']}",
+                }
+            ],
+        }
+    ]
+    assert source_policy["sourceLineage"]["state"] == "observed_references"
+    assert source_policy["policyEvaluation"]["state"] == "unknown"
+    assert source_policy["policyEvaluation"]["authority"] == "experience360_frame_policy_runtime"
+    assert source_policy["freshness"]["state"] == "available"
+
+
+async def test_source_policy_context_is_tenant_filtered_and_keeps_recorded_consent_evidence() -> None:
+    receipt_ref = EvidenceRef(
+        id="consent-receipt-1",
+        type="event",
+        source="governance.consent.authority",
+        observedAt="2026-09-03T10:00:00Z",
+    )
+    identity_ref = EvidenceRef(
+        id="identity-binding-1",
+        type="entity",
+        source="comms_provider_identities",
+        observedAt="2026-09-03T10:00:00Z",
+    )
+    message = _msg(
+        TENANT_A,
+        "consented-message",
+        provider="mail.provider.v1",
+        consent_evidence=CommunicationConsentEvidence(
+            state="recorded",
+            purpose="marketing",
+            receipt_id=receipt_ref.id,
+            subject_entity_id="recipient-1",
+            identity_binding_id=identity_ref.id,
+            evidence_refs=[receipt_ref, identity_ref],
+        ),
+    )
+    foreign_fact = _fact(
+        TENANT_B,
+        "foreign-provider-fact",
+        payload={"episode_id": "episode-policy", "provider_id": "foreign.provider.v1"},
+    )
+
+    class MisbehavingSource(FakeSource):
+        async def facts(self, tenant_id, *, kind=None, since=None, limit=None):
+            self.fact_read_count += 1
+            return [foreign_fact]
+
+    source = MisbehavingSource(messages=[message])
+    provider = Communication360Provider(sources=source)
+    request, context = await _make_context(
+        ProviderRegistry(),
+        subject=ProjectionSubject(kind="campaign", id="camp_1"),
+    )
+
+    result = await provider.project(request, context)
+
+    state = next(section for section in result.sections if section.id == "state")
+    source_policy = state.content["sourcePolicyContext"]
+    assert [
+        item["providerIdentity"] for item in source_policy["sourceLineage"]["references"]
+    ] == ["mail.provider.v1"]
+    assert source_policy["historicalConsent"]["state"] == "recorded"
+    assert source_policy["historicalConsent"]["receipts"][0]["receiptId"] == receipt_ref.id
+    assert {
+        ref["id"] for ref in source_policy["historicalConsent"]["receipts"][0]["evidenceRefs"]
+    } == {receipt_ref.id, identity_ref.id}
+    assert "foreign.provider.v1" not in str(source_policy)
+    assert source_policy["freshness"]["state"] == "available"
+
+
+async def test_source_policy_context_degrades_when_a_required_source_is_unavailable() -> None:
+    provider = Communication360Provider(sources=FakeSource(raises="messages"))
+    request, context = await _make_context(ProviderRegistry())
+
+    result = await provider.project(request, context)
+
+    state = next(section for section in result.sections if section.id == "state")
+    source_policy = state.content["sourcePolicyContext"]
+    assert source_policy["state"] == "degraded"
+    assert source_policy["sourceLineage"]["state"] == "degraded"
+    assert source_policy["historicalConsent"]["state"] == "degraded"
+    assert source_policy["freshness"]["state"] == "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -727,7 +1190,10 @@ def test_register_same_object_is_idempotent() -> None:
     reg = ProviderRegistry()
     provider = Communication360Provider()
     reg.register(provider, source="services/api/journeys/communication360")
-    assert reg.register(provider, source="services/api/journeys/communication360") == "communication360"
+    assert (
+        reg.register(provider, source="services/api/journeys/communication360")
+        == "communication360"
+    )
     assert len(reg.list()) == 1
 
 
@@ -759,7 +1225,4 @@ def test_register_unknown_id_raises() -> None:
 
 
 def test_provider_contract_version_matches_registry() -> None:
-    assert (
-        Communication360Provider.contract_version
-        == INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION
-    )
+    assert Communication360Provider.contract_version == INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION

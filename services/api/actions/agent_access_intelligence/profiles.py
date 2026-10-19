@@ -126,6 +126,9 @@ _CATALOG_SCAN_LIMIT = 1000
 # newest-first window that revoked rows fill up, so an agent's older live grants fall out
 # and the split reports "0 authorized" about a fully authorized agent.
 _AUTHORIZATION_SCAN_LIMIT = 2000
+# The 360 frame links a bounded sample of grant records as evidence. The profile
+# still computes its authorization counts over the full bounded scan above.
+_AUTHORIZATION_EVIDENCE_LIMIT = 200
 # Window scanned to build the agent index. Distinct agents are derived from installation
 # rows, so this bounds agents indirectly; truncation is disclosed.
 _PROFILE_INDEX_SCAN_LIMIT = 2000
@@ -376,6 +379,22 @@ class AgentAccessProfileService:
                 "capabilities_authorized": counts["capabilities_authorized"],
                 "capabilities_unauthorized": counts["capabilities_unauthorized"],
                 "scan_limit": _AUTHORIZATION_SCAN_LIMIT,
+                "activeRecordIds": sorted(
+                    {
+                        str(record_id)
+                        for row in active_authorizations or []
+                        if row.get("authorization_kind") == "capability"
+                        and (record_id := row.get("delegation_id") or row.get("id"))
+                    }
+                )[:_AUTHORIZATION_EVIDENCE_LIMIT],
+                "activeRecordIdsTruncated": len(
+                    {
+                        str(record_id)
+                        for row in active_authorizations or []
+                        if row.get("authorization_kind") == "capability"
+                        and (record_id := row.get("delegation_id") or row.get("id"))
+                    }
+                ) > _AUTHORIZATION_EVIDENCE_LIMIT,
             },
             "risk": {
                 "known": True,

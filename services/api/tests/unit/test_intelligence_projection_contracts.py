@@ -140,9 +140,9 @@ def test_projection_subject_kind_matches_generated_registry() -> None:
             }
         )
     )
-    # 11 kinds: entity/relationship/campaign/episode/population/source/
-    # connection/cluster/agent (P0) + deployment/infrastructure (Infrastructure360).
-    assert len(expected) == 11
+    # 12 kinds: the shared product 360 subject families plus the separately
+    # governed deployment/infrastructure inputs used by Infrastructure360.
+    assert len(expected) == 12
     assert tuple(get_args(ProjectionSubjectKind)) == expected
 
 

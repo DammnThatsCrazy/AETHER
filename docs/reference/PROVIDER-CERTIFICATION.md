@@ -15,7 +15,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "services/api/connectors/provider_runtime/": "sha256:7b305b72716ad006af0d0b7ab8f65899f65e6daca49f5b93c28b5b7094233d10"
+  "services/api/connectors/provider_runtime/": "sha256:aa62f66c71646a1fc875f3156e6e02514061a87698ebc292af8eeb6697116bee"
   "services/api/connectors/providers/routes.py": "sha256:49308bb682d1347fb244676eaf438349c42b961d87561900ba24f20549cee523"
   "services/api/shared/certification/readiness.py": "sha256:313478219b358e356847b4468b6e174620950dd12b90eeb68ab03856556bda6d"
   "services/api/shared/integration_contracts/certification.py": "sha256:2969b5f1176212f462882a7361fcdeebdaf13a390148eba0626c459451fdf101"
@@ -30,6 +30,11 @@ rejects identity, manifest, and capability-honesty violations, while
 environment availability and readiness remain manifest/evidence declarations
 and tenant data rights are a separate raw-data admission gate. This
 spec documents the harness, its checks, and how to read its output.
+
+Experience360's `Source360Provider` and `Connection360Provider` are separate,
+read-only Intelligence Projection providers. They consume UPR-owned data and
+do not implement `ProviderPlugin`; their projection `implementationState` is
+not a UPR certification or credential-readiness result.
 
 ## 1. Entry point
 

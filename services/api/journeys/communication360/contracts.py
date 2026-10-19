@@ -44,10 +44,10 @@ from __future__ import annotations
 from enum import Enum
 from typing import Literal, Optional
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, model_validator
 
 from shared.contracts_models.epistemic import EpistemicStatus
-from journeys.comms.contracts import CommunicationState
+from journeys.comms.contracts import CommunicationState, MessageCategory
 from identity.identity.models import EntityType
 from graph.operational_intelligence.models import (
     ContractModel,
@@ -198,6 +198,37 @@ class MessageClaimBinding(CommunicationContract):
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
 
 
+class CommunicationConsentEvidence(CommunicationContract):
+    """Historical consent evidence captured by server-owned connector ingress."""
+
+    state: Literal["recorded", "unknown"] = "unknown"
+    purpose: Optional[str] = None
+    receipt_id: Optional[str] = None
+    subject_entity_id: Optional[str] = None
+    identity_binding_id: Optional[str] = None
+    evidence_refs: list[EvidenceRef] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def recorded_state_requires_both_authorities(self) -> "CommunicationConsentEvidence":
+        if self.state == "recorded" and not all(
+            (
+                self.purpose,
+                self.receipt_id,
+                self.subject_entity_id,
+                self.identity_binding_id,
+                len(self.evidence_refs) >= 2,
+            )
+        ):
+            raise ValueError(
+                "recorded consent requires purpose, receipt, recipient binding, and evidence"
+            )
+        if self.state == "unknown" and any(
+            (self.receipt_id, self.subject_entity_id, self.identity_binding_id, self.evidence_refs)
+        ):
+            raise ValueError("unknown consent cannot carry a receipt or resolved subject")
+        return self
+
+
 class InformationTransformation(CommunicationContract):
     """Declared lineage from one information object to another (R2).
 
@@ -237,15 +268,25 @@ class CommunicationMessage(CommunicationContract):
     external_thread_id: Optional[str] = None
     channel: Optional[str] = "email"
     direction: Optional[str] = None  # inbound | outbound
+    message_category: Optional[MessageCategory] = (
+        None  # source fact only; no purpose/consent inference
+    )
     communication_state: Optional[CommunicationState] = None  # delivery ladder, NOT knowledge
     sender_entity_id: Optional[str] = None
+    sender_identity_binding_id: Optional[str] = None
+    sender_identity_evidence_ref: Optional[EvidenceRef] = None
     recipient_entity_id: Optional[str] = None
+    recipient_identity_binding_id: Optional[str] = None
+    recipient_identity_evidence_ref: Optional[EvidenceRef] = None
     recipient_alias_id: Optional[str] = None
     subject: Optional[str] = None
     content_ref: Optional[str] = None
     campaign_id: Optional[str] = None
     occurred_at: str
     received_at: Optional[str] = None
+    consent_evidence: CommunicationConsentEvidence = Field(
+        default_factory=CommunicationConsentEvidence
+    )
     claim_state: Optional[EpistemicStatus] = None  # capped observed (R1)
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
 
@@ -541,6 +582,7 @@ __all__ = [
     "InformationRef",
     "Information",
     "MessageClaimBinding",
+    "CommunicationConsentEvidence",
     "InformationTransformation",
     # message spine
     "CommunicationMessage",

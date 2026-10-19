@@ -12,27 +12,58 @@ since_version: "0.1.0"
 
 ## Overview
 
-360 surfaces are productized read/query views over the intelligence
-graph. Each 360 provides a complete view of a specific entity type
-or concept.
+360 surfaces are productized, governed read/query views over canonical Aether
+authorities, including graph, identity, evidence, temporal, execution, and
+economic sources. Each 360 composes a contextual view of a specific entity
+type or concept while preserving provider provenance and policy state.
 
-## Available 360s
+## Product catalog
 
-| 360 Surface | Entity | Description |
-|---|---|---|
-| Profile 360 | Person / Organization | Entity attributes, activity, value |
-| Campaign 360 | Campaign | Performance, touchpoints, attribution |
-| Journey 360 | Journey | Stage progression, handoffs |
-| Agent 360 | Agent | Lifecycle, actions, decisions |
-| Communication 360 | Communication | Delivery, engagement, consent |
-| Value 360 | Value | Revenue, LTV, economic flow |
-| Risk 360 | Risk | Risk signals, anomalies |
+The complete catalog contains 18 product surfaces. Its machine-readable
+contracts and slot-to-provider section mappings are maintained in
+`packages/shared/contracts/intelligence-projection-registry.json` and
+rendered in the generated [Product 360 Surface Catalog](../_generated/360-surface-catalog.md).
+The 18 product surfaces are a separate catalog from the technical projection
+providers that supply their reads.
 
 ## Architecture
 
-360 surfaces are query-time projections over graph state. They do
-not store data independently — all data comes from the intelligence
-graph.
+360 surfaces are governed projections over canonical authority data. They do
+not own a competing system of record; each domain's canonical authority
+remains responsible for its own truth.
+
+## Backend contract status
+
+The shared backend contract now defines a typed frame request/response,
+catalog-bound slots, projection lineage, evidence refs, freshness, quality,
+policy disposition, actor attribution, delegation, and frame degradation. The
+frame builder evaluates a tenant- and surface-bound policy result before it
+reads projections, requests only sections needed by permitted slots, and
+composes through the existing intelligence projection runtime. Missing policy
+is a closed gate.
+Until a provider can constrain its reads to approved fields and preserve
+field-to-claim dependencies, a slot marked redacted is suppressed before its
+projection providers are queried.
+
+The common frame path is mounted at `POST /v1/experience360/frames`; the
+tenant-scoped catalog and live technical-provider availability are exposed at
+`GET /v1/experience360/catalog`. Tenant scope comes from authenticated request
+state. Frame and slot reads use the central `AccessControlService` by default;
+slot authority domains are checked before projection reads. An unclassified
+catalog authority, unavailable/malformed evaluator, or mismatched policy scope
+fails closed and suppresses reads. This access layer complements canonical
+source-level consent, purpose, and field-redaction decisions; it does not
+replace them.
+
+This is an implementation foundation, not a claim that all surfaces are live.
+The product catalog is reconstructed and marked
+`reconstructed_pending_source_alignment`; the original SSOT is unavailable in
+the current checkout. Technical projection provider availability still varies.
+Agent and Execution 360 require explicit slot actor attribution and
+authority-decision metadata before their corresponding slots can be reported
+as available. A surface is complete only when every required slot is backed by
+its canonical authority, a registered provider path, evidence/provenance,
+freshness, and policy behavior; catalog presence alone does not count.
 
 ## See Also
 

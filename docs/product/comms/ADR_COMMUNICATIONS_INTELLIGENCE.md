@@ -10,7 +10,7 @@ source_files: [services/api/journeys/comms/contracts.py, services/api/journeys/c
 source_hashes:
   "services/api/ingestion/silver/dispatcher.py": "sha256:91649997a908ec2894c0097e513dba14c6a7e4d5c39a6519159bf0593e3d01fb"
   "services/api/journeys/comms/contracts.py": "sha256:9629e0f07c08f85d43c8b7bd24faf4c2c835a1974ca60d98efad27aa6ff5d961"
-  "services/api/journeys/comms/projector.py": "sha256:fd040efc9e84420c7d41809a02c253cbcc58d6386f4904e859e2b8bb3fd7b0d2"
+  "services/api/journeys/comms/projector.py": "sha256:dca2f1d942cceba08f88a978da1d68cd914e65fbf8b93f99baef25567b69b4a0"
 ---
 
 # Architecture Decision Records — Communications Intelligence
@@ -150,6 +150,12 @@ provider_account, marketing_channel, tenant_wide, alias_wide`) — never a singl
 global boolean. Uncertainty fails closed: a comms fact with unresolvable
 consent snapshot is stored with `privacy_class` intact but is excluded from
 marketing analytics and attribution eligibility.
+
+For connector ingress, consent receipts and identity lineage are attached by
+server-owned bridge logic. Provider payload fields that resemble canonical
+recipient IDs or consent fields are stripped from persisted payloads. A receipt
+is retained only when its tenant, subject, and identity-binding reference
+match the resolved recipient; otherwise the stored consent state is `unknown`.
 
 **Enforcement.** `tests/unit/comms/test_comms_state.py::TestSuppressionScopes`.
 

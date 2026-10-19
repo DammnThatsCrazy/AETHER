@@ -39,7 +39,7 @@ reviewed_source_commits:
   - commit: "40af67902"
     reason: "Reviewed the optional server-returned consent, usage, and audit references for accepted batch observations. The contracts preserve the existing intake and authority boundaries."
 source_hashes:
-  "packages/shared/": "sha256:2e164d7d6738f796c23d7c60e8c5c8f298edcb883210e06fa3d0207785679e41"
+  "packages/shared/": "sha256:200291987c4223664ca49da1f3b6c6e1e80cbf62352026bb21cecf3605683f16"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
@@ -54,7 +54,7 @@ source_hashes:
   "services/api/ingestion/ingestion/replay.py": "sha256:65f898480787b71d14c8f687351844fdf5585cd67664ff5c32699328594b24ce"
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
-  "services/api/main.py": "sha256:52e672c1c82e17907041ba173b1fb7cee68bfb03b158eb370fd4f25b584cc726"
+  "services/api/main.py": "sha256:692f6e93ad5413068a0cc54fa10a6139bc783a7a75ac94069e0f0c4fdaea9ca7"
   "services/api/middleware/middleware.py": "sha256:da6d7c92bd082a2c1823b72aca5d4bfa5c17faf0a3fb9e85fc7bd9a88a5b0654"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
   "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
@@ -546,7 +546,7 @@ Canonical contract plane (single source of truth, codegen twins via
 
 A **360** is an intelligence projection over canonical Aether truth — it is
 never a competing system of record. The intelligence projection plane owns the
-single canonical registry (19 projections, nine of which — `outcome360`,
+single canonical registry (20 technical projections, nine of which — `outcome360`,
 `economic360`, `infrastructure360`, `communication360`, `risk360`, `fraud360`,
 the context-360 time leaf `temporal360`, the context-360 WHO/SET leaf
 `population360` and the context-360 WHERE leaf `geographic360` — are now
@@ -571,8 +571,14 @@ providers are registered at boot — `main.py`'s lifespan calls
 `dependencies.projection_plane.register_implemented_projection_providers` — so a
 projection surface answers live instead of degrading to `provider_unavailable`
 (a provider is not live until registered at this mount; the enforcement note is
-in the source-of-truth). Exploration surfaces compose over the engine through
-projection-backed surface adapters
+in the source-of-truth). All 20 providers register, with 9 still classified as
+`implemented` and 11 as `in_flight`; registration does not promote status. The
+tenant-scoped `POST /v1/experience360/frames` route composes the separate
+18-surface product catalog, and `GET /v1/experience360/catalog` reports catalog
+and provider-registration state. Policy runs before reads, and missing or
+unsupported slot paths remain unknown/degraded. The reconstructed product
+contracts are pending alignment with the original 360 blueprint. Exploration
+surfaces compose over the engine through projection-backed surface adapters
 
 (`services/api/journeys/exploration/adapters/projection.py`).
 The design decision is [ADR-010](decisions/ADR-010-intelligence-projection-plane.md);

@@ -378,7 +378,9 @@ async def test_project_returns_valid_result_from_repositories() -> None:
     # dependencyState is echoed verbatim from the registry-computed context.
     assert result.dependencyState == context.dependencyState
     assert {d.projectionId for d in result.dependencyState} == {
-        "profile360", "cluster360", "economic360",
+        "profile360",
+        "cluster360",
+        "economic360",
     }
     assert all(d.state == "available" for d in result.dependencyState)
 
@@ -387,14 +389,15 @@ async def test_project_returns_valid_result_from_repositories() -> None:
 async def test_section_states_are_typed_section_state_vocabulary() -> None:
     await _seed(_assessment(), [_signal("sig-1", TENANT_A)])
     provider = Risk360Provider()
-    result = await provider.project(
-        _request(), await _context(_available_registry())
-    )
+    result = await provider.project(_request(), await _context(_available_registry()))
     for section in result.sections:
         assert section.state in VALID_SECTION_STATES, section.id
     # The states actually chosen are the honest subset the provider is allowed.
     assert {s.state for s in result.sections} <= {
-        "available", "degraded", "empty", "missing",
+        "available",
+        "degraded",
+        "empty",
+        "missing",
     }
 
 
@@ -451,9 +454,7 @@ async def test_claims_are_evidence_grounded_and_canonical() -> None:
     assert result.claims, "expected evidence-grounded claims"
     for claim in result.claims:
         assert isinstance(claim.subject, ProjectionSubject)
-        assert claim.evidenceRefs, (
-            f"requiresEvidence: claim {claim.id!r} must carry EvidenceRefs"
-        )
+        assert claim.evidenceRefs, f"requiresEvidence: claim {claim.id!r} must carry EvidenceRefs"
         for ref in claim.evidenceRefs:
             assert isinstance(ref, _OI_EvidenceRef)
             assert ref.id
@@ -461,6 +462,13 @@ async def test_claims_are_evidence_grounded_and_canonical() -> None:
     assert "risk360.assessment.a-1" in ids
     assert "risk360.dimension.economic" in ids
     assert "risk360.health.fraud.signals" in ids
+    by_id = {claim.id: claim for claim in result.claims}
+    assert by_id["risk360.assessment.a-1"].claimState == EpistemicStatus.DERIVED
+    assert by_id["risk360.dimension.economic"].claimState == EpistemicStatus.OBSERVED
+    # The canonical fact that a source emitted a persisted signal is observed;
+    # the signal's interpretation retains its own inferred claim state.
+    assert by_id["risk360.health.fraud.signals"].claimState == EpistemicStatus.OBSERVED
+    assert by_id["risk360.signal.sig-1"].claimState == EpistemicStatus.INFERRED
 
 
 @pytest.mark.asyncio
@@ -561,6 +569,183 @@ async def test_raising_signals_reader_degrades_health_only() -> None:
 
 
 @pytest.mark.asyncio
+async def test_repository_read_failure_is_not_misreported_as_missing() -> None:
+    class FailingAssessmentRepository:
+        async def list_by_subject(self, *args, **kwargs):
+            raise RuntimeError("secret database diagnostic")
+
+    reader = RepositoryRiskSourceReader()
+    reader._assessments = FailingAssessmentRepository()
+    result = await Risk360Provider(sources=reader).project(
+        _request(), await _context(_available_registry())
+    )
+
+    by_id = {section.id: section for section in result.sections}
+    assert by_id["summary"].state == "degraded"
+    assert by_id["state"].state == "degraded"
+    assert by_id["findings"].state == "degraded"
+    assert "secret database diagnostic" not in result.model_dump_json()
+
+
+@pytest.mark.asyncio
+async def test_repository_assessment_scan_over_bound_is_degraded() -> None:
+    class OverLimitAssessmentRepository:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            assert limit == 51
+            return [
+                _assessment(f"assessment-{index}").model_dump(mode="json") for index in range(51)
+            ]
+
+    reader = RepositoryRiskSourceReader()
+    reader._assessments = OverLimitAssessmentRepository()
+    result = await Risk360Provider(sources=reader).project(
+        _request(), await _context(_available_registry())
+    )
+
+    by_id = {section.id: section for section in result.sections}
+    assert by_id["summary"].state == "degraded"
+    assert by_id["state"].state == "degraded"
+    assert by_id["findings"].state == "degraded"
+    assert by_id["findings"].content["assessmentId"] is None
+
+
+@pytest.mark.asyncio
+async def test_signal_scope_mismatch_and_truncation_degrade_health() -> None:
+    assessment = _assessment()
+    mismatched = _signal("wrong-tenant", "tenant-other").model_dump(mode="json")
+    mismatch_result = await Risk360Provider(
+        sources=_FakeReader(assessment=assessment.model_dump(mode="json"), signals=[mismatched])  # type: ignore[arg-type]
+    ).project(_request(), await _context(_available_registry()))
+    assert next(s for s in mismatch_result.sections if s.id == "health").state == "degraded"
+
+    too_many = [
+        _signal(f"signal-{index}", TENANT_A).model_dump(mode="json") for index in range(101)
+    ]
+    truncated_result = await Risk360Provider(
+        sources=_FakeReader(assessment=assessment.model_dump(mode="json"), signals=too_many)  # type: ignore[arg-type]
+    ).project(_request(), await _context(_available_registry()))
+    health = next(s for s in truncated_result.sections if s.id == "health")
+    assert health.state == "degraded"
+    assert health.content["signalSources"] == {}
+
+
+@pytest.mark.asyncio
+async def test_agent_signal_context_preserves_observation_and_inferred_risk_state() -> None:
+    agent_id = "agent-risk-context"
+    observed_at = datetime(2026, 10, 18, 12, 30, tzinfo=timezone.utc)
+    ref = EvidenceRef(
+        id="ev-agent-risk-context",
+        type="relationship",
+        source="aether.fraud.detector.delegation",
+        observedAt=observed_at.isoformat(),
+        uri="aether://fraud-networks/network-agent/evidence?signal=agentic_delegation_abuse",
+    )
+    assessment = RiskAssessment(
+        assessment_id="ras-agent-risk-context",
+        tenant_id=TENANT_A,
+        subject_kind="agent",
+        subject_id=agent_id,
+        dimensions=["agentic"],
+        vector=RiskVector(
+            components=[
+                RiskComponent(
+                    dimension="agentic",
+                    state=ValueState.INSUFFICIENT_DATA,
+                    claim_state=EpistemicStatus.UNKNOWN,
+                    evidence_refs=[ref],
+                )
+            ]
+        ),
+        claim_state=EpistemicStatus.DERIVED,
+        evidence_refs=[ref],
+        assessed_at=observed_at,
+    )
+    signal = RiskSignal(
+        signal_id="sig-agent-risk-context",
+        tenant_id=TENANT_A,
+        subject_kind="agent",
+        subject_id=agent_id,
+        risk_dimension="agentic",
+        claim_state=EpistemicStatus.INFERRED,
+        confidence=0.78,
+        evidence_refs=[ref],
+        source="aether.fraud.detector.delegation",
+        observed_at=observed_at,
+        score=None,
+    )
+    request = _request(subject=ProjectionSubject(kind="agent", id=agent_id))
+    provider = Risk360Provider(
+        sources=_FakeReader(
+            assessment=assessment.model_dump(mode="json"),
+            signals=[signal.model_dump(mode="json")],
+        )  # type: ignore[arg-type]
+    )
+
+    result = await provider.project(request, await _context(_available_registry()))
+
+    health = next(section for section in result.sections if section.id == "health")
+    assert health.state == "available"
+    context = health.content["signalContext"]
+    assert len(context) == 1
+    assert context[0]["signalId"] == signal.signal_id
+    assert context[0]["dimension"] == "agentic"
+    assert context[0]["claimState"] == EpistemicStatus.INFERRED.value
+    assert context[0]["observedAt"] == observed_at.isoformat()
+    assert context[0]["score"] is None
+    assert context[0]["evidenceRefs"] == [ref.model_dump(mode="json")]
+
+    claims = {claim.id: claim for claim in result.claims}
+    assert claims[f"risk360.signal.{signal.signal_id}"].claimState == EpistemicStatus.INFERRED
+    assert claims[f"risk360.signal.{signal.signal_id}"].evidenceRefs == [ref]
+    assert (
+        claims["risk360.health.aether.fraud.detector.delegation"].claimState
+        == EpistemicStatus.OBSERVED
+    )
+    state = next(section for section in result.sections if section.id == "state")
+    agentic = next(row for row in state.content["dimensionStates"] if row["dimension"] == "agentic")
+    assert agentic["state"] == ValueState.INSUFFICIENT_DATA.value
+    assert agentic["score"] is None
+
+
+@pytest.mark.asyncio
+async def test_reader_marks_same_tenant_rows_for_a_different_subject_degraded() -> None:
+    # Same ID but another kind is not the requested Agent assessment; the
+    # signal has the right kind but another ID. Neither can leak via a reader
+    # implementation that ignores its subject arguments, and the incomplete
+    # exact-subject read must not be mistaken for an ordinary missing result.
+    assessment = _assessment("wrong-kind", TENANT_A, subject_id="usr_1")
+    other_agent_signal = RiskSignal(
+        signal_id="sig-other-agent",
+        tenant_id=TENANT_A,
+        subject_kind="agent",
+        subject_id="agent-other",
+        risk_dimension="agentic",
+        claim_state=EpistemicStatus.INFERRED,
+        evidence_refs=[_evidence("ev-other-agent")],
+        source="fraud.agentic",
+    )
+    request = _request(subject=ProjectionSubject(kind="agent", id="usr_1"))
+    provider = Risk360Provider(
+        sources=_FakeReader(
+            assessment=assessment.model_dump(mode="json"),
+            signals=[other_agent_signal.model_dump(mode="json")],
+        )  # type: ignore[arg-type]
+    )
+
+    result = await provider.project(request, await _context(_available_registry()))
+
+    by_id = {section.id: section for section in result.sections}
+    assert by_id["summary"].state == "degraded"
+    assert by_id["state"].state == "degraded"
+    assert by_id["evidence"].state == "empty"
+    assert by_id["findings"].state == "degraded"
+    assert by_id["health"].state == "degraded"
+    assert result.claims == []
+    assert "wrong-kind" not in result.model_dump_json()
+    assert "other-agent" not in result.model_dump_json()
+
+
+@pytest.mark.asyncio
 async def test_result_never_raises_projection_error_from_backing_source() -> None:
     provider = Risk360Provider(
         sources=_FakeReader(raise_assessment=True, raise_signals=True)  # type: ignore[arg-type]
@@ -581,7 +766,9 @@ async def test_missing_dependencies_recorded_and_echoed_in_dependency_state() ->
     reg = ProviderRegistry()  # nothing registered -> all siblings "missing"
     context = await _context(reg)
     assert {d.projectionId for d in context.dependencyState} == {
-        "profile360", "cluster360", "economic360",
+        "profile360",
+        "cluster360",
+        "economic360",
     }
     assert all(d.state == "missing" for d in context.dependencyState)
 
@@ -603,7 +790,11 @@ async def test_profile360_missing_degrades_summary_only() -> None:
     # profile360 intentionally NOT registered -> summary's dependency is missing.
     context = await _context(reg)
     by_dep = {d.projectionId: d.state for d in context.dependencyState}
-    assert by_dep == {"cluster360": "available", "economic360": "available", "profile360": "missing"}
+    assert by_dep == {
+        "cluster360": "available",
+        "economic360": "available",
+        "profile360": "missing",
+    }
 
     provider = Risk360Provider()
     result = await provider.project(_request(), context)
@@ -623,7 +814,11 @@ async def test_cluster360_missing_degrades_state_only() -> None:
     # cluster360 intentionally NOT registered -> state's dependency is missing.
     context = await _context(reg)
     by_dep = {d.projectionId: d.state for d in context.dependencyState}
-    assert by_dep == {"cluster360": "missing", "economic360": "available", "profile360": "available"}
+    assert by_dep == {
+        "cluster360": "missing",
+        "economic360": "available",
+        "profile360": "available",
+    }
 
     provider = Risk360Provider()
     result = await provider.project(_request(), context)
@@ -697,8 +892,16 @@ async def test_provider_result_conforms_to_extra_forbid() -> None:
 
 def test_provider_surface_exposes_no_mutation_method() -> None:
     write_verbs = (
-        "create", "insert", "upsert", "write", "update",
-        "delete", "remove", "mutate", "put", "post",
+        "create",
+        "insert",
+        "upsert",
+        "write",
+        "update",
+        "delete",
+        "remove",
+        "mutate",
+        "put",
+        "post",
     )
     for cls in (Risk360Provider, RepositoryRiskSourceReader):
         for name in dir(cls):
@@ -748,6 +951,13 @@ def test_build_projection_request_is_strict() -> None:
     assert request.projectionId == "risk360"
     assert request.tenantId == TENANT_A
     assert request.subject.kind == "relationship"
+
+    source_request = build_projection_request(
+        projection_id="risk360",
+        tenant_id=TENANT_A,
+        subject=ProjectionSubject(kind="source", id="provider:crm"),
+    )
+    assert source_request.subject.kind == "source"
 
 
 def test_route_router_exposes_the_read_only_surface() -> None:

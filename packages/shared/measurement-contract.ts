@@ -9,33 +9,36 @@
 
       /** Canonical metric names the measurement plane knows how to report. */
       export type MetricName =
-        | 'attributed_conversions'
-| 'campaign_cac'
-| 'campaign_ltv'
-| 'campaign_roas'
-| 'campaign_spend'
-| 'claim_retention_rate'
-| 'citation_retention_rate'
-| 'contradiction_rate'
-| 'conversion_rate'
-| 'costs'
-| 'email_click_rate'
-| 'email_open_rate'
-| 'email_reply_rate'
-| 'evidence_retention_rate'
-| 'exposure'
-| 'gross_value'
-| 'journey_completion_rate'
-| 'ltv'
-| 'machine_event_rate'
-| 'margin'
-| 'net_value'
-| 'omission_rate'
-| 'refunds'
-| 'revenue'
-| 'semantic_drift'
-| 'touchpoints'
-| 'unsupported_addition_rate'
+        | "agent_execution_cost"
+| "ai_execution_cost"
+| "attributed_conversions"
+| "campaign_cac"
+| "campaign_ltv"
+| "campaign_roas"
+| "campaign_spend"
+| "citation_retention_rate"
+| "claim_retention_rate"
+| "contradiction_rate"
+| "conversion_rate"
+| "costs"
+| "email_click_rate"
+| "email_open_rate"
+| "email_reply_rate"
+| "entity_execution_cost"
+| "evidence_retention_rate"
+| "exposure"
+| "gross_value"
+| "journey_completion_rate"
+| "ltv"
+| "machine_event_rate"
+| "margin"
+| "net_value"
+| "omission_rate"
+| "refunds"
+| "revenue"
+| "semantic_drift"
+| "touchpoints"
+| "unsupported_addition_rate"
         ;
 
       /** Definition of a single measurable metric. */
@@ -53,270 +56,300 @@
       /** Every registered metric definition, keyed positionally by MetricName. */
       export const metricDefinitions: readonly MetricDefinition[] = [
         {
-  name: 'attributed_conversions',
-  version: '1',
-  unit: 'count',
-  description: 'Conversions credited under the active attribution model.',
+  name: "agent_execution_cost",
+  version: "1",
+  unit: "usd",
+  description: "Observed operating cost of an agent's executions, normalized to USD only when supported by the source evidence.",
   lower: 0,
   upper: null,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'campaign_cac',
-  version: '1',
-  unit: 'usd',
-  description: 'Customer acquisition cost for a campaign.',
+  name: "ai_execution_cost",
+  version: "1",
+  unit: "usd",
+  description: "Observed AI execution operating cost explicitly scoped to a campaign, normalized to USD only when supported by the source evidence.",
   lower: 0,
   upper: null,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'campaign_ltv',
-  version: '1',
-  unit: 'usd',
-  description: 'Customer lifetime value attributed to a campaign.',
+  name: "attributed_conversions",
+  version: "1",
+  unit: "count",
+  description: "Conversions credited under the active attribution model.",
   lower: 0,
   upper: null,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'campaign_roas',
-  version: '1',
-  unit: 'ratio',
-  description: 'Return on ad spend for a campaign.',
+  name: "campaign_cac",
+  version: "1",
+  unit: "usd",
+  description: "Customer acquisition cost for a campaign.",
   lower: 0,
   upper: null,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'campaign_spend',
-  version: '1',
-  unit: 'usd',
-  description: 'Media and allocated cost spent on a campaign.',
+  name: "campaign_ltv",
+  version: "1",
+  unit: "usd",
+  description: "Customer lifetime value attributed to a campaign.",
   lower: 0,
   upper: null,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'claim_retention_rate',
-  version: '1',
-  unit: 'ratio',
-  description: 'Share of source claims retained across an information transformation chain.',
+  name: "campaign_roas",
+  version: "1",
+  unit: "ratio",
+  description: "Return on ad spend for a campaign.",
+  lower: 0,
+  upper: null,
+  allowsProbability: false,
+  minSample: 1,
+},
+{
+  name: "campaign_spend",
+  version: "1",
+  unit: "usd",
+  description: "Media and allocated cost spent on a campaign.",
+  lower: 0,
+  upper: null,
+  allowsProbability: false,
+  minSample: 1,
+},
+{
+  name: "citation_retention_rate",
+  version: "1",
+  unit: "ratio",
+  description: "Share of source citations retained across an information transformation chain.",
   lower: 0,
   upper: 1,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'citation_retention_rate',
-  version: '1',
-  unit: 'ratio',
-  description: 'Share of source citations retained across an information transformation chain.',
+  name: "claim_retention_rate",
+  version: "1",
+  unit: "ratio",
+  description: "Share of source claims retained across an information transformation chain.",
   lower: 0,
   upper: 1,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'contradiction_rate',
-  version: '1',
-  unit: 'ratio',
-  description: 'Share of source claims contradicted across an information transformation chain.',
+  name: "contradiction_rate",
+  version: "1",
+  unit: "ratio",
+  description: "Share of source claims contradicted across an information transformation chain.",
   lower: 0,
   upper: 1,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'conversion_rate',
-  version: '1',
-  unit: 'ratio',
-  description: 'Share of journeys that reached a conversion.',
+  name: "conversion_rate",
+  version: "1",
+  unit: "ratio",
+  description: "Share of journeys that reached a conversion.",
   lower: 0,
   upper: 1,
   allowsProbability: false,
   minSample: 30,
 },
 {
-  name: 'costs',
-  version: '1',
-  unit: 'usd',
-  description: 'Total costs incurred over the measurement window.',
+  name: "costs",
+  version: "1",
+  unit: "usd",
+  description: "Total costs incurred over the measurement window.",
   lower: null,
   upper: null,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'email_click_rate',
-  version: '1',
-  unit: 'ratio',
-  description: 'Share of delivered campaign messages with a qualified click.',
+  name: "email_click_rate",
+  version: "1",
+  unit: "ratio",
+  description: "Share of delivered campaign messages with a qualified click.",
   lower: 0,
   upper: 1,
   allowsProbability: false,
   minSample: 30,
 },
 {
-  name: 'email_open_rate',
-  version: '1',
-  unit: 'ratio',
-  description: 'Share of delivered campaign messages with a qualified open.',
+  name: "email_open_rate",
+  version: "1",
+  unit: "ratio",
+  description: "Share of delivered campaign messages with a qualified open.",
   lower: 0,
   upper: 1,
   allowsProbability: false,
   minSample: 30,
 },
 {
-  name: 'email_reply_rate',
-  version: '1',
-  unit: 'ratio',
-  description: 'Share of delivered campaign messages with a human reply.',
+  name: "email_reply_rate",
+  version: "1",
+  unit: "ratio",
+  description: "Share of delivered campaign messages with a human reply.",
   lower: 0,
   upper: 1,
   allowsProbability: false,
   minSample: 30,
 },
 {
-  name: 'evidence_retention_rate',
-  version: '1',
-  unit: 'ratio',
-  description: 'Share of source evidence references retained across an information transformation chain.',
+  name: "entity_execution_cost",
+  version: "1",
+  unit: "usd",
+  description: "Observed AI execution operating cost explicitly scoped to an entity, normalized to USD only when supported by the source evidence.",
+  lower: 0,
+  upper: null,
+  allowsProbability: false,
+  minSample: 1,
+},
+{
+  name: "evidence_retention_rate",
+  version: "1",
+  unit: "ratio",
+  description: "Share of source evidence references retained across an information transformation chain.",
   lower: 0,
   upper: 1,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'exposure',
-  version: '1',
-  unit: 'usd',
-  description: 'Observed economic exposure over the measurement window.',
+  name: "exposure",
+  version: "1",
+  unit: "usd",
+  description: "Observed economic exposure over the measurement window.",
   lower: null,
   upper: null,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'gross_value',
-  version: '1',
-  unit: 'usd',
-  description: 'Gross economic value observed over the window.',
+  name: "gross_value",
+  version: "1",
+  unit: "usd",
+  description: "Gross economic value observed over the window.",
   lower: null,
   upper: null,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'journey_completion_rate',
-  version: '1',
-  unit: 'ratio',
-  description: 'Share of started journeys that completed.',
+  name: "journey_completion_rate",
+  version: "1",
+  unit: "ratio",
+  description: "Share of started journeys that completed.",
   lower: 0,
   upper: 1,
   allowsProbability: false,
   minSample: 20,
 },
 {
-  name: 'ltv',
-  version: '1',
-  unit: 'usd',
-  description: 'Customer lifetime value over the measurement window.',
+  name: "ltv",
+  version: "1",
+  unit: "usd",
+  description: "Customer lifetime value over the measurement window.",
   lower: null,
   upper: null,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'machine_event_rate',
-  version: '1',
-  unit: 'ratio',
-  description: 'Share of campaign communication events classified as machine generated.',
+  name: "machine_event_rate",
+  version: "1",
+  unit: "ratio",
+  description: "Share of campaign communication events classified as machine generated.",
   lower: 0,
   upper: 1,
   allowsProbability: false,
   minSample: 30,
 },
 {
-  name: 'margin',
-  version: '1',
-  unit: 'ratio',
-  description: 'Profit margin ratio over the measurement window.',
+  name: "margin",
+  version: "1",
+  unit: "ratio",
+  description: "Profit margin ratio over the measurement window.",
   lower: null,
   upper: null,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'net_value',
-  version: '1',
-  unit: 'usd',
-  description: 'Net economic value observed over the window.',
+  name: "net_value",
+  version: "1",
+  unit: "usd",
+  description: "Net economic value observed over the window.",
   lower: null,
   upper: null,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'omission_rate',
-  version: '1',
-  unit: 'ratio',
-  description: 'Share of source claims omitted across an information transformation chain.',
+  name: "omission_rate",
+  version: "1",
+  unit: "ratio",
+  description: "Share of source claims omitted across an information transformation chain.",
   lower: 0,
   upper: 1,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'refunds',
-  version: '1',
-  unit: 'usd',
-  description: 'Refunds issued over the measurement window.',
+  name: "refunds",
+  version: "1",
+  unit: "usd",
+  description: "Refunds issued over the measurement window.",
   lower: null,
   upper: null,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'revenue',
-  version: '1',
-  unit: 'currency',
-  description: 'Attributed revenue over the measurement window.',
+  name: "revenue",
+  version: "1",
+  unit: "currency",
+  description: "Attributed revenue over the measurement window.",
   lower: 0,
   upper: null,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'semantic_drift',
-  version: '1',
-  unit: 'ratio',
-  description: 'Normalized semantic drift between source and derived information.',
+  name: "semantic_drift",
+  version: "1",
+  unit: "ratio",
+  description: "Normalized semantic drift between source and derived information.",
   lower: 0,
   upper: 1,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'touchpoints',
-  version: '1',
-  unit: 'count',
-  description: 'Distinct marketing touchpoints observed in the window.',
+  name: "touchpoints",
+  version: "1",
+  unit: "count",
+  description: "Distinct marketing touchpoints observed in the window.",
   lower: 0,
   upper: null,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'unsupported_addition_rate',
-  version: '1',
-  unit: 'ratio',
-  description: 'Share of added claims lacking supporting citation across an information transformation chain.',
+  name: "unsupported_addition_rate",
+  version: "1",
+  unit: "ratio",
+  description: "Share of added claims lacking supporting citation across an information transformation chain.",
   lower: 0,
   upper: 1,
   allowsProbability: false,

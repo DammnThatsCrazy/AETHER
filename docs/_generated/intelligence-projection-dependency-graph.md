@@ -99,6 +99,8 @@ flowchart LR
   social360 -.-> profile360
   social360 -.-> relationship360
   source360 --> upr
+  support360 --> contract_spine
+  support360 --> temporal_kernel
   temporal360 --> contract_spine
   temporal360 --> graph_history_replay
 ```

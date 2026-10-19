@@ -29,7 +29,7 @@ AI_WORKFLOW_ECONOMICS_STORE = "ai_workflow_economics"
 
 _FILTERABLE_FIELDS = (
     "workflow_run_id", "provider", "model", "task_type", "status",
-    "cost_basis", "agent_id", "campaign_id",
+    "cost_basis", "agent_id", "campaign_id", "entity_id",
 )
 
 

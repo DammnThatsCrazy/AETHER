@@ -150,6 +150,17 @@
       "supportsExport": true
     },
     {
+      "surfaceId": "support360",
+      "supportedFieldCategories": ["entity", "time", "source", "evidence", "truth"],
+      "supportedTemporalModes": ["window"],
+      "supportedViews": ["table", "timeline"],
+      "supportsFacets": false,
+      "supportsComparison": false,
+      "supportsSelectionSets": false,
+      "supportsSavedViews": false,
+      "supportsExport": false
+    },
+    {
       "surfaceId": "infrastructure360",
       "supportedFieldCategories": ["entity", "time", "graph", "risk", "truth"],
       "supportedTemporalModes": ["window", "as_of", "compare", "relative"],

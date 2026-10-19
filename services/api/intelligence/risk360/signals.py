@@ -250,6 +250,7 @@ class FraudNetworkSignalEvidence(BaseModel):
     signal_name: str
     entity_ids: list[str] = Field(default_factory=list)
     detail: dict[str, Any] = Field(default_factory=dict)
+    evidence_ref: Optional[EvidenceRef] = None
 
 
 class RiskEvidenceBundle(RiskContract):
@@ -347,13 +348,14 @@ def _normalize_network_evidence(
     normalized: list[dict[str, Any]] = []
     for entry in evidence or []:
         if isinstance(entry, FraudNetworkSignalEvidence):
-            normalized.append(
-                {
-                    "signal_name": entry.signal_name,
-                    "entity_ids": list(entry.entity_ids),
-                    "detail": dict(entry.detail),
-                }
-            )
+            row = {
+                "signal_name": entry.signal_name,
+                "entity_ids": list(entry.entity_ids),
+                "detail": dict(entry.detail),
+            }
+            if entry.evidence_ref is not None:
+                row["evidence_ref"] = entry.evidence_ref
+            normalized.append(row)
             continue
         if isinstance(entry, tuple) and len(entry) == 3:
             normalized.append(
@@ -365,13 +367,14 @@ def _normalize_network_evidence(
             )
             continue
         if isinstance(entry, Mapping):
-            normalized.append(
-                {
-                    "signal_name": entry.get("signal_name"),
-                    "entity_ids": list(entry.get("entity_ids") or []),
-                    "detail": dict(entry.get("detail") or {}),
-                }
-            )
+            row = {
+                "signal_name": entry.get("signal_name"),
+                "entity_ids": list(entry.get("entity_ids") or []),
+                "detail": dict(entry.get("detail") or {}),
+            }
+            if "evidence_ref" in entry:
+                row["evidence_ref"] = entry.get("evidence_ref")
+            normalized.append(row)
             continue
         raise TypeError(
             f"unrecognized fraud-network evidence entry {type(entry).__name__!r}"
@@ -416,18 +419,42 @@ def signals_from_fraud_network_evidence(
         dimension = _FRAUD_NETWORK_DIMENSIONS.get(signal_name, "relationship")
         confidence = _network_signal_confidence(signal_name)
         evidence_type = _refs_from_network_signal(signal_name).type
-        ref = EvidenceRef(
-            id=_evidence_id(
-                "fraud_network",
-                signal_name=signal_name,
-                index=index,
-                tenant_id=tenant_id,
-            ),
-            type=evidence_type,  # type: ignore[arg-type]
-            source="fraud_networks.detectors",
-            observedAt=_as_observed_at(observed_at),
-            confidence=confidence,
-        )
+        raw_ref = row.get("evidence_ref")
+        if isinstance(raw_ref, EvidenceRef):
+            ref = raw_ref
+        elif isinstance(raw_ref, Mapping):
+            try:
+                ref = EvidenceRef.model_validate(raw_ref)
+            except (TypeError, ValueError):
+                # An explicitly supplied but invalid source reference cannot be
+                # replaced with a synthetic reference without losing provenance.
+                continue
+        elif raw_ref is None:
+            ref = EvidenceRef(
+                id=_evidence_id(
+                    "fraud_network",
+                    signal_name=signal_name,
+                    index=index,
+                    tenant_id=tenant_id,
+                ),
+                type=evidence_type,  # type: ignore[arg-type]
+                source="fraud_networks.detectors",
+                observedAt=_as_observed_at(observed_at),
+                confidence=confidence,
+            )
+        else:
+            continue
+        if not ref.id.strip() or not ref.source.strip():
+            continue
+        signal_source = ref.source
+        signal_observed_at = observed_at
+        if signal_observed_at is None and ref.observedAt:
+            try:
+                signal_observed_at = datetime.fromisoformat(
+                    ref.observedAt.replace("Z", "+00:00")
+                )
+            except ValueError:
+                signal_observed_at = None
         signals.append(
             RiskSignal(
                 signal_id=_signal_id(
@@ -436,9 +463,10 @@ def signals_from_fraud_network_evidence(
                     subject_kind=subject_kind,
                     subject_id=subject_id,
                     dimension=dimension,
-                    source="fraud_networks.detectors",
+                    source=signal_source,
                     signal_name=signal_name,
                     index=index,
+                    evidence_id=ref.id,
                 ),
                 tenant_id=tenant_id,
                 subject_kind=subject_kind,
@@ -447,8 +475,8 @@ def signals_from_fraud_network_evidence(
                 claim_state=EpistemicStatus.INFERRED,
                 confidence=confidence,
                 evidence_refs=[ref],
-                source="fraud_networks.detectors",
-                observed_at=observed_at,
+                source=signal_source,
+                observed_at=signal_observed_at,
             )
         )
     return signals

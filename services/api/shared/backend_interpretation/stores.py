@@ -19,10 +19,12 @@ the classes are safe to construct and read at any time.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Any, Optional
 
 from shared.backend_interpretation.primitives import (
     EpisodeRecord,
+    OutcomeContextRef,
     OutcomeTruthRecord,
     RelationshipFact,
 )
@@ -87,9 +89,7 @@ class RelationshipFactStore(BaseTruthStore):
         return f"{tenant_id}:{fact_id}"
 
     async def upsert(self, fact: RelationshipFact) -> RelationshipFact:
-        await self._store.set(
-            self._key(fact.tenant_id, fact.fact_id), fact.model_dump(mode="json")
-        )
+        await self._store.set(self._key(fact.tenant_id, fact.fact_id), fact.model_dump(mode="json"))
         return fact
 
     async def get(self, tenant_id: str, fact_id: str) -> Optional[RelationshipFact]:
@@ -151,6 +151,38 @@ class EpisodeStore(BaseTruthStore):
                 logger.warning("Skipping non-episode row in %s", self.store_name)
         return records
 
+    async def list_page_by_tenant(
+        self,
+        tenant_id: str,
+        *,
+        limit: int,
+        cursor: Optional[str] = None,
+    ) -> "EpisodePageRead":
+        """Read one bounded tenant episode page and retain malformed-row state."""
+        if not tenant_id:
+            raise ValueError("list_page_by_tenant requires a tenant_id")
+        documents, next_cursor, truncated = await self._store.find_page(
+            limit=limit,
+            cursor=cursor,
+            key_prefix=f"{tenant_id}:",
+        )
+        records: list[EpisodeRecord] = []
+        invalid_records = False
+        for document in documents:
+            if not isinstance(document, dict) or document.get("tenant_id") != tenant_id:
+                invalid_records = True
+                continue
+            try:
+                records.append(EpisodeRecord.model_validate(document))
+            except Exception:  # noqa: BLE001 - malformed rows degrade completeness
+                invalid_records = True
+        return EpisodePageRead(
+            records=tuple(records),
+            next_cursor=next_cursor,
+            truncated=truncated,
+            invalid_records=invalid_records,
+        )
+
     async def list_for_subject(
         self, tenant_id: str, kind: str, subject_id: str
     ) -> list[EpisodeRecord]:
@@ -160,6 +192,16 @@ class EpisodeStore(BaseTruthStore):
             for r in await self.list_by_tenant(tenant_id)
             if subject_match(r.subject, kind, subject_id)
         ]
+
+
+@dataclass(frozen=True)
+class EpisodePageRead:
+    """One tenant-bounded page of validated durable episode records."""
+
+    records: tuple[EpisodeRecord, ...]
+    next_cursor: Optional[str]
+    truncated: bool
+    invalid_records: bool = False
 
 
 # ── Outcome truth (item 3) ───────────────────────────────────────────────────
@@ -223,9 +265,7 @@ class CorrelationRegistry(BaseTruthStore):
     def _key(tenant_id: str, correlation_id: str) -> str:
         return f"{tenant_id}:{correlation_id}"
 
-    async def get(
-        self, tenant_id: str, correlation_id: str
-    ) -> Optional[dict[str, Any]]:
+    async def get(self, tenant_id: str, correlation_id: str) -> Optional[dict[str, Any]]:
         return await self._get_doc(self._key(tenant_id, correlation_id))
 
     async def register(
@@ -322,6 +362,14 @@ def subject_matches_request(subject: Any, request_kind: str, request_id: str) ->
         return False
     if kind == request_kind:
         return True
+    if isinstance(subject, OutcomeContextRef):
+        # Product measurement contexts are exact references, not coarse
+        # aliases for another context that happens to reuse the same id.
+        return False
+    if request_kind == "agent":
+        # Agent is a canonical entity kind in EntityRef. Do not let a coarse
+        # agent request bind an unrelated same-id user/entity outcome row.
+        return False
     return request_kind in _PROJECTION_SUBJECT_KINDS
 
 
@@ -337,7 +385,8 @@ class OutcomeTruthStoreReader:
     instead of returning ``None``. The exact-money strings and derivation
     lineage live on the durable :class:`OutcomeTruthRecord`; the legacy
     contract's ``value: Optional[float]`` is projected from a present
-    ``value_amount`` only (never a silent 0.0).
+    ``value_amount`` only (never a silent 0.0). Agent subjects require exact
+    agent-kind EntityRef matches; a same-id user or other entity row is excluded.
     """
 
     def __init__(self, store: Optional[OutcomeTruthStore] = None) -> None:

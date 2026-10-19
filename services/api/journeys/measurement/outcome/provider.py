@@ -11,7 +11,8 @@ five registered output sections (``summary``, ``state``, ``evidence``,
 Invariants:
 
 * **Tenant-scoped end to end** — every outcome row the provider touches carries
-  ``request.tenantId``; there is no shared mutable state across tenants.
+  ``request.tenantId``; there is no shared mutable state across tenants. Agent
+  requests join durable outcomes only through an exact ``EntityRef(kind="agent")``.
 * **Pure read** — ``graphMutationPolicy`` is ``read_only``; the provider has no
   write path and never mutates canonical state.
 * **Fail-isolated** — a missing backing source (no injected store, the

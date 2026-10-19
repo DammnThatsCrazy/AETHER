@@ -12,7 +12,7 @@ source_hashes:
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
-  "services/api/actions/agent/": "sha256:fc71088a7d70afeeb1e4d7486cfdcffcb8645cf366e75e01827f57a6e445ec29"
+  "services/api/actions/agent/": "sha256:753b9b6d837785bc11dd7d23ce590168ae0448de68864cf88db2265f41a90ff5"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
@@ -79,6 +79,30 @@ source action, or prove settlement finality.
 The historical gap matrices below retain their original audit date and should
 not be read as a current inventory without this addendum and the linked
 source-of-truth documents.
+
+## 360 provider addendum (2026-10-18)
+
+The backend now mounts `POST /v1/experience360/frames` and
+`GET /v1/experience360/catalog` for the reconstructed 18-surface product
+catalog. Agent360 and Execution360 provide execution evidence; the frame runtime
+joins their output to communication, risk, economic, and outcome projections.
+It carries actor-attribution and delegation context where canonical evidence
+supports them. Tenant policy runs before provider reads. Delegation
+parties resolve only through exact tenant-scoped canonical entity rows; a
+missing or duplicate party binding leaves the authority slot unknown or
+conflicted. Event-time delegation evidence remains separate from verified
+external execution, for which there is no general server-owned receipt.
+
+All 20 technical providers register at app startup (9 `implemented`, 11
+`in_flight`). Product 360 contracts remain `reconstructed_pending_source_alignment`,
+and some required slot/subject variants have no compatible canonical provider
+path yet. Unknown, missing, and degraded states are preserved. Agent360 now
+includes observed capability reach and active invoke-grant coverage from the
+tenant-scoped catalog, installation, and delegation authorities. It does not
+decide whether a new action/resource request is authorized. Complete
+episode-to-payment references, measured outcome producers, and all-surface
+source-aligned golden coverage remain follow-on work; none is claimed by the
+mounted route or the catalog.
 
 ## Bucket 1 — Correctly observation-only
 

@@ -76,14 +76,17 @@ async def ingest_normalized_events(
             counts["skipped"] += 1
     if counts["communications"]:
         metrics.increment(
-            "comms_events_ingested_total", counts["communications"],
+            "comms_events_ingested_total",
+            counts["communications"],
             labels={"tenant_id": tenant_id, "source": data.get("source", "unknown")},
         )
     return counts
 
 
 async def _ingest_communication(
-    tenant_id: str, data: dict[str, Any], source_connector_id: Optional[str],
+    tenant_id: str,
+    data: dict[str, Any],
+    source_connector_id: Optional[str],
 ) -> bool:
     """Durable Bronze write, then bus publish (mirrors /v1/batch ordering).
 
@@ -111,38 +114,98 @@ async def _ingest_communication(
 
     properties, _ = scrub_sensitive_fields(properties)
     event_type = str(data.get("event_type") or "")
-    # subject resolvable = the canonical recipient/profile id on the event.
-    recipient = (
-        properties.get("recipient_entity_id")
-        or properties.get("profile_id")
-        or ""
+    provider = properties.get("provider") or data.get("source") or "webhook"
+    provider_account_id = properties.get("provider_account_id") or provider
+    provider_recipient_id = properties.get("provider_recipient_id")
+    provider_profile_id = properties.get("provider_profile_id") or properties.get(
+        "provider_profile"
     )
-    recipient = str(recipient).strip() or None
-    anon = str(properties.get("anonymous_id") or "").strip() or None
-    purpose = EVENT_CONSENT_PURPOSE.get(event_type)
+    recipient_identity = None
+    try:
+        from journeys.comms.identity_bridge import resolve_provider_recipient_identity
+
+        recipient_identity = await resolve_provider_recipient_identity(
+            tenant_id,
+            str(provider),
+            str(provider_account_id),
+            provider_recipient_id=(str(provider_recipient_id) if provider_recipient_id else None),
+            provider_profile_id=(str(provider_profile_id) if provider_profile_id else None),
+        )
+    except Exception:  # noqa: BLE001 - an unavailable identity link stays unknown
+        recipient_identity = None
+    canonical_recipient_id = (
+        recipient_identity.get("canonical_entity_id") if recipient_identity is not None else None
+    )
+    source_agent_id = properties.get("agent_id")
+    sender_identity = None
+    if isinstance(source_agent_id, str) and source_agent_id.strip():
+        try:
+            sender_identity = await _resolve_agent_sender_binding(
+                tenant_id, source_agent_id.strip()
+            )
+        except Exception:  # noqa: BLE001 - unresolved agent sender stays unknown
+            sender_identity = None
+
+    # Connector fields that look canonical are source claims. Drop them before
+    # creating the normalized event; only the verified bridge result below may
+    # supply a canonical recipient to downstream projectors.
+    for key in (
+        "recipient_entity_id",
+        "profile_id",
+        "sender_entity_id",
+        "consent_snapshot_id",
+        "consentSnapshotId",
+        "consent_purpose",
+        "consent_subject_id",
+        "consent_evaluation_state",
+        "consent_identity_binding_id",
+    ):
+        properties.pop(key, None)
+    if canonical_recipient_id:
+        properties["recipient_entity_id"] = canonical_recipient_id
+        properties["profile_id"] = canonical_recipient_id
+
+    mapped_purpose = EVENT_CONSENT_PURPOSE.get(event_type)
+    purpose = mapped_purpose
     if not settings.ingress_consent.connector_comms_consent_enforcement_enabled:
         # S-class server-receipt escalation disabled for this connector path:
         # fall back to the unconditional scrub + data-policy decision (no
         # per-subject lookup or purpose gate; the event is processed under C/T
         # minimization).
-        recipient = anon = purpose = None
-    allowed, reason_code, _decisions = await evaluate_ingress_decision(
+        purpose = None
+    allowed, reason_code, decisions = await evaluate_ingress_decision(
         tenant_id=tenant_id,
-        subject_id=recipient,
-        anonymous_id=anon,
+        subject_id=canonical_recipient_id,
+        anonymous_id=None,
         purpose=purpose,
         fingerprint_obj=properties,
+        include_receipt_id=True,
     )
     if not allowed:
         logger.warning(
             "comms_ingest_consent_denied event=%s tenant=%s type=%s reason=%s",
-            data.get("external_id") or data.get("id"), tenant_id, event_type,
+            data.get("external_id") or data.get("id"),
+            tenant_id,
+            event_type,
             reason_code,
         )
         return False
 
+    consent_decision = next(
+        (
+            item
+            for item in decisions
+            if item.get("control") == "consent_authority" and item.get("outcome") == "allowed"
+        ),
+        {},
+    )
+    receipt_id = consent_decision.get("receipt_id")
+    receipt_id = receipt_id if isinstance(receipt_id, str) and receipt_id else None
+    consent_recorded = bool(
+        receipt_id and canonical_recipient_id and recipient_identity is not None
+    )
+
     event_id = str(data.get("external_id") or uuid.uuid4())
-    provider = properties.get("provider") or data.get("source") or "webhook"
     # Deterministic event id namespaced by provider so replays dedupe.
     normalized = {
         "event_id": f"{provider}:{event_id}",
@@ -151,9 +214,35 @@ async def _ingest_communication(
         "event_family": "comms",
         "session_id": properties.get("session_id"),
         "anonymous_id": properties.get("anonymous_id"),
-        "user_id": properties.get("recipient_entity_id") or properties.get("profile_id"),
+        "user_id": canonical_recipient_id,
         "properties": properties,
-        "context": {"tenantId": tenant_id, "sourceConnectorId": source_connector_id},
+        "context": {
+            "tenantId": tenant_id,
+            "sourceConnectorId": source_connector_id,
+            "recipientEntityId": canonical_recipient_id,
+            "recipientIdentityBindingId": (
+                recipient_identity.get("identity_id") if recipient_identity else None
+            ),
+            "senderEntityId": (
+                sender_identity.get("canonical_entity_id") if sender_identity else None
+            ),
+            "senderIdentityBindingId": (
+                sender_identity.get("identity_evidence_id") if sender_identity else None
+            ),
+            "senderIdentityEvidenceSource": (
+                sender_identity.get("identity_evidence_source") if sender_identity else None
+            ),
+            "consentPurpose": mapped_purpose,
+            "consentEvidenceState": "recorded" if consent_recorded else "unknown",
+            "consentSnapshotId": receipt_id if consent_recorded else None,
+            "consentSubjectEntityId": (canonical_recipient_id if consent_recorded else None),
+            "consentIdentityBindingId": (
+                recipient_identity.get("identity_id")
+                if consent_recorded and recipient_identity
+                else None
+            ),
+            "consentAuthority": ("server_consent_authority" if consent_recorded else None),
+        },
         # Provider-reported occurrence time; providers that send no timestamp
         # (Mailchimp) emit the empty "unknown" sentinel — fall back to received
         # time so Bronze never stores an empty occurrence.
@@ -166,6 +255,7 @@ async def _ingest_communication(
     }
 
     from repositories.lake import BronzeRepository
+
     bronze = BronzeRepository("sdk_events")
     await bronze.ingest(
         source="connector",
@@ -181,13 +271,16 @@ async def _ingest_communication(
     try:
         from dependencies.providers import get_registry
         from shared.events.events import Event, Topic
+
         registry = get_registry()
-        await registry.producer.publish(Event(
-            topic=Topic.SDK_EVENTS_VALIDATED,
-            tenant_id=tenant_id,
-            source_service="comms.ingest",
-            payload=normalized,
-        ))
+        await registry.producer.publish(
+            Event(
+                topic=Topic.SDK_EVENTS_VALIDATED,
+                tenant_id=tenant_id,
+                source_service="comms.ingest",
+                payload=normalized,
+            )
+        )
     except Exception as exc:
         # Bronze is durable; a replay of the Bronze range recovers the publish.
         logger.warning("comms_ingest_publish_failed event=%s: %s", normalized["event_id"], exc)
@@ -199,6 +292,7 @@ async def _record_identity(tenant_id: str, data: dict[str, Any]) -> bool:
     """Record provider identity evidence into the bridge (§13). Best-effort."""
     try:
         from journeys.comms.identity_bridge import record_identity_from_event
+
         result = await record_identity_from_event(tenant_id, data)
         return result is not None
     except Exception as exc:  # pragma: no cover - never break ingest
@@ -206,10 +300,60 @@ async def _record_identity(tenant_id: str, data: dict[str, Any]) -> bool:
         return False
 
 
+async def _resolve_agent_sender_binding(
+    tenant_id: str, source_agent_ref: str
+) -> Optional[dict[str, str]]:
+    """Reuse Agent360's exact tenant deployment/binding/entity authority."""
+    from actions.agent.agent360_provider import RepositoryAgent360Source
+
+    batch = await RepositoryAgent360Source().actor_identity(tenant_id, source_agent_ref)
+    if batch.truncated or batch.scope_mismatch:
+        return None
+    rows = [
+        row
+        for row in batch.rows
+        if isinstance(row, dict)
+        and row.get("tenant_id") == tenant_id
+        and row.get("agent_id") == source_agent_ref
+    ]
+    if not rows:
+        return None
+    # A malformed matching resolution row makes the handoff unknown. Silently
+    # dropping it could make a conflicting Agent360 result look unique.
+    if any(
+        not isinstance(row.get("canonical_agent_entity_id"), str)
+        or not row["canonical_agent_entity_id"].strip()
+        or not isinstance(row.get("identity_evidence_source"), str)
+        or not row["identity_evidence_source"].strip()
+        or not isinstance(row.get("identity_evidence_id"), str)
+        or not row["identity_evidence_id"].strip()
+        for row in rows
+    ):
+        return None
+    canonical_ids = {row["canonical_agent_entity_id"] for row in rows}
+    if len(canonical_ids) != 1:
+        return None
+    canonical_id = next(iter(canonical_ids))
+    evidence = {
+        (row["identity_evidence_source"], row["identity_evidence_id"])
+        for row in rows
+        if row["canonical_agent_entity_id"] == canonical_id
+    }
+    if len(evidence) != 1:
+        return None
+    evidence_source, evidence_id = next(iter(evidence))
+    return {
+        "canonical_entity_id": canonical_id,
+        "identity_evidence_source": evidence_source,
+        "identity_evidence_id": evidence_id,
+    }
+
+
 async def _record_suppression(tenant_id: str, data: dict[str, Any]) -> None:
     """Record a canonical suppression when the event carries one. Best-effort."""
     try:
         from journeys.comms.suppression_authority import SuppressionAuthorityService
+
         await SuppressionAuthorityService().record_from_event(tenant_id, data)
     except Exception as exc:  # pragma: no cover - never break ingest
         logger.warning("comms_suppression_authority_failed: %s", exc)
@@ -219,20 +363,25 @@ async def _meter_event(tenant_id: str, data: dict[str, Any]) -> None:
     """Emit billable usage metering for one canonical event. Best-effort."""
     try:
         from journeys.comms.metering import record_event_usage
+
         props = data.get("properties") or {}
         provider = props.get("provider") or data.get("source") or "webhook"
         event_id = str(data.get("external_id") or "")
         if event_id:
             await record_event_usage(
-                tenant_id, event_type=data.get("event_type", ""),
-                event_id=f"{provider}:{event_id}", provider=provider,
+                tenant_id,
+                event_type=data.get("event_type", ""),
+                event_id=f"{provider}:{event_id}",
+                provider=provider,
             )
     except Exception as exc:  # pragma: no cover - metering never breaks ingest
         logger.warning("comms_event_metering_failed: %s", exc)
 
 
 async def _register_catalog_record(
-    tenant_id: str, data: dict[str, Any], source_connector_id: Optional[str],
+    tenant_id: str,
+    data: dict[str, Any],
+    source_connector_id: Optional[str],
 ) -> None:
     """Campaign/flow catalog record → canonical campaign registry + message dims."""
     properties = data.get("properties") or {}
@@ -246,6 +395,7 @@ async def _register_catalog_record(
         return
     try:
         from journeys.campaign.registry import CampaignRegistryService
+
         registry = CampaignRegistryService()
         campaign = await registry.upsert_external_campaign(
             tenant_id,
@@ -260,27 +410,35 @@ async def _register_catalog_record(
         # Message dimension rows ride along when the provider includes them.
         for message in properties.get("messages") or []:
             from journeys.comms.repository import CampaignMessageRepository
-            await CampaignMessageRepository().upsert_message({
-                "tenant_id": tenant_id,
-                "campaign_id": str(campaign["campaign_id"]),
-                "provider": provider,
-                "provider_account_id": properties.get("provider_account_id"),
-                "external_message_id": str(message.get("id") or message.get("external_message_id")),
-                "external_template_id": message.get("template_id"),
-                "name": message.get("name"),
-                "sequence_step": message.get("sequence_step"),
-                "variant_id": message.get("variant_id"),
-                "channel": properties.get("channel") or "email",
-                "source_connector_id": source_connector_id,
-            })
+
+            await CampaignMessageRepository().upsert_message(
+                {
+                    "tenant_id": tenant_id,
+                    "campaign_id": str(campaign["campaign_id"]),
+                    "provider": provider,
+                    "provider_account_id": properties.get("provider_account_id"),
+                    "external_message_id": str(
+                        message.get("id") or message.get("external_message_id")
+                    ),
+                    "external_template_id": message.get("template_id"),
+                    "name": message.get("name"),
+                    "sequence_step": message.get("sequence_step"),
+                    "variant_id": message.get("variant_id"),
+                    "channel": properties.get("channel") or "email",
+                    "source_connector_id": source_connector_id,
+                }
+            )
     except Exception as exc:
         logger.warning(
             "comms_catalog_register_failed provider=%s external_id=%s: %s",
-            provider, external_id, exc,
+            provider,
+            external_id,
+            exc,
         )
         metrics.increment("comms_catalog_failures_total", labels={"tenant_id": tenant_id})
 
 
 def _now() -> str:
     from datetime import datetime, timezone
+
     return datetime.now(timezone.utc).isoformat()

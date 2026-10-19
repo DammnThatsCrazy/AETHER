@@ -25,7 +25,7 @@ os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from intelligence.fraud.signals import SignalResult  # noqa: E402
-from intelligence.risk360.contracts import EpistemicStatus  # noqa: E402
+from intelligence.risk360.contracts import EvidenceRef, EpistemicStatus  # noqa: E402
 from intelligence.risk360.signals import (  # noqa: E402
     RiskEvidenceBundle,
     adapt_producer_signal,
@@ -162,6 +162,41 @@ def test_fraud_network_signal_ids_are_deterministic():
     first = signals_from_fraud_network_evidence(raw, **SUBJ)
     second = signals_from_fraud_network_evidence(raw, **SUBJ)
     assert first[0].signal_id == second[0].signal_id
+
+
+def test_fraud_network_adapter_reuses_persisted_network_evidence_ref():
+    evidence_ref = EvidenceRef(
+        id="network-evidence-17",
+        type="relationship",
+        source="aether.fraud.detector.delegation",
+        observedAt="2026-10-18T12:30:00+00:00",
+        confidence=0.78,
+        uri="aether://fraud-networks/network-1/evidence?signal=agentic_delegation_abuse",
+    )
+    signals = signals_from_fraud_network_evidence(
+        [
+            {
+                "signal_name": "agentic_delegation_abuse",
+                "entity_ids": ["agent-1", "target-1"],
+                "detail": {"agent_id": "agent-1", "target_count": 5},
+                "evidence_ref": evidence_ref,
+            }
+        ],
+        subject_kind="agent",
+        subject_id="agent-1",
+        tenant_id="ten_agent_risk",
+    )
+
+    assert len(signals) == 1
+    signal = signals[0]
+    assert signal.subject_kind == "agent"
+    assert signal.subject_id == "agent-1"
+    assert signal.risk_dimension == "agentic"
+    assert signal.claim_state == EpistemicStatus.INFERRED
+    assert signal.score is None
+    assert signal.evidence_refs == [evidence_ref]
+    assert signal.source == evidence_ref.source
+    assert signal.observed_at.isoformat() == evidence_ref.observedAt
 
 
 # ── device risk ─────────────────────────────────────────────────────────────

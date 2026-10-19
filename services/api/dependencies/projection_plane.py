@@ -2,18 +2,18 @@
 
 The plane's runtime ``projection_registry`` singleton (``shared/intelligence_projections/registry.py``)
 is deliberately NEVER mutated by provider modules at import time: each
-implemented provider exposes an explicit ``register_provider(registry)`` and
+provider exposes an explicit ``register_provider(registry)`` and
 documents that the global registry is wired by the *caller*. This module is
 that caller. The app's ``lifespan`` startup (``main.py``) invokes
-:func:`register_implemented_projection_providers` so the plane's implemented
-providers are live exactly at boot — and nowhere else.
+:func:`register_implemented_projection_providers` so the declared provider set
+is live exactly at boot — and nowhere else.
 
-The registered set is explicit and auditable: every projection whose registry
-row is ``implementationState: "implemented"`` belongs in
-:data:`IMPLEMENTED_PROJECTION_IDS`, and its provider module is added below in
-the SAME change that flips the row. A provider that is implemented but not
-listed here is not live (the phase-1 enforcement note in
-``docs/reference/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md``).
+The registered set is explicit and auditable. Fully implemented providers are
+listed in :data:`IMPLEMENTED_PROJECTION_IDS`. Concrete but incomplete
+providers can also be registered from :data:`IN_FLIGHT_PROVIDER_IDS`, so
+surface frames can expose evidence and explicit unknown/degraded states while
+the registry continues to report ``in_flight``. Registration never promotes a
+projection's implementation state or implies readiness.
 """
 
 from __future__ import annotations
@@ -29,10 +29,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# The plane's implemented projections, in registration order. When a follow-up
-# vertical slice flips a row to ``implemented`` (e.g. risk360 / fraud360 /
-# geographic360), add its provider module below and extend this tuple in the
-# same change.
+# The plane's fully implemented projections, in registration order.
 IMPLEMENTED_PROJECTION_IDS: tuple[str, ...] = (
     "economic360",
     "outcome360",
@@ -40,13 +37,38 @@ IMPLEMENTED_PROJECTION_IDS: tuple[str, ...] = (
     "temporal360",
     "population360",
     "geographic360",
+    "risk360",
+    "fraud360",
+    "communication360",
+)
+
+# Concrete providers that intentionally remain in-flight. They expose bounded
+# canonical evidence and explicit gaps; their registration does not claim that
+# every contract slot or temporal mode is complete.
+IN_FLIGHT_PROVIDER_IDS: tuple[str, ...] = (
+    "agent360",
+    "execution360",
+    "profile360",
+    "relationship360",
+    "episode360",
+    "social360",
+    "cluster360",
+    "campaign360",
+    "source360",
+    "connection360",
+    "support360",
+)
+
+REGISTERED_PROJECTION_IDS: tuple[str, ...] = (
+    *IMPLEMENTED_PROJECTION_IDS,
+    *IN_FLIGHT_PROVIDER_IDS,
 )
 
 
 def register_implemented_projection_providers(
     registry: "ProviderRegistry | None" = None,
 ) -> dict[str, str]:
-    """Register every implemented projection provider on the plane's registry.
+    """Register every declared provider on the plane's runtime registry.
 
     Defaults to the global ``projection_registry`` singleton (the app-boot call
     site); tests pass a fresh :class:`ProviderRegistry` to avoid touching the
@@ -62,7 +84,9 @@ def register_implemented_projection_providers(
     registers exactly once.
 
     Returns ``{projection_id: source}`` for everything registered on
-    ``registry``.
+    ``registry``. Provider registration is distinct from full implementation:
+    inspect ``implementationState`` in the projection contract for that
+    distinction.
     """
     if registry is None:
         from shared.intelligence_projections.registry import projection_registry
@@ -89,6 +113,46 @@ def register_implemented_projection_providers(
     from graph.geographic360.provider import (
         register_provider as _register_geographic360,
     )
+    from intelligence.risk360.provider import (
+        register_provider as _register_risk360,
+    )
+    from intelligence.fraud360.provider import (
+        register_provider as _register_fraud360,
+    )
+    from journeys.communication360.provider import (
+        register_provider as _register_communication360,
+    )
+    from actions.agent.agent360_provider import (
+        register_provider as _register_agent360,
+    )
+    from actions.agent.execution360_provider import (
+        register_provider as _register_execution360,
+    )
+    from identity.profile.profile360_provider import (
+        register_provider as _register_profile360,
+    )
+    from identity.relationship_intelligence.relationship360_provider import (
+        register_provider as _register_relationship360,
+    )
+    from journeys.measurement.episodes.provider import (
+        register_provider as _register_episode360,
+    )
+    from services.social360.provider import (
+        register_provider as _register_social360,
+    )
+    from graph.cluster.cluster360_provider import (
+        register_provider as _register_cluster360,
+    )
+    from journeys.campaign.campaign360_provider import (
+        register_provider as _register_campaign360,
+    )
+    from connectors.provider_runtime.source360_provider import (
+        register_provider as _register_source360,
+    )
+    from connectors.provider_runtime.connection360_provider import (
+        register_provider as _register_connection360,
+    )
+    from journeys.support360.provider import register_provider as _register_support360
 
     for pid, register in (
         ("economic360", _register_economic360),
@@ -97,6 +161,20 @@ def register_implemented_projection_providers(
         ("temporal360", _register_temporal360),
         ("population360", _register_population360),
         ("geographic360", _register_geographic360),
+        ("risk360", _register_risk360),
+        ("fraud360", _register_fraud360),
+        ("communication360", _register_communication360),
+        ("agent360", _register_agent360),
+        ("execution360", _register_execution360),
+        ("profile360", _register_profile360),
+        ("relationship360", _register_relationship360),
+        ("episode360", _register_episode360),
+        ("social360", _register_social360),
+        ("cluster360", _register_cluster360),
+        ("campaign360", _register_campaign360),
+        ("source360", _register_source360),
+        ("connection360", _register_connection360),
+        ("support360", _register_support360),
     ):
         if registry.get(pid) is None:
             register(registry)
@@ -106,5 +184,7 @@ def register_implemented_projection_providers(
 
 __all__ = [
     "IMPLEMENTED_PROJECTION_IDS",
+    "IN_FLIGHT_PROVIDER_IDS",
+    "REGISTERED_PROJECTION_IDS",
     "register_implemented_projection_providers",
 ]

@@ -117,7 +117,15 @@ async def test_episode360_provider_renders_sections(wsd_flags):
     result = await provider.project(request, context)
     assert result.projectionId == "episode360"
     by_id = {s.id: s for s in result.sections}
-    assert set(by_id) == {"evidence", "interactions", "outcomes", "state", "summary", "timeline"}
+    assert set(by_id) == {
+        "evidence",
+        "episode_context",
+        "interactions",
+        "outcomes",
+        "state",
+        "summary",
+        "timeline",
+    }
     assert by_id["summary"].state == "available"
     assert by_id["summary"].content["episodeCount"] == 1
     assert by_id["outcomes"].content["outcomeIds"] == ["oc-1"]
@@ -150,4 +158,11 @@ async def test_episode360_provider_empty_store_is_typed_empty(wsd_flags):
     )
     result = await provider.project(request, context)
     assert result.sections
-    assert all(s.state == "empty" for s in result.sections)
+    by_id = {section.id: section for section in result.sections}
+    assert all(
+        section.state == "empty"
+        for section in result.sections
+        if section.id != "episode_context"
+    )
+    assert by_id["episode_context"].state == "unknown"
+    assert by_id["episode_context"].content["coverage"] == "unknown"

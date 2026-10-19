@@ -1,7 +1,7 @@
 """Unit tests for the Phase-3 canonical Communication360 contract surface.
 
 The authoritative surface is ``services/api/journeys/communication360/contracts.py`` and its
-``__all__`` (27 names: 21 pydantic model families + the 6 Phase-2 vocab enums).
+``__all__`` (28 names: 22 pydantic model families + the 6 Phase-2 vocab enums).
 These tests enforce the parity/alignment obligations:
 
 * every model family constructs with its required fields and round-trips
@@ -62,6 +62,7 @@ _MODEL_SAMPLES: dict[str, dict] = {
             "tenant_id": "tenant-a",
         },
     },
+    "CommunicationConsentEvidence": {},
     "InformationTransformation": {
         "transformation_id": "tx-1",
         "tenant_id": "tenant-a",
@@ -186,10 +187,10 @@ def _enum_vocabularies():
 
 
 def test_surface_composition() -> None:
-    assert len(contracts_mod.__all__) == 27
+    assert len(contracts_mod.__all__) == 28
     model_names = [n for n, _ in _model_families()]
     enum_names = [n for n, _ in _enum_vocabularies()]
-    assert len(model_names) == 21
+    assert len(model_names) == 22
     assert len(enum_names) == 6
     assert set(model_names) | set(enum_names) == set(contracts_mod.__all__)
 

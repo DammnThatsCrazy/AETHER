@@ -10,7 +10,7 @@ source_files: [services/api/connectors/integrations/connectors/klaviyo.py, servi
 source_hashes:
   "services/api/alembic/versions/20260703_comms_intelligence.py": "sha256:651ee8f17a6e86e00d49d09cdbc0041d525682817851af1368576984c27fec76"
   "services/api/connectors/integrations/connectors/klaviyo.py": "sha256:4255adaf7e0669b8e7d75a632a331fd85ce16696ccfbc8511dba1c37d8539aea"
-  "services/api/journeys/comms/ingest.py": "sha256:5d3bb421d821198b564cd5ad5faa940d4de4de334711c186043366bf2623ad68"
+  "services/api/journeys/comms/ingest.py": "sha256:ec0bcf7c4e6b9fe903ca9f85cc08bf6b07feb40ff762cd7bad0e72aedcb27892"
 ---
 
 # Communications Backfill & Replay Runbook
@@ -68,6 +68,11 @@ await CommunicationStateService().rebuild_for_entity(tenant_id, entity_id)
 
 Run after identity merges/splits, consent changes, DSR erasure, or any
 suspected drift. Rebuilds are idempotent.
+
+When a connector-originated event is replayed, the server-owned identity and
+consent bridge remains authoritative. Provider-supplied canonical entity IDs
+and consent fields are not restored as authority; missing or non-matching
+bindings remain unresolved or unknown after replay.
 
 ## Rollback
 

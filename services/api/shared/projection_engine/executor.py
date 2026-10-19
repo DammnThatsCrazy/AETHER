@@ -113,6 +113,7 @@ class ProjectionExecutor:
             subject=ir.subject,
             page=ir.page,
             timeRange=ir.time_range,
+            asOf=ir.as_of,
             includeSections=list(ir.requested_sections) if ir.requested_sections else None,
             includeClaims=ir.requested_claims or None,
             lensIds=list(ir.lens_ids) if node.role == "target" else None,
