@@ -98,12 +98,14 @@ checks:
     command: [python, scripts/validate_frontend_reachability.py]
     runtime_budget_seconds: 10
   # A new settings field, a deleted reader, or a change to the allowlist can each
-  # leave a flag that nothing reads, so this runs in every PR-lane plan too.
+  # leave a flag that nothing reads, so this runs in every PR-lane plan too. The
+  # validator parses production Python across the repo and needs more headroom on
+  # cold hosted runners than the previous 30-second budget allowed.
   settings_flags:
     owner: platform
     risk: high
     command: [python, scripts/validate_settings_flags.py]
-    runtime_budget_seconds: 30
+    runtime_budget_seconds: 60
   # Any backend change can orphan a module, and any ledger change can strand an
   # allowlist row, so the reachability check also runs in every PR-lane plan.
   backend_reachability:
