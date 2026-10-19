@@ -11,6 +11,9 @@ owns ``population360`` (Phase 3) rather than shadowing ``comparison_workbench``
 (deferred) or ``cluster360`` (already owned by ``ClusterSurfaceAdapter``); the
 WHERE leaf owns ``geographic360`` (Phase 4) rather than shadowing ``geo``
 (already owned by the graph-plane ``GeoSurfaceAdapter``).
+
+Support360 owns its explicitly scoped support-evidence adapter; its provider
+does not infer canonical case, journey, or outcome state.
 """
 
 from __future__ import annotations
@@ -37,6 +40,7 @@ from journeys.exploration.adapters.projection import (
     Population360SurfaceAdapter,
     Risk360SurfaceAdapter,
     Social360SurfaceAdapter,
+    Support360SurfaceAdapter,
     Temporal360SurfaceAdapter,
 )
 from journeys.exploration.adapters.timeline import TimelineSurfaceAdapter
@@ -54,6 +58,7 @@ _ADAPTER_TYPES: tuple[type[SurfaceAdapter], ...] = (
     Temporal360SurfaceAdapter,
     Population360SurfaceAdapter,
     Geographic360SurfaceAdapter,
+    Support360SurfaceAdapter,
     Social360SurfaceAdapter,
     Risk360SurfaceAdapter,
     Fraud360SurfaceAdapter,

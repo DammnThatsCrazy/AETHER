@@ -30,8 +30,7 @@ _local_links: dict[str, dict[str, Any]] = {}
 
 def reset_local_stores() -> None:
     """Test helper — clears all in-memory fallbacks."""
-    for store in (_local_facts, _local_state, _local_suppressions,
-                  _local_messages, _local_links):
+    for store in (_local_facts, _local_state, _local_suppressions, _local_messages, _local_links):
         store.clear()
 
 
@@ -46,29 +45,87 @@ def _decode_cursor(cursor: str) -> tuple[str, str]:
 
 
 _FACT_COLUMNS: tuple[str, ...] = (
-    "fact_id", "tenant_id", "source_event_id", "source_event_type",
-    "actor_id", "user_id", "anonymous_id", "org_id", "occurred_at",
-    "received_at", "consent_snapshot_id", "privacy_class", "idempotency_key",
-    "payload", "comms_type", "channel", "campaign_id", "message_id",
-    "support_case_id", "deliverability",
-    "provider", "provider_account_id", "provider_event_id",
-    "source_connector_id", "direction", "message_category",
-    "communication_state", "journey_role", "actor_kind",
-    "sender_entity_id", "recipient_entity_id", "recipient_alias_id",
-    "recipient_display", "recipient_is_shared_mailbox", "profile_id",
-    "cluster_id", "organization_id", "agent_id", "external_campaign_id",
-    "external_flow_id", "external_message_id", "external_thread_id",
-    "external_template_id", "sequence_step", "variant_id", "link_id",
-    "link_url_hash", "audience_id", "segment_id", "delivery_status",
-    "bounce_type", "suppression_scope", "unsubscribe_scope",
-    "engagement_type", "engagement_confidence", "engagement_strength",
-    "machine_activity_probability", "suspected_machine_activity",
-    "automated_response_kind", "classifier_version",
-    "identity_resolution_method", "identity_confidence",
-    "campaign_resolution_method", "campaign_resolution_confidence",
-    "campaign_resolution_status", "campaign_resolution_version",
-    "raw_evidence_ref", "evidence_ids", "provenance",
-    "canonical_activity_key", "schema_version",
+    "fact_id",
+    "tenant_id",
+    "source_event_id",
+    "source_event_type",
+    "actor_id",
+    "user_id",
+    "anonymous_id",
+    "org_id",
+    "occurred_at",
+    "received_at",
+    "consent_snapshot_id",
+    "consent_purpose",
+    "consent_subject_id",
+    "consent_evaluation_state",
+    "consent_identity_binding_id",
+    "consent_authority",
+    "privacy_class",
+    "idempotency_key",
+    "payload",
+    "comms_type",
+    "channel",
+    "campaign_id",
+    "message_id",
+    "support_case_id",
+    "deliverability",
+    "provider",
+    "provider_account_id",
+    "provider_event_id",
+    "provider_recipient_id",
+    "provider_profile_id",
+    "source_connector_id",
+    "direction",
+    "message_category",
+    "communication_state",
+    "journey_role",
+    "actor_kind",
+    "sender_entity_id",
+    "sender_identity_binding_id",
+    "sender_identity_evidence_source",
+    "recipient_entity_id",
+    "recipient_identity_binding_id",
+    "recipient_alias_id",
+    "recipient_display",
+    "recipient_is_shared_mailbox",
+    "profile_id",
+    "cluster_id",
+    "organization_id",
+    "agent_id",
+    "external_campaign_id",
+    "external_flow_id",
+    "external_message_id",
+    "external_thread_id",
+    "external_template_id",
+    "sequence_step",
+    "variant_id",
+    "link_id",
+    "link_url_hash",
+    "audience_id",
+    "segment_id",
+    "delivery_status",
+    "bounce_type",
+    "suppression_scope",
+    "unsubscribe_scope",
+    "engagement_type",
+    "engagement_confidence",
+    "engagement_strength",
+    "machine_activity_probability",
+    "suspected_machine_activity",
+    "automated_response_kind",
+    "classifier_version",
+    "identity_resolution_method",
+    "identity_confidence",
+    "campaign_resolution_method",
+    "campaign_resolution_confidence",
+    "campaign_resolution_status",
+    "campaign_resolution_version",
+    "raw_evidence_ref",
+    "evidence_ids",
+    "provenance",
+    "canonical_activity_key",
+    "schema_version",
 )
 
 _JSON_COLUMNS = {"payload", "provenance"}
@@ -95,7 +152,7 @@ class CommsFactsRepository:
             return _local_facts[key]
 
         cols = [c for c in _FACT_COLUMNS if c in row]
-        placeholders = ", ".join(f"${i+1}" for i in range(len(cols)))
+        placeholders = ", ".join(f"${i + 1}" for i in range(len(cols)))
         values = [
             json.dumps(row[c]) if c in _JSON_COLUMNS and row[c] is not None else row[c]
             for c in cols
@@ -103,7 +160,7 @@ class CommsFactsRepository:
         async with pool.acquire() as conn:
             await conn.execute(
                 f"""
-                INSERT INTO silver_comms_facts ({', '.join(cols)})
+                INSERT INTO silver_comms_facts ({", ".join(cols)})
                 VALUES ({placeholders})
                 ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
                 """,
@@ -134,31 +191,45 @@ class CommsFactsRepository:
         pool = await self._pool()
         if pool is None:
             rows = [
-                r for r in _local_facts.values()
+                r
+                for r in _local_facts.values()
                 if r.get("tenant_id") == tenant_id
-                and entity_id in (r.get("profile_id"), r.get("recipient_entity_id"),
-                                  r.get("user_id"))
+                and entity_id
+                in (r.get("profile_id"), r.get("recipient_entity_id"), r.get("user_id"))
             ]
             rows = _apply_local_filters(
-                rows, channel=channel, category=category, direction=direction,
-                campaign_id=campaign_id, external_message_id=external_message_id,
-                state=state, human_qualified=human_qualified,
-                after=after, before=before,
+                rows,
+                channel=channel,
+                category=category,
+                direction=direction,
+                campaign_id=campaign_id,
+                external_message_id=external_message_id,
+                state=state,
+                human_qualified=human_qualified,
+                after=after,
+                before=before,
             )
             rows.sort(key=lambda r: str(r.get("occurred_at") or ""), reverse=True)
             if cursor:
                 c_at, c_key = _decode_cursor(cursor)
-                rows = [r for r in rows if str(r.get("occurred_at")) < c_at
-                        or (str(r.get("occurred_at")) == c_at and str(r.get("fact_id")) < c_key)]
+                rows = [
+                    r
+                    for r in rows
+                    if str(r.get("occurred_at")) < c_at
+                    or (str(r.get("occurred_at")) == c_at and str(r.get("fact_id")) < c_key)
+                ]
             page = rows[:limit]
             next_cursor = (
                 _encode_cursor(str(page[-1].get("occurred_at")), str(page[-1].get("fact_id")))
-                if len(rows) > limit and page else None
+                if len(rows) > limit and page
+                else None
             )
             return page, next_cursor
 
-        conditions = ["tenant_id = $1",
-                      "(profile_id = $2 OR recipient_entity_id = $2 OR user_id = $2)"]
+        conditions = [
+            "tenant_id = $1",
+            "(profile_id = $2 OR recipient_entity_id = $2 OR user_id = $2)",
+        ]
         params: list[Any] = [tenant_id, entity_id]
 
         def _add(cond_sql: str, value: Any) -> None:
@@ -189,12 +260,12 @@ class CommsFactsRepository:
             params.append(_parse_ts(c_at))
             params.append(c_key)
             conditions.append(
-                f"(occurred_at, fact_id::text) < (${len(params)-1}, ${len(params)})"
+                f"(occurred_at, fact_id::text) < (${len(params) - 1}, ${len(params)})"
             )
 
         sql = f"""
             SELECT * FROM silver_comms_facts
-            WHERE {' AND '.join(conditions)}
+            WHERE {" AND ".join(conditions)}
             ORDER BY occurred_at DESC, fact_id DESC
             LIMIT {int(limit) + 1}
         """
@@ -213,18 +284,32 @@ class CommsFactsRepository:
         pool = await self._pool()
         if pool is None:
             rows = [
-                r for r in _local_facts.values()
+                r
+                for r in _local_facts.values()
                 if r.get("tenant_id") == tenant_id
-                and entity_id in (r.get("profile_id"), r.get("recipient_entity_id"),
-                                  r.get("user_id"))
+                and entity_id
+                in (r.get("profile_id"), r.get("recipient_entity_id"), r.get("user_id"))
             ]
             human = [r for r in rows if not r.get("suspected_machine_activity")]
             return {
                 "communications": len(rows),
-                "email_campaigns": len({r.get("campaign_id") for r in rows if r.get("campaign_id")}),
-                "human_clicks": sum(1 for r in human if r.get("source_event_type") in ("email_clicked", "notification_clicked")),
-                "replies": sum(1 for r in human if r.get("source_event_type") in ("email_replied", "message_replied_observed") and not r.get("automated_response_kind")),
-                "communication_outcomes": sum(1 for r in rows if r.get("journey_role") == "outcome"),
+                "email_campaigns": len(
+                    {r.get("campaign_id") for r in rows if r.get("campaign_id")}
+                ),
+                "human_clicks": sum(
+                    1
+                    for r in human
+                    if r.get("source_event_type") in ("email_clicked", "notification_clicked")
+                ),
+                "replies": sum(
+                    1
+                    for r in human
+                    if r.get("source_event_type") in ("email_replied", "message_replied_observed")
+                    and not r.get("automated_response_kind")
+                ),
+                "communication_outcomes": sum(
+                    1 for r in rows if r.get("journey_role") == "outcome"
+                ),
             }
 
         async with pool.acquire() as conn:
@@ -246,7 +331,8 @@ class CommsFactsRepository:
                 WHERE tenant_id = $1
                   AND (profile_id = $2 OR recipient_entity_id = $2 OR user_id = $2)
                 """,
-                tenant_id, entity_id,
+                tenant_id,
+                entity_id,
             )
         return dict(rec) if rec else {}
 
@@ -265,7 +351,8 @@ class CommsFactsRepository:
         pool = await self._pool()
         if pool is None:
             rows = [
-                r for r in _local_facts.values()
+                r
+                for r in _local_facts.values()
                 if r.get("tenant_id") == tenant_id and str(r.get("campaign_id")) == str(campaign_id)
             ]
             rows = _apply_local_filters(rows, state=state, human_qualified=human_qualified)
@@ -284,11 +371,11 @@ class CommsFactsRepository:
             params.append(_parse_ts(c_at))
             params.append(c_key)
             conditions.append(
-                f"(occurred_at, fact_id::text) < (${len(params)-1}, ${len(params)})"
+                f"(occurred_at, fact_id::text) < (${len(params) - 1}, ${len(params)})"
             )
         sql = f"""
             SELECT * FROM silver_comms_facts
-            WHERE {' AND '.join(conditions)}
+            WHERE {" AND ".join(conditions)}
             ORDER BY occurred_at DESC, fact_id DESC
             LIMIT {int(limit) + 1}
         """
@@ -308,7 +395,8 @@ class CommsFactsRepository:
         pool = await self._pool()
         if pool is None:
             rows = [
-                r for r in _local_facts.values()
+                r
+                for r in _local_facts.values()
                 if r.get("tenant_id") == tenant_id and str(r.get("campaign_id")) == str(campaign_id)
             ]
             return _local_funnel(rows)
@@ -345,7 +433,8 @@ class CommsFactsRepository:
                 FROM silver_comms_facts
                 WHERE tenant_id = $1 AND campaign_id = $2
                 """,
-                tenant_id, campaign_id,
+                tenant_id,
+                campaign_id,
             )
         return dict(rec) if rec else {}
 
@@ -355,11 +444,18 @@ class CommsFactsRepository:
         if pool is None:
             by_msg: dict[str, list[dict[str, Any]]] = {}
             for r in _local_facts.values():
-                if r.get("tenant_id") == tenant_id and str(r.get("campaign_id")) == str(campaign_id):
-                    by_msg.setdefault(str(r.get("external_message_id") or "unattributed"), []).append(r)
+                if r.get("tenant_id") == tenant_id and str(r.get("campaign_id")) == str(
+                    campaign_id
+                ):
+                    by_msg.setdefault(
+                        str(r.get("external_message_id") or "unattributed"), []
+                    ).append(r)
             return [
-                {"external_message_id": mid, "sequence_step": rows[0].get("sequence_step"),
-                 **_local_funnel(rows)}
+                {
+                    "external_message_id": mid,
+                    "sequence_step": rows[0].get("sequence_step"),
+                    **_local_funnel(rows),
+                }
                 for mid, rows in sorted(by_msg.items())
             ]
 
@@ -386,7 +482,8 @@ class CommsFactsRepository:
                 GROUP BY COALESCE(external_message_id, 'unattributed')
                 ORDER BY MIN(sequence_step) NULLS LAST, external_message_id
                 """,
-                tenant_id, campaign_id,
+                tenant_id,
+                campaign_id,
             )
         return [dict(r) for r in records]
 
@@ -397,11 +494,13 @@ class CommsFactsRepository:
             by_link: dict[str, int] = {}
             msg_of: dict[str, Any] = {}
             for r in _local_facts.values():
-                if (r.get("tenant_id") == tenant_id
-                        and str(r.get("campaign_id")) == str(campaign_id)
-                        and r.get("source_event_type") == "email_clicked"
-                        and not r.get("suspected_machine_activity")
-                        and r.get("link_id")):
+                if (
+                    r.get("tenant_id") == tenant_id
+                    and str(r.get("campaign_id")) == str(campaign_id)
+                    and r.get("source_event_type") == "email_clicked"
+                    and not r.get("suspected_machine_activity")
+                    and r.get("link_id")
+                ):
                     by_link[r["link_id"]] = by_link.get(r["link_id"], 0) + 1
                     msg_of[r["link_id"]] = r.get("external_message_id")
             return [
@@ -424,13 +523,17 @@ class CommsFactsRepository:
                 GROUP BY link_id
                 ORDER BY COUNT(*) DESC
                 """,
-                tenant_id, campaign_id,
+                tenant_id,
+                campaign_id,
             )
         return [dict(r) for r in records]
 
     async def campaign_population(
-        self, tenant_id: str, campaign_id: str,
-        *, stage: Optional[str] = None,
+        self,
+        tenant_id: str,
+        campaign_id: str,
+        *,
+        stage: Optional[str] = None,
         bounced: Optional[bool] = None,
         suppressed: Optional[bool] = None,
         unsubscribed: Optional[bool] = None,
@@ -468,21 +571,29 @@ class CommsFactsRepository:
         return out
 
     async def _population_rows(
-        self, tenant_id: str, campaign_id: str, *, limit: int,
+        self,
+        tenant_id: str,
+        campaign_id: str,
+        *,
+        limit: int,
     ) -> list[dict[str, Any]]:
         pool = await self._pool()
         if pool is None:
             by_recipient: dict[str, list[dict[str, Any]]] = {}
             for r in _local_facts.values():
-                if (r.get("tenant_id") == tenant_id
-                        and str(r.get("campaign_id")) == str(campaign_id)):
-                    key = str(r.get("recipient_alias_id") or r.get("recipient_entity_id")
-                              or r.get("profile_id") or r.get("fact_id"))
+                if r.get("tenant_id") == tenant_id and str(r.get("campaign_id")) == str(
+                    campaign_id
+                ):
+                    key = str(
+                        r.get("recipient_alias_id")
+                        or r.get("recipient_entity_id")
+                        or r.get("profile_id")
+                        or r.get("fact_id")
+                    )
                     by_recipient.setdefault(key, []).append(r)
-            return [
-                _classify_recipient(key, facts)
-                for key, facts in sorted(by_recipient.items())
-            ][:limit]
+            return [_classify_recipient(key, facts) for key, facts in sorted(by_recipient.items())][
+                :limit
+            ]
 
         async with pool.acquire() as conn:
             records = await conn.fetch(
@@ -522,7 +633,9 @@ class CommsFactsRepository:
                 ORDER BY MAX(occurred_at) DESC
                 LIMIT $3
                 """,
-                tenant_id, campaign_id, limit,
+                tenant_id,
+                campaign_id,
+                limit,
             )
         return [_population_row_from_record(dict(r)) for r in records]
 
@@ -537,10 +650,16 @@ class CommsFactsRepository:
         pool = await self._pool()
         if pool is None:
             keys = [
-                k for k, r in _local_facts.items()
+                k
+                for k, r in _local_facts.items()
                 if r.get("tenant_id") == tenant_id
-                and entity_id in (r.get("profile_id"), r.get("recipient_entity_id"),
-                                  r.get("user_id"), r.get("recipient_alias_id"))
+                and entity_id
+                in (
+                    r.get("profile_id"),
+                    r.get("recipient_entity_id"),
+                    r.get("user_id"),
+                    r.get("recipient_alias_id"),
+                )
             ]
             for k in keys:
                 _local_facts.pop(k, None)
@@ -557,35 +676,47 @@ class CommsFactsRepository:
                       AND (profile_id = $2 OR recipient_entity_id = $2
                            OR user_id = $2 OR recipient_alias_id = $2)
                     """,
-                    tenant_id, entity_id,
+                    tenant_id,
+                    entity_id,
                 )
                 await conn.execute(
                     "DELETE FROM communication_state WHERE tenant_id = $1 AND entity_id = $2",
-                    tenant_id, entity_id,
+                    tenant_id,
+                    entity_id,
                 )
             removed = int(result.split()[-1]) if result else 0
         from shared.logger.logger import metrics as _metrics
-        _metrics.increment(
-            "comms_dsr_erasures_total", labels={"tenant_id": tenant_id}
-        )
+
+        _metrics.increment("comms_dsr_erasures_total", labels={"tenant_id": tenant_id})
         logger.info(
             "comms_dsr_erasure tenant=%s entity=%s facts_removed=%d",
-            tenant_id, entity_id, removed,
+            tenant_id,
+            entity_id,
+            removed,
         )
         return removed
 
     async def facts_for_state_rebuild(
-        self, tenant_id: str, entity_id: str, channel: str = "email",
+        self,
+        tenant_id: str,
+        entity_id: str,
+        channel: str = "email",
     ) -> list[dict[str, Any]]:
         """All facts needed to rebuild communication state for one entity."""
         pool = await self._pool()
         if pool is None:
             rows = [
-                r for r in _local_facts.values()
+                r
+                for r in _local_facts.values()
                 if r.get("tenant_id") == tenant_id
                 and r.get("channel") == channel
-                and entity_id in (r.get("profile_id"), r.get("recipient_entity_id"),
-                                  r.get("recipient_alias_id"), r.get("user_id"))
+                and entity_id
+                in (
+                    r.get("profile_id"),
+                    r.get("recipient_entity_id"),
+                    r.get("recipient_alias_id"),
+                    r.get("user_id"),
+                )
             ]
             rows.sort(key=lambda r: str(r.get("occurred_at") or ""))
             return rows
@@ -598,7 +729,9 @@ class CommsFactsRepository:
                        OR recipient_alias_id = $3 OR user_id = $3)
                 ORDER BY occurred_at ASC
                 """,
-                tenant_id, channel, entity_id,
+                tenant_id,
+                channel,
+                entity_id,
             )
         return [dict(r) for r in records]
 
@@ -610,35 +743,54 @@ class CommunicationStateRepository:
         return await get_pool()
 
     async def upsert(self, state: dict[str, Any]) -> dict[str, Any]:
-        key = (f"{state['tenant_id']}:{state['entity_id']}:"
-               f"{state.get('channel', 'email')}:{state.get('scope', 'marketing')}")
+        key = (
+            f"{state['tenant_id']}:{state['entity_id']}:"
+            f"{state.get('channel', 'email')}:{state.get('scope', 'marketing')}"
+        )
         state.setdefault("computed_at", datetime.now(timezone.utc).isoformat())
         pool = await self._pool()
         if pool is None:
             _local_state[key] = state
             return state
         cols = [
-            "tenant_id", "entity_id", "channel", "scope",
-            "subscription_status", "deliverability_status",
-            "last_sent_at", "last_delivered_at", "last_reported_open_at",
-            "last_human_engagement_at", "last_click_at", "last_reply_at",
-            "total_sent", "total_delivered", "total_reported_opens",
-            "total_human_clicks", "total_replies",
-            "hard_bounce_count", "soft_bounce_count", "complaint_count",
-            "suppression_scope", "unsubscribe_scope", "provider_profiles",
-            "source_freshness_at", "computed_at", "schema_version",
+            "tenant_id",
+            "entity_id",
+            "channel",
+            "scope",
+            "subscription_status",
+            "deliverability_status",
+            "last_sent_at",
+            "last_delivered_at",
+            "last_reported_open_at",
+            "last_human_engagement_at",
+            "last_click_at",
+            "last_reply_at",
+            "total_sent",
+            "total_delivered",
+            "total_reported_opens",
+            "total_human_clicks",
+            "total_replies",
+            "hard_bounce_count",
+            "soft_bounce_count",
+            "complaint_count",
+            "suppression_scope",
+            "unsubscribe_scope",
+            "provider_profiles",
+            "source_freshness_at",
+            "computed_at",
+            "schema_version",
         ]
         values = [
-            json.dumps(state.get(c) or {}) if c == "provider_profiles"
-            else state.get(c) for c in cols
+            json.dumps(state.get(c) or {}) if c == "provider_profiles" else state.get(c)
+            for c in cols
         ]
         update_cols = [c for c in cols if c not in ("tenant_id", "entity_id", "channel", "scope")]
         set_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in update_cols)
         async with pool.acquire() as conn:
             await conn.execute(
                 f"""
-                INSERT INTO communication_state ({', '.join(cols)})
-                VALUES ({', '.join(f'${i+1}' for i in range(len(cols)))})
+                INSERT INTO communication_state ({", ".join(cols)})
+                VALUES ({", ".join(f"${i + 1}" for i in range(len(cols)))})
                 ON CONFLICT (tenant_id, entity_id, channel, scope)
                 DO UPDATE SET {set_clause}
                 """,
@@ -647,8 +799,11 @@ class CommunicationStateRepository:
         return state
 
     async def get(
-        self, tenant_id: str, entity_id: str,
-        channel: str = "email", scope: str = "marketing",
+        self,
+        tenant_id: str,
+        entity_id: str,
+        channel: str = "email",
+        scope: str = "marketing",
     ) -> Optional[dict[str, Any]]:
         pool = await self._pool()
         if pool is None:
@@ -659,21 +814,22 @@ class CommunicationStateRepository:
                 SELECT * FROM communication_state
                 WHERE tenant_id = $1 AND entity_id = $2 AND channel = $3 AND scope = $4
                 """,
-                tenant_id, entity_id, channel, scope,
+                tenant_id,
+                entity_id,
+                channel,
+                scope,
             )
         return dict(rec) if rec else None
 
     async def list_for_entity(self, tenant_id: str, entity_id: str) -> list[dict[str, Any]]:
         pool = await self._pool()
         if pool is None:
-            return [
-                s for k, s in _local_state.items()
-                if k.startswith(f"{tenant_id}:{entity_id}:")
-            ]
+            return [s for k, s in _local_state.items() if k.startswith(f"{tenant_id}:{entity_id}:")]
         async with pool.acquire() as conn:
             records = await conn.fetch(
                 "SELECT * FROM communication_state WHERE tenant_id = $1 AND entity_id = $2",
-                tenant_id, entity_id,
+                tenant_id,
+                entity_id,
             )
         return [dict(r) for r in records]
 
@@ -708,12 +864,18 @@ class CommunicationSuppressionRepository:
                           $13,$14,$15,$16,$17,$18,$19,$20,$21)
                 ON CONFLICT DO NOTHING
                 """,
-                suppression["suppression_id"], suppression["tenant_id"],
-                suppression.get("entity_id"), suppression.get("recipient_alias_id"),
-                suppression.get("channel", "email"), suppression["scope"],
-                suppression.get("scope_ref"), suppression["reason"],
-                suppression.get("source_event_id"), suppression.get("provider"),
-                suppression["active"], _parse_ts(suppression["created_at"]),
+                suppression["suppression_id"],
+                suppression["tenant_id"],
+                suppression.get("entity_id"),
+                suppression.get("recipient_alias_id"),
+                suppression.get("channel", "email"),
+                suppression["scope"],
+                suppression.get("scope_ref"),
+                suppression["reason"],
+                suppression.get("source_event_id"),
+                suppression.get("provider"),
+                suppression["active"],
+                _parse_ts(suppression["created_at"]),
                 suppression.get("provider_account_id"),
                 suppression.get("canonical_entity_id"),
                 suppression.get("canonical_profile_id"),
@@ -722,23 +884,32 @@ class CommunicationSuppressionRepository:
                 suppression.get("provider_enforcement_state"),
                 suppression.get("aether_enforcement_state"),
                 _parse_ts(suppression["last_reconciled_at"])
-                if suppression.get("last_reconciled_at") else None,
+                if suppression.get("last_reconciled_at")
+                else None,
                 suppression.get("evidence_reference"),
             )
         return suppression
 
     async def active_for(
-        self, tenant_id: str, *, entity_id: Optional[str] = None,
-        recipient_alias_id: Optional[str] = None, channel: str = "email",
+        self,
+        tenant_id: str,
+        *,
+        entity_id: Optional[str] = None,
+        recipient_alias_id: Optional[str] = None,
+        channel: str = "email",
     ) -> list[dict[str, Any]]:
         pool = await self._pool()
         if pool is None:
             return [
-                s for s in _local_suppressions.values()
-                if s.get("tenant_id") == tenant_id and s.get("active")
+                s
+                for s in _local_suppressions.values()
+                if s.get("tenant_id") == tenant_id
+                and s.get("active")
                 and s.get("channel") == channel
-                and ((entity_id and s.get("entity_id") == entity_id)
-                     or (recipient_alias_id and s.get("recipient_alias_id") == recipient_alias_id))
+                and (
+                    (entity_id and s.get("entity_id") == entity_id)
+                    or (recipient_alias_id and s.get("recipient_alias_id") == recipient_alias_id)
+                )
             ]
         async with pool.acquire() as conn:
             records = await conn.fetch(
@@ -748,19 +919,28 @@ class CommunicationSuppressionRepository:
                   AND (($3::text IS NOT NULL AND entity_id = $3)
                        OR ($4::text IS NOT NULL AND recipient_alias_id = $4))
                 """,
-                tenant_id, channel, entity_id, recipient_alias_id,
+                tenant_id,
+                channel,
+                entity_id,
+                recipient_alias_id,
             )
         return [dict(r) for r in records]
 
     async def list_active_for_tenant(
-        self, tenant_id: str, *, provider: Optional[str] = None, limit: int = 500,
+        self,
+        tenant_id: str,
+        *,
+        provider: Optional[str] = None,
+        limit: int = 500,
     ) -> list[dict[str, Any]]:
         """All active suppressions for a tenant (read API + reconciliation)."""
         pool = await self._pool()
         if pool is None:
             rows = [
-                s for s in _local_suppressions.values()
-                if s.get("tenant_id") == tenant_id and s.get("active")
+                s
+                for s in _local_suppressions.values()
+                if s.get("tenant_id") == tenant_id
+                and s.get("active")
                 and (provider is None or s.get("provider") == provider)
             ]
             return rows[:limit]
@@ -773,7 +953,9 @@ class CommunicationSuppressionRepository:
                 ORDER BY created_at DESC
                 LIMIT $3
                 """,
-                tenant_id, provider, limit,
+                tenant_id,
+                provider,
+                limit,
             )
         return [dict(r) for r in records]
 
@@ -791,7 +973,9 @@ class CampaignMessageRepository:
         if pool is None:
             existing = _local_messages.get(key)
             if existing:
-                existing.update({k: v for k, v in msg.items() if v is not None and k != "message_id"})
+                existing.update(
+                    {k: v for k, v in msg.items() if v is not None and k != "message_id"}
+                )
                 return existing
             _local_messages[key] = msg
             return msg
@@ -811,13 +995,21 @@ class CampaignMessageRepository:
                     status = EXCLUDED.status,
                     last_seen_at = now()
                 """,
-                msg["message_id"], msg["tenant_id"], msg.get("campaign_id"),
-                msg["provider"], msg.get("provider_account_id"),
-                msg["external_message_id"], msg.get("external_template_id"),
-                msg.get("name"), msg.get("subject_redacted"),
-                msg.get("sequence_step"), msg.get("variant_id"),
-                msg.get("channel", "email"), msg.get("message_category", "marketing"),
-                msg.get("status", "active"), msg.get("source_connector_id"),
+                msg["message_id"],
+                msg["tenant_id"],
+                msg.get("campaign_id"),
+                msg["provider"],
+                msg.get("provider_account_id"),
+                msg["external_message_id"],
+                msg.get("external_template_id"),
+                msg.get("name"),
+                msg.get("subject_redacted"),
+                msg.get("sequence_step"),
+                msg.get("variant_id"),
+                msg.get("channel", "email"),
+                msg.get("message_category", "marketing"),
+                msg.get("status", "active"),
+                msg.get("source_connector_id"),
                 json.dumps(msg.get("properties") or {}),
             )
         return msg
@@ -826,7 +1018,8 @@ class CampaignMessageRepository:
         pool = await self._pool()
         if pool is None:
             return [
-                m for m in _local_messages.values()
+                m
+                for m in _local_messages.values()
                 if m.get("tenant_id") == tenant_id and str(m.get("campaign_id")) == str(campaign_id)
             ]
         async with pool.acquire() as conn:
@@ -836,12 +1029,16 @@ class CampaignMessageRepository:
                 WHERE tenant_id = $1 AND campaign_id = $2
                 ORDER BY sequence_step NULLS LAST, external_message_id
                 """,
-                tenant_id, campaign_id,
+                tenant_id,
+                campaign_id,
             )
         return [dict(r) for r in records]
 
     async def get_by_external_id(
-        self, tenant_id: str, provider: str, external_message_id: str,
+        self,
+        tenant_id: str,
+        provider: str,
+        external_message_id: str,
     ) -> Optional[dict[str, Any]]:
         pool = await self._pool()
         if pool is None:
@@ -852,12 +1049,15 @@ class CampaignMessageRepository:
                 SELECT * FROM campaign_messages
                 WHERE tenant_id = $1 AND provider = $2 AND external_message_id = $3
                 """,
-                tenant_id, provider, external_message_id,
+                tenant_id,
+                provider,
+                external_message_id,
             )
         return dict(rec) if rec else None
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _apply_local_filters(rows: list[dict[str, Any]], **filters: Any) -> list[dict[str, Any]]:
     out = rows
@@ -874,8 +1074,9 @@ def _apply_local_filters(rows: list[dict[str, Any]], **filters: Any) -> list[dic
     if filters.get("state"):
         out = [r for r in out if r.get("communication_state") == filters["state"]]
     if filters.get("human_qualified") is True:
-        out = [r for r in out
-               if not r.get("suspected_machine_activity") and r.get("engagement_type")]
+        out = [
+            r for r in out if not r.get("suspected_machine_activity") and r.get("engagement_type")
+        ]
     if filters.get("after"):
         out = [r for r in out if str(r.get("occurred_at") or "") >= str(filters["after"])]
     if filters.get("before"):
@@ -885,8 +1086,7 @@ def _apply_local_filters(rows: list[dict[str, Any]], **filters: Any) -> list[dic
 
 def _local_funnel(rows: list[dict[str, Any]]) -> dict[str, Any]:
     def uniq(pred) -> int:
-        return len({r.get("recipient_alias_id") or r.get("fact_id")
-                    for r in rows if pred(r)})
+        return len({r.get("recipient_alias_id") or r.get("fact_id") for r in rows if pred(r)})
 
     human = lambda r: not r.get("suspected_machine_activity")  # noqa: E731
     return {
@@ -896,12 +1096,26 @@ def _local_funnel(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "human_opens": uniq(lambda r: r.get("source_event_type") == "email_opened" and human(r)),
         "reported_clicks": uniq(lambda r: r.get("source_event_type") == "email_clicked"),
         "human_clicks": uniq(lambda r: r.get("source_event_type") == "email_clicked" and human(r)),
-        "replies": uniq(lambda r: r.get("source_event_type") in ("email_replied", "message_replied_observed")
-                        and not r.get("automated_response_kind")),
-        "hard_bounces": sum(1 for r in rows if r.get("source_event_type") == "email_bounced" and r.get("bounce_type") == "hard"),
-        "soft_bounces": sum(1 for r in rows if r.get("source_event_type") == "email_bounced" and r.get("bounce_type") != "hard"),
+        "replies": uniq(
+            lambda r: (
+                r.get("source_event_type") in ("email_replied", "message_replied_observed")
+                and not r.get("automated_response_kind")
+            )
+        ),
+        "hard_bounces": sum(
+            1
+            for r in rows
+            if r.get("source_event_type") == "email_bounced" and r.get("bounce_type") == "hard"
+        ),
+        "soft_bounces": sum(
+            1
+            for r in rows
+            if r.get("source_event_type") == "email_bounced" and r.get("bounce_type") != "hard"
+        ),
         "complaints": sum(1 for r in rows if r.get("source_event_type") == "email_spam_complaint"),
-        "unsubscribes": sum(1 for r in rows if r.get("source_event_type") == "unsubscribe_observed"),
+        "unsubscribes": sum(
+            1 for r in rows if r.get("source_event_type") == "unsubscribe_observed"
+        ),
         "suppressions": sum(1 for r in rows if r.get("source_event_type") == "email_suppressed"),
         "deferred": sum(1 for r in rows if r.get("source_event_type") == "email_deferred"),
         "dropped": sum(1 for r in rows if r.get("source_event_type") == "email_dropped"),
@@ -912,6 +1126,7 @@ def _local_funnel(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _classify_recipient(key: str, facts: list[dict[str, Any]]) -> dict[str, Any]:
     """Local-mode recipient classification mirroring the SQL rollup."""
+
     def count(pred) -> int:
         return sum(1 for f in facts if pred(f))
 
@@ -919,30 +1134,42 @@ def _classify_recipient(key: str, facts: list[dict[str, Any]]) -> dict[str, Any]
     record = {
         "recipient_key": key,
         "entity_id": next(
-            (f.get("recipient_entity_id") or f.get("profile_id")
-             for f in facts if f.get("recipient_entity_id") or f.get("profile_id")),
+            (
+                f.get("recipient_entity_id") or f.get("profile_id")
+                for f in facts
+                if f.get("recipient_entity_id") or f.get("profile_id")
+            ),
             None,
         ),
         "recipient_display": next(
-            (f.get("recipient_display") for f in facts if f.get("recipient_display")), None,
+            (f.get("recipient_display") for f in facts if f.get("recipient_display")),
+            None,
         ),
         "sent": count(lambda f: f.get("source_event_type") == "email_sent"),
         "delivered": count(lambda f: f.get("source_event_type") == "email_delivered"),
         "human_opens": count(lambda f: f.get("source_event_type") == "email_opened" and human(f)),
         "human_clicks": count(lambda f: f.get("source_event_type") == "email_clicked" and human(f)),
-        "replies": count(lambda f: f.get("source_event_type") in ("email_replied", "message_replied_observed")
-                         and not f.get("automated_response_kind")),
+        "replies": count(
+            lambda f: (
+                f.get("source_event_type") in ("email_replied", "message_replied_observed")
+                and not f.get("automated_response_kind")
+            )
+        ),
         "bounces": count(lambda f: f.get("source_event_type") == "email_bounced"),
         "complaints": count(lambda f: f.get("source_event_type") == "email_spam_complaint"),
         "unsubscribes": count(lambda f: f.get("source_event_type") == "unsubscribe_observed"),
         "suppressions": count(lambda f: f.get("source_event_type") == "email_suppressed"),
         "last_engagement_at": max(
-            (str(f.get("occurred_at")) for f in facts
-             if f.get("engagement_type") and human(f)), default=None,
+            (str(f.get("occurred_at")) for f in facts if f.get("engagement_type") and human(f)),
+            default=None,
         ),
         "identity_confidence": max(
-            (float(f["identity_confidence"]) for f in facts
-             if f.get("identity_confidence") is not None), default=None,
+            (
+                float(f["identity_confidence"])
+                for f in facts
+                if f.get("identity_confidence") is not None
+            ),
+            default=None,
         ),
     }
     return _population_row_from_record(record)
@@ -986,7 +1213,8 @@ def _population_row_from_record(record: dict[str, Any]) -> dict[str, Any]:
         ),
         "identity_confidence": (
             float(record["identity_confidence"])
-            if record.get("identity_confidence") is not None else None
+            if record.get("identity_confidence") is not None
+            else None
         ),
         "profile360": f"/v1/profile/{record['entity_id']}" if record.get("entity_id") else None,
     }

@@ -2488,6 +2488,7 @@ INTELLIGENCE_PROJECTION_TS = ROOT / "packages" / "shared" / "intelligence-projec
 INTELLIGENCE_PROJECTION_PY = BACKEND / "shared" / "intelligence_projections" / "generated_registry.py"
 INTELLIGENCE_PROJECTION_TABLE_MD = ROOT / "docs" / "_generated" / "intelligence-projection-registry-table.md"
 INTELLIGENCE_PROJECTION_GRAPH_MD = ROOT / "docs" / "_generated" / "intelligence-projection-dependency-graph.md"
+PRODUCT_360_SURFACE_CATALOG_MD = ROOT / "docs" / "_generated" / "360-surface-catalog.md"
 
 # Fixed schema field orders for deterministic emission (order-stable generation:
 # reordering arrays / shuffling key order across a rebase yields zero diff).
@@ -2517,6 +2518,37 @@ _COST_PROFILE_FIELD_ORDER = ("class", "supportsAsync")
 _COMMERCIAL_CLASSIFICATION_FIELD_ORDER = ("sellableCapability", "meterRefs", "costClassRefs")
 _LEGACY_BINDINGS_FIELD_ORDER = ("routes", "surfaceIds", "services", "migrationMode", "migrationBlueprint")
 _PENDING_FIELD_ORDER = ("id", "kind", "reason", "resolvesInProjection")
+_PRODUCT_SURFACE_FIELD_ORDER = (
+    "id", "displayName", "description", "contractStatus", "subjectKinds",
+    "domainSlots", "projectionBindings", "directProviderBindings", "sourceOfTruth", "freshnessPolicy",
+    "policyBehavior", "backendCapabilities", "lensContract",
+)
+_PRODUCT_DOMAIN_SLOT_FIELD_ORDER = (
+    "id", "requirement", "description", "canonicalAuthorityRefs", "projectionBindings",
+)
+_PRODUCT_SLOT_BINDING_FIELD_ORDER = ("projectionId", "role", "subjectKinds", "sectionIds")
+_PRODUCT_PROVIDER_BINDING_FIELD_ORDER = (
+    "projectionId", "role", "bindingStatus", "providerImplementationState",
+)
+_PRODUCT_DIRECT_PROVIDER_BINDING_FIELD_ORDER = (
+    "providerClass", "providerKind", "bindingStatus", "subjectKinds",
+    "domainSlotIds", "implementationRef", "runtimeBindingRef",
+)
+_PRODUCT_SOURCE_OF_TRUTH_FIELD_ORDER = (
+    "canonicalAuthorities", "ownsCanonicalTruth", "prohibitedOwnership",
+)
+_PRODUCT_FRESHNESS_FIELD_ORDER = (
+    "required", "maxAgeSeconds", "sourceTimestamps", "missingTimestamp", "onStale",
+    "requirementStatus",
+)
+_PRODUCT_POLICY_FIELD_ORDER = (
+    "tenantScopeRequired", "authorizationBeforeRead", "policyEvaluation",
+    "historicalConsentEvaluation", "redactionBehavior", "requirementStatus",
+)
+_PRODUCT_BACKEND_CAPABILITIES_FIELD_ORDER = (
+    "required", "projectionCapabilityKeys", "providerCapabilityStatus",
+)
+_PRODUCT_LENS_CONTRACT_FIELD_ORDER = ("expectedCount", "lensIds", "sourceAlignmentStatus")
 _LENS_FIELD_ORDER = (
     "id", "displayName", "kind", "baseLens", "description", "domain",
     "applicableSubjectKinds", "temporalModes", "default",
@@ -2531,6 +2563,16 @@ _OBJECT_FIELD_ORDERS = {
     frozenset(_COMMERCIAL_CLASSIFICATION_FIELD_ORDER): _COMMERCIAL_CLASSIFICATION_FIELD_ORDER,
     frozenset(_LEGACY_BINDINGS_FIELD_ORDER): _LEGACY_BINDINGS_FIELD_ORDER,
     frozenset(_PENDING_FIELD_ORDER): _PENDING_FIELD_ORDER,
+    frozenset(_PRODUCT_SURFACE_FIELD_ORDER): _PRODUCT_SURFACE_FIELD_ORDER,
+    frozenset(_PRODUCT_DOMAIN_SLOT_FIELD_ORDER): _PRODUCT_DOMAIN_SLOT_FIELD_ORDER,
+    frozenset(_PRODUCT_SLOT_BINDING_FIELD_ORDER): _PRODUCT_SLOT_BINDING_FIELD_ORDER,
+    frozenset(_PRODUCT_PROVIDER_BINDING_FIELD_ORDER): _PRODUCT_PROVIDER_BINDING_FIELD_ORDER,
+    frozenset(_PRODUCT_DIRECT_PROVIDER_BINDING_FIELD_ORDER): _PRODUCT_DIRECT_PROVIDER_BINDING_FIELD_ORDER,
+    frozenset(_PRODUCT_SOURCE_OF_TRUTH_FIELD_ORDER): _PRODUCT_SOURCE_OF_TRUTH_FIELD_ORDER,
+    frozenset(_PRODUCT_FRESHNESS_FIELD_ORDER): _PRODUCT_FRESHNESS_FIELD_ORDER,
+    frozenset(_PRODUCT_POLICY_FIELD_ORDER): _PRODUCT_POLICY_FIELD_ORDER,
+    frozenset(_PRODUCT_BACKEND_CAPABILITIES_FIELD_ORDER): _PRODUCT_BACKEND_CAPABILITIES_FIELD_ORDER,
+    frozenset(_PRODUCT_LENS_CONTRACT_FIELD_ORDER): _PRODUCT_LENS_CONTRACT_FIELD_ORDER,
 }
 
 
@@ -2548,8 +2590,9 @@ def _sorted_value(value: object) -> object:
     """Recursively normalize a registry value before emission.
 
     (a) Every list value is sorted (order-stable generation: reordering arrays
-    / shuffling key order across a rebase yields zero diff) — lists of dicts
-    (pending declarations) sort by their ``id`` key.
+    / shuffling key order across a rebase yields zero diff). Lists of dicts
+    sort by their stable id, projection id, or provider class when available;
+    other entries use canonical JSON so source key order cannot affect output.
     (b) Every ``_``-prefixed key (``_comment`` and any other annotation key) is
     dropped recursively, so annotation text never reaches the artifacts and the
     cleaned dict matches the fixed schema field orders.
@@ -2562,9 +2605,25 @@ def _sorted_value(value: object) -> object:
         }
     if isinstance(value, list):
         items = [_sorted_value(v) for v in value]
+
+        def sort_key(item: object) -> tuple[str, str, str]:
+            if isinstance(item, dict):
+                for key in ("id", "projectionId", "providerClass"):
+                    if key in item:
+                        return (
+                            key,
+                            str(item[key]),
+                            json.dumps(item, sort_keys=True, separators=(",", ":")),
+                        )
+            return (
+                "",
+                "",
+                json.dumps(item, sort_keys=True, separators=(",", ":")),
+            )
+
         return sorted(
             items,
-            key=lambda v: v["id"] if isinstance(v, dict) and "id" in v else repr(v),
+            key=sort_key,
         )
     return value
 
@@ -2812,6 +2871,75 @@ def gen_intelligence_projection_ts(reg: dict) -> str:
         lines.append(f"  {projection['id']}: {_ts_literal(_sorted_value(entries), 1)},")
     lines.append("};")
     lines.append("")
+    product_surfaces = sorted(reg["productSurfaces"], key=lambda row: row["id"])
+    lines.append(f'export const product360SurfaceCatalogVersion = "{reg["productSurfaceCatalogVersion"]}" as const;')
+    lines.append("")
+    lines += _ts_const_array(
+        "PRODUCT_360_SURFACE_IDS",
+        "Product360SurfaceId",
+        [surface["id"] for surface in product_surfaces],
+        "Productized 360 surfaces; distinct from the technical projection provider registry.",
+    )
+    lines += _ts_const_array(
+        "EXPERIENCE_360_FRAME_STATES",
+        "Experience360FrameState",
+        sorted(reg["experience360FrameStates"]),
+        "Aggregate 360 frame states; section states remain projection-owned.",
+    )
+    lines.append("export type Product360SlotRequirement = 'required' | 'optional';")
+    lines.append("export type Product360BindingRole = 'primary' | 'supporting';")
+    lines.append("export type Product360DirectProviderKind = 'surface_authority_reader' | 'surface_frame_provider';")
+    lines.append("export interface Product360SlotProjectionBinding {")
+    lines.append("  projectionId: IntelligenceProjectionId;")
+    lines.append("  role: Product360BindingRole;")
+    lines.append("  subjectKinds: readonly IntelligenceProjectionSubjectKind[];")
+    lines.append("  sectionIds: readonly string[];")
+    lines.append("}")
+    lines.append("export interface Product360DomainSlot {")
+    lines.append("  id: string;")
+    lines.append("  requirement: Product360SlotRequirement;")
+    lines.append("  description: string;")
+    lines.append("  canonicalAuthorityRefs: readonly string[];")
+    lines.append("  projectionBindings: readonly Product360SlotProjectionBinding[];")
+    lines.append("}")
+    lines.append("export interface Product360ProviderBinding {")
+    lines.append("  projectionId: IntelligenceProjectionId;")
+    lines.append("  role: Product360BindingRole;")
+    lines.append("  bindingStatus: 'catalog_only';")
+    lines.append("  providerImplementationState: IntelligenceProjectionImplementationState;")
+    lines.append("}")
+    lines.append("export interface Product360DirectProviderBinding {")
+    lines.append("  providerClass: string;")
+    lines.append("  providerKind: Product360DirectProviderKind;")
+    lines.append("  bindingStatus: 'runtime_wired';")
+    lines.append("  subjectKinds: readonly IntelligenceProjectionSubjectKind[];")
+    lines.append("  domainSlotIds: readonly string[];")
+    lines.append("  implementationRef: string;")
+    lines.append("  runtimeBindingRef: string;")
+    lines.append("}")
+    lines.append("export interface Product360SurfaceDefinition {")
+    lines.append("  id: Product360SurfaceId;")
+    lines.append("  displayName: string;")
+    lines.append("  description: string;")
+    lines.append("  contractStatus: 'draft_pending_source_alignment' | 'reconstructed_pending_source_alignment' | 'source_aligned';")
+    lines.append("  subjectKinds: readonly IntelligenceProjectionSubjectKind[];")
+    lines.append("  domainSlots: readonly Product360DomainSlot[];")
+    lines.append("  projectionBindings: readonly Product360ProviderBinding[];")
+    lines.append("  directProviderBindings?: readonly Product360DirectProviderBinding[];")
+    lines.append("  sourceOfTruth: { canonicalAuthorities: readonly string[]; ownsCanonicalTruth: false; prohibitedOwnership: readonly string[] };")
+    lines.append("  freshnessPolicy: { required: true; maxAgeSeconds: number | null; sourceTimestamps: string; missingTimestamp: string; onStale: string; requirementStatus: string };")
+    lines.append("  policyBehavior: { tenantScopeRequired: true; authorizationBeforeRead: true; policyEvaluation: string; historicalConsentEvaluation: string; redactionBehavior: string; requirementStatus: string };")
+    lines.append("  backendCapabilities: { required: readonly string[]; projectionCapabilityKeys: readonly string[]; providerCapabilityStatus: string };")
+    lines.append("  lensContract: { expectedCount: number | null; lensIds: readonly string[]; sourceAlignmentStatus: string };")
+    lines.append("}")
+    lines.append("export const PRODUCT_360_SURFACE_DEFINITIONS: Record<")
+    lines.append("  Product360SurfaceId,")
+    lines.append("  Product360SurfaceDefinition")
+    lines.append("> = {")
+    for surface in product_surfaces:
+        lines.append(f"  {surface['id']}: {_ts_literal(_sorted_value(surface), 1)},")
+    lines.append("};")
+    lines.append("")
     return "\n".join(lines)
 
 
@@ -2885,6 +3013,24 @@ def gen_intelligence_projection_py(reg: dict) -> str:
         )
     lines.append("}")
     lines.append("")
+    product_surfaces = sorted(reg["productSurfaces"], key=lambda row: row["id"])
+    lines.append(f'PRODUCT_360_SURFACE_CATALOG_VERSION = "{reg["productSurfaceCatalogVersion"]}"')
+    lines += _py_tuple(
+        "PRODUCT_360_SURFACE_IDS",
+        [surface["id"] for surface in product_surfaces],
+        "Productized 360 surfaces; distinct from the technical projection provider registry.",
+    )
+    lines += _py_tuple(
+        "EXPERIENCE_360_FRAME_STATES",
+        sorted(reg["experience360FrameStates"]),
+        "Aggregate 360 frame states; projection section states remain separate.",
+    )
+    lines.append("# Product surface contracts and explicit slot-to-projection section bindings.")
+    lines.append("PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {")
+    for surface in product_surfaces:
+        lines.append(f'    "{surface["id"]}": {_py_literal(_sorted_value(surface), 1)},')
+    lines.append("}")
+    lines.append("")
     lines.append("# Pending canonical-authority declarations (sorted by projection id).")
     lines.append("PENDING_AUTHORITIES: dict[str, list] = {")
     for projection in projections:
@@ -2906,6 +3052,10 @@ def gen_intelligence_projection_py(reg: dict) -> str:
     lines.append("__all__ = [")
     for name in sorted((
         "INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION",
+        "PRODUCT_360_SURFACE_CATALOG_VERSION",
+        "PRODUCT_360_SURFACE_IDS",
+        "PRODUCT_360_SURFACE_DEFINITIONS",
+        "EXPERIENCE_360_FRAME_STATES",
         "INTELLIGENCE_PROJECTION_IDS",
         "INTELLIGENCE_PROJECTION_DEFINITIONS",
         "PROJECTION_DEPENDENCY_GRAPH",
@@ -2968,6 +3118,160 @@ def gen_intelligence_projection_table_md(reg: dict) -> str:
     return "\n".join(lines)
 
 
+def gen_product_360_surface_catalog_md(reg: dict) -> str:
+    """Generate the distinct product 360 catalog and explicit provider map."""
+    surfaces = sorted(reg["productSurfaces"], key=lambda row: row["id"])
+    projections = {row["id"]: row for row in reg["projections"]}
+    lines = _md_header(INTELLIGENCE_PROJECTION_JSON)
+    lines.extend(
+        [
+            "# Product 360 Surface Catalog",
+            "",
+            f"Catalog version: `{reg['productSurfaceCatalogVersion']}`",
+            "",
+            f"This product catalog has {len(surfaces)} surface contracts and is separate from the {len(projections)}-row technical projection provider registry. Projection mappings are `catalog_only` candidate section bindings. Direct surface-provider mappings use a separate namespace; `runtime_wired` confirms a frame-runtime call path for the declared subjects and slots, not full surface completion.",
+            "",
+            "The originally reviewed 3,013-line 360 SSOT is not available in this checkout. The catalog below is reconstructed from repository contracts and must be aligned to that source before its names or slot details are treated as exact. Reconstructed fields are marked accordingly in the machine-readable contract.",
+            "",
+            "## Frame lifecycle states",
+            "",
+            "| State | Meaning |",
+            "|---|---|",
+            "| `ready` | Required slots are resolved and governed for this request. |",
+            "| `partial` | Some useful slots are available while other slots are degraded or unavailable. |",
+            "| `empty` | Authorities returned a known empty result. |",
+            "| `missing` | A required slot or provider is absent. |",
+            "| `unknown` | The available evidence cannot establish a state. |",
+            "| `suppressed` | Policy removed a slot from this response. |",
+            "| `stale` | Source freshness limits were exceeded. |",
+            "| `degraded` | A provider returned a partial or degraded result. |",
+            "| `unavailable` | No usable provider result is available. |",
+            "| `conflicted` | Tenant, identity, or provenance invariants conflict. |",
+            "",
+            "## Catalog overview",
+            "",
+            "| Product surface | Contract status | Subject kinds | Required slots | Optional slots | Projection providers | Direct surface providers |",
+            "|---|---|---|---:|---:|---|---|",
+        ]
+    )
+    for surface in surfaces:
+        required = sum(slot["requirement"] == "required" for slot in surface["domainSlots"])
+        optional = sum(slot["requirement"] == "optional" for slot in surface["domainSlots"])
+        providers = ", ".join(f"`{row['projectionId']}`" for row in surface["projectionBindings"])
+        direct_providers = ", ".join(
+            f"`{row['providerClass']}` ({row['bindingStatus']})"
+            for row in surface.get("directProviderBindings", [])
+        ) or "—"
+        subjects = ", ".join(f"`{kind}`" for kind in surface["subjectKinds"])
+        anchor = surface["displayName"].lower().replace(" ", "-")
+        lines.append(
+            f"| [{surface['displayName']}](#{anchor}) | {surface['contractStatus']} | "
+            f"{subjects} | {required} | {optional} | {providers} | {direct_providers} |"
+        )
+    for surface in surfaces:
+        lines.extend(
+            [
+                "",
+                f"## {surface['displayName']}",
+                "",
+                f"Product surface id: `{surface['id']}`",
+                f"Contract status: `{surface['contractStatus']}`",
+                f"Subject kinds: {', '.join(f'`{kind}`' for kind in surface['subjectKinds'])}",
+                "",
+                surface["description"],
+                "",
+                "### Domain slots",
+                "",
+                "| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Description |",
+                "|---|---|---|---|---|---|",
+            ]
+        )
+        for slot in sorted(surface["domainSlots"], key=lambda row: row["id"]):
+            required_metadata = ", ".join(
+                f"`{item}`" for item in slot.get("requiredFrameMetadata", [])
+            )
+            authorities = ", ".join(f"`{authority}`" for authority in slot["canonicalAuthorityRefs"])
+            bindings = "; ".join(
+                f"`{binding['projectionId']}` ({binding['role']}): "
+                + f"subjects {', '.join(f'`{kind}`' for kind in binding['subjectKinds']) or 'none'}; "
+                + ", ".join(f"`{section}`" for section in binding["sectionIds"])
+                for binding in slot["projectionBindings"]
+            )
+            lines.append(
+                f"| `{slot['id']}` | {slot['requirement']} | {required_metadata} | {authorities} | {bindings} | {slot['description']} |"
+            )
+        lines.extend(
+            [
+                "",
+                "### Projection provider bindings",
+                "",
+                "| Projection | Binding | Provider implementation metadata | Capability keys |",
+                "|---|---|---|---|",
+            ]
+        )
+        for binding in surface["projectionBindings"]:
+            provider = projections[binding["projectionId"]]
+            caps = ", ".join(f"`{cap}`" for cap in provider["capabilityKeys"])
+            lines.append(
+                f"| `{binding['projectionId']}` | `{binding['bindingStatus']}` ({binding['role']}) | "
+                f"`{binding['providerImplementationState']}` | {caps} |"
+            )
+        lines.extend(
+            [
+                "",
+                "### Direct surface-provider bindings",
+                "",
+                "| Provider class | Provider kind | Binding status | Subjects | Domain slots | Implementation | Frame-runtime call site |",
+                "|---|---|---|---|---|---|---|",
+            ]
+        )
+        direct_bindings = surface.get("directProviderBindings", [])
+        if direct_bindings:
+            for binding in direct_bindings:
+                direct_subjects = ", ".join(
+                    f"`{kind}`" for kind in binding["subjectKinds"]
+                )
+                direct_slots = ", ".join(
+                    f"`{slot_id}`" for slot_id in binding["domainSlotIds"]
+                )
+                lines.append(
+                    f"| `{binding['providerClass']}` | `{binding['providerKind']}` | "
+                    f"`{binding['bindingStatus']}` | {direct_subjects} | {direct_slots} | "
+                    f"`{binding['implementationRef']}` | `{binding['runtimeBindingRef']}` |"
+                )
+        else:
+            lines.append("| none declared | — | — | — | — | — | — |")
+        lines.extend(
+            [
+                "",
+                "### Authority and governance contract",
+                "",
+                f"Canonical authorities: {', '.join(f'`{authority}`' for authority in surface['sourceOfTruth']['canonicalAuthorities'])}.",
+                "",
+                "The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.",
+                "",
+                f"Freshness requirement: source timestamps `{surface['freshnessPolicy']['sourceTimestamps']}`; missing timestamps become `{surface['freshnessPolicy']['missingTimestamp']}`; stale slots become `{surface['freshnessPolicy']['onStale']}`. Maximum age is unset pending authority-specific configuration.",
+                "",
+                f"Policy requirement: tenant scope `{str(surface['policyBehavior']['tenantScopeRequired']).lower()}`, authorization before read `{str(surface['policyBehavior']['authorizationBeforeRead']).lower()}`, policy evaluation `{surface['policyBehavior']['policyEvaluation']}`, historical consent `{surface['policyBehavior']['historicalConsentEvaluation']}`, redaction `{surface['policyBehavior']['redactionBehavior']}`.",
+                "",
+                "Required backend capabilities: " + ", ".join(f"`{cap}`" for cap in surface["backendCapabilities"]["required"]) + ".",
+                "",
+                f"Capability and provider status is contract metadata only: `{surface['backendCapabilities']['providerCapabilityStatus']}`. Provider implementation states are copied from the technical registry and do not imply runtime readiness.",
+                "",
+                f"Lens alignment: expected count `{surface['lensContract']['expectedCount']}`; exact lens ids are pending source alignment.",
+            ]
+        )
+        if surface["id"] == "agent360":
+            lines.extend(
+                [
+                    "",
+                    "Recovered Agent blueprint review records 11 domain slots and 8 lenses. The 11 slot labels in this reconstructed catalog and all exact lens ids still require alignment to the original SSOT; no original lens names are asserted here.",
+                ]
+            )
+    lines.append("")
+    return "\n".join(lines)
+
+
 def gen_intelligence_projection_graph_md(reg: dict) -> str:
     projections = sorted(reg["projections"], key=lambda p: p["id"])
     lines = _md_header(INTELLIGENCE_PROJECTION_JSON)
@@ -3022,7 +3326,7 @@ def _summary_intelligence_projections(reg: dict) -> str:
     pending_references = sum(len(p.get("pendingReference", [])) for p in reg["projections"])
     return (
         f"intelligence-projection v{reg['contractVersion']} — "
-        f"{len(reg['projections'])} projections, "
+        f"{len(reg['projections'])} projections, {len(reg.get('productSurfaces', []))} product 360 surfaces, "
         f"{pending_authorities} pending authorities, {pending_references} pending references"
     )
 
@@ -4167,6 +4471,7 @@ REGISTRIES: tuple = (
             (INTELLIGENCE_PROJECTION_TS, gen_intelligence_projection_ts),
             (INTELLIGENCE_PROJECTION_PY, gen_intelligence_projection_py),
             (INTELLIGENCE_PROJECTION_TABLE_MD, gen_intelligence_projection_table_md),
+            (PRODUCT_360_SURFACE_CATALOG_MD, gen_product_360_surface_catalog_md),
             (INTELLIGENCE_PROJECTION_GRAPH_MD, gen_intelligence_projection_graph_md),
         ),
         _summary_intelligence_projections,

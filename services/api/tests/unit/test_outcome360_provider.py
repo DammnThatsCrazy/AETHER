@@ -38,6 +38,16 @@ from shared.intelligence_projections import (  # noqa: E402
     ProjectionSubject,
     ProviderRegistry,
 )
+from graph.operational_intelligence.models import EntityRef  # noqa: E402
+from shared.backend_interpretation.primitives import (  # noqa: E402
+    OutcomeContextRef,
+    OutcomeTruthRecord,
+)
+from shared.backend_interpretation.stores import (  # noqa: E402
+    OutcomeTruthStore,
+    OutcomeTruthStoreReader,
+)
+from shared.store import InMemoryStore  # noqa: E402
 from journeys.measurement.outcome import (  # noqa: E402
     EvidenceRef,
     Outcome,
@@ -52,13 +62,14 @@ def _request(
     tenant_id: str = "tenant-a",
     subject_id: str = "cmp_1",
     *,
+    subject_kind: str = "campaign",
     temporal_mode: str | None = None,
     include_sections: list[str] | None = None,
 ) -> ProjectionRequest:
     return ProjectionRequest(
         projectionId="outcome360",
         tenantId=tenant_id,
-        subject=ProjectionSubject(kind="campaign", id=subject_id),
+        subject=ProjectionSubject(kind=subject_kind, id=subject_id),
         temporalMode=temporal_mode,
         includeSections=include_sections,
     )
@@ -99,9 +110,7 @@ class InMemoryOutcomeStore:
     def __init__(self, by_tenant: dict[str, list[Outcome]]) -> None:
         self._by_tenant = dict(by_tenant)
 
-    async def list_outcomes(
-        self, tenant_id: str, subject: ProjectionSubject
-    ) -> list[Outcome]:
+    async def list_outcomes(self, tenant_id: str, subject: ProjectionSubject) -> list[Outcome]:
         return list(self._by_tenant.get(tenant_id, []))
 
 
@@ -119,6 +128,7 @@ def _raise_error_provider(cls: type[Exception]) -> object:
 # ---------------------------------------------------------------------------
 # Valid typed result with the registry's output sections + evidence grounding
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_provider_returns_valid_typed_result() -> None:
@@ -200,6 +210,7 @@ def _context() -> object:
 # extra="forbid" conformance (constructed via ProjectionRequest / Result)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_provider_constructs_via_forbid_contracts() -> None:
     request = _request(temporal_mode="window")
@@ -221,17 +232,12 @@ async def test_provider_constructs_via_forbid_contracts() -> None:
 # Missing dependency -> dependencyState records it, projection still returns
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_page_caps_render_set_with_honest_has_next_page() -> None:
     from graph.operational_intelligence.models import PageRequest
 
-    store = InMemoryOutcomeStore(
-        {
-            "tenant-a": [
-                _outcome(f"oc_{i}", "tenant-a") for i in range(5)
-            ]
-        }
-    )
+    store = InMemoryOutcomeStore({"tenant-a": [_outcome(f"oc_{i}", "tenant-a") for i in range(5)]})
     provider = Outcome360Provider(outcome_store=store)
     request = _request()
     request.page = PageRequest(limit=2)
@@ -286,6 +292,7 @@ async def test_missing_backing_store_degrades_sections_not_plane() -> None:
 # Content-free degraded results (fail-isolated runtime)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_project_error_yields_content_free_degraded_result() -> None:
     registry = ProviderRegistry()
@@ -317,6 +324,7 @@ async def test_non_projection_error_yields_generic_degraded_result() -> None:
 # Tenant isolation
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_tenant_a_never_surfaces_tenant_b_outcomes() -> None:
     tenant_a_rows = [
@@ -325,9 +333,7 @@ async def test_tenant_a_never_surfaces_tenant_b_outcomes() -> None:
     ]
     tenant_b_rows = [_outcome("b_1", "tenant-b")]  # journey_completion, tenant-b
     provider = Outcome360Provider(
-        outcome_store=InMemoryOutcomeStore(
-            {"tenant-a": tenant_a_rows, "tenant-b": tenant_b_rows}
-        )
+        outcome_store=InMemoryOutcomeStore({"tenant-a": tenant_a_rows, "tenant-b": tenant_b_rows})
     )
 
     result_a = await provider.project(_request("tenant-a", "cmp_a"), _context())
@@ -351,6 +357,182 @@ async def test_tenant_a_never_surfaces_tenant_b_outcomes() -> None:
 
 
 @pytest.mark.asyncio
+async def test_durable_journey_outcomes_match_exact_tenant_kind_and_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from shared.intelligence_projections.composition import compose_experience360_frame
+    from shared.intelligence_projections.contracts import (
+        Experience360FrameRequest,
+        Experience360PolicyDisposition,
+    )
+    import shared.backend_interpretation.stores as truth_stores
+
+    backing = InMemoryStore("outcome-truth-journey-test")
+    monkeypatch.setattr(truth_stores, "_kv", lambda _name: backing)
+    truth_store = OutcomeTruthStore()
+
+    def truth_record(
+        outcome_id: str,
+        tenant_id: str,
+        subject: EntityRef | OutcomeContextRef,
+        evidence_id: str,
+    ) -> OutcomeTruthRecord:
+        return OutcomeTruthRecord(
+            outcome_id=outcome_id,
+            tenant_id=tenant_id,
+            definition_ref="purchase_recorded",
+            subject=subject,
+            state="final",
+            evidence_refs=[
+                EvidenceRef(
+                    id=evidence_id,
+                    type="event",
+                    source="measurement",
+                    observedAt="2026-10-17T12:00:00Z",
+                )
+            ],
+            source_event_ids=[f"source-{outcome_id}"],
+            observed_at="2026-10-17T12:00:00Z",
+            updated_at="2026-10-17T12:00:01Z",
+        )
+
+    exact_record = truth_record(
+        "outcome-journey-exact",
+        "tenant-a",
+        OutcomeContextRef(kind="journey", id="journey-1"),
+        "evidence-journey-exact",
+    )
+    records = [
+        exact_record,
+        truth_record(
+            "outcome-journey-wrong-kind",
+            "tenant-a",
+            OutcomeContextRef(kind="episode", id="journey-1"),
+            "evidence-wrong-kind",
+        ),
+        truth_record(
+            "outcome-journey-wrong-id",
+            "tenant-a",
+            OutcomeContextRef(kind="journey", id="journey-other"),
+            "evidence-wrong-id",
+        ),
+        truth_record(
+            "outcome-journey-wrong-tenant",
+            "tenant-b",
+            OutcomeContextRef(kind="journey", id="journey-1"),
+            "evidence-wrong-tenant",
+        ),
+        truth_record(
+            "outcome-legacy-entity-ref",
+            "tenant-a",
+            EntityRef(kind="user", id="user-1"),
+            "evidence-legacy-entity-ref",
+        ),
+    ]
+    for record in records:
+        await truth_store.upsert(record)
+
+    reloaded = await truth_store.get("tenant-a", exact_record.outcome_id)
+    assert reloaded is not None
+    assert isinstance(reloaded.subject, OutcomeContextRef)
+    assert reloaded.subject.model_dump() == {"kind": "journey", "id": "journey-1"}
+
+    legacy_reloaded = await truth_store.get("tenant-a", "outcome-legacy-entity-ref")
+    assert legacy_reloaded is not None
+    assert isinstance(legacy_reloaded.subject, EntityRef)
+    assert legacy_reloaded.subject.kind == "user"
+
+    reader = OutcomeTruthStoreReader(store=truth_store)
+    journey_subject = ProjectionSubject(kind="journey", id="journey-1")
+    read_outcomes = await reader.list_outcomes("tenant-a", journey_subject)
+    assert [outcome.id for outcome in read_outcomes] == ["outcome-journey-exact"]
+    assert read_outcomes[0].tenant_id == "tenant-a"
+    assert [ref.id for ref in read_outcomes[0].evidence_refs] == ["evidence-journey-exact"]
+    same_id_other_context = await reader.list_outcomes(
+        "tenant-a", ProjectionSubject(kind="campaign", id="journey-1")
+    )
+    assert same_id_other_context == []
+
+    legacy_outcomes = await reader.list_outcomes(
+        "tenant-a", ProjectionSubject(kind="entity", id="user-1")
+    )
+    assert [outcome.id for outcome in legacy_outcomes] == ["outcome-legacy-entity-ref"]
+
+    provider = Outcome360Provider(outcome_store=reader)
+    journey_request = _request("tenant-a", "journey-1", subject_kind="journey")
+    result = await provider.project(journey_request, _context())
+
+    outcomes_section = next(section for section in result.sections if section.id == "outcomes")
+    projected = outcomes_section.content["outcomes"]
+    assert [outcome["id"] for outcome in projected] == ["outcome-journey-exact"]
+    assert projected[0]["tenant_id"] == "tenant-a"
+    assert projected[0]["updated_at"] == "2026-10-17T12:00:01Z"
+    assert projected[0]["evidence_refs"][0]["id"] == "evidence-journey-exact"
+    assert result.asOf is None
+    assert all(claim.evidenceRefs for claim in result.claims)
+
+    frame = compose_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="value360",
+            tenantId="tenant-a",
+            subject=journey_subject,
+            requestedSlotIds=["measured_outcomes"],
+            includeEvidence=True,
+        ),
+        [result],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        generated_at="2026-10-18T12:00:00Z",
+    )
+    slot = frame.slots[0]
+    assert slot.state == "available"
+    assert set(slot.canonicalAuthorityRefs) == {
+        "outcome_facts",
+        "measurement_contract",
+    }
+    assert {ref.id for ref in slot.evidenceRefs} == {"evidence-journey-exact"}
+    assert any(
+        provenance.projectionId == "outcome360"
+        and provenance.sectionId == "outcomes"
+        and provenance.evidenceRefs
+        for provenance in slot.provenance
+    )
+    # The row exposes updated_at, but there is no configured max-age rule or
+    # source snapshot timestamp. Preserve unknown freshness instead of
+    # claiming fresh or stale.
+    assert slot.freshness.state == "unknown"
+    assert slot.freshness.sourceAsOf is None
+    assert "freshness_threshold_not_configured" in slot.reasonCodes
+
+    unrelated_result = await provider.project(
+        _request("tenant-a", "journey-missing", subject_kind="journey"),
+        _context(),
+    )
+    unrelated_outcomes = next(
+        section for section in unrelated_result.sections if section.id == "outcomes"
+    )
+    assert unrelated_outcomes.state == "empty"
+    assert unrelated_outcomes.content["outcomes"] == []
+    assert unrelated_result.claims == []
+    empty_frame = compose_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="value360",
+            tenantId="tenant-a",
+            subject=ProjectionSubject(kind="journey", id="journey-missing"),
+            requestedSlotIds=["measured_outcomes"],
+            includeEvidence=True,
+        ),
+        [unrelated_result],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        generated_at="2026-10-18T12:00:00Z",
+    )
+    empty_slot = empty_frame.slots[0]
+    assert empty_slot.state == "empty"
+    assert empty_slot.content is None
+    assert empty_slot.evidenceRefs == []
+    assert empty_slot.freshness.state == "not_applicable"
+
+
+@pytest.mark.asyncio
 async def test_no_shared_mutable_state_across_tenants() -> None:
     provider_a = Outcome360Provider(
         outcome_store=InMemoryOutcomeStore({"tenant-a": [_outcome("a_1", "tenant-a")]})
@@ -371,6 +553,7 @@ async def test_no_shared_mutable_state_across_tenants() -> None:
 # ---------------------------------------------------------------------------
 # register_provider contract
 # ---------------------------------------------------------------------------
+
 
 def test_register_provider_succeeds_on_fresh_registry() -> None:
     registry = ProviderRegistry()

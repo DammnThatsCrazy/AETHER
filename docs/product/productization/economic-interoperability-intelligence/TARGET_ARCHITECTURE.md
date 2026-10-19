@@ -17,7 +17,7 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/config/settings.py": "sha256:120775873521c402933065c3073b8f2d242589bca26b095f982952f6bb392f42"
-  "services/api/main.py": "sha256:52e672c1c82e17907041ba173b1fb7cee68bfb03b158eb370fd4f25b584cc726"
+  "services/api/main.py": "sha256:692f6e93ad5413068a0cc54fa10a6139bc783a7a75ac94069e0f0c4fdaea9ca7"
 ---
 
 # Target Architecture
@@ -65,7 +65,8 @@ silver projectors (registry-derived handles) ──► silver_*_facts
 graph mutations (flag-gated, idempotent)        gold materialization
         │                                       (ClickHouse DDL, no training)
         ▼
-Profile360 sub-resources · Noesis intents · OODA suggestions · alerts
+Product 360 frames (`/v1/experience360/frames`) · Profile360 sub-resources ·
+Noesis intents · OODA suggestions · alerts
         ▼
 Aether tenant pages · Kyber operator ops pages (flag-gated, honest states)
 ```

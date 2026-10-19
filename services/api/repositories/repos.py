@@ -2494,6 +2494,50 @@ class EntityRepository(BaseRepository):
             "metadata": metadata or {},
         })
 
+    async def find_many_for_tenant_entity_ids(
+        self,
+        tenant_id: str,
+        entity_ids: set[str] | list[str] | tuple[str, ...],
+    ) -> tuple[list[dict], bool]:
+        """Resolve a bounded set of canonical entity IDs within one tenant.
+
+        The returned truncation flag is conservative: more rows than requested IDs
+        indicates duplicate entity identifiers or an unexpected repository shape, so
+        callers must not select one row as canonical.
+        """
+        if not tenant_id:
+            raise ValueError("find_many_for_tenant_entity_ids requires a tenant_id")
+        requested = sorted(
+            {value.strip() for value in entity_ids if isinstance(value, str) and value.strip()}
+        )
+        if not requested:
+            return [], False
+
+        limit = len(requested) + 1
+        requested_set = set(requested)
+        pool = await self._ensure_pool()
+        if pool is None:
+            rows = [
+                row
+                for row in self._store.values()
+                if row.get("tenant_id") == tenant_id
+                and row.get("entity_id") in requested_set
+            ]
+            rows.sort(key=lambda row: str(row.get("entity_id", "")))
+            return rows[:limit], len(rows) > len(requested)
+
+        await self._ensure_table()
+        rows = await pool.fetch(
+            "SELECT data FROM entities "
+            "WHERE tenant_id = $1 AND data->>'entity_id' = ANY($2::text[]) "
+            "ORDER BY id ASC LIMIT $3",
+            tenant_id,
+            requested,
+            limit,
+        )
+        records = [json.loads(row["data"]) for row in rows]
+        return records, len(records) > len(requested)
+
     async def list_by_tenant(
         self, tenant_id: str, entity_type: Optional[str] = None, limit: int = 100,
         *, offset: int = 0, stable_order: bool = False,
@@ -2680,12 +2724,14 @@ class AgentExecutionRepository(BaseRepository):
         error: Optional[dict] = None,
         started_at: Optional[str] = None,
         ended_at: Optional[str] = None,
+        initiating_principal_user_id: Optional[str] = None,
     ) -> dict:
         now = utc_now().isoformat()
         return await self.insert(execution_id, {
             "execution_id": execution_id,
             "agent_id": agent_id,
             "tenant_id": tenant_id,
+            "initiating_principal_user_id": initiating_principal_user_id,
             "delegation_id": delegation_id,
             "triggered_by_event_id": triggered_by_event_id,
             "status": status,

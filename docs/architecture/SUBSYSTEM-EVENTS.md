@@ -18,10 +18,10 @@ source_hashes:
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
-  "services/api/ingestion/ingestion/validation.py": "sha256:0b5528935209e6b9a75c0c58ece7cde8e5097ed13b5e199d3d76853ace69b2ee"
+  "services/api/ingestion/ingestion/validation.py": "sha256:b5181a91cc872201c6bd4103e3095c800d456a612757c436ae424cdf8d112398"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
-  "services/api/repositories/repos.py": "sha256:0526f10f7486f0e40a6b808400feaf9f65c787880ea5858c4db6b5f348645959"
+  "services/api/repositories/repos.py": "sha256:d09d752ef63f4b6eb1c46fe1b1e3f8c00399f40d1a6e86fb15ebad9685459568"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
 ---
@@ -146,3 +146,14 @@ amount limit at the source-reported event time as `within_scope`,
 source-asserted. This grant-policy evaluation does not prove external execution;
 without a server-owned receipt occurrence remains source-reported and
 unverified.
+
+Communications connector ingress can request the consent authority's durable
+receipt ID as part of validation. The receipt is passed to the projector only
+when the evaluated consent decision allows the event; the connector bridge
+keeps that receipt separate from provider-reported identity and consent fields.
+
+When AETHER's own execution endpoint creates an `agent_executions` row, it
+records the authenticated initiating principal separately from the target
+agent and stores the server-recorded delegation decision and constraints. A
+rejected attempt is still an execution-denial record; this local policy record
+does not assert that an external tool or business action occurred.

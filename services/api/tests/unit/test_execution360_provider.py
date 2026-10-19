@@ -1,0 +1,1917 @@
+"""Focused contract tests for the Execution360 provider slice."""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+os.environ.setdefault("AETHER_ENV", "local")
+os.environ.setdefault("JWT_SECRET", "test-secret")
+
+from actions.agent.execution360_provider import (  # noqa: E402
+    ExecutionEpisodeContextRead,
+    OUTPUT_SECTIONS,
+    Execution360Provider,
+    ExecutionRead,
+    RepositoryExecution360Source,
+    _read_agent_episode_context,
+    register_provider,
+)
+from actions.agent.identity_resolution import (  # noqa: E402
+    resolve_agent_identities,
+)
+from graph.operational_intelligence.models import EntityRef, EvidenceRef, TimeRangeFilter  # noqa: E402
+from shared.backend_interpretation.primitives import EpisodeRecord  # noqa: E402
+from shared.backend_interpretation.stores import EpisodePageRead, EpisodeStore  # noqa: E402
+from shared.contracts_models.epistemic import EpistemicStatus  # noqa: E402
+from shared.intelligence_projections.contracts import (  # noqa: E402
+    ClaimEnvelope,
+    Experience360ActorAttribution,
+    Experience360ActorParty,
+    Experience360FrameRequest,
+    ProjectionSection,
+)
+from shared.intelligence_projections.frame_runtime import (  # noqa: E402
+    _derive_agent_actor_metadata,
+)
+from shared.intelligence_projections import (  # noqa: E402
+    ProjectionContext,
+    ProjectionRequest,
+    ProjectionResult,
+    ProjectionSubject,
+    ProviderRegistry,
+)
+from shared.store import InMemoryStore  # noqa: E402
+
+
+TENANT = "tenant-execution360"
+AGENT = "agent-canonical-1"
+
+
+def _request(**overrides: object) -> ProjectionRequest:
+    values: dict[str, object] = {
+        "projectionId": "execution360",
+        "tenantId": TENANT,
+        "subject": ProjectionSubject(kind="agent", id=AGENT),
+    }
+    values.update(overrides)
+    return ProjectionRequest(**values)
+
+
+async def _context(request: ProjectionRequest) -> ProjectionContext:
+    return await ProviderRegistry().build_context("execution360", request)
+
+
+def _server_row(tenant_id: str = TENANT, agent_id: str = AGENT) -> dict:
+    return {
+        "tenant_id": tenant_id,
+        "agent_id": agent_id,
+        "execution_id": "exec-1",
+        "delegation_id": "deleg-1",
+        "canonical_delegation_id": "deleg-1",
+        "canonical_delegation_matched": True,
+        "canonical_agent_identity": True,
+        "canonical_agent_entity_id": AGENT,
+        "canonical_owner_entity_id": "owner-1",
+        "status": "completed",
+        "started_at": "2026-10-16T10:00:00+00:00",
+        "ended_at": "2026-10-16T10:00:02+00:00",
+        "triggered_by_event_id": "trigger-1",
+        "input_snapshot": {
+            "action": "transfer",
+            "resource": "account:4",
+            "payload": {"secret": "must-not-appear"},
+        },
+        "policy_log": {"delegation_check": {"allowed": True}},
+        "reasoning": "must-not-appear",
+        "output": {"secret": "must-not-appear"},
+    }
+
+
+def _agent360_principal_result(
+    *,
+    identity_state: str,
+    canonical_human_id: str | None,
+    candidate_human_ids: list[str],
+    principal_state: str = "available",
+    raw_principal_ids: list[str] | None = None,
+) -> ProjectionResult:
+    raw_principal_ids = raw_principal_ids or ["human-principal-1"]
+    execution_evidence_refs = [
+        EvidenceRef(
+            id=f"execution-{index}",
+            type="event",
+            source="agent_executions",
+            observedAt="2026-10-16T10:00:00Z",
+        )
+        for index, _ in enumerate(raw_principal_ids, start=1)
+    ]
+    alias_evidence_refs = [
+        EvidenceRef(
+            id=f"user-id-alias-{index}",
+            type="entity",
+            source="identity_aliases",
+            observedAt="2026-10-16T10:00:00Z",
+        )
+        for index, _ in enumerate(raw_principal_ids, start=1)
+    ]
+    subject_evidence = EvidenceRef(
+        id="human-subject-1",
+        type="entity",
+        source="identity_subjects",
+        observedAt="2026-10-16T10:00:00Z",
+    )
+    agent_identity_evidence = EvidenceRef(
+        id="agent-binding-1",
+        type="entity",
+        source="agent_deployment_identity_bindings",
+        observedAt="2026-10-16T10:00:00Z",
+    )
+    return ProjectionResult(
+        projectionId="agent360",
+        tenantId=TENANT,
+        contractVersion="1.0.0",
+        sections=[
+            ProjectionSection(
+                id="state",
+                state="available",
+                content={
+                    "dimensions": [
+                        {
+                            "id": "actor_attribution",
+                            "state": "matched",
+                            "content": {
+                                "resolvedCanonicalActor": AGENT,
+                                "executionPrincipal": {
+                                    "kind": "human",
+                                    "id": raw_principal_ids[0],
+                                }
+                                if len(raw_principal_ids) == 1
+                                else None,
+                                "executionPrincipalState": principal_state,
+                                "executionPrincipalCandidates": [
+                                    {
+                                        "principal": {"kind": "human", "id": principal_id},
+                                        "executionIds": [f"execution-{index}"],
+                                        "evidenceRefs": [
+                                            execution_evidence_refs[index - 1].model_dump(
+                                                mode="json"
+                                            )
+                                        ],
+                                    }
+                                    for index, principal_id in enumerate(raw_principal_ids, start=1)
+                                ],
+                                "executionPrincipalEvidenceRefs": [
+                                    evidence.model_dump(mode="json")
+                                    for evidence in execution_evidence_refs
+                                ],
+                                "executionPrincipalCanonicalIdentity": {
+                                    "state": identity_state,
+                                    "canonicalHumanEntityId": canonical_human_id,
+                                    "candidateEntityIds": candidate_human_ids,
+                                    "evidenceRefs": [
+                                        evidence.model_dump(mode="json")
+                                        for evidence in alias_evidence_refs
+                                    ]
+                                    + [
+                                        subject_evidence.model_dump(mode="json"),
+                                    ],
+                                },
+                            },
+                        }
+                    ]
+                },
+            )
+        ],
+        claims=[
+            ClaimEnvelope(
+                id="agent_identity_binding.agent-1",
+                kind="canonically_resolved_agent_identity",
+                subject=ProjectionSubject(kind="agent", id=AGENT),
+                evidenceRefs=[agent_identity_evidence],
+                claims=["The tenant binding resolves the agent identity."],
+                claimState=EpistemicStatus.RESOLVED,
+                domainSlotIds=["actor_attribution"],
+            )
+        ],
+        dependencyState=[],
+        generatedAt="2026-10-16T10:01:00Z",
+        degradedReasons=[],
+    )
+
+
+def _execution_result_with_principal(principal_user_id: str) -> ProjectionResult:
+    return _execution_result_with_principals([principal_user_id])
+
+
+def _execution_result_with_principals(principal_user_ids: list[str]) -> ProjectionResult:
+    evidence_by_execution_id = {
+        f"execution-{index}": EvidenceRef(
+            id=f"execution-{index}",
+            type="event",
+            source="agent_executions",
+            observedAt="2026-10-16T10:00:00Z",
+        )
+        for index, _ in enumerate(principal_user_ids, start=1)
+    }
+    return ProjectionResult(
+        projectionId="execution360",
+        tenantId=TENANT,
+        contractVersion="1.0.0",
+        sections=[
+            ProjectionSection(
+                id="state",
+                state="available",
+                content={
+                    "sourceStates": {"serverRecordedLifecycle": "available"},
+                    "serverRecordedExecutions": [
+                        {
+                            "executionId": f"execution-{index}",
+                            "initiatingPrincipalUserId": principal_user_id,
+                        }
+                        for index, principal_user_id in enumerate(principal_user_ids, start=1)
+                    ],
+                },
+            )
+        ],
+        claims=[
+            ClaimEnvelope(
+                id=f"execution.principal-{index}",
+                kind="authenticated_execution_principal",
+                subject=ProjectionSubject(kind="agent", id=AGENT),
+                evidenceRefs=[evidence_by_execution_id[f"execution-{index}"]],
+                claims=["AETHER recorded the authenticated initiating principal."],
+                claimState=EpistemicStatus.OBSERVED,
+            )
+            for index, _ in enumerate(principal_user_ids, start=1)
+        ],
+        dependencyState=[],
+        generatedAt="2026-10-16T10:01:00Z",
+        degradedReasons=[],
+    )
+
+
+def _observed_row(tenant_id: str = TENANT, actor_id: str = AGENT) -> dict:
+    return {
+        "tenantId": tenant_id,
+        "sourceEventId": "silver-event-1",
+        "occurredAt": "2026-10-16T10:00:01+00:00",
+        "eventName": "agent_tool_call_observed",
+        "runId": "source-run-1",
+        "actorAgentId": actor_id,
+        "actorIdentityStatus": "matched",
+        "delegationId": "deleg-1",
+        "delegationResolutionStatus": "matched_reference",
+        "delegationPartyBindingStatus": "matched",
+        "delegatorAgentId": AGENT,
+        "delegateeAgentId": "agent-delegatee-1",
+        "delegationScope": ["action:transfer", "resource:account:4"],
+        "delegationValidFrom": "2026-10-16T09:00:00+00:00",
+        "delegationValidUntil": "2026-10-17T09:00:00+00:00",
+        "delegationStatus": "granted",
+        "delegationEvidenceId": "deleg-1",
+        "delegationEvidenceObservedAt": "2026-10-16T08:00:00+00:00",
+        "authorizationStatus": "within_scope",
+        "actionType": "transfer",
+        "resourceRef": "account:4",
+        "toolName": "payments.send",
+        "reportedStatus": "completed",
+        # Reader additions cannot upgrade external occurrence evidence.
+        "executionOccurrence": "verified",
+        "executionVerified": True,
+    }
+
+
+class FakeSource:
+    def __init__(
+        self,
+        server: ExecutionRead | None = None,
+        observed: ExecutionRead | None = None,
+        *,
+        error: Exception | None = None,
+    ) -> None:
+        self.server = server or ExecutionRead(
+            rows=[_server_row()],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        )
+        self.observed = observed or ExecutionRead(
+            rows=[_observed_row()],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        )
+        self.error = error
+
+    async def server_executions(
+        self, *, tenant_id: str, subject: ProjectionSubject, limit: int
+    ) -> ExecutionRead:
+        if self.error:
+            raise self.error
+        return self.server
+
+    async def observed_facts(
+        self, *, tenant_id: str, subject: ProjectionSubject, limit: int
+    ) -> ExecutionRead:
+        if self.error:
+            raise self.error
+        return self.observed
+
+
+async def test_provider_emits_registry_sections_evidence_and_catalog_bound_claims() -> None:
+    request = _request()
+    context = await _context(request)
+    result = await Execution360Provider(FakeSource()).project(request, context)
+
+    assert isinstance(result, ProjectionResult)
+    assert [section.id for section in result.sections] == list(OUTPUT_SECTIONS)
+    assert OUTPUT_SECTIONS == (
+        "evidence",
+        "interactions",
+        "outcomes",
+        "state",
+        "summary",
+        "timeline",
+        "episode_context",
+    )
+    assert result.dependencyState == context.dependencyState
+    assert result.claims
+    for claim in result.claims:
+        assert claim.evidenceRefs
+        assert all(isinstance(ref, EvidenceRef) and ref.id for ref in claim.evidenceRefs)
+        assert claim.domainSlotIds
+        assert set(claim.domainSlotIds) <= {
+            "action_tool_resource_trace",
+            "actor_and_delegation",
+            "evidence_and_lineage",
+            "execution_identity_and_state",
+        }
+
+    state = next(section for section in result.sections if section.id == "state")
+    server_record = state.content["serverRecordedExecutions"][0]
+    assert server_record["status"] == "completed"
+    assert server_record["externalExecutionReceipt"] == "unknown"
+    assert server_record["delegationId"] == "deleg-1"
+    external = state.content["sourceReportedRuns"][0]
+    assert external["occurrence"] == "source_reported"
+    assert external["verified"] is False
+
+    outcomes = next(section for section in result.sections if section.id == "outcomes")
+    assert outcomes.state == "unknown"
+    assert outcomes.content["businessOutcome"]["state"] == "unknown"
+    assert outcomes.content["executorCallbacks"][0]["businessEffect"] == "not_established"
+
+    serialized = result.model_dump_json()
+    assert "must-not-appear" not in serialized
+    assert "workerRunLinkage" in serialized
+
+
+async def test_tool_telemetry_remains_unlinked_from_server_execution_without_exact_id() -> None:
+    request = _request()
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row()],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead(
+            rows=[_observed_row()],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+    )
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    assert interactions.content["toolInvocationLinkage"] == {
+        "state": "unknown",
+        "reason": "tool_observations_do_not_carry_a_canonical_agent_execution_id",
+        "sourceReadState": "available",
+        "sourceReportedToolRelatedFactCount": 1,
+        "evidenceRefs": [
+            {
+                "id": "silver-event-1",
+                "type": "event",
+                "source": "silver_agent_execution_facts",
+                "observedAt": "2026-10-16T10:00:01+00:00",
+                "uri": "store://silver_agent_execution_facts/silver-event-1",
+            }
+        ],
+    }
+    source_reported = next(
+        item
+        for item in interactions.content["interactions"]
+        if item["source"] == "silver_agent_execution_facts"
+    )
+    assert source_reported["toolName"] == "payments.send"
+    assert source_reported["runId"] == "source-run-1"
+    assert "executionId" not in source_reported
+
+
+async def test_executor_callback_outcome_has_run_evidence_without_business_effect_claim() -> None:
+    server_row = {
+        **_server_row(),
+        "outcome_event_id": "run-outcome-event-1",
+        "outcome_event_published": True,
+    }
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[server_row],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        )
+    )
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    outcomes = next(section for section in result.sections if section.id == "outcomes")
+    assert outcomes.state == "unknown"
+    assert outcomes.content["executionOutcomeAuthority"] == {
+        "source": "agent_executions",
+        "readState": "available",
+        "recordMeaning": "server_recorded_run_lifecycle_callback",
+        "eventPayloadRead": False,
+    }
+    callback = outcomes.content["executorCallbacks"][0]
+    assert callback["executionId"] == "exec-1"
+    assert callback["recordedStatus"] == "completed"
+    assert callback["recordedAt"] == "2026-10-16T10:00:02+00:00"
+    assert callback["outcomeEventId"] == "run-outcome-event-1"
+    assert callback["outcomeEventReferenceKind"] == "event_id_recorded_on_agent_execution"
+    assert callback["eventPublicationState"] == "published"
+    assert callback["outcomeKind"] == "server_recorded_executor_run_terminal_status"
+    assert callback["businessEffect"] == "not_established"
+    assert callback["evidenceRefs"] == [
+        {
+            "id": "exec-1",
+            "type": "event",
+            "source": "agent_executions",
+            "observedAt": "2026-10-16T10:00:02+00:00",
+            "uri": "store://agent_executions/exec-1",
+        }
+    ]
+    assert outcomes.content["businessOutcome"] == {
+        "state": "unknown",
+        "reason": "business_outcome_requires_independent_outcome_or_economic_authority",
+    }
+    assert outcomes.content["businessOutcomeAuthorityRead"] is False
+
+
+@pytest.mark.parametrize(
+    ("published", "expected_state"),
+    [(False, "not_published"), (None, "unknown")],
+)
+async def test_executor_callback_event_publication_state_fails_closed(
+    published: bool | None, expected_state: str
+) -> None:
+    server_row = {
+        **_server_row(),
+        "outcome_event_id": "run-outcome-event-1",
+        "outcome_event_published": published,
+    }
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[server_row],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        )
+    )
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+    outcomes = next(section for section in result.sections if section.id == "outcomes")
+
+    callback = outcomes.content["executorCallbacks"][0]
+    assert callback["eventPublicationState"] == expected_state
+    assert callback["businessEffect"] == "not_established"
+
+
+async def test_run_outcome_event_id_does_not_stand_in_for_action_delivery_receipt() -> None:
+    # Deliberately reuse a telemetry event identifier as the lifecycle event
+    # reference. Equal opaque IDs across stores do not create a receipt join.
+    server_row = {
+        **_server_row(),
+        "outcome_event_id": "silver-event-1",
+        "outcome_event_published": True,
+    }
+    request = _request()
+    result = await Execution360Provider(
+        FakeSource(
+            server=ExecutionRead(
+                rows=[server_row],
+                available=True,
+                scope_known=True,
+                agent_ids=(AGENT,),
+            ),
+            observed=ExecutionRead(
+                rows=[_observed_row()],
+                available=True,
+                scope_known=True,
+                agent_ids=(AGENT,),
+            ),
+        )
+    ).project(request, await _context(request))
+
+    outcomes = next(section for section in result.sections if section.id == "outcomes")
+    assert outcomes.content["externalExecutionReceipt"] == {
+        "state": "unknown",
+        "reason": "no_server_authoritative_external_execution_receipt_is_joined_by_this_provider",
+    }
+    callback = outcomes.content["executorCallbacks"][0]
+    assert callback["outcomeEventId"] == "silver-event-1"
+    assert callback["outcomeEventReferenceKind"] == "event_id_recorded_on_agent_execution"
+    assert callback["businessEffect"] == "not_established"
+
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    source_fact = next(
+        item
+        for item in interactions.content["interactions"]
+        if item["source"] == "silver_agent_execution_facts"
+    )
+    assert source_fact["sourceEventId"] == callback["outcomeEventId"]
+    assert source_fact["executionOccurrence"] == "source_reported"
+    assert source_fact["executionVerified"] is False
+
+
+async def test_source_agent_subject_uses_canonical_identity_for_execution_facts() -> None:
+    source_agent_id = "runtime-agent-7"
+    canonical_agent_id = "canonical-agent-7"
+    request = _request(subject=ProjectionSubject(kind="agent", id=source_agent_id))
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[
+                {
+                    **_server_row(agent_id=source_agent_id),
+                    "canonical_agent_entity_id": canonical_agent_id,
+                }
+            ],
+            available=True,
+            scope_known=True,
+            agent_ids=(canonical_agent_id,),
+        ),
+        observed=ExecutionRead(
+            rows=[_observed_row(actor_id=canonical_agent_id)],
+            available=True,
+            scope_known=True,
+            agent_ids=(canonical_agent_id,),
+        ),
+    )
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    state = next(section for section in result.sections if section.id == "state")
+    assert state.content["serverRecordedExecutions"][0]["agentId"] == canonical_agent_id
+    assert state.content["sourceReportedRuns"][0]["sourceEventId"] == "silver-event-1"
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    observed_interaction = next(
+        row
+        for row in interactions.content["interactions"]
+        if row["source"] == "silver_agent_execution_facts"
+    )
+    assert observed_interaction["actorAgentId"] == canonical_agent_id
+    assert "execution_subject_binding_incomplete" not in result.degradedReasons
+
+
+async def test_shared_agent_identity_resolution_requires_explicit_canonical_binding() -> None:
+    source_agent_id = "runtime-agent-8"
+    canonical_agent_id = "canonical-agent-8"
+
+    class Deployments:
+        async def list_page(self, tenant_id, *, limit, cursor=None):
+            assert tenant_id == TENANT
+            return (
+                [
+                    {
+                        "tenant_id": TENANT,
+                        "id": "deployment-8",
+                        "agent_id": source_agent_id,
+                        "agent_source_namespace": "provider-eight",
+                    }
+                ],
+                None,
+                False,
+            )
+
+    class Bindings:
+        async def find_for_source(self, tenant_id, source_namespace, source_agent_ref):
+            assert (tenant_id, source_namespace, source_agent_ref) == (
+                TENANT,
+                "provider-eight",
+                source_agent_id,
+            )
+            return [
+                {
+                    "id": "binding-8",
+                    "tenant_id": TENANT,
+                    "source_namespace": source_namespace,
+                    "source_agent_ref": source_agent_ref,
+                    "canonical_agent_entity_id": canonical_agent_id,
+                    "binding_authority": "tenant_admin_explicit",
+                    "status": "active",
+                }
+            ]
+
+    class Entities:
+        async def find_by_id(self, entity_id):
+            if entity_id == canonical_agent_id:
+                return {
+                    "tenant_id": TENANT,
+                    "entity_type": "agent",
+                    "entity_id": canonical_agent_id,
+                }
+            return None
+
+    result = await resolve_agent_identities(
+        TENANT,
+        {source_agent_id},
+        deployments=Deployments(),
+        identity_bindings=Bindings(),
+        entities=Entities(),
+        limit=20,
+    )
+
+    assert result.scope_mismatch is False
+    assert result.truncated is False
+    assert result.rows[0]["agent_id"] == source_agent_id
+    assert result.rows[0]["canonical_agent_entity_id"] == canonical_agent_id
+
+
+async def test_missing_source_agent_binding_does_not_create_a_canonical_identity() -> None:
+    class Deployments:
+        async def list_page(self, tenant_id, *, limit, cursor=None):
+            return (
+                [
+                    {
+                        "tenant_id": tenant_id,
+                        "id": "deployment-unbound",
+                        "agent_id": "unbound-agent",
+                        "agent_source_namespace": "provider-unbound",
+                    }
+                ],
+                None,
+                False,
+            )
+
+    class Bindings:
+        async def find_for_source(self, tenant_id, source_namespace, source_agent_ref):
+            return []
+
+    class Entities:
+        async def find_by_id(self, entity_id):
+            return None
+
+    result = await resolve_agent_identities(
+        TENANT,
+        {"unbound-agent"},
+        deployments=Deployments(),
+        identity_bindings=Bindings(),
+        entities=Entities(),
+        limit=20,
+    )
+
+    assert result.rows == []
+    assert result.scope_mismatch is False
+    assert result.truncated is False
+
+
+async def test_repository_execution_adapter_joins_source_ids_to_canonical_agents(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import actions.agent.deployments as deployment_module
+    import actions.agent_marketplace.authority as authority_module
+    import actions.agent_marketplace.identity_binding as binding_module
+    import dependencies.providers as providers_module
+    import repositories.repos as repos_module
+
+    source_agent_id = "runtime-agent-9"
+    canonical_agent_id = "canonical-agent-9"
+    observed_row = {
+        "tenant_id": TENANT,
+        "source_event_id": "silver-event-9",
+        "delegation_id": "deleg-9",
+        "occurred_at": "2026-10-16T10:00:01+00:00",
+        "event_name": "agent_tool_call_observed",
+        "run_id": "source-run-9",
+        "action_type": "transfer",
+        "resource_ref": "account:9",
+        "tool_name": "payments.send",
+        "status": "completed",
+    }
+    execution_row = _server_row(agent_id=source_agent_id)
+    execution_row["execution_id"] = "exec-9"
+
+    class Deployments:
+        async def list_page(self, tenant_id, *, limit, cursor=None):
+            return (
+                [
+                    {
+                        "tenant_id": tenant_id,
+                        "id": "deployment-9",
+                        "agent_id": source_agent_id,
+                        "agent_source_namespace": "provider-nine",
+                    }
+                ],
+                None,
+                False,
+            )
+
+    class Bindings:
+        async def find_for_source(self, tenant_id, source_namespace, source_agent_ref):
+            return [
+                {
+                    "id": "binding-9",
+                    "tenant_id": tenant_id,
+                    "source_namespace": source_namespace,
+                    "source_agent_ref": source_agent_ref,
+                    "canonical_agent_entity_id": canonical_agent_id,
+                    "binding_authority": "tenant_admin_explicit",
+                    "status": "active",
+                }
+            ]
+
+    class Entities:
+        async def find_by_id(self, entity_id):
+            if entity_id == canonical_agent_id:
+                return {
+                    "tenant_id": TENANT,
+                    "entity_type": "agent",
+                    "entity_id": canonical_agent_id,
+                }
+            return None
+
+    class AgentConfigs:
+        async def find_by_id(self, agent_id):
+            return {
+                "tenant_id": TENANT,
+                "agent_id": source_agent_id,
+                "owner_entity_id": "owner-9",
+            }
+
+        async def list_for_owner(self, owner_entity_id):
+            return []
+
+        async def find_many(self, *, filters, limit):
+            return []
+
+    class AgentExecutions:
+        async def list_for_agent(self, agent_id, tenant_id, *, limit):
+            assert agent_id == source_agent_id
+            return [execution_row]
+
+    class Delegations:
+        async def find_by_id(self, delegation_id):
+            return {
+                "tenant_id": TENANT,
+                "delegation_id": delegation_id,
+            }
+
+    class Analytics:
+        def __init__(self, cache):
+            pass
+
+        async def query_silver(self, table, filters, *, limit):
+            assert table == "silver_agent_execution_facts"
+            assert filters == {"tenant_id": TENANT}
+            return [observed_row]
+
+    class AuthorityResolver:
+        async def resolve(self, row):
+            return {
+                "delegation_resolution": {
+                    "actor_identity_status": "matched",
+                    "party_identity_status": "matched",
+                    "status": "matched_reference",
+                    "grantor_entity_id": canonical_agent_id,
+                    "grantee_entity_id": "canonical-delegatee-9",
+                    "state_at_event": "active",
+                },
+                "delegation_record": {
+                    "tenant_id": TENANT,
+                    "delegation_id": "deleg-9",
+                    "grantor_entity_id": canonical_agent_id,
+                    "grantee_entity_id": "canonical-delegatee-9",
+                    "scope": {"actions": ["transfer"], "resources": ["account:9"]},
+                    "starts_at": "2026-10-16T09:00:00+00:00",
+                    "created_at": "2026-10-16T08:00:00+00:00",
+                },
+                "delegation_authorization": {
+                    "actor_entity_id": canonical_agent_id,
+                    "target_entity_id": "canonical-delegatee-9",
+                    "binding_authority": "tenant_admin_explicit",
+                    "status": "within_scope",
+                },
+            }
+
+    monkeypatch.setattr(deployment_module, "get_deployment_repository", lambda: Deployments())
+    monkeypatch.setattr(binding_module, "AgentDeploymentIdentityBindingRepository", Bindings)
+    monkeypatch.setattr(repos_module, "EntityRepository", Entities)
+    monkeypatch.setattr(repos_module, "AgentConfigRepository", AgentConfigs)
+    monkeypatch.setattr(repos_module, "AgentExecutionRepository", AgentExecutions)
+    monkeypatch.setattr(repos_module, "DelegationRepository", Delegations)
+    monkeypatch.setattr(repos_module, "AnalyticsRepository", Analytics)
+    monkeypatch.setattr(authority_module, "AgentRunAuthorityResolver", AuthorityResolver)
+    monkeypatch.setattr(providers_module, "get_cache", lambda: object())
+
+    source = RepositoryExecution360Source()
+    subject = ProjectionSubject(kind="agent", id=source_agent_id)
+    server = await source.server_executions(tenant_id=TENANT, subject=subject, limit=10)
+    observed = await source.observed_facts(tenant_id=TENANT, subject=subject, limit=10)
+
+    assert server.available is True
+    assert server.scope_known is True
+    assert server.agent_ids == (canonical_agent_id,)
+    assert server.rows[0]["canonical_agent_identity"] is True
+    assert server.rows[0]["canonical_agent_entity_id"] == canonical_agent_id
+    assert observed.available is True
+    assert observed.scope_known is True
+    assert observed.agent_ids == (canonical_agent_id,)
+    assert observed.rows[0]["actorAgentId"] == canonical_agent_id
+
+
+async def test_authenticated_execution_principal_is_carried_into_frame_metadata() -> None:
+    row = {**_server_row(), "initiating_principal_user_id": "human-principal-1"}
+    source = FakeSource(
+        server=ExecutionRead(rows=[row], available=True, scope_known=True, agent_ids=(AGENT,)),
+        observed=ExecutionRead(rows=[], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+    projection_request = _request()
+    result = await Execution360Provider(source).project(
+        projection_request,
+        await _context(projection_request),
+    )
+
+    claim = next(
+        claim for claim in result.claims if claim.kind == "authenticated_execution_principal"
+    )
+    assert claim.claimState == EpistemicStatus.OBSERVED
+    assert claim.evidenceRefs[0].source == "agent_executions"
+    state = next(section for section in result.sections if section.id == "state")
+    assert state.content["serverRecordedExecutions"][0]["initiatingPrincipalUserId"] == (
+        "human-principal-1"
+    )
+
+    frame_request = Experience360FrameRequest(
+        surfaceId="execution360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+    )
+    metadata = _derive_agent_actor_metadata(frame_request, [result])
+    actor = metadata["actor_and_delegation"]
+    assert actor.executionPrincipal is not None
+    assert actor.executionPrincipal.kind == "human"
+    assert actor.executionPrincipal.id == "human-principal-1"
+    assert any(ref.source == "agent_executions" for ref in actor.evidenceRefs)
+
+
+async def test_principal_stays_unknown_when_any_complete_execution_lacks_attribution() -> None:
+    rows = [
+        {**_server_row(), "initiating_principal_user_id": "human-principal-1"},
+        {**_server_row(), "execution_id": "exec-2"},
+    ]
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=rows,
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead(rows=[], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+    projection_request = _request()
+    result = await Execution360Provider(source).project(
+        projection_request,
+        await _context(projection_request),
+    )
+    frame_request = Experience360FrameRequest(
+        surfaceId="execution360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+    )
+
+    metadata = _derive_agent_actor_metadata(frame_request, [result])
+
+    assert metadata["actor_and_delegation"].executionPrincipal is None
+
+
+async def test_truncated_server_execution_read_does_not_resolve_principal_or_decision() -> None:
+    row = {
+        **_server_row(),
+        "initiating_principal_user_id": "human-principal-1",
+    }
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[row],
+            available=True,
+            scope_known=True,
+            truncated=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead(rows=[], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+    projection_request = _request()
+    result = await Execution360Provider(source).project(
+        projection_request,
+        await _context(projection_request),
+    )
+    frame_request = Experience360FrameRequest(
+        surfaceId="execution360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+    )
+
+    metadata = _derive_agent_actor_metadata(frame_request, [result])
+    actor = metadata["actor_and_delegation"]
+
+    assert actor.executionPrincipal is None
+    assert actor.resolvedCanonicalActor is None
+    assert actor.authorityDecision is not None
+    assert actor.authorityDecision.outcome == "unknown"
+    assert actor.authorityDecision.reasonCodes == ["no_action_scoped_decision_available"]
+
+
+async def test_truncated_source_telemetry_does_not_resolve_actor_or_delegation_chain() -> None:
+    source = FakeSource(
+        server=ExecutionRead(rows=[], available=True, scope_known=True, agent_ids=(AGENT,)),
+        observed=ExecutionRead(
+            rows=[_observed_row()],
+            available=True,
+            scope_known=True,
+            truncated=True,
+            agent_ids=(AGENT,),
+        ),
+    )
+    projection_request = _request()
+    result = await Execution360Provider(source).project(
+        projection_request,
+        await _context(projection_request),
+    )
+    frame_request = Experience360FrameRequest(
+        surfaceId="execution360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+    )
+
+    metadata = _derive_agent_actor_metadata(frame_request, [result])
+    actor = metadata["actor_and_delegation"]
+
+    assert actor.resolutionState == "unknown"
+    assert actor.resolvedCanonicalActor is None
+    assert actor.delegator is None
+    assert actor.delegatee is None
+    assert actor.delegationChain == []
+
+
+async def test_frame_does_not_collapse_multiple_execution_principals() -> None:
+    rows = [
+        {
+            **_server_row(),
+            "execution_id": f"exec-{index}",
+            "initiating_principal_user_id": principal,
+        }
+        for index, principal in enumerate(("human-principal-1", "human-principal-2"), start=1)
+    ]
+    source = FakeSource(
+        server=ExecutionRead(rows=rows, available=True, scope_known=True, agent_ids=(AGENT,)),
+        observed=ExecutionRead(rows=[], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+    projection_request = _request()
+    result = await Execution360Provider(source).project(
+        projection_request,
+        await _context(projection_request),
+    )
+    frame_request = Experience360FrameRequest(
+        surfaceId="execution360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+    )
+
+    metadata = _derive_agent_actor_metadata(frame_request, [result])
+
+    assert metadata["actor_and_delegation"].executionPrincipal is None
+
+
+async def test_provider_drops_cross_tenant_rows_and_unresolved_authority() -> None:
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row(tenant_id="tenant-other")],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead(
+            rows=[
+                _observed_row(tenant_id="tenant-other"),
+                {**_observed_row(), "delegationResolutionStatus": "unresolved"},
+            ],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+    )
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    assert result.claims == []
+    assert (
+        next(section for section in result.sections if section.id == "summary").content[
+            "serverRecordedExecutionCount"
+        ]
+        == 0
+    )
+    assert (
+        next(section for section in result.sections if section.id == "summary").content[
+            "sourceReportedFactCount"
+        ]
+        == 0
+    )
+
+
+async def test_unavailable_sources_degrade_without_leaking_diagnostics() -> None:
+    request = _request()
+    result = await Execution360Provider(
+        FakeSource(error=RuntimeError("sensitive tenant storage detail"))
+    ).project(request, await _context(request))
+
+    assert "sensitive tenant storage detail" not in result.model_dump_json()
+    assert result.degradedReasons == [
+        "observed_execution_source_unavailable",
+        "server_execution_source_unavailable",
+    ]
+    assert all(
+        section.state == "degraded" for section in result.sections if section.id != "outcomes"
+    )
+    assert (
+        next(section for section in result.sections if section.id == "outcomes").state == "unknown"
+    )
+
+
+async def test_historical_anchor_is_not_claimed_when_lifecycle_is_mutable() -> None:
+    request = _request(asOf="2026-10-16T10:00:00+00:00")
+    result = await Execution360Provider(FakeSource()).project(request, await _context(request))
+
+    assert result.asOf is None
+    assert "temporal_anchor_not_reconstructable_from_current_sources" in result.degradedReasons
+    assert next(section for section in result.sections if section.id == "state").state == "degraded"
+
+
+async def test_window_mode_is_supported_and_applies_explicit_event_time_bounds() -> None:
+    request = _request(
+        temporalMode="window",
+        timeRange=TimeRangeFilter(
+            from_="2026-10-16T10:00:01+00:00",
+            to="2026-10-16T10:00:01+00:00",
+        ),
+    )
+    result = await Execution360Provider(FakeSource()).project(request, await _context(request))
+
+    assert result.degradedReasons == []
+    state = next(section for section in result.sections if section.id == "state")
+    assert state.state == "available"
+    assert state.content["serverRecordedExecutions"] == []
+    assert len(state.content["sourceReportedRuns"]) == 1
+
+
+async def test_frame_actor_metadata_uses_execution_evidence_and_keeps_decision_scoped() -> None:
+    projection_request = _request()
+    result = await Execution360Provider(FakeSource()).project(
+        projection_request,
+        await _context(projection_request),
+    )
+    frame_request = Experience360FrameRequest(
+        surfaceId="agent360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+    )
+
+    metadata = _derive_agent_actor_metadata(frame_request, [result])
+
+    actor = metadata["actor_attribution"]
+    assert actor.resolutionState == "resolved"
+    assert actor.resolvedCanonicalActor is not None
+    assert actor.resolvedCanonicalActor.id == AGENT
+    assert actor.evidenceRefs
+    authority = metadata["authority_and_delegation"].authorityDecision
+    assert authority is not None
+    assert authority.outcome == "allow"
+    assert authority.delegationRefs == ["deleg-1"]
+    assert authority.reasonCodes == ["recorded_execution_scoped_decision_not_standing_authority"]
+    assert authority.evidenceRefs
+    assert metadata["actor_attribution"].delegator is not None
+    assert metadata["actor_attribution"].delegator.id == AGENT
+    assert metadata["actor_attribution"].delegatee is not None
+    assert metadata["actor_attribution"].delegatee.id == "agent-delegatee-1"
+    assert len(metadata["actor_attribution"].delegationChain) == 1
+    delegation = metadata["actor_attribution"].delegationChain[0]
+    assert delegation.id == "deleg-1"
+    assert delegation.scope == ["action:transfer", "resource:account:4"]
+    assert {ref.source for ref in delegation.evidenceRefs} == {
+        "delegations",
+        "silver_agent_execution_facts",
+    }
+
+
+async def test_recorded_denial_without_matching_grant_reaches_agent_frame() -> None:
+    denied = {
+        **_server_row(),
+        "delegation_id": None,
+        "canonical_delegation_id": None,
+        "canonical_delegation_matched": False,
+        "status": "revoked",
+        "policy_log": {
+            "delegation_check": {
+                "allowed": False,
+                "delegation_id": None,
+                "reason": "no_active_delegation",
+                "matched_scope": None,
+            }
+        },
+    }
+    projection_request = _request()
+    result = await Execution360Provider(
+        FakeSource(
+            server=ExecutionRead(
+                rows=[denied],
+                available=True,
+                scope_known=True,
+                agent_ids=(AGENT,),
+            )
+        )
+    ).project(projection_request, await _context(projection_request))
+
+    state = next(section for section in result.sections if section.id == "state")
+    recorded = state.content["serverRecordedExecutions"][0]
+    assert recorded["recordedDelegationDecision"] is False
+    assert recorded["delegationDecisionReason"] == "no_active_delegation"
+    decision_claim = next(
+        claim for claim in result.claims if claim.kind == "server_recorded_delegation_decision"
+    )
+    assert decision_claim.claimState == EpistemicStatus.OBSERVED
+    assert "denied" in decision_claim.claims[0]
+    assert "transfer" in decision_claim.claims[0]
+    assert "account:4" in decision_claim.claims[0]
+
+    frame_request = Experience360FrameRequest(
+        surfaceId="agent360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+    )
+    metadata = _derive_agent_actor_metadata(frame_request, [result])
+    authority = metadata["authority_and_delegation"].authorityDecision
+    assert authority is not None
+    assert authority.outcome == "deny"
+    assert authority.authorityRef == "aether.agent_delegation_engine"
+    assert authority.delegationRefs == []
+    assert authority.actionRefs == ["transfer"]
+    assert authority.resourceRefs == ["account:4"]
+    assert authority.executionRefs == ["exec-1"]
+    assert authority.evidenceRefs[0].id == "exec-1"
+    assert authority.reasonCodes == ["recorded_delegation_denial_without_matching_grant"]
+
+
+async def test_frame_keeps_same_outcome_decisions_separate_by_action_and_resource() -> None:
+    rows = [
+        {
+            **_server_row(),
+            "execution_id": "exec-transfer",
+            "input_snapshot": {"action": "transfer", "resource": "account:4"},
+        },
+        {
+            **_server_row(),
+            "execution_id": "exec-refund",
+            "input_snapshot": {"action": "refund", "resource": "invoice:9"},
+        },
+    ]
+    projection_request = _request()
+    result = await Execution360Provider(
+        FakeSource(
+            server=ExecutionRead(
+                rows=rows,
+                available=True,
+                scope_known=True,
+                agent_ids=(AGENT,),
+            ),
+            observed=ExecutionRead(
+                rows=[],
+                available=True,
+                scope_known=True,
+                agent_ids=(AGENT,),
+            ),
+        )
+    ).project(projection_request, await _context(projection_request))
+    frame_request = Experience360FrameRequest(
+        surfaceId="agent360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+    )
+
+    metadata = _derive_agent_actor_metadata(frame_request, [result])
+    authority = metadata["authority_and_delegation"].authorityDecision
+
+    assert authority is not None
+    assert authority.outcome == "unknown"
+    assert authority.authorityRef is None
+    assert authority.actionRefs == ["refund", "transfer"]
+    assert authority.resourceRefs == ["account:4", "invoice:9"]
+    assert authority.executionRefs == ["exec-refund", "exec-transfer"]
+    assert authority.reasonCodes == ["multiple_action_scoped_decisions_not_collapsed"]
+
+
+async def test_frame_does_not_emit_allow_when_recorded_action_scope_is_missing() -> None:
+    row = {
+        **_server_row(),
+        "input_snapshot": {"resource": "account:4"},
+    }
+    projection_request = _request()
+    result = await Execution360Provider(
+        FakeSource(
+            server=ExecutionRead(
+                rows=[row],
+                available=True,
+                scope_known=True,
+                agent_ids=(AGENT,),
+            ),
+            observed=ExecutionRead(
+                rows=[],
+                available=True,
+                scope_known=True,
+                agent_ids=(AGENT,),
+            ),
+        )
+    ).project(projection_request, await _context(projection_request))
+    frame_request = Experience360FrameRequest(
+        surfaceId="agent360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+    )
+
+    metadata = _derive_agent_actor_metadata(frame_request, [result])
+    authority = metadata["authority_and_delegation"].authorityDecision
+
+    assert authority is not None
+    assert authority.outcome == "unknown"
+    assert authority.actionRefs == []
+    assert authority.resourceRefs == ["account:4"]
+    assert authority.executionRefs == ["exec-1"]
+    assert authority.reasonCodes == ["recorded_execution_decision_missing_action_scope"]
+
+
+async def test_frame_delegation_chain_requires_aware_validity_and_nonempty_scope() -> None:
+    projection_request = _request()
+    row = {**_observed_row(), "delegationScope": None, "delegationValidFrom": "2026-10-16T09:00:00"}
+    result = await Execution360Provider(
+        FakeSource(
+            observed=ExecutionRead(rows=[row], available=True, scope_known=True, agent_ids=(AGENT,))
+        )
+    ).project(projection_request, await _context(projection_request))
+    frame_request = Experience360FrameRequest(
+        surfaceId="agent360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+    )
+
+    metadata = _derive_agent_actor_metadata(frame_request, [result])
+
+    actor = metadata["actor_attribution"]
+    assert actor.delegator is not None and actor.delegator.id == AGENT
+    assert actor.delegatee is not None and actor.delegatee.id == "agent-delegatee-1"
+    assert actor.delegationChain == []
+
+
+async def test_frame_does_not_collapse_multiple_delegations_into_one_chain() -> None:
+    projection_request = _request()
+    first = _observed_row()
+    second = {
+        **_observed_row(),
+        "sourceEventId": "silver-event-2",
+        "delegationId": "deleg-2",
+        "delegationEvidenceId": "deleg-2",
+        "delegateeAgentId": "agent-delegatee-2",
+    }
+    result = await Execution360Provider(
+        FakeSource(
+            observed=ExecutionRead(
+                rows=[first, second], available=True, scope_known=True, agent_ids=(AGENT,)
+            )
+        )
+    ).project(projection_request, await _context(projection_request))
+    frame_request = Experience360FrameRequest(
+        surfaceId="execution360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+    )
+
+    metadata = _derive_agent_actor_metadata(frame_request, [result])
+
+    actor = metadata["actor_and_delegation"]
+    assert actor.delegator is None
+    assert actor.delegatee is None
+    assert actor.delegationChain == []
+
+
+async def test_frame_actor_metadata_accepts_agent360_identity_claim_but_keeps_authority_unknown() -> (
+    None
+):
+    evidence = EvidenceRef(
+        id="binding-agent-1",
+        type="entity",
+        source="agent_deployment_identity_bindings",
+        observedAt="2026-10-16T10:00:00Z",
+    )
+    agent_result = ProjectionResult(
+        projectionId="agent360",
+        tenantId=TENANT,
+        contractVersion="1.0.0",
+        sections=[
+            ProjectionSection(
+                id="state",
+                state="available",
+                content={
+                    "dimensions": [
+                        {
+                            "id": "actor_attribution",
+                            "state": "matched",
+                            "content": {"resolvedCanonicalActor": "canonical-agent-1"},
+                        }
+                    ]
+                },
+            )
+        ],
+        claims=[
+            ClaimEnvelope(
+                id="agent_identity_binding.binding-agent-1",
+                kind="canonically_resolved_agent_identity",
+                subject=ProjectionSubject(kind="agent", id=AGENT),
+                evidenceRefs=[evidence],
+                claims=["Explicit tenant binding resolves this agent identity."],
+                claimState=EpistemicStatus.RESOLVED,
+                domainSlotIds=["actor_attribution"],
+            )
+        ],
+        dependencyState=[],
+        generatedAt="2026-10-16T10:00:00Z",
+        degradedReasons=[],
+    )
+    frame_request = Experience360FrameRequest(
+        surfaceId="agent360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+    )
+
+    metadata = _derive_agent_actor_metadata(frame_request, [agent_result])
+
+    actor = metadata["actor_attribution"]
+    assert actor.resolutionState == "resolved"
+    assert actor.resolvedCanonicalActor is not None
+    assert actor.resolvedCanonicalActor.id == "canonical-agent-1"
+    assert actor.evidenceRefs == [evidence]
+    authority = metadata["authority_and_delegation"].authorityDecision
+    assert authority is not None
+    assert authority.outcome == "unknown"
+    assert authority.reasonCodes == ["no_action_scoped_decision_available"]
+
+    identity_only_request = Experience360FrameRequest(
+        surfaceId="agent360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+        requestedSlotIds=["agent_identity"],
+    )
+    assert _derive_agent_actor_metadata(identity_only_request, [agent_result]) == {}
+
+    actor_only_request = identity_only_request.model_copy(
+        update={"requestedSlotIds": ["actor_attribution"]}
+    )
+    actor_only_metadata = _derive_agent_actor_metadata(actor_only_request, [agent_result])
+    assert set(actor_only_metadata) == {"actor_attribution"}
+    assert actor_only_metadata["actor_attribution"].resolvedCanonicalActor is not None
+
+
+@pytest.mark.parametrize(
+    (
+        "identity_state",
+        "canonical_human_id",
+        "candidate_human_ids",
+        "principal_state",
+        "expected_canonical_human_id",
+        "raw_principal_ids",
+    ),
+    [
+        (
+            "resolved",
+            "canonical-human-1",
+            ["canonical-human-1"],
+            "available",
+            "canonical-human-1",
+            ["human-principal-1"],
+        ),
+        ("unresolved", None, [], "available", None, ["human-principal-1"]),
+        (
+            "ambiguous",
+            None,
+            ["canonical-human-1", "canonical-human-2"],
+            "available",
+            None,
+            ["human-principal-1"],
+        ),
+        (
+            "resolved",
+            "canonical-human-1",
+            ["canonical-human-1"],
+            "partial",
+            None,
+            ["human-principal-1"],
+        ),
+        (
+            "resolved",
+            "canonical-human-1",
+            ["canonical-human-1"],
+            "ambiguous",
+            "canonical-human-1",
+            ["human-principal-1", "human-principal-2"],
+        ),
+    ],
+)
+async def test_agent_frame_propagates_only_complete_unambiguous_principal_identity(
+    identity_state: str,
+    canonical_human_id: str | None,
+    candidate_human_ids: list[str],
+    principal_state: str,
+    expected_canonical_human_id: str | None,
+    raw_principal_ids: list[str],
+) -> None:
+    agent_result = _agent360_principal_result(
+        identity_state=identity_state,
+        canonical_human_id=canonical_human_id,
+        candidate_human_ids=candidate_human_ids,
+        principal_state=principal_state,
+        raw_principal_ids=raw_principal_ids,
+    )
+    execution_result = _execution_result_with_principals(raw_principal_ids)
+    request = Experience360FrameRequest(
+        surfaceId="agent360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+    )
+
+    actor = _derive_agent_actor_metadata(request, [agent_result, execution_result])["actor_attribution"]
+
+    # The raw authenticated USER_ID claim remains distinct from its canonical Human link.
+    if len(raw_principal_ids) == 1:
+        assert actor.executionPrincipal is not None
+        assert actor.executionPrincipal.kind == "human"
+        assert actor.executionPrincipal.id == raw_principal_ids[0]
+    else:
+        assert actor.executionPrincipal is None
+    if expected_canonical_human_id is None:
+        assert actor.executionPrincipalCanonicalIdentity is None
+    else:
+        assert actor.executionPrincipalCanonicalIdentity is not None
+        assert actor.executionPrincipalCanonicalIdentity.kind == "human"
+        assert actor.executionPrincipalCanonicalIdentity.id == expected_canonical_human_id
+        assert actor.executionPrincipalCanonicalIdentity.id not in raw_principal_ids
+        assert {ref.source for ref in actor.evidenceRefs} >= {
+            "agent_executions",
+            "identity_aliases",
+            "identity_subjects",
+        }
+    assert actor.authorityDecision is not None
+    assert actor.authorityDecision.outcome == "unknown"
+
+
+def test_agent_frame_rejects_principal_identity_when_execution_sources_disagree() -> None:
+    agent_result = _agent360_principal_result(
+        identity_state="resolved",
+        canonical_human_id="canonical-human-1",
+        candidate_human_ids=["canonical-human-1"],
+        principal_state="ambiguous",
+        raw_principal_ids=["human-principal-1", "human-principal-2"],
+    )
+    execution_result = _execution_result_with_principal("human-principal-1")
+    request = Experience360FrameRequest(
+        surfaceId="agent360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+    )
+
+    actor = _derive_agent_actor_metadata(request, [agent_result, execution_result])["actor_attribution"]
+
+    assert actor.executionPrincipalCanonicalIdentity is None
+    assert actor.executionPrincipal is not None
+    assert actor.executionPrincipal.id == "human-principal-1"
+
+
+def test_agent_frame_rejects_principal_identity_with_non_identity_provenance() -> None:
+    agent_result = _agent360_principal_result(
+        identity_state="resolved",
+        canonical_human_id="canonical-human-1",
+        candidate_human_ids=["canonical-human-1"],
+    )
+    actor_content = agent_result.sections[0].content["dimensions"][0]["content"]
+    actor_content["executionPrincipalCanonicalIdentity"]["evidenceRefs"][0].update(
+        {"type": "event", "source": "agent_executions"}
+    )
+    execution_result = _execution_result_with_principal("human-principal-1")
+    request = Experience360FrameRequest(
+        surfaceId="agent360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+    )
+
+    actor = _derive_agent_actor_metadata(request, [agent_result, execution_result])["actor_attribution"]
+
+    assert actor.executionPrincipalCanonicalIdentity is None
+
+
+@pytest.mark.parametrize(
+    "evidence_sources",
+    [
+        ["agent_executions"],
+        ["agent_executions", "identity_aliases"],
+        ["identity_aliases", "identity_subjects"],
+    ],
+)
+def test_typed_principal_identity_requires_execution_and_identity_evidence(
+    evidence_sources: list[str],
+) -> None:
+    with pytest.raises(ValidationError, match="USER_ID alias and subject evidence"):
+        Experience360ActorAttribution(
+            tenantId=TENANT,
+            executionPrincipalCanonicalIdentity=Experience360ActorParty(
+                kind="human", id="canonical-human-1"
+            ),
+            evidenceRefs=[
+                EvidenceRef(
+                    id=f"evidence-{source}",
+                    type="event" if source == "agent_executions" else "entity",
+                    source=source,
+                )
+                for source in evidence_sources
+            ],
+        )
+
+
+async def test_episode_scope_is_unknown_without_canonical_execution_binding() -> None:
+    request = _request(subject=ProjectionSubject(kind="episode", id="episode-1"))
+    source = FakeSource(
+        server=ExecutionRead([], available=True, scope_known=False),
+        observed=ExecutionRead([], available=True, scope_known=False),
+    )
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    assert (
+        next(section for section in result.sections if section.id == "summary").state == "unknown"
+    )
+    assert "execution_subject_binding_incomplete" in result.degradedReasons
+
+
+async def test_episode_projection_keeps_only_rows_joined_by_the_same_canonical_event_ids() -> None:
+    request = _request(subject=ProjectionSubject(kind="episode", id="episode-1"))
+    server = _server_row()
+    server["triggered_by_event_id"] = "episode-event-1"
+    unrelated_server = _server_row()
+    unrelated_server["execution_id"] = "exec-unrelated"
+    unrelated_server["triggered_by_event_id"] = "not-linked-to-episode"
+    observed = _observed_row()
+    observed["sourceEventId"] = "episode-event-1"
+    unrelated_observed = _observed_row()
+    unrelated_observed["sourceEventId"] = "not-linked-to-episode"
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[server, unrelated_server],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+            subject_event_ids=("episode-event-1", "episode-event-2"),
+        ),
+        observed=ExecutionRead(
+            rows=[observed, unrelated_observed],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+            subject_event_ids=("episode-event-1", "episode-event-2"),
+        ),
+    )
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    summary = next(section for section in result.sections if section.id == "summary")
+    assert summary.content["serverRecordedExecutionCount"] == 1
+    assert summary.content["sourceReportedFactCount"] == 1
+    assert result.degradedReasons == []
+    state = next(section for section in result.sections if section.id == "state")
+    assert state.content["serverRecordedExecutions"][0]["executionId"] == "exec-1"
+    assert state.content["sourceReportedRuns"][0]["sourceEventId"] == "episode-event-1"
+
+
+def test_registration_is_explicit() -> None:
+    registry = ProviderRegistry()
+    assert registry.get("execution360") is None
+    register_provider(registry)
+    assert registry.get("execution360") is not None
+
+
+@pytest.mark.asyncio
+async def test_agent_episode_context_uses_bounded_tenant_page_and_exact_agent_subject():
+    episode = EpisodeRecord(
+        episode_id="episode-agent-1",
+        tenant_id=TENANT,
+        subject=EntityRef(kind="agent", id=AGENT),
+        kind="execution_run",
+        status="closed",
+        title="private title omitted",
+        occurred_from="2026-10-16T10:00:00Z",
+        occurred_to="2026-10-16T10:00:02Z",
+        source_event_id="trigger-1",
+        evidence_refs=[
+            EvidenceRef(
+                id="episode-evidence-1",
+                type="event",
+                source="episode_observations",
+            )
+        ],
+    )
+    other_agent_episode = episode.model_copy(
+        update={
+            "episode_id": "episode-other-agent",
+            "subject": EntityRef(kind="agent", id="another-agent"),
+        }
+    )
+    foreign_episode = episode.model_copy(
+        update={"episode_id": "episode-foreign", "tenant_id": "tenant-other"}
+    )
+
+    class EpisodeStore:
+        async def list_page_by_tenant(self, tenant_id, *, limit, cursor=None):
+            assert tenant_id == TENANT
+            assert limit == 201
+            assert cursor is None
+            return EpisodePageRead(
+                records=(episode, other_agent_episode, foreign_episode),
+                next_cursor=None,
+                truncated=False,
+            )
+
+    context = await _read_agent_episode_context(
+        TENANT,
+        {AGENT},
+        episode_store=EpisodeStore(),
+        identity_rows=[
+            {
+                "tenant_id": TENANT,
+                "agent_id": AGENT,
+                "canonical_agent_entity_id": AGENT,
+                "identity_evidence_id": AGENT,
+                "identity_evidence_source": "entities",
+                "identity_bound_at": "2026-10-16T09:00:00Z",
+            }
+        ],
+        execution_rows=[
+            {
+                "tenant_id": TENANT,
+                "canonical_agent_identity": True,
+                "canonical_agent_entity_id": AGENT,
+                "execution_id": "exec-linked",
+                "triggered_by_event_id": "trigger-1",
+            },
+            {
+                "tenant_id": TENANT,
+                "canonical_agent_identity": True,
+                "canonical_agent_entity_id": AGENT,
+                "execution_id": "exec-unlinked",
+                "triggered_by_event_id": "different-event",
+            },
+            {
+                "tenant_id": TENANT,
+                "canonical_agent_identity": True,
+                "canonical_agent_entity_id": "another-agent",
+                "execution_id": "exec-other-agent",
+                "triggered_by_event_id": "trigger-1",
+            },
+        ],
+    )
+
+    assert context.state == "degraded"
+    assert context.reason == "agent_episode_record_scope_conflict"
+    assert [item["episodeId"] for item in context.items] == ["episode-agent-1"]
+    assert context.items[0]["sourceEventIds"] == ["trigger-1"]
+    assert context.items[0]["matchedExecutions"] == [
+        {"executionId": "exec-linked", "triggeredByEventId": "trigger-1"}
+    ]
+    assert {ref.id for ref in context.evidence_refs} == {
+        "episode-agent-1",
+        "episode-evidence-1",
+        "exec-linked",
+    }
+    assert [ref.source for ref in context.identity_evidence_refs] == ["entities"]
+    assert context.identity_evidence_refs[0].id == AGENT
+    assert "private title omitted" not in repr(context)
+
+
+@pytest.mark.asyncio
+async def test_agent_episode_context_retains_identity_scope_without_execution_rows():
+    episode = EpisodeRecord(
+        episode_id="episode-without-execution",
+        tenant_id=TENANT,
+        subject=EntityRef(kind="agent", id=AGENT),
+        kind="agent_lifecycle",
+        status="open",
+        source_event_id="unmatched-event",
+    )
+
+    class EpisodeStore:
+        async def list_page_by_tenant(self, tenant_id, *, limit, cursor=None):
+            assert tenant_id == TENANT
+            return EpisodePageRead(
+                records=(episode,),
+                next_cursor=None,
+                truncated=False,
+            )
+
+    context = await _read_agent_episode_context(
+        TENANT,
+        {AGENT},
+        episode_store=EpisodeStore(),
+        identity_rows=[
+            {
+                "tenant_id": TENANT,
+                "agent_id": AGENT,
+                "canonical_agent_entity_id": AGENT,
+                "identity_evidence_id": AGENT,
+                "identity_evidence_source": "entities",
+            }
+        ],
+        execution_rows=[],
+    )
+
+    assert context.state == "available"
+    assert context.items[0]["episodeId"] == "episode-without-execution"
+    assert context.items[0]["matchedExecutions"] == []
+    assert [ref.id for ref in context.identity_evidence_refs] == [AGENT]
+
+
+@pytest.mark.asyncio
+async def test_repository_execution_read_keeps_agent_episode_context_without_executions(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import actions.agent.deployments as deployment_module
+    import actions.agent_marketplace.identity_binding as binding_module
+    import repositories.repos as repos_module
+
+    episode = EpisodeRecord(
+        episode_id="episode-agent-no-execution",
+        tenant_id=TENANT,
+        subject=EntityRef(kind="agent", id=AGENT),
+        kind="agent_lifecycle",
+        status="open",
+        source_event_id="agent-created-event",
+    )
+
+    class AgentConfigs:
+        async def find_by_id(self, agent_id):
+            assert agent_id == AGENT
+            return {"tenant_id": TENANT, "agent_id": AGENT}
+
+    class AgentExecutions:
+        async def list_for_agent(self, agent_id, tenant_id, *, limit):
+            assert agent_id == AGENT
+            assert tenant_id == TENANT
+            return []
+
+    class Delegations:
+        async def find_by_id(self, delegation_id):
+            raise AssertionError("no execution rows should read delegation authority")
+
+    class Entities:
+        async def find_by_id(self, entity_id):
+            assert entity_id == AGENT
+            return {
+                "tenant_id": TENANT,
+                "entity_type": "agent",
+                "entity_id": AGENT,
+                "created_at": "2026-10-16T09:00:00Z",
+            }
+
+    class EpisodePages:
+        async def list_page_by_tenant(self, tenant_id, *, limit, cursor=None):
+            assert tenant_id == TENANT
+            assert limit == 201
+            return EpisodePageRead(
+                records=(episode,),
+                next_cursor=None,
+                truncated=False,
+            )
+
+    monkeypatch.setattr(deployment_module, "get_deployment_repository", lambda: object())
+    monkeypatch.setattr(binding_module, "AgentDeploymentIdentityBindingRepository", object)
+    monkeypatch.setattr(repos_module, "EntityRepository", Entities)
+    monkeypatch.setattr(repos_module, "AgentConfigRepository", AgentConfigs)
+    monkeypatch.setattr(repos_module, "AgentExecutionRepository", AgentExecutions)
+    monkeypatch.setattr(repos_module, "DelegationRepository", Delegations)
+
+    result = await RepositoryExecution360Source(episode_store=EpisodePages()).server_executions(
+        tenant_id=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+        limit=20,
+    )
+
+    assert result.available is True
+    assert result.scope_known is True
+    assert result.rows == []
+    assert result.episode_context is not None
+    assert result.episode_context.state == "available"
+    assert result.episode_context.items[0]["episodeId"] == "episode-agent-no-execution"
+    assert result.episode_context.identity_evidence_refs[0].source == "entities"
+
+
+@pytest.mark.asyncio
+async def test_episode_store_tenant_page_is_bounded_and_partitioned(monkeypatch):
+    import shared.backend_interpretation.stores as truth_stores
+
+    backing = InMemoryStore("execution360-episode-page-test")
+    monkeypatch.setattr(truth_stores, "_kv", lambda _name: backing)
+    store = EpisodeStore()
+    for tenant_id, episode_id in (
+        (TENANT, "episode-page-a"),
+        (TENANT, "episode-page-b"),
+        ("tenant-other", "episode-page-foreign"),
+    ):
+        await store.upsert(
+            EpisodeRecord(
+                episode_id=episode_id,
+                tenant_id=tenant_id,
+                subject=EntityRef(kind="agent", id=AGENT),
+                kind="execution_run",
+            )
+        )
+
+    page = await store.list_page_by_tenant(TENANT, limit=1)
+
+    assert len(page.records) == 1
+    assert page.records[0].tenant_id == TENANT
+    assert page.truncated is True
+    assert page.next_cursor is not None
+
+
+@pytest.mark.asyncio
+async def test_execution_provider_surfaces_agent_episode_context_and_historical_unknown():
+    episode_evidence = EvidenceRef(
+        id="episode-agent-1",
+        type="event",
+        source="episode_records",
+        uri="store://episode_records/episode-agent-1",
+    )
+    episode_context = ExecutionEpisodeContextRead(
+        "available",
+        items=(
+            {
+                "episodeId": "episode-agent-1",
+                "agentEntityId": AGENT,
+                "kind": "execution_run",
+                "status": "closed",
+                "sourceEventIds": ["trigger-1"],
+                "evidenceRefs": [episode_evidence.model_dump(mode="json", by_alias=True)],
+            },
+        ),
+        evidence_refs=(episode_evidence,),
+    )
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row()],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+            episode_context=episode_context,
+        )
+    )
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    section = next(section for section in result.sections if section.id == "episode_context")
+    assert section.state == "available"
+    assert section.content["episodes"][0]["episodeId"] == "episode-agent-1"
+    assert section.content["evidenceRefs"][0]["id"] == "episode-agent-1"
+
+    historical_request = _request(asOf="2026-10-16T10:00:00Z", temporalMode="as_of")
+    historical = await Execution360Provider(source).project(
+        historical_request, await _context(historical_request)
+    )
+    historical_section = next(
+        section for section in historical.sections if section.id == "episode_context"
+    )
+    assert historical_section.state == "unknown"
+    assert historical_section.content["episodes"] == []
+    assert historical_section.content["reason"] == (
+        "temporal_anchor_not_reconstructable_from_current_sources"
+    )

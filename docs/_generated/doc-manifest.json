@@ -1359,6 +1359,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/architecture/blueprints/support360.md",
+      "title": "Support 360 Backend Blueprint",
+      "slug": "blueprints/support360",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/architecture/blueprints/temporal360.md",
       "title": "Temporal360 Vertical Slice Blueprint",
       "slug": "blueprints/temporal360",

@@ -11,8 +11,7 @@ under the ``/v1/risk360`` prefix:
   ``risk360.read`` capability key (declared in the projection registry; enforced
   at the platform route-classification boundary —
   ``config/route_registry.yaml`` — and asserted honestly here). Subject kinds
-  served are the risk360 registry row's four kinds — ``entity``,
-  ``relationship``, ``cluster``, ``population``.
+  served are derived from the risk360 projection registry row.
 * ``GET /v1/risk360/health`` — read-only plane probe: whether the risk360
   provider is registered and contract-compatible.
 
@@ -38,6 +37,7 @@ from shared.intelligence_projections.errors import (
     ProjectionNotFound,
 )
 from shared.intelligence_projections.generated_registry import (
+    INTELLIGENCE_PROJECTION_DEFINITIONS,
     PROJECTION_CAPABILITY_MAP,
 )
 from shared.intelligence_projections.registry import projection_registry
@@ -56,9 +56,12 @@ __all__ = [
     "router",
 ]
 
-#: The subject kinds the risk360 registry row serves. Do NOT invent new ones —
-#: an unlisted kind is rejected here before it can reach the provider.
-SERVED_SUBJECT_KINDS = frozenset({"entity", "relationship", "cluster", "population"})
+#: The subject kinds the risk360 registry row serves. Keep the HTTP guard
+#: derived from the canonical registry so catalog/provider/API support cannot
+#: silently diverge.
+SERVED_SUBJECT_KINDS = frozenset(
+    INTELLIGENCE_PROJECTION_DEFINITIONS[PROJECTION_ID]["subjectKinds"]
+)
 
 
 def _require_risk360_read(request: Request) -> str:

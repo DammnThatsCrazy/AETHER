@@ -9,19 +9,22 @@
 
       /** Canonical metric names the measurement plane knows how to report. */
       export type MetricName =
-        | 'attributed_conversions'
+        | 'agent_execution_cost'
+| 'ai_execution_cost'
+| 'attributed_conversions'
 | 'campaign_cac'
 | 'campaign_ltv'
 | 'campaign_roas'
 | 'campaign_spend'
-| 'claim_retention_rate'
 | 'citation_retention_rate'
+| 'claim_retention_rate'
 | 'contradiction_rate'
 | 'conversion_rate'
 | 'costs'
 | 'email_click_rate'
 | 'email_open_rate'
 | 'email_reply_rate'
+| 'entity_execution_cost'
 | 'evidence_retention_rate'
 | 'exposure'
 | 'gross_value'
@@ -53,6 +56,26 @@
       /** Every registered metric definition, keyed positionally by MetricName. */
       export const metricDefinitions: readonly MetricDefinition[] = [
         {
+  name: 'agent_execution_cost',
+  version: '1',
+  unit: 'usd',
+  description: 'Observed operating cost of an agent's executions, normalized to USD only when supported by the source evidence.',
+  lower: 0,
+  upper: null,
+  allowsProbability: false,
+  minSample: 1,
+},
+{
+  name: 'ai_execution_cost',
+  version: '1',
+  unit: 'usd',
+  description: 'Observed AI execution operating cost explicitly scoped to a campaign, normalized to USD only when supported by the source evidence.',
+  lower: 0,
+  upper: null,
+  allowsProbability: false,
+  minSample: 1,
+},
+{
   name: 'attributed_conversions',
   version: '1',
   unit: 'count',
@@ -103,20 +126,20 @@
   minSample: 1,
 },
 {
-  name: 'claim_retention_rate',
+  name: 'citation_retention_rate',
   version: '1',
   unit: 'ratio',
-  description: 'Share of source claims retained across an information transformation chain.',
+  description: 'Share of source citations retained across an information transformation chain.',
   lower: 0,
   upper: 1,
   allowsProbability: false,
   minSample: 1,
 },
 {
-  name: 'citation_retention_rate',
+  name: 'claim_retention_rate',
   version: '1',
   unit: 'ratio',
-  description: 'Share of source citations retained across an information transformation chain.',
+  description: 'Share of source claims retained across an information transformation chain.',
   lower: 0,
   upper: 1,
   allowsProbability: false,
@@ -181,6 +204,16 @@
   upper: 1,
   allowsProbability: false,
   minSample: 30,
+},
+{
+  name: 'entity_execution_cost',
+  version: '1',
+  unit: 'usd',
+  description: 'Observed AI execution operating cost explicitly scoped to an entity, normalized to USD only when supported by the source evidence.',
+  lower: 0,
+  upper: null,
+  allowsProbability: false,
+  minSample: 1,
 },
 {
   name: 'evidence_retention_rate',

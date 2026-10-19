@@ -1,6 +1,6 @@
-"""Economic360 metric absorption parity (slice S3, hand-authored side).
+"""Economic360 metric absorption parity (hand-authored side).
 
-The 11 economic metrics must be absorbed into the hand-authored
+The economic and AI execution cost metrics must be absorbed into the hand-authored
 ``shared/measurement/registry.py`` in lockstep with
 ``packages/shared/contracts/metric-registry.json``. The cross-source parity test
 (``tests/unit/test_metric_registry_contract.py``) compares the hand-authored
@@ -27,14 +27,16 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from shared.measurement.registry import METRIC_REGISTRY  # noqa: E402
 
-# The 11 metrics absorbed by slice S3 (the 4 pending campaign refs + the
-# program's economic metric set).
+# Economic output metrics and tenant-scoped AI execution operating costs.
 ECONOMIC_METRICS: tuple[str, ...] = (
+    "agent_execution_cost",
+    "ai_execution_cost",
     "campaign_cac",
     "campaign_ltv",
     "campaign_roas",
     "campaign_spend",
     "costs",
+    "entity_execution_cost",
     "exposure",
     "gross_value",
     "ltv",

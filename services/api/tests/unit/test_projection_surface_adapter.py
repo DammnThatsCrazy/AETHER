@@ -63,6 +63,7 @@ from journeys.exploration.adapters.projection import (  # noqa: E402
     Infrastructure360SurfaceAdapter,
     Outcome360SurfaceAdapter,
     Population360SurfaceAdapter,
+    Support360SurfaceAdapter,
     Temporal360SurfaceAdapter,
 )
 from journeys.exploration.adapters.timeline import TimelineSurfaceAdapter  # noqa: E402
@@ -75,6 +76,7 @@ _OUTPUT_SECTIONS = {
     "temporal360": ("summary", "state", "timeline", "evidence", "findings"),
     "population360": ("summary", "state", "timeline", "evidence", "findings"),
     "geographic360": ("summary", "state", "timeline", "evidence", "findings"),
+    "support360": ("summary", "state", "timeline", "evidence", "interactions", "outcomes"),
 }
 
 # Projection dependencies (registry graph, flat closure) registered so clean
@@ -96,6 +98,7 @@ _DEPS = {
     "temporal360": (),
     "population360": ("profile360", "relationship360", "temporal360"),
     "geographic360": ("profile360", "temporal360"),
+    "support360": (),
 }
 
 
@@ -227,6 +230,7 @@ def test_surfaces_map_to_their_projection_ids() -> None:
         (Temporal360SurfaceAdapter, "temporal360"),
         (Population360SurfaceAdapter, "population360"),
         (Geographic360SurfaceAdapter, "geographic360"),
+        (Support360SurfaceAdapter, "support360"),
     ):
         adapter = cls()
         assert adapter.surface_id == surface
@@ -234,13 +238,14 @@ def test_surfaces_map_to_their_projection_ids() -> None:
 
 
 def test_registered_surfaces_do_not_shadow_owned_ones() -> None:
-    # The six 360 projection surfaces are now available...
+    # The projection surfaces are available...
     assert isinstance(get_adapter("outcome360"), Outcome360SurfaceAdapter)
     assert isinstance(get_adapter("economic360"), Economic360SurfaceAdapter)
     assert isinstance(get_adapter("infrastructure360"), Infrastructure360SurfaceAdapter)
     assert isinstance(get_adapter("temporal360"), Temporal360SurfaceAdapter)
     assert isinstance(get_adapter("population360"), Population360SurfaceAdapter)
     assert isinstance(get_adapter("geographic360"), Geographic360SurfaceAdapter)
+    assert isinstance(get_adapter("support360"), Support360SurfaceAdapter)
     for surface in (
         "outcome360",
         "economic360",
@@ -248,6 +253,7 @@ def test_registered_surfaces_do_not_shadow_owned_ones() -> None:
         "temporal360",
         "population360",
         "geographic360",
+        "support360",
     ):
         assert surface in available_surfaces()
 
@@ -302,6 +308,7 @@ def test_registered_surfaces_do_not_shadow_owned_ones() -> None:
         (Temporal360SurfaceAdapter, "temporal360"),
         (Population360SurfaceAdapter, "population360"),
         (Geographic360SurfaceAdapter, "geographic360"),
+        (Support360SurfaceAdapter, "support360"),
     ],
 )
 async def test_projection_surface_composes_typed_sections(cls, surface) -> None:

@@ -80,48 +80,89 @@ RELEASE_CRITICAL_EVENT_FAMILIES = frozenset({"core", "journey", "identity", "con
 
 # These source-reported execution events are emitted by AgentTelemetryClient.
 # They are SDK-emittable only when tied to a tenant-owned active deployment.
-_DEPLOYMENT_REQUIRED_AGENT_EVENTS = frozenset({
-    "agent_task_started",
-    "agent_task_completed",
-    "agent_task_failed",
-    "agent_tool_invocation_observed",
-    "agent_outcome_recorded",
-    "agent_policy_evaluated",
-    "agent_delegated_task",
-})
+_DEPLOYMENT_REQUIRED_AGENT_EVENTS = frozenset(
+    {
+        "agent_task_started",
+        "agent_task_completed",
+        "agent_task_failed",
+        "agent_tool_invocation_observed",
+        "agent_outcome_recorded",
+        "agent_policy_evaluated",
+        "agent_delegated_task",
+    }
+)
 
 _CANONICAL_ENTITY_KEYS = frozenset({"canonical_entity_id", "canonicalentityid"})
-_FINGERPRINT_KEYS = frozenset({
-    "fingerprint",
-    "fingerprinting",
-    "fingerprintsignals",
-    "devicefingerprint",
-    "crossdevicefingerprint",
-    "browserfingerprint",
-    "canvasfingerprint",
-    "audiofingerprint",
-    "webglfingerprint",
-})
+_FINGERPRINT_KEYS = frozenset(
+    {
+        "fingerprint",
+        "fingerprinting",
+        "fingerprintsignals",
+        "devicefingerprint",
+        "crossdevicefingerprint",
+        "browserfingerprint",
+        "canvasfingerprint",
+        "audiofingerprint",
+        "webglfingerprint",
+    }
+)
 _SENSITIVE_KEY_PATTERNS = tuple(
     re.compile(pattern, re.IGNORECASE)
     for pattern in (
-        r"private[_\s]?key", r"seed[_\s]?phrase", r"mnemonic",
-        r"password", r"passwd", r"passphrase", r"secret[_\s]?key?",
-        r"\bsecret\b", r"\bpin\b", r"card[_\s]?number", r"\bpan\b",
-        r"\bcvv\b", r"\bcvc\b", r"cvv2", r"payment[_\s]?token",
-        r"auth[_\s]?code", r"api[_\s\-]?key", r"access[_\s]?token",
-        r"refresh[_\s]?token", r"bearer[_\s]?token", r"ssh[_\s]?key",
-        r"\bauthorization\b", r"authorization[_\s\-]?token", r"auth[_\s\-]?token",
-        r"\bbearer\b", r"\bcookie\b", r"session[_\s]?token", r"\btoken\b",
-        r"\bcredential", r"\bjwt\b", r"oauth[_\s\-]?token", r"\bdob\b",
+        r"private[_\s]?key",
+        r"seed[_\s]?phrase",
+        r"mnemonic",
+        r"password",
+        r"passwd",
+        r"passphrase",
+        r"secret[_\s]?key?",
+        r"\bsecret\b",
+        r"\bpin\b",
+        r"card[_\s]?number",
+        r"\bpan\b",
+        r"\bcvv\b",
+        r"\bcvc\b",
+        r"cvv2",
+        r"payment[_\s]?token",
+        r"auth[_\s]?code",
+        r"api[_\s\-]?key",
+        r"access[_\s]?token",
+        r"refresh[_\s]?token",
+        r"bearer[_\s]?token",
+        r"ssh[_\s]?key",
+        r"\bauthorization\b",
+        r"authorization[_\s\-]?token",
+        r"auth[_\s\-]?token",
+        r"\bbearer\b",
+        r"\bcookie\b",
+        r"session[_\s]?token",
+        r"\btoken\b",
+        r"\bcredential",
+        r"\bjwt\b",
+        r"oauth[_\s\-]?token",
+        r"\bdob\b",
         r"credit[_\s\-]?card",
-        r"id[_\s]?token", r"social[_\s]?security", r"\bssn\b",
-        r"\bein\b", r"\btin\b", r"bank[_\s]?account",
-        r"routing[_\s]?number", r"iban", r"totp[_\s]?secret",
-        r"otp[_\s]?secret", r"recovery[_\s]?code", r"client[_\s]?secret",
-        r"webhook[_\s]?secret", r"form[_\s]?value", r"field[_\s]?value",
-        r"input[_\s]?value", r"entered[_\s]?text", r"clipboard",
-        r"keystroke", r"raw[_\s]?message", r"message[_\s]?body",
+        r"id[_\s]?token",
+        r"social[_\s]?security",
+        r"\bssn\b",
+        r"\bein\b",
+        r"\btin\b",
+        r"bank[_\s]?account",
+        r"routing[_\s]?number",
+        r"iban",
+        r"totp[_\s]?secret",
+        r"otp[_\s]?secret",
+        r"recovery[_\s]?code",
+        r"client[_\s]?secret",
+        r"webhook[_\s]?secret",
+        r"form[_\s]?value",
+        r"field[_\s]?value",
+        r"input[_\s]?value",
+        r"entered[_\s]?text",
+        r"clipboard",
+        r"keystroke",
+        r"raw[_\s]?message",
+        r"message[_\s]?body",
         r"email[_\s]?body",
     )
 )
@@ -222,10 +263,12 @@ def get_event_family(event_type: str) -> str:
     return EVENT_FAMILY.get(event_type, "core")
 
 
-_CLIENT_IDENTITY_CONFIDENCE_KEYS = frozenset({
-    "identityConfidence",
-    "identitySignals",
-})
+_CLIENT_IDENTITY_CONFIDENCE_KEYS = frozenset(
+    {
+        "identityConfidence",
+        "identitySignals",
+    }
+)
 
 
 def neutralize_client_identity_claims(context: dict[str, Any]) -> dict[str, Any]:
@@ -243,9 +286,7 @@ def neutralize_client_identity_claims(context: dict[str, Any]) -> dict[str, Any]
     if not settings.subject_hints.enabled:
         return context
     return {
-        key: value
-        for key, value in context.items()
-        if key not in _CLIENT_IDENTITY_CONFIDENCE_KEYS
+        key: value for key, value in context.items() if key not in _CLIENT_IDENTITY_CONFIDENCE_KEYS
     }
 
 
@@ -256,27 +297,27 @@ def build_normalized_payload(
     received_at: str,
 ) -> dict[str, Any]:
     """Build the only payload eligible for Bronze/outbox persistence."""
-    return sanitize_acquisition_payload({
-        "event_id": sdk_event.id,
-        "tenant_id": tenant_id,
-        "event_type": sdk_event.type,
-        "event_family": get_event_family(sdk_event.type),
-        "session_id": sdk_event.sessionId,
-        "anonymous_id": sdk_event.anonymousId,
-        "user_id": sdk_event.userId,
-        "properties": strip_canonical_entity_id(sdk_event.properties or {}),
-        "context": neutralize_client_identity_claims(
-            strip_canonical_entity_id(
-                sdk_event.context.model_dump(exclude_none=True)
-            )
-        ),
-        "timestamp": sdk_event.timestamp,
-        "received_at": received_at,
-        "ingested_at": utc_now().isoformat(),
-        "batch_id": batch_id,
-        "schema_version": SCHEMA_VERSION,
-        "source": "sdk",
-    })
+    return sanitize_acquisition_payload(
+        {
+            "event_id": sdk_event.id,
+            "tenant_id": tenant_id,
+            "event_type": sdk_event.type,
+            "event_family": get_event_family(sdk_event.type),
+            "session_id": sdk_event.sessionId,
+            "anonymous_id": sdk_event.anonymousId,
+            "user_id": sdk_event.userId,
+            "properties": strip_canonical_entity_id(sdk_event.properties or {}),
+            "context": neutralize_client_identity_claims(
+                strip_canonical_entity_id(sdk_event.context.model_dump(exclude_none=True))
+            ),
+            "timestamp": sdk_event.timestamp,
+            "received_at": received_at,
+            "ingested_at": utc_now().isoformat(),
+            "batch_id": batch_id,
+            "schema_version": SCHEMA_VERSION,
+            "source": "sdk",
+        }
+    )
 
 
 def format_rejection(result: EventValidationResult, sdk_event: Any) -> str:
@@ -415,12 +456,14 @@ async def validate_event(
             gpc_observed=request_privacy.gpc,
             dnt_observed=request_privacy.dnt,
         )
-        decisions.append({
-            "control": "request_privacy_signals",
-            "outcome": "allowed" if signal_allowed else "suppressed",
-            "reason_code": signal_reason,
-            "purpose": required_purpose,
-        })
+        decisions.append(
+            {
+                "control": "request_privacy_signals",
+                "outcome": "allowed" if signal_allowed else "suppressed",
+                "reason_code": signal_reason,
+                "purpose": required_purpose,
+            }
+        )
         if not signal_allowed:
             metrics.increment(
                 "ingestion_request_privacy_blocked_total",
@@ -446,19 +489,23 @@ async def validate_event(
                 return reject(consent_evaluation.reason_code or REJECT_CONSENT_DENIED)
             consent_receipt_id = consent_evaluation.receipt_id
 
-    fingerprint_paths = classify_fingerprints({
-        "properties": sdk_event.properties or {},
-        "context": sdk_event.context.model_dump(exclude_none=True),
-    })
+    fingerprint_paths = classify_fingerprints(
+        {
+            "properties": sdk_event.properties or {},
+            "context": sdk_event.context.model_dump(exclude_none=True),
+        }
+    )
     audit["fingerprint_paths"] = fingerprint_paths
     if fingerprint_paths:
         allowed, reason_code = await evaluate_data_policy(tenant_id, "fingerprint")
-        decisions.append({
-            "control": "fingerprint_policy",
-            "outcome": "allowed" if allowed else "denied",
-            "reason_code": reason_code,
-            "classified_paths": len(fingerprint_paths),
-        })
+        decisions.append(
+            {
+                "control": "fingerprint_policy",
+                "outcome": "allowed" if allowed else "denied",
+                "reason_code": reason_code,
+                "classified_paths": len(fingerprint_paths),
+            }
+        )
         if not allowed:
             metrics.increment(
                 "ingestion_data_policy_blocked_total",
@@ -480,12 +527,10 @@ async def validate_event(
         return reject(REJECT_DEPLOYMENT_CONTEXT)
 
     if settings.external_agent_telemetry.enabled:
-        deployment_ctx = (
-            sdk_event.context.agentDeployment or sdk_event.context.agent_deployment
-        )
+        deployment_ctx = sdk_event.context.agentDeployment or sdk_event.context.agent_deployment
         if isinstance(deployment_ctx, dict):
-            deployment_id = (
-                deployment_ctx.get("deploymentId") or deployment_ctx.get("deployment_id")
+            deployment_id = deployment_ctx.get("deploymentId") or deployment_ctx.get(
+                "deployment_id"
             )
         if sdk_event.type in _DEPLOYMENT_REQUIRED_AGENT_EVENTS and not deployment_id:
             audit["deployment_reason"] = "missing_deployment_id"
@@ -506,9 +551,7 @@ async def validate_event(
                 event_family=get_event_family(sdk_event.type),
             )
             if not valid:
-                await record_event_outcome(
-                    tenant_id, str(deployment_id), "rejected"
-                )
+                await record_event_outcome(tenant_id, str(deployment_id), "rejected")
                 audit["deployment_reason"] = reason
                 metrics.increment(
                     "ingestion_validation_failed_total",
@@ -553,7 +596,10 @@ async def validate_event(
         deployment_record = await get_deployment_repository().get_record(
             tenant_id, str(deployment_id)
         )
-        if deployment_record and deployment_record.get("status") == AgentDeploymentStatus.ACTIVE.value:
+        if (
+            deployment_record
+            and deployment_record.get("status") == AgentDeploymentStatus.ACTIVE.value
+        ):
             normalized["validated_agent_deployment"] = {
                 "deployment_id": str(deployment_id),
                 "agent_id": deployment_record.get("agent_id"),
@@ -577,13 +623,12 @@ async def validate_event(
 # or omits it for a T/C-class purpose-less decision (data-policy + scrub only).
 # Never raises; scrub always proceeds regardless of the decision.
 
+
 def format_ingress_rejection(reason_code: Optional[str], decisions: tuple[dict, ...]) -> str:
     """Stable wire reason mirroring ``format_rejection`` (code[:purpose])."""
     if not reason_code:
         return "validation_failed"
-    purpose = next(
-        (d.get("purpose") for d in decisions if d.get("purpose")), None
-    )
+    purpose = next((d.get("purpose") for d in decisions if d.get("purpose")), None)
     return f"{reason_code}:{purpose}" if purpose else reason_code
 
 
@@ -595,6 +640,7 @@ async def evaluate_ingress_decision(
     purpose: Optional[str] = None,
     request_privacy: RequestPrivacySignals = RequestPrivacySignals(),
     fingerprint_obj: Any = None,
+    include_receipt_id: bool = False,
 ) -> tuple[bool, Optional[str], tuple[dict, ...]]:
     """Consent/data-policy decision for an ingress path (never raises).
 
@@ -626,12 +672,14 @@ async def evaluate_ingress_decision(
             gpc_observed=request_privacy.gpc,
             dnt_observed=request_privacy.dnt,
         )
-        decisions.append({
-            "control": "request_privacy_signals",
-            "outcome": "allowed" if signal_allowed else "suppressed",
-            "reason_code": signal_reason,
-            "purpose": purpose,
-        })
+        decisions.append(
+            {
+                "control": "request_privacy_signals",
+                "outcome": "allowed" if signal_allowed else "suppressed",
+                "reason_code": signal_reason,
+                "purpose": purpose,
+            }
+        )
         if not signal_allowed:
             metrics.increment(
                 "ingestion_request_privacy_blocked_total",
@@ -647,19 +695,33 @@ async def evaluate_ingress_decision(
         # resolvable, so an authoritative-ON, purposed, subject-less request is
         # REJECTED — never silently fail-opened to allowed.
         if settings.consent_authority.authoritative_consent_enforcement_enabled:
-            allowed, reason_code = await evaluate_consent(
-                tenant_id=tenant_id,
-                subject_id=subject,
-                anonymous_id=anon,
-                purpose=purpose,
-            )
-            decisions.append({
+            receipt_id: Optional[str] = None
+            if include_receipt_id:
+                consent_result = await evaluate_consent_with_receipt(
+                    tenant_id=tenant_id,
+                    subject_id=subject,
+                    anonymous_id=anon,
+                    purpose=purpose,
+                )
+                allowed, reason_code = consent_result.allowed, consent_result.reason_code
+                receipt_id = consent_result.receipt_id
+            else:
+                allowed, reason_code = await evaluate_consent(
+                    tenant_id=tenant_id,
+                    subject_id=subject,
+                    anonymous_id=anon,
+                    purpose=purpose,
+                )
+            consent_decision = {
                 "control": "consent_authority",
                 "outcome": "allowed" if allowed else "denied",
                 "reason_code": reason_code,
                 "purpose": purpose,
                 "subject_resolvable": bool(subject or anon),
-            })
+            }
+            if include_receipt_id and allowed and receipt_id:
+                consent_decision["receipt_id"] = receipt_id
+            decisions.append(consent_decision)
             if not allowed:
                 metrics.increment(
                     "ingestion_consent_authority_blocked_total",
@@ -671,12 +733,14 @@ async def evaluate_ingress_decision(
         fingerprint_paths = classify_fingerprints(fingerprint_obj)
         if fingerprint_paths:
             allowed, reason_code = await evaluate_data_policy(tenant_id, "fingerprint")
-            decisions.append({
-                "control": "fingerprint_policy",
-                "outcome": "allowed" if allowed else "denied",
-                "reason_code": reason_code,
-                "classified_paths": len(fingerprint_paths),
-            })
+            decisions.append(
+                {
+                    "control": "fingerprint_policy",
+                    "outcome": "allowed" if allowed else "denied",
+                    "reason_code": reason_code,
+                    "classified_paths": len(fingerprint_paths),
+                }
+            )
             if not allowed:
                 metrics.increment(
                     "ingestion_data_policy_blocked_total",

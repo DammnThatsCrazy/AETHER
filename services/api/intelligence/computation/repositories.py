@@ -321,6 +321,46 @@ class ComputedResultsRepository:
             got = await pool.fetch(q, tenant_id, limit)
         return [json.loads(r["data"]) for r in got]
 
+    async def list_for_subject(
+        self, tenant_id: str, subject_type: str, subject_id: str, *,
+        include_superseded: bool = False, limit: int = 100,
+    ) -> list[dict]:
+        """List results for an exact tenant and subject before applying limit.
+
+        The complete canonical result envelope, including ``dimensions``, is
+        stored in the ``data`` JSONB column. Filter those durable subject
+        dimensions in the repository query so unrelated results cannot crowd
+        exact-subject rows out of a bounded read.
+        """
+        if not tenant_id or not subject_type or not subject_id:
+            raise ValueError("tenant_id, subject_type, and subject_id are required")
+        if limit < 1:
+            raise ValueError("limit must be positive")
+
+        pool = await self._backend()
+        if pool is None:
+            rows = [
+                row for row in self._results.values()
+                if row.get("tenant_id") == tenant_id
+                and isinstance(row.get("dimensions"), dict)
+                and row["dimensions"].get("subject_type") == subject_type
+                and row["dimensions"].get("subject_id") == subject_id
+                and (include_superseded or row.get("superseded_by") is None)
+            ]
+            rows.sort(key=lambda row: row.get("computed_at", ""), reverse=True)
+            return rows[:limit]
+
+        # These exact JSONB scope predicates execute before ORDER BY / LIMIT.
+        clause = "" if include_superseded else " AND superseded_by IS NULL"
+        q = (
+            "SELECT data FROM computed_results WHERE tenant_id=$1 "
+            "AND data->'dimensions'->>'subject_type'=$2 "
+            "AND data->'dimensions'->>'subject_id'=$3"
+            f"{clause} ORDER BY computed_at DESC LIMIT $4"
+        )
+        got = await pool.fetch(q, tenant_id, subject_type, subject_id, limit)
+        return [json.loads(row["data"]) for row in got]
+
     async def restatement_chain(self, tenant_id: str, result_id: str) -> list[dict]:
         """Walk the supersession chain (both directions) for ``result_id``."""
         pool = await self._backend()

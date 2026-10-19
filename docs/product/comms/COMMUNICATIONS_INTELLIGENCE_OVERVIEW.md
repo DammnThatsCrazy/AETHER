@@ -10,7 +10,7 @@ source_files: [services/api/journeys/comms/contracts.py, services/api/journeys/c
 source_hashes:
   "services/api/ingestion/silver/dispatcher.py": "sha256:91649997a908ec2894c0097e513dba14c6a7e4d5c39a6519159bf0593e3d01fb"
   "services/api/journeys/comms/contracts.py": "sha256:9629e0f07c08f85d43c8b7bd24faf4c2c835a1974ca60d98efad27aa6ff5d961"
-  "services/api/journeys/comms/projector.py": "sha256:fd040efc9e84420c7d41809a02c253cbcc58d6386f4904e859e2b8bb3fd7b0d2"
+  "services/api/journeys/comms/projector.py": "sha256:dca2f1d942cceba08f88a978da1d68cd914e65fbf8b93f99baef25567b69b4a0"
   "services/api/journeys/comms/state.py": "sha256:a25ee352c7f49dbdd6f19e89701500bf174cc9b7273e497dd1131203db9a704b"
 ---
 
@@ -29,6 +29,7 @@ External provider (Klaviyo, generic signed webhook, inbound-parse replies)
   → connector normalization        services/api/connectors/integrations/connectors/klaviyo.py
   → canonical communication event  services/api/journeys/comms/contracts.py (registry family: comms)
   → durable Bronze write + bus     services/api/journeys/comms/ingest.py → SDK_EVENTS_VALIDATED
+  → connector identity/consent     tenant-scoped server-owned evidence bridge
   → multi-projector Silver fan-out services/api/ingestion/silver/dispatcher.py (ADR-C3)
       1. CommsProjector            → silver_comms_facts (authoritative)
       2. IdentityEvidenceProjector → identity evidence
@@ -79,6 +80,13 @@ display (`services/api/journeys/comms/mailbox.py`). Bodies and attachments are n
 stored by default; subjects are used transiently for automated-response
 detection only. Shared/role mailboxes (`sales@`, `support@`, …) resolve to
 organizations, never to individual humans.
+
+For connector ingress, sender and recipient entity IDs and consent evidence
+come from server-owned identity bindings and the consent authority. Provider
+payload fields cannot assert canonical entity IDs, consent state, or consent
+receipts. Without an exact identity binding, the entity association remains
+unknown; without a matching authoritative consent receipt, consent remains
+unknown and downstream analytics apply the existing fail-closed policy.
 
 ## Surfaces
 

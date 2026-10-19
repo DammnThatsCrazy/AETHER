@@ -2,7 +2,8 @@
 
 Risk360 is an intelligence projection over canonical Aether truth — never a
 competing system of record (ADR-010). This provider projects the *risk* domain
-for a subject (``entity`` / ``relationship`` / ``cluster`` / ``population``)
+for a subject (``agent`` / ``entity`` / ``relationship`` / ``cluster`` /
+``population`` / ``source``)
 from the tenant's canonical risk records: the Phase-3
 :class:`~intelligence.risk360.contracts.RiskAssessment` (the aggregation of risk
 signals under a policy) and the :class:`~intelligence.risk360.contracts.RiskSignal`
@@ -71,7 +72,7 @@ from graph.operational_intelligence.models import EvidenceRef
 from shared.measurement.value_states import requires_value
 
 # Risk360 Phase-3 domain contracts + dimension registry + repositories.
-from intelligence.risk360.contracts import RiskAssessment, RiskSignal
+from intelligence.risk360.contracts import EpistemicStatus, RiskAssessment, RiskSignal
 from intelligence.risk360.dimensions import RISK_DIMENSIONS
 from intelligence.risk360.store import RiskAssessmentRepository, RiskSignalRepository
 
@@ -96,6 +97,13 @@ SECTION_DEPENDENCIES: dict[str, str] = {
     "summary": "profile360",
     "state": "cluster360",
 }
+
+_MAX_ASSESSMENT_SCAN = 50
+_MAX_SIGNAL_SCAN = 100
+
+
+class RiskSourceReadIncomplete(RuntimeError):
+    """A canonical risk read could not establish complete exact-subject scope."""
 
 
 def _dependency_missing(dep_state: list[Any], projection_id: str) -> bool:
@@ -147,8 +155,8 @@ class RiskSourceReader(Protocol):
 
     Implementations MUST be tenant-scoped: the provider trusts nothing and
     re-filters every returned record by the requesting tenant. A reader that
-    cannot reach its backing store returns ``None`` / ``[]`` (the provider
-    degrades the affected sections) — never raises, never fabricates.
+    cannot establish an available, complete, exact-subject read may raise; the
+    provider boundary sanitizes that failure and degrades the affected section.
 
     The two reads are the entire Risk360 input surface: the tenant's latest
     :class:`RiskAssessment` for the subject (the aggregation) and the atomic
@@ -182,8 +190,8 @@ class RepositoryRiskSourceReader:
     """Default canonical reader over the Phase-3 risk repositories.
 
     Reads the tenant-scoped ``RiskAssessmentRepository`` + ``RiskSignalRepository``
-    defensively. Any backing-source failure returns ``None`` / ``[]`` for that
-    source — the projection degrades, it never crashes.
+    defensively. Backing-source failures propagate to the projection's safe-read
+    boundary, which marks the result degraded without exposing diagnostics.
     """
 
     def __init__(self) -> None:
@@ -198,17 +206,27 @@ class RepositoryRiskSourceReader:
     ) -> Optional[dict[str, Any]]:
         """The tenant's latest RiskAssessment for the subject (or None).
 
-        ``list_scoped`` returns the tenant's rows newest-created first (created_at
-        desc); among them the assessment with the newest ``assessed_at`` is the
-        latest statement. Honest absence when the tenant has none — never raises.
+        The repository order is not an ``assessed_at`` order, so this reads one
+        row beyond the supported bound and declines to choose when more than the
+        bound exists. It also rechecks exact tenant and subject scope.
         """
-        try:
-            rows = await self._assessments.list_by_subject(
-                tenant_id, subject.kind, subject.id, limit=50
-            )
-        except Exception:  # noqa: BLE001 - backing source unavailable -> degrade
-            return None
-        rows = [r for r in rows if str(r.get("tenant_id", "")) == tenant_id]
+        rows = await self._assessments.list_by_subject(
+            tenant_id,
+            subject.kind,
+            subject.id,
+            limit=_MAX_ASSESSMENT_SCAN + 1,
+        )
+        scoped = [
+            row
+            for row in rows
+            if isinstance(row, dict)
+            and str(row.get("tenant_id", "")) == tenant_id
+            and str(row.get("subject_kind", "")) == subject.kind
+            and str(row.get("subject_id", "")) == subject.id
+        ]
+        if len(scoped) != len(rows) or len(rows) > _MAX_ASSESSMENT_SCAN:
+            raise RiskSourceReadIncomplete("risk assessment scope is incomplete")
+        rows = scoped
         if not rows:
             return None
         rows.sort(key=lambda r: str(r.get("assessed_at") or ""), reverse=True)
@@ -221,13 +239,23 @@ class RepositoryRiskSourceReader:
         subject: ProjectionSubject,
     ) -> list[dict[str, Any]]:
         """Tenant-scoped RiskSignal rows for the subject (empty when none)."""
-        try:
-            rows = await self._signals.list_by_subject(
-                tenant_id, subject.kind, subject.id, limit=100
-            )
-        except Exception:  # noqa: BLE001 - backing source unavailable -> degrade
-            return []
-        return [r for r in rows if str(r.get("tenant_id", "")) == tenant_id]
+        rows = await self._signals.list_by_subject(
+            tenant_id,
+            subject.kind,
+            subject.id,
+            limit=_MAX_SIGNAL_SCAN + 1,
+        )
+        scoped = [
+            row
+            for row in rows
+            if isinstance(row, dict)
+            and str(row.get("tenant_id", "")) == tenant_id
+            and str(row.get("subject_kind", "")) == subject.kind
+            and str(row.get("subject_id", "")) == subject.id
+        ]
+        if len(scoped) != len(rows) or len(rows) > _MAX_SIGNAL_SCAN:
+            raise RiskSourceReadIncomplete("risk signal scope is incomplete")
+        return scoped
 
 
 class Risk360Provider:
@@ -240,9 +268,7 @@ class Risk360Provider:
     def __init__(self, sources: Optional[RiskSourceReader] = None) -> None:
         # Injected canonical reader (test seam); default reads the Phase-3
         # repositories. Read-only — the provider holds no write path.
-        self._sources = (
-            sources if sources is not None else RepositoryRiskSourceReader()
-        )
+        self._sources = sources if sources is not None else RepositoryRiskSourceReader()
 
     # ── IntelligenceProjectionProvider ─────────────────────────────────────
 
@@ -255,12 +281,8 @@ class Risk360Provider:
         tenant_id = request.tenantId
         dep_state = context.dependencyState
 
-        assessment, assessment_degraded = await self._safe_assessment(
-            tenant_id, request.subject
-        )
-        signals, signals_degraded = await self._safe_signals(
-            tenant_id, request.subject
-        )
+        assessment, assessment_degraded = await self._safe_assessment(tenant_id, request.subject)
+        signals, signals_degraded = await self._safe_signals(tenant_id, request.subject)
 
         evidence = self._collect_evidence(assessment, signals)
 
@@ -307,19 +329,13 @@ class Risk360Provider:
             warnings.append("risk assessment source unavailable; summary is degraded")
         elif assessment is None:
             state = "missing"
-            warnings.append(
-                "no risk assessment exists for the subject; no summary is rendered"
-            )
+            warnings.append("no risk assessment exists for the subject; no summary is rendered")
         elif _dependency_missing(dep_state, SECTION_DEPENDENCIES["summary"]):
             state = "degraded"
-            warnings.append(
-                "profile360 dependency not available; summary is degraded"
-            )
+            warnings.append("profile360 dependency not available; summary is degraded")
         elif not assessment.vector.components:
             state = "empty"
-            warnings.append(
-                "risk assessment records no risk dimensions; summary is empty"
-            )
+            warnings.append("risk assessment records no risk dimensions; summary is empty")
 
         return ProjectionSection(
             id="summary",
@@ -365,9 +381,7 @@ class Risk360Provider:
             ),
             "runId": assessment.run_id,
             "assessedAt": (
-                assessment.assessed_at.isoformat()
-                if assessment.assessed_at is not None
-                else None
+                assessment.assessed_at.isoformat() if assessment.assessed_at is not None else None
             ),
             # Sparse by design: the dimensions this assessment evaluated.
             "dimensionsEvaluated": list(assessment.dimensions),
@@ -375,9 +389,7 @@ class Risk360Provider:
             "scoredDimensions": scored,
             "claimState": assessment.claim_state.value,
             "confidence": assessment.confidence,
-            "evidenceRefs": [
-                ref.model_dump(mode="json") for ref in assessment.evidence_refs
-            ],
+            "evidenceRefs": [ref.model_dump(mode="json") for ref in assessment.evidence_refs],
         }
         content["assessment"] = assessment_summary
 
@@ -394,9 +406,7 @@ class Risk360Provider:
                     else {
                         "amount": None if amount.amount is None else str(amount.amount),
                         "currency": amount.currency,
-                        "usdValue": (
-                            None if amount.usd_value is None else str(amount.usd_value)
-                        ),
+                        "usdValue": (None if amount.usd_value is None else str(amount.usd_value)),
                     }
                 ),
                 "claimState": exposure.claim_state.value,
@@ -424,9 +434,7 @@ class Risk360Provider:
         warnings: list[str] = []
         if assessment_degraded:
             state = "degraded"
-            warnings.append(
-                "risk assessment source unavailable; per-dimension state is degraded"
-            )
+            warnings.append("risk assessment source unavailable; per-dimension state is degraded")
         elif assessment is None:
             state = "missing"
             warnings.append(
@@ -434,14 +442,10 @@ class Risk360Provider:
             )
         elif _dependency_missing(dep_state, SECTION_DEPENDENCIES["state"]):
             state = "degraded"
-            warnings.append(
-                "cluster360 dependency not available; risk state is degraded"
-            )
+            warnings.append("cluster360 dependency not available; risk state is degraded")
         elif not assessment.vector.components:
             state = "empty"
-            warnings.append(
-                "risk assessment records no risk dimensions; state is empty"
-            )
+            warnings.append("risk assessment records no risk dimensions; state is empty")
 
         content: dict[str, Any] = {
             "tenantId": request.tenantId,
@@ -460,8 +464,7 @@ class Risk360Provider:
                         "claimState": component.claim_state.value,
                         "confidence": component.confidence,
                         "evidenceRefs": [
-                            ref.model_dump(mode="json")
-                            for ref in component.evidence_refs
+                            ref.model_dump(mode="json") for ref in component.evidence_refs
                         ],
                     }
                 )
@@ -507,14 +510,10 @@ class Risk360Provider:
         warnings: list[str] = []
         if assessment_degraded:
             state = "degraded"
-            warnings.append(
-                "risk assessment source unavailable; findings cannot be derived"
-            )
+            warnings.append("risk assessment source unavailable; findings cannot be derived")
         elif assessment is None:
             state = "missing"
-            warnings.append(
-                "no risk assessment exists for the subject; no findings are asserted"
-            )
+            warnings.append("no risk assessment exists for the subject; no findings are asserted")
         else:
             state = "empty"
             warnings.append(
@@ -528,9 +527,7 @@ class Risk360Provider:
             content={
                 "tenantId": request.tenantId,
                 "subject": {"kind": request.subject.kind, "id": request.subject.id},
-                "assessmentId": (
-                    assessment.assessment_id if assessment is not None else None
-                ),
+                "assessmentId": (assessment.assessment_id if assessment is not None else None),
                 "findings": [],
             },
             warnings=warnings or None,
@@ -578,11 +575,7 @@ class Risk360Provider:
                 and signal.detector_version not in source_state["detectorVersions"]
             ):
                 source_state["detectorVersions"].append(signal.detector_version)
-            observed_at = (
-                signal.observed_at.isoformat()
-                if signal.observed_at is not None
-                else None
-            )
+            observed_at = signal.observed_at.isoformat() if signal.observed_at is not None else None
             if observed_at is not None and (
                 source_state["latestObservedAt"] is None
                 or observed_at > source_state["latestObservedAt"]
@@ -593,6 +586,27 @@ class Risk360Provider:
             "tenantId": request.tenantId,
             "subject": {"kind": request.subject.kind, "id": request.subject.id},
             "signalSources": by_source,
+            # Preserve each canonical signal-to-evidence association for
+            # consumers that need the assessed context behind an Agent risk
+            # dimension. The detector's epistemic state is carried verbatim;
+            # recording a signal does not make its underlying risk inference
+            # observed, and an absent score remains absent.
+            "signalContext": [
+                {
+                    "signalId": signal.signal_id,
+                    "dimension": signal.risk_dimension,
+                    "source": signal.source,
+                    "claimState": signal.claim_state.value,
+                    "confidence": signal.confidence,
+                    "observedAt": (
+                        signal.observed_at.isoformat() if signal.observed_at is not None else None
+                    ),
+                    "score": signal.score,
+                    "value": signal.value,
+                    "evidenceRefs": [ref.model_dump(mode="json") for ref in signal.evidence_refs],
+                }
+                for signal in signals
+            ],
             "assessmentFreshness": (
                 None
                 if assessment is None or assessment.assessed_at is None
@@ -626,8 +640,7 @@ class Risk360Provider:
             assessment_refs = self._assessment_evidence(assessment)
             if assessment_refs:
                 policy = (
-                    f" under policy {assessment.policy_id} "
-                    f"v{assessment.policy_version}"
+                    f" under policy {assessment.policy_id} v{assessment.policy_version}"
                     if assessment.policy_id is not None
                     else ""
                 )
@@ -644,6 +657,7 @@ class Risk360Provider:
                             f"{assessment.claim_state.value}."
                         ],
                         confidence=assessment.confidence,
+                        claimState=assessment.claim_state,
                     )
                 )
             # One claim per scored (value-bearing) dimension, grounded in the
@@ -666,16 +680,49 @@ class Risk360Provider:
                             f"{component.claim_state.value}."
                         ],
                         confidence=component.confidence,
+                        claimState=component.claim_state,
                     )
                 )
+
+        # Carry each evidence-backed signal as its own epistemically classified
+        # assessment-context claim. In particular, an inferred Agentic
+        # detector result remains inferred even though the canonical record
+        # and its observation timestamp are directly available here.
+        for signal in signals:
+            if not signal.evidence_refs:
+                continue
+            observed = (
+                f" observed at {signal.observed_at.isoformat()}"
+                if signal.observed_at is not None
+                else ""
+            )
+            score_context = (
+                " no numeric score is recorded."
+                if signal.score is None
+                else f" recorded score {signal.score}."
+            )
+            claims.append(
+                ClaimEnvelope(
+                    id=f"risk360.signal.{signal.signal_id}",
+                    kind="risk_signal_context",
+                    subject=subject,
+                    evidenceRefs=list(signal.evidence_refs),
+                    claims=[
+                        f"Risk signal {signal.signal_id!r} records "
+                        f"{signal.risk_dimension!r} context from "
+                        f"{signal.source!r}{observed} with claim_state "
+                        f"{signal.claim_state.value};{score_context}"
+                    ],
+                    confidence=signal.confidence,
+                    claimState=signal.claim_state,
+                )
+            )
 
         if signals:
             # One claim per contributing signal source (detector health truth).
             refs_by_source: dict[str, list[EvidenceRef]] = {}
             for signal in signals:
-                refs_by_source.setdefault(signal.source, []).extend(
-                    signal.evidence_refs
-                )
+                refs_by_source.setdefault(signal.source, []).extend(signal.evidence_refs)
             for source, refs in refs_by_source.items():
                 if not refs:
                     continue
@@ -691,6 +738,10 @@ class Risk360Provider:
                             f"signal(s) for this subject."
                         ],
                         confidence=None,
+                        # This claim is about the canonical source record
+                        # existing, not whether its inferred risk condition is
+                        # true.
+                        claimState=EpistemicStatus.OBSERVED,
                     )
                 )
         return claims
@@ -706,17 +757,19 @@ class Risk360Provider:
         degraded = False
         raw: Optional[dict[str, Any]] = None
         try:
-            raw = await self._sources.latest_assessment(
-                tenant_id=tenant_id, subject=subject
-            )
+            raw = await self._sources.latest_assessment(tenant_id=tenant_id, subject=subject)
         except Exception:  # noqa: BLE001 - backing source unavailable -> degrade
             return None, True
         if raw is None:
             return None, False
         # Tenant scope is server-authoritative: never project another tenant's
         # assessment/sections/evidence.
-        if str(raw.get("tenant_id", "")) != tenant_id:
-            return None, False
+        if (
+            str(raw.get("tenant_id", "")) != tenant_id
+            or str(raw.get("subject_kind", "")) != subject.kind
+            or str(raw.get("subject_id", "")) != subject.id
+        ):
+            return None, True
         try:
             return RiskAssessment(**raw), degraded
         except Exception:  # noqa: BLE001 - unrenderable record -> degrade
@@ -735,14 +788,22 @@ class Risk360Provider:
         except Exception:  # noqa: BLE001 - backing source unavailable -> degrade
             return [], True
         signals: list[RiskSignal] = []
+        if len(raw_rows) > _MAX_SIGNAL_SCAN:
+            return [], True
         for raw in raw_rows:
             # Server-authoritative tenant filter; a leaky row is dropped, not
             # surfaced (and never mistaken for a degraded read of this tenant).
-            if str(raw.get("tenant_id", "")) != tenant_id:
+            if (
+                str(raw.get("tenant_id", "")) != tenant_id
+                or str(raw.get("subject_kind", "")) != subject.kind
+                or str(raw.get("subject_id", "")) != subject.id
+            ):
+                degraded = True
                 continue
             try:
                 signals.append(RiskSignal(**raw))
             except Exception:  # noqa: BLE001 - skip an unrenderable signal row
+                degraded = True
                 continue
         return signals, degraded
 

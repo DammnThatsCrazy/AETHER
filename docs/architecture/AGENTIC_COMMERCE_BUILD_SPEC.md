@@ -23,7 +23,7 @@ source_hashes:
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:9e5324ad309694cebfbbc1e22f0ae7ae8734c5167791de9190b89bbf1ca0932d"
-  "services/api/repositories/repos.py": "sha256:0526f10f7486f0e40a6b808400feaf9f65c787880ea5858c4db6b5f348645959"
+  "services/api/repositories/repos.py": "sha256:d09d752ef63f4b6eb1c46fe1b1e3f8c00399f40d1a6e86fb15ebad9685459568"
   "services/api/value/commerce/": "sha256:c22d67f4c99b8c6955e027a759a8c39dad8c226ed11c4d2a94a0a62030d182f6"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
@@ -176,6 +176,12 @@ provider correction feeds beyond the signed Stripe refund path, and production
 journey evidence remain open. Linked source references retain source event
 time, validity/revision time where available, and first-persisted time where
 available without conflating source time with ingestion time.
+
+The shared Experience 360 frame route is a read-only consumer of these
+authorities. Campaign and Journey commerce links require exact same-tenant
+`commerce_order_ref` evidence; episode-linked payment evidence remains unknown
+until a canonical episode-to-order reference is available. Operating cost,
+gross value, measured outcomes, payment, and settlement remain separate facts.
 
 External-agent run evidence accepts optional caller-reported payment-intent
 and settlement-event IDs. The resolver requires an exact same-tenant match to

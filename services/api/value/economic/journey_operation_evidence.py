@@ -1,9 +1,10 @@
-"""Exact-reference commerce evidence reads attached to canonical journeys."""
+"""Exact-reference commerce evidence attached to canonical subject scopes."""
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import json
-from datetime import datetime
 from typing import Any, Optional
 
 
@@ -13,12 +14,16 @@ async def journey_commerce_operation_evidence(
     *,
     as_of: Optional[str] = None,
     max_steps: int = 10_000,
+    max_order_refs: int = 500,
 ) -> dict[str, Any]:
-    """Read operation links only from explicit refs in persisted journey steps.
+    """Read operation links and payment facts from explicit journey-step refs.
 
     No joins are made on identity, amount, timestamp, order ID, or payment ID.
-    The result contains only the source-reference contract, not copied values.
+    Monetary facts remain separate by order, payment, adjustment, and
+    settlement; this function never aggregates them into a journey total.
     """
+    max_steps = min(max(int(max_steps), 1), 10_000)
+    max_order_refs = min(max(int(max_order_refs), 1), 1_000)
     from journeys.measurement.repositories.journey_repo import JourneyRepository
     from journeys.measurement.repositories.journey_step_repo import JourneyStepRepository
     from value.commerce.order_payment_reconciliation import CommerceOrderPaymentLedger
@@ -30,17 +35,26 @@ async def journey_commerce_operation_evidence(
             "journey_id": journey_id,
             "join_basis": "explicit_journey_step_commerce_order_ref",
             "operation_links": [],
+            "payment_facts": [],
             "reason": "journey_not_found",
-            "amounts_included": False,
+            "amounts_included": True,
+            "operation_link_amounts_included": False,
+            "facts_are_aggregated": False,
+            "order_reference_count": 0,
+            "invalid_order_reference_count": 0,
+            "ledger_read_errors": 0,
+            "invalid_ledger_records": 0,
             "as_of": as_of,
         }
 
     repo = JourneyStepRepository()
     version_id = str(journey.get("journey_version_id"))
-    refs: set[str] = set()
+    refs: list[str] = []
+    seen_refs: set[str] = set()
     scanned = 0
     cursor: Optional[str] = None
     truncated = False
+    invalid_reference_count = 0
     while scanned < max_steps:
         page = await repo.list_by_version(
             tenant_id,
@@ -64,43 +78,512 @@ async def journey_commerce_operation_evidence(
             if isinstance(values, str):
                 values = [values]
             if isinstance(values, list):
-                refs.update(
-                    value.strip() for value in values
-                    if isinstance(value, str) and value.strip()
-                )
+                for value in values:
+                    reference = _valid_order_reference(value)
+                    if reference is None and value is not None:
+                        invalid_reference_count += 1
+                    elif reference is not None and reference not in seen_refs:
+                        seen_refs.add(reference)
+                        if len(refs) < max_order_refs:
+                            refs.append(reference)
+                        else:
+                            truncated = True
             single = summary.get("commerce_order_ref")
-            if isinstance(single, str) and single.strip():
-                refs.add(single.strip())
+            reference = _valid_order_reference(single)
+            if reference is None and single is not None:
+                invalid_reference_count += 1
+            elif reference is not None and reference not in seen_refs:
+                seen_refs.add(reference)
+                if len(refs) < max_order_refs:
+                    refs.append(reference)
+                else:
+                    truncated = True
         if len(page) < min(500, max_steps - (scanned - len(page))):
             break
         cursor = str(page[-1].get("step_position", ""))
         if scanned >= max_steps:
-            remaining = await repo.list_by_version(
-                tenant_id, version_id, limit=1, cursor=cursor
-            )
+            remaining = await repo.list_by_version(tenant_id, version_id, limit=1, cursor=cursor)
             truncated = bool(remaining)
 
+    truncated = truncated or bool(invalid_reference_count)
+
     ledger = CommerceOrderPaymentLedger()
-    links = []
-    for reference in sorted(refs):
-        record = (
-            await ledger.get_as_of(tenant_id, reference, as_of)
-            if as_of
-            else await ledger.get(tenant_id, reference)
-        )
-        if record is not None:
-            links.append(commerce_ledger_operation_link(record).model_dump(mode="json"))
+
+    async def read_reference(
+        reference: str,
+    ) -> tuple[str, Optional[dict[str, Any]], bool]:
+        try:
+            record = (
+                await ledger.get_as_of(tenant_id, reference, as_of)
+                if as_of
+                else await ledger.get(tenant_id, reference)
+            )
+        except Exception:  # noqa: BLE001 - one unavailable reference stays partial
+            return reference, None, True
+        return reference, record, False
+
+    semaphore = asyncio.Semaphore(16)
+
+    async def bounded_read(
+        reference: str,
+    ) -> tuple[str, Optional[dict[str, Any]], bool]:
+        async with semaphore:
+            return await read_reference(reference)
+
+    resolved = await asyncio.gather(*(bounded_read(reference) for reference in refs))
+    links: list[dict[str, Any]] = []
+    payment_facts: list[dict[str, Any]] = []
+    ledger_read_errors = 0
+    invalid_ledger_records = 0
+    unresolved_order_references = 0
+    for reference, record, failed in resolved:
+        if failed:
+            ledger_read_errors += 1
+            continue
+        if record is None:
+            unresolved_order_references += 1
+            continue
+        if (
+            not isinstance(record, dict)
+            or record.get("tenantId") != tenant_id
+            or record.get("commerceOrderRef") != reference
+        ):
+            invalid_ledger_records += 1
+            continue
+        try:
+            link = commerce_ledger_operation_link(record).model_dump(mode="json")
+            facts = _commerce_payment_facts(record, as_of=as_of)
+        except Exception:  # noqa: BLE001 - malformed stored evidence stays partial
+            invalid_ledger_records += 1
+            continue
+        links.append(link)
+        payment_facts.extend(facts)
+    truncated = truncated or bool(
+        ledger_read_errors or invalid_ledger_records or unresolved_order_references
+    )
 
     return {
         "journey_id": journey_id,
         "join_basis": "explicit_journey_step_commerce_order_ref",
         "operation_links": links,
-        "amounts_included": False,
+        "payment_facts": payment_facts,
+        "amounts_included": True,
+        "operation_link_amounts_included": False,
+        "facts_are_aggregated": False,
         "unlinked_evidence": "not_inferred",
+        "order_reference_count": len(refs),
+        "unresolved_order_references": unresolved_order_references,
+        "invalid_order_reference_count": invalid_reference_count,
+        "ledger_read_errors": ledger_read_errors,
+        "invalid_ledger_records": invalid_ledger_records,
         "steps_scanned": scanned,
         "evidence_truncated": truncated,
         "as_of": as_of,
     }
 
 
-__all__ = ["journey_commerce_operation_evidence"]
+async def campaign_commerce_operation_evidence(
+    tenant_id: str,
+    campaign_id: str,
+    *,
+    as_of: Optional[str] = None,
+    max_activities: int = 1_000,
+    max_order_refs: int = 500,
+) -> dict[str, Any]:
+    """Read payment evidence linked by an exact canonical campaign activity ref."""
+    return await _canonical_activity_commerce_operation_evidence(
+        tenant_id,
+        subject_kind="campaign",
+        subject_id=campaign_id,
+        as_of=as_of,
+        max_activities=max_activities,
+        max_order_refs=max_order_refs,
+    )
+
+
+async def entity_commerce_operation_evidence(
+    tenant_id: str,
+    entity_id: str,
+    *,
+    as_of: Optional[str] = None,
+    max_activities: int = 1_000,
+    max_order_refs: int = 500,
+) -> dict[str, Any]:
+    """Read payment evidence linked by an exact canonical profile activity ref."""
+    return await _canonical_activity_commerce_operation_evidence(
+        tenant_id,
+        subject_kind="entity",
+        subject_id=entity_id,
+        as_of=as_of,
+        max_activities=max_activities,
+        max_order_refs=max_order_refs,
+    )
+
+
+async def _canonical_activity_commerce_operation_evidence(
+    tenant_id: str,
+    *,
+    subject_kind: str,
+    subject_id: str,
+    as_of: Optional[str],
+    max_activities: int,
+    max_order_refs: int,
+) -> dict[str, Any]:
+    """Read exact refs for a caller-validated canonical Campaign or Profile.
+
+    Campaign callers validate against CampaignRegistry; entity callers
+    validate against IdentityRepository before entering this function. Each
+    activity row must carry both the exact canonical subject key and an
+    explicit commerce order reference. Ledger reads then use only that exact
+    reference under the same tenant. No attribution or identity is inferred
+    from amounts, timestamps, or provider order/payment IDs.
+    """
+    max_activities = min(max(int(max_activities), 1), 1_000)
+    max_order_refs = min(max(int(max_order_refs), 1), 1_000)
+    dimensions = {
+        "campaign": (
+            "campaign_id",
+            "list_commerce_by_campaign",
+            "explicit_campaign_scoped_canonical_activity_commerce_order_ref",
+        ),
+        "entity": (
+            "profile_id",
+            "list_commerce_by_profile",
+            "explicit_canonical_profile_scoped_activity_commerce_order_ref",
+        ),
+    }
+    dimension = dimensions.get(subject_kind)
+    if dimension is None:
+        raise ValueError("commerce evidence supports only canonical campaign or entity subjects")
+    scope_field, reader_method, join_basis = dimension
+    subject_key = f"{subject_kind}_id"
+
+    try:
+        from journeys.measurement.repositories.activity_repo import ActivityRepository
+
+        rows = await getattr(ActivityRepository(), reader_method)(
+            tenant_id,
+            subject_id,
+            limit=max_activities + 1,
+            as_of=as_of,
+        )
+    except Exception:  # noqa: BLE001 - a source outage remains an explicit partial state
+        return {
+            subject_key: subject_id,
+            "join_basis": join_basis,
+            "operation_links": [],
+            "payment_facts": [],
+            "association_evidence": [],
+            "amounts_included": True,
+            "operation_link_amounts_included": False,
+            "facts_are_aggregated": False,
+            "reason": "canonical_subject_activity_repository_unavailable",
+            "activity_scan_count": 0,
+            "order_reference_count": 0,
+            "unresolved_order_references": 0,
+            "invalid_order_reference_count": 0,
+            "ledger_read_errors": 0,
+            "invalid_ledger_records": 0,
+            "evidence_truncated": True,
+            "as_of": as_of,
+        }
+
+    truncated = len(rows) > max_activities
+    scanned_rows = rows[:max_activities]
+    refs: list[str] = []
+    seen_refs: set[str] = set()
+    invalid_reference_count = 0
+    association_evidence: list[dict[str, Any]] = []
+    from graph.operational_intelligence.models import EvidenceRef
+
+    for row in scanned_rows:
+        if (
+            str(row.get("tenant_id", "")) != tenant_id
+            or str(row.get(scope_field, "")) != subject_id
+            or row.get("activity_family") != "commerce"
+            or row.get("activity_status") in {"tombstoned", "deleted", "consent_restricted"}
+        ):
+            continue
+        reference = _valid_order_reference(row.get("commerce_order_ref"))
+        if reference is None:
+            if row.get("commerce_order_ref") is not None:
+                invalid_reference_count += 1
+            continue
+        activity_id = str(row.get("activity_id") or "").strip()
+        if not activity_id:
+            invalid_reference_count += 1
+            continue
+        if reference not in seen_refs:
+            seen_refs.add(reference)
+            if len(refs) < max_order_refs:
+                refs.append(reference)
+            else:
+                truncated = True
+        association_evidence.append(
+            {
+                "commerceOrderRef": reference,
+                "subjectKind": subject_kind,
+                "subjectId": subject_id,
+                "activityId": activity_id,
+                "silverTable": row.get("silver_table"),
+                "evidence": EvidenceRef(
+                    id=activity_id,
+                    type="event",
+                    source=str(
+                        row.get("silver_table") or row.get("source_system") or "canonical_activity"
+                    ),
+                    observedAt=row.get("server_received_at"),
+                ).model_dump(mode="json"),
+            }
+        )
+
+    truncated = truncated or bool(invalid_reference_count)
+
+    from value.commerce.order_payment_reconciliation import CommerceOrderPaymentLedger
+    from value.economic.operation_linkage import commerce_ledger_operation_link
+
+    ledger = CommerceOrderPaymentLedger()
+
+    async def read_reference(reference: str) -> tuple[str, Optional[dict[str, Any]], bool]:
+        try:
+            record = (
+                await ledger.get_as_of(tenant_id, reference, as_of)
+                if as_of
+                else await ledger.get(tenant_id, reference)
+            )
+        except Exception:  # noqa: BLE001 - one unavailable order remains partial
+            return reference, None, True
+        return reference, record, False
+
+    semaphore = asyncio.Semaphore(16)
+
+    async def bounded_read(reference: str) -> tuple[str, Optional[dict[str, Any]], bool]:
+        async with semaphore:
+            return await read_reference(reference)
+
+    resolved = await asyncio.gather(*(bounded_read(reference) for reference in refs))
+    links: list[dict[str, Any]] = []
+    payment_facts: list[dict[str, Any]] = []
+    ledger_read_errors = 0
+    invalid_ledger_records = 0
+    unresolved_order_references = 0
+    for reference, record, read_error in resolved:
+        if read_error:
+            ledger_read_errors += 1
+            continue
+        if record is None:
+            unresolved_order_references += 1
+            continue
+        if (
+            str(record.get("tenantId", "")) != tenant_id
+            or str(record.get("commerceOrderRef", "")) != reference
+        ):
+            invalid_ledger_records += 1
+            continue
+        try:
+            links.append(commerce_ledger_operation_link(record).model_dump(mode="json"))
+            payment_facts.extend(
+                _commerce_payment_facts(record, as_of=as_of, join_basis=join_basis)
+            )
+        except Exception:  # noqa: BLE001 - malformed source evidence remains partial
+            invalid_ledger_records += 1
+
+    truncated = truncated or bool(
+        ledger_read_errors or invalid_ledger_records or unresolved_order_references
+    )
+    return {
+        subject_key: subject_id,
+        "join_basis": join_basis,
+        "operation_links": links,
+        "payment_facts": payment_facts,
+        "association_evidence": association_evidence,
+        "amounts_included": True,
+        "operation_link_amounts_included": False,
+        "facts_are_aggregated": False,
+        "unlinked_evidence": "not_inferred",
+        "activity_scan_count": len(scanned_rows),
+        "order_reference_count": len(refs),
+        "unresolved_order_references": unresolved_order_references,
+        "invalid_order_reference_count": invalid_reference_count,
+        "ledger_read_errors": ledger_read_errors,
+        "invalid_ledger_records": invalid_ledger_records,
+        "evidence_truncated": truncated,
+        "as_of": as_of,
+    }
+
+
+def _valid_order_reference(value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    reference = value.strip()
+    if (
+        not reference
+        or len(reference) > 512
+        or any(ord(char) < 32 or ord(char) == 127 for char in reference)
+    ):
+        return None
+    return reference
+
+
+def _commerce_payment_facts(
+    record: dict[str, Any],
+    *,
+    as_of: Optional[str],
+    join_basis: str = "explicit_journey_step_commerce_order_ref",
+) -> list[dict[str, Any]]:
+    """Project source-owned ledger amounts as separate, typed-evidence facts."""
+    from graph.operational_intelligence.models import EvidenceRef
+
+    state = str(record.get("state") or "unmatched")
+    conflict_reason = record.get("conflictReason")
+    operation_ref = str(record.get("commerceOrderRef") or "")
+    facts: list[dict[str, Any]] = []
+
+    def add_fact(
+        *,
+        fact_kind: str,
+        source_record: dict[str, Any],
+        record_id_field: str,
+        evidence_id_field: Optional[str] = None,
+        lifecycle_state: str,
+    ) -> None:
+        amount = source_record.get("amount")
+        currency = source_record.get("currency")
+        record_id = source_record.get(record_id_field)
+        evidence_id = source_record.get(evidence_id_field or record_id_field)
+        provider = source_record.get("provider")
+        if not isinstance(amount, str) or not isinstance(currency, str):
+            return
+        if (
+            not isinstance(record_id, str)
+            or not record_id
+            or not isinstance(provider, str)
+            or not provider.strip()
+        ):
+            return
+        if not isinstance(evidence_id, str) or not evidence_id:
+            # Older order snapshots may predate revision IDs. The canonical
+            # provider order ID is still a real source reference in that case.
+            evidence_id = record_id
+        evidence = EvidenceRef(
+            id=evidence_id,
+            type="transaction",
+            source=provider,
+            observedAt=source_record.get("observedAt"),
+        )
+        reference_digest = hashlib.sha256(operation_ref.encode("utf-8")).hexdigest()[:16]
+        fact_digest = hashlib.sha256(
+            json.dumps(source_record, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()[:12]
+        facts.append(
+            {
+                "factId": (
+                    f"commerce:{reference_digest}:{fact_kind}:{provider}:"
+                    f"{evidence_id}:{fact_digest}"
+                ),
+                "kind": fact_kind,
+                "commerceOrderRef": operation_ref,
+                "joinBasis": join_basis,
+                "amount": amount,
+                "currency": currency,
+                "amountUsd": amount if currency.upper() == "USD" else None,
+                "normalizationState": (
+                    "native_currency_usd" if currency.upper() == "USD" else "not_normalized"
+                ),
+                "lifecycleState": lifecycle_state,
+                "reconciliationState": state,
+                "conflictReason": conflict_reason,
+                "provider": provider,
+                "sourceRecordId": record_id,
+                "evidenceRecordId": evidence_id,
+                "occurredAt": source_record.get("occurredAt"),
+                "observedAt": source_record.get("observedAt"),
+                "ledgerCreatedAt": record.get("createdAt"),
+                "ledgerUpdatedAt": record.get("updatedAt"),
+                "asOf": as_of,
+                "evidence": [evidence.model_dump(mode="json")],
+            }
+        )
+        if fact_kind == "order":
+            facts[-1]["providerOrderId"] = source_record.get("providerOrderId")
+            facts[-1]["revisionId"] = source_record.get("revisionId")
+            facts[-1]["sourceRevisionAt"] = source_record.get("sourceRevisionAt")
+        elif fact_kind == "refund":
+            facts[-1]["adjustmentType"] = source_record.get("adjustmentType")
+            facts[-1]["reversesPaymentId"] = source_record.get("reversesPaymentId")
+        elif fact_kind == "settlement":
+            payment_refs = source_record.get("settlesPaymentRefs")
+            if isinstance(payment_refs, list):
+                facts[-1]["settlesPaymentRefs"] = [
+                    {
+                        "provider": payment_ref.get("provider"),
+                        "providerPaymentId": payment_ref.get("providerPaymentId"),
+                    }
+                    for payment_ref in payment_refs
+                    if isinstance(payment_ref, dict)
+                    and isinstance(payment_ref.get("provider"), str)
+                    and isinstance(payment_ref.get("providerPaymentId"), str)
+                ]
+
+    order_revisions = record.get("orderRevisions")
+    if not isinstance(order_revisions, list) or not order_revisions:
+        order = record.get("order")
+        order_revisions = [order] if isinstance(order, dict) else []
+    for order_revision in order_revisions:
+        if isinstance(order_revision, dict):
+            # The provider order ID identifies the operation, while the ledger's
+            # revision ID is the evidence for this particular order snapshot.
+            # Keep every stored revision so divergent revisions remain visible.
+            add_fact(
+                fact_kind="order",
+                source_record=order_revision,
+                record_id_field="providerOrderId",
+                evidence_id_field="revisionId",
+                lifecycle_state=state,
+            )
+
+    payment_observations = record.get("paymentObservations")
+    if not isinstance(payment_observations, list) or not payment_observations:
+        payment_observations = list((record.get("payments") or {}).values())
+    for payment in payment_observations:
+        if isinstance(payment, dict):
+            add_fact(
+                fact_kind="payment",
+                source_record=payment,
+                record_id_field="providerPaymentId",
+                lifecycle_state=str(payment.get("status") or "unknown"),
+            )
+
+    adjustment_observations = record.get("adjustmentObservations")
+    if not isinstance(adjustment_observations, list) or not adjustment_observations:
+        adjustment_observations = list((record.get("adjustments") or {}).values())
+    for adjustment in adjustment_observations:
+        if isinstance(adjustment, dict):
+            adjustment_type = str(adjustment.get("adjustmentType") or "unknown")
+            add_fact(
+                fact_kind="refund" if adjustment_type == "refund" else "adjustment",
+                source_record=adjustment,
+                record_id_field="adjustmentId",
+                lifecycle_state=adjustment_type,
+            )
+
+    settlement_observations = record.get("settlementObservations")
+    if not isinstance(settlement_observations, list) or not settlement_observations:
+        settlement_observations = list((record.get("settlements") or {}).values())
+    for settlement in settlement_observations:
+        if isinstance(settlement, dict):
+            add_fact(
+                fact_kind="settlement",
+                source_record=settlement,
+                record_id_field="providerSettlementId",
+                lifecycle_state=str(settlement.get("status") or "unknown"),
+            )
+
+    return facts
+
+
+__all__ = [
+    "campaign_commerce_operation_evidence",
+    "entity_commerce_operation_evidence",
+    "journey_commerce_operation_evidence",
+]

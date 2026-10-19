@@ -24,9 +24,8 @@ from typing import Any, Optional
 from shared.backend_interpretation.flags import outcome_truth_store_enabled
 from shared.backend_interpretation.governance import assess_derived_write
 from shared.backend_interpretation.observe import register_correlation_from_observation
-from shared.backend_interpretation.primitives import OutcomeTruthRecord
+from shared.backend_interpretation.primitives import OutcomeSubjectRef, OutcomeTruthRecord
 from shared.backend_interpretation.stores import OutcomeTruthStore
-from graph.operational_intelligence.models import EntityRef
 
 logger = logging.getLogger("aether.outcome.truth_recorder")
 
@@ -71,7 +70,8 @@ async def persist_outcome_truth(
     if decision.mode != "off" and decision.violations:
         logger.warning(
             "outcome-truth derived-write governance (%s) violations: %s",
-            decision.mode, list(decision.violations),
+            decision.mode,
+            list(decision.violations),
         )
     if decision.would_block:
         logger.warning(
@@ -103,7 +103,7 @@ async def record_from_silver_outcome(
     tenant_id: str,
     row: dict[str, Any],
     event_id: str,
-    subject: Optional[EntityRef] = None,
+    subject: Optional[OutcomeSubjectRef] = None,
     model_version: Optional[str] = None,
     policy_version: Optional[str] = None,
     store: Optional[OutcomeTruthStore] = None,

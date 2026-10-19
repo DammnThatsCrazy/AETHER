@@ -20,14 +20,14 @@ Three carriers:
   evidence lineage AND model/policy derivation lineage (gap row 26 / outcome
   store returns ``None`` today). It can be projected FROM a measurement
   :class:`~journeys.measurement.outcome.contracts.Outcome` (same state ladder)
-  but adds the subject + derivation + exact-money columns the canonical outcome
-  read currently drops.
+  but adds a graph ``EntityRef`` or distinct product-context subject, plus the
+  derivation and exact-money columns the canonical outcome read currently drops.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Literal, Optional
+from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -109,6 +109,22 @@ class ContractSpineModel(BaseModel):
     """Base for WS-D carriers (additive-tolerant like the monolith ContractModel)."""
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+
+class OutcomeContextRef(ContractSpineModel):
+    """Exact measurement context reference that is not a graph entity.
+
+    Outcome truth can be scoped directly to a campaign, episode, journey, or
+    population. These references intentionally remain distinct from
+    :class:`EntityRef`: a journey is not a graph vertex merely because an
+    outcome is measured about it.
+    """
+
+    kind: Literal["campaign", "episode", "journey", "population"]
+    id: str
+
+
+OutcomeSubjectRef = Union[EntityRef, OutcomeContextRef]
 
 
 class ValidityWindow(ContractSpineModel):
@@ -202,13 +218,15 @@ class OutcomeTruthRecord(ContractSpineModel):
     ``evidence_refs`` entry. ``state`` uses the Outcome finality-ladder values
     (no second enum); exact money is carried as ``value_amount`` /
     ``value_currency`` DECIMAL strings (``None`` amount is a typed
-    ``value_state`` absence, never a silent ``0.0``).
+    ``value_state`` absence, never a silent ``0.0``). ``subject`` retains a
+    graph ``EntityRef`` for existing callers or an ``OutcomeContextRef`` for an
+    exact product context such as a journey.
     """
 
     outcome_id: str
     tenant_id: str
     definition_ref: str
-    subject: Optional[EntityRef] = None
+    subject: Optional[OutcomeSubjectRef] = None
     state: str = "unknown"  # OutcomeState ladder values (validated below)
     achieved_at: Optional[str] = None
     value_amount: Optional[str] = None
@@ -227,8 +245,7 @@ class OutcomeTruthRecord(ContractSpineModel):
     def validate_vocab(cls, value: str) -> None:
         if value not in OUTCOME_STATES:
             raise ValueError(
-                f"state {value!r} is not an Outcome ladder member "
-                f"(allowed: {OUTCOME_STATES})"
+                f"state {value!r} is not an Outcome ladder member (allowed: {OUTCOME_STATES})"
             )
 
 

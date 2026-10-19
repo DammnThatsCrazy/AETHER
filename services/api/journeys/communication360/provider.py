@@ -64,10 +64,10 @@ Section content schema (stable for central integration):
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Optional, Union
+from typing import Any, Optional, Protocol, Union
 
 # Lightweight plane imports — always importable.
 from shared.intelligence_projections.contracts import (
@@ -81,6 +81,7 @@ from shared.intelligence_projections.contracts import (
 from shared.intelligence_projections.errors import ProjectionError
 from shared.intelligence_projections.generated_registry import (
     INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+    PRODUCT_360_SURFACE_DEFINITIONS,
 )
 from shared.intelligence_projections.registry import ProviderRegistry
 
@@ -96,42 +97,54 @@ from shared.contracts_models.epistemic import EpistemicStatus
 # Sections the registry declares for communication360 (JSON output order —
 # summary, state, timeline, evidence, interactions, outcomes).
 OUTPUT_SECTIONS: tuple[str, ...] = (
-    "summary", "state", "timeline", "evidence", "interactions", "outcomes",
+    "summary",
+    "state",
+    "timeline",
+    "evidence",
+    "interactions",
+    "outcomes",
 )
 
 # Subject kinds communication360 serves (registry subjectKinds).
-_SCOPED_SUBJECT_KINDS: frozenset[str] = frozenset({"campaign", "episode", "source"})
+_SCOPED_SUBJECT_KINDS: frozenset[str] = frozenset(
+    {"agent", "campaign", "episode", "journey", "source"}
+)
 
 # Typed degraded-reason codes surfaced on ``result.degradedReasons`` (short
 # strings only — NEVER an exception body / secret detail). Provider-side only:
 # sibling-dependency degradation is section-level, mirroring Economic360.
 REASON_SILVER_SOURCE_UNAVAILABLE = "silver_source_unavailable"
 REASON_CANONICAL_SOURCE_UNAVAILABLE = "canonical_source_unavailable"
+REASON_SOURCE_READ_TRUNCATED = "communication_source_read_truncated"
+_DEFAULT_READ_LIMIT = 100
+_MAX_READ_LIMIT = 500
 
-# Section-level degradation note for a subject the Phase-4 spine cannot bind.
+# Section-level limitation note for subjects without a message-spine join.
 _SCOPE_NOTES: dict[str, str] = {
     "episode": (
-        "episode binding to the message spine is in flight (episode360); "
-        "messages cannot be scoped to this episode in Phase 4"
+        "messages have no canonical episode join; exact episode_id communication facts remain readable"
+    ),
+    "journey": (
+        "messages have no canonical journey join; exact journey_id communication facts remain readable"
     ),
     "source": (
-        "source scope has no Phase-4 message binding; the message spine is "
-        "entity/campaign scoped"
+        "messages have no canonical source join; exact source reference communication facts remain readable"
     ),
 }
 
 # Canonical fact ``kind`` discriminators each state dimension / section reads.
 _KINDS_INFORMATION = frozenset({"information", "information_transformation"})
-_KINDS_KNOWLEDGE = frozenset(
-    {"knowledge_state", "context_inclusion", "interpretation"}
-)
+_KINDS_KNOWLEDGE = frozenset({"knowledge_state", "context_inclusion", "interpretation"})
 _KINDS_AUTHORITY = frozenset({"authority_evaluation"})
 _KINDS_INTERACTIONS = frozenset({"communication_act", "participant_binding"})
 
 # Engagement states are a strict subset of the delivery ladder.
 _ENGAGEMENT_STATES: tuple[str, ...] = ("opened", "clicked", "replied")
 _DIRECTION_KEYS: tuple[str, ...] = (
-    "outbound", "inbound", "internal", "system_generated",
+    "outbound",
+    "inbound",
+    "internal",
+    "system_generated",
 )
 
 _FACT_REF_SOURCE = "services/api/journeys/communication360/communication360_facts"
@@ -144,12 +157,17 @@ _FACT_REF_SOURCE = "services/api/journeys/communication360/communication360_fact
 
 @dataclass(frozen=True)
 class _Scope:
-    """How a projection subject binds to the Phase-4 canonical surface."""
+    """How a subject binds to message and canonical communication sources."""
 
     kind: str
     id: str
     campaign_id: Optional[str] = None
+    participant_entity_id: Optional[str] = None
+    participant_identity_ids: tuple[str, ...] = ()
+    identity_resolution_state: Optional[str] = None
+    identity_evidence: tuple[EvidenceRef, ...] = ()
     bindable: bool = True
+    canonical_fact_bindable: bool = True
     note: Optional[str] = None
 
     def as_dict(self) -> dict[str, Any]:
@@ -157,24 +175,122 @@ class _Scope:
             "kind": self.kind,
             "id": self.id,
             "campaignId": self.campaign_id,
+            "participantEntityId": self.participant_entity_id,
+            "identityResolutionState": self.identity_resolution_state,
+            "identityEvidenceRefs": [
+                evidence.model_dump(mode="json") for evidence in self.identity_evidence
+            ],
             "bindable": self.bindable,
+            "canonicalFactBindable": self.canonical_fact_bindable,
             "note": self.note,
         }
 
 
+@dataclass(frozen=True)
+class AgentIdentityRead:
+    """Tenant-scoped result for resolving a source agent reference."""
+
+    state: str
+    canonical_agent_entity_id: Optional[str] = None
+    evidence: tuple[EvidenceRef, ...] = ()
+    reason: Optional[str] = None
+
+
+class AgentIdentityReader(Protocol):
+    async def resolve(self, tenant_id: str, source_agent_ref: str) -> AgentIdentityRead:
+        """Resolve only through a tenant-owned canonical Agent identity authority."""
+        ...
+
+
+class RepositoryAgentIdentityReader:
+    """Reuse Agent360's tenant-admin binding and canonical entity checks."""
+
+    async def resolve(self, tenant_id: str, source_agent_ref: str) -> AgentIdentityRead:
+        try:
+            from actions.agent.agent360_provider import RepositoryAgent360Source
+
+            batch = await RepositoryAgent360Source().actor_identity(tenant_id, source_agent_ref)
+        except Exception:  # noqa: BLE001 - identity outage remains unknown
+            return AgentIdentityRead(state="unknown", reason="agent_identity_authority_unavailable")
+
+        if batch.truncated:
+            return AgentIdentityRead(state="unknown", reason="agent_identity_scan_incomplete")
+        if batch.scope_mismatch:
+            return AgentIdentityRead(state="ambiguous", reason="agent_identity_scope_ambiguous")
+
+        rows = [
+            row for row in batch.rows if isinstance(row, dict) and row.get("tenant_id") == tenant_id
+        ]
+        canonical_ids = {
+            str(row.get("canonical_agent_entity_id"))
+            for row in rows
+            if isinstance(row.get("canonical_agent_entity_id"), str)
+            and row.get("canonical_agent_entity_id")
+        }
+        if len(canonical_ids) > 1:
+            return AgentIdentityRead(
+                state="ambiguous", reason="agent_identity_multiple_canonical_matches"
+            )
+        if not canonical_ids:
+            return AgentIdentityRead(state="unresolved", reason="agent_identity_binding_not_found")
+
+        canonical_id = next(iter(canonical_ids))
+        evidence: dict[tuple[str, str], EvidenceRef] = {}
+        for row in rows:
+            if row.get("canonical_agent_entity_id") != canonical_id:
+                continue
+            evidence_id = row.get("identity_evidence_id")
+            evidence_source = row.get("identity_evidence_source")
+            if not isinstance(evidence_id, str) or not evidence_id:
+                continue
+            if not isinstance(evidence_source, str) or not evidence_source:
+                continue
+            ref = EvidenceRef(
+                id=evidence_id,
+                type="entity",
+                source=evidence_source,
+                observedAt=row.get("identity_bound_at"),
+            )
+            evidence[(ref.source, ref.id)] = ref
+        if not evidence:
+            return AgentIdentityRead(state="unknown", reason="agent_identity_evidence_missing")
+        return AgentIdentityRead(
+            state="resolved",
+            canonical_agent_entity_id=canonical_id,
+            evidence=tuple(evidence.values()),
+        )
+
+
 def _resolve_scope(request: ProjectionRequest) -> _Scope:
-    """A campaign subject binds its id as campaign_id; episode/source degrade."""
+    """Resolve direct message joins; other supported subjects use exact facts."""
     kind = request.subject.kind
     if kind == "campaign":
         return _Scope(kind=kind, id=request.subject.id, campaign_id=request.subject.id)
-    if kind == "episode":
-        return _Scope(kind=kind, id=request.subject.id, bindable=False,
-                      note=_SCOPE_NOTES["episode"])
+    if kind == "agent":
+        return _Scope(
+            kind=kind,
+            id=request.subject.id,
+            participant_entity_id=request.subject.id,
+            participant_identity_ids=(request.subject.id,),
+        )
+    if kind in {"episode", "journey", "source"}:
+        return _Scope(
+            kind=kind,
+            id=request.subject.id,
+            bindable=False,
+            note=_SCOPE_NOTES[kind],
+        )
     # source (and any future unbound kind) — honest, no Phase-4 binding.
     note = _SCOPE_NOTES.get(kind)
     if note is None:
         note = f"subject kind {kind!r} has no Phase-4 binding to communication truth"
-    return _Scope(kind=kind, id=request.subject.id, bindable=False, note=note)
+    return _Scope(
+        kind=kind,
+        id=request.subject.id,
+        bindable=False,
+        canonical_fact_bindable=False,
+        note=note,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -221,12 +337,77 @@ def _row_matches_scope(
     """
     if str(row.get("tenant_id", "")) != tenant_id:
         return False
-    if str(row.get("actor_id") or "") == scope.id:
-        return True
-    if str(row.get("agent_id") or "") == scope.id:
-        return True
-    payload = _payload_of(row)
-    return scope.id in json.dumps(payload, default=str)
+    reference_keys = {
+        "agent": {"agent_id", "actor_id", "actor_entity_id", "agent_entity_id", "entity_id"},
+        "campaign": {"campaign_id"},
+        "episode": {"episode_id"},
+        "journey": {"journey_id"},
+        "source": {"source_id", "source_namespace", "provider_id"},
+    }.get(scope.kind, set())
+    reference_ids = scope.participant_identity_ids if scope.kind == "agent" else (scope.id,)
+    for reference_id in reference_ids:
+        if any(str(row.get(key) or "") == reference_id for key in reference_keys):
+            return True
+        if _payload_has_exact_reference(_payload_of(row), reference_keys, reference_id):
+            return True
+    return False
+
+
+def _payload_has_exact_reference(value: Any, keys: set[str], reference: str) -> bool:
+    """Match typed reference fields exactly; never substring-search payload text."""
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key in keys and not isinstance(item, (dict, list)) and str(item or "") == reference:
+                return True
+            if _payload_has_exact_reference(item, keys, reference):
+                return True
+    elif isinstance(value, list):
+        return any(_payload_has_exact_reference(item, keys, reference) for item in value)
+    return False
+
+
+def _message_matches_scope(message: CommunicationMessage, scope: _Scope) -> bool:
+    if scope.kind == "campaign":
+        return str(message.campaign_id or "") == scope.id
+    if scope.kind == "agent":
+        return bool(
+            set(scope.participant_identity_ids)
+            & {message.sender_entity_id, message.recipient_entity_id}
+        )
+    return False
+
+
+def _communication_slot_ids() -> list[str]:
+    """Catalog slots whose declared authority and section binding cover messages."""
+    result: set[str] = set()
+    relevant_sections = {"evidence", "interactions", "timeline"}
+    for surface in PRODUCT_360_SURFACE_DEFINITIONS.values():
+        if not isinstance(surface, dict):
+            continue
+        for slot in surface.get("domainSlots", []):
+            if not isinstance(slot, dict):
+                continue
+            authorities = set(slot.get("canonicalAuthorityRefs", []))
+            if not authorities.intersection({"communication_facts", "campaign_touchpoints"}):
+                continue
+            for binding in slot.get("projectionBindings", []):
+                if (
+                    not isinstance(binding, dict)
+                    or binding.get("projectionId") != "communication360"
+                ):
+                    continue
+                if not set(binding.get("sectionIds", [])).intersection(relevant_sections):
+                    continue
+                slot_id = slot.get("id")
+                if isinstance(slot_id, str):
+                    result.add(slot_id)
+    return sorted(result)
+
+
+def _communication_fact_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep canonical communication families for non-message subject timelines."""
+    kinds = _KINDS_INFORMATION | _KINDS_KNOWLEDGE | _KINDS_AUTHORITY | _KINDS_INTERACTIONS
+    return [row for row in rows if row.get("kind") in kinds]
 
 
 def _row_evidence(row: dict[str, Any]) -> Optional[EvidenceRef]:
@@ -274,6 +455,8 @@ class Communication360Provider:
     def __init__(
         self,
         sources: Optional[Union[CommunicationSource, dict[str, CommunicationSource]]] = None,
+        *,
+        agent_identity_reader: Optional[AgentIdentityReader] = None,
     ) -> None:
         """Injectable sources (test seam); default = ``default_sources()``.
 
@@ -295,6 +478,11 @@ class Communication360Provider:
                 "communication360 provider requires both a silver message source "
                 "and a canonical fact source"
             )
+        self._agent_identity = (
+            agent_identity_reader
+            if agent_identity_reader is not None
+            else RepositoryAgentIdentityReader()
+        )
 
     # ── IntelligenceProjectionProvider ─────────────────────────────────────
 
@@ -306,25 +494,68 @@ class Communication360Provider:
         """Run one read-only Communication360 projection over canonical truth."""
         tenant_id = request.tenantId
         scope = _resolve_scope(request)
+        read_limit = min(
+            max(request.page.limit if request.page else _DEFAULT_READ_LIMIT, 1),
+            _MAX_READ_LIMIT,
+        )
+        if request.subject.kind == "agent":
+            try:
+                identity = await self._agent_identity.resolve(tenant_id, request.subject.id)
+            except Exception:  # noqa: BLE001 - fail closed on identity errors
+                identity = AgentIdentityRead(
+                    state="unknown", reason="agent_identity_authority_unavailable"
+                )
+            if (
+                identity.state == "resolved"
+                and isinstance(identity.canonical_agent_entity_id, str)
+                and identity.canonical_agent_entity_id
+                and identity.evidence
+            ):
+                # Source/runtime references are useful only to the resolver.
+                # Message and canonical fact joins use the resolved Agent entity.
+                identity_ids = (identity.canonical_agent_entity_id,)
+                scope = replace(
+                    scope,
+                    participant_entity_id=identity.canonical_agent_entity_id,
+                    participant_identity_ids=identity_ids,
+                    identity_resolution_state="resolved",
+                    identity_evidence=identity.evidence,
+                )
+            else:
+                scope = replace(
+                    scope,
+                    participant_entity_id=None,
+                    participant_identity_ids=(),
+                    identity_resolution_state=identity.state,
+                    identity_evidence=identity.evidence,
+                    bindable=False,
+                    canonical_fact_bindable=False,
+                    note=identity.reason or "agent_identity_unresolved",
+                )
 
         # Read the canonical fact store once (scope-matched below by family).
-        canonical_up, canonical_rows = await self._read_canonical_rows(
-            tenant_id, scope
+        identity_readable = (
+            request.subject.kind != "agent" or scope.identity_resolution_state == "resolved"
         )
-        in_scope_rows = [
-            r for r in canonical_rows if _row_matches_scope(r, tenant_id, scope)
-        ]
+        canonical_up, canonical_rows, canonical_truncated = (
+            await self._read_canonical_rows(tenant_id, scope, limit=read_limit)
+            if identity_readable
+            else (True, [], False)
+        )
+        in_scope_rows = [r for r in canonical_rows if _row_matches_scope(r, tenant_id, scope)]
 
         # Read the message spine only when the subject binds to it.
         messages: list[CommunicationMessage] = []
         silver_up = True
+        silver_truncated = False
         if scope.bindable:
-            silver_up, messages = await self._read_messages(tenant_id, scope)
+            silver_up, messages, silver_truncated = await self._read_messages(
+                tenant_id, scope, limit=read_limit
+            )
             messages = [
-                m for m in messages
-                if str(m.tenant_id) == tenant_id
-                and (scope.campaign_id is None
-                     or str(m.campaign_id or "") == str(scope.campaign_id))
+                m
+                for m in messages
+                if str(m.tenant_id) == tenant_id and _message_matches_scope(m, scope)
             ]
 
         degraded_reasons: list[str] = []
@@ -332,21 +563,64 @@ class Communication360Provider:
             degraded_reasons.append(REASON_SILVER_SOURCE_UNAVAILABLE)
         if not canonical_up:
             degraded_reasons.append(REASON_CANONICAL_SOURCE_UNAVAILABLE)
+        if silver_truncated or canonical_truncated:
+            degraded_reasons.append(REASON_SOURCE_READ_TRUNCATED)
 
         sections = [
-            self._summary_section(request, scope, messages, silver_up, context),
+            self._summary_section(
+                request,
+                scope,
+                messages,
+                silver_up,
+                silver_truncated,
+                in_scope_rows,
+                canonical_up,
+                canonical_truncated,
+                context,
+            ),
             self._state_section(
-                request, scope, messages, silver_up,
-                canonical_up, in_scope_rows, context,
+                request,
+                scope,
+                messages,
+                silver_up,
+                canonical_up,
+                in_scope_rows,
+                silver_truncated,
+                canonical_truncated,
+                context,
             ),
-            self._timeline_section(request, scope, messages, silver_up),
+            self._timeline_section(
+                request,
+                scope,
+                messages,
+                silver_up,
+                silver_truncated,
+                in_scope_rows,
+                canonical_up,
+                canonical_truncated,
+            ),
             self._evidence_section(
-                request, messages, silver_up, in_scope_rows, canonical_up
+                request,
+                scope,
+                messages,
+                silver_up,
+                in_scope_rows,
+                canonical_up,
+                silver_truncated,
+                canonical_truncated,
             ),
-            self._interactions_section(request, scope, in_scope_rows, canonical_up),
+            self._interactions_section(
+                request,
+                scope,
+                in_scope_rows,
+                canonical_up,
+                canonical_truncated,
+            ),
             self._outcomes_section(context),
         ]
-        claims = self._build_claims(request, messages)
+        claims = self._build_claims(request, messages, scope.identity_evidence)
+        if request.subject.kind == "agent" and scope.identity_resolution_state != "resolved":
+            degraded_reasons.append(scope.note or "agent_identity_unresolved")
 
         return ProjectionResult(
             projectionId=self.projection_id,
@@ -362,26 +636,31 @@ class Communication360Provider:
     # ── Defensive reads ────────────────────────────────────────────────────
 
     async def _read_messages(
-        self, tenant_id: str, scope: _Scope
-    ) -> tuple[bool, list[CommunicationMessage]]:
-        """Silver spine for the scope; (up, messages). Never raises."""
+        self, tenant_id: str, scope: _Scope, *, limit: int
+    ) -> tuple[bool, list[CommunicationMessage], bool]:
+        """Silver spine for the scope; (up, messages, truncated). Never raises."""
         try:
             messages = await self._silver.messages(
-                tenant_id, campaign_id=scope.campaign_id
+                tenant_id,
+                campaign_id=scope.campaign_id,
+                participant_entity_id=scope.participant_entity_id,
+                limit=limit + 1,
             )
-            return True, list(messages)
+            rows = list(messages)
+            return True, rows[:limit], len(rows) > limit
         except Exception:  # noqa: BLE001 - backing unavailable -> degrade
-            return False, []
+            return False, [], False
 
     async def _read_canonical_rows(
-        self, tenant_id: str, scope: _Scope
-    ) -> tuple[bool, list[dict[str, Any]]]:
-        """Canonical fact rows for the tenant; (up, rows). Never raises."""
+        self, tenant_id: str, scope: _Scope, *, limit: int
+    ) -> tuple[bool, list[dict[str, Any]], bool]:
+        """Canonical fact rows for the tenant; (up, rows, truncated). Never raises."""
         try:
-            rows = await self._canonical.facts(tenant_id)
-            return True, [r for r in rows if isinstance(r, dict)]
+            rows = await self._canonical.facts(tenant_id, limit=limit + 1)
+            selected = [r for r in rows if isinstance(r, dict)]
+            return True, selected[:limit], len(selected) > limit
         except Exception:  # noqa: BLE001 - backing unavailable -> degrade
-            return False, []
+            return False, [], False
 
     # ── Section builders ───────────────────────────────────────────────────
 
@@ -391,17 +670,51 @@ class Communication360Provider:
         scope: _Scope,
         messages: list[CommunicationMessage],
         silver_up: bool,
+        silver_truncated: bool,
+        rows: list[dict[str, Any]],
+        canonical_up: bool,
+        canonical_truncated: bool,
         context: ProjectionContext,
     ) -> ProjectionSection:
-        """summary — real spine counts (a reachable empty spine is a real zero)."""
+        """Summary of a complete message scope or exact canonical fact scope."""
         if not scope.bindable:
-            state: str = "degraded"
-            counts: Optional[dict[str, Any]] = None
-            reasons = [scope.note]
+            fact_rows = _communication_fact_rows(rows)
+            if not scope.canonical_fact_bindable:
+                state = "degraded"
+                counts = None
+                reasons = [scope.note or "canonical_fact_subject_binding_unavailable"]
+            elif not canonical_up or canonical_truncated:
+                state = "degraded"
+                counts = None
+                reasons = [
+                    REASON_CANONICAL_SOURCE_UNAVAILABLE
+                    if not canonical_up
+                    else REASON_SOURCE_READ_TRUNCATED
+                ]
+            elif not fact_rows:
+                state = "missing"
+                counts = None
+                reasons = [scope.note, "no_exact_scope_communication_facts_observed"]
+            else:
+                fact_kinds: dict[str, int] = {}
+                for row in fact_rows:
+                    kind = str(row.get("kind") or "unknown")
+                    fact_kinds[kind] = fact_kinds.get(kind, 0) + 1
+                state = "available"
+                counts = {
+                    "messages_total": None,
+                    "communication_facts_total": len(fact_rows),
+                    "communication_fact_kinds": fact_kinds,
+                }
+                reasons = [scope.note]
         elif not silver_up:
             state = "degraded"
             counts = None
             reasons = [REASON_SILVER_SOURCE_UNAVAILABLE]
+        elif silver_truncated:
+            state = "degraded"
+            counts = None
+            reasons = [REASON_SOURCE_READ_TRUNCATED]
         else:
             state = "available"
             counts = self._summary_counts(messages)
@@ -417,6 +730,15 @@ class Communication360Provider:
                 "counts": counts,
                 "reasons": reasons,
                 "registryState": context.registryState,
+                "sourceCompleteness": (
+                    "partial"
+                    if silver_truncated or canonical_truncated
+                    else "bounded_read"
+                    if scope.bindable
+                    else "canonical_facts_only"
+                    if scope.canonical_fact_bindable
+                    else "not_read"
+                ),
             },
             warnings=reasons or None,
         )
@@ -461,6 +783,8 @@ class Communication360Provider:
         silver_up: bool,
         canonical_up: bool,
         rows: list[dict[str, Any]],
+        silver_truncated: bool,
+        canonical_truncated: bool,
         context: ProjectionContext,
     ) -> ProjectionSection:
         """state — the six communication dimensions with typed states."""
@@ -472,8 +796,28 @@ class Communication360Provider:
             self._knowledge_dimension(scope, rows, canonical_up),
             self._authority_dimension(scope, rows, canonical_up),
         ]
+        for dimension in dimensions:
+            name = dimension.get("dimension")
+            affected = (silver_truncated and name in {"delivery", "engagement"}) or (
+                canonical_truncated and name in {"information", "knowledge", "authority"}
+            )
+            if affected:
+                dimension.update(
+                    {
+                        "state": "degraded",
+                        "observed": None,
+                        "breakdown": None,
+                        "reason": REASON_SOURCE_READ_TRUNCATED,
+                    }
+                )
         section_state: str
-        if not scope.bindable or not silver_up or not canonical_up:
+        if (
+            not scope.bindable
+            or not silver_up
+            or not canonical_up
+            or silver_truncated
+            or canonical_truncated
+        ):
             section_state = "degraded"
         else:
             section_state = "available"
@@ -486,6 +830,15 @@ class Communication360Provider:
                 "subject": {"kind": request.subject.kind, "id": request.subject.id},
                 "dimensions": dimensions,
                 "registryState": context.registryState,
+                "sourceCompleteness": (
+                    "partial"
+                    if silver_truncated or canonical_truncated
+                    else "bounded_read"
+                    if scope.bindable
+                    else "canonical_facts_only"
+                    if scope.canonical_fact_bindable
+                    else "not_read"
+                ),
             },
         )
 
@@ -496,9 +849,7 @@ class Communication360Provider:
         if not scope.bindable:
             return self._degraded_dimension("delivery", scope.note)
         if not silver_up:
-            return self._degraded_dimension(
-                "delivery", REASON_SILVER_SOURCE_UNAVAILABLE
-            )
+            return self._degraded_dimension("delivery", REASON_SILVER_SOURCE_UNAVAILABLE)
         by_state: dict[str, int] = {}
         for message in messages:
             state = _message_state_value(message)
@@ -519,9 +870,7 @@ class Communication360Provider:
         if not scope.bindable:
             return self._degraded_dimension("engagement", scope.note)
         if not silver_up:
-            return self._degraded_dimension(
-                "engagement", REASON_SILVER_SOURCE_UNAVAILABLE
-            )
+            return self._degraded_dimension("engagement", REASON_SILVER_SOURCE_UNAVAILABLE)
         breakdown = {k: 0 for k in _ENGAGEMENT_STATES}
         observed = 0
         for message in messages:
@@ -568,17 +917,13 @@ class Communication360Provider:
         self, scope: _Scope, rows: list[dict[str, Any]], canonical_up: bool
     ) -> dict[str, Any]:
         """knowledge (R4) — observed agent-side state; never granted by delivery."""
-        return self._fact_family_dimension(
-            "knowledge", scope, rows, canonical_up, _KINDS_KNOWLEDGE
-        )
+        return self._fact_family_dimension("knowledge", scope, rows, canonical_up, _KINDS_KNOWLEDGE)
 
     def _authority_dimension(
         self, scope: _Scope, rows: list[dict[str, Any]], canonical_up: bool
     ) -> dict[str, Any]:
         """authority — delegation-authority evaluations (Phase 5), observed only."""
-        return self._fact_family_dimension(
-            "authority", scope, rows, canonical_up, _KINDS_AUTHORITY
-        )
+        return self._fact_family_dimension("authority", scope, rows, canonical_up, _KINDS_AUTHORITY)
 
     def _fact_family_dimension(
         self,
@@ -596,10 +941,12 @@ class Communication360Provider:
         most of these).
         """
         family = [r for r in rows if r.get("kind") in kinds]
-        if not canonical_up:
+        if not scope.canonical_fact_bindable:
             return self._degraded_dimension(
-                name, REASON_CANONICAL_SOURCE_UNAVAILABLE
+                name, scope.note or "canonical_fact_subject_binding_unavailable"
             )
+        if not canonical_up:
+            return self._degraded_dimension(name, REASON_CANONICAL_SOURCE_UNAVAILABLE)
         if not family:
             return {
                 "dimension": name,
@@ -635,23 +982,78 @@ class Communication360Provider:
         scope: _Scope,
         messages: list[CommunicationMessage],
         silver_up: bool,
+        silver_truncated: bool,
+        rows: list[dict[str, Any]],
+        canonical_up: bool,
+        canonical_truncated: bool,
     ) -> ProjectionSection:
-        """timeline — ordered messages as claims; ordering is NOT causality."""
+        """Timeline over joined messages or exact canonical facts, never causal."""
         if not scope.bindable:
-            state = "degraded"
-            entries: list[dict[str, Any]] = []
-            warnings = [scope.note]
+            fact_rows = _communication_fact_rows(rows)
+            entries = []
+            undated_count = 0
+            for row in fact_rows:
+                occurred_at = row.get("occurred_at")
+                if occurred_at is None or not str(occurred_at).strip():
+                    undated_count += 1
+                    continue
+                evidence = _row_evidence(row)
+                entries.append(
+                    {
+                        "factId": row.get("fact_id") or row.get("idempotency_key"),
+                        "sourceEventId": row.get("source_event_id"),
+                        "sourceEventType": row.get("source_event_type"),
+                        "factKind": row.get("kind"),
+                        "occurredAt": str(occurred_at),
+                        "evidenceRefIds": [evidence.id] if evidence is not None else [],
+                    }
+                )
+            entries.sort(key=lambda entry: (entry["occurredAt"], str(entry.get("factId") or "")))
+            incomplete = (
+                not scope.canonical_fact_bindable
+                or not canonical_up
+                or canonical_truncated
+                or undated_count > 0
+            )
+            if not scope.canonical_fact_bindable:
+                state = "degraded"
+                warnings = [scope.note or "canonical_fact_subject_binding_unavailable"]
+            elif not canonical_up:
+                state = "degraded"
+                warnings = [REASON_CANONICAL_SOURCE_UNAVAILABLE]
+            elif canonical_truncated or undated_count:
+                state = "degraded"
+                warnings = [
+                    REASON_SOURCE_READ_TRUNCATED
+                    if canonical_truncated
+                    else "canonical_communication_facts_missing_event_time"
+                ]
+            else:
+                state = "available" if entries else "missing"
+                warnings = [] if entries else ["no_exact_scope_communication_facts_observed"]
+            source_completeness = (
+                "not_read"
+                if not scope.canonical_fact_bindable
+                else "partial"
+                if incomplete
+                else "canonical_facts_only"
+            )
+            order = "occurred_at_ascending" if entries else None
         elif not silver_up:
             state = "degraded"
             entries = []
             warnings = [REASON_SILVER_SOURCE_UNAVAILABLE]
+            source_completeness = "partial"
+            order = None
         else:
-            state = "available"
+            state = "degraded" if silver_truncated else "available"
             entries = sorted(
                 (self._message_entry(m) for m in messages),
                 key=lambda e: (str(e.get("occurredAt") or ""), str(e.get("messageId") or "")),
             )
-            warnings = []
+            warnings = [REASON_SOURCE_READ_TRUNCATED] if silver_truncated else []
+            source_completeness = "partial" if silver_truncated else "bounded_read"
+            order = "occurred_at_ascending" if entries else None
         ordered = bool(entries)
         return ProjectionSection(
             id="timeline",
@@ -660,7 +1062,7 @@ class Communication360Provider:
             content={
                 "tenantId": request.tenantId,
                 "subject": {"kind": request.subject.kind, "id": request.subject.id},
-                "order": "occurred_at_ascending" if ordered else None,
+                "order": order if ordered else None,
                 "orderLabeled": ordered,  # no entries -> sequence unlabeled
                 "causalRelationsDeclared": [],  # no lineage field in Phase 4
                 "causalNote": (
@@ -669,6 +1071,8 @@ class Communication360Provider:
                 ),
                 "entryCount": len(entries),
                 "entries": entries,
+                "sourceTruncated": (silver_truncated if scope.bindable else canonical_truncated),
+                "sourceCompleteness": source_completeness,
             },
             warnings=warnings or None,
         )
@@ -682,29 +1086,61 @@ class Communication360Provider:
             "direction": _state_value(message.direction),
             "channel": _state_value(message.channel),
             "campaignId": message.campaign_id,
+            "senderEntityId": (
+                message.sender_entity_id if message.sender_identity_binding_id else None
+            ),
+            "recipientEntityId": (
+                message.recipient_entity_id if message.recipient_identity_binding_id else None
+            ),
             "claimState": _state_value(message.claim_state),
             "evidenceRefIds": [ref.id for ref in message.evidence_refs],
+            "recipientIdentityBindingId": message.recipient_identity_binding_id,
+            "recipientIdentityEvidenceRefId": (
+                message.recipient_identity_evidence_ref.id
+                if message.recipient_identity_evidence_ref is not None
+                else None
+            ),
+            "senderIdentityBindingId": message.sender_identity_binding_id,
+            "senderIdentityEvidenceRefId": (
+                message.sender_identity_evidence_ref.id
+                if message.sender_identity_evidence_ref is not None
+                else None
+            ),
+            "consentEvidence": message.consent_evidence.model_dump(mode="json"),
         }
 
     def _evidence_section(
         self,
         request: ProjectionRequest,
+        scope: _Scope,
         messages: list[CommunicationMessage],
         silver_up: bool,
         rows: list[dict[str, Any]],
         canonical_up: bool,
+        silver_truncated: bool,
+        canonical_truncated: bool,
     ) -> ProjectionSection:
         """evidence — every reused EvidenceRef grounding the sequence, deduped."""
-        refs: list[EvidenceRef] = []
+        refs: list[EvidenceRef] = list(scope.identity_evidence)
         for message in messages:
             refs.extend(message.evidence_refs)
+            if message.recipient_identity_evidence_ref is not None:
+                refs.append(message.recipient_identity_evidence_ref)
+            if message.sender_identity_evidence_ref is not None:
+                refs.append(message.sender_identity_evidence_ref)
+            refs.extend(message.consent_evidence.evidence_refs)
         for row in rows:
             ref = _row_evidence(row)
             if ref is not None:
                 refs.append(ref)
         deduped = _dedupe_refs(refs)
         state = "available"
-        if not silver_up or not canonical_up:
+        if (
+            not scope.canonical_fact_bindable
+            or (scope.bindable and (not silver_up or silver_truncated))
+            or not canonical_up
+            or canonical_truncated
+        ):
             # A partial ref set — the unavailable store's refs cannot be read.
             state = "degraded"
         elif not deduped:
@@ -718,6 +1154,14 @@ class Communication360Provider:
                 "subject": {"kind": request.subject.kind, "id": request.subject.id},
                 "count": len(deduped),
                 "evidence": [ref.model_dump(mode="json") for ref in deduped],
+                "sourceTruncated": silver_truncated or canonical_truncated,
+                "sourceCompleteness": (
+                    "not_read"
+                    if not scope.canonical_fact_bindable
+                    else "partial"
+                    if silver_truncated or canonical_truncated
+                    else "bounded_read"
+                ),
             },
         )
 
@@ -727,20 +1171,25 @@ class Communication360Provider:
         scope: _Scope,
         rows: list[dict[str, Any]],
         canonical_up: bool,
+        canonical_truncated: bool,
     ) -> ProjectionSection:
         """interactions — participant/act rows bound to the subject scope."""
-        if not canonical_up:
+        if not scope.canonical_fact_bindable:
+            state = "degraded"
+            interactions: list[dict[str, Any]] = []
+            warnings = [scope.note or "canonical_fact_subject_binding_unavailable"]
+        elif not canonical_up:
             state = "degraded"
             interactions: list[dict[str, Any]] = []
             warnings = [REASON_CANONICAL_SOURCE_UNAVAILABLE]
         else:
             interactions = [
-                self._interaction_row(r)
-                for r in rows
-                if r.get("kind") in _KINDS_INTERACTIONS
+                self._interaction_row(r) for r in rows if r.get("kind") in _KINDS_INTERACTIONS
             ]
-            state = "available" if interactions else "missing"
-            warnings = []
+            state = (
+                "degraded" if canonical_truncated else "available" if interactions else "missing"
+            )
+            warnings = [REASON_SOURCE_READ_TRUNCATED] if canonical_truncated else []
         return ProjectionSection(
             id="interactions",
             state=state,  # type: ignore[arg-type]
@@ -751,6 +1200,14 @@ class Communication360Provider:
                 "scope": scope.as_dict(),
                 "count": len(interactions),
                 "interactions": interactions,
+                "sourceTruncated": canonical_truncated,
+                "sourceCompleteness": (
+                    "not_read"
+                    if not scope.canonical_fact_bindable
+                    else "partial"
+                    if canonical_truncated
+                    else "bounded_read"
+                ),
             },
             warnings=warnings or None,
         )
@@ -781,9 +1238,7 @@ class Communication360Provider:
     def _outcomes_section(self, context: ProjectionContext) -> ProjectionSection:
         """outcomes — degraded until outcome360 links land; never a redefinition."""
         deps = list(context.dependencyState)
-        outcome_dep = next(
-            (d for d in deps if d.projectionId == "outcome360"), None
-        )
+        outcome_dep = next((d for d in deps if d.projectionId == "outcome360"), None)
         content: dict[str, Any] = {
             "tenantId": context.tenantId,
             "outcomeLinks": None,
@@ -829,6 +1284,7 @@ class Communication360Provider:
         self,
         request: ProjectionRequest,
         messages: list[CommunicationMessage],
+        identity_evidence: tuple[EvidenceRef, ...] = (),
     ) -> list[ClaimEnvelope]:
         """One observed claim per evidenced message in the timeline.
 
@@ -840,12 +1296,13 @@ class Communication360Provider:
         claims: list[ClaimEnvelope] = []
         subject = ProjectionSubject(kind=request.subject.kind, id=request.subject.id)
         for message in messages:
-            refs = _dedupe_refs(list(message.evidence_refs))
+            refs = _dedupe_refs([*identity_evidence, *message.evidence_refs])
             if not refs:
                 continue
             state = _message_state_value(message)
             state_line = (
-                f"communication state: {state}" if state is not None
+                f"communication state: {state}"
+                if state is not None
                 else "communication state: unclassified"
             )
             claims.append(
@@ -860,6 +1317,7 @@ class Communication360Provider:
                     ],
                     confidence=1.0,
                     claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=_communication_slot_ids(),
                 )
             )
         return claims

@@ -77,7 +77,9 @@ class CommsProjector(BaseProjector):
         source_event_id = event.get("messageId") or event.get("id")
         if not source_event_id:
             return ProjectionResult(
-                table=COMMS_TABLE, rows=[], skipped=True,
+                table=COMMS_TABLE,
+                rows=[],
+                skipped=True,
                 skip_reason="missing_message_id",
             )
 
@@ -148,15 +150,65 @@ class CommsProjector(BaseProjector):
         )
 
         # ── Deterministic idempotency from source evidence (replay-safe) ─────
-        idem_key = _p(props, "idempotency_key") or hashlib.sha256(
-            f"{tenant_id}:{provider}:{provider_account_id or ''}:{provider_event_id}:{event_type}".encode()
-        ).hexdigest()
+        idem_key = (
+            _p(props, "idempotency_key")
+            or hashlib.sha256(
+                f"{tenant_id}:{provider}:{provider_account_id or ''}:{provider_event_id}:{event_type}".encode()
+            ).hexdigest()
+        )
 
         activity_key = canonical_activity_key(
             tenant_id, provider, provider_account_id, provider_event_id, event_type
         )
 
         occurred_at = event.get("timestamp") or datetime.now(timezone.utc).isoformat()
+        connector_ingress = event.get("source") == "connector" or bool(ctx.get("sourceConnectorId"))
+        recipient_identity_binding_id = (
+            _p(ctx, "recipientIdentityBindingId") if connector_ingress else None
+        )
+        recipient_entity_id = (
+            _p(ctx, "recipientEntityId")
+            if connector_ingress and recipient_identity_binding_id
+            else None
+            if connector_ingress
+            else _p(props, "recipient_entity_id") or event.get("userId")
+        )
+        sender_identity_binding_id = (
+            _p(ctx, "senderIdentityBindingId") if connector_ingress else None
+        )
+        sender_entity_id = (
+            _p(ctx, "senderEntityId")
+            if connector_ingress and sender_identity_binding_id
+            else None
+            if connector_ingress
+            else _p(props, "sender_entity_id") or agent_id or ctx.get("orgId")
+        )
+        consent_state = _p(ctx, "consentEvidenceState") if connector_ingress else "unknown"
+        if consent_state not in {"recorded", "unknown"}:
+            consent_state = "unknown"
+        consent_authority = _p(ctx, "consentAuthority") if consent_state == "recorded" else None
+        if consent_authority != "server_consent_authority":
+            consent_state = "unknown"
+            consent_authority = None
+        consent_snapshot_id = _p(ctx, "consentSnapshotId") if consent_state == "recorded" else None
+        consent_subject_id = (
+            _p(ctx, "consentSubjectEntityId") if consent_state == "recorded" else None
+        )
+        consent_identity_binding_id = (
+            _p(ctx, "consentIdentityBindingId") if consent_state == "recorded" else None
+        )
+        if not (
+            consent_snapshot_id
+            and consent_subject_id
+            and consent_identity_binding_id
+            and recipient_entity_id == consent_subject_id
+            and recipient_identity_binding_id == consent_identity_binding_id
+        ):
+            consent_state = "unknown"
+            consent_authority = None
+            consent_snapshot_id = None
+            consent_subject_id = None
+            consent_identity_binding_id = None
 
         row: dict[str, Any] = {
             # base lineage
@@ -169,7 +221,12 @@ class CommsProjector(BaseProjector):
             "org_id": ctx.get("orgId"),
             "occurred_at": occurred_at,
             "received_at": event.get("receivedAt") or occurred_at,
-            "consent_snapshot_id": ctx.get("consentSnapshotId") or _p(props, "consent_snapshot_id"),
+            "consent_snapshot_id": consent_snapshot_id,
+            "consent_purpose": _p(ctx, "consentPurpose") if connector_ingress else None,
+            "consent_subject_id": consent_subject_id,
+            "consent_evaluation_state": consent_state,
+            "consent_identity_binding_id": consent_identity_binding_id,
+            "consent_authority": consent_authority,
             "privacy_class": "behavioral_pii" if recipient_alias_id else "behavioral",
             "idempotency_key": idem_key,
             "payload": _safe_payload(props),
@@ -182,6 +239,10 @@ class CommsProjector(BaseProjector):
             "provider": provider,
             "provider_account_id": provider_account_id,
             "provider_event_id": provider_event_id,
+            "provider_recipient_id": _p(props, "provider_recipient_id"),
+            "provider_profile_id": (
+                _p(props, "provider_profile_id") or _p(props, "provider_profile")
+            ),
             "source_connector_id": _p(props, "source_connector_id") or ctx.get("sourceConnectorId"),
             # classification
             "channel": channel,
@@ -191,12 +252,21 @@ class CommsProjector(BaseProjector):
             "journey_role": journey_role.value,
             "actor_kind": actor_kind,
             # identity references
-            "sender_entity_id": _p(props, "sender_entity_id") or agent_id or ctx.get("orgId"),
-            "recipient_entity_id": _p(props, "recipient_entity_id") or event.get("userId"),
+            "sender_entity_id": sender_entity_id,
+            "sender_identity_binding_id": sender_identity_binding_id,
+            "sender_identity_evidence_source": (
+                _p(ctx, "senderIdentityEvidenceSource") if sender_identity_binding_id else None
+            ),
+            "recipient_entity_id": recipient_entity_id,
+            "recipient_identity_binding_id": recipient_identity_binding_id,
             "recipient_alias_id": recipient_alias_id,
             "recipient_display": recipient_display,
             "recipient_is_shared_mailbox": recipient_is_shared_mailbox,
-            "profile_id": _p(props, "profile_id") or event.get("userId"),
+            "profile_id": (
+                recipient_entity_id
+                if connector_ingress
+                else _p(props, "profile_id") or event.get("userId")
+            ),
             "cluster_id": _p(props, "cluster_id") or ctx.get("clusterId"),
             "organization_id": _p(props, "organization_id") or ctx.get("orgId"),
             "agent_id": agent_id,
@@ -220,18 +290,31 @@ class CommsProjector(BaseProjector):
             "suppression_scope": _p(props, "suppression_scope"),
             "unsubscribe_scope": _p(props, "unsubscribe_scope"),
             "engagement_type": event_type if is_engagement else None,
-            "engagement_confidence": classification.engagement_confidence if is_engagement else None,
-            "engagement_strength": classification.engagement_strength.value if is_engagement else None,
-            "machine_activity_probability": classification.machine_activity_probability if is_engagement else None,
-            "suspected_machine_activity": classification.suspected_machine_activity if is_engagement else False,
+            "engagement_confidence": classification.engagement_confidence
+            if is_engagement
+            else None,
+            "engagement_strength": classification.engagement_strength.value
+            if is_engagement
+            else None,
+            "machine_activity_probability": classification.machine_activity_probability
+            if is_engagement
+            else None,
+            "suspected_machine_activity": classification.suspected_machine_activity
+            if is_engagement
+            else False,
             "automated_response_kind": automated_kind,
             "classifier_version": classification.classifier_version if is_engagement else None,
             # resolution provenance
-            "identity_resolution_method": _p(props, "identity_resolution_method") or ctx.get("identityResolutionMethod"),
-            "identity_confidence": _num(_p(props, "identity_confidence") or ctx.get("identityConfidence")),
+            "identity_resolution_method": _p(props, "identity_resolution_method")
+            or ctx.get("identityResolutionMethod"),
+            "identity_confidence": _num(
+                _p(props, "identity_confidence") or ctx.get("identityConfidence")
+            ),
             "campaign_resolution_method": None,
             "campaign_resolution_confidence": None,
-            "campaign_resolution_status": "pending" if _has_campaign_evidence(props) else "not_applicable",
+            "campaign_resolution_status": "pending"
+            if _has_campaign_evidence(props)
+            else "not_applicable",
             # evidence
             "raw_evidence_ref": _p(props, "raw_evidence_ref"),
             "evidence_ids": [str(source_event_id)],
@@ -251,16 +334,45 @@ class CommsProjector(BaseProjector):
 
 def _has_campaign_evidence(props: dict[str, Any]) -> bool:
     return bool(
-        _p(props, "campaign_id") or _p(props, "external_campaign_id")
-        or _p(props, "external_flow_id") or _p(props, "external_message_id")
+        _p(props, "campaign_id")
+        or _p(props, "external_campaign_id")
+        or _p(props, "external_flow_id")
+        or _p(props, "external_message_id")
     )
 
 
 def _safe_payload(props: dict[str, Any]) -> dict[str, Any]:
     """Strip raw PII and oversized content before persisting evidence payload."""
     blocked = {
-        "recipient_email", "email", "recipientEmail", "subject", "body",
-        "html", "text", "content", "headers", "attachments",
+        "recipient_email",
+        "email",
+        "recipientEmail",
+        "subject",
+        "body",
+        "html",
+        "text",
+        "content",
+        "headers",
+        "attachments",
+        # These are Aether-owned lineage columns. Provider payloads cannot
+        # attest canonical identity or consent by copying similarly named keys.
+        "recipient_entity_id",
+        "recipientEntityId",
+        "profile_id",
+        "profileId",
+        "sender_entity_id",
+        "senderEntityId",
+        "consent_snapshot_id",
+        "consentSnapshotId",
+        "consent_purpose",
+        "consentPurpose",
+        "consent_subject_id",
+        "consentSubjectEntityId",
+        "consent_identity_binding_id",
+        "consentIdentityBindingId",
+        "consent_evaluation_state",
+        "consentEvidenceState",
+        "consent_authority",
     }
     return {k: v for k, v in props.items() if k not in blocked}
 

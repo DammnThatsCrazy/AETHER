@@ -432,8 +432,46 @@ def _bus_payload_to_sdk_envelope(payload: dict) -> dict:
     existing Silver write-path tests assert).
     """
     if normalization_spine_enabled():
-        return _project_sdk_envelope(to_observation_view(payload))
-    return _legacy_sdk_envelope(payload)
+        envelope = _project_sdk_envelope(to_observation_view(payload))
+    else:
+        envelope = _legacy_sdk_envelope(payload)
+
+    # ``validated_agent_deployment`` is attached by ingestion validation from
+    # the tenant-scoped deployment registry. It is intentionally separate
+    # from the SDK's ``context.agentDeployment`` claim, and must survive the
+    # bus-to-projector adaptation so agent Silver facts can use the registered
+    # agent identity instead of an untrusted property value.
+    validated_deployment = _validated_agent_deployment_marker(payload)
+    if validated_deployment is not None:
+        envelope["validated_agent_deployment"] = validated_deployment
+    return envelope
+
+
+def _validated_agent_deployment_marker(payload: dict) -> dict[str, str] | None:
+    """Return only a complete, bounded server-validated deployment identity."""
+    marker = payload.get("validated_agent_deployment")
+    if not isinstance(marker, dict):
+        return None
+
+    def identifier(*keys: str) -> str | None:
+        for key in keys:
+            value = marker.get(key)
+            if not isinstance(value, str):
+                continue
+            normalized = value.strip()
+            if (
+                normalized
+                and len(normalized) <= 256
+                and not any(ord(char) < 32 or ord(char) == 127 for char in normalized)
+            ):
+                return normalized
+        return None
+
+    deployment_id = identifier("deployment_id", "deploymentId")
+    agent_id = identifier("agent_id", "agentId")
+    if deployment_id is None or agent_id is None:
+        return None
+    return {"deployment_id": deployment_id, "agent_id": agent_id}
 
 
 def _legacy_sdk_envelope(payload: dict) -> dict:

@@ -19,7 +19,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "services/api/connectors/provider_runtime/": "sha256:7b305b72716ad006af0d0b7ab8f65899f65e6daca49f5b93c28b5b7094233d10"
+  "services/api/connectors/provider_runtime/": "sha256:aa62f66c71646a1fc875f3156e6e02514061a87698ebc292af8eeb6697116bee"
   "services/api/connectors/providers/shopify/": "sha256:4019dd90b0864d3f2b76fc1fac7a4a98bf10e98bfe41ae6c437c248f80814b09"
   "services/api/shared/integration_contracts/capabilities.py": "sha256:0549328cc36de3ad566dcc2bbdf2792cab4eafbf3a6785141485d5cdf0058b6f"
   "services/api/shared/integration_contracts/events.py": "sha256:3db66be3c58959b1ac01cebaee21559d19069abf617ed8086c474f3161f5a80e"
@@ -34,6 +34,12 @@ source_hashes:
 A **provider plugin** is the self-contained unit the Universal Provider
 Runtime (UPR) executes. This spec is the contract for writing one. Reference
 implementation: `services/api/connectors/providers/shopify/`.
+
+The `Source360Provider` and `Connection360Provider` modules under
+`services/api/connectors/provider_runtime/` are consumers of UPR-owned source
+and connection data. They implement the Intelligence Projection provider
+protocol, not `ProviderPlugin`; they do not run connector operations, create
+provider events, or earn UPR certification/readiness.
 
 ## 1. The plugin contract
 

@@ -8,7 +8,7 @@ status: stable
 since_version: "0.1.0"
 source_files: [services/api/intelligence/fraud_networks/routes.py]
 source_hashes:
-  "services/api/intelligence/fraud_networks/routes.py": "sha256:38ba1b424d0712cb9c96e0508997ba3a7e62c697ec930043adc53b3a9e1563ab"
+  "services/api/intelligence/fraud_networks/routes.py": "sha256:6ca3e7cb8c0fcd22a11a8096b52f03f832c60bca86895032d4dfaec926c9bd97"
 ---
 
 # Fraud Networks API Reference
@@ -30,6 +30,14 @@ through the `GraphMutationGateway` (FRAUD_NETWORK `node_versioned`,
 `MEMBER_OF_FRAUD_NETWORK` edges with `causality_class=inferred_influence`,
 and `ATTACHED_TO_CASE` on open-investigation); projection failure is logged
 and never fails the API call.
+
+Risk360 note: build and refresh also make a best-effort handoff for detected
+agentic delegation-abuse signals. A signal is persisted only after its source
+agent resolves through a tenant-owned identity binding to one canonical Agent;
+the assessment retains network and identity evidence and remains an inferred
+risk claim. Unresolved or ambiguous source identities are omitted. This does
+not establish authority, causality, or external execution, and a failed Risk360
+write does not roll back the network operation.
 
 ---
 

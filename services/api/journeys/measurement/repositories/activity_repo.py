@@ -653,6 +653,110 @@ class ActivityRepository:
         """List agentic steps for a specific agent."""
         return await self.list_agentic_steps(tenant_id, agent_id=agent_id, limit=limit)
 
+    async def list_commerce_by_campaign(
+        self,
+        tenant_id: str,
+        campaign_id: str,
+        *,
+        limit: int = 501,
+        as_of: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """Read commerce activities carrying an exact campaign and order ref."""
+        return await self._list_commerce_by_dimension(
+            tenant_id,
+            dimension="campaign_id",
+            dimension_id=campaign_id,
+            limit=limit,
+            as_of=as_of,
+        )
+
+    async def list_commerce_by_profile(
+        self,
+        tenant_id: str,
+        profile_id: str,
+        *,
+        limit: int = 501,
+        as_of: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """Read commerce activities carrying an exact profile and order ref."""
+        return await self._list_commerce_by_dimension(
+            tenant_id,
+            dimension="profile_id",
+            dimension_id=profile_id,
+            limit=limit,
+            as_of=as_of,
+        )
+
+    async def _list_commerce_by_dimension(
+        self,
+        tenant_id: str,
+        *,
+        dimension: str,
+        dimension_id: str,
+        limit: int,
+        as_of: Optional[str],
+    ) -> list[dict[str, Any]]:
+        """Use only allowlisted identity keys for exact same-row references."""
+        if dimension not in {"campaign_id", "profile_id"}:
+            raise ValueError("unsupported commerce activity identity dimension")
+        from shared.temporal.instant import parse_instant_strict
+
+        limit = min(max(int(limit), 1), 1_001)
+        cutoff = parse_instant_strict(as_of) if as_of is not None else None
+        excluded = {"tombstoned", "deleted", "consent_restricted"}
+        pool = await self._pool()
+        if pool is None:
+            rows = []
+            for row in _local_store.values():
+                if (
+                    row.get("tenant_id") != tenant_id
+                    or str(row.get(dimension) or "") != dimension_id
+                    or row.get("activity_family") != "commerce"
+                    or not row.get("commerce_order_ref")
+                    or row.get("activity_status") in excluded
+                ):
+                    continue
+                if cutoff is not None:
+                    received = _parse_ts(row.get("server_received_at"))
+                    if received is None:
+                        continue
+                    if received.tzinfo is None:
+                        received = received.replace(tzinfo=timezone.utc)
+                    if received > cutoff:
+                        continue
+                rows.append(row)
+            rows.sort(
+                key=lambda row: (
+                    str(row.get("server_received_at") or ""),
+                    str(row.get("activity_id") or ""),
+                ),
+                reverse=True,
+            )
+            return rows[:limit]
+
+        conditions = [
+            "tenant_id = $1",
+            f"{dimension} = $2",
+            "activity_family = 'commerce'",
+            "commerce_order_ref IS NOT NULL",
+            "activity_status NOT IN ('tombstoned', 'deleted', 'consent_restricted')",
+        ]
+        params: list[Any] = [tenant_id, dimension_id]
+        if cutoff is not None:
+            params.append(cutoff)
+            conditions.append(f"server_received_at <= ${len(params)}")
+        params.append(limit)
+        rows = await pool.fetch(
+            f"""
+            SELECT * FROM canonical_activity
+            WHERE {' AND '.join(conditions)}
+            ORDER BY server_received_at DESC, activity_id ASC
+            LIMIT ${len(params)}
+            """,
+            *params,
+        )
+        return [dict(row) for row in rows]
+
     async def list_agentic_by_campaign(
         self, tenant_id: str, campaign_id: str, limit: int = 200
     ) -> list[dict[str, Any]]:

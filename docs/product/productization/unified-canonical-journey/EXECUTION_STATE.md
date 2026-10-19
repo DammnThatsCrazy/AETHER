@@ -12,7 +12,7 @@ source_hashes:
   "services/api/alembic/versions/20260725_ai_referral_attribution.py": "sha256:09bcc2502136159d1b50a74181c1d06a7eed30c57ffc9c15da6e900776196189"
   "services/api/alembic/versions/20261010_economic_operation_journey_refs.py": "sha256:78479dca594fb9ac8f2ce19f317de933afae3ed1211d8c0c45120c9b023ea87a"
   "services/api/journeys/measurement/engine/journey_compiler.py": "sha256:1277ef95c3e047d7ab1b6ff04f20f2018d6a0c49dc644e4c6977232f66ca701f"
-  "services/api/journeys/measurement/repositories/activity_repo.py": "sha256:fa144dfc1aa0ddeffbb55b3f93707267bd5b7a95f852a445316adf373149ae9e"
+  "services/api/journeys/measurement/repositories/activity_repo.py": "sha256:72f184f03433036cdbe9c3485c8e39377ba957ee30a74d773b9fa312345cd92b"
   "services/api/journeys/measurement/repositories/journey_step_repo.py": "sha256:b6ae724521d9e8aea583549eba3db22d38ca1ef50bcc1be190e0be8eecda9d0d"
   "services/api/journeys/measurement/silver_adapters.py": "sha256:d69f12e7e527d0f3244b355bae6025dbd9dbae4f38ec35acc66ff505459fab70"
 ---
@@ -51,6 +51,7 @@ source_hashes:
 - **Web3 transaction verification**: SDK transaction references are matched to tenant-scoped Silver facts, checked against registered-chain read-only RPC, persisted as separate execution evidence, and reflected in Journey status/evidence summary; settlement is not inferred
 - **Kyber UI verification action**: Journey Explorer can request an RPC check for an observed Web3 step and labels chain execution independently from payment settlement
 - **Economic operation continuity**: source-supplied `commerce_order_ref` persists through canonical activity and Journey step evidence; tenant-scoped Journey and Economic360 surfaces show exact-reference commerce operation links without copying amounts or asserting settlement
+- **360 operation-evidence limits**: campaign and journey links require exact tenant-scoped canonical references; an episode with no exact `episode_id → commerce_order_ref` authority returns unknown payment evidence rather than an inferred link
 - **Knowledge-time evidence**: commerce order revisions and first-seen payment observations can be reconstructed with an explicit, timezone-qualified `as_of` cutoff
 - **Tests**: 6 core journey test files covering 57 collected scenarios, including tenant and typed-identity collision isolation
 - **Metrics**: `canonical_activities_ingested_total`, `journey_compile_duration_seconds`, `cross_rail_transition_count`, `web3_reorg_corrections_total`, `late_event_insertions_total`
