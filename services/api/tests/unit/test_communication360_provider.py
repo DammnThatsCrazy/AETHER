@@ -39,7 +39,10 @@ if str(BACKEND_ROOT) not in sys.path:
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
-from journeys.communication360.contracts import CommunicationMessage  # noqa: E402
+from journeys.communication360.contracts import (  # noqa: E402
+    CommunicationConsentEvidence,
+    CommunicationMessage,
+)
 from journeys.communication360.provider import (  # noqa: E402
     AgentIdentityRead,
     OUTPUT_SECTIONS,
@@ -164,11 +167,14 @@ def _msg(
     ref_id: str | None = None,
     sender_entity_id: str | None = None,
     recipient_entity_id: str | None = None,
+    provider: str | None = None,
+    consent_evidence: CommunicationConsentEvidence | None = None,
 ) -> CommunicationMessage:
     return CommunicationMessage(
         message_id=mid,
         tenant_id=tenant,
         fact_id=f"fact-{mid}",
+        provider=provider,
         channel=channel,
         direction=direction,
         communication_state=CommunicationState(state),
@@ -177,6 +183,7 @@ def _msg(
         campaign_id=campaign_id,
         occurred_at=occurred_at,
         received_at=occurred_at,
+        consent_evidence=consent_evidence or CommunicationConsentEvidence(),
         claim_state=EpistemicStatus.OBSERVED,
         evidence_refs=[
             EvidenceRef(
@@ -1027,6 +1034,127 @@ async def test_non_message_subjects_use_exact_tenant_canonical_communication_fac
     evidence = next(section for section in result.sections if section.id == "evidence")
     assert [ref["id"] for ref in evidence.content["evidence"]] == [f"{subject_kind}-act-1"]
     assert source.message_read_count == 0
+
+
+@pytest.mark.parametrize(
+    ("subject_kind", "reference_key"),
+    [("episode", "episode_id"), ("journey", "journey_id")],
+)
+async def test_source_policy_context_preserves_exact_provider_refs_for_episode_and_journey(
+    subject_kind: str, reference_key: str
+) -> None:
+    subject_id = f"{subject_kind}-source-context"
+    fact = _fact(
+        TENANT_A,
+        f"{subject_kind}-source-fact",
+        payload={reference_key: subject_id, "provider_identity": "mail.provider.v1"},
+    )
+    source = FakeSource(facts=[fact])
+    provider = Communication360Provider(sources=source)
+    request, context = await _make_context(
+        ProviderRegistry(),
+        subject=ProjectionSubject(kind=subject_kind, id=subject_id),
+    )
+
+    result = await provider.project(request, context)
+
+    state = next(section for section in result.sections if section.id == "state")
+    source_policy = state.content["sourcePolicyContext"]
+    assert source_policy["state"] == "partial"
+    assert source_policy["sourceLineage"]["references"] == [
+        {
+            "providerIdentity": "mail.provider.v1",
+            "referenceSource": "communication360_facts.provider_identity",
+            "observedAt": fact["occurred_at"],
+            "evidenceRefs": [
+                {
+                    "id": fact["fact_id"],
+                    "type": "event",
+                    "source": "services/api/journeys/communication360/communication360_facts",
+                    "observedAt": fact["occurred_at"],
+                    "uri": f"store://communication360_facts/{fact['fact_id']}",
+                }
+            ],
+        }
+    ]
+    assert source_policy["sourceLineage"]["state"] == "observed_references"
+    assert source_policy["policyEvaluation"]["state"] == "unknown"
+    assert source_policy["policyEvaluation"]["authority"] == "experience360_frame_policy_runtime"
+    assert source_policy["freshness"]["state"] == "available"
+
+
+async def test_source_policy_context_is_tenant_filtered_and_keeps_recorded_consent_evidence() -> None:
+    receipt_ref = EvidenceRef(
+        id="consent-receipt-1",
+        type="event",
+        source="governance.consent.authority",
+        observedAt="2026-09-03T10:00:00Z",
+    )
+    identity_ref = EvidenceRef(
+        id="identity-binding-1",
+        type="entity",
+        source="comms_provider_identities",
+        observedAt="2026-09-03T10:00:00Z",
+    )
+    message = _msg(
+        TENANT_A,
+        "consented-message",
+        provider="mail.provider.v1",
+        consent_evidence=CommunicationConsentEvidence(
+            state="recorded",
+            purpose="marketing",
+            receipt_id=receipt_ref.id,
+            subject_entity_id="recipient-1",
+            identity_binding_id=identity_ref.id,
+            evidence_refs=[receipt_ref, identity_ref],
+        ),
+    )
+    foreign_fact = _fact(
+        TENANT_B,
+        "foreign-provider-fact",
+        payload={"episode_id": "episode-policy", "provider_id": "foreign.provider.v1"},
+    )
+
+    class MisbehavingSource(FakeSource):
+        async def facts(self, tenant_id, *, kind=None, since=None, limit=None):
+            self.fact_read_count += 1
+            return [foreign_fact]
+
+    source = MisbehavingSource(messages=[message])
+    provider = Communication360Provider(sources=source)
+    request, context = await _make_context(
+        ProviderRegistry(),
+        subject=ProjectionSubject(kind="campaign", id="camp_1"),
+    )
+
+    result = await provider.project(request, context)
+
+    state = next(section for section in result.sections if section.id == "state")
+    source_policy = state.content["sourcePolicyContext"]
+    assert [
+        item["providerIdentity"] for item in source_policy["sourceLineage"]["references"]
+    ] == ["mail.provider.v1"]
+    assert source_policy["historicalConsent"]["state"] == "recorded"
+    assert source_policy["historicalConsent"]["receipts"][0]["receiptId"] == receipt_ref.id
+    assert {
+        ref["id"] for ref in source_policy["historicalConsent"]["receipts"][0]["evidenceRefs"]
+    } == {receipt_ref.id, identity_ref.id}
+    assert "foreign.provider.v1" not in str(source_policy)
+    assert source_policy["freshness"]["state"] == "available"
+
+
+async def test_source_policy_context_degrades_when_a_required_source_is_unavailable() -> None:
+    provider = Communication360Provider(sources=FakeSource(raises="messages"))
+    request, context = await _make_context(ProviderRegistry())
+
+    result = await provider.project(request, context)
+
+    state = next(section for section in result.sections if section.id == "state")
+    source_policy = state.content["sourcePolicyContext"]
+    assert source_policy["state"] == "degraded"
+    assert source_policy["sourceLineage"]["state"] == "degraded"
+    assert source_policy["historicalConsent"]["state"] == "degraded"
+    assert source_policy["freshness"]["state"] == "unknown"
 
 
 # ---------------------------------------------------------------------------

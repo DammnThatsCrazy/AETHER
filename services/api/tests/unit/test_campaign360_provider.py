@@ -6,6 +6,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -154,6 +155,71 @@ class FakeCampaign360Source:
             }
         )
         return self.attribution_result
+
+
+class ContextCampaign360Source(FakeCampaign360Source):
+    def __init__(
+        self,
+        *,
+        journeys: RowsRead | None = None,
+        episode: CampaignRead | None = None,
+    ) -> None:
+        super().__init__()
+        self.journey_result = journeys or RowsRead(
+            rows=[
+                {
+                    "tenant_id": "tenant-a",
+                    "journey_id": "journey-1",
+                    "journey_version_id": "journey-version-1",
+                    "is_current": True,
+                    "journey_state": "open",
+                    "campaign_ids": [CAMPAIGN_ID],
+                    "started_at": "2026-10-05T00:00:00Z",
+                    "computed_at": "2026-10-10T00:00:00Z",
+                    "data_watermark": "2026-10-09T23:59:00Z",
+                }
+            ],
+            available=True,
+        )
+        self.episode_result = episode or CampaignRead(
+            record={
+                "tenant_id": "tenant-a",
+                "episode_id": "episode-1",
+                "kind": "support_case",
+                "status": "closed",
+                "occurred_from": "2026-10-09T10:00:00Z",
+                "occurred_to": "2026-10-09T11:00:00Z",
+                "created_at": "2026-10-09T11:01:00Z",
+                "evidence_refs": [],
+            },
+            available=True,
+        )
+        self.journey_calls: list[dict[str, object]] = []
+        self.episode_calls: list[tuple[str, str]] = []
+
+    async def journeys_for_campaign(
+        self,
+        tenant_id: str,
+        campaign_id: str,
+        *,
+        start: datetime | None,
+        end: datetime | None,
+        limit: int,
+    ) -> RowsRead:
+        self.journey_calls.append(
+            {
+                "tenant_id": tenant_id,
+                "campaign_id": campaign_id,
+                "start": start,
+                "end": end,
+                "limit": limit,
+            }
+        )
+        return self.journey_result
+
+    async def episode_record(self, tenant_id: str, episode_id: str) -> CampaignRead:
+        self.episode_calls.append((tenant_id, episode_id))
+        return self.episode_result
 
 
 def _request(
@@ -384,3 +450,145 @@ async def test_compare_without_two_windows_preserves_unknown_temporal_state() ->
     assert _slot(result, "touchpoints_and_communications")["state"] == "unknown"
     assert _slot(result, "attribution_and_outcomes")["state"] == "unknown"
     assert "comparison_window_contract_unavailable" in result.degradedReasons
+
+
+@pytest.mark.asyncio
+async def test_campaign_journey_context_uses_exact_tenant_campaign_membership_and_evidence() -> None:
+    source = ContextCampaign360Source()
+    result = await Campaign360Provider(source).project(
+        _request(),
+        _context(),
+    )
+
+    assert source.journey_calls[0]["tenant_id"] == "tenant-a"
+    assert source.journey_calls[0]["campaign_id"] == CAMPAIGN_ID
+    assert source.journey_calls[0]["limit"] > 0
+    state = _section(result, "state").content
+    slot = _slot(result, "journey_and_episode_context")
+    context = state["domainContexts"]["journey_and_episode_context"]
+    assert slot["state"] == "degraded"
+    assert slot["dimensionStates"] == {"journeys": "available", "episodes": "unknown"}
+    assert context["journeys"][0]["journeyVersionId"] == "journey-version-1"
+    assert context["journeys"][0]["campaignIds"] == [CAMPAIGN_ID]
+    assert context["freshness"]["state"] == "available"
+    assert context["freshness"]["sourceTimestamp"] == "2026-10-09T23:59:00Z"
+    claim = next(item for item in result.claims if item.kind == "campaign_journey_membership")
+    assert claim.domainSlotIds == ["journey_and_episode_context"]
+    assert claim.evidenceRefs[0].id == "journey-version-1"
+    assert claim.evidenceRefs[0].source.endswith("journey_repo.py:journey_versions")
+
+
+@pytest.mark.asyncio
+async def test_campaign_journey_evidence_slot_binding_survives_claim_omission() -> None:
+    result = await Campaign360Provider(ContextCampaign360Source()).project(
+        _request(include_claims=False),
+        _context(),
+    )
+
+    evidence_items = _section(result, "evidence").content["items"]
+    journey_evidence = next(
+        item for item in evidence_items if item["evidence"]["id"] == "journey-version-1"
+    )
+    assert result.claims == []
+    assert journey_evidence["domainSlotIds"] == ["journey_and_episode_context"]
+
+
+@pytest.mark.asyncio
+async def test_campaign_journey_context_rejects_foreign_tenant_rows() -> None:
+    foreign = {
+        "tenant_id": "tenant-b",
+        "journey_id": "foreign-journey",
+        "journey_version_id": "foreign-version",
+        "is_current": True,
+        "campaign_ids": [CAMPAIGN_ID],
+        "computed_at": "2026-10-10T00:00:00Z",
+    }
+    source = ContextCampaign360Source(journeys=RowsRead([foreign], available=True))
+    result = await Campaign360Provider(source).project(_request(), _context())
+
+    context = _section(result, "state").content["domainContexts"][
+        "journey_and_episode_context"
+    ]
+    assert context["journeys"] == []
+    assert context["state"] == "unknown"
+    assert context["reason"] == "journey_row_scope_mismatch"
+    assert not any(claim.evidenceRefs[0].id == "foreign-version" for claim in result.claims)
+
+
+@pytest.mark.asyncio
+async def test_campaign_journey_context_degrades_on_authority_outage() -> None:
+    source = ContextCampaign360Source(
+        journeys=RowsRead([], available=False, reason="private backend detail")
+    )
+    result = await Campaign360Provider(source).project(_request(), _context())
+
+    context = _section(result, "state").content["domainContexts"][
+        "journey_and_episode_context"
+    ]
+    assert context["state"] == "degraded"
+    assert context["dimensionStates"] == {"journeys": "unavailable", "episodes": "unknown"}
+    assert "private" not in str(context)
+    assert "journey_authority_unavailable" in result.degradedReasons
+
+
+@pytest.mark.asyncio
+async def test_episode_subject_reads_only_exact_tenant_episode_record() -> None:
+    source = ContextCampaign360Source()
+    result = await Campaign360Provider(source).project(
+        _request(subject_kind="episode", subject_id="episode-1"),
+        _context(),
+    )
+
+    assert source.episode_calls == [("tenant-a", "episode-1")]
+    state = _section(result, "state").content
+    slot = _slot(result, "journey_and_episode_context")
+    context = state["domainContexts"]["journey_and_episode_context"]
+    assert slot["state"] == "degraded"
+    assert slot["dimensionStates"] == {"journeys": "unknown", "episodes": "available"}
+    assert context["episodes"][0]["episodeId"] == "episode-1"
+    assert context["freshness"]["state"] == "available"
+    assert any(claim.kind == "campaign360_episode_subject_record" for claim in result.claims)
+
+
+@pytest.mark.asyncio
+async def test_population_subject_reads_tenant_owned_population_definition_metadata() -> None:
+    class PopulationReader:
+        async def view(self, *, tenant_id: str, subject_kind: str, subject_id: str):
+            assert (tenant_id, subject_kind, subject_id) == (
+                "tenant-a",
+                "population",
+                "population-1",
+            )
+            return SimpleNamespace(
+                kind="population",
+                id=subject_id,
+                missing_reason=None,
+                posture=SimpleNamespace(
+                    population_id=subject_id,
+                    name="Active subscribers",
+                    population_type="audience",
+                    status="active",
+                    definition_version="v3",
+                    created_at="2026-10-01T00:00:00Z",
+                    updated_at="2026-10-10T00:00:00Z",
+                ),
+            )
+
+    result = await Campaign360Provider(
+        FakeCampaign360Source(), population_reader=PopulationReader()
+    ).project(
+        _request(subject_kind="population", subject_id="population-1"),
+        _context(),
+    )
+
+    state = _section(result, "state").content
+    slot = _slot(result, "population_context")
+    context = state["domainContexts"]["population_context"]
+    assert slot["state"] == "available"
+    assert context["state"] == "available"
+    assert context["population"]["definitionVersion"] == "v3"
+    assert "memberCount" not in context["population"]
+    claim = next(item for item in result.claims if item.kind == "campaign_population_definition_context")
+    assert claim.domainSlotIds == ["population_context"]
+    assert claim.evidenceRefs[0].id == "population-1"
+    assert claim.evidenceRefs[0].source == "identity_populations"

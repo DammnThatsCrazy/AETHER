@@ -109,6 +109,12 @@ _ATTRIBUTION_FIELDS: tuple[tuple[str, str], ...] = (
 MAX_PAGE_LIMIT = 500
 MAX_ATTRIBUTION_CREDITS = 500
 DEFAULT_PAGE_LIMIT = 100
+MAX_ASSOCIATED_CONTEXT_ROWS = 100
+
+_JOURNEY_SOURCE = (
+    "services/api/journeys/measurement/repositories/journey_repo.py:journey_versions"
+)
+_EPISODE_SOURCE = "services/api/shared/backend_interpretation/stores.py:episodes"
 
 
 @dataclass(frozen=True)
@@ -165,6 +171,18 @@ class Campaign360Source(Protocol):
         start: Optional[datetime],
         end: Optional[datetime],
     ) -> AttributionRead: ...
+
+    async def journeys_for_campaign(
+        self,
+        tenant_id: str,
+        campaign_id: str,
+        *,
+        start: Optional[datetime],
+        end: Optional[datetime],
+        limit: int,
+    ) -> RowsRead: ...
+
+    async def episode_record(self, tenant_id: str, episode_id: str) -> CampaignRead: ...
 
 
 class RepositoryCampaign360Source:
@@ -257,6 +275,58 @@ class RepositoryCampaign360Source:
             credits=[row for row in summary["credits"] if isinstance(row, dict)],
             available=True,
             data_quality=_string_or_none(summary.get("data_quality")),
+        )
+
+    async def journeys_for_campaign(
+        self,
+        tenant_id: str,
+        campaign_id: str,
+        *,
+        start: Optional[datetime],
+        end: Optional[datetime],
+        limit: int,
+    ) -> RowsRead:
+        """Read current journey versions with an exact campaign_ids membership.
+
+        JourneyRepository applies both ``tenant_id`` and the typed campaign id
+        membership predicate in SQL/local storage. The provider independently
+        validates the returned rows before rendering them.
+        """
+        try:
+            from journeys.measurement.repositories.journey_repo import JourneyRepository
+
+            rows = await JourneyRepository().list_by_campaign(
+                tenant_id,
+                campaign_id,
+                after_started=start,
+                before_started=end,
+                limit=limit,
+            )
+        except Exception:  # noqa: BLE001 - journey read failure is slot-local
+            return RowsRead([], available=False, reason="journey_authority_unavailable")
+        return RowsRead(rows=list(rows), available=True)
+
+    async def episode_record(self, tenant_id: str, episode_id: str) -> CampaignRead:
+        """Read one canonical episode by its exact tenant/episode composite key."""
+        try:
+            from shared.backend_interpretation.stores import EpisodeStore
+
+            record = await EpisodeStore().get(tenant_id, episode_id)
+        except Exception:  # noqa: BLE001 - episode read failure is slot-local
+            return CampaignRead(
+                record=None,
+                available=False,
+                reason="episode_authority_unavailable",
+            )
+        if record is None:
+            return CampaignRead(record=None, available=True)
+        model_dump = getattr(record, "model_dump", None)
+        if callable(model_dump):
+            record = model_dump(mode="json")
+        return CampaignRead(
+            record=record if isinstance(record, dict) else None,
+            available=isinstance(record, dict),
+            reason=None if isinstance(record, dict) else "episode_record_shape_invalid",
         )
 
 
@@ -460,8 +530,14 @@ class Campaign360Provider(IntelligenceProjectionProvider):
     projection_id = PROJECTION_ID
     contract_version = INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION
 
-    def __init__(self, source: Optional[Campaign360Source] = None) -> None:
+    def __init__(
+        self,
+        source: Optional[Campaign360Source] = None,
+        *,
+        population_reader: Any = None,
+    ) -> None:
         self._source = source or RepositoryCampaign360Source()
+        self._population_reader = population_reader
 
     async def project(
         self,
@@ -491,6 +567,20 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         touchpoint_page: Optional[PageInfo] = None
         campaign_found = False
         campaign_id: Optional[str] = None
+        journey_episode_context: dict[str, Any] = {
+            "state": "unknown",
+            "subject": {"kind": subject.kind, "id": subject.id},
+            "journeys": [],
+            "episodes": [],
+            "dimensionStates": {"journeys": "unknown", "episodes": "unknown"},
+            "freshness": {"state": "unknown", "sourceTimestampsPreserved": True},
+            "reason": "journey_and_episode_context_not_resolved",
+        }
+        population_context: dict[str, Any] = {
+            "state": "unknown",
+            "subject": {"kind": subject.kind, "id": subject.id},
+            "reason": "population360_is_canonical_provider_for_population_context",
+        }
 
         if subject.kind != "campaign":
             for slot_id, requirement in _SLOT_REQUIREMENTS:
@@ -509,6 +599,20 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                     "state": "unknown",
                 }
             )
+            if subject.kind == "episode":
+                journey_episode_context = await self._read_episode_context(
+                    request=request,
+                    slot_states=slot_states,
+                    evidence_by_key=evidence_by_key,
+                    claims=claims,
+                )
+            elif subject.kind == "population":
+                population_context = await self._read_population_context(
+                    request=request,
+                    slot_states=slot_states,
+                    evidence_by_key=evidence_by_key,
+                    claims=claims,
+                )
         else:
             try:
                 parsed_campaign_id = UUID(subject.id)
@@ -677,12 +781,30 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                         sourceAuthorities=["attribution_credits", "outcomes"],
                     )
 
-                # These required/optional slots are provided by sibling 360s.
-                slot_states[SLOT_JOURNEY_EPISODE].update(
-                    state="unknown",
-                    reason="episode360_is_canonical_provider_for_journey_and_episode_context",
-                    sourceAuthorities=["journeys", "episode_facts"],
-                )
+                # Join the canonical journey authority by its explicit
+                # campaign_ids membership. Episode records have no typed
+                # campaign relation, so that dimension remains unknown.
+                if campaign_found and temporal.observations_supported:
+                    journey_episode_context = await self._read_campaign_journey_context(
+                        request=request,
+                        campaign_id=campaign_id or "",
+                        temporal=temporal,
+                        slot_states=slot_states,
+                        evidence_by_key=evidence_by_key,
+                        claims=claims,
+                        degraded_reasons=degraded_reasons,
+                    )
+                else:
+                    slot_states[SLOT_JOURNEY_EPISODE].update(
+                        state="unknown",
+                        reason=(
+                            temporal.reason
+                            if campaign_found
+                            else "campaign_registry_subject_not_available"
+                        ),
+                        sourceAuthorities=["journeys", "episode_facts"],
+                        dimensionStates={"journeys": "unknown", "episodes": "unknown"},
+                    )
                 slot_states[SLOT_POPULATION].update(
                     state="unknown",
                     reason="population360_is_canonical_provider_for_population_context",
@@ -755,6 +877,15 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         state_content = {
             "temporalScope": temporal.as_dict(),
             "slots": [slot_states[slot_id] for slot_id, _ in _SLOT_REQUIREMENTS],
+            "domainContexts": {
+                SLOT_JOURNEY_EPISODE: journey_episode_context,
+                SLOT_POPULATION: population_context,
+                "source_context": {
+                    "state": "unknown",
+                    "subject": {"kind": subject.kind, "id": subject.id},
+                    "reason": "campaign_source_to_canonical_campaign_join_unavailable",
+                },
+            },
             "dependencyState": [
                 item.model_dump(by_alias=True, exclude_none=True)
                 for item in context.dependencyState
@@ -779,6 +910,8 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                         SLOT_CAMPAIGN_IDENTITY,
                         SLOT_TOUCHPOINTS,
                         SLOT_ATTRIBUTION_OUTCOMES,
+                        SLOT_JOURNEY_EPISODE,
+                        SLOT_POPULATION,
                     ],
                     "provenance": {
                         "projectionId": PROJECTION_ID,
@@ -872,6 +1005,411 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             temporalMode=request.temporalMode,
             degradation=degradation,
         )
+
+    async def _read_campaign_journey_context(
+        self,
+        *,
+        request: ProjectionRequest,
+        campaign_id: str,
+        temporal: _TemporalScope,
+        slot_states: dict[str, dict[str, Any]],
+        evidence_by_key: dict[tuple[str, str], EvidenceRef],
+        claims: list[ClaimEnvelope],
+        degraded_reasons: list[str],
+    ) -> dict[str, Any]:
+        """Project exact current journey versions that declare this campaign.
+
+        Campaign ids are taken only from the canonical journey version's
+        ``campaign_ids`` array. Episode records have no typed campaign join, so
+        their dimension remains unknown and the combined slot stays degraded.
+        """
+        source_read = getattr(self._source, "journeys_for_campaign", None)
+        base = {
+            "subject": {"kind": request.subject.kind, "id": request.subject.id},
+            "campaignId": campaign_id,
+            "journeys": [],
+            "episodes": [],
+            "dimensionStates": {"journeys": "unknown", "episodes": "unknown"},
+            "freshness": {"state": "unknown", "sourceTimestampsPreserved": True},
+        }
+        if not callable(source_read):
+            slot_states[SLOT_JOURNEY_EPISODE].update(
+                state="unknown",
+                reason="journey_authority_binding_unavailable",
+                sourceAuthorities=["journeys", "episode_facts"],
+                dimensionStates=base["dimensionStates"],
+            )
+            return {**base, "state": "unknown", "reason": "journey_authority_binding_unavailable"}
+
+        try:
+            result = await source_read(
+                request.tenantId,
+                campaign_id,
+                start=temporal.start,
+                end=temporal.end,
+                limit=MAX_ASSOCIATED_CONTEXT_ROWS + 1,
+            )
+        except Exception:  # noqa: BLE001 - optional context fails independently
+            result = RowsRead([], available=False, reason="journey_authority_unavailable")
+
+        if not isinstance(result, RowsRead) or not result.available:
+            slot_states[SLOT_JOURNEY_EPISODE].update(
+                state="degraded",
+                reason="journey_authority_unavailable",
+                sourceAuthorities=["journeys", "episode_facts"],
+                dimensionStates={"journeys": "unavailable", "episodes": "unknown"},
+            )
+            degraded_reasons.append("journey_authority_unavailable")
+            return {
+                **base,
+                "state": "degraded",
+                "dimensionStates": {"journeys": "unavailable", "episodes": "unknown"},
+                "reason": "journey_authority_unavailable",
+            }
+
+        if any(not isinstance(row, dict) for row in result.rows):
+            slot_states[SLOT_JOURNEY_EPISODE].update(
+                state="unknown",
+                reason="journey_row_shape_invalid",
+                sourceAuthorities=["journeys", "episode_facts"],
+                dimensionStates={"journeys": "unknown", "episodes": "unknown"},
+            )
+            degraded_reasons.append("journey_row_shape_invalid")
+            return {**base, "state": "unknown", "reason": "journey_row_shape_invalid"}
+
+        rows = result.rows
+        if any(
+            row.get("tenant_id") != request.tenantId
+            or row.get("is_current") is not True
+            or not isinstance(row.get("campaign_ids"), list)
+            or campaign_id not in row.get("campaign_ids", [])
+            for row in rows
+        ):
+            slot_states[SLOT_JOURNEY_EPISODE].update(
+                state="unknown",
+                reason="journey_row_scope_mismatch",
+                sourceAuthorities=["journeys", "episode_facts"],
+                dimensionStates={"journeys": "unknown", "episodes": "unknown"},
+            )
+            degraded_reasons.append("journey_row_scope_mismatch")
+            return {**base, "state": "unknown", "reason": "journey_row_scope_mismatch"}
+
+        truncated = len(rows) > MAX_ASSOCIATED_CONTEXT_ROWS
+        rows = rows[:MAX_ASSOCIATED_CONTEXT_ROWS]
+        journey_items: list[dict[str, Any]] = []
+        missing_evidence = False
+        missing_timestamps = False
+        timestamps: list[str] = []
+        for row in rows:
+            journey_id = _string_or_none(row.get("journey_id"))
+            version_id = _string_or_none(row.get("journey_version_id"))
+            if not journey_id or not version_id:
+                missing_evidence = True
+                continue
+            observed_at = _string_or_none(row.get("data_watermark") or row.get("computed_at"))
+            if observed_at:
+                timestamps.append(observed_at)
+            else:
+                missing_timestamps = True
+            evidence = EvidenceRef(
+                id=version_id,
+                type="entity",
+                source=_JOURNEY_SOURCE,
+                observedAt=observed_at,
+                uri=f"store://journey_versions/{version_id}",
+            )
+            _add_evidence(evidence_by_key, evidence)
+            journey_items.append(
+                {
+                    "journeyId": journey_id,
+                    "journeyVersionId": version_id,
+                    "journeyState": _string_or_none(row.get("journey_state")),
+                    "startedAt": _string_or_none(row.get("started_at")),
+                    "endedAt": _string_or_none(row.get("ended_at")),
+                    "computedAt": _string_or_none(row.get("computed_at")),
+                    "dataWatermark": _string_or_none(row.get("data_watermark")),
+                    "campaignIds": list(row.get("campaign_ids") or []),
+                    "evidenceRefs": [evidence.model_dump(by_alias=True, exclude_none=True)],
+                }
+            )
+            claims.append(
+                _claim(
+                    claim_id=f"campaign360:{campaign_id}:journey:{version_id}",
+                    kind="campaign_journey_membership",
+                    subject=request.subject,
+                    evidence=evidence,
+                    text=(
+                        "A tenant-scoped current journey version explicitly lists "
+                        "this campaign in its campaign_ids reference."
+                    ),
+                    slot_id=SLOT_JOURNEY_EPISODE,
+                )
+            )
+
+        if truncated or missing_evidence:
+            journey_state = "degraded"
+            journey_reason = (
+                "campaign_journey_read_truncated"
+                if truncated
+                else "campaign_journey_evidence_reference_missing"
+            )
+        elif journey_items:
+            journey_state = "available"
+            journey_reason = None
+        else:
+            journey_state = "empty"
+            journey_reason = None
+        dimension_states = {
+            "journeys": journey_state,
+            "episodes": "unknown",
+        }
+        slot_states[SLOT_JOURNEY_EPISODE].update(
+            state="degraded",
+            reason=journey_reason or "campaign_episode_association_unavailable",
+            sourceAuthorities=["journeys", "episode_facts"],
+            dimensionStates=dimension_states,
+            journeyCount=len(journey_items) if journey_state in {"available", "empty"} else None,
+            episodeCount=None,
+        )
+        if journey_reason:
+            degraded_reasons.append(journey_reason)
+        if journey_state in {"available", "empty"}:
+            degraded_reasons.append("campaign_episode_association_unavailable")
+        return {
+            **base,
+            "state": "degraded",
+            "journeys": journey_items,
+            "dimensionStates": dimension_states,
+            "freshness": {
+                "state": "available" if timestamps and not missing_timestamps else "unknown",
+                "sourceTimestamp": max(timestamps) if timestamps else None,
+                "sourceTimestampsPreserved": True,
+                "missingTimestamp": "unknown",
+            },
+            "reason": slot_states[SLOT_JOURNEY_EPISODE]["reason"],
+        }
+
+    async def _read_episode_context(
+        self,
+        *,
+        request: ProjectionRequest,
+        slot_states: dict[str, dict[str, Any]],
+        evidence_by_key: dict[tuple[str, str], EvidenceRef],
+        claims: list[ClaimEnvelope],
+    ) -> dict[str, Any]:
+        """Read the requested episode by its exact tenant-owned identifier."""
+        source_read = getattr(self._source, "episode_record", None)
+        base = {
+            "subject": {"kind": request.subject.kind, "id": request.subject.id},
+            "journeys": [],
+            "episodes": [],
+            "dimensionStates": {"journeys": "unknown", "episodes": "unknown"},
+            "freshness": {"state": "unknown", "sourceTimestampsPreserved": True},
+        }
+        if not callable(source_read):
+            slot_states[SLOT_JOURNEY_EPISODE].update(
+                state="unknown",
+                reason="episode_authority_binding_unavailable",
+                sourceAuthorities=["episode_facts", "journeys"],
+                dimensionStates=base["dimensionStates"],
+            )
+            return {**base, "state": "unknown", "reason": "episode_authority_binding_unavailable"}
+        try:
+            read = await source_read(request.tenantId, request.subject.id)
+        except Exception:  # noqa: BLE001 - exact episode read is fail-isolated
+            read = CampaignRead(None, False, "episode_authority_unavailable")
+        if not isinstance(read, CampaignRead) or not read.available:
+            slot_states[SLOT_JOURNEY_EPISODE].update(
+                state="degraded",
+                reason="episode_authority_unavailable",
+                sourceAuthorities=["episode_facts", "journeys"],
+                dimensionStates={"journeys": "unknown", "episodes": "unavailable"},
+            )
+            return {
+                **base,
+                "state": "degraded",
+                "dimensionStates": {"journeys": "unknown", "episodes": "unavailable"},
+                "reason": "episode_authority_unavailable",
+            }
+        record = read.record
+        if record is None:
+            slot_states[SLOT_JOURNEY_EPISODE].update(
+                state="missing",
+                reason="tenant_scoped_episode_record_not_found",
+                sourceAuthorities=["episode_facts", "journeys"],
+                dimensionStates={"journeys": "unknown", "episodes": "missing"},
+            )
+            return {
+                **base,
+                "state": "missing",
+                "dimensionStates": {"journeys": "unknown", "episodes": "missing"},
+                "reason": "tenant_scoped_episode_record_not_found",
+            }
+        if (
+            not isinstance(record, dict)
+            or record.get("tenant_id") != request.tenantId
+            or record.get("episode_id") != request.subject.id
+        ):
+            slot_states[SLOT_JOURNEY_EPISODE].update(
+                state="unknown",
+                reason="episode_record_scope_mismatch",
+                sourceAuthorities=["episode_facts", "journeys"],
+                dimensionStates={"journeys": "unknown", "episodes": "unknown"},
+            )
+            return {**base, "state": "unknown", "reason": "episode_record_scope_mismatch"}
+
+        episode_id = request.subject.id
+        observed_at = _string_or_none(record.get("created_at") or record.get("occurred_to"))
+        evidence = EvidenceRef(
+            id=episode_id,
+            type="entity",
+            source=_EPISODE_SOURCE,
+            observedAt=observed_at,
+            uri=f"store://episodes/{episode_id}",
+        )
+        _add_evidence(evidence_by_key, evidence)
+        episode_payload = {
+            "episodeId": episode_id,
+            "kind": _string_or_none(record.get("kind")),
+            "status": _string_or_none(record.get("status")),
+            "occurredFrom": _string_or_none(record.get("occurred_from")),
+            "occurredTo": _string_or_none(record.get("occurred_to")),
+            "createdAt": _string_or_none(record.get("created_at")),
+            "evidenceRefs": [evidence.model_dump(by_alias=True, exclude_none=True)],
+        }
+        claims.append(
+            _claim(
+                claim_id=f"campaign360:episode:{episode_id}",
+                kind="campaign360_episode_subject_record",
+                subject=request.subject,
+                evidence=evidence,
+                text="A tenant-scoped canonical episode record exists for this episode subject.",
+                slot_id=SLOT_JOURNEY_EPISODE,
+            )
+        )
+        slot_states[SLOT_JOURNEY_EPISODE].update(
+            state="degraded",
+            reason="episode_journey_association_unavailable",
+            sourceAuthorities=["episode_facts", "journeys"],
+            dimensionStates={"journeys": "unknown", "episodes": "available"},
+            journeyCount=None,
+            episodeCount=1,
+        )
+        return {
+            **base,
+            "state": "degraded",
+            "episodes": [episode_payload],
+            "dimensionStates": {"journeys": "unknown", "episodes": "available"},
+            "freshness": {
+                "state": "available" if observed_at else "unknown",
+                "sourceTimestamp": observed_at,
+                "sourceTimestampsPreserved": True,
+                "missingTimestamp": "unknown",
+            },
+            "reason": "episode_journey_association_unavailable",
+        }
+
+    async def _read_population_context(
+        self,
+        *,
+        request: ProjectionRequest,
+        slot_states: dict[str, dict[str, Any]],
+        evidence_by_key: dict[tuple[str, str], EvidenceRef],
+        claims: list[ClaimEnvelope],
+    ) -> dict[str, Any]:
+        """Read exact tenant-owned population definition metadata.
+
+        This uses Population360's canonical reader and intentionally omits
+        member counts: the Campaign360 context does not own population
+        membership completeness or measurement semantics.
+        """
+        base = {"subject": {"kind": request.subject.kind, "id": request.subject.id}}
+        try:
+            reader = self._population_reader
+            if reader is None:
+                from identity.population360.provider import PopulationRepositoryReader
+
+                reader = PopulationRepositoryReader()
+            view = await reader.view(
+                tenant_id=request.tenantId,
+                subject_kind="population",
+                subject_id=request.subject.id,
+            )
+        except Exception:  # noqa: BLE001 - population context fails independently
+            slot_states[SLOT_POPULATION].update(
+                state="degraded",
+                reason="population_authority_unavailable",
+                sourceAuthorities=["population", "population_definitions"],
+            )
+            return {
+                **base,
+                "state": "degraded",
+                "reason": "population_authority_unavailable",
+            }
+        posture = getattr(view, "posture", None)
+        if (
+            getattr(view, "kind", None) != "population"
+            or getattr(view, "id", None) != request.subject.id
+            or posture is None
+            or getattr(posture, "population_id", None) != request.subject.id
+        ):
+            reason = getattr(view, "missing_reason", None) or "tenant_scoped_population_not_found"
+            slot_states[SLOT_POPULATION].update(
+                state="missing",
+                reason="tenant_scoped_population_not_found",
+                sourceAuthorities=["population", "population_definitions"],
+            )
+            return {**base, "state": "missing", "reason": reason}
+
+        observed_at = _string_or_none(
+            getattr(posture, "updated_at", None) or getattr(posture, "created_at", None)
+        )
+        evidence = EvidenceRef(
+            id=request.subject.id,
+            type="entity",
+            source="identity_populations",
+            observedAt=observed_at,
+            uri=f"store://populations/{request.subject.id}",
+        )
+        _add_evidence(evidence_by_key, evidence)
+        claims.append(
+            _claim(
+                claim_id=f"campaign360:population:{request.subject.id}:definition",
+                kind="campaign_population_definition_context",
+                subject=request.subject,
+                evidence=evidence,
+                text="A tenant-owned canonical population definition exists for this population subject.",
+                slot_id=SLOT_POPULATION,
+            )
+        )
+        population = {
+            "populationId": request.subject.id,
+            "name": _string_or_none(getattr(posture, "name", None)),
+            "populationType": _string_or_none(getattr(posture, "population_type", None)),
+            "status": _string_or_none(getattr(posture, "status", None)),
+            "definitionVersion": _string_or_none(getattr(posture, "definition_version", None)),
+            "createdAt": _string_or_none(getattr(posture, "created_at", None)),
+            "updatedAt": _string_or_none(getattr(posture, "updated_at", None)),
+            "evidenceRefs": [evidence.model_dump(by_alias=True, exclude_none=True)],
+        }
+        slot_states[SLOT_POPULATION].update(
+            state="available",
+            reason=None,
+            sourceAuthorities=["population", "population_definitions"],
+            freshnessState="available" if observed_at else "unknown",
+            sourceTimestamp=observed_at,
+        )
+        return {
+            **base,
+            "state": "available",
+            "population": population,
+            "freshness": {
+                "state": "available" if observed_at else "unknown",
+                "sourceTimestamp": observed_at,
+                "sourceTimestampsPreserved": True,
+                "missingTimestamp": "unknown",
+            },
+        }
 
     async def _read_touchpoints(
         self,
@@ -1234,6 +1772,10 @@ def _slots_for_evidence(
             slots.append(SLOT_TOUCHPOINTS)
         elif "attribution_run_repo.py:attribution_credits" in evidence.source:
             slots.append(SLOT_ATTRIBUTION_OUTCOMES)
+        elif evidence.source == _JOURNEY_SOURCE or evidence.source == _EPISODE_SOURCE:
+            slots.append(SLOT_JOURNEY_EPISODE)
+        elif evidence.source == "identity_populations":
+            slots.append(SLOT_POPULATION)
     return list(dict.fromkeys(slots))
 
 

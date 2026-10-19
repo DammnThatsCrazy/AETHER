@@ -120,6 +120,10 @@ class Agent360Source(Protocol):
 
     async def tools(self, tenant_id: str, agent_id: str, limit: int) -> list[dict[str, Any]]: ...
 
+    async def capability_access_profile(
+        self, tenant_id: str, agent_id: str
+    ) -> Agent360ReadBatch: ...
+
     async def risk_signals(
         self, tenant_id: str, agent_id: str, limit: int
     ) -> list[dict[str, Any]]: ...
@@ -396,6 +400,22 @@ class RepositoryAgent360Source:
     async def tools(self, tenant_id: str, agent_id: str, limit: int) -> list[dict[str, Any]]:
         return await self._tools.find_many(
             filters={"tenant_id": tenant_id, "agent_id": agent_id}, limit=limit + 1
+        )
+
+    async def capability_access_profile(
+        self, tenant_id: str, agent_id: str
+    ) -> Agent360ReadBatch:
+        """Read capability reach and active invoke grants through their authority.
+
+        This service uses the existing tenant-scoped capability catalog,
+        installation, and delegation authorities. Its grant coverage is not an
+        authorization decision for a new action/resource request.
+        """
+        from actions.agent_access_intelligence.profiles import capability_profile_service
+
+        profile = await capability_profile_service.profile(tenant_id, agent_id)
+        return Agent360ReadBatch(
+            rows=[{"tenant_id": tenant_id, "agent_id": agent_id, "profile": profile}]
         )
 
     async def risk_signals(self, tenant_id: str, agent_id: str, limit: int) -> list[dict[str, Any]]:
@@ -730,6 +750,7 @@ class Agent360Provider:
             "active_delegations",
             "activities",
             "tools",
+            "capability_access_profile",
             "risk_signals",
             "communications",
         )
@@ -748,6 +769,9 @@ class Agent360Provider:
             ),
             "activities": lambda: self._source.activities(tenant_id, agent_id, limit),
             "tools": lambda: self._source.tools(tenant_id, agent_id, limit),
+            "capability_access_profile": lambda: self._source.capability_access_profile(
+                tenant_id, agent_id
+            ),
             "risk_signals": lambda: self._source.risk_signals(tenant_id, agent_id, limit),
             "communications": lambda: self._source.communications(tenant_id, agent_id, limit),
         }
@@ -812,6 +836,27 @@ class Agent360Provider:
             if delegation_agent_id is not None
             else unresolved_delegation_read()
         )
+        async def not_applicable_capability_profile() -> Agent360ReadBatch:
+            # Capability installations are keyed by the runtime agent reference.
+            # An entity subject has no exact runtime-id join in this provider.
+            return Agent360ReadBatch(
+                rows=[
+                    {
+                        "tenant_id": tenant_id,
+                        "agent_id": agent_id,
+                        "not_applicable": True,
+                        "profile": None,
+                    }
+                ]
+            )
+
+        if request.subject.kind != "agent":
+            loaders["capability_access_profile"] = not_applicable_capability_profile
+        elif delegation_agent_id is None:
+            async def unresolved_capability_profile() -> Agent360ReadBatch:
+                return Agent360ReadBatch(rows=[], scope_known=False)
+
+            loaders["capability_access_profile"] = unresolved_capability_profile
 
         names_to_read = tuple(name for name in names if name != "actor_identity")
         reads = await asyncio.gather(
@@ -918,6 +963,21 @@ class Agent360Provider:
                 data["principal_identities"], tenant_id, principal_user_ids
             )
         )
+        capability_profile_rows, capability_profile_mismatch = (
+            self._tenant_capability_access_profile_rows(
+                data["capability_access_profile"], tenant_id, agent_id
+            )
+        )
+        capability_profile_complete = bool(
+            len(capability_profile_rows) == 1
+            and isinstance(capability_profile_rows[0].get("profile"), dict)
+            and capability_profile_rows[0]["profile"].get("profile_known") is True
+            and not capability_profile_rows[0]["profile"].get("missing_inputs")
+            and isinstance(capability_profile_rows[0]["profile"].get("authorization"), dict)
+            and capability_profile_rows[0]["profile"]["authorization"].get("known") is True
+        )
+        if capability_profile_rows and capability_profile_rows[0].get("not_applicable") is True:
+            capability_profile_complete = True
         source_scope_mismatches = {
             "config": config_mismatch,
             "actor_identity": actor_identity_mismatch,
@@ -930,11 +990,20 @@ class Agent360Provider:
             "outgoing_delegations": outgoing_mismatch,
             "active_delegations": active_mismatch,
             "principal_identities": principal_identity_mismatch,
+            "capability_access_profile": capability_profile_mismatch,
         }
         data = {
             name: replace(read, scope_mismatch=read.scope_mismatch or source_scope_mismatches[name])
             for name, read in data.items()
         }
+        data["capability_access_profile"] = replace(
+            data["capability_access_profile"],
+            scope_known=(
+                data["capability_access_profile"].scope_known
+                and capability_profile_complete
+                and not capability_profile_mismatch
+            ),
+        )
         scope_mismatch = actor_identity_conflict or any(
             read.scope_mismatch for read in data.values()
         )
@@ -1279,8 +1348,17 @@ class Agent360Provider:
                 data["active_delegations"],
                 data["executions"],
                 data["delegation_parties"],
+                data["capability_access_profile"],
             ],
-            has_rows=bool(delegation_items or action_scoped_decisions),
+            has_rows=bool(
+                delegation_items
+                or action_scoped_decisions
+                or (
+                    capability_profile_complete
+                    and capability_profile_rows
+                    and capability_profile_rows[0].get("not_applicable") is not True
+                )
+            ),
         )
         if active_delegation_conflicts:
             authority_state = "degraded"
@@ -1312,6 +1390,11 @@ class Agent360Provider:
                 degraded_reasons.append("agent_execution_delegation_reference_unresolved")
             if conflicted_delegation_reference:
                 degraded_reasons.append("agent_execution_delegation_reference_conflicted")
+        capability_access_profile_view = self._capability_access_profile_view(
+            capability_profile_rows,
+            data["capability_access_profile"],
+            scope_mismatch=capability_profile_mismatch,
+        )
         authority_content = {
             "state": authority_state,
             "delegationRecords": delegation_items,
@@ -1321,6 +1404,7 @@ class Agent360Provider:
                 [data["executions"]], has_rows=bool(action_scoped_decisions)
             ),
             "effectiveAuthorizationDecision": "unknown",
+            "capabilityAccessProfile": capability_access_profile_view,
             "decisionReason": (
                 "recorded execution decisions describe only the action and resource evaluated "
                 "at request time; stored delegation records do not authorize a new action. "
@@ -1747,6 +1831,30 @@ class Agent360Provider:
                 communication_rows=timeline_communications.rows,
             )
         )
+        capability_access_refs: list[EvidenceRef] = []
+        for raw_ref in capability_access_profile_view.get("evidenceRefs", []):
+            try:
+                capability_access_refs.append(EvidenceRef.model_validate(raw_ref))
+            except Exception:  # noqa: BLE001 - malformed authority evidence is omitted
+                continue
+        if (
+            not invalid_window
+            and capability_access_profile_view.get("state") == "available"
+            and capability_access_refs
+        ):
+            claims.append(
+                ClaimEnvelope(
+                    id="capability_access_profile",
+                    kind="agent_capability_access_profile",
+                    subject=request.subject,
+                    evidenceRefs=_dedupe_refs(capability_access_refs),
+                    claims=[
+                        "The tenant-scoped capability access profile reports observed capability reach and coverage by active invoke grants; it does not evaluate effective authorization for a new action or resource."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["authority_and_delegation"],
+                )
+            )
         sections = [
             summary_section,
             state_section,
@@ -1805,6 +1913,7 @@ class Agent360Provider:
             "active_delegations": REASON_DELEGATION_UNAVAILABLE,
             "activities": REASON_ACTIVITY_UNAVAILABLE,
             "tools": REASON_TOOL_UNAVAILABLE,
+            "capability_access_profile": "agent_capability_access_profile_unavailable",
             "risk_signals": REASON_RISK_UNAVAILABLE,
             "communications": REASON_COMMUNICATION_UNAVAILABLE,
         }.get(name, "agent_source_unavailable")
@@ -1890,6 +1999,192 @@ class Agent360Provider:
                 continue
             rows.append({**row, "identity_evidence_refs": normalized_refs})
         return rows, mismatch
+
+    @staticmethod
+    def _tenant_capability_access_profile_rows(
+        read: _Read, tenant_id: str, agent_id: str
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Accept only the exact tenant/agent profile returned by its authority."""
+        if not read.available or read.rows is None:
+            return [], read.scope_mismatch
+        rows: list[dict[str, Any]] = []
+        mismatch = read.scope_mismatch
+        for row in read.rows:
+            if (
+                row.get("tenant_id") != tenant_id
+                or row.get("agent_id") != agent_id
+                or (not row.get("not_applicable") and not isinstance(row.get("profile"), dict))
+            ):
+                mismatch = True
+                continue
+            profile = row.get("profile")
+            if isinstance(profile, dict):
+                subject = profile.get("subject")
+                if not isinstance(subject, dict) or subject != {"kind": "agent", "id": agent_id}:
+                    mismatch = True
+                    continue
+            rows.append(row)
+        if len(rows) > 1:
+            mismatch = True
+            return [], mismatch
+        return rows, mismatch
+
+    @staticmethod
+    def _capability_access_profile_view(
+        rows: list[dict[str, Any]],
+        read: _Read,
+        *,
+        scope_mismatch: bool,
+    ) -> dict[str, Any]:
+        """Project observed capability reach and invoke-grant coverage without
+        turning it into an authorization verdict for an arbitrary new action.
+        """
+        if not read.available:
+            return {
+                "state": "unavailable",
+                "profileKnown": None,
+                "counts": None,
+                "capabilities": [],
+                "authorization": {"known": False, "activeGrantRecordIds": []},
+                "evidenceRefs": [],
+                "reason": "capability access profile authority was unavailable",
+            }
+        if scope_mismatch or read.scope_mismatch:
+            return {
+                "state": "conflicted",
+                "profileKnown": None,
+                "counts": None,
+                "capabilities": [],
+                "authorization": {"known": False, "activeGrantRecordIds": []},
+                "evidenceRefs": [],
+                "reason": "capability access profile did not match the requested tenant and agent",
+            }
+        if not rows:
+            return {
+                "state": "unknown",
+                "profileKnown": None,
+                "counts": None,
+                "capabilities": [],
+                "authorization": {"known": False, "activeGrantRecordIds": []},
+                "evidenceRefs": [],
+                "reason": "no exact capability access profile was returned",
+            }
+        row = rows[0]
+        if row.get("not_applicable") is True:
+            return {
+                "state": "not_applicable",
+                "profileKnown": None,
+                "counts": None,
+                "capabilities": [],
+                "authorization": {"known": False, "activeGrantRecordIds": []},
+                "evidenceRefs": [],
+                "reason": "capability installations are keyed by runtime agent ID, not entity ID",
+            }
+        profile = row.get("profile")
+        if not isinstance(profile, dict):
+            return {
+                "state": "unknown",
+                "profileKnown": False,
+                "counts": None,
+                "capabilities": [],
+                "authorization": {"known": False, "activeGrantRecordIds": []},
+                "evidenceRefs": [],
+                "reason": "capability access profile returned no profile object",
+            }
+
+        missing_inputs = profile.get("missing_inputs")
+        missing_inputs = (
+            [item for item in missing_inputs if isinstance(item, str)]
+            if isinstance(missing_inputs, list)
+            else []
+        )
+        known = profile.get("profile_known") is True
+        authorization = profile.get("authorization")
+        authorization = authorization if isinstance(authorization, dict) else {}
+        authorization_known = authorization.get("known") is True
+        complete = known and not missing_inputs and authorization_known
+        state = "available" if complete else "partial" if known else "unknown"
+
+        reach = profile.get("reach")
+        reach = reach if isinstance(reach, dict) else {}
+        raw_capabilities = reach.get("capabilities")
+        capabilities = [
+            {
+                "capabilityId": item.get("capability_id"),
+                "serverKey": item.get("server_key"),
+                "provider": item.get("provider"),
+                "toolName": item.get("tool_name"),
+                "basis": item.get("basis"),
+                "invokeGrantCoversCapability": (
+                    item.get("authorized") if authorization_known else None
+                ),
+            }
+            for item in raw_capabilities
+            if isinstance(item, dict) and isinstance(item.get("capability_id"), str)
+        ] if isinstance(raw_capabilities, list) else []
+
+        evidence_refs: list[dict[str, Any]] = []
+        identity = profile.get("identity")
+        identity = identity if isinstance(identity, dict) else {}
+        observation = profile.get("observation")
+        observation = observation if isinstance(observation, dict) else {}
+        last_seen_at = observation.get("last_seen_at")
+        for installation_id in identity.get("installation_ids", []):
+            if isinstance(installation_id, str) and installation_id:
+                evidence_refs.append(
+                    EvidenceRef(
+                        id=installation_id,
+                        type="event",
+                        source="capability_installations",
+                        observedAt=last_seen_at if isinstance(last_seen_at, str) else None,
+                    ).model_dump(mode="json", exclude_none=True)
+                )
+        for item in capabilities:
+            evidence_refs.append(
+                EvidenceRef(
+                    id=item["capabilityId"],
+                    type="entity",
+                    source="capability_catalog",
+                ).model_dump(mode="json", exclude_none=True)
+            )
+        record_ids = authorization.get("activeRecordIds")
+        record_ids = record_ids if isinstance(record_ids, list) else []
+        for record_id in record_ids:
+            if isinstance(record_id, str) and record_id:
+                evidence_refs.append(
+                    EvidenceRef(
+                        id=record_id,
+                        type="relationship",
+                        source="delegations",
+                    ).model_dump(mode="json", exclude_none=True)
+                )
+
+        return {
+            "state": state,
+            "profileKnown": known,
+            "basis": profile.get("basis") or "observed_only",
+            "counts": profile.get("counts") if complete else None,
+            "capabilities": capabilities,
+            "authorization": {
+                "known": authorization_known,
+                "activeGrantCount": authorization.get("authorizations_active")
+                if authorization_known
+                else None,
+                "activeGrantRecordIds": record_ids,
+                "activeGrantRecordIdsTruncated": authorization.get(
+                    "activeRecordIdsTruncated", False
+                ),
+                "action": "invoke",
+                "effectiveAuthorizationDecision": "unknown",
+                "reason": (
+                    "active capability grants describe observed invoke-scope coverage; "
+                    "they do not evaluate a new action/resource request"
+                ),
+            },
+            "missingInputs": missing_inputs,
+            "evidenceRefs": _dedupe_json_refs(evidence_refs),
+            "reason": None if complete else "capability access inputs are incomplete or unknown",
+        }
 
     @staticmethod
     def _resolve_execution_principal_identity(

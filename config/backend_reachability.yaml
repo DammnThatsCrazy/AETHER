@@ -17,18 +17,10 @@ allow_unreachable:
     modules: [admin_cli, mesh_config]
     ledger: product-backend-unmounted-code-pending
     reason: formerly the repo-root security/ package (outside the scanned tree); admin_cli is an operator `python -m` entry point and mesh_config has no import path, so removal is an owner decision
-  - package: services.social360
-    modules: [provider]
-    ledger: product-backend-unmounted-code-pending
-    reason: Social360 stays registry-state in_flight, so the provider is intentionally not registered at boot; re-register it (and add services/api/services to the image) when the projection is promoted
-  - package: journeys
-    modules: [communication360]
-    ledger: product-backend-unmounted-code-pending
-    reason: no test or document uses it and no route, worker or import path reaches it; it sits in a package with live code, so removing it is an owner decision
   - package: journeys.communication360
-    modules: [authority, contracts, fidelity, knowledge, provider, reader, registry, repository, resolution, routes]
+    modules: [authority, fidelity, knowledge, registry, resolution]
     ledger: product-backend-unmounted-code-pending
-    reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
+    reason: authority, fidelity, knowledge, registry, and resolution remain unmounted; contracts, provider, reader, repository, and routes are reachable through the mounted Communication360 path
   - package: graph.crossdomain
     modules: [models]
     ledger: product-backend-unmounted-code-pending
@@ -62,9 +54,9 @@ allow_unreachable:
     ledger: product-backend-unmounted-code-pending
     reason: implemented and tested, but no route, worker or import path reaches it
   - package: journeys.measurement
-    modules: [episodes, episodes.engine, episodes.provider, metrics]
+    modules: [metrics]
     ledger: product-backend-unmounted-code-pending
-    reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
+    reason: episode metrics remains unmounted; the episode engine and provider are reachable through the projection runtime
   - package: billing.metering_evidence
     modules: [reconciliation]
     ledger: product-backend-unmounted-code-pending
@@ -145,7 +137,3 @@ allow_unreachable:
     modules: [evidence, motif_indicators, motifs, promotion]
     ledger: product-backend-unmounted-code-pending
     reason: implemented, but no route, worker or import path reaches it; some modules are only tested, some only documented, some neither
-  - package: tenancy.rights_authority
-    modules: [source_lineage]
-    ledger: product-backend-unmounted-code-pending
-    reason: read-only lineage trace from a rights decision to its source grant and relationship; tested, but no route or worker consumes it yet

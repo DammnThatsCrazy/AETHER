@@ -1483,6 +1483,7 @@ export type Experience360FrameState = typeof EXPERIENCE_360_FRAME_STATES[number]
 export type Product360SlotRequirement = 'required' | 'optional';
 export type Product360BindingRole = 'primary' | 'supporting';
 export type Product360DirectProviderKind = 'surface_authority_reader' | 'surface_frame_provider';
+export type Product360RequiredFrameMetadata = 'slotActorAttribution' | 'slotAuthorityDecision';
 export interface Product360SlotProjectionBinding {
   projectionId: IntelligenceProjectionId;
   role: Product360BindingRole;
@@ -1495,6 +1496,7 @@ export interface Product360DomainSlot {
   description: string;
   canonicalAuthorityRefs: readonly string[];
   projectionBindings: readonly Product360SlotProjectionBinding[];
+  requiredFrameMetadata?: readonly Product360RequiredFrameMetadata[];
 }
 export interface Product360ProviderBinding {
   projectionId: IntelligenceProjectionId;

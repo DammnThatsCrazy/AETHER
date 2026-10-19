@@ -19,6 +19,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 from journeys.support360.provider import (  # noqa: E402
     OUTPUT_SECTIONS,
     PROJECTION_ID,
+    RepositorySupportAgentIdentityReader,
     RepositorySupport360Source,
     Support360Provider,
     SupportFactsRead,
@@ -28,6 +29,7 @@ from journeys.support360.provider import (  # noqa: E402
     _REASON_SOURCE_UNAVAILABLE,
     _REASON_UNSUPPORTED_SUBJECT,
 )
+from graph.operational_intelligence.models import EvidenceRef  # noqa: E402
 from shared.intelligence_projections import (  # noqa: E402
     INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
     ProjectionContext,
@@ -264,7 +266,7 @@ async def test_support_case_id_stays_source_reported_and_unresolved() -> None:
     assert sections["state"].content["measuredOutcomes"]["state"] == "unknown"
 
 
-@pytest.mark.parametrize("subject_kind", ["agent", "episode", "source"])
+@pytest.mark.parametrize("subject_kind", ["campaign"])
 @pytest.mark.asyncio
 async def test_unsupported_subject_kinds_fail_closed(subject_kind: str) -> None:
     source = FakeSource(SupportFactsRead(rows=[_row("should-not-read")], available=True))
@@ -281,6 +283,273 @@ async def test_unsupported_subject_kinds_fail_closed(subject_kind: str) -> None:
     assert sections["state"].content["supportCases"]["reasonCode"] == _REASON_CASE_AUTHORITY_MISSING
     assert sections["state"].content["journeyLinkage"]["reasonCode"] == _REASON_JOURNEY_JOIN_MISSING
     assert source.calls == []
+
+
+class _ResolvedAgentIdentity:
+    state = "resolved"
+    canonical_agent_entity_id = "canonical-agent-7"
+    evidence = (
+        EvidenceRef(
+            id="agent-binding-7",
+            type="entity",
+            source="agent_deployment_identity_bindings",
+            observedAt="2026-10-17T11:00:00Z",
+        ),
+    )
+
+
+class _ResolvedAgentReader:
+    async def resolve(self, tenant_id: str, source_agent_ref: str):
+        assert tenant_id == TENANT_A
+        assert source_agent_ref == "source-agent-7"
+        return _ResolvedAgentIdentity()
+
+
+class _SubjectSource:
+    def __init__(self, **reads: SupportFactsRead) -> None:
+        self.reads = reads
+        self.calls: list[tuple[str, tuple[Any, ...], dict[str, Any]]] = []
+
+    async def support_facts_for_entity(self, tenant_id: str, subject_id: str, **kwargs):
+        self.calls.append(("entity", (tenant_id, subject_id), kwargs))
+        return self.reads["entity"]
+
+    async def support_facts_for_agent(
+        self, tenant_id: str, canonical_agent_entity_id: str, **kwargs
+    ):
+        self.calls.append(("agent", (tenant_id, canonical_agent_entity_id), kwargs))
+        return self.reads["agent"]
+
+    async def support_facts_for_episode(self, tenant_id: str, episode_id: str, **kwargs):
+        self.calls.append(("episode", (tenant_id, episode_id), kwargs))
+        return self.reads["episode"]
+
+    async def support_facts_for_source(self, tenant_id: str, source_id: str, **kwargs):
+        self.calls.append(("source", (tenant_id, source_id), kwargs))
+        return self.reads["source"]
+
+
+@pytest.mark.asyncio
+async def test_agent_support_uses_exact_sender_binding_and_preserves_join_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from journeys.comms.repository import CommsFactsRepository, reset_local_stores
+
+    reset_local_stores()
+    repository = CommsFactsRepository()
+
+    async def local_pool():
+        return None
+
+    monkeypatch.setattr(repository, "_pool", local_pool)
+    await repository.upsert(
+        {
+            **_row("agent-support-fact", tenant_id=TENANT_A),
+            "source_event_id": "agent-support-event",
+            "idempotency_key": "agent-support-good",
+            "sender_entity_id": "canonical-agent-7",
+            "sender_identity_binding_id": "agent-binding-7",
+        }
+    )
+    await repository.upsert(
+        {
+            **_row("agent-unbound-fact", tenant_id=TENANT_A),
+            "source_event_id": "agent-unbound-event",
+            "idempotency_key": "agent-support-unbound",
+            "sender_entity_id": "canonical-agent-7",
+            "sender_identity_binding_id": "unverified-binding",
+        }
+    )
+    await repository.upsert(
+        {
+            **_row("agent-other-tenant", tenant_id=TENANT_B),
+            "source_event_id": "agent-other-tenant-event",
+            "idempotency_key": "agent-support-other-tenant",
+            "sender_entity_id": "canonical-agent-7",
+            "sender_identity_binding_id": "agent-binding-7",
+        }
+    )
+    source = RepositorySupport360Source(facts=repository)
+    provider = Support360Provider(source, agent_identity_reader=_ResolvedAgentReader())
+    request = _request("agent", "source-agent-7")
+
+    result = await provider.project(request, _context(request))
+
+    sections = _sections(result)
+    communications = sections["state"].content["supportCommunications"]
+    assert sections["timeline"].content["entryCount"] == 1
+    assert sections["timeline"].content["entries"][0]["factId"] == "agent-support-fact"
+    assert communications["subjectJoin"] == "sender_entity_id_and_identity_binding_id_exact_match"
+    assert communications["readCompleteness"] == "complete"
+    refs = sections["evidence"].content["evidenceRefs"]
+    assert {(ref.source, ref.id) for ref in refs} == {
+        ("agent_deployment_identity_bindings", "agent-binding-7"),
+        ("services/api/journeys/comms/silver_comms_facts", "agent-support-fact"),
+    }
+    assert sections["summary"].content["freshness"]["state"] == "unknown"
+    assert "support_agent_join_requires_bound_sender_identity_evidence" in result.degradedReasons
+    reset_local_stores()
+
+
+@pytest.mark.asyncio
+async def test_episode_support_uses_canonical_episode_event_reference_and_tenant_scope(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from graph.operational_intelligence.models import EntityRef
+    from journeys.comms.repository import CommsFactsRepository, reset_local_stores
+    from shared.backend_interpretation.primitives import EpisodeRecord
+
+    reset_local_stores()
+    repository = CommsFactsRepository()
+
+    async def local_pool():
+        return None
+
+    monkeypatch.setattr(repository, "_pool", local_pool)
+    await repository.upsert(
+        {
+            **_row("episode-support-fact", tenant_id=TENANT_A),
+            "source_event_id": "episode-support-event",
+            "idempotency_key": "episode-support-good",
+        }
+    )
+    await repository.upsert(
+        {
+            **_row("episode-other-tenant", tenant_id=TENANT_B),
+            "source_event_id": "episode-support-event",
+            "idempotency_key": "episode-support-other-tenant",
+        }
+    )
+    episode = EpisodeRecord(
+        episode_id="episode-support-1",
+        tenant_id=TENANT_A,
+        subject=EntityRef(kind="user", id=ENTITY_ID),
+        kind="support",
+        source_event_id="episode-support-event",
+        evidence_refs=[
+            EvidenceRef(
+                id="episode-support-fact",
+                type="event",
+                source="services/api/journeys/comms/silver_comms_facts",
+                uri="store://silver_comms_facts/episode-support-fact",
+                observedAt="2026-10-17T12:00:00Z",
+            )
+        ],
+    )
+
+    class EpisodeStore:
+        async def get(self, tenant_id: str, episode_id: str):
+            assert (tenant_id, episode_id) == (TENANT_A, "episode-support-1")
+            return episode
+
+    source = RepositorySupport360Source(facts=repository, episodes=EpisodeStore())
+    request = _request("episode", "episode-support-1")
+    result = await Support360Provider(source).project(request, _context(request))
+
+    sections = _sections(result)
+    state = sections["state"].content["supportCommunications"]
+    assert state["subjectJoin"] == "episode_record_event_evidence_exact_match"
+    assert state["joinState"] == "resolved"
+    assert sections["timeline"].content["entryCount"] == 1
+    evidence = sections["evidence"].content["evidenceRefs"]
+    assert {ref.id for ref in evidence} == {
+        "episode-support-1",
+        "episode-support-fact",
+        "episode-support-event",
+    }
+    assert {ref.source for ref in evidence} >= {
+        "shared.backend_interpretation.stores.EpisodeStore",
+        "services/api/journeys/comms/silver_comms_facts",
+    }
+    assert sections["summary"].content["freshness"]["newestObservedAt"] == "2026-10-17T12:00:01Z"
+    reset_local_stores()
+
+
+@pytest.mark.asyncio
+async def test_source_support_uses_current_tenant_provider_connection_join(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from journeys.comms.repository import CommsFactsRepository, reset_local_stores
+
+    reset_local_stores()
+    repository = CommsFactsRepository()
+
+    async def local_pool():
+        return None
+
+    monkeypatch.setattr(repository, "_pool", local_pool)
+    await repository.upsert(
+        {
+            **_row("source-support-fact", tenant_id=TENANT_A),
+            "source_event_id": "source-support-event",
+            "idempotency_key": "source-support-good",
+            "source_connector_id": "connection-a",
+        }
+    )
+    await repository.upsert(
+        {
+            **_row("source-other-connection", tenant_id=TENANT_A),
+            "source_event_id": "source-other-connection-event",
+            "idempotency_key": "source-support-other-connection",
+            "source_connector_id": "connection-b",
+        }
+    )
+
+    class Connections:
+        async def find_many(self, *, filters, sort_by, sort_order, limit):
+            assert filters == {"tenant_id": TENANT_A, "provider_identity": "crm-source"}
+            assert (sort_by, sort_order, limit) == ("created_at", "desc", 101)
+            return [
+                {
+                    "tenant_id": TENANT_A,
+                    "connection_id": "connection-a",
+                    "provider_identity": "crm-source",
+                    "created_at": "2026-10-16T12:00:00Z",
+                    "updated_at": "2026-10-17T12:00:00Z",
+                },
+            ]
+
+    source = RepositorySupport360Source(facts=repository, connections=Connections())
+    request = _request("source", "crm-source")
+    result = await Support360Provider(source).project(request, _context(request))
+
+    sections = _sections(result)
+    assert sections["timeline"].content["entryCount"] == 1
+    assert sections["timeline"].content["entries"][0]["factId"] == "source-support-fact"
+    state = sections["state"].content["supportCommunications"]
+    assert state["subjectJoin"] == "provider_identity_to_connection_to_source_connector_id_exact_match"
+    assert state["readCompleteness"] == "partial"
+    refs = sections["evidence"].content["evidenceRefs"]
+    assert {ref.id for ref in refs} == {"connection-a", "source-support-fact"}
+    assert {ref.source for ref in refs} == {
+        "provider_connections",
+        "services/api/journeys/comms/silver_comms_facts",
+    }
+    assert "support_source_join_uses_current_provider_connection_membership" in result.degradedReasons
+
+    class CrossTenantConnections(Connections):
+        async def find_many(self, *, filters, sort_by, sort_order, limit):
+            return [
+                {
+                    "tenant_id": TENANT_B,
+                    "connection_id": "connection-foreign",
+                    "provider_identity": "crm-source",
+                }
+            ]
+
+    isolated_source = RepositorySupport360Source(
+        facts=repository,
+        connections=CrossTenantConnections(),
+    )
+    isolated_result = await Support360Provider(isolated_source).project(
+        request,
+        _context(request),
+    )
+    isolated_sections = _sections(isolated_result)
+    assert isolated_sections["summary"].state == "unknown"
+    assert isolated_sections["timeline"].content is None
+    assert "support_source_connection_tenant_scope_mismatch" in isolated_result.degradedReasons
+    reset_local_stores()
 
 
 @pytest.mark.asyncio

@@ -141,7 +141,7 @@ LENS_DEFINITIONS: dict[str, dict] = {
         "baseLens": "standard",
         "description": "Foregrounds engagement mechanics — social interactions, content and communities, and the relationship and incentive structure that drives or discounts that engagement. Surfaces the M1 filter-field categories social, relationship, incentive, source and evidence over the social360 projection, gated so correlated observations are never counted as independent evidence.",
         "domain": "engagementfi",
-        "applicableSubjectKinds": ("campaign", "entity", "relationship", "source"),
+        "applicableSubjectKinds": ("agent", "campaign", "entity", "population", "relationship", "source"),
         "temporalModes": ("relative", "window"),
         "default": False
     },
@@ -229,7 +229,7 @@ LENS_DEFINITIONS: dict[str, dict] = {
         "baseLens": "standard",
         "description": "Views a subject through narrative structure — narrative refs, the relationship arcs and evidence that ground them, and the fidelity-aware paths over which narrative propagates. Surfaces the M1 filter-field categories narrative, evidence, source, path, social and relationship over the social360 projection; every rendered claim resolves to evidence or is marked ungrounded.",
         "domain": "narrative",
-        "applicableSubjectKinds": ("entity", "episode", "relationship", "source"),
+        "applicableSubjectKinds": ("agent", "entity", "episode", "population", "relationship", "source"),
         "temporalModes": ("relative", "window"),
         "default": False
     },
@@ -328,7 +328,7 @@ LENS_DEFINITIONS: dict[str, dict] = {
         "baseLens": "standard",
         "description": "Views a subject through its social-financial structure — cross-provider social identity, account and connection types, communities, interactions, and the incentive context that exposure creates. Surfaces the M1 filter-field categories social, relationship, incentive, source and evidence over the social360 projection. Absent incentive evidence is never rendered as organic and an unavailable social metric is never rendered as zero (unknown is a state, zero is a measurement).",
         "domain": "socialfi",
-        "applicableSubjectKinds": ("connection", "entity", "relationship", "source"),
+        "applicableSubjectKinds": ("agent", "connection", "entity", "population", "relationship", "source"),
         "temporalModes": ("as_of", "relative", "window"),
         "default": False
     },

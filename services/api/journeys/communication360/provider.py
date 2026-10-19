@@ -410,6 +410,146 @@ def _communication_fact_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]
     return [row for row in rows if row.get("kind") in kinds]
 
 
+def _source_policy_context(
+    *,
+    request: ProjectionRequest,
+    scope: _Scope,
+    messages: list[CommunicationMessage],
+    rows: list[dict[str, Any]],
+    silver_up: bool,
+    canonical_up: bool,
+    silver_truncated: bool,
+    canonical_truncated: bool,
+) -> dict[str, Any]:
+    """Expose exact source references and stored consent receipts without
+    treating either as a current policy decision.
+
+    Campaign messages carry an explicit provider identity on the silver row.
+    Episode/journey canonical facts may carry an explicit ``provider_id`` or
+    ``provider_identity`` reference in their row/payload. These identifiers
+    are preserved as observed references only; Source360 must still resolve
+    source rights/provenance and the frame runtime owns policy evaluation.
+    """
+    source_refs: dict[tuple[str, str], dict[str, Any]] = {}
+    for message in messages:
+        provider = message.provider
+        if not isinstance(provider, str) or not provider.strip():
+            continue
+        refs = [
+            ref.model_dump(mode="json", exclude_none=True)
+            for ref in message.evidence_refs
+            if isinstance(ref, EvidenceRef)
+        ]
+        source_refs[("silver_comms_facts", provider)] = {
+            "providerIdentity": provider,
+            "referenceSource": "silver_comms_facts.provider",
+            "observedAt": message.received_at or message.occurred_at,
+            "evidenceRefs": refs,
+        }
+
+    for row in rows:
+        payload = _payload_of(row)
+        provider = row.get("provider_identity") or row.get("provider_id")
+        if not isinstance(provider, str) or not provider.strip():
+            provider = payload.get("provider_identity") or payload.get("provider_id")
+        if not isinstance(provider, str) or not provider.strip():
+            continue
+        evidence = _row_evidence(row)
+        source_refs[("communication360_facts", provider)] = {
+            "providerIdentity": provider,
+            "referenceSource": "communication360_facts.provider_identity",
+            "observedAt": str(row.get("occurred_at") or "") or None,
+            "evidenceRefs": (
+                [evidence.model_dump(mode="json", exclude_none=True)]
+                if evidence is not None
+                else []
+            ),
+        }
+
+    consent_receipts: dict[str, dict[str, Any]] = {}
+    for message in messages:
+        consent = message.consent_evidence
+        if consent.state != "recorded" or not consent.receipt_id:
+            continue
+        # CommunicationConsentEvidence validates that the server-owned receipt
+        # and identity-binding evidence are both present for recorded state.
+        if len(consent.evidence_refs) < 2:
+            continue
+        consent_receipts[consent.receipt_id] = {
+            "receiptId": consent.receipt_id,
+            "purpose": consent.purpose,
+            "subjectEntityId": consent.subject_entity_id,
+            "observedAt": message.received_at or message.occurred_at,
+            "evidenceRefs": [
+                ref.model_dump(mode="json", exclude_none=True)
+                for ref in consent.evidence_refs
+                if isinstance(ref, EvidenceRef)
+            ],
+        }
+
+    source_incomplete = (
+        (scope.bindable and (not silver_up or silver_truncated))
+        or (scope.canonical_fact_bindable and (not canonical_up or canonical_truncated))
+    )
+    if source_incomplete:
+        lineage_state = "degraded"
+        consent_state = "degraded" if scope.bindable else "unknown"
+        state = "degraded"
+        reason = (
+            REASON_SOURCE_READ_TRUNCATED
+            if silver_truncated or canonical_truncated
+            else REASON_SILVER_SOURCE_UNAVAILABLE
+            if scope.bindable and not silver_up
+            else REASON_CANONICAL_SOURCE_UNAVAILABLE
+        )
+    else:
+        lineage_state = "observed_references" if source_refs else "unknown"
+        consent_state = "recorded" if consent_receipts else "unknown"
+        state = "partial" if source_refs or consent_receipts else "unknown"
+        reason = (
+            "source360_rights_lineage_not_composed"
+            if source_refs
+            else "no_exact_source_or_server_consent_reference_observed"
+        )
+
+    return {
+        "state": state,
+        "tenantId": request.tenantId,
+        "subject": {"kind": request.subject.kind, "id": request.subject.id},
+        "sourceLineage": {
+            "state": lineage_state,
+            "references": list(source_refs.values()),
+            "authority": "source360_required_for_provider_registry_and_rights_lineage",
+        },
+        "historicalConsent": {
+            "state": consent_state,
+            "receipts": list(consent_receipts.values()),
+            "reason": (
+                None
+                if consent_receipts
+                else "consent_is_not_inferred_from_delivery_or_message_category"
+            ),
+        },
+        "policyEvaluation": {
+            "state": "unknown",
+            "authority": "experience360_frame_policy_runtime",
+            "reason": "policy_is_evaluated_by_the_governing_frame_runtime",
+        },
+        "freshness": {
+            "state": "available"
+            if all(
+                item.get("observedAt")
+                for item in list(source_refs.values()) + list(consent_receipts.values())
+            )
+            and (source_refs or consent_receipts)
+            else "unknown",
+            "sourceTimestampsPreserved": True,
+            "missingTimestamp": "unknown",
+        },
+        "reason": reason,
+    }
+
+
 def _row_evidence(row: dict[str, Any]) -> Optional[EvidenceRef]:
     """A reused canonical EvidenceRef for one stored fact row (or None)."""
     ref_id = row.get("fact_id") or row.get("idempotency_key") or row.get("source_event_id")
@@ -829,6 +969,16 @@ class Communication360Provider:
                 "tenantId": request.tenantId,
                 "subject": {"kind": request.subject.kind, "id": request.subject.id},
                 "dimensions": dimensions,
+                "sourcePolicyContext": _source_policy_context(
+                    request=request,
+                    scope=scope,
+                    messages=messages,
+                    rows=rows,
+                    silver_up=silver_up,
+                    canonical_up=canonical_up,
+                    silver_truncated=silver_truncated,
+                    canonical_truncated=canonical_truncated,
+                ),
                 "registryState": context.registryState,
                 "sourceCompleteness": (
                     "partial"

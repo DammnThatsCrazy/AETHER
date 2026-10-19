@@ -157,6 +157,7 @@ services:
   stablecoins: {class: experimental, stage: intake, reason: "canonical stablecoin intelligence domain"}
   storage_lifecycle: {class: core, stage: control-plane, reason: "object-backed Bronze storage lifecycle workers"}
   suggestions: {class: beta, stage: action, reason: "OODA suggestion intelligence"}
+  support360: {class: beta, stage: product, reason: "tenant-scoped support case and workflow intelligence projection"}
   targeting_intelligence: {class: beta, stage: intelligence, reason: "cluster targeting observation"}
   temporal360: {class: beta, stage: product, reason: "Temporal360 contextual time projection"}
   temporal_preferences: {class: beta, stage: product, reason: "viewer and tenant temporal preferences"}

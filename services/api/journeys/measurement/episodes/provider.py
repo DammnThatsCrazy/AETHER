@@ -1,8 +1,9 @@
 """episode360 intelligence-projection provider (WS-D item 2 surface).
 
 Projects durable :class:`~shared.backend_interpretation.primitives.EpisodeRecord`
-rows into the six ``episode360`` registry output sections (``evidence``,
-``interactions``, ``outcomes``, ``state``, ``summary``, ``timeline``). A 360 is
+rows into the seven ``episode360`` registry output sections (``evidence``,
+``episode_context``, ``interactions``, ``outcomes``, ``state``, ``summary``,
+``timeline``). A 360 is
 an intelligence projection over canonical truth — never a competing system of
 record — so the provider is ``read_only`` and every claim stays grounded in the
 episode's own :class:`EvidenceRef` lineage.

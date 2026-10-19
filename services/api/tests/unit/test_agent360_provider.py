@@ -250,6 +250,51 @@ class FakeSource:
             ],
         )
 
+    async def capability_access_profile(self, tenant_id, agent_id):
+        rows = await self._rows(
+            "capability_access_profile",
+            [
+                {
+                    "tenant_id": tenant_id,
+                    "agent_id": agent_id,
+                    "profile": {
+                        "subject": {"kind": "agent", "id": agent_id},
+                        "profile_known": True,
+                        "missing_inputs": [],
+                        "basis": "observed_only",
+                        "identity": {"installation_ids": ["installation-agent-a"]},
+                        "observation": {"last_seen_at": "2026-10-04T00:00:00Z"},
+                        "counts": {
+                            "capabilities_reachable": 1,
+                            "capabilities_invoked": 1,
+                            "capabilities_authorized": 1,
+                            "capabilities_unauthorized": 0,
+                            "authorizations_active": 1,
+                        },
+                        "reach": {
+                            "capabilities": [
+                                {
+                                    "capability_id": "capability-search",
+                                    "server_key": "mcp-main",
+                                    "provider": "mcp",
+                                    "tool_name": "search",
+                                    "basis": "invoked",
+                                    "authorized": True,
+                                }
+                            ]
+                        },
+                        "authorization": {
+                            "known": True,
+                            "authorizations_active": 1,
+                            "activeRecordIds": ["capability-grant-1"],
+                            "activeRecordIdsTruncated": False,
+                        },
+                    },
+                }
+            ],
+        )
+        return Agent360ReadBatch(rows=rows)
+
     async def risk_signals(self, tenant_id, agent_id, limit):
         return await self._rows(
             "risks",
@@ -563,6 +608,17 @@ async def test_agent360_projects_scoped_evidence_without_inventing_authority_or_
     authority = sections["state"].content["dimensions"][2]["content"]
     assert authority["state"] == "available"
     assert authority["effectiveAuthorizationDecision"] == "unknown"
+    access_profile = authority["capabilityAccessProfile"]
+    assert access_profile["state"] == "available"
+    assert access_profile["authorization"]["activeGrantCount"] == 1
+    assert access_profile["authorization"]["activeGrantRecordIds"] == [
+        "capability-grant-1"
+    ]
+    assert access_profile["capabilities"][0]["invokeGrantCoversCapability"] is True
+    assert any(
+        ref["id"] == "capability-grant-1" and ref["source"] == "delegations"
+        for ref in access_profile["evidenceRefs"]
+    )
     assert authority["actionScopedDecisionState"] == "available"
     assert authority["actionScopedDecisions"] == [
         {

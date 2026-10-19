@@ -279,6 +279,198 @@ class CommsFactsRepository:
             next_cursor = _encode_cursor(str(last["occurred_at"]), str(last["fact_id"]))
         return rows, next_cursor
 
+    async def list_for_sender_entity(
+        self,
+        tenant_id: str,
+        sender_entity_id: str,
+        *,
+        sender_identity_binding_ids: list[str],
+        category: Optional[str] = None,
+        after: Optional[str] = None,
+        before: Optional[str] = None,
+        limit: int = 50,
+        cursor: Optional[str] = None,
+    ) -> tuple[list[dict[str, Any]], Optional[str]]:
+        """Read facts for one canonically bound sender entity.
+
+        Sender ids in silver facts are accepted only with an identity-binding
+        receipt selected by the caller from the tenant's identity authority.
+        This method adds the tenant, exact sender, category, and binding keys
+        to the durable query; it does not accept provider-supplied aliases.
+        """
+        bindings = sorted({str(value).strip() for value in sender_identity_binding_ids if str(value).strip()})
+        if not tenant_id or not sender_entity_id or not bindings:
+            return [], None
+
+        pool = await self._pool()
+        if pool is None:
+            rows = [
+                row
+                for row in _local_facts.values()
+                if row.get("tenant_id") == tenant_id
+                and row.get("sender_entity_id") == sender_entity_id
+                and row.get("sender_identity_binding_id") in bindings
+            ]
+            rows = _apply_local_filters(rows, category=category, after=after, before=before)
+            return _page_local_facts(rows, limit=limit, cursor=cursor)
+
+        conditions = [
+            "tenant_id = $1",
+            "sender_entity_id = $2",
+            "sender_identity_binding_id = ANY($3::text[])",
+        ]
+        params: list[Any] = [tenant_id, sender_entity_id, bindings]
+
+        def _add(sql: str, value: Any) -> None:
+            params.append(value)
+            conditions.append(sql.format(n=len(params)))
+
+        if category:
+            _add("message_category = ${n}", category)
+        if after:
+            _add("occurred_at >= ${n}", _parse_ts(after))
+        if before:
+            _add("occurred_at <= ${n}", _parse_ts(before))
+        if cursor:
+            occurred_at, fact_id = _decode_cursor(cursor)
+            params.extend((_parse_ts(occurred_at), fact_id))
+            conditions.append(f"(occurred_at, fact_id::text) < (${len(params) - 1}, ${len(params)})")
+
+        async with pool.acquire() as conn:
+            records = await conn.fetch(
+                f"""
+                SELECT * FROM silver_comms_facts
+                WHERE {" AND ".join(conditions)}
+                ORDER BY occurred_at DESC, fact_id DESC
+                LIMIT {max(1, int(limit)) + 1}
+                """,
+                *params,
+            )
+        return _page_fetched_facts([dict(record) for record in records], limit=limit)
+
+    async def list_for_event_references(
+        self,
+        tenant_id: str,
+        *,
+        source_event_ids: list[str],
+        fact_ids: list[str],
+        category: Optional[str] = None,
+        after: Optional[str] = None,
+        before: Optional[str] = None,
+        limit: int = 50,
+        cursor: Optional[str] = None,
+    ) -> tuple[list[dict[str, Any]], Optional[str]]:
+        """Read facts named by explicit canonical event/fact references."""
+        event_ids = sorted({str(value).strip() for value in source_event_ids if str(value).strip()})
+        exact_fact_ids = sorted({str(value).strip() for value in fact_ids if str(value).strip()})
+        if not tenant_id or not (event_ids or exact_fact_ids):
+            return [], None
+
+        pool = await self._pool()
+        if pool is None:
+            event_set, fact_set = set(event_ids), set(exact_fact_ids)
+            rows = [
+                row
+                for row in _local_facts.values()
+                if row.get("tenant_id") == tenant_id
+                and (
+                    str(row.get("source_event_id") or "") in event_set
+                    or str(row.get("fact_id") or "") in fact_set
+                )
+            ]
+            rows = _apply_local_filters(rows, category=category, after=after, before=before)
+            return _page_local_facts(rows, limit=limit, cursor=cursor)
+
+        conditions = ["tenant_id = $1", "(source_event_id::text = ANY($2::text[]) OR fact_id::text = ANY($3::text[]))"]
+        params: list[Any] = [tenant_id, event_ids, exact_fact_ids]
+
+        def _add(sql: str, value: Any) -> None:
+            params.append(value)
+            conditions.append(sql.format(n=len(params)))
+
+        if category:
+            _add("message_category = ${n}", category)
+        if after:
+            _add("occurred_at >= ${n}", _parse_ts(after))
+        if before:
+            _add("occurred_at <= ${n}", _parse_ts(before))
+        if cursor:
+            occurred_at, fact_id = _decode_cursor(cursor)
+            params.extend((_parse_ts(occurred_at), fact_id))
+            conditions.append(f"(occurred_at, fact_id::text) < (${len(params) - 1}, ${len(params)})")
+
+        async with pool.acquire() as conn:
+            records = await conn.fetch(
+                f"""
+                SELECT * FROM silver_comms_facts
+                WHERE {" AND ".join(conditions)}
+                ORDER BY occurred_at DESC, fact_id DESC
+                LIMIT {max(1, int(limit)) + 1}
+                """,
+                *params,
+            )
+        return _page_fetched_facts([dict(record) for record in records], limit=limit)
+
+    async def list_for_source_connectors(
+        self,
+        tenant_id: str,
+        connection_ids: list[str],
+        *,
+        category: Optional[str] = None,
+        after: Optional[str] = None,
+        before: Optional[str] = None,
+        limit: int = 50,
+        cursor: Optional[str] = None,
+    ) -> tuple[list[dict[str, Any]], Optional[str]]:
+        """Read facts carried by exact tenant-owned provider connection ids."""
+        exact_connection_ids = sorted(
+            {str(value).strip() for value in connection_ids if str(value).strip()}
+        )
+        if not tenant_id or not exact_connection_ids:
+            return [], None
+
+        pool = await self._pool()
+        if pool is None:
+            connection_set = set(exact_connection_ids)
+            rows = [
+                row
+                for row in _local_facts.values()
+                if row.get("tenant_id") == tenant_id
+                and str(row.get("source_connector_id") or "") in connection_set
+            ]
+            rows = _apply_local_filters(rows, category=category, after=after, before=before)
+            return _page_local_facts(rows, limit=limit, cursor=cursor)
+
+        conditions = ["tenant_id = $1", "source_connector_id = ANY($2::text[])"]
+        params: list[Any] = [tenant_id, exact_connection_ids]
+
+        def _add(sql: str, value: Any) -> None:
+            params.append(value)
+            conditions.append(sql.format(n=len(params)))
+
+        if category:
+            _add("message_category = ${n}", category)
+        if after:
+            _add("occurred_at >= ${n}", _parse_ts(after))
+        if before:
+            _add("occurred_at <= ${n}", _parse_ts(before))
+        if cursor:
+            occurred_at, fact_id = _decode_cursor(cursor)
+            params.extend((_parse_ts(occurred_at), fact_id))
+            conditions.append(f"(occurred_at, fact_id::text) < (${len(params) - 1}, ${len(params)})")
+
+        async with pool.acquire() as conn:
+            records = await conn.fetch(
+                f"""
+                SELECT * FROM silver_comms_facts
+                WHERE {" AND ".join(conditions)}
+                ORDER BY occurred_at DESC, fact_id DESC
+                LIMIT {max(1, int(limit)) + 1}
+                """,
+                *params,
+            )
+        return _page_fetched_facts([dict(record) for record in records], limit=limit)
+
     async def entity_summary(self, tenant_id: str, entity_id: str) -> dict[str, Any]:
         """Aggregate communication counts for the Profile360 summary card."""
         pool = await self._pool()
@@ -1082,6 +1274,46 @@ def _apply_local_filters(rows: list[dict[str, Any]], **filters: Any) -> list[dic
     if filters.get("before"):
         out = [r for r in out if str(r.get("occurred_at") or "") <= str(filters["before"])]
     return out
+
+
+def _page_local_facts(
+    rows: list[dict[str, Any]], *, limit: int, cursor: Optional[str]
+) -> tuple[list[dict[str, Any]], Optional[str]]:
+    """Mirror the durable occurred-at/fact-key cursor ordering in local mode."""
+    bounded_limit = max(1, int(limit))
+    ordered = sorted(
+        rows,
+        key=lambda row: (str(row.get("occurred_at") or ""), str(row.get("fact_id") or "")),
+        reverse=True,
+    )
+    if cursor:
+        cursor_at, cursor_key = _decode_cursor(cursor)
+        ordered = [
+            row
+            for row in ordered
+            if str(row.get("occurred_at") or "") < cursor_at
+            or (
+                str(row.get("occurred_at") or "") == cursor_at
+                and str(row.get("fact_id") or "") < cursor_key
+            )
+        ]
+    return _page_fetched_facts(ordered, limit=bounded_limit)
+
+
+def _page_fetched_facts(
+    rows: list[dict[str, Any]], *, limit: int
+) -> tuple[list[dict[str, Any]], Optional[str]]:
+    """Trim a `limit + 1` read and return the opaque cursor for the next page."""
+    bounded_limit = max(1, int(limit))
+    if len(rows) <= bounded_limit:
+        return rows, None
+    page = rows[:bounded_limit]
+    last = page[-1]
+    occurred_at = str(last.get("occurred_at") or "")
+    fact_key = str(last.get("fact_id") or "")
+    if not occurred_at or not fact_key:
+        return page, None
+    return page, _encode_cursor(occurred_at, fact_key)
 
 
 def _local_funnel(rows: list[dict[str, Any]]) -> dict[str, Any]:
