@@ -31,16 +31,25 @@ since_version: 0.1.0
 "Alpha" means the capability exists at `0.1.0-alpha.0` and may change before a
 stable release; it is not a production-readiness claim.
 
-- **React** is the `react` entry point of `@aether/sdk-web`
-  (`packages/sdk/web/src/react.tsx`), not a separate package.
+- **React** is the `./react` entry point of `@aether/web`
+  (`packages/sdk/web/src/react.tsx`), imported as `@aether/web/react`, not a
+  separate package.
 - **React Native** is a JS bridge. Batching, retry and the offline spool are
-  enforced by the native iOS/Android layers it wraps (`delegated_native`).
+  meant to be enforced by the native iOS/Android SDKs it wraps
+  (`delegated_native`). On Android the React Native package does not declare the
+  native `com.aether.sdk` core as a dependency, so consumers must add it
+  themselves. Manifest signature verification is likewise claimed as native;
+  the JS `fetchAndApplyManifest()` path does not check the manifest `signature`,
+  so do not treat remote manifests as fail-closed on React Native.
 - The **server** SDK (`packages/sdk/server`) and the **Python** envelope builder
-  (`packages/sdk/python`) are not columns here. The server SDK keeps a bounded
-  in-process queue with no cross-restart persistence and only forwards consent as
-  an ingestion hint; the Python package has no client-side emit pipeline.
+  (`packages/sdk/python`) are not columns here. By default the server SDK keeps a
+  bounded in-process queue; setting `durable: true` or `spoolPath` selects the
+  disk-backed `DurableEventQueue`, which persists accepted events and replays
+  them at startup. The server SDK only forwards consent as an ingestion hint.
+  The Python package has no client-side emit pipeline.
 - The runtime-behaviour rows (observe, consent gating, batching, manifest fetch
-  and signature verification, batch health, retry, offline queue) are governed
-  per SDK by `packages/shared/sdk-parity.json`, which is canonical and
-  validator-enforced (`scripts/validate_sdk_parity.py`). The remaining rows are
-  not machine-checked.
+  and signature verification, batch health, retry, offline queue) are recorded
+  per SDK in `packages/shared/sdk-parity.json`, which is canonical.
+  `scripts/validate_sdk_parity.py` checks that each claimed cell's evidence
+  file and symbol exist; it does not prove the behavior is enforced end to end.
+  The remaining rows are not machine-checked.
