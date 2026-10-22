@@ -23,6 +23,7 @@ from actions.agent.execution360_provider import (  # noqa: E402
     ExecutionRead,
     RepositoryExecution360Source,
     _read_agent_episode_context,
+    _resolve_server_delegation_reference,
     register_provider,
 )
 from actions.agent.identity_resolution import (  # noqa: E402
@@ -37,8 +38,10 @@ from shared.intelligence_projections.contracts import (  # noqa: E402
     Experience360ActorAttribution,
     Experience360ActorParty,
     Experience360FrameRequest,
+    Experience360PolicyDisposition,
     ProjectionSection,
 )
+from shared.intelligence_projections.composition import compose_experience360_frame  # noqa: E402
 from shared.intelligence_projections.frame_runtime import (  # noqa: E402
     _derive_agent_actor_metadata,
 )
@@ -78,6 +81,8 @@ def _server_row(tenant_id: str = TENANT, agent_id: str = AGENT) -> dict:
         "delegation_id": "deleg-1",
         "canonical_delegation_id": "deleg-1",
         "canonical_delegation_matched": True,
+        "canonical_delegation_resolution_status": "matched_current_grant_reference_and_grantee",
+        "canonical_delegation_evidence_observed_at": "2026-10-16T08:00:00+00:00",
         "canonical_agent_identity": True,
         "canonical_agent_entity_id": AGENT,
         "canonical_owner_entity_id": "owner-1",
@@ -90,7 +95,7 @@ def _server_row(tenant_id: str = TENANT, agent_id: str = AGENT) -> dict:
             "resource": "account:4",
             "payload": {"secret": "must-not-appear"},
         },
-        "policy_log": {"delegation_check": {"allowed": True}},
+        "policy_log": {"delegation_check": {"allowed": True, "delegation_id": "deleg-1"}},
         "reasoning": "must-not-appear",
         "output": {"secret": "must-not-appear"},
     }
@@ -199,7 +204,7 @@ def _agent360_principal_result(
                 evidenceRefs=[agent_identity_evidence],
                 claims=["The tenant binding resolves the agent identity."],
                 claimState=EpistemicStatus.RESOLVED,
-                domainSlotIds=["actor_attribution"],
+                domainSlotIds=["identity", "actor_attribution"],
             )
         ],
         dependencyState=[],
@@ -290,6 +295,25 @@ def _observed_row(tenant_id: str = TENANT, actor_id: str = AGENT) -> dict:
     }
 
 
+def _task_decomposition_row(
+    *, execution_id: str = "exec-1", tenant_id: str = TENANT
+) -> dict:
+    return {
+        "tenant_id": tenant_id,
+        "agent_id": AGENT,
+        "execution_id": execution_id,
+        "record_id": f"{execution_id}:decomposition",
+        "event_type": "task_decomposed",
+        "root_task_id": "task-root-1",
+        "subtask_ids": ["task-child-1", "task-child-2"],
+        "occurred_at": "2026-10-16T10:00:01+00:00",
+        "canonical_agent_identity": True,
+        "canonical_agent_entity_id": AGENT,
+        "canonical_owner_entity_id": "owner-1",
+        "metadata": {"secret": "private-plan-body"},
+    }
+
+
 class FakeSource:
     def __init__(
         self,
@@ -350,11 +374,63 @@ async def test_provider_emits_registry_sections_evidence_and_catalog_bound_claim
         assert all(isinstance(ref, EvidenceRef) and ref.id for ref in claim.evidenceRefs)
         assert claim.domainSlotIds
         assert set(claim.domainSlotIds) <= {
-            "action_tool_resource_trace",
-            "actor_and_delegation",
-            "evidence_and_lineage",
-            "execution_identity_and_state",
+            "tool_calls",
+            "actor_attribution",
+            "authority_check",
+            "authority_envelope",
+            "evidence_trace",
+            "execution_history",
+            "execution_summary",
+            "inputs_outputs",
+            "failures",
+            "latency_cost",
+            "plan_steps",
+            "tool_usage",
         }
+
+    lifecycle_claim = next(
+        claim for claim in result.claims if claim.kind == "server_recorded_execution_lifecycle"
+    )
+    assert lifecycle_claim.domainSlotIds == [
+        "execution_summary",
+        "execution_history",
+        "evidence_trace",
+    ]
+    duration_claim = next(
+        claim
+        for claim in result.claims
+        if claim.kind == "server_recorded_lifecycle_elapsed_time"
+    )
+    assert duration_claim.domainSlotIds == ["latency_cost", "evidence_trace"]
+    assert duration_claim.evidenceRefs[0].id == "exec-1"
+    assert "2000 milliseconds" in duration_claim.claims[0]
+    decision_claim = next(
+        claim for claim in result.claims if claim.kind == "server_recorded_delegation_decision"
+    )
+    assert decision_claim.domainSlotIds == [
+        "authority_check",
+        "authority_envelope",
+        "evidence_trace",
+    ]
+    joined_grant_claim = next(
+        claim
+        for claim in result.claims
+        if claim.kind == "canonically_joined_server_delegation_reference"
+    )
+    assert joined_grant_claim.claimState == EpistemicStatus.RESOLVED
+    assert joined_grant_claim.domainSlotIds == ["authority_check", "evidence_trace"]
+    assert {ref.source for ref in joined_grant_claim.evidenceRefs} == {
+        "agent_executions",
+        "delegations",
+    }
+    observed_claim = next(
+        claim for claim in result.claims if claim.kind == "source_reported_agent_telemetry_fact"
+    )
+    assert observed_claim.domainSlotIds == ["evidence_trace"]
+    tool_claim = next(
+        claim for claim in result.claims if claim.kind == "source_reported_tool_invocation"
+    )
+    assert tool_claim.domainSlotIds == ["tool_usage", "evidence_trace"]
 
     state = next(section for section in result.sections if section.id == "state")
     server_record = state.content["serverRecordedExecutions"][0]
@@ -365,6 +441,17 @@ async def test_provider_emits_registry_sections_evidence_and_catalog_bound_claim
     assert external["occurrence"] == "source_reported"
     assert external["verified"] is False
 
+    summary = next(section for section in result.sections if section.id == "summary")
+    latency_cost = summary.content["latencyCost"]
+    assert latency_cost["latency"]["state"] == "available"
+    assert latency_cost["latency"]["sampleCount"] == 1
+    assert latency_cost["latency"]["samples"][0]["elapsedMs"] == 2000.0
+    assert latency_cost["latency"]["samples"][0]["evidenceRefs"][0]["id"] == "exec-1"
+    assert latency_cost["cost"] == {
+        "state": "unknown",
+        "reason": "no_execution_cost_authority_is_joined_by_execution360",
+    }
+
     outcomes = next(section for section in result.sections if section.id == "outcomes")
     assert outcomes.state == "unknown"
     assert outcomes.content["businessOutcome"]["state"] == "unknown"
@@ -373,6 +460,360 @@ async def test_provider_emits_registry_sections_evidence_and_catalog_bound_claim
     serialized = result.model_dump_json()
     assert "must-not-appear" not in serialized
     assert "workerRunLinkage" in serialized
+
+
+async def test_exact_execution_subject_reads_only_tenant_execution_record() -> None:
+    request = _request(subject=ProjectionSubject(kind="execution", id="exec-1"))
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row(), _server_row(tenant_id="tenant-other")],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead(
+            rows=[],
+            available=True,
+            scope_known=False,
+            reason="execution_source_telemetry_join_unavailable",
+        ),
+    )
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    state = next(section for section in result.sections if section.id == "state")
+    assert state.content["scope"] == {"kind": "execution", "id": "exec-1"}
+    assert [row["executionId"] for row in state.content["serverRecordedExecutions"]] == [
+        "exec-1"
+    ]
+    assert any(
+        claim.kind == "server_recorded_execution_lifecycle"
+        and claim.evidenceRefs[0].id == "exec-1"
+        for claim in result.claims
+    )
+    assert not any(
+        claim.kind == "source_reported_tool_invocation" for claim in result.claims
+    )
+
+
+async def test_inputs_outputs_exposes_only_recorded_metadata_and_event_reference() -> None:
+    server_row = {
+        **_server_row(),
+        "status": "failed",
+        "outcome_event_id": "outcome-ref-1",
+        "outcome_event_published": False,
+        "input_snapshot": {
+            "action": "transfer",
+            "resource": "account:4",
+            "payload": {"secret": "raw-input-secret"},
+        },
+        "output": {"secret": "raw-output-secret"},
+        "error": {"message": "raw-error-secret"},
+    }
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[server_row], available=True, scope_known=True, agent_ids=(AGENT,)
+        ),
+        observed=ExecutionRead(
+            rows=[], available=True, scope_known=True, agent_ids=(AGENT,)
+        ),
+    )
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+    state = next(section for section in result.sections if section.id == "state")
+    inputs_outputs = state.content["inputsOutputs"]
+    assert inputs_outputs["state"] == "available"
+    assert inputs_outputs["count"] == 1
+    record = inputs_outputs["records"][0]
+    assert record["request"] == {
+        "state": "available",
+        "action": "transfer",
+        "resourceRef": "account:4",
+        "triggerEventRef": "trigger-1",
+        "payloadRead": False,
+    }
+    assert record["result"]["state"] == "unknown"
+    assert record["result"]["outcomeEventRef"] == "outcome-ref-1"
+    assert record["result"]["eventPublicationState"] == "not_published"
+    assert record["result"]["externalEffect"] == "not_established"
+    assert record["evidenceRefs"][0]["id"] == "exec-1"
+    assert {
+        claim.kind for claim in result.claims if "inputs_outputs" in claim.domainSlotIds
+    } == {
+        "server_recorded_execution_request_metadata",
+        "server_recorded_result_event_reference",
+    }
+    serialized = result.model_dump_json()
+    for secret in ("raw-input-secret", "raw-output-secret", "raw-error-secret"):
+        assert secret not in serialized
+
+
+async def test_failures_keep_server_and_source_reported_boundaries_distinct() -> None:
+    server_row = {**_server_row(), "status": "revoked", "error": {"secret": "failure-body"}}
+    observed_row = {**_observed_row(), "reportedStatus": "failed"}
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[server_row], available=True, scope_known=True, agent_ids=(AGENT,)
+        ),
+        observed=ExecutionRead(
+            rows=[observed_row], available=True, scope_known=True, agent_ids=(AGENT,)
+        ),
+    )
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+    state = next(section for section in result.sections if section.id == "state")
+    failures = state.content["failures"]
+    assert failures["state"] == "available"
+    assert failures["count"] == 1
+    assert failures["records"][0]["classification"] == "server_recorded_lifecycle_failure"
+    assert failures["records"][0]["executionId"] == "exec-1"
+    assert failures["unlinkedSourceReportedCount"] == 1
+    unlinked = failures["unlinkedSourceReportedFailures"][0]
+    assert unlinked["classification"] == "source_reported_unlinked_failure_telemetry"
+    assert unlinked["sourceEventId"] == "silver-event-1"
+    assert "executionId" not in unlinked
+    assert all(record["externalEffect"] == "unknown" for record in failures["records"])
+    assert {
+        claim.kind for claim in result.claims if "failures" in claim.domainSlotIds
+    } == {"server_recorded_execution_failure"}
+    assert any(
+        claim.kind == "source_reported_agent_failure_telemetry"
+        and claim.domainSlotIds == ["evidence_trace"]
+        for claim in result.claims
+    )
+    assert "failure-body" not in result.model_dump_json()
+
+
+async def test_failure_slot_is_empty_only_with_complete_source_scope() -> None:
+    request = _request()
+    complete = await Execution360Provider(FakeSource()).project(
+        request, await _context(request)
+    )
+    complete_state = next(section for section in complete.sections if section.id == "state")
+    assert complete_state.content["failures"]["state"] == "empty"
+    assert complete_state.content["failures"]["count"] == 0
+    assert not [claim for claim in complete.claims if "failures" in claim.domainSlotIds]
+
+    partial_source = FakeSource(
+        server=ExecutionRead(
+            rows=[], available=True, scope_known=False, agent_ids=(AGENT,)
+        )
+    )
+    partial = await Execution360Provider(partial_source).project(
+        request, await _context(request)
+    )
+    partial_state = next(section for section in partial.sections if section.id == "state")
+    assert partial_state.content["failures"]["state"] == "unknown"
+    assert partial_state.content["failures"]["count"] is None
+
+
+async def test_source_failure_without_execution_id_is_unlinked_context_only() -> None:
+    observed = {**_observed_row(), "reportedStatus": "failed", "riskLevel": "high"}
+    source = FakeSource(
+        server=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        observed=ExecutionRead([observed], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    state = next(section for section in result.sections if section.id == "state")
+    failures = state.content["failures"]
+    assert failures["state"] == "empty"
+    assert failures["records"] == []
+    assert failures["count"] == 0
+    assert failures["unlinkedSourceReportedCount"] == 1
+    assert failures["reason"] == "source_reported_failure_unlinked_to_execution"
+    assert not any("failures" in claim.domainSlotIds for claim in result.claims)
+
+
+async def test_plan_steps_join_exact_task_decomposition_without_lifecycle_pollution() -> None:
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row(), _task_decomposition_row()],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+    state = next(section for section in result.sections if section.id == "state")
+    summary = next(section for section in result.sections if section.id == "summary")
+    timeline = next(section for section in result.sections if section.id == "timeline")
+
+    assert len(state.content["serverRecordedExecutions"]) == 1
+    assert summary.content["serverRecordedExecutionCount"] == 1
+    assert state.content["planSteps"]["state"] == "degraded"
+    assert state.content["planSteps"]["fullPlanKnown"] is False
+    assert state.content["planSteps"]["observedCount"] == 1
+    plan = state.content["planSteps"]["records"][0]
+    assert plan["rootTaskId"] == "task-root-1"
+    assert plan["subtaskIds"] == ["task-child-1", "task-child-2"]
+    assert {ref["id"] for ref in plan["evidenceRefs"]} == {
+        "exec-1",
+        "exec-1:decomposition",
+    }
+    assert any(entry.get("eventName") == "task_decomposed" for entry in timeline.content["entries"])
+    plan_claims = [claim for claim in result.claims if "plan_steps" in claim.domainSlotIds]
+    assert len(plan_claims) == 1
+    assert plan_claims[0].kind == "observed_execution_task_decomposition"
+    assert {ref.id for ref in plan_claims[0].evidenceRefs} == {
+        "exec-1",
+        "exec-1:decomposition",
+    }
+    assert "private-plan-body" not in result.model_dump_json()
+
+
+async def test_plan_steps_reject_unjoined_cross_tenant_and_malformed_records() -> None:
+    malformed = {**_task_decomposition_row(), "record_id": "forged-record"}
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[
+                _server_row(),
+                _task_decomposition_row(execution_id="other-execution"),
+                _task_decomposition_row(tenant_id="other-tenant"),
+                malformed,
+            ],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+    state = next(section for section in result.sections if section.id == "state")
+
+    assert state.content["planSteps"]["state"] == "unknown"
+    assert state.content["planSteps"]["records"] == []
+    assert state.content["planSteps"]["observedCount"] == 0
+    assert "task_decomposition_record_invalid" in result.degradedReasons
+    assert not [claim for claim in result.claims if "plan_steps" in claim.domainSlotIds]
+    serialized = result.model_dump_json()
+    assert "other-execution:decomposition" not in serialized
+    assert "forged-record" not in serialized
+
+
+async def test_execution_slots_route_exact_claims_and_obey_frame_policy() -> None:
+    server_row = {**_server_row(), "status": "failed"}
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[server_row, _task_decomposition_row()],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+    frame_request = Experience360FrameRequest(
+        surfaceId="execution360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+        requestedSlotIds=["inputs_outputs", "failures", "plan_steps", "authority_check"],
+        includeEvidence=True,
+    )
+
+    allowed = compose_experience360_frame(
+        frame_request,
+        [result],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        actor_attribution_by_slot=_derive_agent_actor_metadata(frame_request, [result]),
+    )
+    slots = {slot.id: slot for slot in allowed.slots}
+    assert slots["inputs_outputs"].content is not None
+    assert slots["failures"].content is not None
+    assert slots["plan_steps"].content is not None
+    assert {claim.kind for claim in slots["inputs_outputs"].claims} >= {
+        "server_recorded_execution_request_metadata"
+    }
+    assert {claim.kind for claim in slots["failures"].claims} >= {
+        "server_recorded_execution_failure"
+    }
+    assert {claim.kind for claim in slots["plan_steps"].claims} >= {
+        "observed_execution_task_decomposition"
+    }
+    assert {claim.kind for claim in slots["authority_check"].claims} >= {
+        "server_recorded_delegation_decision",
+        "canonically_joined_server_delegation_reference",
+    }
+    assert all(slot.evidenceRefs and slot.provenance for slot in slots.values())
+
+    denied = compose_experience360_frame(
+        frame_request,
+        [result],
+        frame_policy=Experience360PolicyDisposition(state="denied"),
+    )
+    assert all(
+        slot.state == "suppressed"
+        and slot.content is None
+        and slot.claims == []
+        and slot.evidenceRefs == []
+        for slot in denied.slots
+    )
+
+
+def test_execution_slots_do_not_promote_content_without_evidence() -> None:
+    result = ProjectionResult(
+        projectionId="execution360",
+        tenantId=TENANT,
+        contractVersion=Execution360Provider.contract_version,
+        sections=[
+            ProjectionSection(id=section_id, state="available", content={"state": "available"})
+            for section_id in OUTPUT_SECTIONS
+        ],
+        claims=[],
+        dependencyState=[],
+        generatedAt="2026-10-16T10:01:00Z",
+        degradedReasons=[],
+    )
+    request = Experience360FrameRequest(
+        surfaceId="execution360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+        requestedSlotIds=["inputs_outputs", "failures", "plan_steps"],
+        includeEvidence=True,
+    )
+    frame = compose_experience360_frame(
+        request,
+        [result],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+    )
+    assert {slot.id for slot in frame.slots} == {
+        "inputs_outputs",
+        "failures",
+        "plan_steps",
+    }
+    assert all(
+        slot.state != "available"
+        and slot.content is None
+        and slot.evidenceRefs == []
+        and slot.claims == []
+        for slot in frame.slots
+    )
+
+
+async def test_non_tool_execution_fact_does_not_claim_tool_call_or_usage() -> None:
+    observed = {**_observed_row(), "toolName": None, "eventName": "agent_run_observed"}
+    source = FakeSource(
+        server=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        observed=ExecutionRead(
+            rows=[observed], available=True, scope_known=True, agent_ids=(AGENT,)
+        ),
+    )
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    assert any(claim.kind == "source_reported_agent_telemetry_fact" for claim in result.claims)
+    assert not [
+        claim
+        for claim in result.claims
+        if "tool_calls" in claim.domainSlotIds or "tool_usage" in claim.domainSlotIds
+    ]
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    assert interactions.content["toolInvocationLinkage"]["sourceReportedToolRelatedFactCount"] == 0
 
 
 async def test_tool_telemetry_remains_unlinked_from_server_execution_without_exact_id() -> None:
@@ -400,6 +841,7 @@ async def test_tool_telemetry_remains_unlinked_from_server_execution_without_exa
         "reason": "tool_observations_do_not_carry_a_canonical_agent_execution_id",
         "sourceReadState": "available",
         "sourceReportedToolRelatedFactCount": 1,
+        "joinedExecutionToolCalls": [],
         "evidenceRefs": [
             {
                 "id": "silver-event-1",
@@ -410,6 +852,12 @@ async def test_tool_telemetry_remains_unlinked_from_server_execution_without_exa
             }
         ],
     }
+    assert interactions.content["riskEventLinkage"] == {
+        "state": "unknown",
+        "reason": "agent_risk_records_do_not_carry_a_canonical_agent_execution_id",
+        "joinedExecutionRiskEvents": [],
+        "evidenceRefs": [],
+    }
     source_reported = next(
         item
         for item in interactions.content["interactions"]
@@ -418,6 +866,55 @@ async def test_tool_telemetry_remains_unlinked_from_server_execution_without_exa
     assert source_reported["toolName"] == "payments.send"
     assert source_reported["runId"] == "source-run-1"
     assert "executionId" not in source_reported
+
+
+async def test_untrusted_tool_and_risk_ids_do_not_complete_execution_slots() -> None:
+    reported = {
+        **_observed_row(),
+        "executionId": "spoofed-execution-join",
+        "execution_id": "spoofed-execution-join",
+        "riskEventId": "spoofed-risk-join",
+        "riskLevel": "high",
+    }
+    source = FakeSource(
+        server=ExecutionRead([_server_row()], available=True, scope_known=True, agent_ids=(AGENT,)),
+        observed=ExecutionRead([reported], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    assert not any(
+        "tool_calls" in claim.domainSlotIds or "risk_events" in claim.domainSlotIds
+        for claim in result.claims
+    )
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    assert interactions.content["toolInvocationLinkage"]["state"] == "unknown"
+    assert interactions.content["toolInvocationLinkage"]["joinedExecutionToolCalls"] == []
+    assert interactions.content["riskEventLinkage"]["state"] == "unknown"
+    assert interactions.content["riskEventLinkage"]["joinedExecutionRiskEvents"] == []
+    serialized = str(result.model_dump(mode="json"))
+    assert "spoofed-execution-join" not in serialized
+    assert "spoofed-risk-join" not in serialized
+
+    frame = compose_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="execution360",
+            tenantId=TENANT,
+            subject=ProjectionSubject(kind="agent", id=AGENT),
+            requestedSlotIds=["tool_calls", "risk_events"],
+            includeEvidence=True,
+        ),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+    )
+    assert {slot.id for slot in frame.slots} == {"tool_calls", "risk_events"}
+    assert all(
+        slot.state != "available"
+        and slot.content is None
+        and slot.claims == []
+        and slot.evidenceRefs == []
+        for slot in frame.slots
+    )
 
 
 async def test_executor_callback_outcome_has_run_evidence_without_business_effect_claim() -> None:
@@ -712,6 +1209,8 @@ async def test_repository_execution_adapter_joins_source_ids_to_canonical_agents
     }
     execution_row = _server_row(agent_id=source_agent_id)
     execution_row["execution_id"] = "exec-9"
+    execution_row["delegation_id"] = "deleg-9"
+    execution_row["policy_log"]["delegation_check"]["delegation_id"] = "deleg-9"
 
     class Deployments:
         async def list_page(self, tenant_id, *, limit, cursor=None):
@@ -767,6 +1266,10 @@ async def test_repository_execution_adapter_joins_source_ids_to_canonical_agents
             return []
 
     class AgentExecutions:
+        async def find_by_id(self, execution_id):
+            assert execution_id == "exec-9"
+            return execution_row
+
         async def list_for_agent(self, agent_id, tenant_id, *, limit):
             assert agent_id == source_agent_id
             return [execution_row]
@@ -776,6 +1279,10 @@ async def test_repository_execution_adapter_joins_source_ids_to_canonical_agents
             return {
                 "tenant_id": TENANT,
                 "delegation_id": delegation_id,
+                "grantor_entity_id": "owner-9",
+                "grantee_entity_id": canonical_agent_id,
+                "scope": {"actions": ["transfer"], "resources": ["account:9"]},
+                "created_at": "2026-10-16T08:00:00+00:00",
             }
 
     class Analytics:
@@ -835,10 +1342,145 @@ async def test_repository_execution_adapter_joins_source_ids_to_canonical_agents
     assert server.agent_ids == (canonical_agent_id,)
     assert server.rows[0]["canonical_agent_identity"] is True
     assert server.rows[0]["canonical_agent_entity_id"] == canonical_agent_id
+    assert server.rows[0]["canonical_delegation_id"] == "deleg-9"
+    assert (
+        server.rows[0]["canonical_delegation_resolution_status"]
+        == "matched_current_grant_reference_and_grantee"
+    )
     assert observed.available is True
     assert observed.scope_known is True
     assert observed.agent_ids == (canonical_agent_id,)
     assert observed.rows[0]["actorAgentId"] == canonical_agent_id
+
+    exact_execution = await source.server_executions(
+        tenant_id=TENANT,
+        subject=ProjectionSubject(kind="execution", id="exec-9"),
+        limit=10,
+    )
+    assert exact_execution.available is True
+    assert exact_execution.scope_known is True
+    assert [row["execution_id"] for row in exact_execution.rows] == ["exec-9"]
+    assert exact_execution.rows[0]["canonical_agent_entity_id"] == canonical_agent_id
+
+    execution_row["tenant_id"] = "tenant-other"
+    foreign_execution = await source.server_executions(
+        tenant_id=TENANT,
+        subject=ProjectionSubject(kind="execution", id="exec-9"),
+        limit=10,
+    )
+    assert foreign_execution.rows == []
+    assert foreign_execution.scope_known is False
+    assert foreign_execution.reason == "execution_subject_scope_unresolved"
+
+
+async def test_server_delegation_reference_joins_policy_log_to_tenant_grantee() -> None:
+    row = _server_row()
+    grant = {
+        "tenant_id": TENANT,
+        "delegation_id": "deleg-1",
+        "grantor_entity_id": "owner-1",
+        "grantee_entity_id": AGENT,
+        "scope": {"actions": ["transfer"], "resources": ["account:4"]},
+        "created_at": "2026-10-16T08:00:00+00:00",
+        "revoked_at": "2026-10-17T00:00:00+00:00",
+    }
+
+    class Grants:
+        async def find_by_id(self, delegation_id):
+            assert delegation_id == "deleg-1"
+            return grant
+
+    resolution = await _resolve_server_delegation_reference(
+        row, tenant_id=TENANT, repository=Grants()
+    )
+
+    assert resolution == {
+        "canonical_delegation_matched": True,
+        "canonical_delegation_id": "deleg-1",
+        "canonical_delegation_resolution_status": "matched_current_grant_reference_and_grantee",
+        "canonical_delegation_evidence_observed_at": "2026-10-16T08:00:00+00:00",
+    }
+
+
+@pytest.mark.parametrize(
+    ("case", "expected"),
+    [
+        ("foreign_execution", "execution_scope_mismatch"),
+        ("missing_recorded_reference", "not_recorded"),
+        ("missing_policy_decision", "policy_decision_missing"),
+        ("missing_policy_reference", "policy_reference_missing"),
+        ("conflicting_policy_reference", "conflicted_policy_reference"),
+        ("unresolved_agent", "canonical_agent_unresolved"),
+        ("missing_grant", "grant_not_found"),
+        ("foreign_grant", "grant_scope_mismatch"),
+        ("incomplete_grant", "grant_record_incomplete"),
+        ("wrong_grantee", "grant_party_mismatch"),
+    ],
+)
+async def test_server_delegation_reference_rejects_unverified_joins(
+    case: str, expected: str
+) -> None:
+    row = _server_row()
+    grant = {
+        "tenant_id": TENANT,
+        "delegation_id": "deleg-1",
+        "grantor_entity_id": "owner-1",
+        "grantee_entity_id": AGENT,
+        "scope": {"actions": ["transfer"], "resources": ["account:4"]},
+    }
+    if case == "foreign_execution":
+        row["tenant_id"] = "foreign-tenant"
+    elif case == "missing_recorded_reference":
+        row["delegation_id"] = None
+    elif case == "missing_policy_decision":
+        row["policy_log"]["delegation_check"].pop("allowed")
+    elif case == "missing_policy_reference":
+        row["policy_log"]["delegation_check"].pop("delegation_id")
+    elif case == "conflicting_policy_reference":
+        row["policy_log"]["delegation_check"]["delegation_id"] = "other-grant"
+    elif case == "unresolved_agent":
+        row["canonical_agent_identity"] = False
+    elif case == "missing_grant":
+        grant = None
+    elif case == "foreign_grant":
+        grant["tenant_id"] = "foreign-tenant"
+    elif case == "incomplete_grant":
+        grant.pop("scope")
+    elif case == "wrong_grantee":
+        grant["grantee_entity_id"] = "another-agent"
+
+    class Grants:
+        async def find_by_id(self, delegation_id):
+            assert delegation_id == "deleg-1"
+            return grant
+
+    resolution = await _resolve_server_delegation_reference(
+        row, tenant_id=TENANT, repository=Grants()
+    )
+
+    assert resolution == {"canonical_delegation_resolution_status": expected}
+
+
+async def test_execution_provider_rejects_unverified_server_delegation_metadata() -> None:
+    row = _server_row()
+    row["policy_log"]["delegation_check"]["delegation_id"] = "other-grant"
+    source = FakeSource(
+        server=ExecutionRead([row], available=True, scope_known=True, agent_ids=(AGENT,)),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    state = next(section for section in result.sections if section.id == "state")
+    recorded = state.content["serverRecordedExecutions"][0]
+    assert recorded["delegationId"] is None
+    assert recorded["delegationResolutionStatus"] == "unverified_join_metadata"
+    assert not any(
+        claim.kind == "canonically_joined_server_delegation_reference"
+        for claim in result.claims
+    )
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert not any(ref["source"] == "delegations" for ref in evidence.content["evidence"])
 
 
 async def test_authenticated_execution_principal_is_carried_into_frame_metadata() -> None:
@@ -869,7 +1511,7 @@ async def test_authenticated_execution_principal_is_carried_into_frame_metadata(
         subject=ProjectionSubject(kind="agent", id=AGENT),
     )
     metadata = _derive_agent_actor_metadata(frame_request, [result])
-    actor = metadata["actor_and_delegation"]
+    actor = metadata["actor_attribution"]
     assert actor.executionPrincipal is not None
     assert actor.executionPrincipal.kind == "human"
     assert actor.executionPrincipal.id == "human-principal-1"
@@ -903,7 +1545,7 @@ async def test_principal_stays_unknown_when_any_complete_execution_lacks_attribu
 
     metadata = _derive_agent_actor_metadata(frame_request, [result])
 
-    assert metadata["actor_and_delegation"].executionPrincipal is None
+    assert metadata["actor_attribution"].executionPrincipal is None
 
 
 async def test_truncated_server_execution_read_does_not_resolve_principal_or_decision() -> None:
@@ -933,7 +1575,7 @@ async def test_truncated_server_execution_read_does_not_resolve_principal_or_dec
     )
 
     metadata = _derive_agent_actor_metadata(frame_request, [result])
-    actor = metadata["actor_and_delegation"]
+    actor = metadata["actor_attribution"]
 
     assert actor.executionPrincipal is None
     assert actor.resolvedCanonicalActor is None
@@ -965,7 +1607,7 @@ async def test_truncated_source_telemetry_does_not_resolve_actor_or_delegation_c
     )
 
     metadata = _derive_agent_actor_metadata(frame_request, [result])
-    actor = metadata["actor_and_delegation"]
+    actor = metadata["actor_attribution"]
 
     assert actor.resolutionState == "unknown"
     assert actor.resolvedCanonicalActor is None
@@ -1000,7 +1642,7 @@ async def test_frame_does_not_collapse_multiple_execution_principals() -> None:
 
     metadata = _derive_agent_actor_metadata(frame_request, [result])
 
-    assert metadata["actor_and_delegation"].executionPrincipal is None
+    assert metadata["actor_attribution"].executionPrincipal is None
 
 
 async def test_provider_drops_cross_tenant_rows_and_unresolved_authority() -> None:
@@ -1037,6 +1679,27 @@ async def test_provider_drops_cross_tenant_rows_and_unresolved_authority() -> No
         ]
         == 0
     )
+    assert "server_execution_scope_mismatch" in result.degradedReasons
+    assert "observed_execution_scope_mismatch" in result.degradedReasons
+    frame_request = Experience360FrameRequest(
+        surfaceId="execution360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+        requestedSlotIds=["inputs_outputs", "failures", "plan_steps"],
+        includeEvidence=True,
+    )
+    frame = compose_experience360_frame(
+        frame_request,
+        [result],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+    )
+    assert all(
+        slot.state != "available"
+        and slot.content is None
+        and slot.evidenceRefs == []
+        and slot.claims == []
+        for slot in frame.slots
+    )
 
 
 async def test_unavailable_sources_degrade_without_leaking_diagnostics() -> None:
@@ -1053,6 +1716,67 @@ async def test_unavailable_sources_degrade_without_leaking_diagnostics() -> None
     assert all(
         section.state == "degraded" for section in result.sections if section.id != "outcomes"
     )
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    assert interactions.content["toolInvocationLinkage"]["state"] == "unknown"
+    assert interactions.content["toolInvocationLinkage"]["sourceReportedToolRelatedFactCount"] is None
+    assert interactions.content["riskEventLinkage"]["state"] == "unknown"
+
+
+async def test_latency_cost_keeps_invalid_lifecycle_durations_degraded_and_cost_unknown() -> None:
+    invalid_rows = [
+        {**_server_row(), "execution_id": "exec-no-end", "ended_at": None},
+        {
+            **_server_row(),
+            "execution_id": "exec-invalid-timezone",
+            "started_at": "2026-10-16T10:00:00",
+        },
+        {
+            **_server_row(),
+            "execution_id": "exec-negative-duration",
+            "ended_at": "2026-10-16T09:59:59+00:00",
+        },
+    ]
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=invalid_rows,
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+
+    result = await Execution360Provider(source).project(_request(), await _context(_request()))
+
+    summary = next(section for section in result.sections if section.id == "summary")
+    latency_cost = summary.content["latencyCost"]
+    assert latency_cost["latency"]["state"] == "degraded"
+    assert latency_cost["latency"]["samples"] == []
+    assert (
+        latency_cost["latency"]["reason"]
+        == "some_server_lifecycle_records_lack_valid_start_or_end_timestamps"
+    )
+    assert latency_cost["cost"]["state"] == "unknown"
+    assert not any(
+        claim.kind == "server_recorded_lifecycle_elapsed_time" for claim in result.claims
+    )
+
+
+async def test_latency_cost_is_unknown_without_lifecycle_rows() -> None:
+    request = _request()
+    source = FakeSource(
+        server=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    summary = next(section for section in result.sections if section.id == "summary")
+    latency_cost = summary.content["latencyCost"]
+    assert latency_cost["latency"]["state"] == "unknown"
+    assert latency_cost["latency"]["sampleCount"] is None
+    assert latency_cost["latency"]["samples"] == []
+    assert latency_cost["cost"]["state"] == "unknown"
     assert (
         next(section for section in result.sections if section.id == "outcomes").state == "unknown"
     )
@@ -1103,7 +1827,7 @@ async def test_frame_actor_metadata_uses_execution_evidence_and_keeps_decision_s
     assert actor.resolvedCanonicalActor is not None
     assert actor.resolvedCanonicalActor.id == AGENT
     assert actor.evidenceRefs
-    authority = metadata["authority_and_delegation"].authorityDecision
+    authority = metadata["authority_envelope"].authorityDecision
     assert authority is not None
     assert authority.outcome == "allow"
     assert authority.delegationRefs == ["deleg-1"]
@@ -1169,7 +1893,7 @@ async def test_recorded_denial_without_matching_grant_reaches_agent_frame() -> N
         subject=ProjectionSubject(kind="agent", id=AGENT),
     )
     metadata = _derive_agent_actor_metadata(frame_request, [result])
-    authority = metadata["authority_and_delegation"].authorityDecision
+    authority = metadata["authority_envelope"].authorityDecision
     assert authority is not None
     assert authority.outcome == "deny"
     assert authority.authorityRef == "aether.agent_delegation_engine"
@@ -1218,7 +1942,7 @@ async def test_frame_keeps_same_outcome_decisions_separate_by_action_and_resourc
     )
 
     metadata = _derive_agent_actor_metadata(frame_request, [result])
-    authority = metadata["authority_and_delegation"].authorityDecision
+    authority = metadata["authority_envelope"].authorityDecision
 
     assert authority is not None
     assert authority.outcome == "unknown"
@@ -1258,7 +1982,7 @@ async def test_frame_does_not_emit_allow_when_recorded_action_scope_is_missing()
     )
 
     metadata = _derive_agent_actor_metadata(frame_request, [result])
-    authority = metadata["authority_and_delegation"].authorityDecision
+    authority = metadata["authority_envelope"].authorityDecision
 
     assert authority is not None
     assert authority.outcome == "unknown"
@@ -1315,7 +2039,7 @@ async def test_frame_does_not_collapse_multiple_delegations_into_one_chain() -> 
 
     metadata = _derive_agent_actor_metadata(frame_request, [result])
 
-    actor = metadata["actor_and_delegation"]
+    actor = metadata["actor_attribution"]
     assert actor.delegator is None
     assert actor.delegatee is None
     assert actor.delegationChain == []
@@ -1357,7 +2081,7 @@ async def test_frame_actor_metadata_accepts_agent360_identity_claim_but_keeps_au
                 evidenceRefs=[evidence],
                 claims=["Explicit tenant binding resolves this agent identity."],
                 claimState=EpistemicStatus.RESOLVED,
-                domainSlotIds=["actor_attribution"],
+                domainSlotIds=["identity", "actor_attribution"],
             )
         ],
         dependencyState=[],
@@ -1377,7 +2101,7 @@ async def test_frame_actor_metadata_accepts_agent360_identity_claim_but_keeps_au
     assert actor.resolvedCanonicalActor is not None
     assert actor.resolvedCanonicalActor.id == "canonical-agent-1"
     assert actor.evidenceRefs == [evidence]
-    authority = metadata["authority_and_delegation"].authorityDecision
+    authority = metadata["authority_envelope"].authorityDecision
     assert authority is not None
     assert authority.outcome == "unknown"
     assert authority.reasonCodes == ["no_action_scoped_decision_available"]
@@ -1386,7 +2110,7 @@ async def test_frame_actor_metadata_accepts_agent360_identity_claim_but_keeps_au
         surfaceId="agent360",
         tenantId=TENANT,
         subject=ProjectionSubject(kind="agent", id=AGENT),
-        requestedSlotIds=["agent_identity"],
+        requestedSlotIds=["identity"],
     )
     assert _derive_agent_actor_metadata(identity_only_request, [agent_result]) == {}
 
@@ -1589,7 +2313,12 @@ async def test_episode_projection_keeps_only_rows_joined_by_the_same_canonical_e
     unrelated_observed["sourceEventId"] = "not-linked-to-episode"
     source = FakeSource(
         server=ExecutionRead(
-            rows=[server, unrelated_server],
+            rows=[
+                server,
+                unrelated_server,
+                _task_decomposition_row(),
+                _task_decomposition_row(execution_id="exec-unrelated"),
+            ],
             available=True,
             scope_known=True,
             agent_ids=(AGENT,),
@@ -1613,6 +2342,8 @@ async def test_episode_projection_keeps_only_rows_joined_by_the_same_canonical_e
     state = next(section for section in result.sections if section.id == "state")
     assert state.content["serverRecordedExecutions"][0]["executionId"] == "exec-1"
     assert state.content["sourceReportedRuns"][0]["sourceEventId"] == "episode-event-1"
+    assert state.content["planSteps"]["observedCount"] == 1
+    assert state.content["planSteps"]["records"][0]["executionId"] == "exec-1"
 
 
 def test_registration_is_explicit() -> None:

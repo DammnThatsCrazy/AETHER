@@ -17,9 +17,11 @@ plane stays up when the episode store is empty or unavailable.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional, Protocol
+from urllib.parse import quote
 from uuid import UUID
 
 from shared.backend_interpretation.primitives import EpisodeRecord
@@ -59,10 +61,33 @@ _JOURNEY_VERSION_SOURCE = (
 _JOURNEY_STEP_SOURCE = (
     "services/api/journeys/measurement/repositories/journey_step_repo.py:journey_steps"
 )
+_JOURNEY_TOUCHPOINT_SOURCE = (
+    "services/api/journeys/measurement/repositories/touchpoint_repo.py:silver_campaign_touchpoint_facts"
+)
+_JOURNEY_CONVERSION_SOURCE = (
+    "services/api/journeys/measurement/repositories/conversion_repo.py:canonical_conversions"
+)
+_EPISODE_RECORD_SOURCE = "shared.backend_interpretation.stores.EpisodeStore"
 _JOURNEY_STEP_CAP = 200
+_JOURNEY_TOUCHPOINT_CAP = 200
+_JOURNEY_CONVERSION_CAP = 100
+_JOURNEY_TOUCHPOINT_READ_CONCURRENCY = 8
 _EPISODE_PAGE_DEFAULT = 50
 _EPISODE_SUBJECT_RELATIONSHIP_CAP = 100
 _GRAPH_LEDGER_SOURCE = "graph_mutation_ledger"
+_JOURNEY_REQUIRED_SLOT_IDS = (
+    "journey_summary",
+    "stages",
+    "episodes",
+    "touchpoints",
+    "agent_interventions",
+    "communications",
+    "dropoffs",
+    "conversions",
+    "attribution",
+    "recommended_actions",
+    "evidence_trace",
+)
 
 
 @dataclass(frozen=True)
@@ -74,6 +99,30 @@ class Journey360Read:
     available: bool
     complete: bool
     reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class JourneyTouchpointRead:
+    """Bounded exact-ID read of touchpoints named by one current journey version."""
+
+    requested_ids: tuple[str, ...] = ()
+    rows: tuple[dict[str, Any], ...] = ()
+    evidence_refs: tuple[EvidenceRef, ...] = ()
+    state: str = "unknown"
+    warnings: tuple[str, ...] = ()
+    missing_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class JourneyConversionRead:
+    """Canonical conversions referenced by one exact current journey version."""
+
+    requested_ids: tuple[str, ...] = ()
+    rows: tuple[dict[str, Any], ...] = ()
+    evidence_refs: tuple[EvidenceRef, ...] = ()
+    state: str = "unknown"
+    warnings: tuple[str, ...] = ()
+    truncated: bool = False
 
 
 @dataclass(frozen=True)
@@ -154,6 +203,18 @@ class Journey360Source(Protocol):
     ) -> list[dict[str, Any]]: ...
 
 
+class JourneyTouchpointSource(Protocol):
+    """Tenant-scoped exact read from the canonical touchpoint authority."""
+
+    async def get(self, tenant_id: str, touchpoint_id: str) -> Optional[dict[str, Any]]: ...
+
+
+class JourneyConversionSource(Protocol):
+    """Tenant-scoped exact read from the canonical conversion authority."""
+
+    async def get(self, tenant_id: str, conversion_id: str) -> Optional[dict[str, Any]]: ...
+
+
 class RepositoryJourney360Source:
     """Adapter over the canonical versioned journey and ordered-step stores."""
 
@@ -203,6 +264,39 @@ class RepositoryJourney360Source:
         return [row for value in rows if (row := _as_mapping(value)) is not None]
 
 
+class RepositoryJourneyTouchpointSource:
+    """Adapter over the tenant-keyed canonical TouchpointRepository read."""
+
+    def __init__(self, *, repository: Any = None) -> None:
+        self._repository = repository
+
+    def _touchpoint_repository(self) -> Any:
+        if self._repository is None:
+            from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
+
+            self._repository = TouchpointRepository()
+        return self._repository
+
+    async def get(self, tenant_id: str, touchpoint_id: str) -> Optional[dict[str, Any]]:
+        row = await self._touchpoint_repository().get(tenant_id, touchpoint_id)
+        return _as_mapping(row)
+
+
+class RepositoryJourneyConversionSource:
+    """Adapter over canonical conversion IDs recorded on a journey version."""
+
+    def __init__(self, *, repository: Any = None) -> None:
+        self._repository = repository
+
+    async def get(self, tenant_id: str, conversion_id: str) -> Optional[dict[str, Any]]:
+        if self._repository is None:
+            from journeys.measurement.repositories.conversion_repo import ConversionRepository
+
+            self._repository = ConversionRepository()
+        row = await self._repository.get(tenant_id, conversion_id)
+        return _as_mapping(row)
+
+
 class Episode360Provider:
     """The ``episode360`` intelligence projection provider (read_only)."""
 
@@ -213,12 +307,16 @@ class Episode360Provider:
         self,
         episode_store: Optional[EpisodeStore] = None,
         journey_source: Optional[Journey360Source] = None,
+        touchpoint_source: Optional[JourneyTouchpointSource] = None,
+        conversion_source: Optional[JourneyConversionSource] = None,
         subject_relationship_reader: Optional[EpisodeSubjectRelationshipReader] = None,
     ) -> None:
         """``episode_store`` may be injected (tests); defaults to the durable
         :class:`EpisodeStore` (WS-D item 2)."""
         self._episode_store = episode_store
         self._journey_source = journey_source
+        self._touchpoint_source = touchpoint_source
+        self._conversion_source = conversion_source
         self._subject_relationship_reader = (
             subject_relationship_reader
             if subject_relationship_reader is not None
@@ -282,6 +380,158 @@ class Episode360Provider:
             invalid_records=page.invalid_records,
             tenant_mismatch=tenant_mismatch,
             next_cursor=page.next_cursor,
+        )
+
+    async def _load_journey_touchpoints(
+        self,
+        tenant_id: str,
+        journey: dict[str, Any],
+    ) -> JourneyTouchpointRead:
+        raw_ids = journey.get("touchpoint_ids")
+        reference_list_available = isinstance(raw_ids, (list, tuple))
+        touchpoint_ids = _journey_ordered_values(raw_ids) if reference_list_available else []
+        endpoint_reference_mismatch = False
+        for field in ("entry_touchpoint_id", "exit_touchpoint_id"):
+            touchpoint_id = _journey_text(journey.get(field))
+            if touchpoint_id is not None and touchpoint_id not in touchpoint_ids:
+                endpoint_reference_mismatch = reference_list_available
+                touchpoint_ids.append(touchpoint_id)
+        if not touchpoint_ids:
+            if reference_list_available:
+                return JourneyTouchpointRead(state="empty")
+            return JourneyTouchpointRead(
+                state="unknown",
+                warnings=("journey_touchpoint_reference_list_unavailable",),
+            )
+
+        truncated = len(touchpoint_ids) > _JOURNEY_TOUCHPOINT_CAP
+        requested_ids = touchpoint_ids[:_JOURNEY_TOUCHPOINT_CAP]
+        source = self._touchpoint_source or RepositoryJourneyTouchpointSource()
+        semaphore = asyncio.Semaphore(_JOURNEY_TOUCHPOINT_READ_CONCURRENCY)
+
+        async def read_one(touchpoint_id: str) -> tuple[str, Optional[dict[str, Any]], bool]:
+            async with semaphore:
+                try:
+                    value = await source.get(tenant_id, touchpoint_id)
+                except Exception:  # noqa: BLE001 - exact row failure remains unknown
+                    return touchpoint_id, None, True
+            return touchpoint_id, _as_mapping(value), False
+
+        results = await asyncio.gather(*(read_one(value) for value in requested_ids))
+        rows: list[dict[str, Any]] = []
+        missing_ids: list[str] = []
+        read_failed = False
+        scope_mismatch = False
+        evidence_refs: list[EvidenceRef] = []
+        for touchpoint_id, row, failed in results:
+            if failed:
+                read_failed = True
+                continue
+            if row is None:
+                missing_ids.append(touchpoint_id)
+                continue
+            if (
+                str(row.get("tenant_id") or "") != tenant_id
+                or _journey_text(row.get("touchpoint_id")) != touchpoint_id
+            ):
+                scope_mismatch = True
+                missing_ids.append(touchpoint_id)
+                continue
+            evidence = _journey_touchpoint_ref(row)
+            if evidence is None:
+                missing_ids.append(touchpoint_id)
+                continue
+            rows.append(row)
+            evidence_refs.append(evidence)
+
+        warnings: list[str] = []
+        if not reference_list_available:
+            warnings.append("journey_touchpoint_reference_list_unavailable")
+        if endpoint_reference_mismatch:
+            warnings.append("journey_touchpoint_endpoint_reference_not_in_list")
+        if truncated:
+            warnings.append("journey_touchpoint_read_truncated")
+        if read_failed:
+            warnings.append("journey_touchpoint_source_unavailable")
+        if missing_ids:
+            warnings.append("journey_touchpoint_rows_missing")
+        if scope_mismatch:
+            warnings.append("journey_touchpoint_scope_mismatch")
+        complete = not warnings and len(rows) == len(touchpoint_ids)
+        state = "available" if complete else "degraded" if rows else "unknown"
+        return JourneyTouchpointRead(
+            requested_ids=tuple(touchpoint_ids),
+            rows=tuple(rows),
+            evidence_refs=tuple(evidence_refs),
+            state=state,
+            warnings=tuple(warnings),
+            missing_ids=tuple(missing_ids),
+        )
+
+    async def _load_journey_conversions(
+        self, tenant_id: str, journey: dict[str, Any]
+    ) -> JourneyConversionRead:
+        raw_ids = journey.get("conversion_ids")
+        if not isinstance(raw_ids, (list, tuple)):
+            return JourneyConversionRead(
+                warnings=("journey_conversion_reference_list_unavailable",)
+            )
+        conversion_ids = _journey_ordered_values(raw_ids)
+        if not conversion_ids:
+            return JourneyConversionRead(state="empty")
+        truncated = len(conversion_ids) > _JOURNEY_CONVERSION_CAP
+        source = self._conversion_source or RepositoryJourneyConversionSource()
+        semaphore = asyncio.Semaphore(_JOURNEY_TOUCHPOINT_READ_CONCURRENCY)
+
+        async def read_one(conversion_id: str) -> tuple[Optional[dict[str, Any]], bool]:
+            async with semaphore:
+                try:
+                    row = await source.get(tenant_id, conversion_id)
+                except Exception:  # noqa: BLE001 - exact authority failure remains unknown
+                    return None, True
+            return _as_mapping(row), False
+
+        results = await asyncio.gather(
+            *(read_one(value) for value in conversion_ids[:_JOURNEY_CONVERSION_CAP])
+        )
+        rows: list[dict[str, Any]] = []
+        evidence_refs: list[EvidenceRef] = []
+        warnings: list[str] = []
+        if truncated:
+            warnings.append("journey_conversion_read_truncated")
+        for conversion_id, (row, failed) in zip(conversion_ids, results):
+            if failed:
+                warnings.append("journey_conversion_authority_unavailable")
+                continue
+            if row is None:
+                warnings.append("journey_conversion_row_missing")
+                continue
+            if (
+                str(row.get("tenant_id") or "") != tenant_id
+                or _journey_text(row.get("conversion_id")) != conversion_id
+            ):
+                warnings.append("journey_conversion_scope_mismatch")
+                continue
+            evidence = _journey_conversion_ref(row)
+            if evidence is None:
+                warnings.append("journey_conversion_evidence_missing")
+                continue
+            rows.append(row)
+            evidence_refs.append(evidence)
+        state = (
+            "available"
+            if rows and not warnings and len(rows) == len(conversion_ids)
+            else "degraded"
+            if rows
+            else "unknown"
+        )
+        return JourneyConversionRead(
+            requested_ids=tuple(conversion_ids),
+            rows=tuple(rows),
+            evidence_refs=tuple(evidence_refs),
+            state=state,
+            warnings=tuple(dict.fromkeys(warnings)),
+            truncated=truncated,
         )
 
     async def project(
@@ -350,6 +600,7 @@ class Episode360Provider:
             if isinstance(reason, str) and reason not in warnings:
                 warnings.append(reason)
         sections = self._build_sections(
+            request,
             episodes,
             availability,
             warnings,
@@ -608,6 +859,18 @@ class Episode360Provider:
                 temporal_mode,
                 "journey_authority_scope_mismatch",
             )
+        # The repository query is tenant-scoped and filters to is_current=TRUE,
+        # but injected adapters and alternate persistence implementations must
+        # still prove the same contract in the returned row. Do not label a
+        # stale or marker-less version as the current Journey360 subject.
+        if journey.get("is_current") is not True:
+            return _journey_unavailable_result(
+                request,
+                context,
+                generated_at,
+                temporal_mode,
+                "journey_current_version_not_proven",
+            )
 
         page_limit = min(
             _JOURNEY_STEP_CAP,
@@ -646,7 +909,10 @@ class Episode360Provider:
                 continue
             scoped_steps.append(row)
         scoped_steps.sort(key=lambda row: _journey_int(row.get("step_position"), 0))
-        truncated = len(scoped_steps) > page_limit
+        # The reader was asked for one look-ahead row. Count truncation before
+        # dropping mismatched rows; otherwise an out-of-scope row at the page
+        # boundary could hide that the canonical journey still has later steps.
+        truncated = len(raw_steps) > page_limit
         rendered_steps = scoped_steps[:page_limit]
         journey_ref = _journey_version_ref(journey)
         step_refs = [
@@ -659,6 +925,28 @@ class Episode360Provider:
             warnings.append("journey_steps_truncated")
         if scope_mismatch:
             warnings.append("unscoped_journey_step_rows_dropped")
+        if len(step_refs) != len(rendered_steps):
+            warnings.append("journey_step_evidence_missing")
+        step_inventory_complete = (
+            steps_available
+            and not truncated
+            and not scope_mismatch
+            and len(step_refs) == len(rendered_steps)
+            and cursor is None
+            and after is None
+            and before is None
+        )
+
+        journey_episodes = _journey_episode_context(request)
+        warnings.extend(journey_episodes["warnings"])
+        journey_touchpoints = _journey_touchpoint_context(
+            await self._load_journey_touchpoints(request.tenantId, journey)
+        )
+        warnings.extend(journey_touchpoints["warnings"])
+        journey_conversions = _journey_conversion_context(
+            await self._load_journey_conversions(request.tenantId, journey)
+        )
+        warnings.extend(journey_conversions["warnings"])
 
         sections = _build_journey_sections(
             request=request,
@@ -667,14 +955,25 @@ class Episode360Provider:
             journey_ref=journey_ref,
             step_refs=step_refs,
             steps_available=steps_available,
+            step_inventory_complete=step_inventory_complete,
             truncated=truncated,
             warnings=warnings,
+            episode_context=journey_episodes,
+            touchpoint_context=journey_touchpoints,
+            conversion_context=journey_conversions,
         )
         if request.includeSections is not None:
             wanted = set(request.includeSections)
             sections = [section for section in sections if section.id in wanted]
         claims = (
-            _build_journey_claims(request, journey, rendered_steps, journey_ref, step_refs)
+            _build_journey_claims(
+                request,
+                journey,
+                rendered_steps,
+                journey_ref,
+                journey_touchpoints["claims"],
+                journey_conversions["claims"],
+            )
             if request.includeClaims is not False and steps_available and not scope_mismatch
             else []
         )
@@ -701,6 +1000,7 @@ class Episode360Provider:
 
     def _build_sections(
         self,
+        request: ProjectionRequest,
         episodes: list[EpisodeRecord],
         availability: str,
         warnings: Optional[list[str]] = None,
@@ -724,6 +1024,17 @@ class Episode360Provider:
             "evidenceCount": len(evidence) if complete else None,
             "observedEvidenceCount": len(evidence),
             "coverage": "complete" if complete else availability,
+            "evidenceTrace": {
+                "state": "available" if evidence else "unknown",
+                "coverage": "partial" if evidence else "unknown",
+                "evidenceRefs": [ref.model_dump() for ref in evidence],
+                "sourceProvenanceState": "partial" if episodes else "unknown",
+                "reason": (
+                    "episode_record_and_lineage_refs_available_source_event_provenance_unjoined"
+                    if episodes
+                    else "episode_evidence_unavailable"
+                ),
+            },
             "episodeSubjects": [
                 {
                     "episodeId": episode.episode_id,
@@ -731,6 +1042,21 @@ class Episode360Provider:
                 }
                 for episode in episodes
             ],
+            "freshness": {
+                "state": "unknown",
+                "evaluation": "not_performed",
+                "reason": "episode_store_freshness_watermark_not_available",
+            },
+            "policy": {
+                "state": "unknown",
+                "evaluation": "not_performed",
+                "reason": "episode_policy_evaluation_not_performed_by_projection",
+            },
+            "provenance": {
+                "state": "partial" if episodes else "unknown",
+                "authority": _EPISODE_RECORD_SOURCE,
+                "reason": "episode_source_event_and_lens_provenance_not_joined",
+            },
         }
         if subject_relationship_context is not None:
             evidence_content["subjectRelationshipContext"] = subject_relationship_context
@@ -765,6 +1091,44 @@ class Episode360Provider:
                     "observedKinds": by_kind,
                     "stateDistribution": by_status if complete else None,
                     "observedStateDistribution": by_status,
+                    "episodes": [_episode_view(episode) for episode in episodes],
+                    "episodeSummary": (
+                        _episode_view(episodes[0])
+                        if request.subject.kind == "episode" and len(episodes) == 1
+                        else None
+                    ),
+                    "primarySubject": (
+                        _episode_participant(episodes[0])
+                        if len(episodes) == 1
+                        else None
+                    ),
+                    "participants": _episode_participant_context(request, episodes),
+                    "evidenceRefs": [ref.model_dump() for ref in evidence],
+                    "requiredSlotCoverage": (
+                        _episode_required_slot_coverage(
+                            request,
+                            episodes,
+                            availability=availability,
+                            evidence_refs=evidence,
+                        )
+                        if request.subject.kind == "episode"
+                        else None
+                    ),
+                    "freshness": {
+                        "state": "unknown",
+                        "evaluation": "not_performed",
+                        "reason": "episode_store_freshness_watermark_not_available",
+                    },
+                    "policy": {
+                        "state": "unknown",
+                        "evaluation": "not_performed",
+                        "reason": "episode_policy_evaluation_not_performed_by_projection",
+                    },
+                    "provenance": {
+                        "state": "partial" if episodes else "unknown",
+                        "authority": _EPISODE_RECORD_SOURCE,
+                        "reason": "episode_source_event_and_lens_provenance_not_joined",
+                    },
                     "coverage": "complete" if complete else availability,
                 },
                 warnings=warnings or None,
@@ -776,6 +1140,16 @@ class Episode360Provider:
                 content={
                     "distribution": by_status if complete else None,
                     "observedDistribution": by_status,
+                    "episodeStatuses": [
+                        {
+                            "episodeId": episode.episode_id,
+                            "status": episode.status,
+                            "evidenceRefs": [
+                                ref.model_dump() for ref in _episode_evidence_refs(episode)
+                            ],
+                        }
+                        for episode in episodes
+                    ],
                     "coverage": "complete" if complete else availability,
                 },
                 warnings=warnings or None,
@@ -796,31 +1170,106 @@ class Episode360Provider:
             ),
             ProjectionSection(
                 id="interactions",
-                state=availability,
+                state=(
+                    "degraded"
+                    if episodes
+                    else "unknown"
+                    if not episodes and availability not in {"empty", "missing"}
+                    else availability
+                ),
                 title=_SECTION_TITLES["interactions"],
                 content={
                     "interactionCount": interaction_count if complete else None,
                     "observedInteractionCount": interaction_count,
                     "observationIds": _flatten(e.observation_ids for e in episodes),
-                    "coverage": "complete" if complete else availability,
+                    "observationReferences": {
+                        "state": "degraded" if episodes and interaction_count else "empty"
+                        if complete
+                        else "unknown",
+                        "coverage": "partial" if interaction_count else "unknown",
+                        "observationIds": _flatten(e.observation_ids for e in episodes),
+                        "evidenceRefs": [ref.model_dump() for ref in evidence],
+                        "reason": "episode_record_has_observation_ids_but_observation_rows_not_joined",
+                    },
+                    "sessionContext": _episode_session_context(request, episodes),
+                    "touchpointContext": {
+                        **_unknown_episode_slot(
+                            "episode_record_contract_has_no_touchpoint_references"
+                        ),
+                        "touchpoints": [],
+                    },
+                    "communicationContext": {
+                        **_unknown_episode_slot(
+                            "episode_record_contract_has_no_communication_references"
+                        ),
+                        "communications": [],
+                    },
+                    "agentHandoffs": {
+                        **_unknown_episode_slot(
+                            "episode_record_contract_has_no_agent_handoff_references"
+                        ),
+                        "handoffs": [],
+                    },
+                    "policy": {
+                        "state": "unknown",
+                        "evaluation": "not_performed",
+                        "reason": "episode_policy_evaluation_not_performed_by_projection",
+                    },
+                    "coverage": "partial" if episodes else availability,
                 },
                 warnings=warnings or None,
             ),
             ProjectionSection(
                 id="outcomes",
-                state=availability,
+                state=(
+                    "degraded"
+                    if episodes
+                    else "unknown"
+                    if not episodes and availability not in {"empty", "missing"}
+                    else availability
+                ),
                 title=_SECTION_TITLES["outcomes"],
                 content={
                     "outcomeCount": outcome_count if complete else None,
                     "observedOutcomeCount": outcome_count,
                     "outcomeIds": _flatten(e.outcome_ids for e in episodes),
-                    "coverage": "complete" if complete else availability,
+                    "recordedOutcomeReferences": [
+                        {
+                            "episodeId": episode.episode_id,
+                            "outcomeIds": list(episode.outcome_ids),
+                            "evidenceRefs": [
+                                ref.model_dump() for ref in _episode_evidence_refs(episode)
+                            ],
+                            "outcomeTruthState": "unknown",
+                        }
+                        for episode in episodes
+                        if episode.outcome_ids
+                    ],
+                    "conversionEvents": {
+                        **_unknown_episode_slot("episode_outcome_ids_are_not_conversion_ids"),
+                        "events": [],
+                    },
+                    "attributionLinks": {
+                        **_unknown_episode_slot("episode_attribution_authority_not_joined"),
+                        "links": [],
+                    },
+                    "riskFlags": {
+                        **_unknown_episode_slot("episode_risk_authority_not_joined"),
+                        "flags": [],
+                    },
+                    "coverage": "partial" if episodes else availability,
                 },
                 warnings=warnings or None,
             ),
             ProjectionSection(
                 id="timeline",
-                state=availability,
+                state=(
+                    "degraded"
+                    if episodes
+                    else "unknown"
+                    if availability not in {"empty", "missing"}
+                    else availability
+                ),
                 title=_SECTION_TITLES["timeline"],
                 content={
                     "timeline": [
@@ -832,13 +1281,17 @@ class Episode360Provider:
                             "occurredTo": e.occurred_to,
                             "observationCount": len(e.observation_ids),
                             "outcomeCount": len(e.outcome_ids),
+                            "observationIds": list(e.observation_ids),
+                            "evidenceRefs": [
+                                ref.model_dump() for ref in _episode_evidence_refs(e)
+                            ],
                         }
                         for e in sorted(
                             episodes,
                             key=lambda e: e.occurred_from or e.created_at or "",
                         )
                     ],
-                    "coverage": "complete" if complete else availability,
+                    "coverage": "partial" if episodes else availability,
                 },
                 warnings=warnings or None,
             ),
@@ -849,19 +1302,82 @@ class Episode360Provider:
     ) -> list[ClaimEnvelope]:
         claims: list[ClaimEnvelope] = []
         for episode in episodes:
+            evidence_refs = _episode_evidence_refs(episode)
             claims.append(
                 ClaimEnvelope(
                     id=f"episode.{episode.episode_id}.span",
                     kind="episode",
                     subject=request.subject,
-                    evidenceRefs=episode.evidence_refs,
+                    evidenceRefs=evidence_refs,
                     claims=[
                         f"episode {episode.episode_id!r} ({episode.kind!r}) "
                         f"spans {episode.observation_ids and len(episode.observation_ids) or 0} "
                         f"observations and is {episode.status}"
                     ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["episode_summary", "timeline", "evidence_trace"],
                 )
             )
+            claims.append(
+                ClaimEnvelope(
+                    id=f"episode.{episode.episode_id}.primary-subject",
+                    kind="episode_primary_subject",
+                    subject=request.subject,
+                    evidenceRefs=evidence_refs,
+                    claims=[
+                        f"episode {episode.episode_id!r} records primary subject "
+                        f"{episode.subject.kind!r}:{episode.subject.id!r}"
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["episode_summary", "evidence_trace"],
+                )
+            )
+            if episode.subject.kind in {"user", "agent"}:
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"episode.{episode.episode_id}.participant:{episode.subject.kind}:{episode.subject.id}",
+                        kind="episode_primary_participant",
+                        subject=request.subject,
+                        evidenceRefs=evidence_refs,
+                        claims=[
+                            f"episode {episode.episode_id!r} names "
+                            f"{episode.subject.kind!r}:{episode.subject.id!r} "
+                            "as its primary subject; other participants are unresolved"
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=["participants", "evidence_trace"],
+                    )
+                )
+            if episode.subject.kind == "session":
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"episode.{episode.episode_id}.session:{episode.subject.id}",
+                        kind="episode_primary_session",
+                        subject=request.subject,
+                        evidenceRefs=evidence_refs,
+                        claims=[
+                            f"episode {episode.episode_id!r} records primary session "
+                            f"{episode.subject.id!r}; session inventory completeness is unknown"
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=["sessions", "evidence_trace"],
+                    )
+                )
+            if episode.observation_ids:
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"episode.{episode.episode_id}.observation-references",
+                        kind="episode_observation_references",
+                        subject=request.subject,
+                        evidenceRefs=evidence_refs,
+                        claims=[
+                            f"episode record references {len(episode.observation_ids)} "
+                            "observation identifiers; observation records are not joined"
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=["timeline", "evidence_trace"],
+                    )
+                )
         return claims
 
 
@@ -888,6 +1404,11 @@ def _journey_unavailable_result(
             id=section_id,
             state="unknown",
             title=_SECTION_TITLES[section_id],
+            content=(
+                {"requiredSlotCoverage": _unknown_journey_slot_coverage(reason)}
+                if section_id == "summary"
+                else None
+            ),
             warnings=[reason],
         )
         for section_id in _EPISODE360_SECTIONS
@@ -919,6 +1440,16 @@ def _journey_missing_result(
             id=section_id,
             state="missing",
             title=_SECTION_TITLES[section_id],
+            content=(
+                {
+                    "requiredSlotCoverage": _unknown_journey_slot_coverage(
+                        "tenant_scoped_journey_not_found",
+                        journey_summary_state="missing",
+                    )
+                }
+                if section_id == "summary"
+                else None
+            ),
             warnings=["tenant_scoped_journey_not_found"],
         )
         for section_id in _EPISODE360_SECTIONS
@@ -966,6 +1497,169 @@ def _journey_time_bounds(
     return after, before, None
 
 
+def _journey_episode_context(
+    request: ProjectionRequest,
+) -> dict[str, Any]:
+    """Keep the episode slot unresolved until a typed journey association exists.
+
+    EpisodeRecord subjects are constrained to graph EntityRef kinds and do
+    not carry a journey id. Joining by profile id or coincident opaque IDs
+    would attach unrelated episodes to a journey, so this provider does not
+    scan EpisodeStore for journey subjects.
+    """
+    return {
+        "state": "unknown",
+        "coverage": "unknown",
+        "requestedSubject": {"kind": request.subject.kind, "id": request.subject.id},
+        "episodeCount": None,
+        "observedEpisodeCount": None,
+        "episodes": [],
+        "evidenceRefs": [],
+        "warnings": ["journey_episode_subject_binding_unavailable"],
+        "reason": "episode_record_contract_has_no_typed_journey_subject_reference",
+    }
+
+
+def _journey_touchpoint_context(read: JourneyTouchpointRead) -> dict[str, Any]:
+    touchpoints = [
+        _journey_touchpoint_view(row)
+        for row in read.rows
+        if _journey_touchpoint_ref(row) is not None
+    ]
+    return {
+        "state": read.state,
+        "coverage": "complete"
+        if read.state in {"available", "empty"}
+        else "partial"
+        if touchpoints
+        else "unknown",
+        "touchpointIds": list(read.requested_ids),
+        "touchpoints": touchpoints,
+        "count": len(touchpoints) if read.state in {"available", "empty"} else None,
+        "observedCount": len(touchpoints),
+        "evidenceRefs": [ref.model_dump(mode="json") for ref in read.evidence_refs],
+        "missingTouchpointIds": list(read.missing_ids),
+        "warnings": list(read.warnings),
+        "reason": (
+            "touchpoints_resolved_from_journey_version_references"
+            if read.state == "available"
+            else "journey_version_records_no_touchpoint_references"
+            if read.state == "empty"
+            else read.warnings[0] if read.warnings else "journey_touchpoint_read_unresolved"
+        ),
+        # Internal evidence pairs feed observed claims; only the public fields
+        # above are copied into ProjectionSection content.
+        "claims": [
+            (_journey_text(row.get("touchpoint_id")) or "", ref)
+            for row in read.rows
+            if (ref := _journey_touchpoint_ref(row)) is not None
+        ],
+    }
+
+
+def _journey_conversion_context(read: JourneyConversionRead) -> dict[str, Any]:
+    conversions = [
+        {
+            "conversionId": _journey_text(row.get("conversion_id")),
+            "conversionType": _journey_text(row.get("conversion_type")),
+            "conversionStatus": _journey_text(row.get("conversion_status")),
+            "occurredAt": _journey_timestamp(row.get("occurred_at")),
+            "evidenceRefs": [ref.model_dump(mode="json")],
+        }
+        for row, ref in zip(read.rows, read.evidence_refs)
+    ]
+    return {
+        "state": read.state,
+        "coverage": "referenced_ids_only",
+        "conversionIds": list(read.requested_ids),
+        "conversions": conversions,
+        "count": len(conversions) if read.state in {"available", "empty"} else None,
+        "observedCount": len(conversions),
+        "evidenceRefs": [ref.model_dump(mode="json") for ref in read.evidence_refs],
+        "warnings": list(read.warnings),
+        "reason": (
+            "canonical_conversions_resolved_from_journey_version_references"
+            if read.state == "available"
+            else "current_journey_version_has_no_conversion_references"
+            if read.state == "empty"
+            else read.warnings[0] if read.warnings else "journey_conversion_read_unresolved"
+        ),
+        "claims": [
+            (_journey_text(row.get("conversion_id")) or "", ref)
+            for row, ref in zip(read.rows, read.evidence_refs)
+        ],
+    }
+
+
+def _journey_ordered_values(value: Any) -> list[str]:
+    """Return stable, non-empty string IDs without inventing joins."""
+    if not isinstance(value, (list, tuple)):
+        return []
+    values: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        normalized = _journey_text(item)
+        if normalized is not None and normalized not in seen:
+            seen.add(normalized)
+            values.append(normalized)
+    return values
+
+
+def _journey_touchpoint_ref(row: dict[str, Any]) -> Optional[EvidenceRef]:
+    touchpoint_id = _journey_text(row.get("touchpoint_id"))
+    if touchpoint_id is None:
+        return None
+    return EvidenceRef(
+        id=touchpoint_id,
+        type="event",
+        source=_JOURNEY_TOUCHPOINT_SOURCE,
+        observedAt=_journey_timestamp(row.get("occurred_at")),
+        uri=f"store://silver_campaign_touchpoint_facts/{touchpoint_id}",
+    )
+
+
+def _journey_conversion_ref(row: dict[str, Any]) -> Optional[EvidenceRef]:
+    conversion_id = _journey_text(row.get("conversion_id"))
+    observed_at = _journey_timestamp(row.get("observed_at") or row.get("occurred_at"))
+    if conversion_id is None or observed_at is None:
+        return None
+    return EvidenceRef(
+        id=conversion_id,
+        type="event",
+        source=_JOURNEY_CONVERSION_SOURCE,
+        observedAt=observed_at,
+        uri=f"store://canonical_conversions/{conversion_id}",
+    )
+
+
+def _journey_touchpoint_view(row: dict[str, Any]) -> dict[str, Any]:
+    """Expose only journey-relevant classification fields from a touchpoint."""
+    evidence = _journey_touchpoint_ref(row)
+    eligible = row.get("attribution_eligible")
+    return {
+        "touchpointId": _journey_text(row.get("touchpoint_id")),
+        "occurredAt": _journey_timestamp(row.get("occurred_at")),
+        "touchpointType": _journey_text(row.get("touchpoint_type")),
+        "interactionType": _journey_text(row.get("interaction_type")),
+        "channel": _journey_text(row.get("channel")),
+        "source": _journey_text(row.get("source")),
+        "medium": _journey_text(row.get("medium")),
+        "sourceClass": _journey_text(row.get("source_class")),
+        "trafficOrigin": _journey_text(row.get("traffic_origin")),
+        "economicClass": _journey_text(row.get("economic_class")),
+        "channelFamily": _journey_text(row.get("channel_family")),
+        "entryMethod": _journey_text(row.get("entry_method")),
+        "proofLevel": _journey_text(row.get("proof_level")),
+        "actorType": _journey_text(row.get("actor_type")),
+        "journeyRole": _journey_text(row.get("journey_role")),
+        "campaignId": _journey_text(row.get("campaign_id")),
+        "agentId": _journey_text(row.get("agent_id")),
+        "attributionEligible": eligible if isinstance(eligible, bool) else None,
+        "verificationLevel": _journey_text(row.get("verification_level")),
+        "evidenceRefs": [evidence.model_dump(mode="json")] if evidence is not None else [],
+    }
+
+
 def _build_journey_sections(
     *,
     request: ProjectionRequest,
@@ -974,8 +1668,12 @@ def _build_journey_sections(
     journey_ref: EvidenceRef,
     step_refs: list[EvidenceRef],
     steps_available: bool,
+    step_inventory_complete: bool,
     truncated: bool,
     warnings: list[str],
+    episode_context: dict[str, Any],
+    touchpoint_context: dict[str, Any],
+    conversion_context: dict[str, Any],
 ) -> list[ProjectionSection]:
     time_window = {
         "from": request.timeRange.from_ if request.timeRange is not None else None,
@@ -985,26 +1683,85 @@ def _build_journey_sections(
         "unknown"
         if not steps_available
         else "degraded"
-        if truncated or "unscoped_journey_step_rows_dropped" in warnings
+        if truncated
+        or "unscoped_journey_step_rows_dropped" in warnings
+        or "journey_step_evidence_missing" in warnings
         else "available"
         if steps
         else "empty"
     )
+    summary_state = "degraded" if step_state in {"unknown", "degraded"} else "available"
     step_evidence = [ref.model_dump(mode="json") for ref in step_refs]
     version_evidence = [journey_ref.model_dump(mode="json")]
     journey_view = _journey_view(journey)
     timeline = [_journey_step_view(row) for row in steps]
+    episode_evidence = episode_context["evidenceRefs"]
+    touchpoint_evidence = touchpoint_context["evidenceRefs"]
+    conversion_evidence = conversion_context["evidenceRefs"]
+    required_slot_coverage = _journey_required_slot_coverage(
+        journey=journey,
+        steps=steps,
+        journey_ref=journey_ref,
+        step_refs=step_refs,
+        steps_available=steps_available,
+        step_inventory_complete=step_inventory_complete,
+        touchpoint_context=touchpoint_context,
+        conversion_context=conversion_context,
+    )
+    complete_evidence = step_state not in {"unknown", "degraded"} and episode_context[
+        "state"
+    ] not in {"unknown", "degraded"} and touchpoint_context["state"] in {
+        "available",
+        "empty",
+    }
+    outcome_state = conversion_context["state"]
+    outcome_content = {
+        "recordedConversionIds": conversion_context["conversionIds"],
+        "conversionTruthState": conversion_context["state"],
+        "conversions": conversion_context["conversions"],
+        "attributionState": "unknown",
+        "journeyVersionEvidenceRefs": version_evidence,
+        "evidenceRefs": version_evidence + conversion_evidence,
+        "reason": conversion_context["reason"],
+    }
     output: dict[str, ProjectionSection] = {
         "summary": ProjectionSection(
             id="summary",
-            state="available",
+            state=summary_state,
             title=_SECTION_TITLES["summary"],
             content={
                 "journey": journey_view,
-                "stepCount": len(steps),
+                "stepCount": len(steps) if step_state in {"available", "empty"} else None,
+                "observedStepCount": len(steps),
+                "touchpointCount": touchpoint_context["count"],
+                "observedTouchpointCount": touchpoint_context["observedCount"],
                 "timeWindow": time_window,
                 "evidenceRefs": version_evidence,
+                "continuity": {
+                    "state": "unknown",
+                    "identityVersion": journey_view["identityVersion"],
+                    "reason": "journey_identity_continuity_not_evaluated",
+                },
+                "freshness": {
+                    "state": "unknown",
+                    "computedAt": journey_view["computedAt"],
+                    "dataWatermark": journey_view["dataWatermark"],
+                    "evaluation": "not_performed",
+                    "reason": "journey_freshness_window_not_evaluated",
+                },
+                "policy": {
+                    "state": "unknown",
+                    "evaluation": "not_performed",
+                    "reason": "journey_policy_evaluation_not_performed_by_projection",
+                },
+                "provenance": {
+                    "state": "partial",
+                    "authority": "journey_versions_and_journey_steps",
+                    "reason": "source_provenance_authority_not_joined",
+                },
+                "requiredSlotCoverage": required_slot_coverage,
             },
+            warnings=warnings or None,
         ),
         "state": ProjectionSection(
             id="state",
@@ -1021,28 +1778,29 @@ def _build_journey_sections(
         ),
         "evidence": ProjectionSection(
             id="evidence",
-            state="available",
+            state="degraded" if not complete_evidence else "available",
             title=_SECTION_TITLES["evidence"],
             content={
                 "journeyVersion": version_evidence[0],
                 "journeySteps": step_evidence,
                 "sourceEventIds": _journey_values(journey.get("event_ids")),
-                "evidenceRefs": version_evidence + step_evidence,
+                "evidenceRefs": version_evidence + step_evidence + touchpoint_evidence + conversion_evidence,
                 "rawStepEvidenceSummaryIncluded": False,
+                "journeyEpisodes": episode_evidence,
+                "journeyTouchpoints": touchpoint_evidence,
+                "coverage": "complete" if complete_evidence else "partial",
             },
-            warnings=warnings or None,
+            warnings=sorted(
+                set(warnings + episode_context["warnings"] + touchpoint_context["warnings"])
+            )
+            or None,
         ),
         "episode_context": ProjectionSection(
             id="episode_context",
-            state="not_applicable",
+            state=episode_context["state"],
             title=_SECTION_TITLES["episode_context"],
-            content={
-                "state": "not_applicable",
-                "coverage": "not_applicable",
-                "reason": "journey_subject_has_no_episode_entity_binding",
-                "observedRelationships": [],
-                "relationshipEvidenceRefs": [],
-            },
+            content=episode_context,
+            warnings=episode_context["warnings"] or None,
         ),
         "interactions": ProjectionSection(
             id="interactions",
@@ -1063,6 +1821,26 @@ def _build_journey_sections(
                         }
                         for row in steps
                     ],
+                    "agentActivities": [
+                        {
+                            "stepId": _journey_text(row.get("step_id")),
+                            "agentId": _journey_text(row.get("agent_id")),
+                            "actorType": _journey_text(row.get("actor_type")),
+                            "activityId": _journey_text(row.get("activity_id")),
+                            "activityType": _journey_text(row.get("activity_type")),
+                            "occurredAt": _journey_timestamp(row.get("occurred_at")),
+                            "evidenceRefs": [ref.model_dump(mode="json")]
+                            if (ref := _journey_step_ref(row)) is not None
+                            else [],
+                        }
+                        for row in steps
+                        if _journey_text(row.get("agent_id")) is not None
+                    ],
+                    "agentActivityCoverage": (
+                        "observed_in_returned_steps"
+                        if step_state in {"available", "empty"}
+                        else "partial"
+                    ),
                     "evidenceRefs": step_evidence,
                 }
                 if steps_available
@@ -1072,9 +1850,10 @@ def _build_journey_sections(
         ),
         "outcomes": ProjectionSection(
             id="outcomes",
-            state="unknown",
+            state=outcome_state,
             title=_SECTION_TITLES["outcomes"],
-            warnings=["journey_outcome_truth_join_unavailable"],
+            content=outcome_content,
+            warnings=conversion_context["warnings"] or ["journey_attribution_authority_not_joined"],
         ),
         "timeline": ProjectionSection(
             id="timeline",
@@ -1084,7 +1863,22 @@ def _build_journey_sections(
                 {
                     "journey": journey_view,
                     "timeline": timeline,
-                    "evidenceRefs": version_evidence + step_evidence,
+                    "evidenceRefs": (
+                        version_evidence
+                        + step_evidence
+                        + episode_evidence
+                        + touchpoint_evidence
+                    ),
+                    "touchpointReferences": {
+                        **{
+                            key: value
+                            for key, value in touchpoint_context.items()
+                            if key != "claims"
+                        },
+                        "entryTouchpointId": journey_view["entryTouchpointId"],
+                        "exitTouchpointId": journey_view["exitTouchpointId"],
+                        "journeyVersionEvidenceRefs": version_evidence,
+                    },
                 }
                 if steps_available
                 else None
@@ -1095,17 +1889,189 @@ def _build_journey_sections(
     return [output[section_id] for section_id in _EPISODE360_SECTIONS]
 
 
+def _unknown_journey_slot_coverage(
+    reason: str,
+    *,
+    journey_summary_state: str = "unknown",
+) -> dict[str, dict[str, Any]]:
+    """Give every blueprint slot an explicit state when the exact journey read fails."""
+    return {
+        slot_id: {
+            "state": journey_summary_state if slot_id == "journey_summary" else "unknown",
+            "coverage": "unknown",
+            "reason": reason if slot_id == "journey_summary" else "journey_version_unavailable",
+            "evidenceRefs": [],
+        }
+        for slot_id in _JOURNEY_REQUIRED_SLOT_IDS
+    }
+
+
+def _journey_required_slot_coverage(
+    *,
+    journey: dict[str, Any],
+    steps: list[dict[str, Any]],
+    journey_ref: EvidenceRef,
+    step_refs: list[EvidenceRef],
+    steps_available: bool,
+    step_inventory_complete: bool,
+    touchpoint_context: dict[str, Any],
+    conversion_context: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Expose SSOT slot states using only tenant/version-bound canonical evidence.
+
+    This records supported row coverage without inferring stage transitions,
+    episode associations, communication joins, conversions, attribution, or
+    actions from opaque IDs and neighboring projections.
+    """
+    version_evidence = [journey_ref.model_dump(mode="json", exclude_none=True)]
+    step_evidence = [ref.model_dump(mode="json", exclude_none=True) for ref in step_refs]
+    touchpoint_evidence = [
+        ref for ref in touchpoint_context.get("evidenceRefs", []) if isinstance(ref, dict)
+    ]
+    conversion_evidence = [
+        ref for ref in conversion_context.get("evidenceRefs", []) if isinstance(ref, dict)
+    ]
+    all_evidence = version_evidence + step_evidence + touchpoint_evidence + conversion_evidence
+
+    agent_steps = [
+        row
+        for row in steps
+        if _journey_text(row.get("agent_id")) is not None
+        or _journey_text(row.get("actor_type")) == "agent"
+    ]
+    agent_step_evidence = [
+        ref.model_dump(mode="json", exclude_none=True)
+        for row in agent_steps
+        if (ref := _journey_step_ref(row)) is not None
+    ]
+    if agent_steps:
+        agent_state = "degraded"
+        agent_coverage = "partial"
+        agent_reason = "journey_steps_record_agent_activity_without_actor_authority_join"
+    elif step_inventory_complete:
+        agent_state = "empty"
+        agent_coverage = "complete"
+        agent_reason = "complete_current_journey_step_inventory_has_no_agent_activity"
+        agent_step_evidence = step_evidence
+    elif not steps_available:
+        agent_state = "unknown"
+        agent_coverage = "unknown"
+        agent_reason = "journey_step_authority_unavailable"
+    else:
+        agent_state = "unknown"
+        agent_coverage = "partial"
+        agent_reason = "journey_step_inventory_incomplete_for_agent_activity"
+
+    touchpoint_state = touchpoint_context.get("state")
+    if touchpoint_state == "available":
+        touchpoint_slot = {
+            "state": "available",
+            "coverage": "complete",
+            "reason": "exact_tenant_touchpoints_resolved_from_current_journey_version",
+            "evidenceRefs": touchpoint_evidence,
+        }
+    elif touchpoint_state == "empty":
+        touchpoint_slot = {
+            "state": "empty",
+            "coverage": "complete",
+            "reason": "current_journey_version_has_no_touchpoint_references",
+            "evidenceRefs": version_evidence,
+        }
+    elif touchpoint_state == "degraded" and touchpoint_evidence:
+        touchpoint_slot = {
+            "state": "degraded",
+            "coverage": "partial",
+            "reason": touchpoint_context.get("reason") or "journey_touchpoint_read_incomplete",
+            "evidenceRefs": touchpoint_evidence,
+        }
+    else:
+        touchpoint_slot = {
+            "state": "unknown",
+            "coverage": "unknown",
+            "reason": touchpoint_context.get("reason") or "journey_touchpoint_read_incomplete",
+            "evidenceRefs": [],
+        }
+
+    conversion_slot = {
+        "state": conversion_context["state"],
+        "coverage": conversion_context["coverage"],
+        "reason": conversion_context["reason"],
+        "evidenceRefs": version_evidence + conversion_evidence,
+    }
+
+    return {
+        "journey_summary": {
+            "state": "available",
+            "coverage": "persisted_version_fields",
+            "reason": "tenant_scoped_current_journey_version_loaded_by_exact_key",
+            "evidenceRefs": version_evidence,
+        },
+        "stages": {
+            "state": "unknown",
+            "coverage": "unknown",
+            "reason": "journey_step_contract_has_no_typed_stage_authority",
+            "evidenceRefs": [],
+        },
+        "episodes": {
+            "state": "unknown",
+            "coverage": "unknown",
+            "reason": "episode_record_contract_has_no_typed_journey_subject_reference",
+            "evidenceRefs": [],
+        },
+        "touchpoints": touchpoint_slot,
+        "agent_interventions": {
+            "state": agent_state,
+            "coverage": agent_coverage,
+            "reason": agent_reason,
+            "evidenceRefs": agent_step_evidence,
+        },
+        "communications": {
+            "state": "unknown",
+            "coverage": "unknown",
+            "reason": "journey_communication_fact_join_not_implemented",
+            "evidenceRefs": [],
+        },
+        "dropoffs": {
+            "state": "unknown",
+            "coverage": "unknown",
+            "reason": "journey_dropoff_authority_not_available",
+            "evidenceRefs": [],
+        },
+        "conversions": conversion_slot,
+        "attribution": {
+            "state": "unknown",
+            "coverage": "unknown",
+            "reason": "immutable_attribution_credit_authority_not_joined",
+            "evidenceRefs": [],
+        },
+        "recommended_actions": {
+            "state": "unknown",
+            "coverage": "unknown",
+            "reason": "journey_action_recommendation_authority_not_available",
+            "evidenceRefs": [],
+        },
+        "evidence_trace": {
+            "state": "degraded",
+            "coverage": "partial",
+            "reason": "journey_version_and_linked_row_evidence_available_source_provenance_not_joined",
+            "evidenceRefs": all_evidence,
+        },
+    }
+
+
 def _build_journey_claims(
     request: ProjectionRequest,
     journey: dict[str, Any],
     steps: list[dict[str, Any]],
     journey_ref: EvidenceRef,
-    step_refs: list[EvidenceRef],
+    touchpoint_claims: list[tuple[str, EvidenceRef]],
+    conversion_claims: list[tuple[str, EvidenceRef]],
 ) -> list[ClaimEnvelope]:
     journey_id = _journey_text(journey.get("journey_id")) or request.subject.id
     version_id = _journey_text(journey.get("journey_version_id")) or journey_id
     version_slots = _journey_slot_ids_for_sections({"summary", "state", "evidence"})
     step_slots = _journey_slot_ids_for_sections({"timeline", "interactions", "evidence"})
+    touchpoint_slots = _journey_slot_ids_for_sections({"timeline", "evidence"})
     claims = [
         ClaimEnvelope(
             id=f"episode360:{journey_id}:{version_id}:journey-version",
@@ -1117,9 +2083,10 @@ def _build_journey_claims(
             domainSlotIds=version_slots,
         )
     ]
-    for row, evidence in zip(steps, step_refs, strict=False):
+    for row in steps:
         step_id = _journey_text(row.get("step_id"))
-        if not step_id:
+        evidence = _journey_step_ref(row)
+        if not step_id or evidence is None:
             continue
         claims.append(
             ClaimEnvelope(
@@ -1134,27 +2101,57 @@ def _build_journey_claims(
         )
         if len(claims) >= 101:
             break
+    for touchpoint_id, evidence in touchpoint_claims:
+        if len(claims) >= 101:
+            break
+        claims.append(
+            ClaimEnvelope(
+                id=f"episode360:{journey_id}:{version_id}:touchpoint:{touchpoint_id}",
+                kind="server_recorded_journey_touchpoint",
+                subject=request.subject,
+                evidenceRefs=[journey_ref, evidence],
+                claims=["A persisted tenant-scoped touchpoint is referenced by this journey version."],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=touchpoint_slots,
+            )
+        )
+    for conversion_id, evidence in conversion_claims:
+        if len(claims) >= 201:
+            break
+        claims.append(
+            ClaimEnvelope(
+                id=f"episode360:{journey_id}:{version_id}:conversion:{conversion_id}",
+                kind="canonical_journey_conversion",
+                subject=request.subject,
+                evidenceRefs=[journey_ref, evidence],
+                claims=["A canonical conversion is referenced by this current journey version."],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=["conversions"],
+            )
+        )
     return claims
 
 
 def _journey_slot_ids_for_sections(section_ids: set[str]) -> list[str]:
     slot_ids: set[str] = set()
-    for surface in PRODUCT_360_SURFACE_DEFINITIONS.values():
-        if not isinstance(surface, dict) or "journey" not in surface.get("subjectKinds", []):
+    surface = PRODUCT_360_SURFACE_DEFINITIONS.get("journey360")
+    if not isinstance(surface, dict) or "journey" not in surface.get("subjectKinds", []):
+        return []
+    blueprint = surface.get("blueprintContract", {})
+    required_slot_ids = set(blueprint.get("requiredSlotIds", [])) if isinstance(blueprint, dict) else set()
+    for slot in surface.get("domainSlots", []):
+        if not isinstance(slot, dict):
             continue
-        for slot in surface.get("domainSlots", []):
-            if not isinstance(slot, dict):
-                continue
-            for binding in slot.get("projectionBindings", []):
-                if (
-                    isinstance(binding, dict)
-                    and binding.get("projectionId") == "episode360"
-                    and "journey" in binding.get("subjectKinds", [])
-                    and section_ids.intersection(binding.get("sectionIds", []))
-                ):
-                    slot_id = slot.get("id")
-                    if isinstance(slot_id, str):
-                        slot_ids.add(slot_id)
+        for binding in slot.get("projectionBindings", []):
+            if (
+                isinstance(binding, dict)
+                and binding.get("projectionId") == "episode360"
+                and "journey" in binding.get("subjectKinds", [])
+                and section_ids.intersection(binding.get("sectionIds", []))
+            ):
+                slot_id = slot.get("id")
+                if isinstance(slot_id, str) and slot_id in required_slot_ids:
+                    slot_ids.add(slot_id)
     return sorted(slot_ids)
 
 
@@ -1191,11 +2188,22 @@ def _journey_view(row: dict[str, Any]) -> dict[str, Any]:
         "isCurrent": row.get("is_current") if isinstance(row.get("is_current"), bool) else None,
         "profileId": _journey_text(row.get("profile_id")),
         "clusterId": _journey_text(row.get("cluster_id")),
+        "accountId": _journey_text(row.get("account_id")),
+        "organizationId": _journey_text(row.get("organization_id")),
+        "walletId": _journey_text(row.get("wallet_id")),
         "agentId": _journey_text(row.get("agent_id")),
+        "entryTouchpointId": _journey_text(row.get("entry_touchpoint_id")),
+        "exitTouchpointId": _journey_text(row.get("exit_touchpoint_id")),
         "campaignIds": _journey_values(row.get("campaign_ids")),
+        "touchpointIds": _journey_values(row.get("touchpoint_ids")),
+        "sessionIds": _journey_values(row.get("session_ids")),
+        "deviceIds": _journey_values(row.get("device_ids")),
         "channelSequence": _journey_values(row.get("channel_sequence")),
         "conversionIds": _journey_values(row.get("conversion_ids")),
         "eventIds": _journey_values(row.get("event_ids")),
+        "agentActivityIds": _journey_values(row.get("agent_activity_ids")),
+        "web3ActivityIds": _journey_values(row.get("web3_activity_ids")),
+        "x402ActivityIds": _journey_values(row.get("x402_activity_ids")),
         "startedAt": _journey_timestamp(row.get("started_at")),
         "endedAt": _journey_timestamp(row.get("ended_at")),
         "convertedAt": _journey_timestamp(row.get("converted_at")),
@@ -1215,9 +2223,13 @@ def _journey_step_view(row: dict[str, Any]) -> dict[str, Any]:
         "activityId": _journey_text(row.get("activity_id")),
         "activityFamily": _journey_text(row.get("activity_family")),
         "activityType": _journey_text(row.get("activity_type")),
+        "domain": _journey_text(row.get("domain")),
+        "appId": _journey_text(row.get("app_id")),
+        "dappId": _journey_text(row.get("dapp_id")),
         "transitionType": _journey_text(row.get("transition_type")),
         "actorType": _journey_text(row.get("actor_type")),
         "channel": _journey_text(row.get("channel")),
+        "source": _journey_text(row.get("source")),
         "sourceClass": _journey_text(row.get("source_class")),
         "trafficOrigin": _journey_text(row.get("traffic_origin")),
         "economicClass": _journey_text(row.get("economic_class")),
@@ -1227,6 +2239,9 @@ def _journey_step_view(row: dict[str, Any]) -> dict[str, Any]:
         "campaignId": _journey_text(row.get("campaign_id")),
         "conversionId": _journey_text(row.get("conversion_id")),
         "agentId": _journey_text(row.get("agent_id")),
+        "walletId": _journey_text(row.get("wallet_id")),
+        "sessionId": _journey_text(row.get("session_id")),
+        "deviceId": _journey_text(row.get("device_id")),
         "activityStatus": _journey_text(row.get("activity_status")),
         "evidenceRefs": [evidence.model_dump(mode="json")] if evidence is not None else [],
     }
@@ -1324,15 +2339,254 @@ def _status_distribution(episodes: list[EpisodeRecord]) -> dict[str, int]:
 
 
 def _collect_evidence(episodes: list[EpisodeRecord]) -> list[Any]:
-    seen: set[str] = set()
+    seen: set[tuple[str, str, str]] = set()
     refs: list[Any] = []
     for e in episodes:
-        for ref in e.evidence_refs:
-            if ref.id in seen:
+        for ref in _episode_evidence_refs(e):
+            key = (ref.id, ref.type, ref.source)
+            if key in seen:
                 continue
-            seen.add(ref.id)
+            seen.add(key)
             refs.append(ref)
     return refs
+
+
+def _episode_record_ref(episode: EpisodeRecord) -> EvidenceRef:
+    episode_id = episode.episode_id
+    return EvidenceRef(
+        id=episode_id,
+        type="entity",
+        source=_EPISODE_RECORD_SOURCE,
+        observedAt=_journey_timestamp(episode.created_at or episode.occurred_to),
+        uri=f"store://episode_records/{quote(episode_id, safe='')}",
+    )
+
+
+def _episode_evidence_refs(episode: EpisodeRecord) -> list[EvidenceRef]:
+    unique: dict[tuple[str, str, str], EvidenceRef] = {}
+    for ref in [_episode_record_ref(episode), *episode.evidence_refs]:
+        if not isinstance(ref, EvidenceRef) or not ref.id or not ref.source:
+            continue
+        unique.setdefault((ref.id, ref.type, ref.source), ref)
+    return list(unique.values())
+
+
+def _episode_view(episode: EpisodeRecord) -> dict[str, Any]:
+    return {
+        "episodeId": episode.episode_id,
+        "kind": episode.kind,
+        "status": episode.status,
+        "title": episode.title,
+        "occurredFrom": episode.occurred_from,
+        "occurredTo": episode.occurred_to,
+        "subject": {"kind": episode.subject.kind, "id": episode.subject.id},
+        "observationIds": list(episode.observation_ids),
+        "outcomeIds": list(episode.outcome_ids),
+        "modelVersion": episode.model_version,
+        "createdAt": _journey_timestamp(episode.created_at),
+        "closedAt": episode.closed_at,
+        "evidenceRefs": [ref.model_dump() for ref in _episode_evidence_refs(episode)],
+    }
+
+
+def _episode_participant(episode: EpisodeRecord) -> Optional[dict[str, Any]]:
+    if episode.subject.kind not in {"user", "agent"}:
+        return None
+    evidence_refs = [ref.model_dump() for ref in _episode_evidence_refs(episode)]
+    return {
+        "entity": {"kind": episode.subject.kind, "id": episode.subject.id},
+        "role": "primary_subject",
+        "coverage": "partial",
+        "evidenceRefs": evidence_refs,
+        "reason": "episode_record_has_no_additional_participant_inventory",
+    }
+
+
+def _episode_participant_context(
+    request: ProjectionRequest,
+    episodes: list[EpisodeRecord],
+) -> dict[str, Any]:
+    if request.subject.kind != "episode" or len(episodes) != 1:
+        return _unknown_episode_slot("exact_episode_subject_record_unavailable") | {
+            "participants": []
+        }
+    participant = _episode_participant(episodes[0])
+    if participant is None:
+        return _unknown_episode_slot("episode_subject_kind_does_not_identify_a_participant") | {
+            "participants": []
+        }
+    return {
+        "state": "degraded",
+        "coverage": "partial",
+        "participants": [participant],
+        "count": None,
+        "observedCount": 1,
+        "reason": "episode_record_has_no_additional_participant_inventory",
+    }
+
+
+def _episode_session_context(
+    request: ProjectionRequest,
+    episodes: list[EpisodeRecord],
+) -> dict[str, Any]:
+    if request.subject.kind != "episode" or len(episodes) != 1:
+        return _unknown_episode_slot("episode_record_has_no_session_inventory")
+    episode = episodes[0]
+    if episode.subject.kind != "session":
+        return _unknown_episode_slot("episode_record_subject_is_not_a_session")
+    return {
+        "state": "degraded",
+        "coverage": "partial",
+        "sessions": [
+            {
+                "sessionId": episode.subject.id,
+                "role": "primary_episode_subject",
+                "evidenceRefs": [
+                    ref.model_dump() for ref in _episode_evidence_refs(episode)
+                ],
+            }
+        ],
+        "count": None,
+        "observedCount": 1,
+        "reason": "episode_records_one_session_subject_without_session_inventory",
+    }
+
+
+def _unknown_episode_slot(reason: str) -> dict[str, Any]:
+    return {"state": "unknown", "coverage": "unknown", "items": [], "reason": reason}
+
+
+def _episode_required_slot_coverage(
+    request: ProjectionRequest,
+    episodes: list[EpisodeRecord],
+    *,
+    availability: str,
+    evidence_refs: list[EvidenceRef],
+) -> dict[str, dict[str, Any]]:
+    """Expose the SSOT slot status without promoting partial sources to complete."""
+    evidence = [ref.model_dump() for ref in evidence_refs]
+    if (
+        request.subject.kind != "episode"
+        or len(episodes) != 1
+        or episodes[0].episode_id != request.subject.id
+        or episodes[0].tenant_id != request.tenantId
+    ):
+        summary_state = "empty" if availability == "empty" else "unknown"
+        summary_reason = (
+            "tenant_scoped_episode_not_found"
+            if availability == "empty"
+            else "episode_record_read_incomplete"
+        )
+        return {
+            slot_id: {
+                "state": summary_state if slot_id == "episode_summary" else "unknown",
+                "coverage": "empty" if summary_state == "empty" and slot_id == "episode_summary" else "unknown",
+                "reason": summary_reason
+                if slot_id == "episode_summary"
+                else "episode_subject_record_unavailable",
+                "evidenceRefs": evidence,
+            }
+            for slot_id in _EPISODE_REQUIRED_SLOT_IDS
+        }
+
+    episode = episodes[0]
+    subject_evidence = evidence
+    participant_state = (
+        "degraded" if episode.subject.kind in {"user", "agent"} else "unknown"
+    )
+    participant_reason = (
+        "only_primary_episode_subject_is_recorded"
+        if participant_state == "degraded"
+        else "episode_subject_kind_does_not_identify_a_participant"
+    )
+    session_state = "degraded" if episode.subject.kind == "session" else "unknown"
+    return {
+        "episode_summary": {
+            "state": "available",
+            "coverage": "complete",
+            "reason": "tenant_scoped_episode_record_loaded_by_exact_composite_key",
+            "evidenceRefs": subject_evidence,
+        },
+        "timeline": {
+            "state": "degraded",
+            "coverage": "partial",
+            "reason": "episode_span_and_observation_ids_loaded_without_observation_rows",
+            "evidenceRefs": subject_evidence,
+        },
+        "participants": {
+            "state": participant_state,
+            "coverage": "partial" if participant_state == "degraded" else "unknown",
+            "reason": participant_reason,
+            "evidenceRefs": subject_evidence if participant_state == "degraded" else [],
+        },
+        "sessions": {
+            "state": session_state,
+            "coverage": "partial" if session_state == "degraded" else "unknown",
+            "reason": (
+                "episode_record_names_one_session_without_session_inventory"
+                if session_state == "degraded"
+                else "episode_record_has_no_session_inventory"
+            ),
+            "evidenceRefs": subject_evidence if session_state == "degraded" else [],
+        },
+        "touchpoints": {
+            "state": "unknown",
+            "coverage": "unknown",
+            "reason": "episode_record_contract_has_no_touchpoint_references",
+            "evidenceRefs": [],
+        },
+        "communications": {
+            "state": "unknown",
+            "coverage": "unknown",
+            "reason": "episode_record_contract_has_no_communication_references",
+            "evidenceRefs": [],
+        },
+        "agent_handoffs": {
+            "state": "unknown",
+            "coverage": "unknown",
+            "reason": "episode_record_contract_has_no_agent_handoff_references",
+            "evidenceRefs": [],
+        },
+        "conversion_events": {
+            "state": "unknown",
+            "coverage": "unknown",
+            "reason": "episode_outcome_ids_are_not_conversion_ids",
+            "evidenceRefs": [],
+        },
+        "attribution_links": {
+            "state": "unknown",
+            "coverage": "unknown",
+            "reason": "episode_attribution_authority_not_joined",
+            "evidenceRefs": [],
+        },
+        "risk_flags": {
+            "state": "unknown",
+            "coverage": "unknown",
+            "reason": "episode_risk_authority_not_joined",
+            "evidenceRefs": [],
+        },
+        "evidence_trace": {
+            "state": "degraded",
+            "coverage": "partial",
+            "reason": "episode_record_and_lineage_refs_available_source_event_provenance_unjoined",
+            "evidenceRefs": subject_evidence,
+        },
+    }
+
+
+_EPISODE_REQUIRED_SLOT_IDS = (
+    "episode_summary",
+    "timeline",
+    "participants",
+    "sessions",
+    "touchpoints",
+    "communications",
+    "agent_handoffs",
+    "conversion_events",
+    "attribution_links",
+    "risk_flags",
+    "evidence_trace",
+)
 
 
 def _flatten(lists: Any) -> list[str]:

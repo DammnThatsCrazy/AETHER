@@ -2903,6 +2903,11 @@ def gen_intelligence_projection_ts(reg: dict) -> str:
     lines.append("  canonicalAuthorityRefs: readonly string[];")
     lines.append("  projectionBindings: readonly Product360SlotProjectionBinding[];")
     lines.append("  requiredFrameMetadata?: readonly Product360RequiredFrameMetadata[];")
+    lines.append("  unboundReason?: string;")
+    lines.append("  unboundCanonicalAuthorityRefs?: readonly string[];")
+    lines.append("  implementationCrosswalk?: readonly string[];")
+    lines.append("  authorityGapReason?: string;")
+    lines.append("  partialImplementationReason?: string;")
     lines.append("}")
     lines.append("export interface Product360ProviderBinding {")
     lines.append("  projectionId: IntelligenceProjectionId;")
@@ -2918,6 +2923,7 @@ def gen_intelligence_projection_ts(reg: dict) -> str:
     lines.append("  domainSlotIds: readonly string[];")
     lines.append("  implementationRef: string;")
     lines.append("  runtimeBindingRef: string;")
+    lines.append("  canonicalAuthorityRefs?: readonly string[];")
     lines.append("}")
     lines.append("export interface Product360SurfaceDefinition {")
     lines.append("  id: Product360SurfaceId;")
@@ -2928,6 +2934,7 @@ def gen_intelligence_projection_ts(reg: dict) -> str:
     lines.append("  domainSlots: readonly Product360DomainSlot[];")
     lines.append("  projectionBindings: readonly Product360ProviderBinding[];")
     lines.append("  directProviderBindings?: readonly Product360DirectProviderBinding[];")
+    lines.append("  blueprintContract?: { sourceSection: string; priority: 'P0' | 'P1' | 'P2'; canonicalOwner: string; subjectIdentifiers: readonly string[]; requiredLensIds: readonly string[]; purpose: string; requiredSlotIds: readonly string[] };")
     lines.append("  sourceOfTruth: { canonicalAuthorities: readonly string[]; ownsCanonicalTruth: false; prohibitedOwnership: readonly string[] };")
     lines.append("  freshnessPolicy: { required: true; maxAgeSeconds: number | null; sourceTimestamps: string; missingTimestamp: string; onStale: string; requirementStatus: string };")
     lines.append("  policyBehavior: { tenantScopeRequired: true; authorizationBeforeRead: true; policyEvaluation: string; historicalConsentEvaluation: string; redactionBehavior: string; requirementStatus: string };")
@@ -3133,7 +3140,8 @@ def gen_product_360_surface_catalog_md(reg: dict) -> str:
             "",
             f"This product catalog has {len(surfaces)} surface contracts and is separate from the {len(projections)}-row technical projection provider registry. Projection mappings are `catalog_only` candidate section bindings. Direct surface-provider mappings use a separate namespace; `runtime_wired` confirms a frame-runtime call path for the declared subjects and slots, not full surface completion.",
             "",
-            "The originally reviewed 3,013-line 360 SSOT is not available in this checkout. The catalog below is reconstructed from repository contracts and must be aligned to that source before its names or slot details are treated as exact. Reconstructed fields are marked accordingly in the machine-readable contract.",
+            "The 18 product contracts and their lens lists are aligned to the recovered primary backend 360 source of truth. `source_aligned` describes blueprint alignment only. A slot needs a canonical provider read and governed frame evidence before it can be considered implemented; the binding and gap columns below show the current limits.",
+            "Declared binding counts are registry coverage, not proof that a slot or surface is complete. A bound slot can still return unknown, degraded, stale, or suppressed for a request.",
             "",
             "## Frame lifecycle states",
             "",
@@ -3152,13 +3160,33 @@ def gen_product_360_surface_catalog_md(reg: dict) -> str:
             "",
             "## Catalog overview",
             "",
-            "| Product surface | Contract status | Subject kinds | Required slots | Optional slots | Projection providers | Direct surface providers |",
-            "|---|---|---|---:|---:|---|---|",
+            "| Product surface | Contract status | Subject kinds | Required slots | Declared required bindings | Explicit partial required slots | Unbound required slots | Optional slots | Projection providers | Direct surface providers |",
+            "|---|---|---|---:|---:|---:|---:|---:|---|---|",
         ]
     )
     for surface in surfaces:
         required = sum(slot["requirement"] == "required" for slot in surface["domainSlots"])
         optional = sum(slot["requirement"] == "optional" for slot in surface["domainSlots"])
+        directly_bound_slots = {
+            slot_id
+            for binding in surface.get("directProviderBindings", [])
+            for slot_id in binding["domainSlotIds"]
+        }
+        required_slots = [
+            slot for slot in surface["domainSlots"] if slot["requirement"] == "required"
+        ]
+        declared_required_bindings = sum(
+            bool(slot["projectionBindings"] or slot["id"] in directly_bound_slots)
+            for slot in required_slots
+        )
+        partial_required = sum(
+            bool(slot.get("partialImplementationReason") or slot.get("authorityGapReason"))
+            for slot in required_slots
+        )
+        unbound_required = sum(
+            not (slot["projectionBindings"] or slot["id"] in directly_bound_slots)
+            for slot in required_slots
+        )
         providers = ", ".join(f"`{row['projectionId']}`" for row in surface["projectionBindings"])
         direct_providers = ", ".join(
             f"`{row['providerClass']}` ({row['bindingStatus']})"
@@ -3168,7 +3196,8 @@ def gen_product_360_surface_catalog_md(reg: dict) -> str:
         anchor = surface["displayName"].lower().replace(" ", "-")
         lines.append(
             f"| [{surface['displayName']}](#{anchor}) | {surface['contractStatus']} | "
-            f"{subjects} | {required} | {optional} | {providers} | {direct_providers} |"
+            f"{subjects} | {required} | {declared_required_bindings}/{required} | "
+            f"{partial_required} | {unbound_required} | {optional} | {providers} | {direct_providers} |"
         )
     for surface in surfaces:
         lines.extend(
@@ -3184,10 +3213,16 @@ def gen_product_360_surface_catalog_md(reg: dict) -> str:
                 "",
                 "### Domain slots",
                 "",
-                "| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Description |",
-                "|---|---|---|---|---|---|",
+                "| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |",
+                "|---|---|---|---|---|---|---|---|",
             ]
         )
+        direct_slot_providers: dict[str, list[str]] = {}
+        for direct_binding in surface.get("directProviderBindings", []):
+            for slot_id in direct_binding["domainSlotIds"]:
+                direct_slot_providers.setdefault(slot_id, []).append(
+                    f"`{direct_binding['providerClass']}` ({direct_binding['bindingStatus']})"
+                )
         for slot in sorted(surface["domainSlots"], key=lambda row: row["id"]):
             required_metadata = ", ".join(
                 f"`{item}`" for item in slot.get("requiredFrameMetadata", [])
@@ -3199,8 +3234,19 @@ def gen_product_360_surface_catalog_md(reg: dict) -> str:
                 + ", ".join(f"`{section}`" for section in binding["sectionIds"])
                 for binding in slot["projectionBindings"]
             )
+            direct_providers = "; ".join(direct_slot_providers.get(slot["id"], [])) or "—"
+            gap_parts = [
+                f"Unbound: `{slot['unboundReason']}`" if slot.get("unboundReason") else "",
+                f"Authority: `{slot['authorityGapReason']}`"
+                if slot.get("authorityGapReason")
+                else "",
+                f"Partial: `{slot['partialImplementationReason']}`"
+                if slot.get("partialImplementationReason")
+                else "",
+            ]
+            implementation_gap = "; ".join(part for part in gap_parts if part) or "—"
             lines.append(
-                f"| `{slot['id']}` | {slot['requirement']} | {required_metadata} | {authorities} | {bindings} | {slot['description']} |"
+                f"| `{slot['id']}` | {slot['requirement']} | {required_metadata} | {authorities} | {bindings or '—'} | {direct_providers} | {implementation_gap} | {slot['description']} |"
             )
         lines.extend(
             [
@@ -3260,16 +3306,9 @@ def gen_product_360_surface_catalog_md(reg: dict) -> str:
                 "",
                 f"Capability and provider status is contract metadata only: `{surface['backendCapabilities']['providerCapabilityStatus']}`. Provider implementation states are copied from the technical registry and do not imply runtime readiness.",
                 "",
-                f"Lens alignment: expected count `{surface['lensContract']['expectedCount']}`; exact lens ids are pending source alignment.",
+                f"Lens alignment: `{surface['lensContract']['sourceAlignmentStatus']}`; expected count `{surface['lensContract']['expectedCount']}`; lens ids: {', '.join(f'`{lens}`' for lens in surface['lensContract']['lensIds'])}.",
             ]
         )
-        if surface["id"] == "agent360":
-            lines.extend(
-                [
-                    "",
-                    "Recovered Agent blueprint review records 11 domain slots and 8 lenses. The 11 slot labels in this reconstructed catalog and all exact lens ids still require alignment to the original SSOT; no original lens names are asserted here.",
-                ]
-            )
     lines.append("")
     return "\n".join(lines)
 

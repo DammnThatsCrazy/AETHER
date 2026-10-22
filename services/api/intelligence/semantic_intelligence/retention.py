@@ -37,7 +37,11 @@ _EXPIRED_STATUS = "expired"
 
 # Silver evidence is tombstoned (provenance-preserving); Gold projections are
 # recomputable, so they are deleted and rebuilt by the reducer path on demand.
-_SILVER_TABLES = ("silver_semantic_observations", "silver_sentiment_observations")
+_SILVER_TABLES = (
+    "silver_semantic_observations",
+    "silver_sentiment_observations",
+    "semantic_memory_records",
+)
 _GOLD_TABLES = ("gold_entity_semantic_state", "gold_entity_sentiment_state")
 
 _RETENTION_INTERVAL_S = int(os.getenv("SEMANTIC_RETENTION_INTERVAL_S", str(24 * 3600)))
@@ -81,9 +85,11 @@ async def sweep_tenant(tenant_id: str, *, now: Optional[datetime] = None) -> dic
 
 async def sweep_once() -> list[dict[str, Any]]:
     """One retention pass across every tenant with Silver evidence."""
-    tenants = await SemanticFactRepository(_SILVER_TABLES[0]).distinct_tenants()
+    tenant_ids: set[str] = set()
+    for table in _SILVER_TABLES:
+        tenant_ids.update(await SemanticFactRepository(table).distinct_tenants())
     reports: list[dict[str, Any]] = []
-    for tenant_id in tenants:
+    for tenant_id in sorted(tenant_ids):
         report = await sweep_tenant(tenant_id)
         if report["tombstoned_total"] or report["deleted_total"]:
             metrics.increment("semantic_retention_tombstoned_total", report["tombstoned_total"])

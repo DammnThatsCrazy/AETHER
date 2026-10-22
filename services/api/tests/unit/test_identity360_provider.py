@@ -52,6 +52,8 @@ class FakeIdentity360Source:
                 "status": "resolved",
                 "external_id": "private-external-id",
                 "user_id": "private-user-id",
+                "device_id": "private-device-id",
+                "session_id": "private-session-id",
                 "first_seen_at": "2026-09-05T00:00:00Z",
                 "last_seen_at": "2026-10-14T00:00:00Z",
             }
@@ -119,6 +121,19 @@ class FakeIdentity360Source:
                 "verified_at": "2026-10-11T00:00:00Z",
             }
         ]
+        self.conflicts: list[dict[str, Any]] = [
+            {
+                "id": "conflict-1",
+                "tenant_id": "tenant-a",
+                "candidate_entity_ids": ["entity-1", "entity-2"],
+                "candidate_aliases": [{"value": "private-conflict-value"}],
+                "conflict_type": "ambiguous_match",
+                "confidence": 0.72,
+                "reason_codes": ["conflicting_verified_identifier"],
+                "status": "open",
+                "created_at": "2026-10-13T00:00:00Z",
+            }
+        ]
         self.force_truncate_aliases = False
         self.claim_read_called = False
         self.batch_reads: list[str] = []
@@ -163,6 +178,17 @@ class FakeIdentity360Source:
         self.batch_reads.append("decisions")
         return IdentityBatchRead(rows=tuple(self.decisions))
 
+    async def conflicts_for_entity(
+        self, tenant_id: str, entity_id: str, *, limit: int
+    ) -> IdentityBatchRead:
+        self.batch_reads.append("conflicts")
+        rows = [
+            row
+            for row in self.conflicts
+            if row.get("tenant_id") == tenant_id and entity_id in row.get("candidate_entity_ids", [])
+        ]
+        return IdentityBatchRead(rows=tuple(rows[:limit]), truncated=len(rows) > limit)
+
     async def verification_for_entity(
         self, tenant_id: str, entity_id: str, *, limit: int
     ) -> IdentityBatchRead:
@@ -190,15 +216,37 @@ async def test_entity_identity_projects_scoped_evidence_without_sensitive_values
     source = FakeIdentity360Source()
     result = await Identity360Provider(source).read("tenant-a", "entity", "entity-1")
 
-    assert result.state == "available"
-    assert result.slot("resolved_subject_identity").state == "available"
-    assert result.slot("source_identifier_lineage").state == "available"
-    assert result.slot("identity_evidence").state == "available"
-    assert result.slot("relationship_identity_context").content["semantics"] == (
-        "identity_resolution_edges_only"
+    assert [slot.id for slot in result.slots] == [
+        "identifier_inventory",
+        "namespace_map",
+        "match_evidence",
+        "conflicts",
+        "confidence",
+        "aliases",
+        "devices_sessions",
+        "wallets",
+        "policy_redactions",
+        "evidence_trace",
+    ]
+    assert result.state == "degraded"
+    assert result.slot("identifier_inventory").state == "available"
+    assert result.slot("namespace_map").state == "available"
+    assert result.slot("namespace_map").content["canonicalNamespaceRegistryJoin"]["state"] == "unknown"
+    assert result.slot("match_evidence").state == "available"
+    assert result.slot("match_evidence").content["semantics"] == (
+        "recorded_identity_resolution_evidence_only"
     )
-    assert result.slot("actor_and_agent_binding").state == "unknown"
-    assert result.slot("identity_evidence").content["freshness"]["state"] == "unknown"
+    assert result.slot("conflicts").state == "available"
+    assert result.slot("conflicts").content["items"][0]["type"] == "ambiguous_match"
+    assert result.slot("confidence").state == "available"
+    assert result.slot("confidence").content["compositeConfidence"] is None
+    assert result.slot("aliases").state == "available"
+    assert result.slot("devices_sessions").state == "degraded"
+    assert result.slot("wallets").state == "unknown"
+    assert result.slot("policy_redactions").state == "degraded"
+    assert result.slot("policy_redactions").content["projectionRedaction"]["state"] == "applied"
+    assert result.slot("evidence_trace").state == "available"
+    assert result.slot("match_evidence").content["freshness"]["state"] == "unknown"
 
     rendered = json.dumps(_payload(result), sort_keys=True)
     for private_value in (
@@ -210,6 +258,9 @@ async def test_entity_identity_projects_scoped_evidence_without_sensitive_values
         "private-event-id",
         "private-verification-hash",
         "private-proof-reference",
+        "private-device-id",
+        "private-session-id",
+        "private-conflict-value",
         "consent-payload",
     ):
         assert private_value not in rendered
@@ -218,6 +269,7 @@ async def test_entity_identity_projects_scoped_evidence_without_sensitive_values
     assert "j***@example.test" in rendered
     assert "identity_source_identities" in rendered
     assert "identity_verification_evidence" in rendered
+    assert "identity_conflicts" in rendered
 
 
 @pytest.mark.asyncio
@@ -227,18 +279,13 @@ async def test_requested_slot_scope_skips_identity_authorities_for_unrequested_s
         "tenant-a",
         "entity",
         "entity-1",
-        requested_slot_ids={"resolved_subject_identity"},
+        requested_slot_ids={"identifier_inventory"},
     )
 
-    assert result.slot("resolved_subject_identity").state == "available"
-    assert set(result.slot("resolved_subject_identity").content["resolution"]) == {
-        "state",
-        "authority",
-        "exactIdMatch",
-    }
-    assert source.batch_reads == []
-    assert result.slot("identity_evidence").state == "unknown"
-    assert result.slot("identity_evidence").reason == "identity_slot_not_requested"
+    assert result.slot("identifier_inventory").state == "available"
+    assert source.batch_reads == ["source_identities"]
+    assert result.slot("match_evidence").state == "unknown"
+    assert result.slot("match_evidence").reason == "identity_slot_not_requested"
 
 
 @pytest.mark.asyncio
@@ -272,24 +319,50 @@ async def test_source_subject_uses_exact_tenant_scoped_record_and_sanitized_clai
 
     result = await Identity360Provider(source).read("tenant-a", "source", "source-1")
 
-    lineage = result.slot("source_identifier_lineage")
-    evidence = result.slot("identity_evidence")
-    assert lineage.state == "degraded"
-    assert lineage.reason == "source_provider_registry_join_not_performed"
+    inventory = result.slot("identifier_inventory")
+    namespaces = result.slot("namespace_map")
+    evidence = result.slot("evidence_trace")
+    assert inventory.state == "available"
+    assert namespaces.state == "available"
+    assert namespaces.content["canonicalNamespaceRegistryJoin"]["state"] == "unknown"
     assert "source_provider_registry_join_not_performed" in result.warnings
-    assert lineage.content["sourceIdentities"][0]["identifierTypes"] == ["external_id"]
-    assert lineage.content["claims"][0]["claimType"] == "email"
-    assert evidence.content["sourceClaims"][0]["verificationStatus"] == "observed"
-    assert result.slot("resolved_subject_identity").state == "unknown"
-    assert result.slot("relationship_identity_context").state == "unknown"
+    assert inventory.content["sourceIdentities"][0]["identifierTypes"] == ["external_id"]
+    assert inventory.content["claims"][0]["claimType"] == "email"
+    assert evidence.state == "available"
+    assert result.slot("match_evidence").state == "unknown"
+    assert result.slot("aliases").state == "unknown"
 
     rendered = json.dumps(_payload(result), sort_keys=True)
     for private_value in (
         "private-source-identifier",
         "private-normalized-email",
         "private-raw-email",
+        "private-source-identifier",
     ):
         assert private_value not in rendered
+
+
+@pytest.mark.asyncio
+async def test_resolved_source_identity_joins_canonical_match_evidence() -> None:
+    source = FakeIdentity360Source()
+    source.source = {
+        "id": "source-1",
+        "tenant_id": "tenant-a",
+        "source_kind": "connector",
+        "source_namespace": "crm:customers",
+        "status": "resolved",
+        "external_id": "private-source-identifier",
+        "canonical_entity_id": "entity-1",
+    }
+
+    result = await Identity360Provider(source).read("tenant-a", "source", "source-1")
+
+    assert result.slot("match_evidence").state == "available"
+    assert result.slot("match_evidence").content["subjectResolution"]["state"] == "resolved"
+    assert result.slot("aliases").state == "available"
+    assert "aliases" in source.batch_reads
+    rendered = json.dumps(_payload(result), sort_keys=True)
+    assert "private-source-identifier" not in rendered
 
 
 @pytest.mark.asyncio
@@ -310,13 +383,13 @@ async def test_unresolved_source_link_does_not_become_canonical_subject() -> Non
         "tenant-a",
         "source",
         "source-1",
-        requested_slot_ids={"resolved_subject_identity"},
+        requested_slot_ids={"match_evidence"},
     )
 
-    identity = result.slot("resolved_subject_identity")
+    identity = result.slot("match_evidence")
     assert identity.state == "unknown"
-    assert identity.content["canonicalEntity"] is None
-    assert identity.content["resolution"]["state"] == "unknown"
+    assert identity.content["subjectResolution"]["canonicalEntity"] is None
+    assert identity.content["subjectResolution"]["state"] == "unknown"
     assert "source_identity_not_resolved" in result.warnings
 
 
@@ -325,6 +398,8 @@ async def test_repository_source_identity_query_is_tenant_bound_before_identity3
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     reset_in_memory_stores()
+
+
     repository = IdentityResolutionRepository()
     source_identity_id = "shared-source-record-id"
     foreign_row = {
@@ -370,9 +445,9 @@ async def test_repository_source_identity_query_is_tenant_bound_before_identity3
     assert query_filters == [{"tenant_id": "tenant-a", "id": source_identity_id}]
 
     result = await Identity360Provider(source).read("tenant-a", "source", source_identity_id)
-    assert result.state == "unknown"
-    assert result.slot("source_identifier_lineage").content["sourceIdentities"] == []
-    assert result.slot("identity_evidence").content["sourceClaims"] == []
+    assert result.state == "degraded"
+    assert result.slot("identifier_inventory").content["sourceIdentities"] == []
+    assert result.slot("evidence_trace").content["evidenceRefs"] == []
     assert all(
         filters == {"tenant_id": "tenant-a", "id": source_identity_id} for filters in query_filters
     )
@@ -383,6 +458,28 @@ async def test_repository_source_identity_query_is_tenant_bound_before_identity3
         "foreign-entity-id",
     ):
         assert foreign_value not in rendered
+    reset_in_memory_stores()
+
+
+@pytest.mark.asyncio
+async def test_repository_conflicts_are_tenant_and_entity_scoped() -> None:
+    reset_in_memory_stores()
+    repository = IdentityResolutionRepository()
+    await repository.create_conflict(
+        "tenant-a", ["entity-1", "entity-2"], [], "ambiguous_match", 0.7, ["review"]
+    )
+    await repository.create_conflict(
+        "tenant-b", ["entity-1", "entity-foreign"], [], "foreign_match", 0.9, ["private"]
+    )
+
+    source = RepositoryIdentity360Source(identity_repository=repository)
+    read = await source.conflicts_for_entity("tenant-a", "entity-1", limit=10)
+
+    assert read.available is True
+    assert read.truncated is False
+    assert len(read.rows) == 1
+    assert read.rows[0]["tenant_id"] == "tenant-a"
+    assert read.rows[0]["candidate_entity_ids"] == ["entity-1", "entity-2"]
     reset_in_memory_stores()
 
 
@@ -405,10 +502,10 @@ async def test_cross_tenant_entity_and_evidence_are_not_projected() -> None:
 
     result = await Identity360Provider(source).read("tenant-a", "entity", "entity-1")
 
-    assert result.state == "unknown"
-    assert result.slot("resolved_subject_identity").state == "unknown"
-    assert result.slot("identity_evidence").state == "unknown"
-    assert result.slot("identity_evidence").content["aliases"] == []
+    assert result.state == "degraded"
+    assert result.slot("match_evidence").state == "unknown"
+    assert result.slot("aliases").state == "unknown"
+    assert result.slot("aliases").content["items"] == []
     assert "Cross Tenant Private Name" not in json.dumps(_payload(result))
 
 
@@ -428,16 +525,16 @@ async def test_tenant_mismatched_rows_fail_closed_and_truncation_is_preserved() 
 
     result = await Identity360Provider(source).read("tenant-a", "entity", "entity-1")
 
-    evidence = result.slot("identity_evidence")
+    evidence = result.slot("aliases")
     assert evidence.state == "degraded"
-    assert evidence.content["aliases"] == []
+    assert evidence.content["items"] == []
     assert "must-not-leak" not in json.dumps(_payload(result))
 
     source.aliases = []
     source.force_truncate_aliases = True
     result = await Identity360Provider(source).read("tenant-a", "entity", "entity-1")
-    assert result.slot("identity_evidence").state == "truncated"
-    assert result.slot("identity_evidence").truncated is True
+    assert result.slot("aliases").state == "truncated"
+    assert result.slot("aliases").truncated is True
 
 
 @pytest.mark.asyncio
@@ -447,8 +544,35 @@ async def test_agent_subject_requires_canonical_agent_entity_type() -> None:
 
     result = await Identity360Provider(source).read("tenant-a", "agent", "entity-1")
 
-    assert result.slot("resolved_subject_identity").state == "unknown"
-    assert result.slot("actor_and_agent_binding").content["state"] == "unknown"
+    assert result.slot("match_evidence").state == "unknown"
+    assert result.slot("wallets").state == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_wallet_source_candidate_does_not_claim_wallet_ownership() -> None:
+    source = FakeIdentity360Source()
+    source.source_rows = [
+        {
+            "id": "wallet-source-row",
+            "tenant_id": "tenant-a",
+            "source_kind": "sdk_wallet",
+            "source_namespace": "tenant:tenant-a:wallet:eip155:1",
+            "canonical_entity_id": "entity-1",
+            "status": "unresolved",
+            "external_id": "private-wallet-hash",
+        }
+    ]
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"wallets"}
+    )
+
+    wallets = result.slot("wallets")
+    assert wallets.state == "unknown"
+    assert wallets.content["ownershipState"] == "unknown"
+    assert wallets.content["observedSourceCandidates"][0]["sourceKind"] == "sdk_wallet"
+    rendered = json.dumps(_payload(result), sort_keys=True)
+    assert "private-wallet-hash" not in rendered
 
 
 @pytest.mark.asyncio
@@ -475,8 +599,8 @@ async def test_suppressed_source_identity_does_not_read_or_project_claims() -> N
     result = await Identity360Provider(source).read("tenant-a", "source", "source-1")
 
     assert not source.claim_read_called
-    assert result.slot("source_identifier_lineage").state == "suppressed"
-    assert result.slot("identity_evidence").state == "suppressed"
+    assert result.slot("identifier_inventory").state == "suppressed"
+    assert result.slot("namespace_map").state == "suppressed"
     rendered = json.dumps(_payload(result), sort_keys=True)
     for private_value in (
         "private-namespace",
@@ -494,7 +618,7 @@ async def test_repository_failure_is_reported_as_degraded_without_exception_text
 
     result = await Identity360Provider(FailingSource()).read("tenant-a", "entity", "entity-1")
 
-    resolved = result.slot("resolved_subject_identity")
+    resolved = result.slot("match_evidence")
     assert resolved.state == "degraded"
     assert "RuntimeError" in " ".join(result.warnings)
     assert "private backend endpoint" not in json.dumps(_payload(result))

@@ -39,7 +39,7 @@ reviewed_source_commits:
   - commit: "40af67902"
     reason: "Reviewed the optional server-returned consent, usage, and audit references for accepted batch observations. The contracts preserve the existing intake and authority boundaries."
 source_hashes:
-  "packages/shared/": "sha256:294fd9cf9e0b11c7a3de955df666a6aa54000bd369c301a217689762952b1615"
+  "packages/shared/": "sha256:90f33f83ca5fe429f3ab87b9da982c1617cb34a79eeb6a42c4c707e6fd8d37ff"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
@@ -54,7 +54,7 @@ source_hashes:
   "services/api/ingestion/ingestion/replay.py": "sha256:65f898480787b71d14c8f687351844fdf5585cd67664ff5c32699328594b24ce"
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:8871db780d887fbd8857b2bc3745f630798a3b872dd00e2bfe75ebf2489c3ab7"
-  "services/api/main.py": "sha256:43bc0df60879c8fa844a700da23e7d80455c003b26c14225ce41b1d9865ce521"
+  "services/api/main.py": "sha256:785efdc38288d9d00e3493739316c46f99bde0126cc8f9c8ea69fb9b3501d2f3"
   "services/api/middleware/middleware.py": "sha256:da6d7c92bd082a2c1823b72aca5d4bfa5c17faf0a3fb9e85fc7bd9a88a5b0654"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
   "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
@@ -576,9 +576,19 @@ in the source-of-truth). All 20 providers register, with 9 still classified as
 tenant-scoped `POST /v1/experience360/frames` route composes the separate
 18-surface product catalog, and `GET /v1/experience360/catalog` reports catalog
 and provider-registration state. Policy runs before reads, and missing or
-unsupported slot paths remain unknown/degraded. The reconstructed product
-contracts are pending alignment with the original 360 blueprint. Exploration
-surfaces compose over the engine through projection-backed surface adapters
+unsupported slot paths remain unknown/degraded. The product catalog is
+crosswalked to the checked-in
+[`AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md`](../reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md),
+which defines the exact 18 backend product surfaces; the supplemental
+architectural blueprint informs shared projection and lens design but does not
+change that catalog's scope. Each catalog entry records its source section,
+required slots, subjects, lenses, owner, and purpose. All 18 entries are now
+marked `source_aligned` for contract metadata and slot IDs. This is contract
+alignment only: it does not prove a complete provider path, evidence coverage,
+policy behavior, freshness, API reachability, or surface-level verification.
+The registry contains 24 technical projections; 9 are marked `implemented` and
+15 remain `in_flight`, and registration does not promote that state.
+Exploration surfaces compose over the engine through projection-backed surface adapters
 
 (`services/api/journeys/exploration/adapters/projection.py`).
 The design decision is [ADR-010](decisions/ADR-010-intelligence-projection-plane.md);

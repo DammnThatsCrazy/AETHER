@@ -162,6 +162,11 @@ async def test_provider_returns_valid_typed_result() -> None:
     # Every claim carries a reused EvidenceRef (requiresEvidence: true).
     assert result.claims
     assert all(c.evidenceRefs for c in result.claims)
+    # Claims route to each exact eligible consumer slot declared by the catalog.
+    assert all(
+        set(c.domainSlotIds or []) == {"conversions", "measured_outcomes"}
+        for c in result.claims
+    )
 
 
 @pytest.mark.asyncio
@@ -470,6 +475,10 @@ async def test_durable_journey_outcomes_match_exact_tenant_kind_and_id(
     assert projected[0]["evidence_refs"][0]["id"] == "evidence-journey-exact"
     assert result.asOf is None
     assert all(claim.evidenceRefs for claim in result.claims)
+    outcome_claim = next(
+        claim for claim in result.claims if claim.id == "outcome.outcome-journey-exact"
+    )
+    assert "measured_outcomes" in (outcome_claim.domainSlotIds or [])
 
     frame = compose_experience360_frame(
         Experience360FrameRequest(
@@ -490,6 +499,7 @@ async def test_durable_journey_outcomes_match_exact_tenant_kind_and_id(
         "measurement_contract",
     }
     assert {ref.id for ref in slot.evidenceRefs} == {"evidence-journey-exact"}
+    assert [claim.id for claim in slot.claims] == [outcome_claim.id]
     assert any(
         provenance.projectionId == "outcome360"
         and provenance.sectionId == "outcomes"

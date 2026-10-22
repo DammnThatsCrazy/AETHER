@@ -3,11 +3,12 @@
 
 # Product 360 Surface Catalog
 
-Catalog version: `0.1.0`
+Catalog version: `0.2.0`
 
-This product catalog has 18 surface contracts and is separate from the 20-row technical projection provider registry. Projection mappings are `catalog_only` candidate section bindings. Direct surface-provider mappings use a separate namespace; `runtime_wired` confirms a frame-runtime call path for the declared subjects and slots, not full surface completion.
+This product catalog has 18 surface contracts and is separate from the 24-row technical projection provider registry. Projection mappings are `catalog_only` candidate section bindings. Direct surface-provider mappings use a separate namespace; `runtime_wired` confirms a frame-runtime call path for the declared subjects and slots, not full surface completion.
 
-The originally reviewed 3,013-line 360 SSOT is not available in this checkout. The catalog below is reconstructed from repository contracts and must be aligned to that source before its names or slot details are treated as exact. Reconstructed fields are marked accordingly in the machine-readable contract.
+The 18 product contracts and their lens lists are aligned to the recovered primary backend 360 source of truth. `source_aligned` describes blueprint alignment only. A slot needs a canonical provider read and governed frame evidence before it can be considered implemented; the binding and gap columns below show the current limits.
+Declared binding counts are registry coverage, not proof that a slot or surface is complete. A bound slot can still return unknown, degraded, stale, or suppressed for a request.
 
 ## Frame lifecycle states
 
@@ -26,43 +27,54 @@ The originally reviewed 3,013-line 360 SSOT is not available in this checkout. T
 
 ## Catalog overview
 
-| Product surface | Contract status | Subject kinds | Required slots | Optional slots | Projection providers | Direct surface providers |
-|---|---|---|---:|---:|---|---|
-| [Account 360](#account-360) | reconstructed_pending_source_alignment | `entity` | 3 | 1 | `economic360`, `profile360`, `relationship360` | `Account360Provider` (runtime_wired) |
-| [Agent 360](#agent-360) | reconstructed_pending_source_alignment | `agent`, `entity` | 6 | 5 | `agent360`, `communication360`, `economic360`, `execution360`, `outcome360`, `profile360`, `relationship360`, `risk360`, `social360`, `source360`, `temporal360` | — |
-| [Campaign 360](#campaign-360) | reconstructed_pending_source_alignment | `campaign`, `episode`, `population`, `source` | 4 | 2 | `campaign360`, `cluster360`, `communication360`, `economic360`, `episode360`, `outcome360`, `population360` | — |
-| [Commerce 360](#commerce-360) | reconstructed_pending_source_alignment | `entity`, `campaign`, `journey` | 3 | 2 | `campaign360`, `economic360`, `outcome360`, `profile360` | — |
-| [Communications 360](#communications-360) | reconstructed_pending_source_alignment | `campaign`, `episode`, `journey`, `source` | 2 | 3 | `campaign360`, `communication360`, `episode360`, `outcome360`, `source360` | — |
-| [Episode 360](#episode-360) | reconstructed_pending_source_alignment | `episode`, `entity`, `campaign` | 4 | 2 | `campaign360`, `communication360`, `episode360`, `outcome360`, `profile360`, `relationship360`, `source360`, `temporal360` | — |
-| [Execution 360](#execution-360) | reconstructed_pending_source_alignment | `agent`, `episode`, `entity` | 5 | 1 | `agent360`, `economic360`, `episode360`, `execution360`, `outcome360`, `source360`, `temporal360` | — |
-| [Identity 360](#identity-360) | reconstructed_pending_source_alignment | `entity`, `agent`, `source` | 3 | 2 | `agent360`, `execution360`, `profile360`, `relationship360`, `source360` | `Identity360Provider` (runtime_wired) |
-| [Journey 360](#journey-360) | reconstructed_pending_source_alignment | `journey`, `entity`, `episode` | 3 | 2 | `communication360`, `episode360`, `outcome360`, `profile360`, `temporal360` | — |
-| [Location 360](#location-360) | reconstructed_pending_source_alignment | `entity`, `population`, `source` | 3 | 1 | `geographic360`, `population360`, `profile360` | — |
-| [Memory 360](#memory-360) | reconstructed_pending_source_alignment | `entity`, `agent`, `episode`, `journey` | 4 | 2 | `agent360`, `episode360`, `outcome360`, `profile360`, `relationship360`, `source360`, `temporal360` | — |
-| [Profile 360](#profile-360) | reconstructed_pending_source_alignment | `entity`, `agent` | 3 | 3 | `economic360`, `outcome360`, `profile360`, `relationship360`, `risk360` | — |
-| [Risk 360](#risk-360) | reconstructed_pending_source_alignment | `entity`, `relationship`, `agent`, `cluster` | 3 | 3 | `economic360`, `execution360`, `fraud360`, `relationship360`, `risk360`, `social360` | — |
-| [Signals 360](#signals-360) | reconstructed_pending_source_alignment | `entity`, `agent`, `relationship`, `source` | 2 | 3 | `connection360`, `fraud360`, `outcome360`, `risk360`, `social360`, `source360`, `temporal360` | — |
-| [Social 360](#social-360) | reconstructed_pending_source_alignment | `entity`, `relationship`, `source`, `population` | 3 | 2 | `geographic360`, `population360`, `relationship360`, `social360`, `source360` | — |
-| [Support 360](#support-360) | reconstructed_pending_source_alignment | `entity`, `agent`, `episode`, `source` | 4 | 2 | `agent360`, `episode360`, `outcome360`, `profile360`, `risk360`, `source360`, `support360` | — |
-| [Value 360](#value-360) | reconstructed_pending_source_alignment | `campaign`, `episode`, `journey` | 3 | 2 | `campaign360`, `economic360`, `outcome360`, `temporal360` | — |
-| [Workflow 360](#workflow-360) | reconstructed_pending_source_alignment | `agent`, `episode`, `connection` | 4 | 2 | `agent360`, `connection360`, `execution360`, `infrastructure360`, `outcome360`, `source360` | — |
+| Product surface | Contract status | Subject kinds | Required slots | Declared required bindings | Explicit partial required slots | Unbound required slots | Optional slots | Projection providers | Direct surface providers |
+|---|---|---|---:|---:|---:|---:|---:|---|---|
+| [Account 360](#account-360) | source_aligned | `account`, `entity`, `workspace` | 11 | 6/11 | 0 | 5 | 4 | `economic360`, `profile360`, `relationship360` | `Account360Provider` (runtime_wired) |
+| [Agent 360](#agent-360) | source_aligned | `agent`, `entity` | 11 | 11/11 | 6 | 0 | 4 | `agent360`, `communication360`, `economic360`, `execution360`, `outcome360`, `relationship360`, `risk360` | — |
+| [Campaign 360](#campaign-360) | source_aligned | `campaign` | 11 | 8/11 | 1 | 3 | 0 | `campaign360`, `communication360`, `economic360`, `outcome360` | — |
+| [Commerce 360](#commerce-360) | source_aligned | `entity`, `campaign`, `journey`, `commerce`, `product`, `offer`, `sku`, `checkout` | 11 | 6/11 | 2 | 5 | 0 | `commerce360` | — |
+| [Communications 360](#communications-360) | source_aligned | `message`, `thread`, `profile`, `campaign`, `episode`, `agent`, `journey`, `source` | 11 | 9/11 | 2 | 2 | 0 | `communication360` | — |
+| [Episode 360](#episode-360) | source_aligned | `episode`, `session`, `conversation`, `activity_window`, `entity`, `campaign` | 11 | 5/11 | 0 | 6 | 1 | `campaign360`, `episode360`, `profile360`, `relationship360` | — |
+| [Execution 360](#execution-360) | source_aligned | `agent`, `entity`, `episode`, `execution` | 11 | 8/11 | 2 | 3 | 0 | `execution360` | — |
+| [Identity 360](#identity-360) | source_aligned | `entity`, `agent`, `source` | 10 | 10/10 | 0 | 0 | 3 | `agent360`, `execution360`, `profile360`, `relationship360` | `Identity360Provider` (runtime_wired) |
+| [Journey 360](#journey-360) | source_aligned | `journey`, `profile`, `account`, `campaign`, `episode`, `entity` | 11 | 5/11 | 2 | 6 | 2 | `episode360`, `profile360` | — |
+| [Location 360](#location-360) | source_aligned | `location`, `place`, `geohash`, `timezone`, `region`, `entity`, `population`, `source` | 11 | 4/11 | 1 | 7 | 4 | `geographic360`, `population360`, `profile360` | — |
+| [Memory 360](#memory-360) | source_aligned | `entity`, `semantic_entity`, `memory`, `card`, `topic` | 10 | 7/10 | 1 | 3 | 0 | `memory360` | — |
+| [Profile 360](#profile-360) | source_aligned | `profile`, `entity`, `agent`, `anonymous_subject`, `account_member`, `cluster` | 13 | 6/13 | 2 | 7 | 6 | `economic360`, `outcome360`, `profile360`, `relationship360`, `risk360` | — |
+| [Risk 360](#risk-360) | source_aligned | `risk`, `entity`, `profile`, `agent`, `account`, `source`, `campaign`, `contagion_path`, `relationship`, `cluster` | 12 | 5/12 | 1 | 7 | 6 | `economic360`, `execution360`, `fraud360`, `relationship360`, `risk360`, `social360` | — |
+| [Signals 360](#signals-360) | source_aligned | `entity`, `signal`, `source`, `event`, `observation`, `stream` | 10 | 5/10 | 2 | 5 | 0 | `signals360` | — |
+| [Social 360](#social-360) | source_aligned | `entity`, `profile`, `relationship`, `community`, `syndicate`, `source`, `population` | 10 | 4/10 | 1 | 6 | 5 | `geographic360`, `population360`, `relationship360`, `social360`, `source360` | — |
+| [Support 360](#support-360) | source_aligned | `support_case`, `callback`, `conversation`, `ticket`, `entity`, `agent`, `episode`, `source` | 10 | 3/10 | 2 | 7 | 6 | `agent360`, `episode360`, `outcome360`, `profile360`, `risk360`, `source360`, `support360` | — |
+| [Value 360](#value-360) | source_aligned | `value`, `profile`, `account`, `conversion`, `cluster`, `campaign`, `episode`, `journey`, `entity`, `agent`, `source` | 11 | 5/11 | 3 | 6 | 5 | `campaign360`, `economic360`, `outcome360`, `temporal360` | — |
+| [Workflow 360](#workflow-360) | source_aligned | `workflow`, `automation`, `trigger`, `run`, `workflow_run` | 11 | 4/11 | 1 | 7 | 0 | `workflow360` | — |
 
 ## Account 360
 
 Product surface id: `account360`
-Contract status: `reconstructed_pending_source_alignment`
-Subject kinds: `entity`
+Contract status: `source_aligned`
+Subject kinds: `account`, `entity`, `workspace`
 
 Governed account-level view composed from canonical entity, relationship, economic, and evidence authorities.
 
 ### Domain slots
 
-| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Description |
-|---|---|---|---|---|---|
-| `account_identity_and_state` | required |  | `identity`, `entity_registry` | `profile360` (primary): subjects `entity`; `summary`, `state` | Resolved account identity and state. |
-| `account_relationships` | required |  | `relationship_facts`, `graph` | `relationship360` (primary): subjects `entity`; `summary`, `interactions`, `evidence` | Relationships associated with the account. |
-| `economic_context` | optional |  | `economic_facts`, `ai_execution_facts` | `economic360` (primary): subjects `entity`; `summary`, `evidence`, `outcomes` | Economic facts associated with the account. |
-| `evidence_and_limitations` | required |  | `evidence` | `profile360` (primary): subjects `entity`; `evidence`, `findings` | Evidence and coverage for account context. |
+| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
+|---|---|---|---|---|---|---|---|
+| `account_identity_and_state` | optional |  | `identity`, `entity_registry` | `profile360` (primary): subjects `entity`; `summary`, `state` | — | — | Resolved account identity and state. |
+| `account_relationships` | optional |  | `relationship_facts`, `graph` | `relationship360` (primary): subjects `entity`; `summary`, `interactions`, `evidence` | — | — | Relationships associated with the account. |
+| `account_summary` | required |  | `entities`, `entity_registry` | — | `Account360Provider` (runtime_wired) | — | Exact tenant organization or account identity; lifecycle coverage remains unknown. |
+| `agents` | required |  | `entity_registry`, `graph` | — | `Account360Provider` (runtime_wired) | — | Observed canonical agent members of the account; authority and delegation are evaluated in their owning subsystems. |
+| `communications` | required |  | `communication_facts` | — | — | Unbound: `account_communication_subject_binding_not_available` | Account linked communication threads with participant policy. |
+| `contracts` | required |  | `commerce` | — | — | Unbound: `canonical_account_contract_authority_not_available` | Canonical account contract and obligation records. |
+| `economic_context` | optional |  | `economic_facts`, `ai_execution_facts` | `economic360` (primary): subjects `entity`; `summary`, `evidence`, `outcomes` | — | — | Economic facts associated with the account. |
+| `evidence_and_limitations` | optional |  | `evidence` | `profile360` (primary): subjects `entity`; `evidence`, `findings` | — | — | Evidence and coverage for account context. |
+| `evidence_trace` | required |  | `evidence` | `profile360` (primary): subjects `entity`; `evidence`, `findings` | — | — | Evidence and limits for the account entity only, not a complete member aggregate. |
+| `journeys` | required |  | `journeys` | — | — | Unbound: `account_journey_membership_authority_not_joined` | Journeys directly linked to the account by a canonical relationship. |
+| `members` | required |  | `entity_registry`, `graph` | — | `Account360Provider` (runtime_wired) | — | Known current organization MEMBER_OF edges validated against canonical member entities; roster completeness unknown. |
+| `profiles` | required |  | `identity`, `entity_registry` | — | — | Unbound: `account_member_profile_fanout_and_policy_not_implemented` | Profile views for validated account members with each profile policy independently applied. |
+| `relationships` | required |  | `relationship_facts`, `graph` | `relationship360` (primary): subjects `entity`; `summary`, `interactions`, `evidence` | — | — | Entity scoped relationship evidence for the exact account identity. |
+| `risk` | required |  | `risk_outputs` | — | — | Unbound: `account_risk_subject_join_not_available` | Account linked risk outputs backed by canonical evidence. |
+| `value` | required |  | `economic_facts` | `economic360` (primary): subjects `entity`; `summary` | — | — | Direct entity-scoped economic value for the canonical account profile, without member or execution-cost aggregation. |
 
 ### Projection provider bindings
 
@@ -76,11 +88,11 @@ Governed account-level view composed from canonical entity, relationship, econom
 
 | Provider class | Provider kind | Binding status | Subjects | Domain slots | Implementation | Frame-runtime call site |
 |---|---|---|---|---|---|---|
-| `Account360Provider` | `surface_frame_provider` | `runtime_wired` | `entity` | `account_identity_and_state` | `services/api/identity/account360_provider.py` | `services/api/shared/intelligence_projections/frame_runtime.py` |
+| `Account360Provider` | `surface_frame_provider` | `runtime_wired` | `entity` | `account_summary`, `members`, `agents` | `services/api/identity/account360_provider.py` | `services/api/shared/intelligence_projections/frame_runtime.py` |
 
 ### Authority and governance contract
 
-Canonical authorities: `ai_execution_facts`, `economic_facts`, `entity_registry`, `evidence`, `graph`, `identity`, `relationship_facts`.
+Canonical authorities: `ai_execution_facts`, `commerce`, `communication_facts`, `economic_facts`, `entities`, `entity_registry`, `evidence`, `graph`, `identity`, `journeys`, `relationship_facts`, `risk_outputs`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -92,31 +104,35 @@ Required backend capabilities: `experience360.frame.compose`, `experience360.ten
 
 Capability and provider status is contract metadata only: `registry_requirements_not_route_attestation`. Provider implementation states are copied from the technical registry and do not imply runtime readiness.
 
-Lens alignment: expected count `None`; exact lens ids are pending source alignment.
+Lens alignment: `source_aligned`; expected count `8`; lens ids: `account`, `identity`, `relationship`, `journey`, `value`, `communications`, `risk`, `policy`.
 
 ## Agent 360
 
 Product surface id: `agent360`
-Contract status: `reconstructed_pending_source_alignment`
+Contract status: `source_aligned`
 Subject kinds: `agent`, `entity`
 
 Governed view of an agent identity, actor attribution, authority and delegation, execution activity, communications, risk, evidence, and measured outcomes.
 
 ### Domain slots
 
-| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Description |
-|---|---|---|---|---|---|
-| `actions_tools_resources` | required |  | `actions`, `tools`, `resources` | `execution360` (primary): subjects `agent`, `entity`; `interactions`, `evidence` | Observed actions, tools, and resource activity. |
-| `actor_attribution` | required | `slotActorAttribution` | `agent_entities`, `identity` | `execution360` (primary): subjects `agent`, `entity`; `state`, `evidence`; `agent360` (supporting): subjects `agent`, `entity`; `state`, `evidence` | Canonical actor and subject attribution attached to agent activity. |
-| `agent_identity` | required |  | `agent_entity`, `identity` | `agent360` (primary): subjects `agent`, `entity`; `summary`, `state`; `profile360` (supporting): subjects `agent`, `entity`; `summary`, `state` | Agent identity and canonical entity context. |
-| `authority_and_delegation` | required | `slotActorAttribution`, `slotAuthorityDecision` | `agent_access`, `identity` | `agent360` (primary): subjects `agent`, `entity`; `state`, `evidence` | Agent access, authority context, and delegation lineage. |
-| `business_outcomes` | optional |  | `outcome_facts` | `outcome360` (primary): subjects `agent`; `outcomes`, `evidence` | Measured outcomes linked to the agent activity. |
-| `communications` | optional |  | `communication_facts`, `observations` | `communication360` (primary): subjects `agent`; `timeline`, `interactions`, `evidence`; `agent360` (supporting): subjects `agent`; `interactions`, `evidence` | Observed agent messages joined through tenant-scoped inbox records, alongside communication events associated with agent work. |
-| `economic_cost_and_settlement` | optional |  | `economic_facts`, `payments`, `commerce`, `ai_execution_facts` | `economic360` (primary): subjects `agent`, `entity`; `summary`, `evidence` | Economic facts and authoritative payment or commerce evidence. |
-| `execution_lifecycle` | required |  | `agent_executions`, `execution_facts` | `execution360` (primary): subjects `agent`, `entity`; `state`, `timeline`, `evidence`; `agent360` (supporting): subjects `agent`, `entity`; `timeline`, `evidence` | Execution lifecycle evidence and temporal trace. |
-| `risk_and_contagion` | optional |  | `agent_entities`, `identity`, `relationship_facts`, `risk_outputs`, `social_observations` | `risk360` (primary): subjects `agent`, `entity`; `findings`, `evidence`; `social360` (supporting): subjects `agent`, `entity`; `findings`, `evidence`; `relationship360` (supporting): subjects `agent`, `entity`; `interactions`, `evidence` | Risk, fraud, social, and relationship context with source evidence. |
-| `source_evidence_lineage` | required |  | `evidence`, `source_provenance` | `source360` (primary): subjects `agent`; `evidence`, `coverage`; `agent360` (supporting): subjects `agent`, `entity`; `evidence` | Evidence and source provenance for claims included in the frame. |
-| `temporal_relationship_context` | optional |  | `temporal_kernel`, `relationship_facts`, `graph` | `temporal360` (primary): subjects `entity`; `timeline`, `evidence`; `relationship360` (supporting): subjects `agent`, `entity`; `interactions`, `timeline` | Temporal state and relationship context surrounding agent activity. |
+| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
+|---|---|---|---|---|---|---|---|
+| `actor_attribution` | optional |  | `agent_entities`, `identity` | `agent360` (supporting): subjects `agent`, `entity`; `evidence`, `state`; `execution360` (primary): subjects `agent`, `entity`; `evidence`, `state` | — | — | Optional Aether provider context retained for Agent 360: actor attribution. |
+| `authority_envelope` | required | `slotActorAttribution`, `slotAuthorityDecision` | `agent_access`, `agent_executions`, `identity` | `agent360` (primary): subjects `agent`, `entity`; `evidence`, `state` | — | — | Observed current capability grants and recorded action-scoped delegation decisions; no standing action or resource authorization verdict. |
+| `business_outcomes` | optional |  | `outcome_facts` | `outcome360` (primary): subjects `agent`; `evidence`, `outcomes` | — | — | Optional Aether provider context retained for Agent 360: business outcomes. |
+| `capabilities` | required |  | `actions`, `resources`, `tools`, `agent_access` | `agent360` (primary): subjects `agent`, `entity`; `state`, `evidence` | — | Authority: `active_invoke_grants_do_not_evaluate_action_or_resource_specific_policy`; Partial: `current_active_grant_join_is_bounded_to_2000_records_and_does_not_replay_historical_authority` | Observed runtime capability reach joined to exact active invoke grants for the resolved canonical Agent; action and resource authorization remains unknown. |
+| `communications` | optional |  | `communication_facts`, `observations` | `agent360` (supporting): subjects `agent`; `interactions`; `communication360` (primary): subjects `agent`; `evidence`, `interactions`, `timeline` | — | — | Optional Aether provider context retained for Agent 360: communications. |
+| `delegation_chain` | required | `slotActorAttribution`, `slotAuthorityDecision` | `agent_access`, `identity` | `agent360` (primary): subjects `agent`, `entity`; `evidence`, `state` | — | Partial: `delegation_reads_are_bounded_and_do_not_evaluate_transitive_or_action_resource_authority` | Tenant-scoped stored delegation edges with party identity evidence; no transitive or action-specific authority is inferred. |
+| `economic_cost_and_settlement` | optional |  | `ai_execution_facts`, `commerce`, `economic_facts`, `payments` | `economic360` (primary): subjects `agent`, `entity`; `evidence`, `summary` | — | — | Optional Aether provider context retained for Agent 360: economic cost and settlement. |
+| `evidence_trace` | required |  | `evidence`, `source_provenance` | `agent360` (supporting): subjects `agent`, `entity`; `evidence` | — | Authority: `exact_subject_authority_join_not_implemented` | Required Agent 360 blueprint slot: evidence trace. |
+| `execution_history` | required |  | `agent_executions`, `execution_facts` | `execution360` (primary): subjects `agent`, `entity`; `evidence`, `state`, `timeline` | — | — | Required Agent 360 blueprint slot: execution history. |
+| `identity` | required |  | `agent_entity`, `identity` | `agent360` (primary): subjects `agent`, `entity`; `state`, `summary` | — | — | Required Agent 360 blueprint slot: identity. |
+| `owner_delegator` | required | `slotActorAttribution` | `agent_access`, `identity` | `agent360` (primary): subjects `agent`, `entity`; `evidence`, `state` | — | Partial: `delegation_reads_are_bounded_and_party_identity_or_current_authority_can_remain_unknown` | Tenant-scoped owner and delegator records with canonical party identity only where resolved; no effective action authorization is inferred. |
+| `policy_boundary` | required |  | `agent_access`, `agent_executions`, `identity` | `agent360` (primary): subjects `agent`, `entity`; `policy_boundary` | — | Partial: `only_stored_execution_time_decisions_are_available_and_standing_policy_is_not_exposed` | Recorded execution-scoped policy decisions; standing agent policy and a new action decision remain unknown. |
+| `risk_summary` | required |  | `agent_entities`, `identity`, `relationship_facts`, `risk_outputs`, `social_observations` | `risk360` (primary): subjects `agent`, `entity`; `evidence`, `findings` | — | Authority: `exact_subject_authority_join_not_implemented` | Required Agent 360 blueprint slot: risk summary. |
+| `spawned_agents` | required |  | `graph`, `relationship_facts`, `temporal` | `relationship360` (primary): subjects `agent`, `entity`; `agent_spawned_agents` | — | — | Required Agent 360 blueprint slot: spawned agents. |
+| `tool_usage` | required |  | `actions`, `resources`, `tools` | `execution360` (primary): subjects `agent`, `entity`; `evidence`, `interactions` | — | — | Required Agent 360 blueprint slot: tool usage. |
 
 ### Projection provider bindings
 
@@ -127,12 +143,8 @@ Governed view of an agent identity, actor attribution, authority and delegation,
 | `economic360` | `catalog_only` (primary) | `implemented` | `economic360.read`, `economic360.explore` |
 | `execution360` | `catalog_only` (primary) | `in_flight` | `execution360.read`, `execution360.explore` |
 | `outcome360` | `catalog_only` (primary) | `implemented` | `outcome360.read`, `outcome360.explore` |
-| `profile360` | `catalog_only` (supporting) | `in_flight` | `profile360.read`, `profile360.explore` |
-| `relationship360` | `catalog_only` (supporting) | `in_flight` | `relationship360.read`, `relationship360.explore` |
+| `relationship360` | `catalog_only` (primary) | `in_flight` | `relationship360.read`, `relationship360.explore` |
 | `risk360` | `catalog_only` (primary) | `implemented` | `risk360.read`, `risk360.explore` |
-| `social360` | `catalog_only` (supporting) | `in_flight` | `social360.read`, `social360.explore` |
-| `source360` | `catalog_only` (primary) | `in_flight` | `source360.read`, `source360.explore` |
-| `temporal360` | `catalog_only` (primary) | `implemented` | `temporal360.read`, `temporal360.explore` |
 
 ### Direct surface-provider bindings
 
@@ -142,7 +154,7 @@ Governed view of an agent identity, actor attribution, authority and delegation,
 
 ### Authority and governance contract
 
-Canonical authorities: `actions`, `agent_access`, `agent_entities`, `agent_entity`, `agent_executions`, `ai_execution_facts`, `commerce`, `communication_facts`, `economic_facts`, `evidence`, `execution_facts`, `graph`, `identity`, `observations`, `outcome_facts`, `payments`, `relationship_facts`, `resources`, `risk_outputs`, `social_observations`, `source_provenance`, `temporal_kernel`, `tools`.
+Canonical authorities: `actions`, `agent_access`, `agent_entities`, `agent_entity`, `agent_executions`, `ai_execution_facts`, `commerce`, `communication_facts`, `economic_facts`, `evidence`, `execution_facts`, `graph`, `identity`, `observations`, `outcome_facts`, `payments`, `relationship_facts`, `resources`, `risk_outputs`, `social_observations`, `source_provenance`, `temporal`, `tools`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -154,40 +166,40 @@ Required backend capabilities: `experience360.frame.compose`, `experience360.ten
 
 Capability and provider status is contract metadata only: `registry_requirements_not_route_attestation`. Provider implementation states are copied from the technical registry and do not imply runtime readiness.
 
-Lens alignment: expected count `8`; exact lens ids are pending source alignment.
-
-Recovered Agent blueprint review records 11 domain slots and 8 lenses. The 11 slot labels in this reconstructed catalog and all exact lens ids still require alignment to the original SSOT; no original lens names are asserted here.
+Lens alignment: `source_aligned`; expected count `8`; lens ids: `identity`, `agentic`, `authority`, `execution`, `risk`, `relationship`, `policy`, `provenance`.
 
 ## Campaign 360
 
 Product surface id: `campaign360`
-Contract status: `reconstructed_pending_source_alignment`
-Subject kinds: `campaign`, `episode`, `population`, `source`
+Contract status: `source_aligned`
+Subject kinds: `campaign`
 
-Governed campaign view of campaign facts, touchpoints, journeys, communications, attribution, outcomes, and optional economic context.
+Governed view of canonical campaign identity, source classification, signals, touchpoints, journeys, conversions, attribution, cohorts, performance, anomalies, and evidence.
 
 ### Domain slots
 
-| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Description |
-|---|---|---|---|---|---|
-| `attribution_and_outcomes` | required |  | `attribution_credits`, `outcome_facts`, `outcomes` | `campaign360` (primary): subjects `campaign`, `episode`, `population`, `source`; `outcomes`, `findings`; `outcome360` (supporting): subjects `campaign`, `episode`, `population`; `outcomes`, `evidence` | Attribution credits and measured outcomes. |
-| `campaign_identity_and_state` | required |  | `campaign_facts` | `campaign360` (primary): subjects `campaign`, `episode`, `population`, `source`; `summary`, `state`, `evidence` | Campaign facts and state. |
-| `economic_context` | optional |  | `economic`, `economic_facts`, `ai_execution_facts` | `economic360` (primary): subjects `campaign`, `episode`, `source`; `summary`, `evidence`, `outcomes`; `campaign360` (supporting): subjects `campaign`, `episode`, `population`, `source`; `summary`, `evidence`, `outcomes` | Economic facts associated with campaigns. |
-| `journey_and_episode_context` | required |  | `journeys`, `episode_facts` | `episode360` (primary): subjects `campaign`, `episode`; `timeline`, `evidence` | Journeys and episodes associated with campaign activity. |
-| `population_context` | optional |  | `population`, `population_definitions` | `population360` (primary): subjects `population`; `summary`, `state`, `findings`; `cluster360` (supporting): subjects `population`; `summary`, `state`, `evidence` | Population context for campaign reach and measurement. |
-| `touchpoints_and_communications` | required |  | `touchpoints`, `campaign_touchpoints`, `communication_facts` | `campaign360` (primary): subjects `campaign`, `episode`, `population`, `source`; `evidence`, `outcomes`; `communication360` (supporting): subjects `campaign`, `episode`, `source`; `timeline`, `interactions`, `evidence` | Campaign touchpoints and linked communication evidence. |
+| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
+|---|---|---|---|---|---|---|---|
+| `anomalies` | required |  | `risk_outputs`, `source_provenance` | — | — | Unbound: `No exact campaign-to-risk or source-anomaly provider is connected.` | Campaign-linked risk and source anomalies backed by canonical findings. |
+| `attribution` | required |  | `attribution_credits` | `campaign360` (primary): subjects `campaign`; `evidence`, `outcomes`, `findings` | — | — | Active, evidence-backed attribution credits associated with the campaign. |
+| `campaign_identity` | required |  | `campaign_facts` | `campaign360` (primary): subjects `campaign`; `summary`, `state`, `evidence` | — | — | Canonical Aether campaign identity and registered state. |
+| `cohorts_syndicates` | required |  | `cluster_definitions`, `cluster_membership`, `cohort_membership`, `relationship_facts` | — | — | Unbound: `No exact campaign-to-cohort or campaign-to-syndicate relationship is currently joined.` | Canonical cohort, cluster, and syndicate memberships associated with the campaign. |
+| `conversions` | required |  | `measurement_contract`, `outcome_facts` | `outcome360` (primary): subjects `campaign`; `outcomes`, `evidence` | — | — | Canonical conversion and measured-outcome records scoped to the campaign. |
+| `evidence_trace` | required |  | `attribution_credits`, `campaign_facts`, `campaign_touchpoints`, `journeys`, `touchpoints` | `campaign360` (primary): subjects `campaign`; `evidence` | — | — | Source evidence references supporting the campaign frame and its claims. |
+| `journeys` | required |  | `journeys` | `campaign360` (primary): subjects `campaign`; `evidence`, `state` | — | — | Current journey versions that explicitly reference this canonical campaign. |
+| `performance` | required |  | `commerce`, `economic_facts`, `outcome_facts`, `payments` | `economic360` (primary): subjects `campaign`; `summary`, `evidence`, `outcomes` | — | — | Observed economic and outcome performance facts for the campaign. |
+| `signal_sources` | required |  | `events`, `observations`, `source_facts` | — | — | Unbound: `No campaign-scoped signal-source authority is connected to this surface.` | Tenant-scoped signal and source observations associated with the campaign. |
+| `source_classification` | required |  | `campaign_touchpoints`, `source_facts`, `source_provenance` | `campaign360` (primary): subjects `campaign`; `state`, `evidence` | — | Authority: `Touchpoint classification revisions do not classify the campaign registry source or every asserting source.`; Partial: `Only classified tenant campaign touchpoints on the requested page are joined; campaign registry provenance remains unknown.` | Canonical classification of the source that asserted or synchronized campaign evidence. |
+| `touchpoints` | required |  | `campaign_touchpoints`, `communication_facts`, `touchpoints` | `campaign360` (primary): subjects `campaign`; `evidence`, `state`; `communication360` (supporting): subjects `campaign`; `timeline`, `interactions`, `evidence` | — | — | Campaign touchpoints with linked, policy-governed communication evidence. |
 
 ### Projection provider bindings
 
 | Projection | Binding | Provider implementation metadata | Capability keys |
 |---|---|---|---|
 | `campaign360` | `catalog_only` (primary) | `in_flight` | `campaign360.read`, `campaign360.explore` |
-| `cluster360` | `catalog_only` (supporting) | `in_flight` | `cluster360.read`, `cluster360.explore` |
 | `communication360` | `catalog_only` (supporting) | `implemented` | `communication360.read`, `communication360.explore` |
 | `economic360` | `catalog_only` (primary) | `implemented` | `economic360.read`, `economic360.explore` |
-| `episode360` | `catalog_only` (primary) | `in_flight` | `episode360.read`, `episode360.explore` |
-| `outcome360` | `catalog_only` (supporting) | `implemented` | `outcome360.read`, `outcome360.explore` |
-| `population360` | `catalog_only` (primary) | `implemented` | `population360.read`, `population360.explore` |
+| `outcome360` | `catalog_only` (primary) | `implemented` | `outcome360.read`, `outcome360.explore` |
 
 ### Direct surface-provider bindings
 
@@ -197,7 +209,7 @@ Governed campaign view of campaign facts, touchpoints, journeys, communications,
 
 ### Authority and governance contract
 
-Canonical authorities: `ai_execution_facts`, `attribution_credits`, `campaign_facts`, `campaign_touchpoints`, `communication_facts`, `economic`, `economic_facts`, `episode_facts`, `journeys`, `outcome_facts`, `outcomes`, `population`, `population_definitions`, `touchpoints`.
+Canonical authorities: `attribution_credits`, `campaign_facts`, `campaign_touchpoints`, `cluster_definitions`, `cluster_membership`, `cohort_membership`, `commerce`, `communication_facts`, `economic_facts`, `events`, `journeys`, `measurement_contract`, `observations`, `outcome_facts`, `payments`, `relationship_facts`, `risk_outputs`, `source_facts`, `source_provenance`, `touchpoints`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -209,34 +221,37 @@ Required backend capabilities: `experience360.frame.compose`, `experience360.ten
 
 Capability and provider status is contract metadata only: `registry_requirements_not_route_attestation`. Provider implementation states are copied from the technical registry and do not imply runtime readiness.
 
-Lens alignment: expected count `None`; exact lens ids are pending source alignment.
+Lens alignment: `source_aligned`; expected count `8`; lens ids: `campaign`, `signals`, `journey`, `attribution`, `value`, `communications`, `risk`, `provenance`.
 
 ## Commerce 360
 
 Product surface id: `commerce360`
-Contract status: `reconstructed_pending_source_alignment`
-Subject kinds: `entity`, `campaign`, `journey`
+Contract status: `source_aligned`
+Subject kinds: `entity`, `campaign`, `journey`, `commerce`, `product`, `offer`, `sku`, `checkout`
 
 Governed view of commerce and payment facts, economic value, attributed outcomes, and supporting evidence.
 
 ### Domain slots
 
-| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Description |
-|---|---|---|---|---|---|
-| `attribution_and_campaign_context` | optional |  | `attribution_credits`, `campaign_facts` | `campaign360` (primary): subjects `campaign`; `summary`, `evidence`, `outcomes` | Campaign attribution associated with commerce activity. |
-| `commerce_and_payment_facts` | required |  | `commerce`, `payments`, `economic_facts`, `ai_execution_facts` | `economic360` (primary): subjects `entity`, `campaign`, `journey`; `summary`, `state`, `evidence`, `outcomes` | Commerce and payment facts with authoritative source evidence. |
-| `economic_value_and_normalization` | required |  | `economic_facts`, `currency_value_normalization`, `ai_execution_facts` | `economic360` (primary): subjects `entity`, `campaign`, `journey`; `summary`, `evidence` | Economic value and currency normalization context. |
-| `entity_context` | required |  | `identity`, `entity_registry` | `profile360` (primary): subjects `entity`; `summary`, `state`, `evidence` | Resolved entity context for commerce subjects. |
-| `measured_outcomes` | optional |  | `outcome_facts`, `measurement_contract` | `outcome360` (primary): subjects `campaign`; `summary`, `evidence`, `outcomes` | Measured outcomes associated with commerce facts. |
+| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
+|---|---|---|---|---|---|---|---|
+| `availability_price` | required |  | `commerce` | — | — | Unbound: `commerce_availability_price_authority_not_connected` | Required commerce360 slot: availability price. |
+| `campaign_links` | required |  | `campaign_facts`, `commerce`, `source_provenance` | `commerce360` (primary): subjects `campaign`; `campaign_links` | — | — | Explicit campaign scoped commerce order references. |
+| `cart_checkout` | required |  | `commerce` | — | — | Unbound: `commerce_cart_checkout_authority_not_connected` | Required commerce360 slot: cart checkout. |
+| `catalog_links` | required |  | `commerce_product_offer_graph`, `source_provenance` | `commerce360` (primary): subjects `product`, `offer`; `catalog_links` | — | Partial: `catalog_link_coverage_is_limited_to_persisted_product_offer_revisions_and_freshness_sla_is_unconfigured` | Offer to product links from exact tenant-scoped catalog revisions. |
+| `evidence_trace` | required |  | `commerce`, `payments`, `source_provenance` | `commerce360` (primary): subjects `entity`, `campaign`, `journey`; `evidence_trace` | — | — | Source evidence for exact scoped commerce facts. |
+| `exposures` | required |  | `commerce` | — | — | Unbound: `commerce_exposure_subject_join_not_available` | Required commerce360 slot: exposures. |
+| `intent` | required |  | `commerce` | — | — | Unbound: `commerce_intent_subject_join_not_available` | Required commerce360 slot: intent. |
+| `product_offer_summary` | required |  | `commerce_product_offer_graph`, `source_provenance` | `commerce360` (primary): subjects `product`, `offer`; `product_offer_summary` | — | Partial: `catalog_source_ingestion_coverage_and_freshness_sla_are_unconfigured` | Exact tenant-scoped product and offer revisions by canonical product or offer ID. |
+| `purchase` | required |  | `commerce`, `payments`, `source_provenance` | `commerce360` (primary): subjects `entity`, `campaign`, `journey`; `purchase` | — | — | Explicit scoped commerce order and payment fact references. |
+| `risk` | required |  | `risk_outputs` | — | — | Unbound: `commerce_risk_subject_join_not_available` | Required commerce360 slot: risk. |
+| `value` | required |  | `payments`, `source_provenance` | `commerce360` (primary): subjects `entity`, `campaign`, `journey`; `value` | — | — | Observed purchase amounts and currency without unsupported aggregation. |
 
 ### Projection provider bindings
 
 | Projection | Binding | Provider implementation metadata | Capability keys |
 |---|---|---|---|
-| `campaign360` | `catalog_only` (primary) | `in_flight` | `campaign360.read`, `campaign360.explore` |
-| `economic360` | `catalog_only` (primary) | `implemented` | `economic360.read`, `economic360.explore` |
-| `outcome360` | `catalog_only` (primary) | `implemented` | `outcome360.read`, `outcome360.explore` |
-| `profile360` | `catalog_only` (primary) | `in_flight` | `profile360.read`, `profile360.explore` |
+| `commerce360` | `catalog_only` (primary) | `in_flight` | `commerce360.read` |
 
 ### Direct surface-provider bindings
 
@@ -246,7 +261,7 @@ Governed view of commerce and payment facts, economic value, attributed outcomes
 
 ### Authority and governance contract
 
-Canonical authorities: `ai_execution_facts`, `attribution_credits`, `campaign_facts`, `commerce`, `currency_value_normalization`, `economic_facts`, `entity_registry`, `identity`, `measurement_contract`, `outcome_facts`, `payments`.
+Canonical authorities: `campaign_facts`, `commerce`, `commerce_product_offer_graph`, `payments`, `risk_outputs`, `source_provenance`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -258,35 +273,37 @@ Required backend capabilities: `experience360.frame.compose`, `experience360.ten
 
 Capability and provider status is contract metadata only: `registry_requirements_not_route_attestation`. Provider implementation states are copied from the technical registry and do not imply runtime readiness.
 
-Lens alignment: expected count `None`; exact lens ids are pending source alignment.
+Lens alignment: `source_aligned`; expected count `8`; lens ids: `commerce`, `product-offer`, `campaign`, `journey`, `value`, `identity`, `risk`, `provenance`.
 
 ## Communications 360
 
 Product surface id: `communications360`
-Contract status: `reconstructed_pending_source_alignment`
-Subject kinds: `campaign`, `episode`, `journey`, `source`
+Contract status: `source_aligned`
+Subject kinds: `message`, `thread`, `profile`, `campaign`, `episode`, `agent`, `journey`, `source`
 
 Governed view of communication facts, delivery and engagement evidence, campaign and journey context, and applicable consent policy.
 
 ### Domain slots
 
-| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Description |
-|---|---|---|---|---|---|
-| `campaign_context` | optional |  | `campaign_touchpoints`, `campaign_facts` | `campaign360` (primary): subjects `campaign`, `episode`, `source`; `summary`, `evidence`, `outcomes`; `communication360` (supporting): subjects `campaign`, `episode`, `journey`, `source`; `state`, `evidence` | Campaign touchpoints associated with communications. |
-| `communication_events` | required |  | `communication_facts`, `evidence` | `communication360` (primary): subjects `campaign`, `episode`, `journey`, `source`; `summary`, `timeline`, `interactions`, `evidence` | Communication facts and evidence about events and interactions. |
-| `journey_and_episode_context` | optional |  | `journeys`, `episode_facts`, `events` | `episode360` (primary): subjects `campaign`, `episode`, `journey`; `timeline`, `evidence` | Journey and episode context for communication activity. |
-| `measured_outcomes` | optional |  | `outcome_facts` | `outcome360` (primary): subjects `campaign`, `episode`, `journey`; `outcomes`, `evidence` | Measured outcomes associated with communications. |
-| `source_and_policy_context` | required |  | `source_provenance`, `provider_registry` | `source360` (primary): subjects `source`; `evidence`, `coverage` | Source lineage for communications; consent and policy are evaluated by their governing authorities. |
+| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
+|---|---|---|---|---|---|---|---|
+| `agent_authorship` | required |  | `communication_facts`, `entities` | `communication360` (primary): subjects `agent`; `interactions`, `evidence` | — | — | Observed agent author bindings; delegation authority remains unjoined. |
+| `campaign_links` | required |  | `communication_facts`, `campaign_touchpoints` | `communication360` (primary): subjects `campaign`; `state`, `evidence` | — | — | Explicit campaign scoped communication and touchpoint refs. |
+| `evidence_trace` | required |  | `communication_facts`, `evidence` | `communication360` (primary): subjects `agent`, `campaign`; `evidence` | — | — | Communication fact and message evidence with partial source provenance. |
+| `journey_links` | required |  | `communication_facts`, `journeys` | `communication360` (primary): subjects `agent`, `campaign`, `episode`, `journey`, `source`; `summary`, `evidence` | — | Partial: `current_explicit_journey_references_only_no_historical_replay` | Explicit journey references on in-scope communication facts resolved to current tenant journey versions. |
+| `message_inventory` | required |  | `communication_facts`, `evidence` | `communication360` (primary): subjects `agent`, `campaign`; `timeline`, `evidence` | — | — | Bounded observed message entries with message evidence. |
+| `participants` | required |  | `communication_facts`, `entities` | `communication360` (primary): subjects `agent`, `campaign`; `interactions` | — | — | Participant binding rows and endpoint metadata; full role resolution is pending. |
+| `policy_state` | required |  | `communication_facts` | — | — | Unbound: `communication_policy_evaluation_authority_not_joined` | Required communications360 slot: policy state. |
+| `profile_links` | required |  | `communication_facts`, `identity` | — | — | Unbound: `typed_profile_message_link_authority_not_joined` | Required communications360 slot: profile links. |
+| `response_events` | required |  | `communication_facts` | `communication360` (primary): subjects `agent`, `campaign`; `interactions` | — | — | Observed response-like communication acts; expectations stay distinct. |
+| `risk_flags` | required |  | `risk_outputs`, `risk_signals` | `communication360` (primary): subjects `agent`, `source`; `summary`, `evidence` | — | Authority: `message_scoped_composite_risk_output_not_joined`; Partial: `agent_and_source_current_risk_signals_only` | Exact current risk-signal records for direct source or identity-resolved agent communication subjects. |
+| `thread_summary` | required |  | `communication_facts` | `communication360` (primary): subjects `agent`, `campaign`; `summary`, `interactions` | — | — | Partial thread counts and canonical thread facts; message-thread composition is incomplete. |
 
 ### Projection provider bindings
 
 | Projection | Binding | Provider implementation metadata | Capability keys |
 |---|---|---|---|
-| `campaign360` | `catalog_only` (primary) | `in_flight` | `campaign360.read`, `campaign360.explore` |
 | `communication360` | `catalog_only` (primary) | `implemented` | `communication360.read`, `communication360.explore` |
-| `episode360` | `catalog_only` (primary) | `in_flight` | `episode360.read`, `episode360.explore` |
-| `outcome360` | `catalog_only` (primary) | `implemented` | `outcome360.read`, `outcome360.explore` |
-| `source360` | `catalog_only` (primary) | `in_flight` | `source360.read`, `source360.explore` |
 
 ### Direct surface-provider bindings
 
@@ -296,7 +313,7 @@ Governed view of communication facts, delivery and engagement evidence, campaign
 
 ### Authority and governance contract
 
-Canonical authorities: `campaign_facts`, `campaign_touchpoints`, `communication_facts`, `episode_facts`, `events`, `evidence`, `journeys`, `outcome_facts`, `provider_registry`, `source_provenance`.
+Canonical authorities: `campaign_touchpoints`, `communication_facts`, `entities`, `evidence`, `identity`, `journeys`, `risk_outputs`, `risk_signals`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -308,39 +325,41 @@ Required backend capabilities: `experience360.frame.compose`, `experience360.ten
 
 Capability and provider status is contract metadata only: `registry_requirements_not_route_attestation`. Provider implementation states are copied from the technical registry and do not imply runtime readiness.
 
-Lens alignment: expected count `None`; exact lens ids are pending source alignment.
+Lens alignment: `source_aligned`; expected count `7`; lens ids: `communications`, `identity`, `campaign`, `journey`, `risk`, `policy`, `provenance`.
 
 ## Episode 360
 
 Product surface id: `episode360`
-Contract status: `reconstructed_pending_source_alignment`
-Subject kinds: `episode`, `entity`, `campaign`
+Contract status: `source_aligned`
+Subject kinds: `episode`, `session`, `conversation`, `activity_window`, `entity`, `campaign`
 
 Governed time-bounded view of related events and journey activity, with entity context, evidence, and optional outcomes.
 
 ### Domain slots
 
-| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Description |
-|---|---|---|---|---|---|
-| `communication_context` | optional |  | `communication_facts` | `communication360` (primary): subjects `episode`, `campaign`; `timeline`, `interactions`, `evidence` | Communication events associated with the episode. |
-| `entity_and_relationship_context` | required |  | `campaign_facts`, `episode_facts`, `graph`, `identity`, `relationship_facts` | `profile360` (primary): subjects `entity`, `episode`; `evidence`, `state`, `summary`; `relationship360` (supporting): subjects `entity`, `episode`; `interactions`, `evidence`; `episode360` (supporting): subjects `campaign`, `entity`, `episode`; `episode_context`; `campaign360` (primary): subjects `campaign`; `evidence`, `state`, `summary` | Canonical identity for entity and episode subjects, campaign identity for campaign subjects, and graph relationships where the subject has a supported entity graph. |
-| `episode_identity_and_state` | required |  | `episode_facts` | `episode360` (primary): subjects `episode`, `entity`, `campaign`; `summary`, `state` | Episode identity, state, and canonical episode facts. |
-| `event_and_journey_timeline` | required |  | `events`, `journeys`, `temporal_kernel` | `episode360` (primary): subjects `episode`, `entity`, `campaign`; `timeline`; `temporal360` (supporting): subjects `entity`; `timeline`, `state` | Ordered event, journey, and temporal context. |
-| `evidence_and_source_lineage` | required |  | `evidence`, `source_provenance` | `episode360` (primary): subjects `episode`, `entity`, `campaign`; `evidence`; `source360` (supporting): subjects none; `evidence`, `coverage` | Evidence and source lineage for episode facts. |
-| `measured_outcomes` | optional |  | `outcome_facts` | `outcome360` (primary): subjects `episode`, `campaign`; `outcomes`, `evidence` | Measured outcomes linked to the episode. |
+| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
+|---|---|---|---|---|---|---|---|
+| `agent_handoffs` | required |  | `agent_executions` | — | — | Unbound: `episode_agent_handoff_authority_not_joined` | Required episode360 slot: agent handoffs. |
+| `attribution_links` | required |  | `attribution_credits` | — | — | Unbound: `episode_attribution_credit_authority_not_joined` | Required episode360 slot: attribution links. |
+| `communications` | required |  | `communication_facts` | — | — | Unbound: `episode_communications_authority_not_joined` | Required episode360 slot: communications. |
+| `conversion_events` | required |  | `outcome_facts` | — | — | Unbound: `episode_outcome_ids_are_not_conversion_records` | Required episode360 slot: conversion events. |
+| `entity_and_relationship_context` | optional |  | `campaign_facts`, `episode_facts`, `graph`, `identity`, `relationship_facts` | `profile360` (primary): subjects `entity`, `episode`; `evidence`, `state`, `summary`; `relationship360` (supporting): subjects `entity`, `episode`; `interactions`, `evidence`; `episode360` (supporting): subjects `campaign`, `entity`, `episode`; `episode_context`; `campaign360` (primary): subjects `campaign`; `evidence`, `state`, `summary` | — | — | Canonical identity for entity and episode subjects, campaign identity for campaign subjects, and graph relationships where the subject has a supported entity graph. |
+| `episode_summary` | required |  | `episode_facts`, `evidence` | `episode360` (primary): subjects `episode`; `summary`, `evidence` | — | — | Exact tenant episode record with evidence lineage. |
+| `evidence_trace` | required |  | `episode_facts`, `evidence` | `episode360` (primary): subjects `episode`; `evidence` | — | — | Episode record and lineage refs; source event provenance is partial. |
+| `participants` | required |  | `episode_facts` | `episode360` (primary): subjects `episode`; `interactions`, `episode_context` | — | — | Primary user or agent subject reference only; full participant resolution is pending. |
+| `risk_flags` | required |  | `risk_outputs` | — | — | Unbound: `episode_risk_authority_not_joined` | Required episode360 slot: risk flags. |
+| `sessions` | required |  | `episode_facts` | `episode360` (primary): subjects `episode`; `episode_context` | — | — | Primary session reference only; session inventory is pending. |
+| `timeline` | required |  | `episode_facts`, `temporal` | `episode360` (primary): subjects `episode`; `timeline` | — | — | Episode observation IDs and bounded temporal context; observation rows remain unjoined. |
+| `touchpoints` | required |  | `campaign_touchpoints` | — | — | Unbound: `episode_record_has_no_typed_touchpoint_references` | Required episode360 slot: touchpoints. |
 
 ### Projection provider bindings
 
 | Projection | Binding | Provider implementation metadata | Capability keys |
 |---|---|---|---|
 | `campaign360` | `catalog_only` (primary) | `in_flight` | `campaign360.read`, `campaign360.explore` |
-| `communication360` | `catalog_only` (primary) | `implemented` | `communication360.read`, `communication360.explore` |
 | `episode360` | `catalog_only` (primary) | `in_flight` | `episode360.read`, `episode360.explore` |
-| `outcome360` | `catalog_only` (primary) | `implemented` | `outcome360.read`, `outcome360.explore` |
 | `profile360` | `catalog_only` (primary) | `in_flight` | `profile360.read`, `profile360.explore` |
 | `relationship360` | `catalog_only` (supporting) | `in_flight` | `relationship360.read`, `relationship360.explore` |
-| `source360` | `catalog_only` (supporting) | `in_flight` | `source360.read`, `source360.explore` |
-| `temporal360` | `catalog_only` (supporting) | `implemented` | `temporal360.read`, `temporal360.explore` |
 
 ### Direct surface-provider bindings
 
@@ -350,7 +369,7 @@ Governed time-bounded view of related events and journey activity, with entity c
 
 ### Authority and governance contract
 
-Canonical authorities: `campaign_facts`, `communication_facts`, `episode_facts`, `events`, `evidence`, `graph`, `identity`, `journeys`, `outcome_facts`, `relationship_facts`, `source_provenance`, `temporal_kernel`.
+Canonical authorities: `agent_executions`, `attribution_credits`, `campaign_facts`, `campaign_touchpoints`, `communication_facts`, `episode_facts`, `evidence`, `graph`, `identity`, `outcome_facts`, `relationship_facts`, `risk_outputs`, `temporal`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -362,38 +381,37 @@ Required backend capabilities: `experience360.frame.compose`, `experience360.ten
 
 Capability and provider status is contract metadata only: `registry_requirements_not_route_attestation`. Provider implementation states are copied from the technical registry and do not imply runtime readiness.
 
-Lens alignment: expected count `None`; exact lens ids are pending source alignment.
+Lens alignment: `source_aligned`; expected count `8`; lens ids: `activity`, `journey`, `communications`, `campaign`, `identity`, `location`, `risk`, `provenance`.
 
 ## Execution 360
 
 Product surface id: `execution360`
-Contract status: `reconstructed_pending_source_alignment`
-Subject kinds: `agent`, `episode`, `entity`
+Contract status: `source_aligned`
+Subject kinds: `agent`, `entity`, `episode`, `execution`
 
 Governed view of one execution lifecycle, attributed actors and delegation, action/tool/resource activity, evidence, and outcomes.
 
 ### Domain slots
 
-| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Description |
-|---|---|---|---|---|---|
-| `action_tool_resource_trace` | required |  | `actions`, `tools`, `resources` | `execution360` (primary): subjects `agent`, `episode`, `entity`; `interactions`, `timeline`, `evidence` | Observed actions, tools, and resources in the execution. |
-| `actor_and_delegation` | required | `slotActorAttribution`, `slotAuthorityDecision` | `agent_entities`, `agent_access`, `identity` | `agent360` (primary): subjects `agent`, `entity`; `state`, `evidence`; `execution360` (supporting): subjects `agent`, `episode`, `entity`; `state`, `evidence` | Agent and actor attribution plus authority context. |
-| `economic_and_business_outcomes` | optional |  | `economic_facts`, `outcome_facts`, `ai_execution_facts` | `economic360` (primary): subjects `agent`, `episode`, `entity`; `summary`, `evidence`, `outcomes`; `outcome360` (supporting): subjects `episode`; `evidence`, `outcomes` | Exact AI execution costs and separately measured business outcomes linked to a run. |
-| `evidence_and_lineage` | required |  | `evidence`, `source_provenance` | `execution360` (primary): subjects `agent`, `episode`, `entity`; `evidence`; `source360` (supporting): subjects none; `evidence`, `coverage` | Evidence and source trace for execution claims. |
-| `execution_identity_and_state` | required |  | `execution_facts`, `agent_executions` | `execution360` (primary): subjects `agent`, `episode`, `entity`; `summary`, `state`; `agent360` (supporting): subjects `agent`, `entity`; `timeline`, `evidence` | Execution identity, lifecycle state, and execution facts. |
-| `temporal_and_episode_context` | required |  | `temporal_kernel`, `episode_facts`, `events` | `temporal360` (primary): subjects `entity`; `timeline`, `state`; `episode360` (supporting): subjects `episode`, `entity`; `timeline`, `evidence`; `execution360` (primary): subjects `agent`; `episode_context`, `timeline`, `evidence` | Execution time context and associated episode. |
+| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
+|---|---|---|---|---|---|---|---|
+| `actor_attribution` | required | `slotActorAttribution` | `agent_access`, `agent_entities`, `identity` | `execution360` (supporting): subjects `agent`, `entity`, `episode`, `execution`; `evidence`, `state` | — | — | Required Execution 360 blueprint slot: actor attribution. |
+| `approval_chain` | required | `slotActorAttribution`, `slotAuthorityDecision` | `agent_access`, `agent_entities`, `identity` | — | — | Unbound: `execution_approval_id_canonical_join_not_available` | Required Execution 360 blueprint slot: approval chain. |
+| `authority_check` | required | `slotActorAttribution`, `slotAuthorityDecision` | `agent_access`, `agent_entities`, `identity` | `execution360` (supporting): subjects `agent`, `entity`, `episode`, `execution`; `evidence`, `state` | — | — | Required Execution 360 blueprint slot: authority check. |
+| `evidence_trace` | required |  | `evidence`, `source_provenance` | `execution360` (primary): subjects `agent`, `entity`, `episode`, `execution`; `evidence` | — | Authority: `exact_subject_authority_join_not_implemented` | Required Execution 360 blueprint slot: evidence trace. |
+| `execution_summary` | required |  | `agent_executions`, `execution_facts` | `execution360` (primary): subjects `agent`, `entity`, `episode`, `execution`; `state`, `summary` | — | — | Required Execution 360 blueprint slot: execution summary. |
+| `failures` | required |  | `agent_executions`, `execution_facts` | `execution360` (primary): subjects `agent`, `entity`, `episode`, `execution`; `state`, `summary` | — | — | Required Execution 360 blueprint slot: failures. |
+| `inputs_outputs` | required |  | `actions`, `agent_executions`, `execution_facts`, `resources`, `tools` | `execution360` (primary): subjects `agent`, `entity`, `episode`, `execution`; `evidence`, `interactions`, `state`, `summary`, `timeline` | — | — | Required Execution 360 blueprint slot: inputs outputs. |
+| `latency_cost` | required |  | `agent_executions`, `ai_execution_facts`, `economic_facts`, `execution_facts`, `outcome_facts` | `execution360` (primary): subjects `agent`, `entity`, `episode`, `execution`; `state`, `summary` | — | Authority: `exact_subject_authority_join_not_implemented` | Required Execution 360 blueprint slot: latency cost. |
+| `plan_steps` | required |  | `agent_executions`, `episode_facts`, `events`, `execution_facts`, `temporal_kernel` | `execution360` (primary): subjects `agent`, `entity`, `episode`, `execution`; `episode_context`, `evidence`, `state`, `summary`, `timeline` | — | — | Required Execution 360 blueprint slot: plan steps. |
+| `risk_events` | required |  | `agent_executions`, `execution_facts` | — | — | Unbound: `execution_risk_event_exact_join_not_available` | Required Execution 360 blueprint slot: risk events. |
+| `tool_calls` | required |  | `actions`, `resources`, `tools` | — | — | Unbound: `execution_tool_call_exact_join_not_available` | Tool calls exactly linked to this execution; source-reported agent tool telemetry does not establish that join. |
 
 ### Projection provider bindings
 
 | Projection | Binding | Provider implementation metadata | Capability keys |
 |---|---|---|---|
-| `agent360` | `catalog_only` (primary) | `in_flight` | `agent360.read`, `agent360.explore` |
-| `economic360` | `catalog_only` (primary) | `implemented` | `economic360.read`, `economic360.explore` |
-| `episode360` | `catalog_only` (supporting) | `in_flight` | `episode360.read`, `episode360.explore` |
 | `execution360` | `catalog_only` (primary) | `in_flight` | `execution360.read`, `execution360.explore` |
-| `outcome360` | `catalog_only` (supporting) | `implemented` | `outcome360.read`, `outcome360.explore` |
-| `source360` | `catalog_only` (supporting) | `in_flight` | `source360.read`, `source360.explore` |
-| `temporal360` | `catalog_only` (primary) | `implemented` | `temporal360.read`, `temporal360.explore` |
 
 ### Direct surface-provider bindings
 
@@ -415,25 +433,33 @@ Required backend capabilities: `experience360.frame.compose`, `experience360.ten
 
 Capability and provider status is contract metadata only: `registry_requirements_not_route_attestation`. Provider implementation states are copied from the technical registry and do not imply runtime readiness.
 
-Lens alignment: expected count `None`; exact lens ids are pending source alignment.
+Lens alignment: `source_aligned`; expected count `8`; lens ids: `execution`, `authority`, `agentic`, `identity`, `policy`, `risk`, `provenance`, `value`.
 
 ## Identity 360
 
 Product surface id: `identity360`
-Contract status: `reconstructed_pending_source_alignment`
+Contract status: `source_aligned`
 Subject kinds: `entity`, `agent`, `source`
 
 Governed view of resolved identities, source identifiers, actor bindings, relationships, and supporting evidence.
 
 ### Domain slots
 
-| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Description |
-|---|---|---|---|---|---|
-| `actor_and_agent_binding` | optional |  | `agent_entity`, `agent_entities`, `agent_access` | `agent360` (primary): subjects `entity`, `agent`; `state`, `evidence`; `execution360` (supporting): subjects `entity`, `agent`; `state`, `evidence` | Agent identity and actor binding evidence. |
-| `identity_evidence` | required |  | `evidence` | `profile360` (primary): subjects `entity`, `agent`; `evidence` | Evidence and limitations associated with the identity view. |
-| `relationship_identity_context` | optional |  | `relationship_facts`, `graph` | `relationship360` (primary): subjects `entity`; `interactions`, `evidence` | Relationship facts associated with the resolved entity. |
-| `resolved_subject_identity` | required |  | `identity`, `entity_registry` | `profile360` (primary): subjects `entity`, `agent`; `summary`, `state` | Resolved identity and entity registry state. |
-| `source_identifier_lineage` | required |  | `source_provenance`, `provider_registry` | `source360` (primary): subjects `entity`, `agent`; `summary`, `evidence`, `coverage` | Source provenance and source identifiers supporting identity resolution. |
+| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
+|---|---|---|---|---|---|---|---|
+| `actor_and_agent_binding` | optional |  | `agent_access`, `agent_entities`, `agent_entity` | `agent360` (primary): subjects `agent`, `entity`; `evidence`, `state`; `execution360` (supporting): subjects `agent`, `entity`; `evidence`, `state` | — | — | Optional Aether provider context retained for Identity 360: actor and agent binding. |
+| `aliases` | required |  | `identity`, `evidence` | — | `Identity360Provider` (runtime_wired) | — | Required Identity 360 blueprint slot: aliases. |
+| `confidence` | required |  | `identity`, `evidence` | — | `Identity360Provider` (runtime_wired) | — | Required Identity 360 blueprint slot: confidence. |
+| `conflicts` | required |  | `identity`, `evidence` | — | `Identity360Provider` (runtime_wired) | — | Required Identity 360 blueprint slot: conflicts. |
+| `devices_sessions` | required |  | `identity`, `source_provenance`, `evidence` | — | `Identity360Provider` (runtime_wired) | — | Required Identity 360 blueprint slot: devices sessions. |
+| `evidence_trace` | required |  | `identity`, `source_provenance`, `evidence` | — | `Identity360Provider` (runtime_wired) | — | Required Identity 360 blueprint slot: evidence trace. |
+| `identifier_inventory` | required |  | `identity`, `source_provenance`, `evidence` | — | `Identity360Provider` (runtime_wired) | — | Required Identity 360 blueprint slot: identifier inventory. |
+| `match_evidence` | required |  | `identity`, `entities`, `entity_registry`, `evidence` | — | `Identity360Provider` (runtime_wired) | — | Required Identity 360 blueprint slot: match evidence. |
+| `namespace_map` | required |  | `identity`, `source_provenance`, `evidence` | — | `Identity360Provider` (runtime_wired) | — | Required Identity 360 blueprint slot: namespace map. |
+| `policy_redactions` | required |  | `identity`, `evidence` | — | `Identity360Provider` (runtime_wired) | — | Required Identity 360 blueprint slot: policy redactions. |
+| `relationship_identity_context` | optional |  | `graph`, `relationship_facts` | `relationship360` (primary): subjects `entity`; `evidence`, `interactions` | — | — | Optional Aether provider context retained for Identity 360: relationship identity context. |
+| `resolved_subject_identity` | optional |  | `entity_registry`, `identity` | `profile360` (primary): subjects `agent`, `entity`; `state`, `summary` | — | — | Optional Aether provider context retained for Identity 360: resolved subject identity. |
+| `wallets` | required |  | `identity`, `source_provenance`, `evidence` | — | `Identity360Provider` (runtime_wired) | — | Required Identity 360 blueprint slot: wallets. |
 
 ### Projection provider bindings
 
@@ -443,17 +469,16 @@ Governed view of resolved identities, source identifiers, actor bindings, relati
 | `execution360` | `catalog_only` (supporting) | `in_flight` | `execution360.read`, `execution360.explore` |
 | `profile360` | `catalog_only` (primary) | `in_flight` | `profile360.read`, `profile360.explore` |
 | `relationship360` | `catalog_only` (primary) | `in_flight` | `relationship360.read`, `relationship360.explore` |
-| `source360` | `catalog_only` (primary) | `in_flight` | `source360.read`, `source360.explore` |
 
 ### Direct surface-provider bindings
 
 | Provider class | Provider kind | Binding status | Subjects | Domain slots | Implementation | Frame-runtime call site |
 |---|---|---|---|---|---|---|
-| `Identity360Provider` | `surface_authority_reader` | `runtime_wired` | `agent`, `entity`, `source` | `identity_evidence`, `relationship_identity_context`, `resolved_subject_identity`, `source_identifier_lineage` | `services/api/identity/identity/identity360_provider.py` | `services/api/shared/intelligence_projections/frame_runtime.py` |
+| `Identity360Provider` | `surface_authority_reader` | `runtime_wired` | `agent`, `entity`, `source` | `identifier_inventory`, `namespace_map`, `match_evidence`, `conflicts`, `confidence`, `aliases`, `devices_sessions`, `wallets`, `policy_redactions`, `evidence_trace` | `services/api/identity/identity/identity360_provider.py` | `services/api/shared/intelligence_projections/frame_runtime.py` |
 
 ### Authority and governance contract
 
-Canonical authorities: `agent_access`, `agent_entities`, `agent_entity`, `entity_registry`, `evidence`, `graph`, `identity`, `provider_registry`, `relationship_facts`, `source_provenance`.
+Canonical authorities: `agent_access`, `agent_entities`, `agent_entity`, `entities`, `entity_registry`, `evidence`, `graph`, `identity`, `relationship_facts`, `source_provenance`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -465,35 +490,40 @@ Required backend capabilities: `experience360.frame.compose`, `experience360.ten
 
 Capability and provider status is contract metadata only: `registry_requirements_not_route_attestation`. Provider implementation states are copied from the technical registry and do not imply runtime readiness.
 
-Lens alignment: expected count `None`; exact lens ids are pending source alignment.
+Lens alignment: `source_aligned`; expected count `5`; lens ids: `identity`, `provenance`, `policy`, `risk`, `location`.
 
 ## Journey 360
 
 Product surface id: `journey360`
-Contract status: `reconstructed_pending_source_alignment`
-Subject kinds: `journey`, `entity`, `episode`
+Contract status: `source_aligned`
+Subject kinds: `journey`, `profile`, `account`, `campaign`, `episode`, `entity`
 
 Governed temporal view of journey state, stages, events, handoffs, and measured outcomes.
 
 ### Domain slots
 
-| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Description |
-|---|---|---|---|---|---|
-| `communication_handoffs` | optional |  | `communication_facts` | `communication360` (primary): subjects `journey`, `episode`; `timeline`, `interactions`, `evidence` | Communication events associated with journey stages. |
-| `entity_context` | required |  | `episode_facts`, `graph`, `identity`, `journeys` | `profile360` (primary): subjects `entity`, `episode`, `journey`; `summary`, `state`, `evidence` | Resolved linked user-profile context for entity, journey, or episode subjects; parent identity is not substituted for the requested subject. |
-| `events_and_episode_context` | required |  | `events`, `episode_facts` | `episode360` (primary): subjects `journey`, `entity`, `episode`; `timeline`, `evidence` | Events and episode facts associated with the journey. |
-| `journey_state_and_path` | required |  | `journeys`, `temporal_kernel` | `episode360` (primary): subjects `journey`, `entity`, `episode`; `summary`, `state`, `timeline`; `temporal360` (supporting): subjects `entity`; `state`, `timeline` | Journey state and ordered path context. |
-| `measured_outcomes` | optional |  | `outcome_facts` | `outcome360` (primary): subjects `episode`; `outcomes`, `evidence` | Measured outcomes associated with the journey. |
+| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
+|---|---|---|---|---|---|---|---|
+| `agent_interventions` | required |  | `journeys` | `episode360` (primary): subjects `journey`; `interactions` | — | — | Typed JourneyStep agent IDs with step evidence; actor and authority joins pending. |
+| `attribution` | required |  | `attribution_credits` | — | — | Unbound: `immutable_attribution_credit_authority_not_joined` | Required journey360 slot: attribution. |
+| `communications` | required |  | `communication_facts` | — | — | Unbound: `journey_communications_authority_not_joined` | Required journey360 slot: communications. |
+| `conversions` | required |  | `canonical_conversions`, `journeys` | `episode360` (primary): subjects `journey`; `outcomes` | — | Partial: `Only the current journey version's explicit conversion IDs are resolved; wider conversion inventory and historical versions are not established.` | Canonical conversions explicitly referenced by the current JourneyVersion. |
+| `dropoffs` | required |  | `outcome_facts` | — | — | Unbound: `journey_dropoff_authority_not_joined` | Required journey360 slot: dropoffs. |
+| `entity_context` | optional |  | `episode_facts`, `graph`, `identity`, `journeys` | `profile360` (primary): subjects `entity`, `episode`, `journey`; `summary`, `state`, `evidence` | — | — | Resolved linked user-profile context for entity, journey, or episode subjects; parent identity is not substituted for the requested subject. |
+| `episodes` | required |  | `episode_facts` | — | — | Unbound: `typed_journey_to_episode_reference_not_available` | Required journey360 slot: episodes. |
+| `events_and_episode_context` | optional |  | `events`, `episode_facts` | `episode360` (primary): subjects `journey`, `entity`, `episode`; `timeline`, `evidence` | — | — | Events and episode facts associated with the journey. |
+| `evidence_trace` | required |  | `journeys`, `campaign_touchpoints`, `evidence` | `episode360` (primary): subjects `journey`; `evidence` | — | — | Journey version, step, and exact touchpoint record refs. |
+| `journey_summary` | required |  | `journeys` | `episode360` (primary): subjects `journey`; `summary` | — | Partial: `current_version_only_and_source_freshness_threshold_is_unconfigured` | Exact current JourneyVersion record and version evidence. |
+| `recommended_actions` | required |  | `actions` | — | — | Unbound: `governed_journey_recommendation_authority_not_joined` | Required journey360 slot: recommended actions. |
+| `stages` | required |  | `journeys` | — | — | Unbound: `typed_journey_stage_authority_not_available` | Required journey360 slot: stages. |
+| `touchpoints` | required |  | `journeys`, `campaign_touchpoints` | `episode360` (primary): subjects `journey`; `timeline`, `evidence` | — | — | Exact tenant touchpoints named by current JourneyVersion references. |
 
 ### Projection provider bindings
 
 | Projection | Binding | Provider implementation metadata | Capability keys |
 |---|---|---|---|
-| `communication360` | `catalog_only` (primary) | `implemented` | `communication360.read`, `communication360.explore` |
 | `episode360` | `catalog_only` (primary) | `in_flight` | `episode360.read`, `episode360.explore` |
-| `outcome360` | `catalog_only` (primary) | `implemented` | `outcome360.read`, `outcome360.explore` |
 | `profile360` | `catalog_only` (primary) | `in_flight` | `profile360.read`, `profile360.explore` |
-| `temporal360` | `catalog_only` (supporting) | `implemented` | `temporal360.read`, `temporal360.explore` |
 
 ### Direct surface-provider bindings
 
@@ -503,7 +533,7 @@ Governed temporal view of journey state, stages, events, handoffs, and measured 
 
 ### Authority and governance contract
 
-Canonical authorities: `communication_facts`, `episode_facts`, `events`, `graph`, `identity`, `journeys`, `outcome_facts`, `temporal_kernel`.
+Canonical authorities: `actions`, `attribution_credits`, `campaign_touchpoints`, `canonical_conversions`, `communication_facts`, `episode_facts`, `events`, `evidence`, `graph`, `identity`, `journeys`, `outcome_facts`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -515,24 +545,35 @@ Required backend capabilities: `experience360.frame.compose`, `experience360.ten
 
 Capability and provider status is contract metadata only: `registry_requirements_not_route_attestation`. Provider implementation states are copied from the technical registry and do not imply runtime readiness.
 
-Lens alignment: expected count `None`; exact lens ids are pending source alignment.
+Lens alignment: `source_aligned`; expected count `9`; lens ids: `journey`, `activity`, `campaign`, `communications`, `value`, `identity`, `agentic`, `location`, `risk`.
 
 ## Location 360
 
 Product surface id: `location360`
-Contract status: `reconstructed_pending_source_alignment`
-Subject kinds: `entity`, `population`, `source`
+Contract status: `source_aligned`
+Subject kinds: `location`, `place`, `geohash`, `timezone`, `region`, `entity`, `population`, `source`
 
 Governed view of locations and geographic observations linked to entities, populations, and temporal context.
 
 ### Domain slots
 
-| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Description |
-|---|---|---|---|---|---|
-| `entity_graph_context` | required |  | `entity_graph`, `graph` | `geographic360` (primary): subjects `entity`, `population`, `source`; `summary`, `findings`; `profile360` (supporting): subjects `entity`; `summary`, `findings` | Entity graph context linked to locations. |
-| `geographic_observations` | required |  | `geo_observations`, `temporal` | `geographic360` (primary): subjects `entity`, `population`, `source`; `timeline`, `evidence` | Observed geographic facts and their temporal context. |
-| `location_identity_and_state` | required |  | `locations`, `context_capsules` | `geographic360` (primary): subjects `entity`, `population`, `source`; `summary`, `state`, `evidence` | Location registry and geographic context. |
-| `population_context` | optional |  | `population_definitions`, `cohort_membership` | `population360` (primary): subjects `entity`, `population`; `summary`, `state`, `findings` | Population context for a location. |
+| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
+|---|---|---|---|---|---|---|---|
+| `activity_density` | required |  | `geo_observations`, `gold_temporal_heatmap` | `geographic360` (primary): subjects `entity`; `state` | — | Partial: `The exact entity heatmap supplies temporal counts but has no join from a count to a particular location fact or place.` | Tenant scoped density aggregation with location privacy. |
+| `campaigns` | required |  | `campaign_facts`, `locations` | — | — | Unbound: `exact_location_campaign_join_unavailable` | Exact campaigns linked to a canonical location fact. |
+| `entity_graph_context` | optional |  | `entity_graph`, `graph` | `geographic360` (primary): subjects `entity`, `population`, `source`; `summary`, `findings`; `profile360` (supporting): subjects `entity`; `summary`, `findings` | — | — | Entity graph context linked to locations. |
+| `evidence_trace` | required |  | `locations`, `context_capsules` | `geographic360` (primary): subjects `entity`, `population`, `source`; `evidence`, `state` | — | — | Location fact and source observation references at allowed precision. |
+| `geo_hierarchy` | required |  | `locations`, `geo_observations` | `geographic360` (primary): subjects `entity`, `population`, `source`; `state`, `evidence` | — | — | Recorded geographic labels at source supported precision. |
+| `geographic_observations` | optional |  | `geo_observations`, `temporal` | `geographic360` (primary): subjects `entity`, `population`, `source`; `timeline`, `evidence` | — | — | Observed geographic facts and their temporal context. |
+| `journeys` | required |  | `journeys`, `locations` | — | — | Unbound: `exact_location_journey_join_unavailable` | Exact journeys linked to a canonical location fact. |
+| `location_identity_and_state` | optional |  | `locations`, `context_capsules` | `geographic360` (primary): subjects `entity`, `population`, `source`; `summary`, `state`, `evidence` | — | — | Location registry and geographic context. |
+| `normalization` | required |  | `geo_observations`, `locations` | — | — | Unbound: `location_normalization_lineage_unavailable` | Source location normalization lineage. |
+| `place_summary` | required |  | `locations`, `geo_observations`, `context_capsules` | `geographic360` (primary): subjects `entity`, `population`, `source`; `summary`, `state` | — | — | Best supported place fact at policy capped precision. |
+| `population_context` | optional |  | `population_definitions`, `cohort_membership` | `population360` (primary): subjects `entity`, `population`; `summary`, `state`, `findings` | — | — | Population context for a location. |
+| `profiles` | required |  | `identity`, `locations` | — | — | Unbound: `exact_location_profile_join_and_policy_unavailable` | Profiles linked to place with profile policy applied. |
+| `risk` | required |  | `risk_outputs`, `locations` | — | — | Unbound: `exact_location_risk_join_unavailable` | Risk outputs linked to place with evidence. |
+| `timezone` | required |  | `temporal`, `locations` | — | — | Unbound: `canonical_timezone_authority_not_joined` | Verified time zone and temporal conversion evidence. |
+| `value` | required |  | `economic_facts`, `locations` | — | — | Unbound: `exact_location_value_join_unavailable` | Economic facts linked to place without subject inference. |
 
 ### Projection provider bindings
 
@@ -550,7 +591,7 @@ Governed view of locations and geographic observations linked to entities, popul
 
 ### Authority and governance contract
 
-Canonical authorities: `cohort_membership`, `context_capsules`, `entity_graph`, `geo_observations`, `graph`, `locations`, `population_definitions`, `temporal`.
+Canonical authorities: `campaign_facts`, `cohort_membership`, `context_capsules`, `economic_facts`, `entity_graph`, `geo_observations`, `gold_temporal_heatmap`, `graph`, `identity`, `journeys`, `locations`, `population_definitions`, `risk_outputs`, `temporal`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -562,38 +603,36 @@ Required backend capabilities: `experience360.frame.compose`, `experience360.ten
 
 Capability and provider status is contract metadata only: `registry_requirements_not_route_attestation`. Provider implementation states are copied from the technical registry and do not imply runtime readiness.
 
-Lens alignment: expected count `None`; exact lens ids are pending source alignment.
+Lens alignment: `source_aligned`; expected count `8`; lens ids: `location`, `identity`, `journey`, `signals`, `campaign`, `value`, `risk`, `provenance`.
 
 ## Memory 360
 
 Product surface id: `memory360`
-Contract status: `reconstructed_pending_source_alignment`
-Subject kinds: `entity`, `agent`, `episode`, `journey`
+Contract status: `source_aligned`
+Subject kinds: `entity`, `semantic_entity`, `memory`, `card`, `topic`
 
 Governed temporal and evidentiary view of entity and agent history, episodes, and observed state; it does not own memory truth.
 
 ### Domain slots
 
-| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Description |
-|---|---|---|---|---|---|
-| `entity_and_agent_context` | required |  | `identity`, `agent_entity`, `agent_executions` | `profile360` (primary): subjects `entity`, `agent`; `summary`, `state`; `agent360` (supporting): subjects `entity`, `agent`; `summary`, `state`, `evidence` | Entity and agent context for history attribution. |
-| `episodes_events_and_journeys` | required |  | `episode_facts`, `events`, `journeys` | `episode360` (primary): subjects `entity`, `episode`, `journey`; `summary`, `timeline`, `evidence` | Episode, event, and journey context. |
-| `evidence_and_provenance` | required |  | `evidence`, `source_provenance` | `episode360` (primary): subjects `entity`, `episode`, `journey`; `evidence`; `source360` (supporting): subjects none; `evidence`, `coverage` | Evidence and source provenance for retained history claims. |
-| `measured_outcomes` | optional |  | `outcome_facts` | `outcome360` (primary): subjects `episode`; `outcomes`, `evidence` | Measured outcomes related to retained history. |
-| `relationship_context` | optional |  | `relationship_facts` | `relationship360` (primary): subjects `entity`; `interactions`, `timeline`, `evidence` | Relationship context associated with the subject history. |
-| `temporal_history` | required |  | `temporal_kernel`, `mutation_history`, `validity_state` | `temporal360` (primary): subjects `entity`; `summary`, `state`, `timeline`, `evidence` | Temporal state, validity, and mutation history. |
+| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
+|---|---|---|---|---|---|---|---|
+| `cards` | required |  | `semantic_memory_graph` | — | — | Unbound: `canonical_context_card_authority_not_available` | Required memory360 slot: cards. |
+| `conflicts` | required |  | `semantic_memory_graph` | `memory360` (primary): subjects `entity`, `semantic_entity`; `conflicts` | — | — | Derived contradiction signal only; canonical conflict objects remain unknown. |
+| `decay` | required |  | `semantic_memory_graph` | `memory360` (primary): subjects `entity`, `semantic_entity`; `decay` | — | — | Reducer half-life parameter only; per-memory decay remains unknown. |
+| `embeddings_meta` | required |  | `semantic_memory_graph` | — | — | Unbound: `canonical_embedding_metadata_authority_not_available` | Required memory360 slot: embeddings meta. |
+| `evidence_trace` | required |  | `semantic_memory_graph`, `evidence` | `memory360` (primary): subjects `entity`, `semantic_entity`; `evidence_trace` | — | — | Gold and active Silver semantic record lineage. |
+| `memories` | required |  | `semantic_memory_graph`, `semantic_memory_records`, `silver_semantic_observations`, `consent_policy_decisions` | `memory360` (primary): subjects `entity`, `semantic_entity`; `memories` | — | Partial: `Only explicit stored memories with exact source and historical consent-decision evidence are read; no automatic memory producer or configured freshness SLA is available.` | Required memory360 slot: memories. |
+| `policy_state` | required |  | `semantic_memory_graph` | — | — | Unbound: `semantic_memory_policy_state_authority_not_connected` | Required memory360 slot: policy state. |
+| `semantic_summary` | required |  | `semantic_memory_graph` | `memory360` (primary): subjects `entity`, `semantic_entity`; `semantic_summary` | — | — | Current Gold semantic entity state with explicit scope and provenance. |
+| `source_links` | required |  | `semantic_memory_graph`, `source_provenance` | `memory360` (primary): subjects `entity`, `semantic_entity`; `source_links` | — | — | Exact tenant scoped semantic observation source event references. |
+| `topics` | required |  | `semantic_memory_graph` | `memory360` (primary): subjects `entity`, `semantic_entity`; `topics` | — | — | Derived reducer topic labels with inferred epistemic state. |
 
 ### Projection provider bindings
 
 | Projection | Binding | Provider implementation metadata | Capability keys |
 |---|---|---|---|
-| `agent360` | `catalog_only` (supporting) | `in_flight` | `agent360.read`, `agent360.explore` |
-| `episode360` | `catalog_only` (primary) | `in_flight` | `episode360.read`, `episode360.explore` |
-| `outcome360` | `catalog_only` (primary) | `implemented` | `outcome360.read`, `outcome360.explore` |
-| `profile360` | `catalog_only` (primary) | `in_flight` | `profile360.read`, `profile360.explore` |
-| `relationship360` | `catalog_only` (primary) | `in_flight` | `relationship360.read`, `relationship360.explore` |
-| `source360` | `catalog_only` (supporting) | `in_flight` | `source360.read`, `source360.explore` |
-| `temporal360` | `catalog_only` (primary) | `implemented` | `temporal360.read`, `temporal360.explore` |
+| `memory360` | `catalog_only` (primary) | `in_flight` | `memory360.read` |
 
 ### Direct surface-provider bindings
 
@@ -603,7 +642,7 @@ Governed temporal and evidentiary view of entity and agent history, episodes, an
 
 ### Authority and governance contract
 
-Canonical authorities: `agent_entity`, `agent_executions`, `episode_facts`, `events`, `evidence`, `identity`, `journeys`, `mutation_history`, `outcome_facts`, `relationship_facts`, `source_provenance`, `temporal_kernel`, `validity_state`.
+Canonical authorities: `consent_policy_decisions`, `evidence`, `semantic_memory_records`, `semantic_memory_graph`, `silver_semantic_observations`, `source_provenance`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -615,26 +654,39 @@ Required backend capabilities: `experience360.frame.compose`, `experience360.ten
 
 Capability and provider status is contract metadata only: `registry_requirements_not_route_attestation`. Provider implementation states are copied from the technical registry and do not imply runtime readiness.
 
-Lens alignment: expected count `None`; exact lens ids are pending source alignment.
+Lens alignment: `source_aligned`; expected count `6`; lens ids: `semantic-memory`, `topic`, `identity`, `provenance`, `risk`, `policy`.
 
 ## Profile 360
 
 Product surface id: `profile360`
-Contract status: `reconstructed_pending_source_alignment`
-Subject kinds: `entity`, `agent`
+Contract status: `source_aligned`
+Subject kinds: `profile`, `entity`, `agent`, `anonymous_subject`, `account_member`, `cluster`
 
 Governed entity-level contextual frame combining identity, observations, relationships, evidence, and optional risk and value context.
 
 ### Domain slots
 
-| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Description |
-|---|---|---|---|---|---|
-| `economic_value_context` | optional |  | `economic_facts`, `outcome_facts`, `ai_execution_facts` | `economic360` (primary): subjects `entity`, `agent`; `summary`, `evidence`, `outcomes`; `outcome360` (supporting): subjects none; `outcomes`, `evidence` | Economic facts and measured outcomes. |
-| `entity_identity` | required |  | `identity`, `entity_registry` | `profile360` (primary): subjects `entity`, `agent`; `summary`, `state` | Resolved entity identity and registry context. |
-| `evidence_and_limitations` | required |  | `evidence` | `profile360` (primary): subjects `entity`, `agent`; `evidence`, `findings` | Evidence supporting the displayed profile claims. |
-| `observed_state_and_activity` | required |  | `observations`, `graph`, `temporal` | `profile360` (primary): subjects `entity`, `agent`; `state`, `timeline`, `interactions` | Observed state and temporal activity with explicit provenance. |
-| `relationship_context` | optional |  | `relationship_facts` | `relationship360` (primary): subjects `entity`; `interactions`, `timeline`, `evidence` | Relationships around the entity. |
-| `risk_context` | optional |  | `risk_outputs`, `model_governance` | `risk360` (primary): subjects `entity`; `summary`, `findings`, `evidence` | Governed risk and fraud context. |
+| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
+|---|---|---|---|---|---|---|---|
+| `agent_delegations` | required |  | `agent_access`, `ai_execution_facts` | — | — | Unbound: `profile_agent_delegation_authority_not_joined` | Agent delegation and authority facts linked to the exact profile. |
+| `communications` | required |  | `communication_facts` | `profile360` (primary): subjects `entity`; `interactions` | — | Partial: `recipient_message_history_is_bounded_and_sender_thread_semantics_and_freshness_sla_are_unverified` | Exact tenant-scoped recipient messages for a resolved profile entity with recorded consent; sender identity, unknown consent, threads, and semantic interaction remain unknown. |
+| `economic_value_context` | optional |  | `economic_facts`, `outcome_facts`, `ai_execution_facts` | `economic360` (primary): subjects `entity`, `agent`; `summary`, `evidence`, `outcomes`; `outcome360` (supporting): subjects none; `outcomes`, `evidence` | — | — | Economic facts and measured outcomes. |
+| `entity_identity` | optional |  | `identity`, `entity_registry` | `profile360` (primary): subjects `entity`, `agent`; `summary`, `state` | — | — | Resolved entity identity and registry context. |
+| `evidence_and_limitations` | optional |  | `evidence` | `profile360` (primary): subjects `entity`, `agent`; `evidence`, `findings` | — | — | Evidence supporting the displayed profile claims. |
+| `evidence_trace` | required |  | `evidence` | `profile360` (primary): subjects `entity`; `evidence`, `findings` | — | — | Source references and coverage limits for the exact tenant profile. |
+| `identity_spine` | required |  | `identity`, `entity_registry` | `profile360` (primary): subjects `entity`; `summary`, `state` | — | — | Exact tenant profile and canonical entity identity; other identifier resolution remains unknown. |
+| `journey_participation` | required |  | `journeys` | `profile360` (primary): subjects `entity`; `journeys` | — | — | Current journey versions joined by exact tenant and typed profile ID; history and completeness remain explicit. |
+| `known_unknown_resolution` | required |  | `identity`, `entity_registry` | `profile360` (primary): subjects `entity`; `summary`, `state` | — | — | Known canonical entity identity and stated unresolved limits, without inferring an anonymous match. |
+| `likely_next_states` | required |  | `model_governance`, `outcome_facts` | — | — | Unbound: `profile_prediction_authority_not_available` | Evidence backed future states when an approved model supplies them. |
+| `location_temporal` | required |  | `geo_observations`, `temporal` | — | — | Unbound: `profile_location_temporal_join_not_available` | Time scoped location evidence for the exact profile. |
+| `observed_state_and_activity` | optional |  | `observations`, `graph`, `temporal` | `profile360` (primary): subjects `entity`, `agent`; `state`, `timeline`, `interactions` | — | — | Observed state and temporal activity with explicit provenance. |
+| `relationship_context` | optional |  | `relationship_facts` | `relationship360` (primary): subjects `entity`; `interactions`, `timeline`, `evidence` | — | — | Relationships around the entity. |
+| `relationships` | required |  | `graph`, `relationship_facts` | — | — | Unbound: `profile_relationship_subject_mapping_not_proven` | Canonical relationship facts for the profile. |
+| `risk_context` | optional |  | `risk_outputs`, `model_governance` | `risk360` (primary): subjects `entity`; `summary`, `findings`, `evidence` | — | — | Governed risk and fraud context. |
+| `risk_summary` | required |  | `risk_outputs` | — | — | Unbound: `profile_risk_output_subject_join_not_available` | Evidence backed risk outputs linked to the profile. |
+| `session_history` | required |  | `identity` | `profile360` (primary): subjects `entity`; `sessions` | — | Partial: `event_session_timeline_and_complete_roster_not_available` | Resolved source identities with session identifiers linked to the exact canonical profile; event timeline and completeness remain unknown. |
+| `syndicates` | required |  | `graph`, `relationship_facts` | — | — | Unbound: `profile_syndicate_membership_authority_not_joined` | Typed syndicate or cohort relationships. |
+| `value_summary` | required |  | `economic_facts`, `outcome_facts` | — | — | Unbound: `profile_value_attribution_join_not_available` | Value facts and attributed outcomes linked to the profile. |
 
 ### Projection provider bindings
 
@@ -654,7 +706,7 @@ Governed entity-level contextual frame combining identity, observations, relatio
 
 ### Authority and governance contract
 
-Canonical authorities: `ai_execution_facts`, `economic_facts`, `entity_registry`, `evidence`, `graph`, `identity`, `model_governance`, `observations`, `outcome_facts`, `relationship_facts`, `risk_outputs`, `temporal`.
+Canonical authorities: `agent_access`, `ai_execution_facts`, `communication_facts`, `economic_facts`, `entity_registry`, `evidence`, `geo_observations`, `graph`, `identity`, `journeys`, `model_governance`, `observations`, `outcome_facts`, `relationship_facts`, `risk_outputs`, `temporal`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -666,26 +718,38 @@ Required backend capabilities: `experience360.frame.compose`, `experience360.ten
 
 Capability and provider status is contract metadata only: `registry_requirements_not_route_attestation`. Provider implementation states are copied from the technical registry and do not imply runtime readiness.
 
-Lens alignment: expected count `None`; exact lens ids are pending source alignment.
+Lens alignment: `source_aligned`; expected count `10`; lens ids: `identity`, `journey`, `communications`, `agentic`, `relationship`, `value`, `risk`, `location`, `campaign`, `provenance`.
 
 ## Risk 360
 
 Product surface id: `risk360`
-Contract status: `reconstructed_pending_source_alignment`
-Subject kinds: `entity`, `relationship`, `agent`, `cluster`
+Contract status: `source_aligned`
+Subject kinds: `risk`, `entity`, `profile`, `agent`, `account`, `source`, `campaign`, `contagion_path`, `relationship`, `cluster`
 
 Governed view of risk findings, evidence, relationship and economic exposure, with explicit coverage and uncertainty.
 
 ### Domain slots
 
-| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Description |
-|---|---|---|---|---|---|
-| `economic_exposure` | optional |  | `economic_facts`, `ai_execution_facts` | `economic360` (primary): subjects `entity`, `agent`; `summary`, `evidence`, `outcomes` | Economic facts associated with the risk subject and network. |
-| `execution_exposure` | optional |  | `execution_facts` | `execution360` (primary): subjects `entity`, `agent`; `summary`, `timeline`, `evidence` | Execution facts associated with an agent or execution subject. |
-| `fraud_and_social_patterns` | optional |  | `fraud_synthesis`, `graph_motifs`, `social_observations` | `fraud360` (primary): subjects `entity`, `relationship`, `agent`; `findings`, `evidence`, `health`; `social360` (supporting): subjects `entity`, `relationship`; `findings`, `evidence` | Fraud synthesis, graph motifs, and social observations. |
-| `relationship_network_context` | required |  | `entity_graph`, `relationship_facts`, `graph` | `relationship360` (primary): subjects `agent`, `entity`, `relationship`; `summary`, `interactions`, `evidence`; `risk360` (supporting): subjects `entity`, `relationship`, `cluster`; `summary`, `evidence` | Entity graph and relationship evidence relevant to risk. |
-| `risk_assessment_state` | required |  | `risk_outputs`, `model_governance` | `risk360` (primary): subjects `agent`, `entity`, `relationship`, `cluster`; `summary`, `state`, `findings`, `health` | Risk outputs, model governance context, and assessment state. |
-| `risk_evidence_and_limitations` | required |  | `evidence` | `risk360` (primary): subjects `agent`, `entity`, `relationship`, `cluster`; `evidence`, `findings` | Evidence and limitations supporting risk findings. |
+| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
+|---|---|---|---|---|---|---|---|
+| `agent_amplification` | required |  | `risk_outputs`, `evidence` | `risk360` (primary): subjects `agent`; `evidence`, `findings`, `health` | — | — | Persisted agentic delegation abuse signal only for exact agent subject. |
+| `anomaly_events` | required |  | `risk_outputs`, `observations` | — | — | Unbound: `canonical_anomaly_event_authority_not_connected` | Typed anomaly event records. |
+| `audit_history` | required |  | `mutation_history`, `evidence` | — | — | Unbound: `risk_audit_history_authority_not_connected` | Versioned risk assessment and intervention audit lineage. |
+| `economic_exposure` | optional |  | `economic_facts`, `ai_execution_facts` | `economic360` (primary): subjects `entity`, `agent`; `summary`, `evidence`, `outcomes` | — | — | Economic facts associated with the risk subject and network. |
+| `evidence_trace` | required |  | `evidence`, `flow_trace_paths`, `flow_traces`, `risk_assessments`, `risk_outputs`, `risk_signals`, `source_provenance`, `transfers` | `risk360` (primary): subjects `agent`, `cluster`, `contagion_path`, `entity`, `relationship`, `source`; `evidence`, `findings`, `health` | — | — | Exact assessment, signal, and source ingress evidence references. |
+| `execution_exposure` | optional |  | `execution_facts` | `execution360` (primary): subjects `entity`, `agent`; `summary`, `timeline`, `evidence` | — | — | Execution facts associated with an agent or execution subject. |
+| `financial_contagion` | required |  | `flow_trace_paths`, `flow_traces`, `transfers`, `risk_assessments`, `risk_signals` | `risk360` (primary): subjects `contagion_path`; `findings` | — | Partial: `causal_contagion_exposure_and_loss_model_not_available` | Exact financial transfer path linked to risk evidence for each node; causal contagion, exposure, and loss remain unproven. |
+| `fraud_and_social_patterns` | optional |  | `fraud_synthesis`, `graph_motifs`, `social_observations` | `fraud360` (primary): subjects `entity`, `relationship`, `agent`; `findings`, `evidence`, `health`; `social360` (supporting): subjects `entity`, `relationship`; `findings`, `evidence` | — | — | Fraud synthesis, graph motifs, and social observations. |
+| `interventions` | required |  | `actions`, `risk_outputs` | — | — | Unbound: `risk_intervention_authority_not_connected` | Recorded risk interventions and results. |
+| `poisoning_evidence` | required |  | `risk_outputs`, `source_provenance` | — | — | Unbound: `data_poisoning_evidence_authority_not_connected` | Verified data poisoning evidence with source lineage. |
+| `policy_flags` | required |  | `risk_outputs`, `model_governance` | — | — | Unbound: `evaluated_policy_flag_authority_not_connected` | Evaluated risk policy flags with policy version and evidence. |
+| `propagation_paths` | required |  | `graph`, `relationship_facts` | — | — | Unbound: `canonical_contagion_path_authority_not_connected` | Causally supported risk propagation paths. |
+| `relationship_network_context` | optional |  | `entity_graph`, `relationship_facts`, `graph` | `relationship360` (primary): subjects `agent`, `entity`, `relationship`; `summary`, `interactions`, `evidence`; `risk360` (supporting): subjects `entity`, `relationship`, `cluster`; `summary`, `evidence` | — | — | Entity graph and relationship evidence relevant to risk. |
+| `risk_assessment_state` | optional |  | `risk_outputs`, `model_governance` | `risk360` (primary): subjects `agent`, `entity`, `relationship`, `cluster`; `summary`, `state`, `findings`, `health` | — | — | Risk outputs, model governance context, and assessment state. |
+| `risk_evidence_and_limitations` | optional |  | `evidence` | `risk360` (primary): subjects `agent`, `entity`, `relationship`, `cluster`; `evidence`, `findings` | — | — | Evidence and limitations supporting risk findings. |
+| `risk_summary` | required |  | `risk_outputs`, `evidence` | `risk360` (primary): subjects `agent`, `cluster`, `entity`, `relationship`, `source`; `summary`, `state`, `evidence`, `findings` | — | — | Exact scoped canonical assessment and dimension state with evidence and confidence. |
+| `social_contagion` | required |  | `social_observations`, `risk_outputs` | — | — | Unbound: `social_contagion_causal_authority_not_connected` | Social contagion supported by exact propagation evidence. |
+| `source_trust` | required |  | `source_provenance` | `risk360` (primary): subjects `source`; `health`, `findings`, `evidence` | — | — | Gateway stamped ingress classification for an exact source subject; reliability remains unknown. |
 
 ### Projection provider bindings
 
@@ -706,7 +770,7 @@ Governed view of risk findings, evidence, relationship and economic exposure, wi
 
 ### Authority and governance contract
 
-Canonical authorities: `ai_execution_facts`, `economic_facts`, `entity_graph`, `evidence`, `execution_facts`, `fraud_synthesis`, `graph`, `graph_motifs`, `model_governance`, `relationship_facts`, `risk_outputs`, `social_observations`.
+Canonical authorities: `actions`, `ai_execution_facts`, `economic_facts`, `entity_graph`, `evidence`, `execution_facts`, `flow_trace_paths`, `flow_traces`, `fraud_synthesis`, `graph`, `graph_motifs`, `model_governance`, `mutation_history`, `observations`, `relationship_facts`, `risk_assessments`, `risk_outputs`, `risk_signals`, `social_observations`, `source_provenance`, `transfers`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -718,37 +782,36 @@ Required backend capabilities: `experience360.frame.compose`, `experience360.ten
 
 Capability and provider status is contract metadata only: `registry_requirements_not_route_attestation`. Provider implementation states are copied from the technical registry and do not imply runtime readiness.
 
-Lens alignment: expected count `None`; exact lens ids are pending source alignment.
+Lens alignment: `source_aligned`; expected count `9`; lens ids: `risk`, `provenance`, `policy`, `identity`, `relationship`, `social`, `value`, `agentic`, `communications`.
 
 ## Signals 360
 
 Product surface id: `signals360`
-Contract status: `reconstructed_pending_source_alignment`
-Subject kinds: `entity`, `agent`, `relationship`, `source`
+Contract status: `source_aligned`
+Subject kinds: `entity`, `signal`, `source`, `event`, `observation`, `stream`
 
 Governed view of risk, fraud, source, social, and outcome signals with evidence and freshness status.
 
 ### Domain slots
 
-| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Description |
-|---|---|---|---|---|---|
-| `fraud_and_network_signals` | optional |  | `fraud_synthesis`, `graph_motifs`, `social_observations`, `relationship_facts` | `fraud360` (primary): subjects `entity`, `agent`, `relationship`; `findings`, `evidence`, `health`; `social360` (supporting): subjects `entity`, `relationship`; `findings`, `evidence` | Fraud synthesis, motifs, social observations, and network context. |
-| `measured_outcome_signals` | optional |  | `outcome_facts`, `measurement_contract` | `outcome360` (primary): subjects none; `summary`, `outcomes`, `findings` | Measured outcomes available as governed signal inputs. |
-| `risk_signals` | required |  | `risk_outputs` | `risk360` (primary): subjects `agent`, `entity`, `relationship`, `source`; `summary`, `findings`, `evidence`, `health` | Risk outputs and signal findings. |
-| `source_signals_and_coverage` | required |  | `source_provenance`, `source_coverage`, `ingestion_health` | `source360` (primary): subjects `agent`, `entity`, `source`; `summary`, `health`, `coverage`, `evidence`; `connection360` (supporting): subjects `source`; `state`, `evidence`, `coverage` | Source provenance and coverage of signal inputs. |
-| `temporal_signal_context` | optional |  | `temporal_kernel` | `temporal360` (primary): subjects `entity`, `relationship`; `state`, `timeline`, `evidence` | Temporal context for signal observations. |
+| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
+|---|---|---|---|---|---|---|---|
+| `campaign_links` | required |  | `campaign_facts`, `campaign_touchpoints` | — | — | Unbound: `canonical_signal_campaign_join_not_available` | Required signals360 slot: campaign links. |
+| `classification` | required |  | `events`, `observations` | — | — | Unbound: `canonical_event_signal_classifier_not_joined` | Required signals360 slot: classification. |
+| `evidence_trace` | required |  | `behavioral_signals` | `signals360` (primary): subjects `entity`; `evidence_trace` | — | — | Evidence references for bounded derived signal records. |
+| `freshness` | required |  | `behavioral_signals` | `signals360` (primary): subjects `entity`; `freshness` | — | — | Source timestamps retained from bounded derived signal records; freshness threshold remains unknown. |
+| `linked_entities` | required |  | `identity`, `entity_graph` | — | — | Unbound: `exact_signal_event_identity_join_not_available` | Required signals360 slot: linked entities. |
+| `normalization` | required |  | `observations`, `source_schema` | — | — | Unbound: `canonical_observation_normalization_read_not_joined` | Required signals360 slot: normalization. |
+| `quality` | required |  | `ingestion_health`, `source_schema`, `observations` | `signals360` (primary): subjects `event`, `observation`; `quality` | — | Authority: `source_reliability_and_semantic_quality_authorities_not_joined`; Partial: `gateway_acceptance_only_no_reliability_semantic_quality_or_freshness_sla` | Exact SDK Bronze gateway acceptance for an event or observation; source reliability and semantic quality remain unknown. |
+| `risk_flags` | required |  | `risk_outputs` | — | — | Unbound: `canonical_signal_risk_join_not_available` | Required signals360 slot: risk flags. |
+| `signal_summary` | required |  | `behavioral_signals` | `signals360` (primary): subjects `entity`; `signal_summary` | — | — | Bounded tenant and entity scoped translator-derived signal records. |
+| `source_inventory` | required |  | `source_facts`, `source_provenance` | `signals360` (primary): subjects `event`, `observation`; `source_inventory` | — | Authority: `This read is limited to authenticated Envelope-B metadata on one SDK event and does not join a tenant source registry or inventory.`; Partial: `Only one exact SDK event or observation is described; the provider cannot enumerate sources or establish source reliability.` | Authenticated source metadata for an exact SDK event or observation; fleet inventory remains unknown. |
 
 ### Projection provider bindings
 
 | Projection | Binding | Provider implementation metadata | Capability keys |
 |---|---|---|---|
-| `connection360` | `catalog_only` (supporting) | `in_flight` | `connection360.read`, `connection360.explore` |
-| `fraud360` | `catalog_only` (primary) | `implemented` | `fraud360.read`, `fraud360.explore` |
-| `outcome360` | `catalog_only` (primary) | `implemented` | `outcome360.read`, `outcome360.explore` |
-| `risk360` | `catalog_only` (primary) | `implemented` | `risk360.read`, `risk360.explore` |
-| `social360` | `catalog_only` (supporting) | `in_flight` | `social360.read`, `social360.explore` |
-| `source360` | `catalog_only` (primary) | `in_flight` | `source360.read`, `source360.explore` |
-| `temporal360` | `catalog_only` (primary) | `implemented` | `temporal360.read`, `temporal360.explore` |
+| `signals360` | `catalog_only` (primary) | `in_flight` | `signals360.read` |
 
 ### Direct surface-provider bindings
 
@@ -758,7 +821,7 @@ Governed view of risk, fraud, source, social, and outcome signals with evidence 
 
 ### Authority and governance contract
 
-Canonical authorities: `fraud_synthesis`, `graph_motifs`, `ingestion_health`, `measurement_contract`, `outcome_facts`, `relationship_facts`, `risk_outputs`, `social_observations`, `source_coverage`, `source_provenance`, `temporal_kernel`.
+Canonical authorities: `behavioral_signals`, `campaign_facts`, `campaign_touchpoints`, `entity_graph`, `events`, `identity`, `ingestion_health`, `observations`, `risk_outputs`, `source_facts`, `source_provenance`, `source_schema`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -770,25 +833,35 @@ Required backend capabilities: `experience360.frame.compose`, `experience360.ten
 
 Capability and provider status is contract metadata only: `registry_requirements_not_route_attestation`. Provider implementation states are copied from the technical registry and do not imply runtime readiness.
 
-Lens alignment: expected count `None`; exact lens ids are pending source alignment.
+Lens alignment: `source_aligned`; expected count `7`; lens ids: `event-signal`, `provenance`, `campaign`, `identity`, `risk`, `location`, `policy`.
 
 ## Social 360
 
 Product surface id: `social360`
-Contract status: `reconstructed_pending_source_alignment`
-Subject kinds: `entity`, `relationship`, `source`, `population`
+Contract status: `source_aligned`
+Subject kinds: `entity`, `profile`, `relationship`, `community`, `syndicate`, `source`, `population`
 
 Governed view of social observations, source-backed relationships, evidence, and optional population or geographic context.
 
 ### Domain slots
 
-| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Description |
-|---|---|---|---|---|---|
-| `evidence_and_coverage` | required |  | `evidence`, `source_coverage`, `identity`, `cohort_membership` | `social360` (primary): subjects `entity`, `relationship`, `source`, `population`; `evidence`, `findings`; `source360` (supporting): subjects `source`; `evidence`, `coverage` | Evidence and source coverage for social claims. |
-| `geographic_context` | optional |  | `geo_observations`, `locations` | `geographic360` (primary): subjects `entity`, `source`, `population`; `summary`, `timeline`, `evidence` | Location context for social observations. |
-| `population_context` | optional |  | `population_definitions`, `cohort_membership` | `population360` (primary): subjects `entity`, `population`; `summary`, `state`, `evidence` | Population and cohort context for social observations. |
-| `relationship_graph` | required |  | `relationship_facts`, `graph`, `identity`, `cohort_membership` | `relationship360` (primary): subjects `entity`, `relationship`, `source`, `population`; `summary`, `interactions`, `evidence` | Relationship facts and graph context. |
-| `social_observations_and_sources` | required |  | `social_observations`, `source_facts`, `identity`, `cohort_membership` | `social360` (primary): subjects `entity`, `relationship`, `source`, `population`; `summary`, `timeline`, `interactions`, `evidence` | Social observations and their source facts. |
+| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
+|---|---|---|---|---|---|---|---|
+| `communities` | required |  | `social_observations` | `social360` (primary): subjects `entity`, `relationship`, `source`, `population`; `findings`, `evidence` | — | — | Recorded Social Silver community membership observations. |
+| `evidence_and_coverage` | optional |  | `evidence`, `source_coverage`, `identity`, `cohort_membership` | `social360` (primary): subjects `entity`, `relationship`, `source`, `population`; `evidence`, `findings`; `source360` (supporting): subjects `source`; `evidence`, `coverage` | — | — | Evidence and source coverage for social claims. |
+| `evidence_trace` | required |  | `evidence`, `social_observations` | `social360` (primary): subjects `entity`, `relationship`, `source`, `population`; `evidence` | — | — | Source references for exact scoped social observations. |
+| `geographic_context` | optional |  | `geo_observations`, `locations` | `geographic360` (primary): subjects `entity`, `source`, `population`; `summary`, `timeline`, `evidence` | — | — | Location context for social observations. |
+| `influence_paths` | required |  | `relationship_facts`, `social_observations` | — | — | Unbound: `canonical_influence_path_derivation_unavailable` | Evidence backed influence paths and direction. |
+| `multi_hop_paths` | required |  | `graph`, `relationship_facts` | `social360` (primary): subjects `entity`; `paths` | — | Partial: `bounded_observed_paths_only_no_exhaustive_or_causal_social_semantics` | Bounded observed FOLLOWS edge sequences for an exact entity; no transitive trust, influence, or exhaustive path claim. |
+| `population_context` | optional |  | `population_definitions`, `cohort_membership` | `population360` (primary): subjects `entity`, `population`; `summary`, `state`, `evidence` | — | — | Population and cohort context for social observations. |
+| `propagation` | required |  | `graph`, `social_observations` | — | — | Unbound: `canonical_social_propagation_path_authority_unavailable` | Observed propagation paths and time order. |
+| `relationship_graph` | optional |  | `relationship_facts`, `graph`, `identity`, `cohort_membership` | `relationship360` (primary): subjects `entity`, `relationship`, `source`, `population`; `summary`, `interactions`, `evidence` | — | — | Relationship facts and graph context. |
+| `relationship_map` | required |  | `social_observations` | `social360` (primary): subjects `entity`, `relationship`, `source`, `population`; `findings`, `evidence` | — | — | Recorded Social Silver connection facts; not canonical graph edges. |
+| `risk_edges` | required |  | `risk_outputs`, `graph` | — | — | Unbound: `social_risk_edge_derivation_not_connected` | Policy governed risk relationship edges. |
+| `social_contagion` | required |  | `risk_outputs`, `social_observations` | — | — | Unbound: `social_contagion_causal_evidence_authority_unavailable` | Causal contagion evidence with source trust and policy. |
+| `social_observations_and_sources` | optional |  | `social_observations`, `source_facts`, `identity`, `cohort_membership` | `social360` (primary): subjects `entity`, `relationship`, `source`, `population`; `summary`, `timeline`, `interactions`, `evidence` | — | — | Social observations and their source facts. |
+| `syndicates` | required |  | `cluster_membership`, `relationship_facts` | — | — | Unbound: `canonical_syndicate_membership_authority_not_joined` | Verified syndicate membership and topology. |
+| `trust_edges` | required |  | `relationship_facts` | — | — | Unbound: `social_trust_edge_derivation_not_connected` | Policy governed trust relationship edges. |
 
 ### Projection provider bindings
 
@@ -808,7 +881,7 @@ Governed view of social observations, source-backed relationships, evidence, and
 
 ### Authority and governance contract
 
-Canonical authorities: `cohort_membership`, `evidence`, `geo_observations`, `graph`, `identity`, `locations`, `population_definitions`, `relationship_facts`, `social_observations`, `source_coverage`, `source_facts`.
+Canonical authorities: `cluster_membership`, `cohort_membership`, `evidence`, `geo_observations`, `graph`, `identity`, `locations`, `population_definitions`, `relationship_facts`, `risk_outputs`, `social_observations`, `source_coverage`, `source_facts`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -820,26 +893,36 @@ Required backend capabilities: `experience360.frame.compose`, `experience360.ten
 
 Capability and provider status is contract metadata only: `registry_requirements_not_route_attestation`. Provider implementation states are copied from the technical registry and do not imply runtime readiness.
 
-Lens alignment: expected count `None`; exact lens ids are pending source alignment.
+Lens alignment: `source_aligned`; expected count `8`; lens ids: `relationship`, `social`, `syndicate`, `identity`, `risk`, `communications`, `value`, `provenance`.
 
 ## Support 360
 
 Product surface id: `support360`
-Contract status: `reconstructed_pending_source_alignment`
-Subject kinds: `entity`, `agent`, `episode`, `source`
+Contract status: `source_aligned`
+Subject kinds: `support_case`, `callback`, `conversation`, `ticket`, `entity`, `agent`, `episode`, `source`
 
 Governed support context composed from communications, episodes and journeys, entity identity, and evidence.
 
 ### Domain slots
 
-| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Description |
-|---|---|---|---|---|---|
-| `entity_and_agent_context` | required |  | `identity`, `agent_entity` | `profile360` (primary): subjects `entity`, `agent`; `summary`, `state`; `agent360` (supporting): subjects `entity`, `agent`; `summary`, `state`, `evidence` | Identity and agent context associated with support activity. |
-| `measured_outcomes` | optional |  | `outcome_facts` | `outcome360` (primary): subjects `episode`; `outcomes`, `evidence` | Measured support outcomes where an authoritative provider exists. |
-| `risk_context` | optional |  | `risk_outputs` | `risk360` (primary): subjects `entity`; `summary`, `findings`, `evidence` | Risk context from its governing projection, subject to policy. |
-| `source_lineage_and_coverage` | required |  | `source_provenance`, `source_coverage` | `source360` (primary): subjects `source`; `evidence`, `coverage` | Source provenance and coverage for support context. |
-| `support_communications` | required |  | `communication_facts`, `evidence` | `support360` (primary): subjects `entity`; `summary`, `state`, `timeline`, `evidence`, `interactions`, `outcomes` | Communication events and interaction evidence. |
-| `support_episode_and_journey` | required |  | `episode_facts`, `journeys`, `events` | `episode360` (primary): subjects `entity`, `episode`; `summary`, `state`, `timeline`, `evidence` | Episode and journey context for support interactions. |
+| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
+|---|---|---|---|---|---|---|---|
+| `agents` | required |  | `agent_entities`, `communication_facts` | — | — | Unbound: `canonical_support_case_agent_assignment_unavailable` | Validated support agent assignments and handoffs. |
+| `callbacks` | required |  | `communication_facts` | — | — | Unbound: `canonical_support_callback_authority_unavailable` | Canonical callback schedule and execution records. |
+| `case_summary` | required |  | `support_cases`, `support_case_events`, `provider_connections`, `evidence` | `support360` (primary): subjects `support_case`; `summary`, `state`, `evidence` | — | Partial: `persisted_case_events_do_not_prove_source_history_completeness_or_freshness_sla` | Exact tenant-owned support case identity and observed lifecycle state from persisted source events. |
+| `conversation_history` | required |  | `communication_facts`, `evidence` | `support360` (primary): subjects `entity`; `timeline`, `state`, `evidence` | — | — | Tenant scoped support communication metadata; bodies require separate content permission. |
+| `entity_and_agent_context` | optional |  | `identity`, `agent_entity` | `profile360` (primary): subjects `entity`, `agent`; `summary`, `state`; `agent360` (supporting): subjects `entity`, `agent`; `summary`, `state`, `evidence` | — | — | Identity and agent context associated with support activity. |
+| `evidence_trace` | required |  | `communication_facts`, `evidence`, `provider_connections`, `support_cases`, `support_case_events` | `support360` (primary): subjects `entity`, `support_case`; `evidence`, `summary`, `state` | — | Partial: `source_history_completeness_and_freshness_sla_are_unverified` | Source references for exact support communication metadata or case lifecycle; message bodies are excluded. |
+| `journey_links` | required |  | `journeys`, `episode_facts` | — | — | Unbound: `canonical_support_case_journey_join_unavailable` | Exact support case to journey relationships. |
+| `measured_outcomes` | optional |  | `outcome_facts` | `outcome360` (primary): subjects `episode`; `outcomes`, `evidence` | — | — | Measured support outcomes where an authoritative provider exists. |
+| `participants` | required |  | `communication_facts`, `identity` | — | — | Unbound: `canonical_support_case_participants_unavailable` | Case participants with identity and content policy. |
+| `resolution` | required |  | `outcome_facts` | — | — | Unbound: `canonical_support_resolution_authority_unavailable` | Recorded support outcome and resolution state. |
+| `risk` | required |  | `risk_outputs` | — | — | Unbound: `support_risk_subject_join_unavailable` | Risk outputs associated with the exact support case. |
+| `risk_context` | optional |  | `risk_outputs` | `risk360` (primary): subjects `entity`; `summary`, `findings`, `evidence` | — | — | Risk context from its governing projection, subject to policy. |
+| `sla` | required |  | `measurement_contract` | — | — | Unbound: `canonical_support_sla_authority_unavailable` | Support service level contract and timer state. |
+| `source_lineage_and_coverage` | optional |  | `source_provenance`, `source_coverage` | `source360` (primary): subjects `source`; `evidence`, `coverage` | — | — | Source provenance and coverage for support context. |
+| `support_communications` | optional |  | `communication_facts`, `evidence` | `support360` (primary): subjects `entity`; `summary`, `state`, `timeline`, `evidence`, `interactions`, `outcomes` | — | — | Communication events and interaction evidence. |
+| `support_episode_and_journey` | optional |  | `episode_facts`, `journeys`, `events` | `episode360` (primary): subjects `entity`, `episode`; `summary`, `state`, `timeline`, `evidence` | — | — | Episode and journey context for support interactions. |
 
 ### Projection provider bindings
 
@@ -861,7 +944,7 @@ Governed support context composed from communications, episodes and journeys, en
 
 ### Authority and governance contract
 
-Canonical authorities: `agent_entity`, `communication_facts`, `episode_facts`, `events`, `evidence`, `identity`, `journeys`, `outcome_facts`, `risk_outputs`, `source_coverage`, `source_provenance`.
+Canonical authorities: `agent_entities`, `agent_entity`, `communication_facts`, `episode_facts`, `events`, `evidence`, `identity`, `journeys`, `measurement_contract`, `outcome_facts`, `provider_connections`, `risk_outputs`, `support_cases`, `support_case_events`, `source_coverage`, `source_provenance`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -873,25 +956,36 @@ Required backend capabilities: `experience360.frame.compose`, `experience360.ten
 
 Capability and provider status is contract metadata only: `registry_requirements_not_route_attestation`. Provider implementation states are copied from the technical registry and do not imply runtime readiness.
 
-Lens alignment: expected count `None`; exact lens ids are pending source alignment.
+Lens alignment: `source_aligned`; expected count `7`; lens ids: `support`, `communications`, `journey`, `identity`, `risk`, `workflow`, `policy`.
 
 ## Value 360
 
 Product surface id: `value360`
-Contract status: `reconstructed_pending_source_alignment`
-Subject kinds: `campaign`, `episode`, `journey`
+Contract status: `source_aligned`
+Subject kinds: `value`, `profile`, `account`, `conversion`, `cluster`, `campaign`, `episode`, `journey`, `entity`, `agent`, `source`
 
 Governed view of economic facts, payment and commerce evidence, attribution, and measured outcomes; missing values remain explicit.
 
 ### Domain slots
 
-| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Description |
-|---|---|---|---|---|---|
-| `campaign_and_attribution_context` | optional |  | `attribution_credits`, `campaign_facts` | `campaign360` (primary): subjects `campaign`, `episode`; `summary`, `evidence`, `outcomes` | Campaign facts and attribution credits associated with value. |
-| `economic_facts_and_state` | required |  | `economic_facts`, `currency_value_normalization`, `ai_execution_facts` | `economic360` (primary): subjects `campaign`, `episode`, `journey`; `summary`, `state`, `evidence` | Economic facts and value state with currency normalization provenance. |
-| `measured_outcomes` | required |  | `outcome_facts`, `measurement_contract` | `outcome360` (primary): subjects `campaign`, `episode`, `journey`; `summary`, `evidence`, `outcomes` | Measured outcome facts linked to economic value. |
-| `payments_and_commerce_evidence` | required |  | `payments`, `commerce`, `ai_execution_facts` | `economic360` (primary): subjects `campaign`, `episode`, `journey`; `evidence`, `outcomes` | Payment and commerce evidence from the corresponding authorities. |
-| `temporal_context` | optional |  | `temporal_kernel` | `temporal360` (primary): subjects none; `state`, `timeline` | Temporal context for value facts and comparisons. |
+| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
+|---|---|---|---|---|---|---|---|
+| `attribution_credits` | required |  | `attribution_runs`, `attribution_credits`, `canonical_conversions`, `campaign_touchpoints` | `economic360` (primary): subjects `conversion`, `profile`, `entity`, `cluster`, `campaign`, `journey`, `account`, `agent`, `episode`, `source`; `evidence` | — | Authority: `credit_records_are_not_rejoined_to_canonical_campaign_touchpoint_rows`; Partial: `credit_records_are_not_rejoined_to_canonical_campaign_touchpoint_rows` | Credited value allocated by canonical attribution authority. |
+| `campaign_and_attribution_context` | optional |  | `attribution_credits`, `campaign_facts` | `campaign360` (primary): subjects `campaign`, `episode`; `summary`, `evidence`, `outcomes` | — | — | Campaign facts and attribution credits associated with value. |
+| `confidence` | required |  | `model_governance`, `economic_facts` | — | — | Unbound: `value_confidence_authority_not_connected` | Confidence of the value/attribution estimate with model lineage. |
+| `conversion_inventory` | required |  | `canonical_conversions` | `economic360` (primary): subjects `conversion`, `profile`, `entity`, `cluster`, `campaign`, `journey`, `account`, `agent`; `evidence` | — | Partial: `value_subject_wallet_cluster_and_historical_inventory_joins_not_available` | Canonical conversion ledger records linked to an exact subject reference; aggregate attribution and unsupported value or wallet-cluster joins remain unknown. |
+| `economic_facts_and_state` | optional |  | `economic_facts`, `currency_value_normalization`, `ai_execution_facts` | `economic360` (primary): subjects `campaign`, `episode`, `journey`; `summary`, `state`, `evidence` | — | — | Economic facts and value state with currency normalization provenance. |
+| `evidence_trace` | required |  | `economic_facts`, `payments`, `commerce`, `canonical_conversions` | `economic360` (primary): subjects `agent`, `campaign`, `entity`, `episode`, `journey`, `source`, `conversion`, `profile`, `account`, `cluster`; `summary`, `evidence` | — | — | Canonical economic, payment, commerce, and conversion evidence references for exact supported subjects. |
+| `financial_risk` | required |  | `risk_outputs`, `economic_facts` | — | — | Unbound: `financial_risk_value_join_not_connected` | Financial risk linked to economic facts by exact subject. |
+| `ltv` | required |  | `economic_facts`, `outcome_facts` | — | — | Unbound: `canonical_ltv_measurement_authority_not_available` | Lifetime value over a defined subject and temporal window. |
+| `measured_outcomes` | optional |  | `outcome_facts`, `measurement_contract` | `outcome360` (primary): subjects `campaign`, `episode`, `journey`; `summary`, `evidence`, `outcomes` | — | — | Measured outcome facts linked to economic value. |
+| `payments_and_commerce_evidence` | optional |  | `payments`, `commerce`, `ai_execution_facts` | `economic360` (primary): subjects `campaign`, `episode`, `journey`; `evidence`, `outcomes` | — | — | Payment and commerce evidence from the corresponding authorities. |
+| `reconciliation` | required |  | `currency_value_normalization`, `payments` | — | — | Unbound: `cross_source_value_reconciliation_not_available` | Source and currency reconciliation evidence. |
+| `revenue_events` | required |  | `payments`, `economic_facts` | `economic360` (primary): subjects `campaign`, `entity`, `journey`; `evidence` | — | Partial: `all_revenue_event_sources_and_attribution_not_joined` | Source-recorded settled payment events with an explicit operation join and transaction evidence; no attributed revenue total. |
+| `temporal_context` | optional |  | `temporal_kernel` | `temporal360` (primary): subjects none; `state`, `timeline` | — | — | Temporal context for value facts and comparisons. |
+| `value_summary` | required |  | `economic_facts`, `currency_value_normalization` | `economic360` (primary): subjects `agent`, `campaign`, `entity`, `episode`, `journey`, `source`; `summary` | — | — | Subject-scoped computed economic value with explicit missing, zero, and source currency states; no inferred attribution or AI cost aggregation. |
+| `web2_value` | required |  | `payments`, `commerce` | — | — | Unbound: `web2_value_semantic_classification_not_joined` | Evidence backed Web2 payment and commerce value. |
+| `web3_value` | required |  | `commerce`, `currency_value_normalization` | — | — | Unbound: `web3_value_semantic_classification_not_joined` | Evidence backed Web3 wallet and on-chain value. |
 
 ### Projection provider bindings
 
@@ -910,7 +1004,7 @@ Governed view of economic facts, payment and commerce evidence, attribution, and
 
 ### Authority and governance contract
 
-Canonical authorities: `ai_execution_facts`, `attribution_credits`, `campaign_facts`, `commerce`, `currency_value_normalization`, `economic_facts`, `measurement_contract`, `outcome_facts`, `payments`, `temporal_kernel`.
+Canonical authorities: `ai_execution_facts`, `attribution_runs`, `attribution_credits`, `campaign_facts`, `campaign_touchpoints`, `canonical_conversions`, `commerce`, `currency_value_normalization`, `economic_facts`, `measurement_contract`, `model_governance`, `outcome_facts`, `payments`, `risk_outputs`, `temporal_kernel`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -922,37 +1016,37 @@ Required backend capabilities: `experience360.frame.compose`, `experience360.ten
 
 Capability and provider status is contract metadata only: `registry_requirements_not_route_attestation`. Provider implementation states are copied from the technical registry and do not imply runtime readiness.
 
-Lens alignment: expected count `None`; exact lens ids are pending source alignment.
+Lens alignment: `source_aligned`; expected count `8`; lens ids: `value`, `attribution`, `campaign`, `identity`, `journey`, `commerce`, `risk`, `provenance`.
 
 ## Workflow 360
 
 Product surface id: `workflow360`
-Contract status: `reconstructed_pending_source_alignment`
-Subject kinds: `agent`, `episode`, `connection`
+Contract status: `source_aligned`
+Subject kinds: `workflow`, `automation`, `trigger`, `run`, `workflow_run`
 
 Governed operational view of agent executions, actions and tools, integration lifecycle, evidence, and optional outcomes.
 
 ### Domain slots
 
-| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Description |
-|---|---|---|---|---|---|
-| `actors_actions_and_resources` | required |  | `agent_entities`, `agent_access`, `actions`, `tools`, `resources` | `execution360` (primary): subjects `agent`, `episode`; `interactions`, `evidence`; `agent360` (supporting): subjects `agent`; `state`, `evidence` | Agent actors, actions, tools, and resources participating in workflow activity. |
-| `deployment_infrastructure_context` | optional |  | `deployments`, `infrastructure_facts`, `infrastructure_state` | `infrastructure360` (primary): subjects none; `deployments`, `evidence`, `findings` | Infrastructure and deployment context for workflows whose execution is associated with a registered deployment. |
-| `evidence_and_source_lineage` | required |  | `evidence`, `source_coverage` | `source360` (primary): subjects `connection`; `evidence`, `coverage` | Evidence and source coverage for workflow state. |
-| `integration_and_sync_context` | required |  | `managed_integration_lifecycle`, `connection_config`, `sync_state`, `provider_health` | `connection360` (primary): subjects `connection`; `summary`, `state`, `health`, `coverage` | Connection lifecycle and sync state for workflow integrations. |
-| `workflow_execution_state` | required |  | `execution_facts`, `agent_executions` | `execution360` (primary): subjects `agent`, `episode`; `summary`, `state`, `timeline`; `agent360` (supporting): subjects `agent`; `timeline`, `evidence` | Execution facts and lifecycle state for workflow activity. |
-| `workflow_outcomes` | optional |  | `outcome_facts` | `outcome360` (primary): subjects `episode`; `outcomes`, `evidence` | Measured outcomes associated with workflow execution. |
+| Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
+|---|---|---|---|---|---|---|---|
+| `actions` | required |  | `actions`, `tools`, `resources` | — | — | Unbound: `canonical_workflow_action_authority_not_joined` | Required Workflow 360 slot: actions. |
+| `actors` | required |  | `ai_execution_facts`, `agent_entities`, `identity` | `workflow360` (primary): subjects `run`, `workflow_run`; `actors` | — | Partial: `ai_invocation_agent_actors_only_no_human_initiator_approver_or_authority` | Agent references on exact workflow-run AI invocations resolved to tenant canonical Agent identity; human and approval actors remain unknown. |
+| `agent_steps` | required |  | `agent_executions` | — | — | Unbound: `canonical_workflow_step_authority_not_joined` | Required Workflow 360 slot: agent steps. |
+| `approvals` | required |  | `agent_access` | — | — | Unbound: `canonical_workflow_approval_authority_not_available` | Required Workflow 360 slot: approvals. |
+| `evidence_trace` | required |  | `ai_execution_facts` | `workflow360` (primary): subjects `run`, `workflow_run`; `evidence_trace` | — | — | Lineage of exact workflow run linked AI invocation facts. |
+| `failures` | required |  | `ai_execution_facts` | `workflow360` (primary): subjects `run`, `workflow_run`; `failures` | — | — | Observed AI invocation failure status only; workflow failure state is unknown. |
+| `outcomes` | required |  | `outcome_facts` | — | — | Unbound: `canonical_workflow_business_outcome_join_not_available` | Required Workflow 360 slot: outcomes. |
+| `risk` | required |  | `risk_outputs` | — | — | Unbound: `canonical_workflow_risk_policy_join_not_available` | Required Workflow 360 slot: risk. |
+| `runs` | required |  | `ai_execution_facts` | `workflow360` (primary): subjects `run`, `workflow_run`; `runs` | — | — | AI invocation facts explicitly linked to a workflow run ID; run state is partial. |
+| `triggers` | required |  | `events` | — | — | Unbound: `canonical_workflow_trigger_authority_not_available` | Required Workflow 360 slot: triggers. |
+| `workflow_summary` | required |  | `execution_facts` | — | — | Unbound: `canonical_workflow_definition_authority_not_available` | Required Workflow 360 slot: workflow summary. |
 
 ### Projection provider bindings
 
 | Projection | Binding | Provider implementation metadata | Capability keys |
 |---|---|---|---|
-| `agent360` | `catalog_only` (supporting) | `in_flight` | `agent360.read`, `agent360.explore` |
-| `connection360` | `catalog_only` (primary) | `in_flight` | `connection360.read`, `connection360.explore` |
-| `execution360` | `catalog_only` (primary) | `in_flight` | `execution360.read`, `execution360.explore` |
-| `infrastructure360` | `catalog_only` (primary) | `implemented` | `infrastructure360.read`, `infrastructure360.explore` |
-| `outcome360` | `catalog_only` (primary) | `implemented` | `outcome360.read`, `outcome360.explore` |
-| `source360` | `catalog_only` (primary) | `in_flight` | `source360.read`, `source360.explore` |
+| `workflow360` | `catalog_only` (primary) | `in_flight` | `workflow360.read` |
 
 ### Direct surface-provider bindings
 
@@ -962,7 +1056,7 @@ Governed operational view of agent executions, actions and tools, integration li
 
 ### Authority and governance contract
 
-Canonical authorities: `actions`, `agent_access`, `agent_entities`, `agent_executions`, `connection_config`, `deployments`, `evidence`, `execution_facts`, `infrastructure_facts`, `infrastructure_state`, `managed_integration_lifecycle`, `outcome_facts`, `provider_health`, `resources`, `source_coverage`, `sync_state`, `tools`.
+Canonical authorities: `actions`, `agent_access`, `agent_entities`, `agent_executions`, `ai_execution_facts`, `events`, `execution_facts`, `identity`, `outcome_facts`, `resources`, `risk_outputs`, `tools`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -974,4 +1068,4 @@ Required backend capabilities: `experience360.frame.compose`, `experience360.ten
 
 Capability and provider status is contract metadata only: `registry_requirements_not_route_attestation`. Provider implementation states are copied from the technical registry and do not imply runtime readiness.
 
-Lens alignment: expected count `None`; exact lens ids are pending source alignment.
+Lens alignment: `source_aligned`; expected count `8`; lens ids: `workflow`, `automation`, `execution`, `agentic`, `policy`, `identity`, `risk`, `value`.

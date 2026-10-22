@@ -12,7 +12,7 @@ source_hashes:
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
-  "services/api/actions/agent/": "sha256:753b9b6d837785bc11dd7d23ce590168ae0448de68864cf88db2265f41a90ff5"
+  "services/api/actions/agent/": "sha256:1e776fa278a4bf6407e79ac93bce40f584caf75d456b01b1de0198b9e39d825d"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
@@ -82,27 +82,51 @@ source-of-truth documents.
 
 ## 360 provider addendum (2026-10-18)
 
-The backend now mounts `POST /v1/experience360/frames` and
-`GET /v1/experience360/catalog` for the reconstructed 18-surface product
-catalog. Agent360 and Execution360 provide execution evidence; the frame runtime
-joins their output to communication, risk, economic, and outcome projections.
-It carries actor-attribution and delegation context where canonical evidence
-supports them. Tenant policy runs before provider reads. Delegation
-parties resolve only through exact tenant-scoped canonical entity rows; a
-missing or duplicate party binding leaves the authority slot unknown or
-conflicted. Event-time delegation evidence remains separate from verified
-external execution, for which there is no general server-owned receipt.
+The backend mounts `POST /v1/experience360/frames` and
+`GET /v1/experience360/catalog` for the exact 18-surface backend contract in
+`docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md`.
+The supplemental architectural blueprint is supporting context; it does not
+expand that backend catalog. All 18 catalog entries now carry source-aligned
+contract metadata and required-slot IDs. This source-alignment marker does not
+mean that a provider fills every required slot or meets the complete surface
+contract. The registry contains 24 technical projections; 9 are marked
+`implemented` and 15 `in_flight`, and all 24 register at startup.
 
-All 20 technical providers register at app startup (9 `implemented`, 11
-`in_flight`). Product 360 contracts remain `reconstructed_pending_source_alignment`,
-and some required slot/subject variants have no compatible canonical provider
-path yet. Unknown, missing, and degraded states are preserved. Agent360 now
-includes observed capability reach and active invoke-grant coverage from the
-tenant-scoped catalog, installation, and delegation authorities. It does not
-decide whether a new action/resource request is authorized. Complete
-episode-to-payment references, measured outcome producers, and all-surface
-source-aligned golden coverage remain follow-on work; none is claimed by the
-mounted route or the catalog.
+Agent360 has tenant-scoped identity, delegation and action-scoped authority
+evidence, observed capability reach, and execution/telemetry evidence. Its
+bounded capability read counts only exact active invoke grants for the resolved
+canonical Agent and tenant; missing, malformed, foreign, or truncated rows keep
+coverage partial or unknown. The capability profile reports observed reach
+and invoke-grant coverage; it does not decide whether a new action/resource
+request is authorized. Its
+`policy_boundary` section now carries historical, action-scoped server
+decisions when observed while keeping effective policy unknown; it does not
+expose a standing policy snapshot. Its `risk_summary` composes canonical
+Risk360 evidence with exact slot attribution and does not compute a local risk
+score. Its `spawned_agents` slot reads only outgoing `SPAWNED_SUBAGENT` graph
+ledger evidence through Relationship360. No observed edge is unknown rather
+than empty, and any observed edge remains degraded because the ledger has no
+completeness watermark. Communications and economic/value context remain
+partial joins.
+
+Execution360 now derives server-recorded lifecycle elapsed time from valid,
+timezone-aware start and end timestamps and carries the lifecycle evidence
+into `latency_cost`. This is not provider/tool latency or cost. It still lacks
+a general server-owned external effect receipt, canonical plan-step evidence,
+approval-chain evidence, complete input/output capture, detailed failures,
+and risk-event coverage.
+
+The frame runtime joins available provider output to communication, risk,
+economic, and outcome projections. Tenant policy runs before provider reads.
+Delegation parties resolve only through exact tenant-scoped canonical entity
+rows; a missing or duplicate party binding leaves the authority slot unknown
+or conflicted. Event-time delegation evidence remains separate from verified
+external execution. All 20 technical providers register at app startup (9
+`implemented`, 11 `in_flight`), but registration does not prove required-slot
+conformance. Unknown, missing, and degraded states are preserved. Complete
+episode-to-payment references, complete source evidence, policy and freshness
+behavior, and surface-level golden coverage remain follow-on work across the
+18 surfaces; none is claimed by the mounted route or catalog.
 
 ## Bucket 1 — Correctly observation-only
 

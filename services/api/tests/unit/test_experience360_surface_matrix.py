@@ -148,10 +148,14 @@ async def test_every_product_surface_and_subject_runs_only_its_declared_provider
     """Exercise policy → provider selection → composition across the 18-surface matrix."""
 
     direct_identity_slots = {
-        "resolved_subject_identity",
-        "source_identifier_lineage",
-        "relationship_identity_context",
-        "identity_evidence",
+        slot_id
+        for binding in PRODUCT_360_SURFACE_DEFINITIONS["identity360"]["directProviderBindings"]
+        for slot_id in binding["domainSlotIds"]
+    }
+    direct_account_slots = {
+        slot_id
+        for binding in PRODUCT_360_SURFACE_DEFINITIONS["account360"]["directProviderBindings"]
+        for slot_id in binding["domainSlotIds"]
     }
     checked_cases = 0
 
@@ -209,7 +213,7 @@ async def test_every_product_surface_and_subject_runs_only_its_declared_provider
             for slot in frame.slots:
                 # The generic projection path returns a known empty result. A slot
                 # with no applicable projection is explicitly unknown; Identity360's
-                # direct reader supplies its four declared readable identity slots.
+                # direct reader supplies the source-aligned identity slots.
                 has_compatible_binding = any(
                     subject_kind in binding.get("subjectKinds", [])
                     for binding in expected_slots[slot.id].get("projectionBindings", [])
@@ -217,11 +221,22 @@ async def test_every_product_surface_and_subject_runs_only_its_declared_provider
                 direct_identity_applies = (
                     surface_id == "identity360" and slot.id in direct_identity_slots
                 )
-                if not has_compatible_binding and not direct_identity_applies:
-                    assert slot.state == "unknown"
+                direct_account_applies = (
+                    surface_id == "account360"
+                    and subject_kind == "entity"
+                    and slot.id in direct_account_slots
+                )
+                if not has_compatible_binding and not direct_identity_applies and not direct_account_applies:
+                    assert slot.state == "unknown", (
+                        surface_id,
+                        subject_kind,
+                        slot.id,
+                        slot.reasonCodes,
+                    )
                     assert (
                         "projection_binding_subject_kind_unsupported" in slot.reasonCodes
                         or "projection_result_missing" in slot.reasonCodes
+                        or "slot_provider_not_connected" in slot.reasonCodes
                     )
                 assert slot.state in {
                     "empty",

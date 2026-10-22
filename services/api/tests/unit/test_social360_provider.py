@@ -14,18 +14,28 @@ os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from shared.intelligence_projections.contracts import (  # noqa: E402
+    Experience360FrameRequest,
+    Experience360PolicyDisposition,
     ProjectionContext,
     ProjectionRequest,
     ProjectionSubject,
 )
 from graph.operational_intelligence.models import EvidenceRef, TimeRangeFilter  # noqa: E402
+from shared.graph.graph import Edge, GraphClient, Vertex  # noqa: E402
+from shared.intelligence_projections.composition import (  # noqa: E402
+    compose_experience360_frame,
+)
 from identity.population360.scope import PopulationScopeRead  # noqa: E402
 from identity.identity.source_subject_scope import SourceSubjectScopeRead  # noqa: E402
 from services.social360.provider import (  # noqa: E402
     AgentSubjectScopeRead,
     OUTPUT_SECTIONS,
     Social360FactRead,
+    SocialGraphPathRead,
+    SocialObservedPath,
     Social360Provider,
+    RepositorySocialGraphPathReader,
+    _domain_slot_ids,
 )
 
 
@@ -33,14 +43,26 @@ TENANT = "tenant-social-360"
 
 
 class FakeSocialSource:
-    def __init__(self, rows: dict[str, list[dict]] | None = None) -> None:
+    def __init__(
+        self,
+        rows: dict[str, list[dict]] | None = None,
+        *,
+        unavailable: set[str] | None = None,
+    ) -> None:
         self.rows = rows or {}
+        self.unavailable = unavailable or set()
         self.calls: list[tuple[str, str, int]] = []
 
     async def read(self, fact_family: str, tenant_id: str, *, limit: int):
         self.calls.append((fact_family, tenant_id, limit))
         rows = self.rows.get(fact_family, [])
-        return Social360FactRead(rows=list(rows), truncated=len(rows) >= 500)
+        available = fact_family not in self.unavailable
+        return Social360FactRead(
+            rows=list(rows),
+            available=available,
+            truncated=len(rows) >= 500,
+            reason=None if available else f"{fact_family}_source_unavailable",
+        )
 
 
 class FakePopulationScopeReader:
@@ -70,6 +92,16 @@ class FakeAgentSubjectScopeReader:
 
     async def resolve(self, tenant_id: str, agent_id: str):
         self.calls.append((tenant_id, agent_id))
+        return self.result
+
+
+class FakeSocialGraphPathReader:
+    def __init__(self, result: SocialGraphPathRead) -> None:
+        self.result = result
+        self.calls: list[tuple[str, str]] = []
+
+    async def read_paths(self, tenant_id: str, start_entity_id: str):
+        self.calls.append((tenant_id, start_entity_id))
         return self.result
 
 
@@ -201,14 +233,20 @@ async def test_entity_projection_is_tenant_scoped_and_emits_typed_fact_evidence(
         "metric-fact-a",
     }
     assert evidence.content["evidenceRefs"][0].source.endswith("silver_social_identity_facts")
+    coverage = evidence.content["sourceCoverage"]
+    assert coverage["state"] == "degraded"
+    assert coverage["countsAreScopedToRequestedSubject"] is True
+    assert coverage["temporalScopeState"] == "not_requested"
+    assert coverage["temporalScope"] == "unbounded"
+    assert coverage["families"]["identity"]["scopedObservationCount"] == 1
+    assert coverage["families"]["metric"]["scopedObservationCount"] == 1
+    assert coverage["families"]["metric"]["sourceTimestampedCount"] == 1
+    assert coverage["families"]["metric"]["receivedAtCount"] == 0
     identity_claim = next(
         claim for claim in result.claims if claim.id == "social360.identity.identity-fact-a"
     )
     assert identity_claim.evidenceRefs[0].id == "identity-fact-a"
-    assert identity_claim.domainSlotIds == [
-        "evidence_and_coverage",
-        "social_observations_and_sources",
-    ]
+    assert identity_claim.domainSlotIds == _domain_slot_ids("entity", "identity")
     assert source.calls[0] == ("identity", TENANT, 500)
 
 
@@ -349,6 +387,20 @@ async def test_relationship_subject_uses_exact_canonical_endpoint_pair():
     assert [row["connection_type"] for row in findings.content["relationships"]] == ["follows"]
     assert [row["interaction_type"] for row in interactions.content["interactions"]] == ["reply"]
     assert "connection-a-c" not in {ref.id for claim in result.claims for ref in claim.evidenceRefs}
+    unsupported_graph_slots = {
+        "relationship_graph",
+        "multi_hop_paths",
+        "syndicates",
+        "influence_paths",
+        "propagation",
+        "social_contagion",
+        "trust_edges",
+        "risk_edges",
+    }
+    assert all(
+        not unsupported_graph_slots.intersection(claim.domainSlotIds or [])
+        for claim in result.claims
+    )
     assert len([call for call in source.calls if call[0] == "identity"]) == 1
 
 
@@ -401,6 +453,88 @@ async def test_unresolved_relationship_or_non_entity_subject_does_not_read_facts
 
 
 @pytest.mark.asyncio
+async def test_unavailable_identity_source_is_degraded_and_does_not_join_partial_rows():
+    source = FakeSocialSource(
+        {
+            "identity": [_identity("partial-identity", "entity-a", "social-a")],
+            "metric": [
+                {
+                    "fact_id": "metric-from-partial-identity",
+                    "tenant_id": TENANT,
+                    "social_identity_ref": "social-a",
+                    "metric_name": "followers",
+                    "value": 999,
+                    "observed_at": "2026-10-18T09:00:00Z",
+                }
+            ],
+        },
+        unavailable={"identity"},
+    )
+
+    result = await Social360Provider(source=source, consent_reader=_allow_consent).project(
+        _request(), _context()
+    )
+
+    sections = {section.id: section for section in result.sections}
+    assert source.calls == [("identity", TENANT, 500)]
+    assert all(
+        section.state == "degraded"
+        for section_id, section in sections.items()
+        if section_id != "paths"
+    )
+    assert sections["paths"].state == "unknown"
+    assert sections["summary"].content["coverage"] == "unavailable"
+    coverage = sections["evidence"].content["sourceCoverage"]
+    assert coverage["state"] == "unavailable"
+    assert coverage["identityBindingState"] == "unavailable"
+    assert coverage["scopeState"] == "degraded"
+    assert coverage["families"]["identity"]["readState"] == "unavailable"
+    assert coverage["families"]["identity"]["scopedObservationCount"] is None
+    assert coverage["families"]["metric"]["readState"] == "not_read"
+    assert coverage["families"]["metric"]["scopedObservationCount"] is None
+    assert "metric-from-partial-identity" not in result.model_dump_json()
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_identity_id_with_unresolved_duplicate_binding_is_excluded_from_joins():
+    source = FakeSocialSource(
+        {
+            "identity": [
+                _identity("identity-resolved", "entity-a", "social-shared"),
+                {
+                    **_identity("identity-unresolved", "entity-a", "social-shared"),
+                    "canonical_entity_ref": None,
+                    "resolution_state": "unresolved",
+                },
+            ],
+            "metric": [
+                {
+                    "fact_id": "metric-should-not-join",
+                    "tenant_id": TENANT,
+                    "social_identity_ref": "social-shared",
+                    "metric_name": "followers",
+                    "value": 77,
+                }
+            ],
+        }
+    )
+
+    result = await Social360Provider(source=source, consent_reader=_allow_consent).project(
+        _request(), _context()
+    )
+
+    sections = {section.id: section for section in result.sections}
+    assert sections["state"].state == "degraded"
+    assert sections["summary"].content["identityCount"] is None
+    assert sections["state"].content["identities"] == []
+    assert sections["state"].content["metrics"] == []
+    assert sections["evidence"].content["sourceCoverage"]["identityBindingState"] == "degraded"
+    assert result.claims == []
+    assert "metric-should-not-join" not in result.model_dump_json()
+
+
+@pytest.mark.asyncio
 async def test_as_of_uses_received_time_and_omits_unanchored_facts():
     source = FakeSocialSource(
         {
@@ -419,17 +553,20 @@ async def test_as_of_uses_received_time_and_omits_unanchored_facts():
 
     result = await provider.project(
         _request(
-            include_sections=["state"],
+            include_sections=["state", "evidence"],
             temporal_mode="as_of",
             as_of="2026-10-17T10:00:00Z",
         ),
         _context(),
     )
 
-    state = result.sections[0]
+    state = next(section for section in result.sections if section.id == "state")
     assert state.state == "degraded"
     assert [row["social_identity_id"] for row in state.content["identities"]] == ["social-a"]
     assert "temporal_fact_coverage_incomplete" in result.degradedReasons
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert evidence.content["sourceCoverage"]["temporalScope"] == "bounded"
+    assert evidence.content["sourceCoverage"]["temporalScopeState"] == "incomplete"
 
 
 @pytest.mark.asyncio
@@ -522,7 +659,9 @@ async def test_population_projection_uses_verified_members_and_internal_social_e
         "memberCount": 2,
         "relationshipScope": "internal_to_verified_population_members",
     }
-    assert all("social_observations_and_sources" in claim.domainSlotIds for claim in result.claims)
+    for claim in result.claims:
+        family = claim.kind.removeprefix("social_").removesuffix("_fact_observation")
+        assert claim.domainSlotIds == _domain_slot_ids("population", family)
 
 
 @pytest.mark.asyncio
@@ -565,7 +704,8 @@ async def test_population_truncation_empty_membership_and_historical_scope_are_e
         population_scope_reader=FakePopulationScopeReader(_population_scope("empty", ())),
     ).project(_request("population", "population-a"), _context())
     assert empty_source.calls == []
-    assert {section.state for section in empty.sections} == {"empty"}
+    assert {section.state for section in empty.sections if section.id != "paths"} == {"empty"}
+    assert next(section for section in empty.sections if section.id == "paths").state == "unknown"
 
     temporal_source = FakeSocialSource()
     temporal_scope = FakePopulationScopeReader(_population_scope())
@@ -660,7 +800,9 @@ async def test_source_subject_uses_identity360_binding_and_limits_social_facts_t
         "state": "available",
         "canonicalEntityId": "canonical-entity-1",
     }
-    assert all("social_observations_and_sources" in claim.domainSlotIds for claim in result.claims)
+    for claim in result.claims:
+        family = claim.kind.removeprefix("social_").removesuffix("_fact_observation")
+        assert claim.domainSlotIds == _domain_slot_ids("source", family)
 
 
 @pytest.mark.asyncio
@@ -708,3 +850,260 @@ async def test_source_subject_rejects_temporal_scope_before_identity_or_social_r
     assert scope_reader.calls == []
     assert source.calls == []
     assert result.degradedReasons == ["source_identity_temporal_scope_unknown"]
+
+
+def _observed_edge(from_id: str, to_id: str, evidence_id: str | None = None) -> Edge:
+    properties = {
+        "tenant_id": TENANT,
+        "relationship_predicate": "FOLLOWS",
+        "idempotency_key": f"follow:{from_id}:{to_id}",
+        "valid_from": "2026-10-20T10:00:00Z",
+    }
+    if evidence_id is not None:
+        properties["evidence_refs"] = [evidence_id]
+    return Edge(
+        edge_type="FOLLOWS_SOCIAL",
+        from_vertex_id=from_id,
+        to_vertex_id=to_id,
+        properties=properties,
+    )
+
+
+@pytest.mark.asyncio
+async def test_repository_social_path_reader_returns_only_bounded_tenant_follows_paths():
+    client = GraphClient()
+    await client.connect()
+    for entity_id, tenant_id in (
+        ("entity-a", TENANT),
+        ("entity-b", TENANT),
+        ("entity-c", TENANT),
+        ("entity-d", TENANT),
+        ("entity-x", TENANT),
+        ("entity-foreign", "tenant-other"),
+    ):
+        await client.add_vertex(
+            Vertex(
+                vertex_type="Entity",
+                vertex_id=entity_id,
+                properties={"tenantId": tenant_id},
+            )
+        )
+    await client.add_edge(_observed_edge("entity-a", "entity-b", "observation-ab"))
+    await client.add_edge(_observed_edge("entity-b", "entity-c", "observation-bc"))
+    # Missing source evidence blocks this edge from contributing to a path.
+    await client.add_edge(_observed_edge("entity-c", "entity-d"))
+    await client.add_edge(
+        Edge(
+            edge_type="RELATED",
+            from_vertex_id="entity-a",
+            to_vertex_id="entity-d",
+            properties={"tenant_id": TENANT},
+        )
+    )
+    await client.add_edge(
+        Edge(
+            edge_type="FOLLOWS_SOCIAL",
+            from_vertex_id="entity-a",
+            to_vertex_id="entity-x",
+            properties={
+                **_observed_edge("entity-a", "entity-x", "unused").properties,
+                "relationship_predicate": "MUTUAL_SOCIAL_CONNECTION",
+            },
+        )
+    )
+    await client.add_edge(_observed_edge("entity-c", "entity-foreign", "foreign-edge"))
+
+    result = await RepositorySocialGraphPathReader(graph_client=client).read_paths(
+        TENANT, "entity-a"
+    )
+
+    assert result.available is True
+    assert [(path.entity_ids, len(path.edge_evidence_refs)) for path in result.paths] == [
+        (("entity-a", "entity-b", "entity-c"), 2)
+    ]
+    refs = {ref.id for edge in result.paths[0].edge_evidence_refs for ref in edge}
+    assert {
+        "follow:entity-a:entity-b",
+        "observation-ab",
+        "follow:entity-b:entity-c",
+        "observation-bc",
+    } == refs
+    graph_refs = [
+        ref
+        for edge_refs in result.paths[0].edge_evidence_refs
+        for ref in edge_refs
+        if ref.source == "entity_graph"
+    ]
+    fact_refs = [
+        ref
+        for edge_refs in result.paths[0].edge_evidence_refs
+        for ref in edge_refs
+        if ref.source == "relationship_facts"
+    ]
+    assert len(graph_refs) == len(fact_refs) == 2
+    assert all(ref.observedAt == "2026-10-20T10:00:00+00:00" for ref in graph_refs)
+    # Graph validity time is not a substitute for the source observation time.
+    assert all(ref.observedAt is None for ref in fact_refs)
+    assert "entity-foreign" not in {entity for path in result.paths for entity in path.entity_ids}
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_multi_hop_paths_has_exact_claim_evidence_and_composes_to_its_slot():
+    source = FakeSocialSource()
+    edge_ab = (
+        EvidenceRef(
+            id="follow:entity-a:entity-b",
+            type="relationship",
+            source="entity_graph",
+            observedAt="2026-10-20T10:00:00Z",
+        ),
+        EvidenceRef(
+            id="observation-ab",
+            type="event",
+            source="relationship_facts",
+            observedAt="2026-10-20T10:00:00Z",
+        ),
+    )
+    edge_bc = (
+        EvidenceRef(
+            id="follow:entity-b:entity-c",
+            type="relationship",
+            source="entity_graph",
+            observedAt="2026-10-20T10:00:00Z",
+        ),
+        EvidenceRef(
+            id="observation-bc",
+            type="event",
+            source="relationship_facts",
+            observedAt="2026-10-20T10:00:00Z",
+        ),
+    )
+    path_reader = FakeSocialGraphPathReader(
+        SocialGraphPathRead(
+            TENANT,
+            "entity-a",
+            paths=(SocialObservedPath(("entity-a", "entity-b", "entity-c"), (edge_ab, edge_bc)),),
+        )
+    )
+    result = await Social360Provider(
+        source=source,
+        consent_reader=_allow_consent,
+        social_graph_path_reader=path_reader,
+    ).project(_request(include_sections=["paths"]), _context())
+
+    section = next(section for section in result.sections if section.id == "paths")
+    assert section.state == "available"
+    assert section.canonicalAuthorityRefs == ["graph", "relationship_facts"]
+    path_content = section.content["multiHopPaths"]
+    assert path_content["coverage"] == "bounded_observed_paths_only"
+    assert path_content["completeness"] == "unknown"
+    assert path_content["freshness"] == "unknown"
+    assert path_content["pathSemantics"]["transitiveRelationshipClaim"] is False
+    assert path_content["pathSemantics"]["trustInferred"] is False
+    assert path_content["pathSemantics"]["influenceInferred"] is False
+    path_claims = [
+        claim for claim in result.claims if "multi_hop_paths" in (claim.domainSlotIds or [])
+    ]
+    assert len(path_claims) == 1
+    claim = path_claims[0]
+    assert claim.domainSlotIds == ["multi_hop_paths"]
+    assert claim.claimState.value == "observed"
+    assert {ref.id for ref in claim.evidenceRefs} == {
+        "follow:entity-a:entity-b",
+        "observation-ab",
+        "follow:entity-b:entity-c",
+        "observation-bc",
+    }
+    assert path_reader.calls == [(TENANT, "entity-a")]
+
+    frame = compose_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="social360",
+            tenantId=TENANT,
+            subject=ProjectionSubject(kind="entity", id="entity-a"),
+            requestedSlotIds=["multi_hop_paths"],
+            includeEvidence=True,
+        ),
+        [result],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+    )
+    slot = next(slot for slot in frame.slots if slot.id == "multi_hop_paths")
+    assert slot.state == "degraded"
+    assert "slot_partial_implementation" in slot.reasonCodes
+    assert slot.claims == [claim]
+    assert {ref.id for ref in slot.evidenceRefs} == {ref.id for ref in claim.evidenceRefs}
+    assert slot.freshness.state == "unknown"
+    assert slot.policyDisposition.state == "allowed"
+    assert frame.degradation is not None
+    assert frame.degradation.level == "partial"
+    assert "multi_hop_paths:slot_partial_implementation" in frame.degradation.reasons
+
+
+@pytest.mark.asyncio
+async def test_multi_hop_paths_is_unknown_when_no_bounded_path_is_observed():
+    path_reader = FakeSocialGraphPathReader(
+        SocialGraphPathRead(
+            TENANT,
+            "entity-a",
+            paths=(),
+            reason_codes=("no_bounded_observed_follows_paths",),
+        )
+    )
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        social_graph_path_reader=path_reader,
+    ).project(_request(include_sections=["paths"]), _context())
+
+    section = result.sections[0]
+    assert section.id == "paths"
+    assert section.state == "unknown"
+    assert section.content is None
+    assert section.warnings == ["no_bounded_observed_follows_paths"]
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_multi_hop_paths_require_consent_for_every_path_endpoint():
+    edge_refs = (
+        EvidenceRef(id="edge-ab", type="relationship", source="entity_graph"),
+        EvidenceRef(id="evidence-ab", type="event", source="relationship_facts"),
+    )
+    edge_refs_bc = (
+        EvidenceRef(id="edge-bc", type="relationship", source="entity_graph"),
+        EvidenceRef(id="evidence-bc", type="event", source="relationship_facts"),
+    )
+    path_reader = FakeSocialGraphPathReader(
+        SocialGraphPathRead(
+            TENANT,
+            "entity-a",
+            paths=(
+                SocialObservedPath(
+                    ("entity-a", "entity-b", "entity-c"),
+                    (edge_refs, edge_refs_bc),
+                ),
+            ),
+        )
+    )
+    checked: list[str] = []
+
+    async def deny_intermediate(tenant_id: str, subject_id: str, anonymous_id, purpose: str):
+        assert tenant_id == TENANT
+        assert anonymous_id is None
+        assert purpose == "analytics"
+        checked.append(subject_id)
+        return subject_id != "entity-b", "consent_receipt_missing"
+
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=deny_intermediate,
+        social_graph_path_reader=path_reader,
+    ).project(_request(include_sections=["paths"]), _context())
+
+    section = result.sections[0]
+    assert checked == ["entity-a", "entity-b", "entity-c"]
+    assert section.state == "unknown"
+    assert section.content is None
+    assert section.warnings == ["social_path_endpoint_consent_restricted"]
+    assert result.claims == []

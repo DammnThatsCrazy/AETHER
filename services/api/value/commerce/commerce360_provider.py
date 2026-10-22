@@ -1,0 +1,1409 @@
+"""Commerce360 projection over exact, tenant-scoped commerce authorities.
+
+Commerce360 is a read-only projection, not a catalog, checkout, payment, or
+risk authority. The current canonical join supports payment/order facts linked
+to an exact campaign activity, profile activity, or journey step reference.
+Product and offer records are read from the durable tenant-scoped catalog
+authority. Exposure, intent, cart/checkout, availability/price, and risk slots
+stay explicitly unknown until their canonical authorities and exact subject
+joins exist.
+"""
+
+from __future__ import annotations
+
+import hashlib
+from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
+from typing import Any, Optional, Protocol
+
+from shared.contracts_models.epistemic import EpistemicStatus
+from shared.intelligence_projections.contracts import (
+    ClaimEnvelope,
+    ProjectionContext,
+    ProjectionRequest,
+    ProjectionResult,
+    ProjectionSection,
+    ProjectionSubject,
+)
+from shared.intelligence_projections.generated_registry import (
+    INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+)
+from shared.intelligence_projections.registry import ProviderRegistry
+from graph.operational_intelligence.models import EvidenceRef
+from value.commerce.product_offer_catalog import (
+    CommerceOfferRecord,
+    CommerceProductOfferCatalogRepository,
+    CommerceProductRecord,
+)
+
+
+PROJECTION_ID = "commerce360"
+
+# SSOT §11.17 order. These section IDs are also the exact product-frame slot
+# IDs; the frame composer only routes sections/claims through explicit bindings.
+OUTPUT_SECTIONS: tuple[str, ...] = (
+    "product_offer_summary",
+    "catalog_links",
+    "exposures",
+    "intent",
+    "cart_checkout",
+    "purchase",
+    "availability_price",
+    "campaign_links",
+    "value",
+    "risk",
+    "evidence_trace",
+)
+
+_UNKNOWN_SLOT_REASONS: dict[str, str] = {
+    "product_offer_summary": "commerce_product_offer_authority_unavailable",
+    "catalog_links": "commerce_catalog_subject_join_unavailable",
+    "exposures": "commerce_exposure_subject_join_unavailable",
+    "intent": "commerce_intent_subject_join_unavailable",
+    "cart_checkout": "commerce_cart_checkout_authority_unavailable",
+    "availability_price": "commerce_availability_price_authority_unavailable",
+    "risk": "commerce_risk_subject_join_unavailable",
+}
+
+_JOIN_BASIS_BY_SUBJECT_KIND: dict[str, str] = {
+    "journey": "explicit_journey_step_commerce_order_ref",
+    "campaign": "explicit_campaign_scoped_canonical_activity_commerce_order_ref",
+    "entity": "explicit_canonical_profile_scoped_activity_commerce_order_ref",
+}
+_SUBJECT_ID_FIELD = {
+    "journey": "journey_id",
+    "campaign": "campaign_id",
+    "entity": "entity_id",
+}
+_PAYMENT_FACT_KINDS = frozenset({"order", "payment", "refund", "adjustment", "settlement"})
+_SUPPORTED_PAYMENT_SECTIONS = frozenset({"purchase", "value", "evidence_trace"})
+_SOURCE_FRESHNESS_UNKNOWN = "commerce_source_freshness_threshold_not_configured"
+_POLICY_OWNER = "experience360_frame_runtime"
+_MAX_PAYMENT_FACTS = 500
+_MAX_CAMPAIGN_ASSOCIATIONS = 500
+_MAX_OPERATION_LINKS = 500
+_MAX_CATALOG_OFFERS = 500
+
+_CATALOG_JOIN_BASIS_BY_SUBJECT_KIND: dict[str, str] = {
+    "product": "tenant_scoped_canonical_product_id",
+    "offer": "tenant_scoped_canonical_offer_product_id",
+}
+
+
+class CommerceOperationEvidenceSource(Protocol):
+    """Narrow read seam for exact commerce-operation evidence."""
+
+    async def read(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        *,
+        as_of: Optional[str],
+    ) -> dict[str, Any]:
+        """Return evidence for exactly one tenant and canonical subject."""
+
+
+class CommerceProductOfferCatalogEvidenceSource(Protocol):
+    """Narrow read seam for canonical product/offer catalog records."""
+
+    async def read(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        *,
+        as_of: Optional[str],
+    ) -> dict[str, Any]:
+        """Return catalog evidence for exactly one tenant and subject."""
+
+
+class RepositoryCommerceProductOfferCatalogEvidenceSource:
+    """Read immutable catalog revisions through exact tenant and ID queries."""
+
+    def __init__(
+        self,
+        repository: Optional[CommerceProductOfferCatalogRepository] = None,
+    ) -> None:
+        self._repository = repository or CommerceProductOfferCatalogRepository()
+
+    async def read(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        *,
+        as_of: Optional[str],
+    ) -> dict[str, Any]:
+        scope = {
+            "tenantId": tenant_id,
+            "subjectKind": subject.kind,
+            "subjectId": subject.id,
+        }
+        join_basis = _CATALOG_JOIN_BASIS_BY_SUBJECT_KIND.get(subject.kind)
+        if join_basis is None:
+            return {
+                "_scope": scope,
+                "join_basis": "unsupported_catalog_subject_kind",
+                "sourceState": "unknown",
+                "reason": "commerce_catalog_subject_kind_not_supported",
+            }
+        anchor = _parse_catalog_anchor(as_of)
+        if as_of is not None and anchor is None:
+            return {
+                "_scope": scope,
+                "join_basis": join_basis,
+                "sourceState": "unknown",
+                "reason": "commerce_catalog_as_of_invalid",
+                "product": None,
+                "offers": [],
+            }
+
+        try:
+            if subject.kind == "product":
+                product = await self._repository.get_product(tenant_id, subject.id, as_of=anchor)
+                if product is None:
+                    return {
+                        "_scope": scope,
+                        "join_basis": join_basis,
+                        "sourceState": "missing",
+                        "reason": "commerce_product_record_not_found",
+                        "product": None,
+                        "offers": [],
+                        "asOf": as_of,
+                    }
+                offers, truncated = await self._repository.list_offers_for_product(
+                    tenant_id,
+                    product.product_id,
+                    as_of=anchor,
+                    limit=_MAX_CATALOG_OFFERS,
+                )
+                return {
+                    "_scope": scope,
+                    "join_basis": join_basis,
+                    "sourceState": "degraded" if truncated else "available",
+                    "reason": "commerce_catalog_offer_list_truncated" if truncated else None,
+                    "product": product.model_dump(mode="json"),
+                    "offers": [offer.model_dump(mode="json") for offer in offers],
+                    "truncated": truncated,
+                    "asOf": as_of,
+                }
+
+            offer = await self._repository.get_offer(tenant_id, subject.id, as_of=anchor)
+            if offer is None:
+                return {
+                    "_scope": scope,
+                    "join_basis": join_basis,
+                    "sourceState": "missing",
+                    "reason": "commerce_offer_record_not_found",
+                    "product": None,
+                    "offers": [],
+                    "asOf": as_of,
+                }
+            product = await self._repository.get_product(tenant_id, offer.product_id, as_of=anchor)
+            if product is None:
+                return {
+                    "_scope": scope,
+                    "join_basis": join_basis,
+                    "sourceState": "degraded",
+                    "reason": "commerce_offer_product_reference_unresolved",
+                    "product": None,
+                    "offers": [offer.model_dump(mode="json")],
+                    "asOf": as_of,
+                }
+            return {
+                "_scope": scope,
+                "join_basis": join_basis,
+                "sourceState": "available",
+                "reason": None,
+                "product": product.model_dump(mode="json"),
+                "offers": [offer.model_dump(mode="json")],
+                "truncated": False,
+                "asOf": as_of,
+            }
+        except Exception:  # noqa: BLE001 - a failed authority read is explicit unknown
+            return {
+                "_scope": scope,
+                "join_basis": join_basis,
+                "sourceState": "unknown",
+                "reason": "commerce_product_offer_catalog_unavailable",
+                "product": None,
+                "offers": [],
+                "asOf": as_of,
+            }
+
+
+class RepositoryCommerceOperationEvidenceSource:
+    """Reuse the existing exact commerce-order/payment reference readers."""
+
+    async def read(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        *,
+        as_of: Optional[str],
+    ) -> dict[str, Any]:
+        scope = {
+            "tenantId": tenant_id,
+            "subjectKind": subject.kind,
+            "subjectId": subject.id,
+        }
+        join_basis = _JOIN_BASIS_BY_SUBJECT_KIND.get(subject.kind)
+        if join_basis is None:
+            return {
+                "_scope": scope,
+                "join_basis": "unsupported_subject_kind",
+                "reason": "commerce_operation_subject_kind_not_supported",
+            }
+
+        try:
+            if subject.kind == "journey":
+                from value.economic.journey_operation_evidence import (
+                    journey_commerce_operation_evidence,
+                )
+
+                result = await journey_commerce_operation_evidence(
+                    tenant_id, subject.id, as_of=as_of
+                )
+            elif subject.kind == "campaign":
+                from value.economic.economic360_provider import (
+                    RepositoryCampaignIdentityReader,
+                )
+                from value.economic.journey_operation_evidence import (
+                    campaign_commerce_operation_evidence,
+                )
+
+                identity = await RepositoryCampaignIdentityReader().is_canonical_campaign(
+                    tenant_id, subject.id
+                )
+                if identity is not True:
+                    return {
+                        "_scope": scope,
+                        "join_basis": join_basis,
+                        "reason": (
+                            "campaign_identity_authority_unavailable"
+                            if identity is None
+                            else "campaign_canonical_identity_unresolved"
+                        ),
+                    }
+                result = await campaign_commerce_operation_evidence(
+                    tenant_id, subject.id, as_of=as_of
+                )
+            else:
+                from value.economic.economic360_provider import (
+                    RepositoryProfileIdentityReader,
+                )
+                from value.economic.journey_operation_evidence import (
+                    entity_commerce_operation_evidence,
+                )
+
+                identity = await RepositoryProfileIdentityReader().is_canonical_profile(
+                    tenant_id, subject.id
+                )
+                if identity is not True:
+                    return {
+                        "_scope": scope,
+                        "join_basis": join_basis,
+                        "reason": (
+                            "profile_identity_authority_unavailable"
+                            if identity is None
+                            else "profile_canonical_identity_unresolved"
+                        ),
+                    }
+                result = await entity_commerce_operation_evidence(
+                    tenant_id, subject.id, as_of=as_of
+                )
+        except Exception:  # noqa: BLE001 - an unavailable source stays unknown
+            return {
+                "_scope": scope,
+                "join_basis": join_basis,
+                "reason": "commerce_operation_evidence_unavailable",
+            }
+
+        if not isinstance(result, dict):
+            return {
+                "_scope": scope,
+                "join_basis": join_basis,
+                "reason": "commerce_operation_evidence_invalid",
+            }
+        return {**result, "_scope": scope}
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _parse_catalog_anchor(value: Optional[str]) -> Optional[datetime]:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return None
+    try:
+        anchor = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if anchor.tzinfo is None:
+        return None
+    return anchor.astimezone(timezone.utc)
+
+
+def _stable_id(prefix: str, value: str) -> str:
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:32]
+    return f"{prefix}.{digest}"
+
+
+def _safe_text(value: Any, *, limit: int = 256) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not value or len(value) > limit or any(ord(char) < 32 for char in value):
+        return None
+    return value
+
+
+def _money_string(value: Any) -> Optional[str]:
+    if not isinstance(value, str) or not value.strip() or len(value) > 128:
+        return None
+    try:
+        amount = Decimal(value.strip())
+    except (InvalidOperation, ValueError):
+        return None
+    return format(amount, "f") if amount.is_finite() else None
+
+
+def _parse_evidence_refs(value: Any, *, required_type: Optional[str] = None) -> list[EvidenceRef]:
+    if not isinstance(value, list):
+        return []
+    refs: list[EvidenceRef] = []
+    seen: set[tuple[str, str, str]] = set()
+    for raw in value:
+        try:
+            ref = EvidenceRef.model_validate(raw)
+        except Exception:  # noqa: BLE001 - malformed provenance fails closed
+            continue
+        if required_type is not None and ref.type != required_type:
+            continue
+        key = (ref.id, ref.type, ref.source)
+        if key not in seen:
+            refs.append(ref)
+            seen.add(key)
+    return refs
+
+
+def _catalog_record_output(
+    record: CommerceProductRecord | CommerceOfferRecord,
+) -> dict[str, Any]:
+    output: dict[str, Any] = {
+        "tenantId": record.tenant_id,
+        "title": record.title,
+        "description": record.description,
+        "lifecycleState": record.lifecycle_state,
+        "validFrom": record.valid_from.isoformat() if record.valid_from else None,
+        "validTo": record.valid_to.isoformat() if record.valid_to else None,
+        "observedAt": record.observed_at.isoformat(),
+        "sourceProvider": record.source_provider,
+        "sourceRecordId": record.source_record_id,
+        "sourceRevisionId": record.source_revision_id,
+        "evidenceRefs": [ref.model_dump(mode="json") for ref in record.evidence_refs],
+    }
+    if isinstance(record, CommerceProductRecord):
+        output["productId"] = record.product_id
+    else:
+        output["offerId"] = record.offer_id
+        output["productId"] = record.product_id
+    return output
+
+
+def _slot_content(
+    *,
+    state: str,
+    request: ProjectionRequest,
+    reason_codes: list[str],
+    as_of: Optional[str],
+    **extra: Any,
+) -> dict[str, Any]:
+    return {
+        "state": state,
+        "tenantId": request.tenantId,
+        "subject": request.subject.model_dump(mode="json"),
+        "reasonCodes": reason_codes,
+        "asOf": as_of,
+        "freshness": {"state": "unknown", "reasonCode": _SOURCE_FRESHNESS_UNKNOWN},
+        "policy": {
+            "evaluationOwner": _POLICY_OWNER,
+            "projectionDisclosesOnlyScopedCommerceFacts": True,
+        },
+        **extra,
+    }
+
+
+class Commerce360Provider:
+    """Read-only Commerce360 provider over explicit order/payment references."""
+
+    projection_id = PROJECTION_ID
+    contract_version = INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION
+    graph_mutation_policy = "read_only"
+
+    def __init__(
+        self,
+        source: Optional[CommerceOperationEvidenceSource] = None,
+        catalog_source: Optional[CommerceProductOfferCatalogEvidenceSource] = None,
+    ) -> None:
+        self._source = source if source is not None else RepositoryCommerceOperationEvidenceSource()
+        self._catalog_source = catalog_source
+        if self._catalog_source is None and source is None:
+            self._catalog_source = RepositoryCommerceProductOfferCatalogEvidenceSource()
+
+    async def project(
+        self,
+        request: ProjectionRequest,
+        context: ProjectionContext,
+    ) -> ProjectionResult:
+        requested_as_of = request.asOf or context.asOf or _utc_now_iso()
+        scope_valid = (
+            bool(request.tenantId.strip())
+            and bool(request.subject.id.strip())
+            and context.tenantId == request.tenantId
+            and context.projectionId == self.projection_id
+        )
+        if scope_valid:
+            try:
+                raw = await self._source.read(
+                    request.tenantId,
+                    request.subject,
+                    as_of=requested_as_of,
+                )
+            except Exception:  # noqa: BLE001 - source outage becomes explicit unknown
+                raw = {
+                    "_scope": {
+                        "tenantId": request.tenantId,
+                        "subjectKind": request.subject.kind,
+                        "subjectId": request.subject.id,
+                    },
+                    "join_basis": _JOIN_BASIS_BY_SUBJECT_KIND.get(request.subject.kind),
+                    "reason": "commerce_operation_evidence_unavailable",
+                }
+        else:
+            raw = {
+                "_scope": {
+                    "tenantId": request.tenantId,
+                    "subjectKind": request.subject.kind,
+                    "subjectId": request.subject.id,
+                },
+                "join_basis": _JOIN_BASIS_BY_SUBJECT_KIND.get(request.subject.kind),
+                "reason": "commerce_projection_context_scope_mismatch",
+            }
+
+        evidence = self._validate_source_result(raw, request)
+        section_states = self._section_states(evidence, request.subject.kind, scope_valid)
+        catalog_raw: dict[str, Any]
+        if scope_valid and self._catalog_source is not None:
+            try:
+                catalog_raw = await self._catalog_source.read(
+                    request.tenantId,
+                    request.subject,
+                    as_of=requested_as_of,
+                )
+            except Exception:  # noqa: BLE001 - catalog outage remains explicit unknown
+                catalog_raw = self._unknown_catalog_result(
+                    request,
+                    reason="commerce_product_offer_catalog_unavailable",
+                )
+        else:
+            catalog_raw = self._unknown_catalog_result(
+                request,
+                reason=(
+                    "commerce_projection_context_scope_mismatch"
+                    if not scope_valid
+                    else "commerce_product_offer_catalog_source_not_configured"
+                ),
+            )
+        catalog = self._validate_catalog_result(catalog_raw, request, as_of=requested_as_of)
+        section_states.update(self._catalog_section_states(catalog, request.subject.kind))
+        sections = self._build_sections(
+            request,
+            evidence,
+            catalog,
+            section_states,
+            as_of=requested_as_of,
+        )
+        claims = self._build_claims(request, evidence, catalog, section_states)
+        if request.includeSections is not None:
+            include = set(request.includeSections)
+            sections = [section for section in sections if section.id in include]
+        if request.includeClaims is False:
+            claims = []
+
+        return ProjectionResult(
+            projectionId=self.projection_id,
+            tenantId=request.tenantId,
+            contractVersion=self.contract_version,
+            sections=sections,
+            claims=claims,
+            dependencyState=list(context.dependencyState),
+            asOf=requested_as_of,
+            generatedAt=_utc_now_iso(),
+            degradedReasons=[],
+        )
+
+    @staticmethod
+    def _unknown_catalog_result(
+        request: ProjectionRequest,
+        *,
+        reason: str,
+    ) -> dict[str, Any]:
+        return {
+            "_scope": {
+                "tenantId": request.tenantId,
+                "subjectKind": request.subject.kind,
+                "subjectId": request.subject.id,
+            },
+            "join_basis": _CATALOG_JOIN_BASIS_BY_SUBJECT_KIND.get(
+                request.subject.kind,
+                "unsupported_catalog_subject_kind",
+            ),
+            "sourceState": "unknown",
+            "reason": reason,
+            "product": None,
+            "offers": [],
+        }
+
+    def _validate_catalog_result(
+        self,
+        raw: Any,
+        request: ProjectionRequest,
+        *,
+        as_of: Optional[str],
+    ) -> dict[str, Any]:
+        expected_scope = {
+            "tenantId": request.tenantId,
+            "subjectKind": request.subject.kind,
+            "subjectId": request.subject.id,
+        }
+        expected_join_basis = _CATALOG_JOIN_BASIS_BY_SUBJECT_KIND.get(request.subject.kind)
+        empty = {
+            "sourceState": "unknown",
+            "reason": "commerce_catalog_source_scope_mismatch",
+            "product": None,
+            "offers": [],
+            "sourceCompleteness": "unknown",
+        }
+        if (
+            not isinstance(raw, dict)
+            or raw.get("_scope") != expected_scope
+            or expected_join_basis is None
+            or raw.get("join_basis") != expected_join_basis
+        ):
+            return empty
+
+        state = raw.get("sourceState")
+        if state not in {"available", "missing", "unknown", "degraded"}:
+            return {**empty, "reason": "commerce_catalog_source_state_invalid"}
+        reason = _safe_text(raw.get("reason"), limit=96)
+        product: Optional[CommerceProductRecord] = None
+        product_raw = raw.get("product")
+        invalid_records = 0
+        if product_raw is not None:
+            try:
+                product = CommerceProductRecord.model_validate(product_raw)
+            except Exception:  # noqa: BLE001 - malformed catalog records are omitted
+                invalid_records += 1
+                product = None
+        if product is not None and (
+            product.tenant_id != request.tenantId
+            or (request.subject.kind == "product" and product.product_id != request.subject.id)
+        ):
+            return {**empty, "reason": "commerce_catalog_product_scope_mismatch"}
+
+        offers: list[CommerceOfferRecord] = []
+        raw_offers = raw.get("offers")
+        if raw_offers is not None and not isinstance(raw_offers, list):
+            invalid_records += 1
+            raw_offers = []
+        if len(raw_offers or []) > _MAX_CATALOG_OFFERS:
+            invalid_records += 1
+        seen_offer_ids: set[tuple[str, str]] = set()
+        for row in (raw_offers or [])[:_MAX_CATALOG_OFFERS]:
+            try:
+                offer = CommerceOfferRecord.model_validate(row)
+            except Exception:  # noqa: BLE001 - malformed catalog records are omitted
+                invalid_records += 1
+                continue
+            if offer.tenant_id != request.tenantId:
+                invalid_records += 1
+                continue
+            if request.subject.kind == "product" and offer.product_id != request.subject.id:
+                invalid_records += 1
+                continue
+            if request.subject.kind == "offer" and offer.offer_id != request.subject.id:
+                invalid_records += 1
+                continue
+            if (
+                request.subject.kind == "offer"
+                and product is not None
+                and offer.product_id != product.product_id
+            ):
+                return {**empty, "reason": "commerce_catalog_offer_product_mismatch"}
+            if product is not None and offer.product_id != product.product_id:
+                invalid_records += 1
+                continue
+            key = (offer.tenant_id, offer.offer_id)
+            if key in seen_offer_ids:
+                invalid_records += 1
+                continue
+            seen_offer_ids.add(key)
+            offers.append(offer)
+
+        if request.subject.kind == "offer" and offers and product is None:
+            state = "degraded"
+            reason = reason or "commerce_offer_product_reference_unresolved"
+        elif (
+            request.subject.kind == "offer" and offers and offers[0].offer_id != request.subject.id
+        ):
+            return {**empty, "reason": "commerce_catalog_offer_scope_mismatch"}
+        if raw.get("truncated") is True:
+            invalid_records += 1
+        if invalid_records:
+            state = "degraded" if state == "available" else state
+            reason = reason or "commerce_catalog_records_invalid_or_truncated"
+
+        anchor = _parse_catalog_anchor(as_of)
+        if as_of is not None and anchor is None:
+            return {
+                **empty,
+                "reason": "commerce_catalog_as_of_invalid",
+            }
+        raw_as_of = raw.get("asOf")
+        if anchor is not None and state in {"available", "missing", "degraded"}:
+            source_anchor = _parse_catalog_anchor(raw_as_of)
+            if source_anchor is None or source_anchor != anchor:
+                return {
+                    **empty,
+                    "reason": "commerce_catalog_as_of_scope_mismatch",
+                }
+        if anchor is not None and any(
+            record.observed_at > anchor
+            for record in ([product] if product is not None else []) + offers
+        ):
+            return {
+                **empty,
+                "reason": "commerce_catalog_record_after_requested_as_of",
+            }
+
+        if "truncated" in raw and not isinstance(raw.get("truncated"), bool):
+            return {
+                **empty,
+                "reason": "commerce_catalog_truncation_state_invalid",
+            }
+        if state == "missing" and (
+            product is not None or offers or raw.get("product") is not None or raw.get("offers")
+        ):
+            return {
+                **empty,
+                "reason": "commerce_catalog_missing_state_contains_records",
+            }
+        if request.subject.kind == "product" and state in {"available", "degraded"}:
+            if product is None:
+                return {
+                    **empty,
+                    "reason": "commerce_catalog_product_record_unavailable",
+                }
+        if request.subject.kind == "offer" and state == "available":
+            if len(offers) != 1 or product is None:
+                return {
+                    **empty,
+                    "reason": "commerce_catalog_offer_identity_unresolved",
+                }
+            if product.product_id != offers[0].product_id:
+                return {
+                    **empty,
+                    "reason": "commerce_catalog_offer_product_mismatch",
+                }
+        if request.subject.kind == "offer" and offers and product is not None:
+            if product.product_id != offers[0].product_id:
+                return {
+                    **empty,
+                    "reason": "commerce_catalog_offer_product_mismatch",
+                }
+
+        return {
+            "sourceState": state,
+            "reason": reason,
+            "product": product,
+            "offers": offers,
+            "sourceCompleteness": (
+                "partial" if state == "degraded" or invalid_records else "complete"
+            ),
+            "join_basis": expected_join_basis,
+            "asOf": _safe_text(raw_as_of, limit=96),
+            "authorityRefs": ["commerce_product_offer_graph", "source_provenance"],
+        }
+
+    @staticmethod
+    def _catalog_section_states(
+        catalog: dict[str, Any],
+        subject_kind: str,
+    ) -> dict[str, str]:
+        if subject_kind not in _CATALOG_JOIN_BASIS_BY_SUBJECT_KIND:
+            return {"product_offer_summary": "unknown", "catalog_links": "unknown"}
+        state = catalog.get("sourceState", "unknown")
+        if state != "available":
+            return {"product_offer_summary": state, "catalog_links": state}
+        if catalog.get("product") is None:
+            return {"product_offer_summary": "unknown", "catalog_links": "unknown"}
+        return {
+            "product_offer_summary": "available",
+            "catalog_links": "available" if catalog.get("offers") else "empty",
+        }
+
+    def _validate_source_result(
+        self,
+        raw: Any,
+        request: ProjectionRequest,
+    ) -> dict[str, Any]:
+        expected_scope = {
+            "tenantId": request.tenantId,
+            "subjectKind": request.subject.kind,
+            "subjectId": request.subject.id,
+        }
+        expected_join_basis = _JOIN_BASIS_BY_SUBJECT_KIND.get(request.subject.kind)
+        if not isinstance(raw, dict) or raw.get("_scope") != expected_scope:
+            return {
+                "sourceState": "unknown",
+                "reason": "commerce_operation_source_scope_mismatch",
+                "join_basis": expected_join_basis,
+                "facts": [],
+                "associations": [],
+                "operation_links": [],
+                "evidence": [],
+            }
+
+        source_subject_id = raw.get(_SUBJECT_ID_FIELD.get(request.subject.kind, ""))
+        if expected_join_basis is None or raw.get("join_basis") != expected_join_basis:
+            return {
+                "sourceState": "unknown",
+                "reason": str(raw.get("reason") or "commerce_operation_join_basis_unavailable"),
+                "join_basis": expected_join_basis,
+                "facts": [],
+                "associations": [],
+                "operation_links": [],
+                "evidence": [],
+            }
+
+        reason = _safe_text(raw.get("reason"), limit=96)
+        source_state = "available"
+        if source_subject_id != request.subject.id and reason is None:
+            return {
+                "sourceState": "unknown",
+                "reason": "commerce_operation_subject_scope_mismatch",
+                "join_basis": expected_join_basis,
+                "facts": [],
+                "associations": [],
+                "operation_links": [],
+                "evidence": [],
+            }
+        elif reason == "journey_not_found":
+            source_state = "missing"
+        elif reason in {
+            "campaign_canonical_identity_unresolved",
+            "profile_canonical_identity_unresolved",
+        }:
+            source_state = "missing"
+        elif reason in {
+            "campaign_identity_authority_unavailable",
+            "profile_identity_authority_unavailable",
+        }:
+            source_state = "unknown"
+        elif reason is not None:
+            source_state = "degraded"
+
+        facts: list[dict[str, Any]] = []
+        seen_fact_ids: set[str] = set()
+        evidence_refs: list[EvidenceRef] = []
+        invalid_facts = 0
+        raw_facts = raw.get("payment_facts")
+        if raw_facts is not None and not isinstance(raw_facts, list):
+            invalid_facts += 1
+            raw_facts = []
+        raw_facts = raw_facts or []
+        source_capped = len(raw_facts) > _MAX_PAYMENT_FACTS
+        for row in raw_facts[:_MAX_PAYMENT_FACTS]:
+            if not isinstance(row, dict):
+                invalid_facts += 1
+                continue
+            fact_id = _safe_text(row.get("factId"), limit=512)
+            fact_kind = _safe_text(row.get("kind"), limit=32)
+            amount = _money_string(row.get("amount"))
+            currency = _safe_text(row.get("currency"), limit=16)
+            order_ref = _safe_text(row.get("commerceOrderRef"), limit=512)
+            if (
+                fact_id is None
+                or not fact_id.startswith("commerce:")
+                or fact_kind not in _PAYMENT_FACT_KINDS
+                or amount is None
+                or currency is None
+                or not currency.isascii()
+                or not currency.isalnum()
+                or order_ref is None
+                or row.get("joinBasis") != expected_join_basis
+                or fact_id in seen_fact_ids
+            ):
+                invalid_facts += 1
+                continue
+            fact_evidence = _parse_evidence_refs(row.get("evidence"), required_type="transaction")
+            if not fact_evidence:
+                invalid_facts += 1
+                continue
+            evidence_refs.extend(fact_evidence)
+            normalized_usd = _money_string(row.get("amountUsd"))
+            normalization_state = _safe_text(row.get("normalizationState"), limit=48)
+            if (
+                currency.upper() != "USD"
+                or normalization_state != "native_currency_usd"
+                or normalized_usd != amount
+            ):
+                # This source currently makes only identity normalization for
+                # native USD. Never accept an unverified FX conversion.
+                normalized_usd = None
+            facts.append(
+                {
+                    "factId": fact_id,
+                    "kind": fact_kind,
+                    "commerceOrderRef": order_ref,
+                    "joinBasis": expected_join_basis,
+                    "amount": amount,
+                    "currency": currency,
+                    "amountUsd": normalized_usd,
+                    "normalizationState": normalization_state,
+                    "lifecycleState": _safe_text(row.get("lifecycleState"), limit=48),
+                    "reconciliationState": _safe_text(row.get("reconciliationState"), limit=48),
+                    "provider": _safe_text(row.get("provider"), limit=96),
+                    "sourceRecordId": _safe_text(row.get("sourceRecordId"), limit=512),
+                    "evidenceRecordId": _safe_text(row.get("evidenceRecordId"), limit=512),
+                    "occurredAt": _safe_text(row.get("occurredAt"), limit=96),
+                    "observedAt": _safe_text(row.get("observedAt"), limit=96),
+                    "ledgerCreatedAt": _safe_text(row.get("ledgerCreatedAt"), limit=96),
+                    "ledgerUpdatedAt": _safe_text(row.get("ledgerUpdatedAt"), limit=96),
+                    "evidence": [ref.model_dump(mode="json") for ref in fact_evidence],
+                }
+            )
+            seen_fact_ids.add(fact_id)
+
+        associations: list[dict[str, Any]] = []
+        raw_associations = raw.get("association_evidence")
+        if raw_associations is not None and not isinstance(raw_associations, list):
+            invalid_facts += 1
+            raw_associations = []
+        raw_associations = raw_associations or []
+        source_capped = source_capped or len(raw_associations) > _MAX_CAMPAIGN_ASSOCIATIONS
+        if request.subject.kind == "campaign":
+            for row in raw_associations[:_MAX_CAMPAIGN_ASSOCIATIONS]:
+                if not isinstance(row, dict):
+                    invalid_facts += 1
+                    continue
+                if (
+                    row.get("subjectKind") != "campaign"
+                    or row.get("subjectId") != request.subject.id
+                    or row.get("commerceOrderRef") is None
+                ):
+                    invalid_facts += 1
+                    continue
+                activity_id = _safe_text(row.get("activityId"), limit=512)
+                order_ref = _safe_text(row.get("commerceOrderRef"), limit=512)
+                refs = _parse_evidence_refs([row.get("evidence")], required_type="event")
+                if activity_id is None or order_ref is None or not refs:
+                    invalid_facts += 1
+                    continue
+                associations.append(
+                    {
+                        "commerceOrderRef": order_ref,
+                        "activityId": activity_id,
+                        "joinBasis": expected_join_basis,
+                        "sourceTable": _safe_text(row.get("silverTable"), limit=128),
+                        "evidence": [ref.model_dump(mode="json") for ref in refs],
+                    }
+                )
+                evidence_refs.extend(refs)
+
+        operation_links: list[dict[str, Any]] = []
+        raw_links = raw.get("operation_links")
+        if raw_links is not None and not isinstance(raw_links, list):
+            invalid_facts += 1
+            raw_links = []
+        raw_links = raw_links or []
+        source_capped = source_capped or len(raw_links) > _MAX_OPERATION_LINKS
+        for link in raw_links[:_MAX_OPERATION_LINKS]:
+            if not isinstance(link, dict) or link.get("tenant_id") != request.tenantId:
+                invalid_facts += 1
+                continue
+            if link.get("operation_ref") not in {
+                fact["commerceOrderRef"] for fact in facts
+            } and not any(
+                link.get("operation_ref") == association["commerceOrderRef"]
+                for association in associations
+            ):
+                invalid_facts += 1
+                continue
+            operation_links.append(link)
+
+        seen: set[tuple[str, str, str]] = set()
+        deduped_evidence: list[EvidenceRef] = []
+        for ref in evidence_refs:
+            key = (ref.id, ref.type, ref.source)
+            if key not in seen:
+                seen.add(key)
+                deduped_evidence.append(ref)
+
+        incomplete = bool(
+            raw.get("evidence_truncated") is True
+            or source_capped
+            or invalid_facts
+            or any(
+                isinstance(raw.get(key), int) and raw.get(key) > 0
+                for key in (
+                    "invalid_order_reference_count",
+                    "ledger_read_errors",
+                    "invalid_ledger_records",
+                    "unresolved_order_references",
+                )
+            )
+        )
+        if source_state == "available" and incomplete:
+            source_state = "degraded"
+
+        return {
+            "sourceState": source_state,
+            "reason": reason,
+            "join_basis": expected_join_basis,
+            "facts": facts,
+            "associations": associations,
+            "operation_links": operation_links,
+            "evidence": deduped_evidence,
+            "incomplete": incomplete,
+            "sourceCompleteness": "partial" if incomplete else "complete",
+            "asOf": _safe_text(raw.get("as_of"), limit=96),
+        }
+
+    def _section_states(
+        self,
+        evidence: dict[str, Any],
+        subject_kind: str,
+        scope_valid: bool,
+    ) -> dict[str, str]:
+        base_state = evidence.get("sourceState", "unknown")
+        if not scope_valid:
+            base_state = "degraded"
+        states = {section_id: "unknown" for section_id in OUTPUT_SECTIONS}
+        if base_state in {"available", "degraded", "missing", "unknown"}:
+            for section_id in _SUPPORTED_PAYMENT_SECTIONS:
+                states[section_id] = (
+                    base_state
+                    if base_state != "available"
+                    else "available"
+                    if evidence.get("facts")
+                    else "empty"
+                )
+            if base_state != "available":
+                states["evidence_trace"] = base_state
+            else:
+                states["evidence_trace"] = "available" if evidence.get("evidence") else "empty"
+        if subject_kind == "campaign":
+            states["campaign_links"] = (
+                base_state
+                if base_state != "available"
+                else "available"
+                if evidence.get("associations")
+                else "empty"
+            )
+        else:
+            # The current profile/journey commerce references do not carry a
+            # canonical campaign join; no campaign association is inferred.
+            states["campaign_links"] = "unknown"
+        return states
+
+    def _build_sections(
+        self,
+        request: ProjectionRequest,
+        evidence: dict[str, Any],
+        catalog: dict[str, Any],
+        states: dict[str, str],
+        *,
+        as_of: Optional[str],
+    ) -> list[ProjectionSection]:
+        facts = evidence.get("facts", [])
+        associations = evidence.get("associations", [])
+        policy = {
+            "evaluationOwner": _POLICY_OWNER,
+            "projectionDisclosesOnlyScopedCommerceFacts": True,
+        }
+        sections: list[ProjectionSection] = []
+        for section_id in OUTPUT_SECTIONS:
+            state = states[section_id]
+            reason_codes: list[str] = []
+            authorities: Optional[list[str]] = None
+            if section_id in {"product_offer_summary", "catalog_links"}:
+                authorities = catalog.get(
+                    "authorityRefs",
+                    ["commerce_product_offer_graph", "source_provenance"],
+                )
+                product = catalog.get("product")
+                offers = catalog.get("offers", [])
+                if section_id == "product_offer_summary":
+                    if product is None and not offers:
+                        reason_codes.append(
+                            catalog.get("reason") or "commerce_product_offer_record_unavailable"
+                        )
+                    content = _slot_content(
+                        state=state,
+                        request=request,
+                        reason_codes=reason_codes,
+                        as_of=as_of,
+                        joinBasis=catalog.get("join_basis"),
+                        product=(_catalog_record_output(product) if product is not None else None),
+                        offers=[_catalog_record_output(offer) for offer in offers],
+                        sourceCompleteness=catalog.get("sourceCompleteness", "unknown"),
+                        policy=policy,
+                    )
+                else:
+                    if not offers and state in {"empty", "missing"}:
+                        reason_codes.append(
+                            catalog.get("reason") or "commerce_catalog_has_no_explicit_offer_links"
+                        )
+                    content = _slot_content(
+                        state=state,
+                        request=request,
+                        reason_codes=reason_codes,
+                        as_of=as_of,
+                        joinBasis=catalog.get("join_basis"),
+                        links=[
+                            {
+                                "offerId": offer.offer_id,
+                                "productId": offer.product_id,
+                                "productResolved": (
+                                    product is not None and product.product_id == offer.product_id
+                                ),
+                                "offerEvidence": [
+                                    ref.model_dump(mode="json") for ref in offer.evidence_refs
+                                ],
+                                "productEvidence": (
+                                    [ref.model_dump(mode="json") for ref in product.evidence_refs]
+                                    if product is not None
+                                    and product.product_id == offer.product_id
+                                    else []
+                                ),
+                            }
+                            for offer in offers
+                        ],
+                        sourceCompleteness=catalog.get("sourceCompleteness", "unknown"),
+                        policy=policy,
+                    )
+                if state in {"unknown", "missing", "degraded"}:
+                    reason_codes.append(
+                        catalog.get("reason")
+                        or "commerce_product_offer_catalog_not_fully_available"
+                    )
+                    content["reasonCodes"] = reason_codes
+                sections.append(
+                    ProjectionSection(
+                        id=section_id,
+                        state=state,
+                        title=section_id.replace("_", " ").title(),
+                        content=content,
+                        warnings=reason_codes or None,
+                        canonicalAuthorityRefs=authorities,
+                    )
+                )
+                continue
+            elif section_id == "purchase":
+                authorities = ["commerce", "payments", "source_provenance"]
+                if not facts and state == "empty":
+                    reason_codes.append("no_explicit_commerce_order_payment_refs")
+                content = _slot_content(
+                    state=state,
+                    request=request,
+                    reason_codes=reason_codes,
+                    as_of=as_of,
+                    joinBasis=evidence.get("join_basis"),
+                    purchaseFacts=facts,
+                    operationLinks=evidence.get("operation_links", []),
+                    sourceCompleteness=evidence.get("sourceCompleteness", "unknown"),
+                    freshness={
+                        "state": "unknown",
+                        "reasonCode": _SOURCE_FRESHNESS_UNKNOWN,
+                        "sourceTimestampsPreserved": True,
+                    },
+                    policy=policy,
+                )
+            elif section_id == "value":
+                authorities = ["payments", "source_provenance"]
+                if not facts and state == "empty":
+                    reason_codes.append("no_explicit_commerce_value_facts")
+                content = _slot_content(
+                    state=state,
+                    request=request,
+                    reason_codes=reason_codes,
+                    as_of=as_of,
+                    values=[
+                        {
+                            "factId": fact["factId"],
+                            "kind": fact["kind"],
+                            "amount": fact["amount"],
+                            "currency": fact["currency"],
+                            "amountUsd": fact["amountUsd"],
+                            "normalizationState": fact["normalizationState"],
+                            "occurredAt": fact["occurredAt"],
+                            "observedAt": fact["observedAt"],
+                            "evidence": fact["evidence"],
+                        }
+                        for fact in facts
+                    ],
+                    aggregation="not_aggregated",
+                    sourceCompleteness=evidence.get("sourceCompleteness", "unknown"),
+                    policy=policy,
+                )
+            elif section_id == "campaign_links":
+                authorities = ["campaign_facts", "commerce", "source_provenance"]
+                if request.subject.kind != "campaign":
+                    reason_codes.append("campaign_link_join_unavailable_for_subject_kind")
+                elif not associations and state == "empty":
+                    reason_codes.append("no_explicit_campaign_commerce_order_refs")
+                content = _slot_content(
+                    state=state,
+                    request=request,
+                    reason_codes=reason_codes,
+                    as_of=as_of,
+                    joinBasis=evidence.get("join_basis"),
+                    links=associations if request.subject.kind == "campaign" else [],
+                    sourceCompleteness=evidence.get("sourceCompleteness", "unknown"),
+                    policy=policy,
+                )
+            elif section_id == "evidence_trace":
+                authorities = ["commerce", "payments", "source_provenance"]
+                if not evidence.get("evidence") and state == "empty":
+                    reason_codes.append("no_explicit_commerce_source_evidence")
+                content = _slot_content(
+                    state=state,
+                    request=request,
+                    reason_codes=reason_codes,
+                    as_of=as_of,
+                    evidence=[ref.model_dump(mode="json") for ref in evidence.get("evidence", [])],
+                    sourceCompleteness=evidence.get("sourceCompleteness", "unknown"),
+                    policy=policy,
+                )
+            else:
+                reason_code = _UNKNOWN_SLOT_REASONS[section_id]
+                content = _slot_content(
+                    state="unknown",
+                    request=request,
+                    reason_codes=[reason_code],
+                    as_of=as_of,
+                    authority="commerce_product_offer_graph",
+                    policy=policy,
+                )
+                warnings = [reason_code]
+                sections.append(
+                    ProjectionSection(
+                        id=section_id,
+                        state="unknown",
+                        title=section_id.replace("_", " ").title(),
+                        content=content,
+                        warnings=warnings,
+                        canonicalAuthorityRefs=authorities,
+                    )
+                )
+                continue
+
+            if state in {"unknown", "missing", "degraded"}:
+                reason = evidence.get("reason") or (
+                    "commerce_projection_context_scope_mismatch"
+                    if not request.tenantId.strip()
+                    else "commerce_operation_evidence_unavailable"
+                )
+                reason_codes.append(str(reason))
+                content["reasonCodes"] = reason_codes
+            warnings = reason_codes or None
+            sections.append(
+                ProjectionSection(
+                    id=section_id,
+                    state=state,
+                    title=section_id.replace("_", " ").title(),
+                    content=content,
+                    warnings=warnings,
+                    canonicalAuthorityRefs=authorities,
+                )
+            )
+        return sections
+
+    def _build_claims(
+        self,
+        request: ProjectionRequest,
+        evidence: dict[str, Any],
+        catalog: dict[str, Any],
+        states: dict[str, str],
+    ) -> list[ClaimEnvelope]:
+        claims: list[ClaimEnvelope] = []
+        if states.get("purchase") in {"available", "degraded"}:
+            for fact in evidence.get("facts", []):
+                refs = _parse_evidence_refs(fact.get("evidence"), required_type="transaction")
+                if not refs:
+                    continue
+                fact_id = fact["factId"]
+                amount = fact["amount"]
+                currency = fact["currency"]
+                kind = fact["kind"]
+                lifecycle = fact.get("lifecycleState")
+                text = f"canonical commerce {kind} fact records {amount} {currency}"
+                if lifecycle:
+                    text += f"; lifecycle state: {lifecycle}"
+                text += "; source records are not aggregated"
+                claims.append(
+                    ClaimEnvelope(
+                        id=_stable_id("commerce.purchase", fact_id),
+                        kind="commerce_purchase_fact",
+                        subject=request.subject,
+                        evidenceRefs=refs,
+                        claims=[text],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=["purchase"],
+                    )
+                )
+                claims.append(
+                    ClaimEnvelope(
+                        id=_stable_id("commerce.value", fact_id),
+                        kind="commerce_value_fact",
+                        subject=request.subject,
+                        evidenceRefs=refs,
+                        claims=[
+                            f"canonical commerce {kind} amount is {amount} {currency}; "
+                            f"normalization state: {fact.get('normalizationState') or 'unknown'}; "
+                            "no aggregate value is computed"
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=["value"],
+                    )
+                )
+
+        product = catalog.get("product")
+        offers = catalog.get("offers", [])
+        if states.get("product_offer_summary") in {"available", "degraded"}:
+            summary_refs: list[EvidenceRef] = []
+            if product is not None:
+                summary_refs.extend(product.evidence_refs)
+            for offer in offers:
+                summary_refs.extend(offer.evidence_refs)
+            summary_refs = _parse_evidence_refs(
+                [ref.model_dump(mode="json") for ref in summary_refs]
+            )
+            if summary_refs:
+                if product is not None:
+                    product_text = (
+                        f"tenant catalog product {product.product_id} is recorded as "
+                        f"{product.lifecycle_state}"
+                    )
+                elif offers:
+                    product_text = (
+                        f"tenant catalog offer {offers[0].offer_id} explicitly references "
+                        f"product {offers[0].product_id}; product record is unresolved"
+                    )
+                else:
+                    product_text = "tenant catalog product and offer records are unavailable"
+                claims.append(
+                    ClaimEnvelope(
+                        id=_stable_id(
+                            "commerce.product_offer_summary",
+                            ":".join(
+                                [
+                                    product.product_id if product is not None else "unresolved",
+                                    *(offer.offer_id for offer in offers),
+                                ]
+                            ),
+                        ),
+                        kind="commerce_product_offer_catalog_summary",
+                        subject=request.subject,
+                        evidenceRefs=summary_refs,
+                        claims=[product_text],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=["product_offer_summary"],
+                    )
+                )
+        if states.get("catalog_links") in {"available", "degraded"}:
+            for offer in offers:
+                refs = list(offer.evidence_refs)
+                product_resolved = product is not None and product.product_id == offer.product_id
+                if product_resolved:
+                    refs.extend(product.evidence_refs)
+                refs = _parse_evidence_refs([ref.model_dump(mode="json") for ref in refs])
+                if not refs:
+                    continue
+                relation_claim = (
+                    f"tenant catalog offer {offer.offer_id} explicitly links to canonical "
+                    f"product {offer.product_id}"
+                )
+                if not product_resolved:
+                    relation_claim += "; product record is unresolved"
+                claims.append(
+                    ClaimEnvelope(
+                        id=_stable_id(
+                            "commerce.catalog_link",
+                            f"{offer.tenant_id}:{offer.offer_id}:{offer.source_revision_id}:{offer.product_id}",
+                        ),
+                        kind="commerce_catalog_product_offer_link",
+                        subject=request.subject,
+                        evidenceRefs=refs,
+                        claims=[relation_claim],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=["catalog_links"],
+                    )
+                )
+
+        if request.subject.kind == "campaign" and states.get("campaign_links") in {
+            "available",
+            "degraded",
+        }:
+            for association in evidence.get("associations", []):
+                refs = _parse_evidence_refs(association.get("evidence"), required_type="event")
+                if not refs:
+                    continue
+                claims.append(
+                    ClaimEnvelope(
+                        id=_stable_id(
+                            "commerce.campaign_link",
+                            association["activityId"],
+                        ),
+                        kind="campaign_commerce_order_link",
+                        subject=request.subject,
+                        evidenceRefs=refs,
+                        claims=[
+                            "a tenant-scoped canonical campaign activity explicitly references a commerce order"
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=["campaign_links"],
+                    )
+                )
+        for ref in evidence.get("evidence", []):
+            claims.append(
+                ClaimEnvelope(
+                    id=_stable_id("commerce.evidence", f"{ref.type}:{ref.source}:{ref.id}"),
+                    kind="commerce_evidence_reference",
+                    subject=request.subject,
+                    evidenceRefs=[ref],
+                    claims=[
+                        "canonical commerce evidence is linked to the requested subject by an exact reference"
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["evidence_trace"],
+                )
+            )
+        return claims
+
+
+def register_provider(registry: ProviderRegistry) -> None:
+    """Register the provider explicitly from central runtime wiring."""
+    registry.register(Commerce360Provider(), source="services/api/value/commerce")
+
+
+__all__ = [
+    "Commerce360Provider",
+    "CommerceOperationEvidenceSource",
+    "OUTPUT_SECTIONS",
+    "PROJECTION_ID",
+    "RepositoryCommerceOperationEvidenceSource",
+    "register_provider",
+]

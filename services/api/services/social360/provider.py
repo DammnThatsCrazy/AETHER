@@ -9,6 +9,7 @@ surface Social Silver facts that are bound to those exact endpoints.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional, Protocol
@@ -47,11 +48,17 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
     "evidence",
     "findings",
     "interactions",
+    "paths",
     "state",
     "summary",
     "timeline",
 )
 _MAX_READ_ROWS = 500
+_SOCIAL_PATH_DEPTH = 3
+_SOCIAL_PATH_NODE_LIMIT = 100
+_SOCIAL_PATH_EDGE_LIMIT = 500
+_SOCIAL_PATH_RESULT_LIMIT = 50
+_SOCIAL_PATH_AUTHORITIES = ["graph", "relationship_facts"]
 _FACT_TABLES = (
     "identity",
     "connection",
@@ -198,6 +205,240 @@ class Social360Source(Protocol):
     async def read(self, fact_family: str, tenant_id: str, *, limit: int) -> Social360FactRead: ...
 
 
+@dataclass(frozen=True)
+class SocialObservedPath:
+    """One directed path made only from observed canonical FOLLOWS edges."""
+
+    entity_ids: tuple[str, ...]
+    edge_evidence_refs: tuple[tuple[EvidenceRef, ...], ...]
+
+
+@dataclass(frozen=True)
+class SocialGraphPathRead:
+    """Bounded tenant-scoped read from the canonical relationship graph."""
+
+    tenant_id: str
+    start_entity_id: str
+    paths: tuple[SocialObservedPath, ...] = ()
+    available: bool = True
+    truncated: bool = False
+    reason_codes: tuple[str, ...] = ()
+
+
+class SocialGraphPathReader(Protocol):
+    """Read observed canonical graph paths without deriving trust or influence."""
+
+    async def read_paths(self, tenant_id: str, start_entity_id: str) -> SocialGraphPathRead: ...
+
+
+class RepositorySocialGraphPathReader:
+    """Resolve bounded paths over registered tenant-scoped FOLLOWS graph edges."""
+
+    def __init__(self, *, graph_client: Any = None) -> None:
+        self._graph_client = graph_client
+
+    async def read_paths(self, tenant_id: str, start_entity_id: str) -> SocialGraphPathRead:
+        from shared.graph.graph import get_graph_client, tenant_of
+        from shared.relationship_spine.relationship_registry import (
+            live_graph_edge_type,
+            predicate_entry,
+        )
+
+        entry = predicate_entry("FOLLOWS")
+        edge_type = live_graph_edge_type("FOLLOWS")
+        if (
+            not entry
+            or entry.get("family") != "SOCIAL"
+            or entry.get("graphRegistrationState") != "REGISTERED"
+            or "NON_TRANSITIVE" not in entry.get("transitivityClasses", [])
+            or edge_type is None
+        ):
+            return SocialGraphPathRead(
+                tenant_id,
+                start_entity_id,
+                available=False,
+                reason_codes=("registered_social_follows_authority_unavailable",),
+            )
+
+        client = self._graph_client or get_graph_client()
+        try:
+            anchor = await client.get_vertex_for_tenant(tenant_id, start_entity_id)
+            if anchor is None or tenant_of(anchor.properties) != tenant_id:
+                # Do not distinguish a missing vertex from a foreign-tenant id.
+                return SocialGraphPathRead(
+                    tenant_id,
+                    start_entity_id,
+                    reason_codes=("canonical_graph_subject_unresolved",),
+                )
+            edge_page = await client.get_edges_for_tenant(
+                tenant_id,
+                limit=_SOCIAL_PATH_EDGE_LIMIT,
+                edge_types=[edge_type],
+                include_revoked=False,
+            )
+        except Exception:  # noqa: BLE001 - graph authority failures fail closed
+            return SocialGraphPathRead(
+                tenant_id,
+                start_entity_id,
+                available=False,
+                reason_codes=("canonical_social_graph_authority_unavailable",),
+            )
+
+        if (
+            not isinstance(edge_page, tuple)
+            or len(edge_page) != 2
+            or not isinstance(edge_page[0], list)
+            or not isinstance(edge_page[1], bool)
+        ):
+            return SocialGraphPathRead(
+                tenant_id,
+                start_entity_id,
+                available=False,
+                reason_codes=("invalid_canonical_social_graph_read_contract",),
+            )
+        tenant_edges, edges_truncated = edge_page
+
+        now = datetime.now(timezone.utc)
+        candidate_edges: dict[str, list[tuple[str, tuple[EvidenceRef, ...], str]]] = {}
+        reasons: set[str] = set()
+        if edges_truncated:
+            reasons.add("canonical_social_path_edge_scan_capped")
+
+        for edge_index, edge in enumerate(tenant_edges):
+            if edge_index >= _SOCIAL_PATH_EDGE_LIMIT:
+                edges_truncated = True
+                reasons.add("canonical_social_path_edge_scan_capped")
+                break
+            props = edge.properties or {}
+            if (
+                edge.edge_type != edge_type
+                or tenant_of(props) != tenant_id
+                or props.get("relationship_predicate") != "FOLLOWS"
+                or _truthy_marker(props.get("revoked"))
+                or bool(props.get("revoked_at"))
+            ):
+                if tenant_of(props) != tenant_id:
+                    reasons.add("canonical_social_path_scope_mismatch")
+                continue
+
+            valid_from = _parse_graph_time(props.get("valid_from"))
+            valid_to_value = props.get("valid_to")
+            valid_to = _parse_graph_time(valid_to_value) if valid_to_value else None
+            valid_from_value = props.get("valid_from")
+            if (valid_to_value and valid_to is None) or (valid_from_value and valid_from is None):
+                reasons.add("canonical_social_path_validity_unknown")
+                continue
+            if valid_from is not None and valid_from > now:
+                continue
+            if valid_to is not None and valid_to <= now:
+                continue
+
+            idempotency_key = _text(props.get("idempotency_key"))
+            evidence_ids = _graph_evidence_ids(props.get("evidence_refs"))
+            if idempotency_key is None or not evidence_ids:
+                reasons.add("canonical_social_path_edge_evidence_unavailable")
+                continue
+
+            observed_at = valid_from.isoformat() if valid_from is not None else None
+            refs = [
+                EvidenceRef(
+                    id=idempotency_key,
+                    type="relationship",
+                    source="entity_graph",
+                    observedAt=observed_at,
+                ),
+                *[
+                    EvidenceRef(
+                        id=evidence_id,
+                        type="event",
+                        source="relationship_facts",
+                    )
+                    for evidence_id in evidence_ids
+                ],
+            ]
+            candidate_edges.setdefault(edge.from_vertex_id, []).append(
+                (edge.to_vertex_id, tuple(refs), idempotency_key)
+            )
+
+        for outgoing in candidate_edges.values():
+            outgoing.sort(key=lambda item: (item[0], item[2]))
+
+        nodes = {start_entity_id: anchor}
+        node_depths = {start_entity_id: 0}
+        queue = [start_entity_id]
+        adjacency: dict[str, list[tuple[str, tuple[EvidenceRef, ...], str]]] = {}
+        node_scan_truncated = False
+        while queue:
+            current_id = queue.pop(0)
+            depth = node_depths[current_id]
+            if depth >= _SOCIAL_PATH_DEPTH:
+                continue
+            for target_id, refs, edge_key in candidate_edges.get(current_id, []):
+                if target_id not in nodes:
+                    if len(nodes) >= _SOCIAL_PATH_NODE_LIMIT:
+                        node_scan_truncated = True
+                        reasons.add("canonical_social_path_node_scan_capped")
+                        continue
+                    try:
+                        target = await client.get_vertex_for_tenant(tenant_id, target_id)
+                    except Exception:  # noqa: BLE001 - tenant-scoped vertex read is fail-closed
+                        return SocialGraphPathRead(
+                            tenant_id,
+                            start_entity_id,
+                            available=False,
+                            reason_codes=("canonical_social_graph_authority_unavailable",),
+                        )
+                    if target is None or tenant_of(target.properties) != tenant_id:
+                        reasons.add("canonical_social_path_endpoint_unresolved")
+                        continue
+                    nodes[target_id] = target
+                    node_depths[target_id] = depth + 1
+                    queue.append(target_id)
+                adjacency.setdefault(current_id, []).append((target_id, refs, edge_key))
+
+        for outgoing in adjacency.values():
+            outgoing.sort(key=lambda item: (item[0], item[2]))
+
+        paths: list[SocialObservedPath] = []
+        path_scan_truncated = False
+
+        def visit(
+            current_id: str,
+            entity_ids: tuple[str, ...],
+            edge_refs: tuple[tuple[EvidenceRef, ...], ...],
+        ) -> None:
+            nonlocal path_scan_truncated
+            hops = len(edge_refs)
+            if hops >= 2:
+                if len(paths) >= _SOCIAL_PATH_RESULT_LIMIT:
+                    path_scan_truncated = True
+                    return
+                paths.append(SocialObservedPath(entity_ids, edge_refs))
+            if hops >= _SOCIAL_PATH_DEPTH or path_scan_truncated:
+                return
+            for next_id, refs, _edge_key in adjacency.get(current_id, []):
+                if next_id in entity_ids:
+                    continue
+                visit(next_id, (*entity_ids, next_id), (*edge_refs, refs))
+                if path_scan_truncated:
+                    return
+
+        visit(start_entity_id, (start_entity_id,), ())
+        truncated = edges_truncated or node_scan_truncated or path_scan_truncated
+        if truncated:
+            reasons.add("canonical_social_path_read_bounded")
+        if not paths and not reasons and not truncated:
+            reasons.add("no_bounded_observed_follows_paths")
+        return SocialGraphPathRead(
+            tenant_id,
+            start_entity_id,
+            paths=tuple(paths),
+            available=True,
+            truncated=truncated,
+            reason_codes=tuple(sorted(reasons)),
+        )
+
+
 class RepositorySocial360Source:
     """Read tenant-scoped rows from the durable Social Silver repositories."""
 
@@ -258,6 +499,7 @@ class Social360Provider(IntelligenceProjectionProvider):
         population_scope_reader: Optional[PopulationScopeReader] = None,
         source_subject_scope_reader: Optional[SourceSubjectScopeReader] = None,
         agent_subject_scope_reader: Optional[AgentSubjectScopeReader] = None,
+        social_graph_path_reader: Optional[SocialGraphPathReader] = None,
     ) -> None:
         self._source = source if source is not None else RepositorySocial360Source()
         self._consent_reader = consent_reader or evaluate_consent
@@ -275,6 +517,11 @@ class Social360Provider(IntelligenceProjectionProvider):
             agent_subject_scope_reader
             if agent_subject_scope_reader is not None
             else RepositoryAgentSubjectScopeReader()
+        )
+        self._social_graph_paths = (
+            social_graph_path_reader
+            if social_graph_path_reader is not None
+            else RepositorySocialGraphPathReader()
         )
 
     async def project(
@@ -476,9 +723,50 @@ class Social360Provider(IntelligenceProjectionProvider):
                 subject=request.subject,
             )
 
+        include = set(request.includeSections or OUTPUT_SECTIONS)
+        path_read = SocialGraphPathRead(
+            request.tenantId,
+            request.subject.id,
+            available=False,
+            reason_codes=("multi_hop_paths_entity_subject_required",),
+        )
+        if "paths" in include:
+            temporal_filter_requested = (
+                request.asOf is not None
+                or context.asOf is not None
+                or (
+                    request.timeRange is not None
+                    and (request.timeRange.from_ is not None or request.timeRange.to is not None)
+                )
+                or (request.temporalMode or "window") in {"as_of", "relative"}
+            )
+            if request.subject.kind == "entity" and temporal_filter_requested:
+                path_read = SocialGraphPathRead(
+                    request.tenantId,
+                    request.subject.id,
+                    available=False,
+                    reason_codes=("social_graph_path_temporal_scope_unsupported",),
+                )
+            elif request.subject.kind == "entity":
+                path_read = await self._read_social_paths(request.tenantId, request.subject.id)
+                path_read = await self._authorize_social_paths(
+                    path_read,
+                    request.tenantId,
+                    request.subject.id,
+                    already_checked={
+                        endpoint: _consent_allowed(consent)
+                        for endpoint, consent in zip(endpoints, consent_results)
+                    },
+                )
+
         reads: dict[str, Social360FactRead] = {}
         reads["identity"] = await self._read("identity", request.tenantId)
         tenant_identity_rows, bad_identity_scope = _tenant_rows(reads["identity"], request.tenantId)
+        if not reads["identity"].available:
+            # A reader may return a partial page alongside an unavailable
+            # status. Those rows cannot establish an identity join.
+            tenant_identity_rows = []
+            bad_identity_scope = False
         entity_ids = set(endpoints)
         identity_rows = [
             row
@@ -498,10 +786,17 @@ class Social360Provider(IntelligenceProjectionProvider):
 
         scoped: dict[str, list[dict[str, Any]]] = {"identity": subject_identity_rows}
         scope_mismatch = bad_identity_scope or bool(ambiguous_identity_ids)
+        queried_families = {"identity"}
         if identity_ids:
             for family in _FACT_TABLES[1:]:
                 reads[family] = await self._read(family, request.tenantId)
+                queried_families.add(family)
                 rows, bad_scope = _tenant_rows(reads[family], request.tenantId)
+                if not reads[family].available:
+                    # Do not turn a partial failed read into evidence-backed
+                    # claims; its coverage remains explicit below.
+                    rows = []
+                    bad_scope = False
                 scope_mismatch = scope_mismatch or bad_scope
                 scoped[family] = _subject_rows(
                     family,
@@ -638,6 +933,17 @@ class Social360Provider(IntelligenceProjectionProvider):
             "community": communities,
             "metric": metrics,
         }
+        identity_binding_state = _identity_binding_state(
+            reads["identity"],
+            identity_ids,
+            ambiguous_identity_ids,
+            bad_identity_scope,
+        )
+        identity_scope_incomplete = identity_binding_state in {
+            "unavailable",
+            "truncated",
+            "degraded",
+        }
         refs_by_family = {
             family: [
                 ref
@@ -656,12 +962,37 @@ class Social360Provider(IntelligenceProjectionProvider):
         )
 
         source_status = _source_status(reads, families=_FACT_TABLES)
-        if not identity_ids:
+        if not identity_ids and source_status == "available":
             source_status = "unresolved"
         if scope_mismatch or temporal_unknown:
-            source_status = "degraded" if source_status in {"available", "empty"} else source_status
+            source_status = (
+                "degraded"
+                if source_status in {"available", "empty", "unresolved"}
+                else source_status
+            )
 
-        identity_count_known = bool(identity_ids) and not reads["identity"].truncated
+        identity_count_known = (
+            bool(identity_ids)
+            and not reads["identity"].truncated
+            and not scope_mismatch
+            and not temporal_unknown
+        )
+        source_coverage = _source_coverage(
+            reads,
+            rows_by_family,
+            queried_families=queried_families,
+            overall_state=source_status,
+            identity_binding_state=identity_binding_state,
+            scope_mismatch=scope_mismatch,
+            temporal_unknown=temporal_unknown,
+            temporal_bounded=(
+                (request.temporalMode or "window") in {"as_of", "relative"}
+                or (
+                    request.timeRange is not None
+                    and (request.timeRange.from_ is not None or request.timeRange.to is not None)
+                )
+            ),
+        )
         section_data = {
             "evidence": (
                 "Evidence",
@@ -678,6 +1009,7 @@ class Social360Provider(IntelligenceProjectionProvider):
                         list(agent_scope.evidence_refs) if agent_scope is not None else []
                     ),
                     "untypedSourceReferenceCount": _untyped_ref_count(rows_by_family),
+                    "sourceCoverage": source_coverage,
                 },
                 ("identity", "connection", "interaction", "content", "community", "metric"),
             ),
@@ -688,6 +1020,7 @@ class Social360Provider(IntelligenceProjectionProvider):
                     "relationships": connection_items,
                     "communityMemberships": community_items,
                     "coverage": source_status,
+                    "sourceCoverage": source_coverage,
                 },
                 ("connection", "community"),
             ),
@@ -729,6 +1062,7 @@ class Social360Provider(IntelligenceProjectionProvider):
                     if source_status == "available"
                     else None,
                     "coverage": source_status,
+                    "sourceCoverage": source_coverage,
                     "metricsAreObservedValues": True,
                     "influenceScore": None,
                     "organicClassification": None,
@@ -778,7 +1112,6 @@ class Social360Provider(IntelligenceProjectionProvider):
             ),
         }
 
-        include = set(request.includeSections or OUTPUT_SECTIONS)
         sections: list[ProjectionSection] = []
         for section_id, (title, rows_or_refs, content_value, families) in section_data.items():
             if section_id not in include:
@@ -789,16 +1122,18 @@ class Social360Provider(IntelligenceProjectionProvider):
             has_rows = bool(rows_or_refs)
             failed = any(not read.available for read in family_reads)
             truncated = any(read.truncated for read in family_reads)
-            if has_rows:
-                state = (
-                    "degraded"
-                    if failed or truncated or scope_mismatch or temporal_unknown
-                    else "available"
-                )
+            if (
+                failed
+                or truncated
+                or scope_mismatch
+                or identity_scope_incomplete
+                or temporal_unknown
+            ):
+                state = "degraded"
             elif not identity_ids:
                 state = "unknown"
-            elif failed or truncated or temporal_unknown:
-                state = "unknown"
+            elif has_rows:
+                state = "available"
             else:
                 state = "empty"
             warnings = []
@@ -828,7 +1163,12 @@ class Social360Provider(IntelligenceProjectionProvider):
                 )
             )
 
+        path_section, path_claims = self._path_section_and_claims(request.subject, path_read)
+        if "paths" in include:
+            sections.append(path_section)
+
         claims = self._claims(request.subject, rows_by_family, refs_by_family)
+        claims.extend(path_claims)
         degraded_reasons = sorted(
             {
                 read.reason or f"{family}_source_unavailable"
@@ -853,6 +1193,173 @@ class Social360Provider(IntelligenceProjectionProvider):
             temporalMode=request.temporalMode or "window",
         )
 
+    async def _read_social_paths(self, tenant_id: str, start_entity_id: str) -> SocialGraphPathRead:
+        try:
+            result = await self._social_graph_paths.read_paths(tenant_id, start_entity_id)
+        except Exception:  # noqa: BLE001 - canonical graph authority is fail-closed
+            return SocialGraphPathRead(
+                tenant_id,
+                start_entity_id,
+                available=False,
+                reason_codes=("canonical_social_graph_authority_unavailable",),
+            )
+        if not isinstance(result, SocialGraphPathRead):
+            return SocialGraphPathRead(
+                tenant_id,
+                start_entity_id,
+                available=False,
+                reason_codes=("invalid_social_graph_path_source_contract",),
+            )
+        if result.tenant_id != tenant_id or result.start_entity_id != start_entity_id:
+            return SocialGraphPathRead(
+                tenant_id,
+                start_entity_id,
+                available=False,
+                reason_codes=("canonical_social_path_scope_mismatch",),
+            )
+        return result
+
+    async def _authorize_social_paths(
+        self,
+        result: SocialGraphPathRead,
+        tenant_id: str,
+        start_entity_id: str,
+        *,
+        already_checked: dict[str, bool],
+    ) -> SocialGraphPathRead:
+        if not result.available:
+            return result
+        visible_paths: list[SocialObservedPath] = []
+        policy_filtered = False
+        invalid_path = False
+        consent_by_entity = dict(already_checked)
+        for path in result.paths:
+            if not _valid_social_observed_path(path, start_entity_id):
+                invalid_path = True
+                continue
+            allowed = True
+            for entity_id in path.entity_ids[1:]:
+                if entity_id not in consent_by_entity:
+                    try:
+                        consent = await self._consent_reader(
+                            tenant_id, entity_id, None, "analytics"
+                        )
+                    except Exception:  # noqa: BLE001 - consent is fail-closed
+                        consent = (False, "consent_authority_unavailable")
+                    consent_by_entity[entity_id] = _consent_allowed(consent)
+                if not consent_by_entity[entity_id]:
+                    allowed = False
+            if allowed:
+                visible_paths.append(path)
+            else:
+                policy_filtered = True
+
+        reasons = set(result.reason_codes)
+        if policy_filtered:
+            reasons.add("social_path_endpoint_consent_restricted")
+        if invalid_path:
+            reasons.add("invalid_canonical_social_path_result")
+        return SocialGraphPathRead(
+            tenant_id,
+            start_entity_id,
+            paths=tuple(visible_paths),
+            available=result.available,
+            truncated=result.truncated,
+            reason_codes=tuple(sorted(reasons)),
+        )
+
+    @staticmethod
+    def _path_section_and_claims(
+        subject: ProjectionSubject, result: SocialGraphPathRead
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        reasons = list(result.reason_codes)
+        claims: list[ClaimEnvelope] = []
+        visible_paths = list(result.paths)
+        if visible_paths and result.available:
+            evidence_refs = _dedupe_refs(
+                [ref for path in visible_paths for edge in path.edge_evidence_refs for ref in edge]
+            )
+            path_items = []
+            for path in visible_paths:
+                path_refs = [_dedupe_refs(list(edge_refs)) for edge_refs in path.edge_evidence_refs]
+                path_items.append(
+                    {
+                        "entityPath": list(path.entity_ids),
+                        "edgePredicate": "FOLLOWS",
+                        "edgeEvidenceRefs": path_refs,
+                    }
+                )
+                evidence = _dedupe_refs(
+                    [ref for edge_refs in path.edge_evidence_refs for ref in edge_refs]
+                )
+                path_key = "\x1f".join([*path.entity_ids, *(ref.id for ref in evidence)])
+                digest = hashlib.sha256(path_key.encode("utf-8")).hexdigest()[:24]
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"social360.multi_hop_paths.{digest}",
+                        kind="social_follows_path_observation",
+                        subject=subject,
+                        evidenceRefs=evidence,
+                        claims=[
+                            "The tenant-scoped canonical graph records this directed sequence "
+                            "of FOLLOWS edges as separate observed relationships; no transitive "
+                            "relationship, trust, or influence is asserted."
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=["multi_hop_paths"],
+                    )
+                )
+
+            state = "degraded" if result.truncated or reasons else "available"
+            content = {
+                "multiHopPaths": {
+                    "state": state,
+                    "paths": path_items,
+                    "coverage": "bounded_observed_paths_only",
+                    "completeness": "unknown",
+                    "freshness": "unknown",
+                    "pathDepthLimit": _SOCIAL_PATH_DEPTH,
+                    "minimumHops": 2,
+                    "pathSemantics": {
+                        "edgePredicate": "FOLLOWS",
+                        "directedObservedEdges": True,
+                        "transitiveRelationshipClaim": False,
+                        "trustInferred": False,
+                        "influenceInferred": False,
+                    },
+                    "evidenceRefs": evidence_refs,
+                }
+            }
+            return (
+                ProjectionSection(
+                    id="paths",
+                    state=state,
+                    title="Bounded observed FOLLOWS paths",
+                    content=content,
+                    warnings=reasons or None,
+                    canonicalAuthorityRefs=list(_SOCIAL_PATH_AUTHORITIES),
+                ),
+                claims,
+            )
+
+        if not reasons:
+            reasons = ["no_bounded_observed_follows_paths"]
+        unsupported_temporal = "social_graph_path_temporal_scope_unsupported" in reasons
+        unsupported_subject = "multi_hop_paths_entity_subject_required" in reasons
+        unavailable = not result.available and not (unsupported_temporal or unsupported_subject)
+        state = "degraded" if unavailable or result.truncated else "unknown"
+        return (
+            ProjectionSection(
+                id="paths",
+                state=state,
+                title="Bounded observed FOLLOWS paths",
+                content=None,
+                warnings=sorted(set(reasons)),
+                canonicalAuthorityRefs=list(_SOCIAL_PATH_AUTHORITIES),
+            ),
+            claims,
+        )
+
     async def _read(self, family: str, tenant_id: str) -> Social360FactRead:
         try:
             result = await self._source.read(family, tenant_id, limit=_MAX_READ_ROWS)
@@ -870,11 +1377,11 @@ class Social360Provider(IntelligenceProjectionProvider):
         rows_by_family: dict[str, list[dict[str, Any]]],
         refs_by_family: dict[str, list[EvidenceRef]],
     ) -> list[ClaimEnvelope]:
-        domain_slot_ids = _domain_slot_ids(subject.kind)
-        if not domain_slot_ids:
-            return []
         claims: list[ClaimEnvelope] = []
         for family, rows in rows_by_family.items():
+            domain_slot_ids = _domain_slot_ids(subject.kind, family)
+            if not domain_slot_ids:
+                continue
             refs_by_id = {ref.id: ref for ref in refs_by_family.get(family, [])}
             table = f"silver_social_{family}_facts"
             for row in rows:
@@ -938,16 +1445,29 @@ class Social360Provider(IntelligenceProjectionProvider):
             "timeline": {"items": []},
         }
         include = set(request.includeSections or OUTPUT_SECTIONS)
-        sections = [
-            ProjectionSection(
-                id=section_id,
-                state="empty",
-                title="Social observation population view",
-                content=empty_content[section_id],
+        sections = []
+        for section_id in OUTPUT_SECTIONS:
+            if section_id not in include:
+                continue
+            if section_id == "paths":
+                sections.append(
+                    ProjectionSection(
+                        id="paths",
+                        state="unknown",
+                        title="Bounded observed FOLLOWS paths",
+                        warnings=["multi_hop_paths_entity_subject_required"],
+                        canonicalAuthorityRefs=list(_SOCIAL_PATH_AUTHORITIES),
+                    )
+                )
+                continue
+            sections.append(
+                ProjectionSection(
+                    id=section_id,
+                    state="empty",
+                    title="Social observation population view",
+                    content=empty_content[section_id],
+                )
             )
-            for section_id in OUTPUT_SECTIONS
-            if section_id in include
-        ]
         return ProjectionResult(
             projectionId=PROJECTION_ID,
             tenantId=request.tenantId,
@@ -971,7 +1491,14 @@ class Social360Provider(IntelligenceProjectionProvider):
     ) -> ProjectionResult:
         include = set(request.includeSections or OUTPUT_SECTIONS)
         sections = [
-            ProjectionSection(id=section_id, state="unknown", warnings=[reason])
+            ProjectionSection(
+                id=section_id,
+                state="unknown",
+                warnings=[reason],
+                canonicalAuthorityRefs=(
+                    list(_SOCIAL_PATH_AUTHORITIES) if section_id == "paths" else None
+                ),
+            )
             for section_id in OUTPUT_SECTIONS
             if section_id in include
         ]
@@ -997,7 +1524,14 @@ class Social360Provider(IntelligenceProjectionProvider):
     ) -> ProjectionResult:
         include = set(request.includeSections or OUTPUT_SECTIONS)
         sections = [
-            ProjectionSection(id=section_id, state="suppressed", warnings=[reason])
+            ProjectionSection(
+                id=section_id,
+                state="suppressed",
+                warnings=[reason],
+                canonicalAuthorityRefs=(
+                    list(_SOCIAL_PATH_AUTHORITIES) if section_id == "paths" else None
+                ),
+            )
             for section_id in OUTPUT_SECTIONS
             if section_id in include
         ]
@@ -1039,6 +1573,54 @@ def _text(value: Any) -> Optional[str]:
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
+def _truthy_marker(value: Any) -> bool:
+    if value is True:
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "yes", "revoked"}
+    return False
+
+
+def _parse_graph_time(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
+def _graph_evidence_ids(value: Any) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(dict.fromkeys(text for item in value if (text := _text(item))))
+
+
+def _valid_social_observed_path(path: Any, start_entity_id: str) -> bool:
+    if not isinstance(path, SocialObservedPath):
+        return False
+    if not (3 <= len(path.entity_ids) <= _SOCIAL_PATH_DEPTH + 1):
+        return False
+    if path.entity_ids[0] != start_entity_id:
+        return False
+    if any(not _text(entity_id) for entity_id in path.entity_ids):
+        return False
+    if len(set(path.entity_ids)) != len(path.entity_ids):
+        return False
+    if len(path.edge_evidence_refs) != len(path.entity_ids) - 1:
+        return False
+    return all(
+        edge_refs and all(isinstance(ref, EvidenceRef) and _text(ref.id) for ref in edge_refs)
+        for edge_refs in path.edge_evidence_refs
+    )
+
+
 def _tenant_rows(read: Social360FactRead, tenant_id: str) -> tuple[list[dict[str, Any]], bool]:
     rows: list[dict[str, Any]] = []
     mismatch = False
@@ -1054,13 +1636,22 @@ def _unique_identity_ids(
     all_rows: list[dict[str, Any]], subject_entities: set[str]
 ) -> tuple[set[str], set[str]]:
     entity_by_identity: dict[str, set[str]] = {}
+    unresolved_identity_ids: set[str] = set()
     for row in all_rows:
         identity_id = _text(row.get("social_identity_id"))
         entity_id = _text(row.get("canonical_entity_ref"))
-        if identity_id and entity_id:
+        if not identity_id:
+            continue
+        if entity_id:
             entity_by_identity.setdefault(identity_id, set()).add(entity_id)
+        else:
+            # An unresolved duplicate cannot be ignored when another row binds
+            # the same social identity. Its canonical entity may be unknown.
+            unresolved_identity_ids.add(identity_id)
     ambiguous = {
-        identity_id for identity_id, entity_ids in entity_by_identity.items() if len(entity_ids) > 1
+        identity_id
+        for identity_id, entity_ids in entity_by_identity.items()
+        if len(entity_ids) > 1 or identity_id in unresolved_identity_ids
     }
     scoped = {
         identity_id
@@ -1218,6 +1809,132 @@ def _source_status(reads: dict[str, Social360FactRead], *, families: tuple[str, 
     return "available"
 
 
+_SOURCE_OBSERVATION_TIME_FIELDS: dict[str, tuple[str, ...]] = {
+    "identity": ("last_observed_at", "observed_at", "first_observed_at"),
+    "connection": ("observed_at",),
+    "interaction": ("observed_at", "occurred_at"),
+    "content": ("edited_at", "published_at"),
+    "community": ("observed_at", "valid_from"),
+    "metric": ("observed_at",),
+}
+
+
+def _identity_binding_state(
+    read: Social360FactRead,
+    identity_ids: set[str],
+    ambiguous_identity_ids: set[str],
+    bad_identity_scope: bool,
+) -> str:
+    if not read.available:
+        return "unavailable"
+    if read.truncated:
+        return "truncated"
+    if bad_identity_scope or ambiguous_identity_ids:
+        return "degraded"
+    return "available" if identity_ids else "unresolved"
+
+
+def _source_coverage(
+    reads: dict[str, Social360FactRead],
+    rows_by_family: dict[str, list[dict[str, Any]]],
+    *,
+    queried_families: set[str],
+    overall_state: str,
+    identity_binding_state: str,
+    scope_mismatch: bool,
+    temporal_unknown: bool,
+    temporal_bounded: bool,
+) -> dict[str, Any]:
+    """Report subject-scoped Silver coverage without treating skipped reads as empty."""
+    families: dict[str, dict[str, Any]] = {}
+    for family in _FACT_TABLES:
+        read = reads.get(family)
+        if family not in queried_families:
+            read_state = "not_read"
+            reason = "canonical_social_identity_binding_not_established"
+            scoped_rows: Optional[list[dict[str, Any]]] = None
+        elif read is None or not read.available:
+            read_state = "unavailable"
+            reason = read.reason if read is not None else f"{family}_source_unavailable"
+            scoped_rows = None
+        elif read.truncated:
+            read_state = "truncated"
+            reason = read.reason or "source_read_capped"
+            scoped_rows = rows_by_family.get(family, [])
+        else:
+            read_state = "available"
+            reason = None
+            scoped_rows = rows_by_family.get(family, [])
+
+        if scoped_rows is None:
+            source_times = None
+            received_times = None
+            scoped_count = None
+        else:
+            source_times = [
+                value
+                for row in scoped_rows
+                if (value := _source_observed_time(family, row)) is not None
+            ]
+            received_times = [
+                value
+                for row in scoped_rows
+                if (value := _parse_time(_text(row.get("received_at")))) is not None
+            ]
+            scoped_count = len(scoped_rows)
+
+        families[family] = {
+            "readState": read_state,
+            "reason": reason,
+            "scopedObservationCount": scoped_count,
+            "sourceTimestampedCount": len(source_times) if source_times is not None else None,
+            "sourceTimestampMissingCount": (
+                scoped_count - len(source_times)
+                if scoped_count is not None and source_times is not None
+                else None
+            ),
+            "latestSourceObservedAt": (max(source_times).isoformat() if source_times else None),
+            "receivedAtCount": len(received_times) if received_times is not None else None,
+            "receivedAtMissingCount": (
+                scoped_count - len(received_times)
+                if scoped_count is not None and received_times is not None
+                else None
+            ),
+        }
+
+    return {
+        "state": overall_state,
+        "identityBindingState": identity_binding_state,
+        "scopeState": (
+            "degraded"
+            if scope_mismatch or identity_binding_state in {"unavailable", "truncated", "degraded"}
+            else "unknown"
+            if identity_binding_state == "unresolved"
+            else "available"
+        ),
+        "temporalScopeState": (
+            "incomplete"
+            if temporal_unknown
+            else "complete"
+            if temporal_bounded
+            else "not_requested"
+        ),
+        "temporalScope": "bounded" if temporal_bounded else "unbounded",
+        "countsAreScopedToRequestedSubject": True,
+        "sourceTimestamps": "preserved_when_present",
+        "missingTimestamp": "unknown",
+        "families": families,
+    }
+
+
+def _source_observed_time(family: str, row: dict[str, Any]) -> Optional[datetime]:
+    for field in _SOURCE_OBSERVATION_TIME_FIELDS[family]:
+        parsed = _parse_time(_text(row.get(field)))
+        if parsed is not None:
+            return parsed
+    return None
+
+
 def _filter_temporal(
     rows: list[dict[str, Any]], request: ProjectionRequest, context_anchor: Optional[str]
 ) -> tuple[list[dict[str, Any]], bool]:
@@ -1275,8 +1992,47 @@ def _parse_time(value: Optional[str]) -> Optional[datetime]:
     return parsed.astimezone(timezone.utc)
 
 
-def _domain_slot_ids(subject_kind: str) -> list[str]:
+_SUPPORTED_SLOTS_BY_FAMILY: dict[str, frozenset[str]] = {
+    # Every direct Silver claim remains an observation and carries an EvidenceRef.
+    # Optional, more specific slots are earned only by the relevant source family.
+    "identity": frozenset(
+        {"social_observations_and_sources", "evidence_and_coverage", "evidence_trace"}
+    ),
+    "connection": frozenset(
+        {
+            "social_observations_and_sources",
+            "evidence_and_coverage",
+            "evidence_trace",
+            # A provider-recorded connection may populate a relationship map
+            # as source evidence, but does not become a canonical graph edge.
+            "relationship_map",
+        }
+    ),
+    "interaction": frozenset(
+        {"social_observations_and_sources", "evidence_and_coverage", "evidence_trace"}
+    ),
+    "content": frozenset(
+        {"social_observations_and_sources", "evidence_and_coverage", "evidence_trace"}
+    ),
+    "community": frozenset(
+        {
+            "social_observations_and_sources",
+            "evidence_and_coverage",
+            "evidence_trace",
+            # This slot is limited to recorded membership facts, not syndicate
+            # or contagion synthesis.
+            "communities",
+        }
+    ),
+    "metric": frozenset(
+        {"social_observations_and_sources", "evidence_and_coverage", "evidence_trace"}
+    ),
+}
+
+
+def _domain_slot_ids(subject_kind: str, fact_family: str) -> list[str]:
     result: set[str] = set()
+    supported_slots = _SUPPORTED_SLOTS_BY_FAMILY.get(fact_family, frozenset())
     for surface_id, surface in PRODUCT_360_SURFACE_DEFINITIONS.items():
         # These are direct Social360 fact claims. Other surfaces may bind the
         # projection as supporting evidence, but that does not make every
@@ -1294,6 +2050,7 @@ def _domain_slot_ids(subject_kind: str) -> list[str]:
                     and binding.get("projectionId") == PROJECTION_ID
                     and subject_kind in binding.get("subjectKinds", [])
                     and isinstance(slot.get("id"), str)
+                    and slot["id"] in supported_slots
                 ):
                     result.add(slot["id"])
     return sorted(result)

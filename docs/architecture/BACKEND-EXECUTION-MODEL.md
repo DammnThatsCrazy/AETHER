@@ -20,7 +20,7 @@ toc_depth: 3
 source_hashes:
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/config/settings.py": "sha256:c1c63fd7fee53677c615e4a61b03b856c7658a37be96eed64ba587ac15d89700"
-  "services/api/main.py": "sha256:43bc0df60879c8fa844a700da23e7d80455c003b26c14225ce41b1d9865ce521"
+  "services/api/main.py": "sha256:785efdc38288d9d00e3493739316c46f99bde0126cc8f9c8ea69fb9b3501d2f3"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
   "services/api/workers/runtime/roles.py": "sha256:061fee9712dee6e5354ba7bc8162eeb06a909e526e6ed45d1dee9a4afe9c63b2"
   "services/api/workers/runtime/run_role.py": "sha256:787c2388526da3d9bf77aa4d138e35fddf15afeb4aafef0d06f2501834785354"
@@ -56,6 +56,11 @@ The catalog observer is registered only when
 `AETHER_AGENT_MARKETPLACE_CATALOG_ENABLED` is true (default OFF); the API mounts
 the read endpoint when either the catalog observer or deployment registry is
 enabled.
+
+The API also mounts `support_cases_router` at `/v1/support/cases`. This is a
+request-path evidence ingress, not a worker role: authenticated tenant callers
+need `write` permission and an exact verified provider connection before an
+allow-listed support case lifecycle event is accepted.
 
 The stream worker also projects public SDK x402 request and intent stages through
 `services/api/ingestion/ingestion/lifecycle_worker.py` into the canonical durable lifecycle

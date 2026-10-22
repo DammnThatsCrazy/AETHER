@@ -24,12 +24,22 @@ from journeys.support360.provider import (  # noqa: E402
     Support360Provider,
     SupportFactsRead,
     _REASON_CASE_AUTHORITY_MISSING,
+    _REASON_CASE_NOT_FOUND,
+    _REASON_CONVERSATION_AUTHORITY_MISSING,
+    _REASON_CALLBACK_AUTHORITY_MISSING,
     _REASON_JOURNEY_JOIN_MISSING,
     _REASON_PARTIAL_ENTITY_JOIN,
     _REASON_SOURCE_UNAVAILABLE,
     _REASON_UNSUPPORTED_SUBJECT,
+    _REASON_TICKET_CASE_JOIN_MISSING,
+    _REQUIRED_SUPPORT_SLOT_IDS,
 )
 from graph.operational_intelligence.models import EvidenceRef  # noqa: E402
+from journeys.support360.cases import (  # noqa: E402
+    SupportCaseEventInput,
+    SupportCaseEventType,
+    SupportCaseRepository,
+)
 from shared.intelligence_projections import (  # noqa: E402
     INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
     ProjectionContext,
@@ -153,6 +163,30 @@ async def test_entity_projection_filters_tenant_category_and_exact_subject() -> 
     assert timeline["entries"][0]["factId"] == "exact-support"
     assert sections["summary"].content["observedSupportCommunicationCount"] == 1
     assert _REASON_PARTIAL_ENTITY_JOIN in sections["summary"].content["reasonCodes"]
+    required_slots = sections["state"].content["requiredSlots"]
+    assert tuple(required_slots) == _REQUIRED_SUPPORT_SLOT_IDS
+    assert required_slots["conversation_history"]["state"] == "degraded"
+    assert required_slots["conversation_history"]["contentMode"] == "metadata_only"
+    assert required_slots["conversation_history"]["contentAccessState"] == "unknown"
+    assert required_slots["conversation_history"]["messageBodyState"] == "suppressed"
+    assert required_slots["evidence_trace"]["state"] == "degraded"
+    assert all(
+        required_slots[slot_id]["state"] == "unknown"
+        for slot_id in (
+            "case_summary",
+            "callbacks",
+            "participants",
+            "sla",
+            "journey_links",
+            "agents",
+            "risk",
+            "resolution",
+        )
+    )
+    assert len(result.claims) == 1
+    assert result.claims[0].domainSlotIds == ["conversation_history", "evidence_trace"]
+    assert result.claims[0].claimState.value == "observed"
+    assert {ref.id for ref in result.claims[0].evidenceRefs} == {"exact-support"}
     assert "private customer message" not in repr(result.model_dump())
     assert "person@example.test" not in repr(result.model_dump())
     assert source.calls == [(TENANT_A, ENTITY_ID, None, None, None, 100)]
@@ -230,9 +264,7 @@ async def test_pagination_cursor_and_truncation_are_preserved() -> None:
     assert result.page.hasNextPage is True
     assert result.sections[0].state == "degraded"
     assert "support_communication_read_truncated" in result.degradedReasons
-    assert source.calls == [
-        (TENANT_A, ENTITY_ID, None, None, "incoming-page-token", 1)
-    ]
+    assert source.calls == [(TENANT_A, ENTITY_ID, None, None, "incoming-page-token", 1)]
 
 
 @pytest.mark.asyncio
@@ -256,6 +288,9 @@ async def test_support_case_id_stays_source_reported_and_unresolved() -> None:
     assert state["supportCases"]["reasonCode"] == _REASON_CASE_AUTHORITY_MISSING
     assert state["supportCases"]["sourceReportedReferenceCount"] == 1
     assert state["supportCases"]["sourceReportedReferencesAreCanonical"] is False
+    assert state["requiredSlots"]["case_summary"]["state"] == "unknown"
+    assert state["requiredSlots"]["case_summary"]["sourceReportedReferencesAreCanonical"] is False
+    assert state["requiredSlots"]["journey_links"]["reasonCode"] == _REASON_JOURNEY_JOIN_MISSING
     source_refs = sections["timeline"].content["entries"]
     assert source_refs[0]["sourceReportedSupportCaseRef"] == "case:source-42"
     assert source_refs[0]["canonicalSupportCaseResolved"] is False
@@ -266,7 +301,10 @@ async def test_support_case_id_stays_source_reported_and_unresolved() -> None:
     assert sections["state"].content["measuredOutcomes"]["state"] == "unknown"
 
 
-@pytest.mark.parametrize("subject_kind", ["campaign"])
+@pytest.mark.parametrize(
+    "subject_kind",
+    ["campaign"],
+)
 @pytest.mark.asyncio
 async def test_unsupported_subject_kinds_fail_closed(subject_kind: str) -> None:
     source = FakeSource(SupportFactsRead(rows=[_row("should-not-read")], available=True))
@@ -282,6 +320,104 @@ async def test_unsupported_subject_kinds_fail_closed(subject_kind: str) -> None:
     assert sections["state"].content["supportCommunications"]["state"] == "unknown"
     assert sections["state"].content["supportCases"]["reasonCode"] == _REASON_CASE_AUTHORITY_MISSING
     assert sections["state"].content["journeyLinkage"]["reasonCode"] == _REASON_JOURNEY_JOIN_MISSING
+    required_slots = sections["state"].content["requiredSlots"]
+    assert tuple(required_slots) == _REQUIRED_SUPPORT_SLOT_IDS
+    assert all(slot["state"] == "unknown" for slot in required_slots.values())
+    assert result.claims == []
+    assert source.calls == []
+
+
+@pytest.mark.parametrize(
+    ("subject_kind", "expected_reason"),
+    [
+        ("support_case", _REASON_CASE_NOT_FOUND),
+        ("callback", _REASON_CALLBACK_AUTHORITY_MISSING),
+        ("conversation", _REASON_CONVERSATION_AUTHORITY_MISSING),
+        ("ticket", _REASON_TICKET_CASE_JOIN_MISSING),
+    ],
+)
+@pytest.mark.asyncio
+async def test_ssot_subject_kinds_fail_closed_with_typed_authority_gaps(
+    subject_kind: str,
+    expected_reason: str,
+) -> None:
+    source = FakeSource(SupportFactsRead(rows=[_row("must-not-read")], available=True))
+    request = _request(subject_kind=subject_kind, subject_id=f"{subject_kind}-1")
+
+    result = await Support360Provider(source).project(request, _context(request))
+
+    sections = _sections(result)
+    assert result.degradedReasons == [expected_reason]
+    assert sections["summary"].state == "unknown"
+    assert sections["summary"].content is None
+    assert sections["state"].content["supportCommunications"] == {
+        "state": "unknown",
+        "reasonCode": expected_reason,
+    }
+    required_slots = sections["state"].content["requiredSlots"]
+    assert tuple(required_slots) == _REQUIRED_SUPPORT_SLOT_IDS
+    assert all(slot["state"] == "unknown" for slot in required_slots.values())
+    assert result.claims == []
+    assert source.calls == []
+
+
+@pytest.mark.asyncio
+async def test_canonical_support_case_subject_reads_exact_case_summary_with_evidence() -> None:
+    from datetime import datetime, timezone
+
+    from journeys.support360.cases import SupportCaseLifecycle
+
+    repository = SupportCaseRepository()
+    record = await repository.ingest_event(
+        tenant_id=TENANT_A,
+        connection_id="support-connection-a",
+        provider_identity="support-desk",
+        connection_verified_at="2026-10-17T11:00:00Z",
+        event=SupportCaseEventInput(
+            source_case_id="source-case-private-42",
+            source_event_id="support-case-created-42",
+            event_type=SupportCaseEventType.CREATED,
+            occurred_at=datetime(2026, 10, 17, 12, tzinfo=timezone.utc),
+        ),
+    )
+    source = FakeSource(SupportFactsRead(rows=[_row("must-not-read")], available=True))
+    request = _request("support_case", record["case_id"])
+
+    result = await Support360Provider(source, case_repository=repository).project(
+        request,
+        _context(request),
+    )
+
+    sections = _sections(result)
+    slots = sections["state"].content["requiredSlots"]
+    assert result.tenantId == TENANT_A
+    assert sections["summary"].content["canonicalCaseId"] == record["case_id"]
+    assert sections["summary"].content["lifecycle"]["state"] == SupportCaseLifecycle.OPEN.value
+    assert sections["summary"].content["lifecycle"]["claimState"] == "observed"
+    assert sections["summary"].content["freshness"]["state"] == "unknown"
+    assert slots["case_summary"]["state"] == "degraded"
+    assert slots["case_summary"]["canonicalCaseId"] == record["case_id"]
+    assert slots["evidence_trace"]["state"] == "degraded"
+    assert all(
+        slots[slot_id]["state"] == "unknown"
+        for slot_id in (
+            "conversation_history",
+            "callbacks",
+            "participants",
+            "sla",
+            "journey_links",
+            "agents",
+            "risk",
+            "resolution",
+        )
+    )
+    assert result.claims[0].domainSlotIds == ["case_summary", "evidence_trace"]
+    assert result.claims[0].claimState.value == "observed"
+    assert {ref.id for ref in result.claims[0].evidenceRefs} == {
+        "support-case-created-42",
+        "support-connection-a",
+    }
+    assert "source-case-private-42" not in repr(result.model_dump())
     assert source.calls == []
 
 
@@ -517,7 +653,9 @@ async def test_source_support_uses_current_tenant_provider_connection_join(
     assert sections["timeline"].content["entryCount"] == 1
     assert sections["timeline"].content["entries"][0]["factId"] == "source-support-fact"
     state = sections["state"].content["supportCommunications"]
-    assert state["subjectJoin"] == "provider_identity_to_connection_to_source_connector_id_exact_match"
+    assert (
+        state["subjectJoin"] == "provider_identity_to_connection_to_source_connector_id_exact_match"
+    )
     assert state["readCompleteness"] == "partial"
     refs = sections["evidence"].content["evidenceRefs"]
     assert {ref.id for ref in refs} == {"connection-a", "source-support-fact"}
@@ -525,7 +663,9 @@ async def test_source_support_uses_current_tenant_provider_connection_join(
         "provider_connections",
         "services/api/journeys/comms/silver_comms_facts",
     }
-    assert "support_source_join_uses_current_provider_connection_membership" in result.degradedReasons
+    assert (
+        "support_source_join_uses_current_provider_connection_membership" in result.degradedReasons
+    )
 
     class CrossTenantConnections(Connections):
         async def find_many(self, *, filters, sort_by, sort_order, limit):

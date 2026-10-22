@@ -29,6 +29,7 @@ flowchart LR
   cluster360 --> computation_substrate
   cluster360 --> exploration_fabric
   cluster360 -.-> population360
+  commerce360 --> contract_spine
   communication360 --> contract_spine
   communication360 --> temporal_kernel
   communication360 -.-> episode360
@@ -65,6 +66,7 @@ flowchart LR
   infrastructure360 --> contract_spine
   infrastructure360 --> infrastructure_model
   infrastructure360 --> temporal_kernel
+  memory360 --> contract_spine
   outcome360 --> measurement_outcome_contract
   outcome360 --> temporal_kernel
   outcome360 -.-> temporal360
@@ -93,6 +95,7 @@ flowchart LR
   risk360 -.-> cluster360
   risk360 -.-> economic360
   risk360 -.-> profile360
+  signals360 --> contract_spine
   social360 --> relationship_fidelity
   social360 --> temporal_kernel
   social360 --> upr
@@ -103,6 +106,7 @@ flowchart LR
   support360 --> temporal_kernel
   temporal360 --> contract_spine
   temporal360 --> graph_history_replay
+  workflow360 --> contract_spine
 ```
 
 ## Pending resolutions

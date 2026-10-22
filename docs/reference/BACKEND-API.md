@@ -25,19 +25,19 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:148fef7aed4863db2ae6f38fe310bd309fcadaf93a9bc3673b960213d1945621"
+  "services/api/actions/": "sha256:8f8eba47bf0ac718973b60139881c6eb6d371e0fc43c155c392123cc24094d04"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:109bad8feb3b4a918c66377c0e48abe963a289fc89290aebde73a7cc6a487a38"
-  "services/api/governance/": "sha256:b47a6fe0cec45cf306bfb4399a2b361df4f4bd1a4f0f897ed003a3db2d4a0dd3"
-  "services/api/graph/": "sha256:27fd6f421f29bf28318b9cb176a8b487a6da84694f30c49933a986cc5cc6e25d"
-  "services/api/identity/": "sha256:810a90997580897145086f0bdfaaced0bba6bc009504e85f7b898afb20e3c8e7"
+  "services/api/governance/": "sha256:d8349fbd9ccbeb432133c7d509e952d660f5ae26e68ebc27cb6ca80d191e5286"
+  "services/api/graph/": "sha256:c4a96fb8c0a9d00c7f87f6fb72fac95e589710253f059c71c36c279c49e658da"
+  "services/api/identity/": "sha256:1202b48f9809833bb6cf7d8cbd586a6080d553b7a2bff67006fc930e84f97e7a"
   "services/api/ingestion/": "sha256:d78406f2a61f3b192307cbbc280e2f7402f4366ad48818fe99921dd23705da8c"
-  "services/api/intelligence/": "sha256:9c4eefdea539b674622f7b3dfb77e66b86241dce2b9eb8364638bb5010981e40"
-  "services/api/journeys/": "sha256:7209a7f218d8235962bfbaa3411895ea7ef3af7a0206a86e0017a9ed43c33023"
+  "services/api/intelligence/": "sha256:c743fbecea5edbdf8cc56724801f25925552687b8cdb489adddaf536486246b3"
+  "services/api/journeys/": "sha256:35542c430fd1fd7e2af10f494aafa2f1ec9fff2583636b3977c8c0956bb45ccb"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
-  "services/api/value/": "sha256:55ec2a85fbe7930121291ffefc79cad39b69cb11445bad7305fb485e689bfd55"
+  "services/api/value/": "sha256:25d643128a4bb9131b680d59aad7e52d36b371b9cb8692a848ae1d1aa55d45a7"
   "services/api/workers/": "sha256:62b80fbcf0fed7df62c169f9ec263635d26e65da656162f01f4fe70e65236ad4"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -1893,10 +1893,34 @@ Frame responses retain slot state, evidence/provenance, freshness, quality,
 policy, and actor/authority metadata where canonical sources support them.
 Unsupported subject/provider paths and unavailable evidence remain explicit
 `unknown`, `missing`, or `degraded` states; the route does not imply that every
-catalog slot is complete. The reconstructed product contracts remain pending
-alignment with the original 360 source blueprint. All 20 technical providers
-register at application startup; 9 remain marked `implemented` and 11 remain
-`in_flight`, because registration does not promote implementation status.
+catalog slot is complete. The 18-entry product catalog is crosswalked to the
+checked-in `docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md`;
+that file is the backend acceptance contract, while the supplemental
+architectural blueprint provides context without expanding the 18-surface
+scope. All 18 contracts now have source-aligned metadata and required-slot IDs.
+Source alignment does not certify provider conformance or runtime completion.
+The registry contains 24 technical projections; 9 are marked `implemented` and
+15 remain `in_flight`. All 24 register at application startup, and registration
+does not promote implementation status.
+
+### Support case lifecycle evidence ingress
+
+`POST /v1/support/cases/ingest` accepts one allow-listed lifecycle event under
+the authenticated tenant and requires `write` permission. The caller must name
+an exact tenant-owned, verified provider connection. The request includes the
+connection ID, source case ID, source event ID, event type, and timezone-aware
+occurrence time; arbitrary payload, title, description, and message-body fields
+are rejected. `support_case_created` must establish a case before later events.
+The response reports the accepted lifecycle state as an observed source claim;
+it does not assert that the support system's account, customer, or resolution
+semantics have been independently verified. Missing verified connection is
+403; missing case or invalid lifecycle transition is 409. Support360 reads the
+resulting tenant-scoped case and event evidence as a partial provider path.
+
+The caller must send one of `support_case_created`, `support_case_updated`,
+`support_case_escalated`, `support_case_resolved`, `support_case_reopened`, or
+`support_case_closed`. The source case and event identifiers remain scoped to
+the verified connection; they are not canonical customer or account identity.
 
 
 ---

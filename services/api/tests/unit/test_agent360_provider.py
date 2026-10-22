@@ -32,6 +32,11 @@ from shared.intelligence_projections import (  # noqa: E402
     ProjectionRequest,
     ProjectionSubject,
 )
+from shared.intelligence_projections.contracts import (  # noqa: E402
+    Experience360FrameRequest,
+    Experience360PolicyDisposition,
+)
+from shared.intelligence_projections.composition import compose_experience360_frame  # noqa: E402
 
 
 TENANT = "tenant-a"
@@ -54,6 +59,7 @@ def _request(
     subject_id: str = AGENT,
     time_range=None,
     temporal_mode="window",
+    include_claims: bool = True,
 ) -> ProjectionRequest:
     return ProjectionRequest(
         projectionId="agent360",
@@ -62,15 +68,24 @@ def _request(
         page={"limit": 10},
         timeRange=time_range,
         temporalMode=temporal_mode,
+        includeClaims=include_claims,
     )
 
 
 class FakeSource:
-    def __init__(self, *, empty: bool = False, fail: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        empty: bool = False,
+        fail: str | None = None,
+        capability_grants: list[dict] | None = None,
+    ) -> None:
         self.empty = empty
         self.fail = fail
+        self.capability_grants = capability_grants
         self.calls = 0
         self.delegation_subjects: list[str] = []
+        self.capability_subjects: list[str] = []
 
     async def _rows(self, name: str, rows: list[dict]) -> list[dict]:
         self.calls += 1
@@ -250,13 +265,38 @@ class FakeSource:
             ],
         )
 
-    async def capability_access_profile(self, tenant_id, agent_id):
+    async def capability_access_profile(
+        self, tenant_id, agent_id, canonical_agent_entity_id
+    ):
+        self.capability_subjects.append(canonical_agent_entity_id)
+        grant_records = self.capability_grants
+        if grant_records is None:
+            grant_records = [
+                {
+                    "tenant_id": tenant_id,
+                    "agent_id": canonical_agent_entity_id,
+                    "grantee_entity_id": canonical_agent_entity_id,
+                    "authorization_id": "capability-grant-1",
+                    "authorization_kind": "capability",
+                    "capability_id": "capability-search",
+                    "scope": {
+                        "actions": ["invoke"],
+                        "resources": ["capability:capability-search"],
+                    },
+                    "state": "active",
+                    "starts_at": "2026-10-01T00:00:00Z",
+                    "created_at": "2026-10-01T00:00:00Z",
+                }
+            ]
         rows = await self._rows(
             "capability_access_profile",
             [
                 {
                     "tenant_id": tenant_id,
                     "agent_id": agent_id,
+                    "canonical_agent_entity_id": canonical_agent_entity_id,
+                    "canonical_grant_records": grant_records,
+                    "canonical_grant_read_complete": True,
                     "profile": {
                         "subject": {"kind": "agent", "id": agent_id},
                         "profile_known": True,
@@ -320,6 +360,12 @@ class FakeSource:
                     "agent_id": agent_id,
                     "subject_binding_basis": "exact_tenant_inbox_agent_id",
                     "inbox_obs_id": "inbox-1",
+                    "inbox_evidence_ref": {
+                        "id": "inbox-1",
+                        "type": "event",
+                        "source": "obs_agent_inboxes",
+                        "observedAt": "2026-10-01T00:00:00Z",
+                    },
                     "message_obs_id": "message-1",
                     "thread_obs_id": "thread-1",
                     "direction": "outbound",
@@ -338,6 +384,63 @@ class FakeSource:
 
 def _sections(result):
     return {section.id: section for section in result.sections}
+
+
+@pytest.mark.asyncio
+async def test_repository_agent_communications_proves_exact_inbox_message_join():
+    class Inboxes:
+        async def find_many(self, *, filters, limit):
+            assert filters == {"tenant_id": TENANT, "agent_id": AGENT}
+            assert limit == 11
+            return [
+                {
+                    "tenant_id": TENANT,
+                    "agent_id": AGENT,
+                    "inbox_obs_id": "inbox-1",
+                    "observed_at": "2026-10-01T00:00:00Z",
+                    "email_address": "private-inbox@example.test",
+                },
+                {
+                    "tenant_id": "other-tenant",
+                    "agent_id": AGENT,
+                    "inbox_obs_id": "foreign-inbox",
+                },
+            ]
+
+    class Messages:
+        async def find_many(self, *, filters, limit):
+            assert filters == {"tenant_id": TENANT, "inbox_obs_id": "inbox-1"}
+            assert limit == 11
+            return [
+                {
+                    "tenant_id": TENANT,
+                    "inbox_obs_id": "inbox-1",
+                    "message_obs_id": "message-1",
+                    "observed_at": "2026-10-02T00:00:00Z",
+                    "subject": "private message subject",
+                },
+                {
+                    "tenant_id": "other-tenant",
+                    "inbox_obs_id": "inbox-1",
+                    "message_obs_id": "foreign-message",
+                },
+            ]
+
+    source = RepositoryAgent360Source.__new__(RepositoryAgent360Source)
+    source._inboxes = Inboxes()
+    source._messages = Messages()
+
+    batch = await source.communications(TENANT, AGENT, 10)
+
+    assert batch.scope_mismatch is True
+    assert batch.truncated is False
+    assert len(batch.rows) == 1
+    row = batch.rows[0]
+    assert row["message_obs_id"] == "message-1"
+    assert row["subject_binding_basis"] == "exact_tenant_inbox_agent_id"
+    assert row["inbox_evidence_ref"]["source"] == "obs_agent_inboxes"
+    assert row["inbox_evidence_ref"]["id"] == "inbox-1"
+    assert "private-inbox@example.test" not in str(row)
 
 
 @pytest.mark.asyncio
@@ -560,7 +663,7 @@ async def test_agent360_does_not_attach_stale_active_status_to_changed_delegatio
     assert conflict["evidenceRefs"][0]["source"] == "delegations"
     assert conflict["evidenceRefs"][0]["id"] == "delegation-in-1"
     assert disputed_claim.claimState == EpistemicStatus.DISPUTED
-    assert disputed_claim.domainSlotIds == ["authority_and_delegation"]
+    assert disputed_claim.domainSlotIds == ["delegation_chain", "authority_check"]
     assert {ref.source for ref in disputed_claim.evidenceRefs} == {"delegations"}
     assert "agent_delegation_active_record_conflict" in result.degradedReasons
 
@@ -614,7 +717,12 @@ async def test_agent360_projects_scoped_evidence_without_inventing_authority_or_
     assert access_profile["authorization"]["activeGrantRecordIds"] == [
         "capability-grant-1"
     ]
+    assert access_profile["authorization"]["canonicalAgentEntityId"] == "canonical-agent-a"
+    assert source.capability_subjects == ["canonical-agent-a"]
     assert access_profile["capabilities"][0]["invokeGrantCoversCapability"] is True
+    assert access_profile["capabilities"][0]["activeGrantRecordIds"] == [
+        "capability-grant-1"
+    ]
     assert any(
         ref["id"] == "capability-grant-1" and ref["source"] == "delegations"
         for ref in access_profile["evidenceRefs"]
@@ -651,6 +759,22 @@ async def test_agent360_projects_scoped_evidence_without_inventing_authority_or_
             },
         }
     ]
+    decision_claim = next(
+        claim
+        for claim in result.claims
+        if claim.kind == "server_recorded_delegation_decision"
+    )
+    assert decision_claim.domainSlotIds == [
+        "authority_envelope",
+        "authority_check",
+        "policy_boundary",
+    ]
+    policy_boundary = sections["policy_boundary"]
+    assert policy_boundary.state == "degraded"
+    assert policy_boundary.content["effectivePolicyState"] == "unknown"
+    assert policy_boundary.content["decisionScope"] == "historical_action_scoped_only"
+    assert policy_boundary.content["decisions"][0]["id"] == decision_claim.id
+    assert "standing_policy_boundary_not_exposed" in policy_boundary.warnings
     assert authority["delegationRecords"][0]["recordState"] == "active_as_reported_by_repository"
     assert authority["delegationRecords"][0]["authorizationDecision"] == "unknown"
     assert authority["delegationRecords"][0]["authorizationKind"] == "capability"
@@ -693,7 +817,11 @@ async def test_agent360_projects_scoped_evidence_without_inventing_authority_or_
     ]
     assert len(party_claims) == 2
     assert all(claim.claimState == EpistemicStatus.RESOLVED for claim in party_claims)
-    assert all(claim.domainSlotIds == ["authority_and_delegation"] for claim in party_claims)
+    assert all(
+        claim.domainSlotIds
+        == ["owner_delegator", "delegation_chain", "actor_attribution"]
+        for claim in party_claims
+    )
     assert all({ref.source for ref in claim.evidenceRefs} == {"delegations", "entities"} for claim in party_claims)
     assert all(
         claim.kind != "canonically_resolved_delegation_party"
@@ -748,6 +876,266 @@ async def test_agent360_projects_scoped_evidence_without_inventing_authority_or_
 
 
 @pytest.mark.asyncio
+async def test_agent360_keeps_capability_coverage_partial_without_exact_canonical_grant():
+    foreign_grant = {
+        "tenant_id": "tenant-b",
+        "agent_id": "canonical-agent-a",
+        "grantee_entity_id": "canonical-agent-a",
+        "authorization_id": "foreign-capability-grant",
+        "authorization_kind": "capability",
+        "capability_id": "capability-search",
+        "scope": {
+            "actions": ["invoke"],
+            "resources": ["capability:capability-search"],
+        },
+        "state": "active",
+    }
+    result = await Agent360Provider(FakeSource(capability_grants=[foreign_grant])).project(
+        _request(), _context()
+    )
+    authority = next(
+        item
+        for item in _sections(result)["state"].content["dimensions"]
+        if item["id"] == "authority_and_delegation"
+    )
+    access_profile = authority["content"]["capabilityAccessProfile"]
+
+    assert access_profile["state"] == "partial"
+    assert access_profile["counts"] is None
+    assert access_profile["authorization"]["known"] is False
+    assert access_profile["authorization"]["activeGrantCount"] is None
+    assert access_profile["capabilities"][0]["invokeGrantCoversCapability"] is None
+    assert access_profile["authorization"]["activeGrantRecordIds"] == []
+    assert "canonical_capability_grant_read_incomplete" in access_profile["missingInputs"]
+    assert not any(claim.domainSlotIds == ["capabilities"] for claim in result.claims)
+
+
+@pytest.mark.asyncio
+async def test_agent360_evidence_trace_requires_refs_and_obeys_frame_policy():
+    result = await Agent360Provider(FakeSource()).project(_request(), _context())
+    evidence_section = _sections(result)["evidence"]
+    trace_claim = next(
+        claim for claim in result.claims if claim.kind == "agent360_validated_evidence_trace"
+    )
+    assert trace_claim.domainSlotIds == ["evidence_trace"]
+    assert trace_claim.claimState == EpistemicStatus.OBSERVED
+    assert trace_claim.evidenceRefs
+    assert {(ref.id, ref.source) for ref in trace_claim.evidenceRefs} <= {
+        (ref["id"], ref["source"]) for ref in evidence_section.content["evidence"]
+    }
+
+    frame_request = Experience360FrameRequest(
+        surfaceId="agent360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+        requestedSlotIds=["evidence_trace"],
+        includeEvidence=True,
+    )
+    allowed = compose_experience360_frame(
+        frame_request,
+        [result],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+    )
+    slot = allowed.slots[0]
+    assert slot.id == "evidence_trace"
+    assert slot.content is not None
+    assert any(claim.kind == trace_claim.kind for claim in slot.claims)
+    assert slot.evidenceRefs and slot.provenance
+
+    denied = compose_experience360_frame(
+        frame_request,
+        [result],
+        frame_policy=Experience360PolicyDisposition(state="denied"),
+    )
+    suppressed = denied.slots[0]
+    assert suppressed.state == "suppressed"
+    assert suppressed.content is None
+    assert suppressed.claims == []
+    assert suppressed.evidenceRefs == []
+
+
+@pytest.mark.asyncio
+async def test_agent360_communications_claim_cites_inbox_and_message_under_policy():
+    result = await Agent360Provider(FakeSource()).project(_request(), _context())
+    communication_claim = next(
+        claim for claim in result.claims if claim.kind == "agent_communication_observation"
+    )
+    assert communication_claim.domainSlotIds == ["communications"]
+    assert {(ref.source, ref.id) for ref in communication_claim.evidenceRefs} == {
+        ("obs_agent_inboxes", "inbox-1"),
+        ("obs_agent_messages", "message-1"),
+    }
+    communication = _sections(result)["interactions"].content["communications"]
+    assert {
+        (ref["source"], ref["id"])
+        for ref in communication["messages"][0]["bindingEvidenceRefs"]
+    } == {
+        ("obs_agent_inboxes", "inbox-1"),
+        ("obs_agent_messages", "message-1"),
+    }
+
+    frame_request = Experience360FrameRequest(
+        surfaceId="agent360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT),
+        requestedSlotIds=["communications"],
+        includeEvidence=True,
+    )
+    allowed = compose_experience360_frame(
+        frame_request,
+        [result],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+    )
+    slot = allowed.slots[0]
+    assert slot.id == "communications"
+    assert slot.content is not None
+    assert any(claim.kind == communication_claim.kind for claim in slot.claims)
+    assert {ref.source for ref in slot.evidenceRefs} >= {
+        "obs_agent_inboxes",
+        "obs_agent_messages",
+    }
+    assert slot.provenance
+
+    denied = compose_experience360_frame(
+        frame_request,
+        [result],
+        frame_policy=Experience360PolicyDisposition(state="denied"),
+    )
+    assert denied.slots[0].state == "suppressed"
+    assert denied.slots[0].content is None
+    assert denied.slots[0].claims == []
+    assert denied.slots[0].evidenceRefs == []
+
+
+@pytest.mark.asyncio
+async def test_agent360_communication_without_inbox_proof_or_in_window_is_unclaimed():
+    class UnprovenCommunicationSource(FakeSource):
+        async def communications(self, tenant_id, agent_id, limit):
+            batch = await super().communications(tenant_id, agent_id, limit)
+            rows = [{**row, "inbox_evidence_ref": None} for row in batch.rows]
+            return Agent360ReadBatch(rows=rows)
+
+    unproven = await Agent360Provider(UnprovenCommunicationSource()).project(
+        _request(), _context()
+    )
+    assert not any(
+        claim.kind == "agent_communication_observation" for claim in unproven.claims
+    )
+    assert _sections(unproven)["interactions"].content["communications"]["messages"] == []
+    assert "agent_source_scope_mismatch" in unproven.degradedReasons
+
+    earlier_window = _request(
+        time_range={"from": "2026-10-03T00:00:00Z", "to": "2026-10-03T23:59:59Z"}
+    )
+    outside = await Agent360Provider(FakeSource()).project(earlier_window, _context())
+    assert not any(
+        claim.kind == "agent_communication_observation" for claim in outside.claims
+    )
+    outside_communications = _sections(outside)["interactions"].content["communications"]
+    assert outside_communications["messages"] == []
+    assert outside_communications["count"] == 0
+    assert "event_time_window" in outside_communications["temporalSemantics"]
+
+
+@pytest.mark.asyncio
+async def test_agent360_evidence_trace_does_not_claim_empty_or_foreign_rows():
+    empty = await Agent360Provider(FakeSource(empty=True)).project(_request(), _context())
+
+    class ForeignOnlySource(FakeSource):
+        async def agent_configs(self, tenant_id, agent_id):
+            return [{"tenant_id": "foreign-tenant", "agent_id": agent_id}]
+
+    foreign = await Agent360Provider(ForeignOnlySource(empty=True)).project(
+        _request(), _context()
+    )
+    for result in (empty, foreign):
+        assert not any(
+            claim.kind == "agent360_validated_evidence_trace" for claim in result.claims
+        )
+        frame = compose_experience360_frame(
+            Experience360FrameRequest(
+                surfaceId="agent360",
+                tenantId=TENANT,
+                subject=ProjectionSubject(kind="agent", id=AGENT),
+                requestedSlotIds=["evidence_trace"],
+                includeEvidence=True,
+            ),
+            [result],
+            frame_policy=Experience360PolicyDisposition(state="allowed"),
+        )
+        assert frame.slots[0].state != "available"
+        assert frame.slots[0].content is None
+        assert frame.slots[0].claims == []
+        assert frame.slots[0].evidenceRefs == []
+
+    no_claims = await Agent360Provider(FakeSource()).project(
+        _request(include_claims=False), _context()
+    )
+    assert no_claims.claims == []
+    assert _sections(no_claims)["evidence"].content["evidence"]
+
+
+@pytest.mark.asyncio
+async def test_agent360_window_evidence_trace_claims_only_admitted_observations():
+    request = _request(
+        time_range={"from": "2026-10-03T00:00:00Z", "to": "2026-10-03T23:59:59Z"}
+    )
+    result = await Agent360Provider(FakeSource()).project(request, _context())
+
+    trace_claim = next(
+        claim for claim in result.claims if claim.kind == "agent360_validated_evidence_trace"
+    )
+    assert {(ref.source, ref.id) for ref in trace_claim.evidenceRefs} == {
+        ("obs_agent_activities", "obs-1")
+    }
+
+    empty_window = _request(
+        time_range={"from": "2026-10-09T00:00:00Z", "to": "2026-10-09T23:59:59Z"}
+    )
+    empty_result = await Agent360Provider(FakeSource()).project(empty_window, _context())
+    assert not any(
+        claim.kind == "agent360_validated_evidence_trace" for claim in empty_result.claims
+    )
+
+
+@pytest.mark.asyncio
+async def test_agent360_policy_boundary_is_unknown_without_a_recorded_action_decision():
+    class NoActionDecisionSource(FakeSource):
+        async def executions(self, tenant_id, agent_id, limit):
+            rows = await super().executions(tenant_id, agent_id, limit)
+            rows[0]["policy_log"].pop("delegation_check", None)
+            return rows
+
+    result = await Agent360Provider(NoActionDecisionSource()).project(_request(), _context())
+    policy_boundary = _sections(result)["policy_boundary"]
+
+    assert policy_boundary.state == "unknown"
+    assert policy_boundary.content is None
+    assert policy_boundary.warnings == ["standing_policy_boundary_not_exposed"]
+    assert not any(
+        claim.kind == "server_recorded_delegation_decision" for claim in result.claims
+    )
+
+
+@pytest.mark.asyncio
+async def test_agent360_policy_boundary_degrades_when_execution_decision_read_is_truncated():
+    class TruncatedExecutionSource(FakeSource):
+        async def executions(self, tenant_id, agent_id, limit):
+            rows = await super().executions(tenant_id, agent_id, limit)
+            return Agent360ReadBatch(rows=rows, truncated=True)
+
+    result = await Agent360Provider(TruncatedExecutionSource()).project(_request(), _context())
+    policy_boundary = _sections(result)["policy_boundary"]
+
+    assert policy_boundary.state == "degraded"
+    assert policy_boundary.content["state"] == "partial"
+    assert policy_boundary.content["effectivePolicyState"] == "unknown"
+    assert policy_boundary.content["decisionScope"] == "historical_action_scoped_only"
+    assert len(policy_boundary.content["decisions"]) == 1
+    assert "action_scoped_policy_decision_read_truncated" in policy_boundary.warnings
+
+
+@pytest.mark.asyncio
 async def test_agent360_keeps_unresolved_delegation_party_unknown_and_degrades_authority():
     class MissingGrantorIdentitySource(FakeSource):
         async def delegation_party_identities(self, tenant_id, party_entity_ids):
@@ -783,7 +1171,11 @@ async def test_agent360_keeps_unresolved_delegation_party_unknown_and_degrades_a
     assert grantor["party"] is None
     assert grantor["reason"] == "no tenant-scoped canonical entity row resolved this party ID"
     assert unknown_claim.claimState == EpistemicStatus.UNKNOWN
-    assert unknown_claim.domainSlotIds == ["authority_and_delegation"]
+    assert unknown_claim.domainSlotIds == [
+        "owner_delegator",
+        "delegation_chain",
+        "actor_attribution",
+    ]
     assert {ref.source for ref in unknown_claim.evidenceRefs} == {"delegations"}
     assert "agent_delegation_party_identity_unresolved" in result.degradedReasons
 

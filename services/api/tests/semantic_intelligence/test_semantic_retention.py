@@ -21,6 +21,7 @@ from intelligence.semantic_intelligence.retention import sweep_tenant
 TENANT = "tenant_retain"
 
 _SILVER_TABLE = "silver_semantic_observations"
+_MEMORY_TABLE = "semantic_memory_records"
 _GOLD_TABLE = "gold_entity_semantic_state"
 
 
@@ -47,6 +48,28 @@ async def _seed_silver(record_id: str, subject: str, age_days: float, *, rclass=
                 "retention_class": rclass,
                 "occurred_at": occurred.isoformat(),
                 "status": "classified",
+            },
+        }
+    )
+
+
+async def _seed_memory(record_id: str, subject: str, age_days: float):
+    repo = SemanticFactRepository(_MEMORY_TABLE)
+    occurred = utc_now() - timedelta(days=age_days)
+    await repo.upsert(
+        {
+            "id": record_id,
+            "tenant_id": TENANT,
+            "subject_ref": subject,
+            "occurred_at": occurred,
+            "idempotency_key": f"semantic-memory:{TENANT}:{record_id}",
+            "data": {
+                "memory_id": record_id,
+                "tenant_id": TENANT,
+                "subject_ref": subject,
+                "retention_class": "standard_90d",
+                "status": "classified",
+                "idempotency_key": f"semantic-memory:{TENANT}:{record_id}",
             },
         }
     )
@@ -84,6 +107,17 @@ async def test_sweep_tombstones_aged_silver_keeps_fresh():
     assert report["tombstoned_total"] == 1
     assert _status(_SILVER_TABLE, "aged") == "expired"
     assert _status(_SILVER_TABLE, "fresh") == "classified"
+
+
+async def test_sweep_tombstones_aged_memory_keeps_fresh():
+    await _seed_memory("mem_aged", "s_mem_aged", age_days=200)
+    await _seed_memory("mem_fresh", "s_mem_fresh", age_days=1)
+
+    report = await sweep_tenant(TENANT)
+
+    assert report["tombstoned"]["semantic_memory_records"] == 1
+    assert _status(_MEMORY_TABLE, "mem_aged") == "expired"
+    assert _status(_MEMORY_TABLE, "mem_fresh") == "classified"
 
 
 async def test_sweep_deletes_aged_gold_keeps_fresh():

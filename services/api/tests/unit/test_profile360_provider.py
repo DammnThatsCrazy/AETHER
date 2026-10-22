@@ -9,20 +9,31 @@ from types import SimpleNamespace
 
 from graph.operational_intelligence.models import TimeRangeFilter
 from graph.temporal360.history_replay import SubjectEvent, SubjectHistory
+from journeys.communication360.contracts import (
+    CommunicationConsentEvidence,
+    CommunicationMessage,
+)
+from shared.intelligence_projections.composition import compose_experience360_frame
 from shared.intelligence_projections.contracts import (
     EvidenceRef,
+    Experience360FrameRequest,
+    Experience360PolicyDisposition,
     ProjectionRequest,
     ProjectionSubject,
 )
 from shared.intelligence_projections.registry import ProviderRegistry
 from identity.profile.profile360_provider import (
+    CanonicalEntityRead,
+    CommunicationRead,
     EventRead,
     HistoryRead,
     IdentityBindingRead,
+    JourneyRead,
     OUTPUT_SECTIONS,
     Profile360Provider,
     ProfileRead,
     RepositoryProfile360Source,
+    SessionIdentityRead,
 )
 
 
@@ -70,9 +81,11 @@ class _FakeProfileSource:
         self,
         *,
         identity: Optional[ProfileRead] = None,
+        entity: Optional[CanonicalEntityRead] = None,
         events: Optional[EventRead] = None,
         history: Optional[HistoryRead] = None,
         binding: Optional[IdentityBindingRead] = None,
+        communications: Optional[CommunicationRead] = None,
         fail: bool = False,
     ) -> None:
         self.identity = identity or ProfileRead(
@@ -84,6 +97,19 @@ class _FakeProfileSource:
                 "created_at": "2026-01-01T00:00:00Z",
                 "updated_at": "2026-05-30T00:00:00Z",
                 "email": "private@example.invalid",
+            },
+            available=True,
+            scope_known=True,
+        )
+        self.entity = entity or CanonicalEntityRead(
+            record={
+                "tenant_id": TENANT,
+                "entity_id": USER_ID,
+                "entity_type": "human",
+                "display_name": "Canonical Test Name",
+                "created_at": "2026-01-01T00:00:00Z",
+                "updated_at": "2026-05-29T00:00:00Z",
+                "metadata": {"private": "must not escape"},
             },
             available=True,
             scope_known=True,
@@ -114,6 +140,9 @@ class _FakeProfileSource:
             scope_known=False,
             reason="identity_binding_not_configured",
         )
+        self.communications = communications or CommunicationRead(
+            rows=[], available=True, scope_known=True
+        )
         self.fail = fail
         self.calls: list[tuple] = []
 
@@ -129,6 +158,12 @@ class _FakeProfileSource:
             raise RuntimeError("identity binding database detail must not escape")
         return self.binding
 
+    async def canonical_entity(self, tenant_id, subject):
+        self.calls.append(("entity", tenant_id, subject.kind, subject.id))
+        if self.fail:
+            raise RuntimeError("entity database detail must not escape")
+        return self.entity
+
     async def analytics_events(
         self, tenant_id, subject, *, limit, start, end
     ):
@@ -143,14 +178,30 @@ class _FakeProfileSource:
             raise RuntimeError("ledger detail must not escape")
         return self.history
 
+    async def communications_for_profile(
+        self, tenant_id, subject, *, limit, start
+    ):
+        self.calls.append(("communications", tenant_id, subject.kind, subject.id, limit, start))
+        if self.fail:
+            raise RuntimeError("communication database detail must not escape")
+        return self.communications
 
-def _request(*, mode: Optional[str] = None, time_range=None) -> ProjectionRequest:
+
+def _request(
+    *,
+    mode: Optional[str] = None,
+    time_range=None,
+    include_sections: Optional[list[str]] = None,
+    include_claims: Optional[bool] = None,
+) -> ProjectionRequest:
     return ProjectionRequest(
         projectionId="profile360",
         tenantId=TENANT,
         subject=ProjectionSubject(kind="entity", id=USER_ID),
         temporalMode=mode,
         timeRange=time_range,
+        includeSections=include_sections,
+        includeClaims=include_claims,
     )
 
 
@@ -161,6 +212,65 @@ async def _project(provider: Profile360Provider, request: ProjectionRequest):
 
 def _section(result, section_id: str):
     return next(section for section in result.sections if section.id == section_id)
+
+
+def _communication_message(
+    *,
+    tenant_id: str = TENANT,
+    recipient_entity_id: Optional[str] = USER_ID,
+    sender_entity_id: Optional[str] = None,
+    binding_id: str = "recipient-binding-1",
+    consent_state: str = "recorded",
+) -> CommunicationMessage:
+    binding_ref = EvidenceRef(
+        id=binding_id,
+        type="entity",
+        source="comms_provider_identities",
+        uri=f"store://comms_provider_identities/{binding_id}",
+    )
+    fact_id = "silver-fact-profile-communication-1"
+    fact_ref = EvidenceRef(
+        id=fact_id,
+        type="event",
+        source="services/api/journeys/comms/silver_comms_facts",
+        uri=f"store://silver_comms_facts/{fact_id}",
+    )
+    consent = (
+        CommunicationConsentEvidence(
+            state="recorded",
+            purpose="marketing",
+            receipt_id="consent-receipt-1",
+            subject_entity_id=recipient_entity_id,
+            identity_binding_id=binding_id,
+            evidence_refs=[
+                EvidenceRef(
+                    id="consent-receipt-1",
+                    type="event",
+                    source="governance.consent.authority",
+                    uri="store://consent_receipts/consent-receipt-1",
+                ),
+                binding_ref,
+            ],
+        )
+        if consent_state == "recorded"
+        else CommunicationConsentEvidence(state="unknown")
+    )
+    return CommunicationMessage(
+        message_id="canonical-message-1",
+        tenant_id=tenant_id,
+        fact_id=fact_id,
+        channel="email",
+        direction="outbound",
+        communication_state="delivered",
+        sender_entity_id=sender_entity_id,
+        recipient_entity_id=recipient_entity_id,
+        recipient_identity_binding_id=binding_id,
+        recipient_identity_evidence_ref=binding_ref,
+        occurred_at="2026-05-20T10:00:00Z",
+        consent_evidence=consent,
+        claim_state="observed",
+        evidence_refs=[fact_ref],
+    )
 
 
 @pytest.mark.asyncio
@@ -180,28 +290,225 @@ async def test_window_projects_catalog_slots_and_evidence_without_raw_payloads()
     assert source.calls[0] == ("identity", TENANT, USER_ID)
     event_call = next(call for call in source.calls if call[0] == "events")
     assert event_call[-2:] == (WINDOW_START, WINDOW_END)
-    assert source.calls[-1][0] == "history"
-    assert source.calls[-1][2] == f"{TENANT}:user:{USER_ID}"
+    history_call = next(call for call in source.calls if call[0] == "history")
+    assert history_call[2] == f"{TENANT}:user:{USER_ID}"
 
     summary = _section(result, "summary")
     assert summary.content["identity"]["record"]["displayName"] == "Test Profile"
     assert "email" not in summary.content["identity"]["record"]
+    canonical_entity = summary.content["identity"]["canonicalEntity"]
+    assert canonical_entity["state"] == "available"
+    assert canonical_entity["record"] == {
+        "id": USER_ID,
+        "type": "human",
+        "displayName": "Canonical Test Name",
+        "createdAt": "2026-01-01T00:00:00Z",
+        "updatedAt": "2026-05-29T00:00:00Z",
+    }
+    assert "private" not in str(canonical_entity)
+    assert canonical_entity["freshness"]["state"] == "unknown"
+    assert canonical_entity["freshness"]["policy"] == "not_evaluated"
+    assert summary.canonicalAuthorityRefs == ["entity_registry", "identity"]
     timeline = _section(result, "timeline")
     assert timeline.content["items"][0]["id"] == "event-profile-1"
     assert "private_payload" not in str(timeline.content)
+    assert timeline.canonicalAuthorityRefs == ["graph", "observations", "temporal"]
     assert _section(result, "interactions").state == "unknown"
-    assert _section(result, "state").content["dimensions"][-1]["state"] == "unknown"
+    dimensions = {
+        item["id"]: item for item in _section(result, "state").content["dimensions"]
+    }
+    assert dimensions["freshness"]["state"] == "unknown"
+    assert dimensions["known_unknown_resolution"]["state"] == "available"
+    assert dimensions["session_history"]["state"] == "unknown"
+    assert "entity_registry" in _section(result, "evidence").canonicalAuthorityRefs
 
     identity_claim = next(
         claim for claim in result.claims if claim.id == "profile360.identity_record_present"
     )
-    assert identity_claim.domainSlotIds == ["entity_identity"]
+    assert identity_claim.domainSlotIds == ["identity_spine"]
     assert identity_claim.evidenceRefs[0].source == "identity_profiles"
     activity_claim = next(
         claim for claim in result.claims if claim.id == "profile360.activity_records_observed"
     )
-    assert "observed_state_and_activity" in activity_claim.domainSlotIds
+    assert "evidence_trace" in activity_claim.domainSlotIds
     assert activity_claim.evidenceRefs
+
+
+@pytest.mark.asyncio
+async def test_profile_communications_requires_exact_recipient_identity_and_consent():
+    source = _FakeProfileSource(
+        communications=CommunicationRead(
+            rows=[_communication_message()], available=True, scope_known=True
+        )
+    )
+    result = await _project(
+        Profile360Provider(source),
+        _request(
+            mode="window",
+            time_range=TimeRangeFilter(**{"from": WINDOW_START, "to": WINDOW_END}),
+            include_sections=["interactions"],
+        ),
+    )
+
+    assert [call[0] for call in source.calls] == ["identity", "entity", "communications"]
+    assert source.calls[-1] == (
+        "communications", TENANT, "entity", USER_ID, 100, WINDOW_START
+    )
+    section = _section(result, "interactions")
+    assert section.state == "degraded"
+    assert section.canonicalAuthorityRefs == ["communication_facts"]
+    assert section.content["coverage"] == "recipient_message_spine_with_recorded_consent_only"
+    assert section.content["complete"] is False
+    item = section.content["items"][0]
+    assert item["messageId"] == "canonical-message-1"
+    assert item["occurredAt"] == "2026-05-20T10:00:00Z"
+    assert item["channel"] == "email"
+    assert item["direction"] == "outbound"
+    assert item["communicationState"] == "delivered"
+    assert item["consentPurpose"] == "marketing"
+    assert {
+        (ref["source"], ref["id"]) for ref in item["evidenceRefs"]
+    } == {
+        ("services/api/journeys/comms/silver_comms_facts", "silver-fact-profile-communication-1"),
+        ("comms_provider_identities", "recipient-binding-1"),
+        ("governance.consent.authority", "consent-receipt-1"),
+    }
+    claim = result.claims[0]
+    assert claim.domainSlotIds == ["communications"]
+    assert {ref.source for ref in claim.evidenceRefs} == {
+        "services/api/journeys/comms/silver_comms_facts",
+        "comms_provider_identities",
+        "governance.consent.authority",
+    }
+    assert "private@example.invalid" not in str(section.content)
+
+
+@pytest.mark.asyncio
+async def test_profile_communications_suppresses_unknown_consent_and_sender_only_links():
+    unknown_consent = _communication_message(consent_state="unknown")
+    sender_only = _communication_message(
+        recipient_entity_id=None,
+        sender_entity_id=USER_ID,
+        consent_state="unknown",
+    )
+    source = _FakeProfileSource(
+        communications=CommunicationRead(
+            rows=[unknown_consent, sender_only], available=True, scope_known=True
+        )
+    )
+    result = await _project(
+        Profile360Provider(source), _request(include_sections=["interactions"])
+    )
+
+    section = _section(result, "interactions")
+    assert section.state == "unknown"
+    assert section.content["items"] == []
+    assert section.content["reasonCode"] == "profile_communication_consent_evidence_unavailable"
+    assert result.claims == []
+    assert "canonical-message-1" not in str(section.content)
+
+
+@pytest.mark.asyncio
+async def test_profile_communications_reject_cross_tenant_message_rows():
+    source = _FakeProfileSource(
+        communications=CommunicationRead(
+            rows=[_communication_message(tenant_id="other-tenant")],
+            available=True,
+            scope_known=True,
+        )
+    )
+    result = await _project(
+        Profile360Provider(source), _request(include_sections=["interactions"])
+    )
+
+    section = _section(result, "interactions")
+    assert section.state == "unknown"
+    assert section.content["reasonCode"] == "profile_communication_source_scope_mismatch"
+    assert section.content["items"] == []
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_profile_communications_require_identity_binding_evidence():
+    message = _communication_message().model_copy(
+        update={"recipient_identity_evidence_ref": None}
+    )
+    source = _FakeProfileSource(
+        communications=CommunicationRead(
+            rows=[message], available=True, scope_known=True
+        )
+    )
+    result = await _project(
+        Profile360Provider(source), _request(include_sections=["interactions"])
+    )
+
+    section = _section(result, "interactions")
+    assert section.state == "unknown"
+    assert section.content["reasonCode"] == "profile_communication_identity_binding_unproven"
+    assert section.content["items"] == []
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_profile_communications_do_not_read_current_rows_for_historical_request():
+    source = _FakeProfileSource(
+        communications=CommunicationRead(
+            rows=[_communication_message()], available=True, scope_known=True
+        )
+    )
+    request = _request(include_sections=["interactions"]).model_copy(
+        update={"temporalMode": "as_of", "asOf": AS_OF}
+    )
+    result = await _project(Profile360Provider(source), request)
+
+    assert not any(call[0] == "communications" for call in source.calls)
+    section = _section(result, "interactions")
+    assert section.state == "unknown"
+    assert section.content["reasonCode"] == "profile_communication_historical_state_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_repository_profile_communication_read_is_exact_bounded_participant_query(monkeypatch):
+    message = _communication_message()
+
+    class _Silver:
+        def __init__(self):
+            self.calls = []
+
+        async def available(self, tenant_id):
+            assert tenant_id == TENANT
+            self.calls.append(("available", tenant_id))
+            return True
+
+        async def messages(self, tenant_id, *, participant_entity_id, since, limit, **kwargs):
+            assert (tenant_id, participant_entity_id, since, limit) == (
+                TENANT, USER_ID, WINDOW_START, 4
+            )
+            self.calls.append(("messages", tenant_id, participant_entity_id, since, limit))
+            return [message, message.model_copy(update={"message_id": "canonical-message-2"}),
+                    message.model_copy(update={"message_id": "canonical-message-3"}),
+                    message.model_copy(update={"message_id": "canonical-message-4"})]
+
+    silver = _Silver()
+    monkeypatch.setattr(
+        "journeys.communication360.reader.SilverCommsSource", lambda: silver
+    )
+    read = await RepositoryProfile360Source().communications_for_profile(
+        TENANT,
+        ProjectionSubject(kind="entity", id=USER_ID),
+        limit=3,
+        start=WINDOW_START,
+    )
+
+    assert silver.calls[0] == ("available", TENANT)
+    assert read.available is True
+    assert read.scope_known is True
+    assert read.truncated is True
+    assert [row.message_id for row in read.rows] == [
+        "canonical-message-1",
+        "canonical-message-2",
+        "canonical-message-3",
+    ]
 
 
 @pytest.mark.asyncio
@@ -213,13 +520,429 @@ async def test_unresolved_empty_reads_remain_unknown_not_known_empty():
             scope_known=False,
             reason="identity_subject_not_resolved",
         ),
+        entity=CanonicalEntityRead(
+            record=None,
+            available=True,
+            scope_known=False,
+            reason="entity_registry_identity_not_found",
+        ),
         events=EventRead(rows=[], available=True, scope_known=True),
         history=HistoryRead(history=_history(present=False, event_count=0), available=True),
     )
     result = await _project(Profile360Provider(source), _request())
 
-    assert _section(result, "state").content["dimensions"][0]["state"] == "unknown"
-    assert _section(result, "state").content["dimensions"][1]["state"] == "unknown"
+    dimensions = {
+        item["id"]: item for item in _section(result, "state").content["dimensions"]
+    }
+    assert dimensions["identity"]["state"] == "unknown"
+    assert dimensions["known_unknown_resolution"]["state"] == "unknown"
+    assert _section(result, "evidence").content["coverage"]["observations"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_identity_only_section_request_skips_activity_and_history_sources():
+    source = _FakeProfileSource()
+    result = await _project(
+        Profile360Provider(source), _request(include_sections=["summary"])
+    )
+
+    assert [section.id for section in result.sections] == ["summary"]
+    assert {call[0] for call in source.calls} == {"identity", "entity"}
+    assert not any(call[0] in {"events", "history"} for call in source.calls)
+
+
+@pytest.mark.asyncio
+async def test_timeline_only_request_skips_profile_attribute_read():
+    source = _FakeProfileSource()
+    result = await _project(
+        Profile360Provider(source), _request(include_sections=["timeline"])
+    )
+
+    assert [section.id for section in result.sections] == ["timeline"]
+    assert "identity" not in {call[0] for call in source.calls}
+    assert {call[0] for call in source.calls} == {"entity", "events", "history"}
+    assert source.calls[-1][0] == "history"
+
+
+@pytest.mark.asyncio
+async def test_include_claims_false_omits_claim_payloads():
+    result = await _project(
+        Profile360Provider(_FakeProfileSource()), _request(include_claims=False)
+    )
+
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_same_tenant_profile_record_for_a_different_subject_is_rejected():
+    source = _FakeProfileSource(
+        identity=ProfileRead(
+            record={
+                "tenant_id": TENANT,
+                "user_id": "user-other",
+                "display_name": "Wrong Profile",
+                "email": "wrong@example.invalid",
+            },
+            available=True,
+            scope_known=True,
+        )
+    )
+    result = await _project(Profile360Provider(source), _request())
+
+    summary = _section(result, "summary")
+    assert summary.content["identity"]["record"] is None
+    assert summary.content["identity"]["state"] == "unknown"
+    assert summary.content["identity"]["reason"] == "identity_record_subject_mismatch"
+    assert "Wrong Profile" not in str(result.sections)
+    assert "wrong@example.invalid" not in str(result.sections)
+    assert not any(claim.id == "profile360.identity_record_present" for claim in result.claims)
+
+
+@pytest.mark.asyncio
+async def test_canonical_entity_row_must_match_exact_tenant_and_subject():
+    source = _FakeProfileSource(
+        entity=CanonicalEntityRead(
+            record={
+                "tenant_id": "tenant-other",
+                "entity_id": USER_ID,
+                "entity_type": "human",
+                "display_name": "Foreign Entity",
+            },
+            available=True,
+            scope_known=True,
+        )
+    )
+    result = await _project(Profile360Provider(source), _request())
+
+    identity = _section(result, "summary").content["identity"]
+    assert identity["canonicalEntity"]["record"] is None
+    assert identity["canonicalEntity"]["state"] == "unknown"
+    assert identity["canonicalEntity"]["reason"] == "entity_registry_scope_mismatch"
+    assert "Foreign Entity" not in str(result.sections)
+    assert not any(claim.id == "profile360.canonical_entity_record_present" for claim in result.claims)
+
+
+@pytest.mark.asyncio
+async def test_repository_canonical_entity_read_filters_tenant_and_exact_id(monkeypatch):
+    class _Entities:
+        async def find_many(self, *, filters, limit):
+            assert filters == {"tenant_id": TENANT, "entity_id": USER_ID}
+            assert limit == 2
+            return [
+                {
+                    "tenant_id": TENANT,
+                    "entity_id": USER_ID,
+                    "entity_type": "human",
+                    "display_name": "Canonical Person",
+                }
+            ]
+
+    monkeypatch.setattr(
+        "repositories.repos.EntityRepository",
+        lambda: _Entities(),
+    )
+    entity = await RepositoryProfile360Source().canonical_entity(
+        TENANT, ProjectionSubject(kind="entity", id=USER_ID)
+    )
+
+    assert entity.available is True
+    assert entity.scope_known is True
+    assert entity.record["display_name"] == "Canonical Person"
+
+
+@pytest.mark.asyncio
+async def test_current_journey_participation_uses_exact_typed_profile_versions_only():
+    class _JourneySource(_FakeProfileSource):
+        async def current_journeys(self, tenant_id, subject, *, limit):
+            self.calls.append(("journeys", tenant_id, subject.kind, subject.id, limit))
+            return JourneyRead(
+                rows=[{
+                    "tenant_id": TENANT,
+                    "profile_id": USER_ID,
+                    "journey_type": "profile",
+                    "is_current": True,
+                    "journey_id": "journey-11",
+                    "journey_version_id": "journey-version-11",
+                    "journey_state": "open",
+                    "computed_at": "2026-05-30T00:00:00Z",
+                    "private_note": "must not escape",
+                }],
+                available=True,
+                scope_known=True,
+            )
+
+    source = _JourneySource()
+    result = await _project(
+        Profile360Provider(source), _request(include_sections=["journeys"])
+    )
+
+    assert [section.id for section in result.sections] == ["journeys"]
+    assert {call[0] for call in source.calls} == {"identity", "entity", "journeys"}
+    section = _section(result, "journeys")
+    assert section.state == "available"
+    assert section.canonicalAuthorityRefs == ["journeys"]
+    assert section.content["items"] == [{
+        "journeyId": "journey-11",
+        "versionId": "journey-version-11",
+        "journeyState": "open",
+        "computedAt": "2026-05-30T00:00:00Z",
+        "evidenceRef": {
+            "id": "journey-version-11",
+            "type": "document",
+            "source": "journey_versions",
+            "observedAt": "2026-05-30T00:00:00Z",
+                "confidence": None,
+                "uri": None,
+        },
+    }]
+    assert "private_note" not in str(result.sections)
+    assert len(result.claims) == 1
+    assert result.claims[0].domainSlotIds == ["journey_participation"]
+    assert result.claims[0].evidenceRefs[0].id == "journey-version-11"
+
+
+@pytest.mark.asyncio
+async def test_current_journey_participation_rejects_cross_tenant_source_row():
+    class _JourneySource(_FakeProfileSource):
+        async def current_journeys(self, tenant_id, subject, *, limit):
+            return JourneyRead(
+                rows=[{
+                    "tenant_id": "other-tenant",
+                    "profile_id": USER_ID,
+                    "journey_type": "profile",
+                    "is_current": True,
+                    "journey_id": "foreign-journey",
+                    "journey_version_id": "foreign-version",
+                    "private_note": "must not escape",
+                }],
+                available=True,
+                scope_known=True,
+            )
+
+    result = await _project(
+        Profile360Provider(_JourneySource()), _request(include_sections=["journeys"])
+    )
+    section = _section(result, "journeys")
+    assert section.state == "unknown"
+    assert section.content["reasonCode"] == "profile_journey_source_scope_mismatch"
+    assert "foreign-journey" not in str(result.sections)
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_bounded_journey_request_never_reads_current_journey_versions():
+    class _JourneySource(_FakeProfileSource):
+        async def current_journeys(self, tenant_id, subject, *, limit):
+            raise AssertionError("current journey authority must not be read")
+
+    source = _JourneySource()
+    result = await _project(
+        Profile360Provider(source),
+        _request(
+            mode="window",
+            time_range=TimeRangeFilter(**{"from": WINDOW_START, "to": WINDOW_END}),
+            include_sections=["journeys"],
+        ),
+    )
+    assert _section(result, "journeys").state == "unknown"
+    assert not any(call[0] in {"journeys", "events", "history"} for call in source.calls)
+
+
+@pytest.mark.asyncio
+async def test_repository_profile_journey_read_uses_typed_identity_and_bounded_query(monkeypatch):
+    class _Journeys:
+        async def find_current_for_profile(
+            self, tenant_id, profile_id, *, identity_type, limit
+        ):
+            assert (tenant_id, profile_id, identity_type, limit) == (
+                TENANT, USER_ID, "profile", 2
+            )
+            return [
+                {
+                    "tenant_id": TENANT,
+                    "profile_id": USER_ID,
+                    "journey_type": "profile",
+                    "is_current": True,
+                    "journey_id": f"journey-{index}",
+                    "journey_version_id": f"version-{index}",
+                }
+                for index in (1, 2)
+            ]
+
+    monkeypatch.setattr(
+        "journeys.measurement.repositories.journey_repo.JourneyRepository",
+        lambda: _Journeys(),
+    )
+    read = await RepositoryProfile360Source().current_journeys(
+        TENANT, ProjectionSubject(kind="entity", id=USER_ID), limit=1
+    )
+    assert read.available is True
+    assert read.scope_known is True
+    assert read.truncated is True
+    assert [row["journey_id"] for row in read.rows] == ["journey-1"]
+
+
+@pytest.mark.asyncio
+async def test_profile_journey_result_composes_into_exact_governed_frame_slot():
+    class _JourneySource(_FakeProfileSource):
+        async def current_journeys(self, tenant_id, subject, *, limit):
+            return JourneyRead(
+                rows=[{
+                    "tenant_id": TENANT,
+                    "profile_id": USER_ID,
+                    "journey_type": "profile",
+                    "is_current": True,
+                    "journey_id": "journey-composed",
+                    "journey_version_id": "journey-version-composed",
+                    "journey_state": "open",
+                    "computed_at": "2026-05-30T00:00:00Z",
+                }],
+                available=True,
+                scope_known=True,
+            )
+
+    projection = await _project(
+        Profile360Provider(_JourneySource()), _request(include_sections=["journeys"])
+    )
+    allowed = Experience360PolicyDisposition(state="allowed")
+    frame = compose_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="profile360",
+            tenantId=TENANT,
+            subject=ProjectionSubject(kind="entity", id=USER_ID),
+            requestedSlotIds=["journey_participation"],
+            includeEvidence=True,
+        ),
+        [projection],
+        frame_policy=allowed,
+        policy_by_slot={"journey_participation": allowed},
+    )
+    slot = frame.slots[0]
+    assert slot.id == "journey_participation"
+    assert slot.state in {"available", "degraded"}
+    assert slot.evidenceRefs[0].id == "journey-version-composed"
+    assert slot.provenance[0].projectionId == "profile360"
+    assert [claim.domainSlotIds for claim in slot.claims] == [["journey_participation"]]
+
+
+@pytest.mark.asyncio
+async def test_resolved_session_identity_projects_partial_profile_history_without_raw_session_id():
+    class _SessionSource(_FakeProfileSource):
+        async def resolved_session_identities(self, tenant_id, subject, *, limit):
+            self.calls.append(("session_identities", tenant_id, subject.kind, subject.id, limit))
+            return SessionIdentityRead(
+                rows=[{
+                    "id": "source-identity-11",
+                    "tenant_id": TENANT,
+                    "canonical_entity_id": USER_ID,
+                    "status": "resolved",
+                    "source_system_id": "sdk-system",
+                    "source_namespace": "sdk:site-a",
+                    "session_id": "raw-session-secret",
+                    "first_seen_at": "2026-05-01T00:00:00Z",
+                    "last_seen_at": "2026-05-02T00:00:00Z",
+                    "raw_claim": "must not escape",
+                }],
+                available=True,
+                scope_known=True,
+            )
+
+    source = _SessionSource()
+    result = await _project(
+        Profile360Provider(source), _request(include_sections=["sessions"])
+    )
+    assert {call[0] for call in source.calls} == {"identity", "entity", "session_identities"}
+    section = _section(result, "sessions")
+    assert section.state == "degraded"
+    assert section.content["complete"] is False
+    assert section.content["items"][0]["sourceIdentityId"] == "source-identity-11"
+    assert "raw-session-secret" not in str(result)
+    assert "raw_claim" not in str(result)
+    assert [claim.domainSlotIds for claim in result.claims] == [["session_history"]]
+
+    allowed = Experience360PolicyDisposition(state="allowed")
+    frame = compose_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="profile360",
+            tenantId=TENANT,
+            subject=ProjectionSubject(kind="entity", id=USER_ID),
+            requestedSlotIds=["session_history"],
+            includeEvidence=True,
+        ),
+        [result],
+        frame_policy=allowed,
+        policy_by_slot={"session_history": allowed},
+    )
+    slot = frame.slots[0]
+    assert slot.state == "degraded"
+    assert slot.evidenceRefs[0].source == "identity_source_identities"
+    assert slot.provenance[0].projectionId == "profile360"
+
+
+@pytest.mark.asyncio
+async def test_session_identity_rejects_cross_tenant_row_and_historical_read():
+    class _SessionSource(_FakeProfileSource):
+        async def resolved_session_identities(self, tenant_id, subject, *, limit):
+            self.calls.append(("session_identities", tenant_id, subject.id, limit))
+            return SessionIdentityRead(
+                rows=[{
+                    "id": "foreign-source",
+                    "tenant_id": "foreign-tenant",
+                    "canonical_entity_id": USER_ID,
+                    "status": "resolved",
+                    "session_id": "foreign-secret",
+                }],
+                available=True,
+                scope_known=True,
+            )
+
+    source = _SessionSource()
+    current = await _project(
+        Profile360Provider(source), _request(include_sections=["sessions"])
+    )
+    assert _section(current, "sessions").state == "unknown"
+    assert "foreign-secret" not in str(current)
+    assert current.claims == []
+
+    source.calls.clear()
+    historical = await _project(
+        Profile360Provider(source),
+        _request(mode="as_of", include_sections=["sessions"]),
+    )
+    assert _section(historical, "sessions").state == "unknown"
+    assert not any(call[0] == "session_identities" for call in source.calls)
+
+
+@pytest.mark.asyncio
+async def test_session_identity_repository_uses_exact_resolved_tenant_scope(monkeypatch):
+    class _SourceIdentities:
+        async def find_many(self, *, filters, limit):
+            assert filters == {
+                "tenant_id": TENANT,
+                "canonical_entity_id": USER_ID,
+                "status": "resolved",
+            }
+            assert limit == 2
+            return [
+                {
+                    "id": f"source-{index}",
+                    **filters,
+                    "session_id": f"session-{index}",
+                }
+                for index in (1, 2)
+            ]
+
+    monkeypatch.setattr(
+        "identity.identity.repository.IdentityResolutionRepository",
+        lambda: SimpleNamespace(_source_identities=_SourceIdentities()),
+    )
+    read = await RepositoryProfile360Source().resolved_session_identities(
+        TENANT, ProjectionSubject(kind="entity", id=USER_ID), limit=1
+    )
+    assert read.available is True
+    assert read.scope_known is True
+    assert read.truncated is True
+    assert [row["id"] for row in read.rows] == ["source-1"]
 
 
 def _related_request(kind: str, subject_id: str, *, as_of: Optional[str] = None):

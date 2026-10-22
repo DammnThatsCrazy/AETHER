@@ -59,6 +59,10 @@ _EXPECTED_IDS = frozenset(
         "connection360",
         "support360",
         "infrastructure360",
+        "signals360",
+        "memory360",
+        "commerce360",
+        "workflow360",
     }
 )
 
@@ -170,9 +174,9 @@ def _entry(pid: str, **overrides: object) -> dict:
     return base
 
 
-def test_registry_has_20_projections() -> None:
+def test_registry_has_24_projections() -> None:
     projections = _projections()
-    assert len(projections) == 20
+    assert len(projections) == 24
     assert {p["id"] for p in projections} == _EXPECTED_IDS
 
 

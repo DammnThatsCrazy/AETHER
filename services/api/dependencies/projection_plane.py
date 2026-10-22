@@ -57,6 +57,10 @@ IN_FLIGHT_PROVIDER_IDS: tuple[str, ...] = (
     "source360",
     "connection360",
     "support360",
+    "signals360",
+    "memory360",
+    "commerce360",
+    "workflow360",
 )
 
 REGISTERED_PROJECTION_IDS: tuple[str, ...] = (
@@ -153,6 +157,18 @@ def register_implemented_projection_providers(
         register_provider as _register_connection360,
     )
     from journeys.support360.provider import register_provider as _register_support360
+    from intelligence.signals.signals360_provider import (
+        register_provider as _register_signals360,
+    )
+    from intelligence.semantic_intelligence.memory360_provider import (
+        register_provider as _register_memory360,
+    )
+    from value.commerce.commerce360_provider import (
+        register_provider as _register_commerce360,
+    )
+    from intelligence.workflow.workflow360_provider import (
+        register_provider as _register_workflow360,
+    )
 
     for pid, register in (
         ("economic360", _register_economic360),
@@ -175,6 +191,10 @@ def register_implemented_projection_providers(
         ("source360", _register_source360),
         ("connection360", _register_connection360),
         ("support360", _register_support360),
+        ("signals360", _register_signals360),
+        ("memory360", _register_memory360),
+        ("commerce360", _register_commerce360),
+        ("workflow360", _register_workflow360),
     ):
         if registry.get(pid) is None:
             register(registry)

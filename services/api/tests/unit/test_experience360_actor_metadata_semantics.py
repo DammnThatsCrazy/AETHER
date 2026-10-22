@@ -118,7 +118,7 @@ def _agent_decision_claim(
         evidenceRefs=[evidence],
         claims=["A delegation decision was recorded for one execution."],
         claimState=claim_state,
-        domainSlotIds=domain_slot_ids or ["authority_and_delegation"],
+        domainSlotIds=domain_slot_ids or ["authority_envelope", "authority_check"],
     )
 
 
@@ -127,7 +127,7 @@ def _agent_decision_request() -> Experience360FrameRequest:
         surfaceId="agent360",
         tenantId=TENANT,
         subject=ProjectionSubject(kind="agent", id=AGENT_ID),
-        requestedSlotIds=["authority_and_delegation"],
+        requestedSlotIds=["authority_envelope"],
         includeEvidence=True,
     )
 
@@ -139,7 +139,7 @@ def test_agent360_action_scoped_decision_is_included_with_exact_evidence() -> No
     metadata = _derive_agent_actor_metadata(
         _agent_decision_request(),
         [_agent_decision_result([decision], [claim])],
-    )["authority_and_delegation"]
+    )["authority_envelope"]
 
     assert metadata.resolutionState == "unknown"
     assert metadata.authorityDecision is not None
@@ -198,7 +198,7 @@ def test_agent360_action_scoped_decision_is_included_with_exact_evidence() -> No
         ({}, {"kind": "asserted_delegation_decision"}),
         ({}, {"claim_state": EpistemicStatus.INFERRED}),
         ({}, {"subject": ProjectionSubject(kind="agent", id="other-agent")}),
-        ({}, {"domain_slot_ids": ["authority_and_delegation", "state"]}),
+        ({}, {"domain_slot_ids": ["authority_envelope", "state"]}),
         (
             {},
             {
@@ -222,7 +222,7 @@ def test_agent360_action_scoped_decision_mismatches_fail_closed(
     metadata = _derive_agent_actor_metadata(
         _agent_decision_request(),
         [_agent_decision_result([decision], [claim])],
-    )["authority_and_delegation"]
+    )["authority_envelope"]
 
     assert metadata.authorityDecision is not None
     assert metadata.authorityDecision.outcome == "unknown"
@@ -238,7 +238,7 @@ def test_agent360_action_scoped_decisions_reject_cross_tenant_result() -> None:
     metadata = _derive_agent_actor_metadata(
         _agent_decision_request(),
         [result.model_copy(update={"tenantId": "another-tenant"})],
-    )["authority_and_delegation"]
+    )["authority_envelope"]
 
     assert metadata.authorityDecision is not None
     assert metadata.authorityDecision.outcome == "unknown"
@@ -253,7 +253,7 @@ def test_agent360_duplicate_matching_decision_claims_fail_closed() -> None:
     metadata = _derive_agent_actor_metadata(
         _agent_decision_request(),
         [_agent_decision_result([decision], [claim, claim])],
-    )["authority_and_delegation"]
+    )["authority_envelope"]
 
     assert metadata.authorityDecision is not None
     assert metadata.authorityDecision.outcome == "unknown"
@@ -274,7 +274,7 @@ def test_conflicting_agent360_action_decisions_remain_unknown() -> None:
     metadata = _derive_agent_actor_metadata(
         _agent_decision_request(),
         [_agent_decision_result(decisions, claims)],
-    )["authority_and_delegation"]
+    )["authority_envelope"]
 
     assert metadata.authorityDecision is not None
     assert metadata.authorityDecision.outcome == "unknown"
@@ -287,8 +287,8 @@ def test_conflicting_agent360_action_decisions_remain_unknown() -> None:
 @pytest.mark.parametrize(
     ("surface_id", "slot_id", "projection_ids"),
     [
-        ("agent360", "authority_and_delegation", ["agent360"]),
-        ("execution360", "actor_and_delegation", ["agent360", "execution360"]),
+        ("agent360", "authority_envelope", ["agent360"]),
+        ("execution360", "authority_check", ["execution360"]),
     ],
 )
 def test_unknown_actor_and_authority_metadata_remains_explicit_on_available_slot(
@@ -332,7 +332,23 @@ def test_unknown_actor_and_authority_metadata_remains_explicit_on_available_slot
                 )
                 for section_id in ("state", "evidence")
             ],
-            claims=[],
+            claims=[
+                ClaimEnvelope(
+                    id=f"{projection_id}.{slot_id}.observed-context",
+                    kind="observed_authority_context",
+                    subject=request.subject,
+                    evidenceRefs=[
+                        EvidenceRef(
+                            id=f"{projection_id}-state-evidence",
+                            type="event",
+                            source=f"{projection_id}/metadata-semantics-test",
+                            observedAt="2026-10-17T10:00:00Z",
+                        )
+                    ],
+                    claims=["A recorded authority context exists; no action decision was resolved."],
+                    domainSlotIds=[slot_id],
+                )
+            ],
             dependencyState=[],
             generatedAt="2026-10-17T10:01:00Z",
             asOf="2026-10-17T10:00:00Z",

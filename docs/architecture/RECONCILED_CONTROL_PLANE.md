@@ -25,7 +25,7 @@ source_files:
   - services/api/config/settings.py
   - packages/shared/managed-integrations.ts
 source_hashes:
-  "config/route_registry.yaml": "sha256:be5b7a1b32443492d41f5870f3415dc9b6faad12179a09dbfe7cc8b74fabf74e"
+  "config/route_registry.yaml": "sha256:a054be7a567dfb02fccda1cac9ccf3ac95c558f0c29642037a0fbea06302ba9a"
   "packages/shared/managed-integrations.ts": "sha256:1277aae12c27f222f7358c793d71bfa0a8e34c07354de88bb48dff5126a55b25"
   "scripts/validate_sdk_control_plane_seam.py": "sha256:321dbeec981f9542054e4be9c70f804414b027befeeb11d5eef4342f6c25f3af"
   "services/api/alembic/versions/20260906_rcp_admission.py": "sha256:ac836b9f4fc08cb325444f9447689efc05031157e0b52d7dc2402d04b7514a1e"
@@ -41,7 +41,7 @@ source_hashes:
   "services/api/connectors/managed_integrations/": "sha256:fe2306749156ff6b2969d6de41359213b1715e645f7514295e5f7c19566239cf"
   "services/api/governance/kyber/access/": "sha256:23b63f5b1882f5b966c9e23f638fdcd140e4271c38241e58ecfbfb5d53f76e25"
   "services/api/ingestion/sdk_distribution/control_plane.py": "sha256:d49325a1264f40d124a17722f1742b6a08a8342cd93b9ff0b3d0bcf22b73d17b"
-  "services/api/main.py": "sha256:43bc0df60879c8fa844a700da23e7d80455c003b26c14225ce41b1d9865ce521"
+  "services/api/main.py": "sha256:785efdc38288d9d00e3493739316c46f99bde0126cc8f9c8ea69fb9b3501d2f3"
 ---
 
 # Reconciled Control Plane — Architecture (§0–40 lane)

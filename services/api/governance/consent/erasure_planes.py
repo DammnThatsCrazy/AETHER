@@ -1023,6 +1023,7 @@ SILVER_EXCLUDED_TABLES = frozenset({
     "silver_campaign_touchpoint_facts",
     "canonical_conversions",
     "silver_semantic_observations",
+    "semantic_memory_records",
     "silver_semantic_entity_mentions",
     "silver_semantic_subject_links",
     "silver_semantic_claims",

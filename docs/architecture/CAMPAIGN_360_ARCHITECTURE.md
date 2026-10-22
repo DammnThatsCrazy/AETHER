@@ -14,7 +14,7 @@ source_hashes:
   "services/api/journeys/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
   "services/api/journeys/campaign/routes.py": "sha256:872f533120f44707b938829206f76d24497d34c17d5ae945da3b16de0ef19186"
   "services/api/journeys/measurement/repositories/attribution_run_repo.py": "sha256:5c5a1edbacb8ebe97e641b0a577eab924a1a0ca5b76e75967711bd88e8ae46dd"
-  "services/api/journeys/measurement/repositories/conversion_repo.py": "sha256:ed4dacb42d8b93f67af9e2c819edf3e98fb7b7f407c9187d1502cd1df340144c"
+  "services/api/journeys/measurement/repositories/conversion_repo.py": "sha256:7b3f6cdb71101a726f21444595ef22224b8cc57f7b02fa37313f478e546eebb8"
   "services/api/journeys/measurement/repositories/touchpoint_repo.py": "sha256:fe9b5f6c7f24fa33a0288533013677fe2741b36b86e71308579d08cc4e2a68f0"
   "services/api/journeys/traffic/repair.py": "sha256:309a31315d07945083aa693341cff37b4fe5cefbc71592925c38ad818acfab68"
 ---
@@ -112,6 +112,11 @@ The explorer never reads directly from ClickHouse gold tables. Those are used
 by the Journey Explorer and Attribution Studio pages separately for aggregate
 analytics. Campaign 360 reads from the PostgreSQL canonical layer for
 entity-level drill-down.
+
+`ConversionRepository` also provides exact tenant/account and tenant/agent
+reads for the Account360 and Agent360 projections. These are separate subject
+lookups: they do not infer a campaign association, replace the campaign
+touchpoint join, or change the campaign-scoped `list_by_campaign()` path.
 
 Source classification is evidence carried through the canonical touchpoint,
 journey step, attribution credit, and Campaign 360 read models. Campaign 360

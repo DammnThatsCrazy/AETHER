@@ -1,11 +1,12 @@
 """Read-only Profile360 projection over existing identity and temporal stores.
 
 This provider is deliberately narrower than the legacy Kyber profile route.
-It reads the tenant-scoped identity profile repository, tenant-scoped analytics
-events, and ``graph_history_replay``. It does not resolve arbitrary identifiers,
-compute risk, join financial/outcome projections, infer semantic interactions,
-or evaluate field-level policy. Missing authorities remain explicit in the
-section states and findings.
+It reads the tenant-scoped identity profile repository and canonical entity
+registry, plus tenant-scoped analytics events and ``graph_history_replay`` when
+requested sections need those authorities. It does not resolve arbitrary
+identifiers, compute risk, join financial/outcome projections, infer semantic
+interactions, or evaluate field-level policy. Missing authorities remain
+explicit in the section states and findings.
 
 Historical requests use only ``GraphHistoryReplay`` at the requested knowledge
 instant. Current identity rows and analytics events are never presented as
@@ -16,6 +17,7 @@ are filtered by valid-time when bounded and labelled as ledger transitions.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional, Protocol
@@ -37,6 +39,7 @@ from shared.intelligence_projections.registry import ProviderRegistry
 from shared.temporal.instant import parse_instant_strict, to_iso_utc
 from graph.operational_intelligence.models import EvidenceRef
 from graph.temporal360.history_replay import GraphHistoryReplay, SubjectHistory
+from journeys.communication360.contracts import CommunicationMessage
 
 
 PROJECTION_ID = "profile360"
@@ -46,17 +49,25 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
     "evidence",
     "findings",
     "interactions",
+    "journeys",
+    "sessions",
     "state",
     "summary",
     "timeline",
 )
 
-SLOT_ENTITY_IDENTITY = "entity_identity"
-SLOT_EVIDENCE_LIMITATIONS = "evidence_and_limitations"
-SLOT_OBSERVED_ACTIVITY = "observed_state_and_activity"
+# These are the exact Profile 360 product slots from SSOT §11.4. Generic
+# observations and graph mutations support evidence_trace; they are not
+# promoted to session_history without a session authority.
+SLOT_ENTITY_IDENTITY = "identity_spine"
+SLOT_KNOWN_UNKNOWN_RESOLUTION = "known_unknown_resolution"
+SLOT_EVIDENCE_LIMITATIONS = "evidence_trace"
 
 DEFAULT_EVENT_LIMIT = 200
 MAX_EVENT_LIMIT = 500
+MAX_JOURNEY_LIMIT = 100
+MAX_SESSION_IDENTITY_LIMIT = 100
+MAX_COMMUNICATION_LIMIT = 100
 
 
 @dataclass(frozen=True)
@@ -70,10 +81,53 @@ class ProfileRead:
 
 
 @dataclass(frozen=True)
+class CanonicalEntityRead:
+    """Exact tenant + entity-id lookup in the canonical entity registry."""
+
+    record: Optional[dict[str, Any]]
+    available: bool
+    scope_known: bool
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class EventRead:
     """Tenant-scoped observation-event read with explicit completeness."""
 
     rows: list[dict[str, Any]]
+    available: bool
+    scope_known: bool
+    truncated: bool = False
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class JourneyRead:
+    """Exact current profile journeys with an explicit read boundary."""
+
+    rows: list[dict[str, Any]]
+    available: bool
+    scope_known: bool
+    truncated: bool = False
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class SessionIdentityRead:
+    """Resolved source identities carrying a session claim for this entity."""
+
+    rows: list[dict[str, Any]]
+    available: bool
+    scope_known: bool
+    truncated: bool = False
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class CommunicationRead:
+    """Exact tenant/profile recipient messages with an explicit source boundary."""
+
+    rows: list[CommunicationMessage]
     available: bool
     scope_known: bool
     truncated: bool = False
@@ -150,6 +204,10 @@ class Profile360Source(Protocol):
         self, tenant_id: str, subject: ProjectionSubject
     ) -> ProfileRead: ...
 
+    async def canonical_entity(
+        self, tenant_id: str, subject: ProjectionSubject
+    ) -> CanonicalEntityRead: ...
+
     async def identity_binding(
         self, tenant_id: str, subject: ProjectionSubject
     ) -> IdentityBindingRead: ...
@@ -163,6 +221,23 @@ class Profile360Source(Protocol):
         start: Optional[str],
         end: Optional[str],
     ) -> EventRead: ...
+
+    async def current_journeys(
+        self, tenant_id: str, subject: ProjectionSubject, *, limit: int
+    ) -> JourneyRead: ...
+
+    async def resolved_session_identities(
+        self, tenant_id: str, subject: ProjectionSubject, *, limit: int
+    ) -> SessionIdentityRead: ...
+
+    async def communications_for_profile(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        *,
+        limit: int,
+        start: Optional[str],
+    ) -> CommunicationRead: ...
 
     async def subject_history(
         self,
@@ -219,6 +294,196 @@ class RepositoryProfile360Source:
                 reason="identity_record_subject_mismatch",
             )
         return ProfileRead(record=record, available=True, scope_known=True)
+
+    async def canonical_entity(
+        self, tenant_id: str, subject: ProjectionSubject
+    ) -> CanonicalEntityRead:
+        """Read one exact canonical entity; never resolve an arbitrary identifier."""
+        if subject.kind != "entity":
+            return CanonicalEntityRead(
+                record=None,
+                available=True,
+                scope_known=False,
+                reason="entity_registry_subject_kind_unsupported",
+            )
+        try:
+            from repositories.repos import EntityRepository
+
+            rows = await EntityRepository().find_many(
+                filters={"tenant_id": tenant_id, "entity_id": subject.id},
+                limit=2,
+            )
+        except Exception as exc:  # noqa: BLE001 - typed provider degradation
+            return CanonicalEntityRead(
+                record=None,
+                available=False,
+                scope_known=False,
+                reason=f"entity_registry_{type(exc).__name__}",
+            )
+        if not isinstance(rows, list):
+            return CanonicalEntityRead(
+                record=None,
+                available=True,
+                scope_known=False,
+                reason="entity_registry_invalid_response",
+            )
+        if len(rows) > 1:
+            return CanonicalEntityRead(
+                record=None,
+                available=True,
+                scope_known=False,
+                reason="entity_registry_identity_ambiguous",
+            )
+        if not rows:
+            return CanonicalEntityRead(
+                record=None,
+                available=True,
+                scope_known=False,
+                reason="entity_registry_identity_not_found",
+            )
+        row = rows[0]
+        if not isinstance(row, dict):
+            return CanonicalEntityRead(
+                record=None,
+                available=True,
+                scope_known=False,
+                reason="entity_registry_invalid_row",
+            )
+        if row.get("tenant_id") != tenant_id or str(row.get("entity_id") or "") != subject.id:
+            return CanonicalEntityRead(
+                record=None,
+                available=True,
+                scope_known=False,
+                reason="entity_registry_scope_mismatch",
+            )
+        return CanonicalEntityRead(record=row, available=True, scope_known=True)
+
+    async def current_journeys(
+        self, tenant_id: str, subject: ProjectionSubject, *, limit: int
+    ) -> JourneyRead:
+        """Read current versions for one typed profile, never a colliding cluster ID."""
+        if subject.kind != "entity" or not tenant_id or not subject.id:
+            return JourneyRead([], available=True, scope_known=False,
+                               reason="profile_journey_subject_kind_unsupported")
+        try:
+            from journeys.measurement.repositories.journey_repo import JourneyRepository
+
+            rows = await JourneyRepository().find_current_for_profile(
+                tenant_id, subject.id, identity_type="profile", limit=limit + 1
+            )
+        except Exception as exc:  # noqa: BLE001 - typed authority degradation
+            return JourneyRead([], available=False, scope_known=False,
+                               reason=f"profile_journey_source_{type(exc).__name__}")
+        if not isinstance(rows, list):
+            return JourneyRead([], available=False, scope_known=False,
+                               reason="profile_journey_source_invalid_response")
+        if any(
+            not isinstance(row, dict)
+            or row.get("tenant_id") != tenant_id
+            or row.get("profile_id") != subject.id
+            or row.get("journey_type") == "anonymous"
+            or row.get("is_current") is not True
+            for row in rows
+        ):
+            return JourneyRead([], available=True, scope_known=False,
+                               reason="profile_journey_source_scope_mismatch")
+        return JourneyRead(rows[:limit], available=True, scope_known=True,
+                           truncated=len(rows) > limit)
+
+    async def resolved_session_identities(
+        self, tenant_id: str, subject: ProjectionSubject, *, limit: int
+    ) -> SessionIdentityRead:
+        """Read canonical identity links; never equate an SDK user ID with a profile."""
+        if subject.kind != "entity" or not tenant_id or not subject.id:
+            return SessionIdentityRead(
+                [], available=True, scope_known=False,
+                reason="profile_session_subject_kind_unsupported",
+            )
+        try:
+            from identity.identity.repository import IdentityResolutionRepository
+
+            rows = await IdentityResolutionRepository()._source_identities.find_many(
+                filters={
+                    "tenant_id": tenant_id,
+                    "canonical_entity_id": subject.id,
+                    "status": "resolved",
+                },
+                limit=limit + 1,
+            )
+        except Exception as exc:  # noqa: BLE001 - typed authority degradation
+            return SessionIdentityRead(
+                [], available=False, scope_known=False,
+                reason=f"profile_session_identity_source_{type(exc).__name__}",
+            )
+        if not isinstance(rows, list) or any(
+            not isinstance(row, dict)
+            or row.get("tenant_id") != tenant_id
+            or row.get("canonical_entity_id") != subject.id
+            or row.get("status") != "resolved"
+            for row in rows
+        ):
+            return SessionIdentityRead(
+                [], available=True, scope_known=False,
+                reason="profile_session_identity_scope_mismatch",
+            )
+        return SessionIdentityRead(
+            rows[:limit], available=True, scope_known=True,
+            truncated=len(rows) > limit,
+        )
+
+    async def communications_for_profile(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        *,
+        limit: int,
+        start: Optional[str],
+    ) -> CommunicationRead:
+        """Read the silver message spine by exact profile entity endpoint.
+
+        The reader's participant filter is tenant-scoped and only returns the
+        exact sender/recipient entity columns. The projector below narrows this
+        to the recipient side, where source identity and stored consent proofs
+        are available together.
+        """
+        if subject.kind != "entity" or not tenant_id or not subject.id:
+            return CommunicationRead(
+                [], available=True, scope_known=False,
+                reason="profile_communication_subject_kind_unsupported",
+            )
+        try:
+            from journeys.communication360.reader import SilverCommsSource
+
+            source = SilverCommsSource()
+            if not await source.available(tenant_id):
+                return CommunicationRead(
+                    [], available=False, scope_known=False,
+                    reason="profile_communication_source_unavailable",
+                )
+            rows = await source.messages(
+                tenant_id,
+                participant_entity_id=subject.id,
+                since=start,
+                limit=limit + 1,
+            )
+        except Exception as exc:  # noqa: BLE001 - typed provider degradation
+            return CommunicationRead(
+                [], available=False, scope_known=False,
+                reason=f"profile_communication_source_{type(exc).__name__}",
+            )
+        if not isinstance(rows, list) or any(
+            not isinstance(row, CommunicationMessage) for row in rows
+        ):
+            return CommunicationRead(
+                [], available=True, scope_known=False,
+                reason="profile_communication_source_invalid_response",
+            )
+        return CommunicationRead(
+            rows=rows[:limit],
+            available=True,
+            scope_known=True,
+            truncated=len(rows) > limit,
+        )
 
     async def identity_binding(
         self, tenant_id: str, subject: ProjectionSubject
@@ -524,6 +789,21 @@ def _safe_text(value: Any) -> Optional[str]:
     return text or None
 
 
+def _safe_instant(value: Any) -> Optional[str]:
+    if isinstance(value, datetime):
+        try:
+            return to_iso_utc(value)
+        except ValueError:
+            return None
+    text = _safe_text(value)
+    if text is None:
+        return None
+    try:
+        return to_iso_utc(parse_instant_strict(text))
+    except ValueError:
+        return None
+
+
 def _profile_evidence(record: dict[str, Any]) -> Optional[EvidenceRef]:
     profile_id = _safe_text(record.get("user_id"))
     if profile_id is None:
@@ -533,6 +813,18 @@ def _profile_evidence(record: dict[str, Any]) -> Optional[EvidenceRef]:
         type="entity",
         source="identity_profiles",
         observedAt=_safe_text(record.get("updated_at")),
+    )
+
+
+def _entity_evidence(record: dict[str, Any]) -> Optional[EvidenceRef]:
+    entity_id = _safe_text(record.get("entity_id"))
+    if entity_id is None:
+        return None
+    return EvidenceRef(
+        id=entity_id,
+        type="entity",
+        source="entity_registry",
+        observedAt=_safe_text(record.get("updated_at") or record.get("created_at")),
     )
 
 
@@ -597,6 +889,17 @@ def _safe_profile(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _safe_entity(record: dict[str, Any]) -> dict[str, Any]:
+    """Project the canonical entity allowlist; omit raw metadata and extra fields."""
+    return {
+        "id": _safe_text(record.get("entity_id")),
+        "type": _safe_text(record.get("entity_type")),
+        "displayName": _safe_text(record.get("display_name")),
+        "createdAt": _safe_text(record.get("created_at")),
+        "updatedAt": _safe_text(record.get("updated_at")),
+    }
+
+
 def _age_seconds(observed_at: Optional[str]) -> Optional[float]:
     """Compute descriptive age only; the provider has no freshness threshold."""
     if observed_at is None:
@@ -609,7 +912,12 @@ def _age_seconds(observed_at: Optional[str]) -> Optional[float]:
 
 
 class Profile360Provider:
-    """Read-only intelligence-projection provider for the profile360 contract."""
+    """Read-only profile projection with tenant-scoped source and slot boundaries.
+
+    The frame runtime evaluates policy before dispatch and passes only sections
+    for requested, permitted slots. Source reads follow ``includeSections`` so
+    an identity-only request does not read activity or graph history.
+    """
 
     projection_id = PROJECTION_ID
     contract_version = INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION
@@ -625,13 +933,37 @@ class Profile360Provider:
     ) -> ProjectionResult:
         """Compose tenant-scoped identity, observation and temporal evidence."""
         temporal = _temporal_request(request)
+        requested_sections = set(request.includeSections or OUTPUT_SECTIONS)
+        needs_journeys = "journeys" in requested_sections
+        needs_sessions = "sessions" in requested_sections
+        needs_identity = bool(
+            {"summary", "state", "evidence", "journeys", "sessions", "interactions"}
+            & requested_sections
+        )
+        needs_entity = bool(
+            {
+                "summary",
+                "state",
+                "evidence",
+                "journeys",
+                "sessions",
+                "interactions",
+            }
+            & requested_sections
+            or ("timeline" in requested_sections and request.subject.kind == "entity")
+        )
+        needs_events = bool({"timeline", "evidence"} & requested_sections)
+        needs_history = bool({"timeline", "evidence"} & requested_sections)
         limit = min(
             max(request.page.limit if request.page is not None else DEFAULT_EVENT_LIMIT, 1),
             MAX_EVENT_LIMIT,
         )
 
         if request.subject.kind in {"journey", "episode"}:
-            return await self._project_related_user_context(request, context, temporal)
+            related_result = await self._project_related_user_context(
+                request, context, temporal
+            )
+            return _filter_projection_result(related_result, request)
 
         # A historical profile request must never read current identity rows or
         # current analytics and mislabel them as what was known then.
@@ -649,15 +981,24 @@ class Profile360Provider:
                 scope_known=False,
                 reason="analytics_events_not_replayed_at_as_of",
             )
+            canonical_entity = CanonicalEntityRead(
+                record=None,
+                available=True,
+                scope_known=False,
+                reason="entity_registry_not_temporally_replayed",
+            )
             history_subject_id = request.subject.id
         elif temporal.error is None:
-            identity, events = await _read_profile_and_events(
+            identity, canonical_entity, events = await _read_profile_and_events(
                 self._source,
                 request.tenantId,
                 request.subject,
                 limit=limit,
                 start=temporal.start,
                 end=temporal.end,
+                include_identity=needs_identity,
+                include_entity=needs_entity,
+                include_events=needs_events,
             )
             history_subject_id = request.subject.id
         else:
@@ -673,9 +1014,15 @@ class Profile360Provider:
                 scope_known=False,
                 reason=temporal.error,
             )
+            canonical_entity = CanonicalEntityRead(
+                record=None,
+                available=False,
+                scope_known=False,
+                reason=temporal.error,
+            )
             history_subject_id = request.subject.id
 
-        if historical or temporal.error is None:
+        if needs_history and (historical or temporal.error is None):
             if not historical and identity.record is not None:
                 # IdentityRepository stores a natural user ID while graph
                 # history stores the tenant-prefixed canonical user vertex ID.
@@ -687,6 +1034,18 @@ class Profile360Provider:
                     request.tenantId,
                     str(identity.record.get("user_id") or request.subject.id),
                 )
+            elif (
+                not historical
+                and canonical_entity.record is not None
+                and canonical_entity.record.get("entity_type") == "human"
+            ):
+                # A timeline-only read may omit the profile row by policy. A
+                # verified canonical human entity still lets us address its
+                # tenant-prefixed graph-history vertex without reading profile
+                # attributes.
+                from shared.graph.graph import user_vertex_id
+
+                history_subject_id = user_vertex_id(request.tenantId, request.subject.id)
             history = await _safe_history(
                 self._source,
                 request.tenantId,
@@ -696,19 +1055,600 @@ class Profile360Provider:
         else:
             history = HistoryRead(
                 history=None,
-                available=False,
-                reason=temporal.error,
+                available=True,
+                reason=(temporal.error or "graph_history_not_requested"),
             )
 
-        return self._result(
+        result = self._result(
             request,
             context,
             temporal,
             identity,
+            canonical_entity,
             events,
             history,
             limit=limit,
         )
+        if needs_journeys:
+            journey_section, journey_claims = await self._journey_participation(
+                request, temporal, identity, canonical_entity
+            )
+            base_claims = (
+                result.claims
+                if {"summary", "state", "evidence"} & requested_sections
+                else []
+            )
+            result = result.model_copy(
+                update={
+                    "sections": sorted(
+                        [*result.sections, journey_section],
+                        key=lambda section: OUTPUT_SECTIONS.index(section.id),
+                    ),
+                    "claims": [*base_claims, *journey_claims],
+                }
+            )
+        if needs_sessions:
+            session_section, session_claims = await self._session_history(
+                request, context, temporal, identity, canonical_entity
+            )
+            base_claims = result.claims if requested_sections != {"sessions"} else []
+            result = result.model_copy(
+                update={
+                    "sections": sorted(
+                        [*result.sections, session_section],
+                        key=lambda section: OUTPUT_SECTIONS.index(section.id),
+                    ),
+                    "claims": [*base_claims, *session_claims],
+                }
+            )
+        if "interactions" in requested_sections:
+            communication_section, communication_claims = await self._profile_communications(
+                request, context, temporal, identity, canonical_entity
+            )
+            sections = [
+                communication_section if section.id == "interactions" else section
+                for section in result.sections
+            ]
+            base_claims = result.claims if requested_sections != {"interactions"} else []
+            result = result.model_copy(
+                update={
+                    "sections": sections,
+                    "claims": [*base_claims, *communication_claims],
+                }
+            )
+        return _filter_projection_result(result, request)
+
+    async def _profile_communications(
+        self,
+        request: ProjectionRequest,
+        context: ProjectionContext,
+        temporal: _TemporalRequest,
+        identity: ProfileRead,
+        canonical_entity: CanonicalEntityRead,
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        """Join only consent-backed messages whose exact recipient is this profile."""
+
+        def unknown(
+            reason: str, *, state: str = "unknown"
+        ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+            return (
+                ProjectionSection(
+                    id="interactions",
+                    state=state,  # type: ignore[arg-type]
+                    title="Profile communication activity",
+                    content={
+                        "state": state,
+                        "items": [],
+                        "complete": False,
+                        "coverage": "recipient_message_spine_with_recorded_consent_only",
+                        "reasonCode": reason,
+                    },
+                    warnings=[reason],
+                    canonicalAuthorityRefs=["communication_facts"],
+                ),
+                [],
+            )
+
+        if context.tenantId != request.tenantId:
+            return unknown("profile_communication_tenant_scope_mismatch")
+        if temporal.as_of is not None or temporal.error is not None:
+            return unknown(
+                temporal.error or "profile_communication_historical_state_unavailable"
+            )
+        if temporal.mode not in {"window", "relative"}:
+            return unknown("profile_communication_temporal_mode_unsupported")
+        if request.subject.kind != "entity":
+            return unknown("profile_communication_subject_kind_unsupported")
+        if request.page is not None and request.page.cursor is not None:
+            return unknown("profile_communication_cursor_paging_unavailable")
+
+        profile = identity.record if identity.available and identity.scope_known else None
+        entity = (
+            canonical_entity.record
+            if canonical_entity.available and canonical_entity.scope_known
+            else None
+        )
+        if (
+            not isinstance(profile, dict)
+            or profile.get("tenant_id") != request.tenantId
+            or str(profile.get("user_id") or "") != request.subject.id
+            or not isinstance(entity, dict)
+            or entity.get("tenant_id") != request.tenantId
+            or str(entity.get("entity_id") or "") != request.subject.id
+            or entity.get("entity_type") != "human"
+        ):
+            return unknown("profile_communication_canonical_subject_unproven")
+
+        reader = getattr(self._source, "communications_for_profile", None)
+        if not callable(reader):
+            return unknown("profile_communication_source_unavailable", state="degraded")
+        limit = min(
+            max(request.page.limit if request.page is not None else MAX_COMMUNICATION_LIMIT, 1),
+            MAX_COMMUNICATION_LIMIT,
+        )
+        try:
+            read = await reader(
+                request.tenantId,
+                request.subject,
+                limit=limit,
+                start=temporal.start,
+            )
+        except Exception:  # noqa: BLE001 - source errors stay content-free
+            return unknown("profile_communication_source_unavailable", state="degraded")
+        if not isinstance(read, CommunicationRead):
+            return unknown("profile_communication_source_invalid_response", state="degraded")
+        if not read.available:
+            return unknown(
+                read.reason or "profile_communication_source_unavailable", state="degraded"
+            )
+        if not read.scope_known:
+            return unknown(read.reason or "profile_communication_scope_unknown")
+        if not isinstance(read.rows, list) or len(read.rows) > limit:
+            return unknown("profile_communication_source_limit_exceeded", state="degraded")
+
+        items: list[dict[str, Any]] = []
+        claims: list[ClaimEnvelope] = []
+        incomplete_reasons: set[str] = set()
+        for message in read.rows:
+            if not isinstance(message, CommunicationMessage):
+                return unknown("profile_communication_source_invalid_row")
+            if message.tenant_id != request.tenantId:
+                return unknown("profile_communication_source_scope_mismatch")
+            if message.sender_entity_id != request.subject.id and message.recipient_entity_id != request.subject.id:
+                return unknown("profile_communication_source_scope_mismatch")
+            # This first slice covers the recipient side only. A sender-side
+            # identity binding currently has no shared human-profile consent
+            # bridge in the message contract.
+            if message.recipient_entity_id != request.subject.id:
+                incomplete_reasons.add("profile_communication_sender_identity_not_joined")
+                continue
+            binding_ref = message.recipient_identity_evidence_ref
+            if not message.recipient_identity_binding_id:
+                incomplete_reasons.add("profile_communication_identity_binding_missing")
+                continue
+            if (
+                binding_ref is None
+                or binding_ref.id != message.recipient_identity_binding_id
+                or binding_ref.source != "comms_provider_identities"
+                or binding_ref.uri
+                != f"store://comms_provider_identities/{message.recipient_identity_binding_id}"
+            ):
+                incomplete_reasons.add("profile_communication_identity_binding_unproven")
+                continue
+
+            consent = message.consent_evidence
+            consent_refs = list(getattr(consent, "evidence_refs", []) or [])
+            receipt_id = _safe_text(getattr(consent, "receipt_id", None))
+            consent_binding_id = _safe_text(getattr(consent, "identity_binding_id", None))
+            consent_subject_id = _safe_text(getattr(consent, "subject_entity_id", None))
+            purpose = _safe_text(getattr(consent, "purpose", None))
+            consent_recorded = (
+                getattr(getattr(consent, "state", None), "value", getattr(consent, "state", None))
+                == "recorded"
+                and consent_subject_id == request.subject.id
+                and consent_binding_id == message.recipient_identity_binding_id
+                and bool(receipt_id and purpose)
+                and any(
+                    ref.id == receipt_id
+                    and ref.source == "governance.consent.authority"
+                    and ref.uri == f"store://consent_receipts/{receipt_id}"
+                    for ref in consent_refs
+                )
+                and any(
+                    ref.id == consent_binding_id
+                    and ref.source == "comms_provider_identities"
+                    and ref.uri == f"store://comms_provider_identities/{consent_binding_id}"
+                    for ref in consent_refs
+                )
+            )
+            if not consent_recorded:
+                incomplete_reasons.add("profile_communication_consent_evidence_unavailable")
+                continue
+
+            fact_id = _safe_text(message.fact_id)
+            message_id = _safe_text(message.message_id)
+            occurred_at = _safe_instant(message.occurred_at)
+            message_ref = next(
+                (
+                    ref
+                    for ref in message.evidence_refs
+                    if fact_id is not None
+                    and ref.id == fact_id
+                    and ref.source == "services/api/journeys/comms/silver_comms_facts"
+                    and ref.uri == f"store://silver_comms_facts/{fact_id}"
+                ),
+                None,
+            )
+            if (
+                fact_id is None
+                or message_id is None
+                or occurred_at is None
+                or message_ref is None
+                or getattr(message.claim_state, "value", message.claim_state) != "observed"
+            ):
+                incomplete_reasons.add("profile_communication_message_provenance_incomplete")
+                continue
+            if not _within(occurred_at, temporal.start, temporal.end):
+                if temporal.start is not None or temporal.end is not None:
+                    continue
+
+            evidence_refs = _dedupe_refs(
+                [message_ref, binding_ref, *consent_refs]
+            )
+            item = {
+                "messageId": message_id,
+                "occurredAt": occurred_at,
+                "channel": _safe_text(message.channel),
+                "direction": _safe_text(message.direction),
+                "communicationState": _safe_text(
+                    getattr(message.communication_state, "value", message.communication_state)
+                ),
+                "consentPurpose": purpose,
+                "evidenceRefs": [ref.model_dump(mode="json") for ref in evidence_refs],
+            }
+            items.append(item)
+            claims.append(
+                ClaimEnvelope(
+                    id=f"profile360.communication.{message_id}",
+                    kind="profile_recipient_communication",
+                    subject=request.subject,
+                    evidenceRefs=evidence_refs,
+                    claims=[
+                        f"Communication message {message_id} is linked to this exact profile as its consent-bound recipient."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["communications"],
+                )
+            )
+
+        if not items:
+            reason = (
+                sorted(incomplete_reasons)[0]
+                if incomplete_reasons
+                else "profile_communication_links_not_observed"
+            )
+            return unknown(reason, state="degraded" if read.truncated else "unknown")
+
+        reasons = {
+            "profile_communication_recipient_message_spine_only",
+            *incomplete_reasons,
+        }
+        if read.truncated:
+            reasons.add("profile_communication_read_truncated")
+        return (
+            ProjectionSection(
+                id="interactions",
+                state="degraded",
+                title="Profile communication activity",
+                content={
+                    "coverage": "recipient_message_spine_with_recorded_consent_only",
+                    "complete": False,
+                    "count": len(items),
+                    "items": items,
+                    "reasonCodes": sorted(reasons),
+                },
+                warnings=sorted(reasons),
+                canonicalAuthorityRefs=["communication_facts"],
+            ),
+            claims,
+        )
+
+    async def _session_history(
+        self,
+        request: ProjectionRequest,
+        context: ProjectionContext,
+        temporal: _TemporalRequest,
+        identity: ProfileRead,
+        canonical_entity: CanonicalEntityRead,
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        """Project resolved session identity observations, not SDK rollup ownership."""
+
+        def unknown(reason: str, *, state: str = "unknown") -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+            return (
+                ProjectionSection(
+                    id="sessions",
+                    state=state,  # type: ignore[arg-type]
+                    title="Profile session identity history",
+                    content={
+                        "state": state,
+                        "reasonCode": reason,
+                        "coverage": "resolved_source_identity_links_only",
+                    },
+                    warnings=[reason],
+                    canonicalAuthorityRefs=["identity"],
+                ),
+                [],
+            )
+
+        if context.tenantId != request.tenantId:
+            return unknown("profile_session_tenant_scope_mismatch")
+        if (
+            request.asOf is not None
+            or request.timeRange is not None
+            or temporal.mode != "window"
+            or temporal.error is not None
+        ):
+            return unknown("profile_session_temporal_history_unavailable")
+        if request.subject.kind != "entity":
+            return unknown("profile_session_subject_kind_unsupported")
+        profile = identity.record if identity.available and identity.scope_known else None
+        entity = (
+            canonical_entity.record
+            if canonical_entity.available and canonical_entity.scope_known
+            else None
+        )
+        if (
+            not isinstance(profile, dict)
+            or profile.get("tenant_id") != request.tenantId
+            or profile.get("user_id") != request.subject.id
+            or not isinstance(entity, dict)
+            or entity.get("tenant_id") != request.tenantId
+            or entity.get("entity_id") != request.subject.id
+            or entity.get("entity_type") != "human"
+        ):
+            return unknown("profile_session_canonical_subject_unproven")
+        reader = getattr(self._source, "resolved_session_identities", None)
+        if not callable(reader):
+            return unknown("profile_session_identity_source_unavailable", state="degraded")
+        limit = min(
+            max(request.page.limit if request.page is not None else MAX_SESSION_IDENTITY_LIMIT, 1),
+            MAX_SESSION_IDENTITY_LIMIT,
+        )
+        try:
+            read = await reader(request.tenantId, request.subject, limit=limit)
+        except Exception:  # noqa: BLE001 - source errors stay content-free
+            return unknown("profile_session_identity_source_unavailable", state="degraded")
+        if not isinstance(read, SessionIdentityRead):
+            return unknown("profile_session_identity_source_invalid_response", state="degraded")
+        if not read.available:
+            return unknown(read.reason or "profile_session_identity_source_unavailable", state="degraded")
+        if not read.scope_known:
+            return unknown(read.reason or "profile_session_identity_scope_unknown")
+        if not isinstance(read.rows, list) or len(read.rows) > limit:
+            return unknown("profile_session_identity_source_limit_exceeded", state="degraded")
+
+        items: list[dict[str, Any]] = []
+        claims: list[ClaimEnvelope] = []
+        seen: set[str] = set()
+        for row in read.rows:
+            if (
+                not isinstance(row, dict)
+                or row.get("tenant_id") != request.tenantId
+                or row.get("canonical_entity_id") != request.subject.id
+                or row.get("status") != "resolved"
+            ):
+                return unknown("profile_session_identity_scope_mismatch")
+            source_id = _safe_text(row.get("id"))
+            session_id = _safe_text(row.get("session_id"))
+            source_namespace = _safe_text(row.get("source_namespace"))
+            source_system_id = _safe_text(row.get("source_system_id"))
+            if session_id is None:
+                continue
+            if source_id is None or source_namespace is None or source_system_id is None:
+                return unknown("profile_session_identity_provenance_incomplete")
+            if source_id in seen:
+                return unknown("profile_session_identity_duplicate_source")
+            seen.add(source_id)
+            first_seen = _safe_instant(row.get("first_seen_at"))
+            last_seen = _safe_instant(row.get("last_seen_at"))
+            evidence_ref = EvidenceRef(
+                id=source_id,
+                type="document",
+                source="identity_source_identities",
+                observedAt=last_seen,
+            )
+            items.append(
+                {
+                    "sourceIdentityId": source_id,
+                    "sourceNamespace": source_namespace,
+                    "sourceSystemId": source_system_id,
+                    "firstSeenAt": first_seen,
+                    "lastSeenAt": last_seen,
+                    "sessionIdentifierPresent": True,
+                    "evidenceRef": evidence_ref.model_dump(mode="json"),
+                }
+            )
+            claims.append(
+                ClaimEnvelope(
+                    id=f"profile360.session_identity.{source_id}",
+                    kind="resolved_session_source_identity",
+                    subject=request.subject,
+                    evidenceRefs=[evidence_ref],
+                    claims=[
+                        "A resolved tenant-scoped source identity with a session identifier is linked to this canonical profile."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["session_history"],
+                )
+            )
+        if not items:
+            return unknown("profile_session_identity_links_not_observed")
+        reasons = ["profile_session_event_timeline_not_joined"]
+        if read.truncated:
+            reasons.append("profile_session_identity_read_capped")
+        return (
+            ProjectionSection(
+                id="sessions",
+                state="degraded",
+                title="Profile session identity history",
+                content={
+                    "coverage": "resolved_source_identity_links_only",
+                    "complete": False,
+                    "count": len(items),
+                    "items": items,
+                },
+                warnings=reasons,
+                canonicalAuthorityRefs=["identity"],
+            ),
+            claims,
+        )
+
+    async def _journey_participation(
+        self,
+        request: ProjectionRequest,
+        temporal: _TemporalRequest,
+        identity: ProfileRead,
+        canonical_entity: CanonicalEntityRead,
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        """Project only current versions with an exact typed profile join."""
+
+        def unknown(reason: str, *, state: str = "unknown") -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+            return (
+                ProjectionSection(
+                    id="journeys",
+                    state=state,  # type: ignore[arg-type]
+                    title="Profile journey participation",
+                    content={"state": state, "reasonCode": reason, "currentOnly": True},
+                    warnings=[reason],
+                    canonicalAuthorityRefs=["journeys"],
+                ),
+                [],
+            )
+
+        if (
+            request.asOf is not None
+            or request.timeRange is not None
+            or temporal.mode != "window"
+            or temporal.error is not None
+        ):
+            return unknown("profile_journey_valid_time_unavailable")
+        if request.subject.kind != "entity":
+            return unknown("profile_journey_subject_kind_unsupported")
+        identity_record = identity.record if identity.available and identity.scope_known else None
+        entity_record = (
+            canonical_entity.record
+            if canonical_entity.available and canonical_entity.scope_known
+            else None
+        )
+        if (
+            not isinstance(identity_record, dict)
+            or identity_record.get("tenant_id") != request.tenantId
+            or identity_record.get("user_id") != request.subject.id
+            or not isinstance(entity_record, dict)
+            or entity_record.get("tenant_id") != request.tenantId
+            or entity_record.get("entity_id") != request.subject.id
+            or entity_record.get("entity_type") != "human"
+        ):
+            return unknown("profile_journey_canonical_subject_unproven")
+        reader = getattr(self._source, "current_journeys", None)
+        if not callable(reader):
+            return unknown("profile_journey_source_unavailable", state="degraded")
+        limit = min(
+            max(request.page.limit if request.page is not None else MAX_JOURNEY_LIMIT, 1),
+            MAX_JOURNEY_LIMIT,
+        )
+        try:
+            read = await reader(request.tenantId, request.subject, limit=limit)
+        except Exception:  # noqa: BLE001 - source failure stays content-free
+            return unknown("profile_journey_source_unavailable", state="degraded")
+        if not isinstance(read, JourneyRead):
+            return unknown("profile_journey_source_invalid_response", state="degraded")
+        if not read.available:
+            return unknown(read.reason or "profile_journey_source_unavailable", state="degraded")
+        if not read.scope_known:
+            return unknown(read.reason or "profile_journey_source_scope_unknown")
+        if not isinstance(read.rows, list) or len(read.rows) > limit:
+            return unknown("profile_journey_source_limit_exceeded", state="degraded")
+
+        items: list[dict[str, Any]] = []
+        claims: list[ClaimEnvelope] = []
+        missing_timestamp = False
+        for row in read.rows:
+            if (
+                not isinstance(row, dict)
+                or row.get("tenant_id") != request.tenantId
+                or row.get("profile_id") != request.subject.id
+                or row.get("journey_type") == "anonymous"
+                or row.get("is_current") is not True
+            ):
+                return unknown("profile_journey_source_scope_mismatch")
+            journey_id = _safe_text(row.get("journey_id"))
+            version_id = _safe_text(row.get("journey_version_id"))
+            if journey_id is None or version_id is None:
+                return unknown("profile_journey_identity_incomplete")
+            computed_at = row.get("computed_at")
+            if isinstance(computed_at, datetime):
+                try:
+                    computed_at = to_iso_utc(computed_at)
+                except ValueError:
+                    computed_at = None
+            if isinstance(computed_at, str):
+                try:
+                    computed_at = to_iso_utc(parse_instant_strict(computed_at))
+                except ValueError:
+                    computed_at = None
+            else:
+                computed_at = None
+            if computed_at is None:
+                missing_timestamp = True
+            evidence_ref = EvidenceRef(
+                id=version_id,
+                type="document",
+                source="journey_versions",
+                observedAt=computed_at,
+            )
+            items.append(
+                {
+                    "journeyId": journey_id,
+                    "versionId": version_id,
+                    "journeyState": _safe_text(row.get("journey_state")),
+                    "computedAt": computed_at,
+                    "evidenceRef": evidence_ref.model_dump(mode="json"),
+                }
+            )
+            claims.append(
+                ClaimEnvelope(
+                    id=f"profile360.journey.{version_id}",
+                    kind="current_profile_journey_version",
+                    subject=request.subject,
+                    evidenceRefs=[evidence_ref],
+                    claims=[
+                        "A current tenant-scoped journey version records this exact typed profile ID."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["journey_participation"],
+                )
+            )
+        state = "degraded" if read.truncated or missing_timestamp else "available" if items else "empty"
+        reasons = []
+        if read.truncated:
+            reasons.append("profile_journey_read_capped")
+        if missing_timestamp:
+            reasons.append("profile_journey_source_timestamp_missing")
+        section = ProjectionSection(
+            id="journeys",
+            state=state,  # type: ignore[arg-type]
+            title="Profile journey participation",
+            content={
+                "currentOnly": True,
+                "complete": not read.truncated,
+                "count": len(items),
+                "items": items,
+            },
+            warnings=reasons or None,
+            canonicalAuthorityRefs=["journeys"],
+        )
+        return section, claims
 
     async def _project_related_user_context(
         self,
@@ -724,6 +1664,14 @@ class Profile360Provider:
         so historical or bounded requests remain unknown without reading the
         current relationship.
         """
+        requested_sections = set(request.includeSections or OUTPUT_SECTIONS)
+        if not {"summary", "state", "evidence"} & requested_sections:
+            return self._related_context_result(
+                request,
+                context,
+                state="unknown",
+                reason="linked_profile_context_not_requested",
+            )
         if (
             request.asOf is not None
             or request.timeRange is not None
@@ -952,19 +1900,45 @@ class Profile360Provider:
         context: ProjectionContext,
         temporal: _TemporalRequest,
         identity: ProfileRead,
+        canonical_entity: CanonicalEntityRead,
         events: EventRead,
         history: HistoryRead,
         *,
         limit: int,
     ) -> ProjectionResult:
         record = identity.record if identity.available and identity.scope_known else None
-        if record is not None and record.get("tenant_id") != request.tenantId:
+        if record is not None and (
+            record.get("tenant_id") != request.tenantId
+            or request.subject.kind != "entity"
+            or str(record.get("user_id") or "") != request.subject.id
+        ):
             record = None
             identity = ProfileRead(
+                record=None, available=True, scope_known=False,
+                reason=(
+                    "identity_record_tenant_mismatch"
+                    if identity.record is not None
+                    and identity.record.get("tenant_id") != request.tenantId
+                    else "identity_record_subject_mismatch"
+                ),
+            )
+
+        entity_record = (
+            canonical_entity.record
+            if canonical_entity.available and canonical_entity.scope_known
+            else None
+        )
+        if entity_record is not None and (
+            entity_record.get("tenant_id") != request.tenantId
+            or str(entity_record.get("entity_id") or "") != request.subject.id
+            or request.subject.kind != "entity"
+        ):
+            entity_record = None
+            canonical_entity = CanonicalEntityRead(
                 record=None,
                 available=True,
                 scope_known=False,
-                reason="identity_record_tenant_mismatch",
+                reason="entity_registry_scope_mismatch",
             )
 
         scoped_events = [
@@ -1007,6 +1981,9 @@ class Profile360Provider:
         profile_ref = _profile_evidence(record) if record else None
         if profile_ref:
             refs.append(profile_ref)
+        entity_ref = _entity_evidence(entity_record) if entity_record else None
+        if entity_ref:
+            refs.append(entity_ref)
         event_refs = {
             id(row): _event_evidence(row) for row in scoped_events
         }
@@ -1028,8 +2005,16 @@ class Profile360Provider:
             if record is not None
             else "unknown"
         )
+        entity_state = (
+            "degraded"
+            if not canonical_entity.available
+            else "available"
+            if entity_record is not None
+            else "unknown"
+        )
         subject_known = bool(
             record is not None
+            or entity_record is not None
             or (
                 history_obj is not None
                 and (history_obj.present or history_obj.event_count > 0)
@@ -1058,6 +2043,7 @@ class Profile360Provider:
         summary_state = (
             "degraded"
             if profile_state == "degraded"
+            or (record is not None and entity_state != "available")
             else "available"
             if record is not None
             else "unknown"
@@ -1066,9 +2052,9 @@ class Profile360Provider:
             summary_state = "degraded"
         state_state = (
             "degraded"
-            if "degraded" in {profile_state, event_state, history_state}
+            if "degraded" in {profile_state, entity_state, event_state, history_state}
             else "available"
-            if "available" in {profile_state, event_state, history_state}
+            if "available" in {profile_state, entity_state, event_state, history_state}
             else "unknown"
         )
         if freshness_state == "unknown" and state_state == "available":
@@ -1080,10 +2066,37 @@ class Profile360Provider:
             "record": limited_profile,
             "source": "identity_profiles" if record else None,
             "evidenceRef": profile_ref.model_dump() if profile_ref else None,
+            "canonicalEntity": {
+                "state": entity_state,
+                "record": _safe_entity(entity_record) if entity_record else None,
+                "source": "entity_registry" if entity_record else None,
+                "evidenceRef": entity_ref.model_dump() if entity_ref else None,
+                "freshness": {
+                    "state": "unknown",
+                    "observedAt": (
+                        _safe_text(entity_record.get("updated_at") or entity_record.get("created_at"))
+                        if entity_record
+                        else None
+                    ),
+                    "ageSeconds": _age_seconds(
+                        _safe_text(entity_record.get("updated_at") or entity_record.get("created_at"))
+                        if entity_record
+                        else None
+                    ),
+                    "policy": "not_evaluated",
+                },
+                "reason": canonical_entity.reason,
+            },
             "canonicalResolution": {
-                "state": "unknown",
+                "state": entity_state,
                 "authority": "entity_registry",
-                "reason": "This provider reads an exact profile key but does not resolve arbitrary entity identifiers.",
+                "scope": "exact_tenant_and_entity_id_only",
+                "reason": (
+                    "exact_tenant_entity_id_match"
+                    if entity_state == "available"
+                    else canonical_entity.reason
+                    or "arbitrary_identifier_resolution_not_performed"
+                ),
             },
             "reason": identity.reason,
         }
@@ -1132,13 +2145,15 @@ class Profile360Provider:
             "references": [ref.model_dump() for ref in refs],
             "coverage": {
                 "identity": profile_state,
+                "canonicalEntity": entity_state,
                 "observations": event_state,
                 "graphHistory": history_state,
             },
             "limitations": [
                 "profile freshness policy is not available to this provider",
                 "field-level policy/redaction is applied by the governed frame boundary",
-                "no semantic interaction authority is wired to profile360",
+                "communication activity joins only exact recipient messages with recorded consent and does not establish semantic interaction meaning",
+                "session history and profile fanout slots require their own canonical authorities",
                 "no separate evidence index is wired; references identify their canonical source records",
             ],
         }
@@ -1154,15 +2169,31 @@ class Profile360Provider:
                 "code": "semantic_interactions_unavailable",
                 "state": "unknown",
                 "authority": "interaction_facts",
-                "reason": "Graph mutations are not promoted to semantic user interactions.",
+                "reason": "Message lifecycle observations and graph mutations do not establish semantic user interactions.",
             },
             {
-                "code": "canonical_entity_resolution_unknown",
+                "code": "session_history_unknown",
                 "state": "unknown",
-                "authority": "entity_registry",
-                "reason": "The provider does not perform arbitrary identifier-to-entity resolution.",
+                "authority": "session_facts",
+                "reason": "Observed events and graph mutations do not establish canonical session membership or continuity.",
+            },
+            {
+                "code": "profile_fanout_unknown",
+                "state": "unknown",
+                "authority": "identity_relationship_facts",
+                "reason": "This provider does not enumerate member, agent, account, wallet-cluster, or other linked profiles.",
             },
         ]
+        if entity_state != "available":
+            findings.append(
+                {
+                    "code": "canonical_entity_resolution_unknown",
+                    "state": "degraded" if entity_state == "degraded" else "unknown",
+                    "authority": "entity_registry",
+                    "reason": canonical_entity.reason
+                    or "This provider does not resolve arbitrary identifiers to canonical entities.",
+                }
+            )
         if identity.reason:
             findings.append(
                 {
@@ -1177,6 +2208,15 @@ class Profile360Provider:
                     "code": "observation_source_limitation",
                     "state": "unknown" if events.available else "degraded",
                     "reason": events.reason,
+                }
+            )
+        if canonical_entity.reason:
+            findings.append(
+                {
+                    "code": "canonical_entity_source_limitation",
+                    "state": "unknown" if canonical_entity.available else "degraded",
+                    "authority": "entity_registry",
+                    "reason": canonical_entity.reason,
                 }
             )
         if history.reason:
@@ -1204,12 +2244,41 @@ class Profile360Provider:
                 }
             )
 
+        requested_sections = set(request.includeSections or OUTPUT_SECTIONS)
+        activity_requested = bool({"timeline", "evidence"} & requested_sections)
+        identity_authorities: set[str] = set()
+        if (
+            not historical
+            and temporal.error is None
+            and request.subject.kind == "entity"
+        ):
+            if identity.reason != "identity_profile_not_requested":
+                identity_authorities.add("identity")
+            if canonical_entity.reason != "entity_registry_not_requested":
+                identity_authorities.add("entity_registry")
+        identity_source_refs = sorted(identity_authorities) or None
+        activity_authorities: set[str] = set()
+        if activity_requested and not historical and temporal.error is None:
+            activity_authorities.add("observations")
+        if (
+            activity_requested
+            and history.available
+            and history.reason != "graph_history_not_requested"
+            and temporal.error is None
+        ):
+            activity_authorities.update({"graph", "temporal"})
+        timeline_source_refs = sorted(activity_authorities) or None
+        evidence_source_refs = (
+            sorted(set(identity_source_refs or []) | activity_authorities) or None
+        )
+
         sections = [
             ProjectionSection(
                 id="evidence",
                 state=evidence_state,
                 title="Evidence and coverage",
                 content=evidence_content,
+                canonicalAuthorityRefs=evidence_source_refs,
             ),
             ProjectionSection(
                 id="findings",
@@ -1220,17 +2289,17 @@ class Profile360Provider:
             ProjectionSection(
                 id="interactions",
                 state="unknown",
-                title="Interactions",
+                title="Profile communication activity",
                 content={
                     "state": "unknown",
                     "items": [],
-                    "reason": "No semantic interaction source is bound to Profile360.",
+                    "reason": "No policy-authorized exact recipient message link was read for this request.",
                 },
             ),
             ProjectionSection(
                 id="state",
                 state=state_state,
-                title="Observed profile state",
+                title="Profile identity and resolution state",
                 content={
                     "dimensions": [
                         {
@@ -1247,33 +2316,41 @@ class Profile360Provider:
                             },
                         },
                         {
-                            "id": "observations",
-                            "state": event_state,
-                            "returned": len(scoped_events) if events.available and events.scope_known else None,
-                            "truncated": events.truncated if events.available and events.scope_known else None,
-                            "reason": events.reason,
-                        },
-                        {
-                            "id": "graph_history",
-                            "state": history_state,
-                            "known": (
-                                True
-                                if history_obj is not None
-                                and (history_obj.present or history_obj.event_count > 0)
-                                else None
-                            ),
-                            "asOf": temporal.as_of,
-                            "reason": history.reason,
+                            "id": SLOT_KNOWN_UNKNOWN_RESOLUTION,
+                            "state": entity_state,
+                            "authority": "entity_registry",
+                            "resolution": identity_content["canonicalResolution"],
+                            "reason": canonical_entity.reason,
+                            "freshness": {
+                                "state": "unknown",
+                                "observedAt": (
+                                    _safe_text(entity_record.get("updated_at") or entity_record.get("created_at"))
+                                    if entity_record
+                                    else None
+                                ),
+                                "ageSeconds": _age_seconds(
+                                    _safe_text(entity_record.get("updated_at") or entity_record.get("created_at"))
+                                    if entity_record
+                                    else None
+                                ),
+                                "policy": "not_evaluated",
+                            },
                         },
                         {
                             "id": "freshness",
                             "state": "unknown",
                             "reason": "No canonical Profile360 freshness policy is available.",
                         },
+                        {
+                            "id": "session_history",
+                            "state": "unknown",
+                            "reason": "Observed events are not a canonical session-continuity record.",
+                        },
                     ],
                     "temporalMode": temporal.mode,
                     "requestedAsOf": temporal.as_of,
                 },
+                canonicalAuthorityRefs=identity_source_refs,
             ),
             ProjectionSection(
                 id="summary",
@@ -1282,6 +2359,10 @@ class Profile360Provider:
                 content={
                     "subject": request.subject.model_dump(),
                     "identity": identity_content,
+                    "sessionHistory": {
+                        "state": "unknown",
+                        "reason": "No canonical session identity or continuity authority is bound to Profile360.",
+                    },
                     "temporalMode": temporal.mode,
                     "asOf": temporal.as_of,
                     "freshness": {
@@ -1290,6 +2371,7 @@ class Profile360Provider:
                     },
                 },
                 warnings=[temporal.error] if temporal.error else None,
+                canonicalAuthorityRefs=identity_source_refs,
             ),
             ProjectionSection(
                 id="timeline",
@@ -1319,6 +2401,7 @@ class Profile360Provider:
                         "retain their valid-time and recorded-time labels."
                     ),
                 },
+                canonicalAuthorityRefs=timeline_source_refs,
             ),
         ]
 
@@ -1337,6 +2420,20 @@ class Profile360Provider:
                     domainSlotIds=[SLOT_ENTITY_IDENTITY],
                 )
             )
+        if entity_record is not None and entity_ref is not None:
+            claims.append(
+                ClaimEnvelope(
+                    id="profile360.canonical_entity_record_present",
+                    kind="canonical_entity_record",
+                    subject=request.subject,
+                    evidenceRefs=[entity_ref],
+                    claims=[
+                        "A canonical entity registry record exists for this exact tenant and entity ID."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=[SLOT_ENTITY_IDENTITY, SLOT_KNOWN_UNKNOWN_RESOLUTION],
+                )
+            )
         activity_refs = [
             ref
             for ref in [*event_refs.values(), *mutation_refs.values()]
@@ -1353,7 +2450,7 @@ class Profile360Provider:
                         "The listed tenant-scoped observation and graph-ledger records were returned by their named authorities."
                     ],
                     claimState=EpistemicStatus.OBSERVED,
-                    domainSlotIds=[SLOT_OBSERVED_ACTIVITY, SLOT_EVIDENCE_LIMITATIONS],
+                    domainSlotIds=[SLOT_EVIDENCE_LIMITATIONS],
                 )
             )
         if refs:
@@ -1394,29 +2491,69 @@ async def _read_profile_and_events(
     limit: int,
     start: Optional[str],
     end: Optional[str],
-) -> tuple[ProfileRead, EventRead]:
-    """Isolate independent identity and observation reads."""
-    try:
-        identity = await source.identity_record(tenant_id, subject)
-    except Exception as exc:  # noqa: BLE001 - isolate source failure
-        identity = ProfileRead(
-            record=None,
-            available=False,
-            scope_known=False,
-            reason=f"identity_source_{type(exc).__name__}",
-        )
-    try:
-        events = await source.analytics_events(
-            tenant_id, subject, limit=limit, start=start, end=end
-        )
-    except Exception as exc:  # noqa: BLE001 - isolate source failure
-        events = EventRead(
-            rows=[],
-            available=False,
-            scope_known=False,
-            reason=f"analytics_source_{type(exc).__name__}",
-        )
-    return identity, events
+    include_identity: bool = True,
+    include_entity: bool = True,
+    include_events: bool = True,
+) -> tuple[ProfileRead, CanonicalEntityRead, EventRead]:
+    """Isolate independent canonical identity and observation reads."""
+
+    async def read_identity() -> ProfileRead:
+        if not include_identity:
+            return ProfileRead(
+                record=None,
+                available=True,
+                scope_known=False,
+                reason="identity_profile_not_requested",
+            )
+        try:
+            return await source.identity_record(tenant_id, subject)
+        except Exception as exc:  # noqa: BLE001 - isolate source failure
+            return ProfileRead(
+                record=None,
+                available=False,
+                scope_known=False,
+                reason=f"identity_source_{type(exc).__name__}",
+            )
+
+    async def read_entity() -> CanonicalEntityRead:
+        if not include_entity:
+            return CanonicalEntityRead(
+                record=None,
+                available=True,
+                scope_known=False,
+                reason="entity_registry_not_requested",
+            )
+        try:
+            return await source.canonical_entity(tenant_id, subject)
+        except Exception as exc:  # noqa: BLE001 - isolate source failure
+            return CanonicalEntityRead(
+                record=None,
+                available=False,
+                scope_known=False,
+                reason=f"entity_registry_source_{type(exc).__name__}",
+            )
+
+    async def read_events() -> EventRead:
+        if not include_events:
+            return EventRead(
+                rows=[],
+                available=True,
+                scope_known=False,
+                reason="analytics_events_not_requested",
+            )
+        try:
+            return await source.analytics_events(
+                tenant_id, subject, limit=limit, start=start, end=end
+            )
+        except Exception as exc:  # noqa: BLE001 - isolate source failure
+            return EventRead(
+                rows=[],
+                available=False,
+                scope_known=False,
+                reason=f"analytics_source_{type(exc).__name__}",
+            )
+
+    return await asyncio.gather(read_identity(), read_entity(), read_events())
 
 
 async def _safe_history(
@@ -1436,6 +2573,21 @@ async def _safe_history(
             available=False,
             reason=f"graph_history_source_{type(exc).__name__}",
         )
+
+
+def _filter_projection_result(
+    result: ProjectionResult, request: ProjectionRequest
+) -> ProjectionResult:
+    """Return only requested sections and claims to preserve slot read scope."""
+    updates: dict[str, Any] = {}
+    if request.includeSections is not None:
+        requested = set(request.includeSections)
+        updates["sections"] = [
+            section for section in result.sections if section.id in requested
+        ]
+    if request.includeClaims is False:
+        updates["claims"] = []
+    return result.model_copy(update=updates) if updates else result
 
 
 def register_provider(registry: ProviderRegistry) -> None:

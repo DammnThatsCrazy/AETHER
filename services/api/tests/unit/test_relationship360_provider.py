@@ -463,6 +463,157 @@ async def test_agent_subject_reads_graph_history_only_after_canonical_agent_vali
 
 
 @pytest.mark.asyncio
+async def test_agent_spawned_agents_only_exposes_outgoing_spawn_edges_with_exact_claim_mapping() -> None:
+    agent_id = "canonical-agent-parent"
+    spawned = _event(
+        offset=1,
+        kind="edge_added",
+        edge_type="SPAWNED_SUBAGENT",
+        source=agent_id,
+        target="canonical-agent-child",
+        valid_from=T1,
+    )
+    delegated = _event(
+        offset=2,
+        kind="edge_added",
+        edge_type="DELEGATES_TO",
+        source=agent_id,
+        target="canonical-agent-delegate",
+        valid_from=T2,
+    )
+    incoming_spawn = _event(
+        offset=3,
+        kind="edge_added",
+        edge_type="SPAWNED_SUBAGENT",
+        source="canonical-agent-other-parent",
+        target=agent_id,
+        valid_from=T3,
+    )
+    history = _history(
+        (spawned, delegated, incoming_spawn),
+        live_edges=(
+            ("SPAWNED_SUBAGENT", agent_id, "canonical-agent-child"),
+            ("DELEGATES_TO", agent_id, "canonical-agent-delegate"),
+            ("SPAWNED_SUBAGENT", "canonical-agent-other-parent", agent_id),
+        ),
+        subject_id=agent_id,
+        vertex_kind="agent",
+    )
+    reader = _Reader(history)
+
+    class CanonicalAgentReader:
+        async def is_canonical_agent(self, tenant_id: str, subject_id: str) -> bool:
+            assert (tenant_id, subject_id) == (TENANT, agent_id)
+            return True
+
+    provider = Relationship360Provider(
+        reader=reader,
+        agent_identity_reader=CanonicalAgentReader(),
+    )
+    request = _request(kind="agent", subject_id=agent_id)
+    result = await provider.project(request, await _context(request))
+
+    section = _sections(result)["agent_spawned_agents"]
+    assert section.state == "degraded"
+    assert section.content["coverage"] == "unknown"
+    assert section.content["stateBasis"] == "tenant_graph_mutation_ledger_replay"
+    assert "no completeness watermark" in section.content["coverageReason"]
+    assert section.warnings == ["spawned_agent_ledger_prefix_incomplete"]
+    assert section.canonicalAuthorityRefs == ["graph", "relationship_facts", "temporal"]
+    assert [
+        (
+            entry["parentGraphAgentReference"],
+            entry["spawnedGraphAgentReference"],
+        )
+        for entry in section.content["spawnedAgents"]
+    ] == [(agent_id, "canonical-agent-child")]
+    evidence = section.content["spawnedAgents"][0]["evidenceRef"]
+    assert evidence["id"] == "mutation-1"
+    assert evidence["source"] == "graph_mutation_ledger"
+
+    claims_by_mutation = {
+        evidence_ref.id: claim
+        for claim in result.claims
+        for evidence_ref in claim.evidenceRefs
+    }
+    assert "spawned_agents" in claims_by_mutation["mutation-1"].domainSlotIds
+    assert "spawned_agents" not in claims_by_mutation["mutation-2"].domainSlotIds
+    assert "spawned_agents" not in claims_by_mutation["mutation-3"].domainSlotIds
+
+
+@pytest.mark.asyncio
+async def test_agent_spawned_agents_stays_unknown_when_only_generic_delegation_is_observed() -> None:
+    agent_id = "canonical-agent-parent"
+    delegated = _event(
+        offset=1,
+        kind="edge_added",
+        edge_type="DELEGATES_TO",
+        source=agent_id,
+        target="canonical-agent-delegate",
+        valid_from=T1,
+    )
+    reader = _Reader(
+        _history(
+            (delegated,),
+            live_edges=(("DELEGATES_TO", agent_id, "canonical-agent-delegate"),),
+            subject_id=agent_id,
+            vertex_kind="agent",
+        )
+    )
+
+    class CanonicalAgentReader:
+        async def is_canonical_agent(self, tenant_id: str, subject_id: str) -> bool:
+            return True
+
+    provider = Relationship360Provider(
+        reader=reader,
+        agent_identity_reader=CanonicalAgentReader(),
+    )
+    request = _request(kind="agent", subject_id=agent_id)
+    result = await provider.project(request, await _context(request))
+
+    section = _sections(result)["agent_spawned_agents"]
+    assert section.state == "unknown"
+    assert section.content is None
+    assert section.warnings == [
+        "no_spawned_agent_edge_observed_in_incomplete_ledger_prefix"
+    ]
+    assert all("spawned_agents" not in claim.domainSlotIds for claim in result.claims)
+
+
+@pytest.mark.asyncio
+async def test_agent_spawned_agents_reports_degraded_when_graph_history_is_unavailable() -> None:
+    agent_id = "canonical-agent-parent"
+
+    class FailingReader:
+        async def subject_history(
+            self,
+            *,
+            tenant_id: str,
+            subject_id: str,
+            as_of: Optional[str] = None,
+        ) -> SubjectHistory:
+            raise RuntimeError("underlying read details are not projected")
+
+    class CanonicalAgentReader:
+        async def is_canonical_agent(self, tenant_id: str, subject_id: str) -> bool:
+            return True
+
+    provider = Relationship360Provider(
+        reader=FailingReader(),
+        agent_identity_reader=CanonicalAgentReader(),
+    )
+    request = _request(kind="agent", subject_id=agent_id)
+    result = await provider.project(request, await _context(request))
+
+    section = _sections(result)["agent_spawned_agents"]
+    assert section.state == "degraded"
+    assert section.content is None
+    assert section.warnings == ["spawned_agent_graph_read_unavailable"]
+    assert result.degradedReasons == ["graph_history_replay_unavailable"]
+
+
+@pytest.mark.asyncio
 async def test_unresolved_agent_subject_never_reads_graph_history() -> None:
     reader = _Reader(_history())
 

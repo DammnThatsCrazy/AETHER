@@ -10,8 +10,8 @@ canonical_owner: platform@aether
 source_files: [services/api/governance/consent/erasure_jobs.py, services/api/governance/consent/erasure_planes.py, services/api/governance/dsr_propagation/models.py, services/api/value/x402/commerce_store.py, services/api/graph/web3/registries.py, services/api/shared/storage/lifecycle.py, scripts/release/check_dsr_coverage.py]
 source_hashes:
   "scripts/release/check_dsr_coverage.py": "sha256:2cca7e381e2c76b5e47e178828a8522cbc0794ffb45cdaad304d01e20f9ae1b4"
-  "services/api/governance/consent/erasure_jobs.py": "sha256:c181535d6b0a3fcc2bf5b7f3d248ca9970845285413c54ac75ba9433a5c6f86c"
-  "services/api/governance/consent/erasure_planes.py": "sha256:f993383c39a336ec26bbf1a1811839f536a00ad3ba2953669daa98bdb7fa1c97"
+  "services/api/governance/consent/erasure_jobs.py": "sha256:fc3d6a55d104aea374737caf8f21965fa03a87afdb05c8a86120472365e4a959"
+  "services/api/governance/consent/erasure_planes.py": "sha256:d62cf1c9e9bbe0f7404790dd32011a025f3e340013653c0d9f401b5576d48ae6"
   "services/api/governance/dsr_propagation/models.py": "sha256:c5afa46e9327a7d48ab0583836932ffb3e8f14ce3f420d7afe404ae5afe3450f"
   "services/api/graph/web3/registries.py": "sha256:13f14a786f6da928db1526c5f01d553f21fd388805feb368c4f6c18493ebdffe"
   "services/api/shared/storage/lifecycle.py": "sha256:f5446beb697cab99031cf464d9dcdb95310ad83870036fe0e5f1baf09d16d712"
@@ -81,7 +81,7 @@ every other plane succeeded in the same attempt; otherwise they are marked
 | `reward_decisions` | `reward_eligibility_decisions` | retained (`legal` / `preserve`) | `skipped_legal_hold`, retained count, policy pointer |
 | `connector_derived_records` | `comms_provider_identities`; `source_identities` + `identity_claims` | tombstone (identifiers cleared, `resolution_status: erased`); hard delete | rows affected |
 | `financial_value_snapshots` | `derivatives_pnl_snapshots` of the subject's trading accounts | hard delete | rows deleted; `artifacts_impacted` = accounts |
-| `silver_facts` | every `silver_*` and projector fact table, via the Silver writer's introspected schemas (typed columns and lake JSONB `data`) | hard delete | rows deleted |
+| `silver_facts` | every `silver_*` and projector fact table, via the Silver writer's introspected schemas (typed columns and lake JSONB `data`); semantic memory records are erased by the semantic handler | hard delete | rows deleted |
 | `bronze_events` | `bronze_sdk_events` (+ externalized objects), `event_outbox` | chain-preserving tombstone + re-pack; payload redaction | rows affected |
 | `web3_observations` | `web3_observations` | exact subject-ref match in tenant-owned structured fields / payload; hard delete, legal hold respected | rows deleted |
 | `x402_commerce` | commerce challenges, approvals, policies, authorizations, receipts, settlements, entitlements, grants, fulfillments, budget policies | hard delete rows whose requester/subject/holder id equals a subject ref; per-resource legal holds respected | rows deleted by store |
@@ -95,7 +95,11 @@ regenerable, 7-day derived copy. The value-semantics snapshot stores
 subject key; `test_value_snapshot_stores_carry_no_subject_key` pins that. Silver
 tables owned by another component are excluded from `silver_facts`:
 `silver_campaign_touchpoint_facts` and `canonical_conversions`
-(`attribution_records`) and the semantic handler's tables.
+(`attribution_records`). The semantic handler owns and hard-deletes
+`silver_semantic_observations`, `semantic_memory_records`, entity mentions,
+subject links, claims, shadow divergences, sentiment observations, Gold
+semantic/sentiment state, and review-queue rows; its returned per-table counts
+feed the DSR component receipt.
 
 Deliberately **not** erased (storage policy `preserve`, the lawful audit trail):
 `identity_merge_events`, `identity_split_events`, `identity_resolution_audit`,
