@@ -20,12 +20,15 @@ from intelligence.signals.signals360_provider import (  # noqa: E402
     OUTPUT_SECTIONS,
     PROJECTION_ID,
     Signals360Provider,
+    LinkedEntitiesRead,
+    LinkedEntity,
     ObservationQualityRead,
     RepositorySignal360Source,
     SignalSummaryRead,
     register_provider,
 )
 from shared.contracts_models.epistemic import EpistemicStatus  # noqa: E402
+from graph.operational_intelligence.models import EvidenceRef  # noqa: E402
 from shared.intelligence_projections.contracts import (  # noqa: E402
     ProjectionContext,
     ProjectionRequest,
@@ -61,6 +64,93 @@ class FakeSignalSource:
         return self.observation_quality_read or ObservationQualityRead(
             None, True, True, "exact_sdk_observation_not_found"
         )
+
+
+class FakeLinkedEntitySignalSource(FakeSignalSource):
+    def __init__(self, read: LinkedEntitiesRead) -> None:
+        super().__init__(SignalSummaryRead((), available=False, complete=False))
+        self.link_read = read
+
+    async def linked_entities(
+        self, *, tenant_id: str, subject_kind: str, subject_id: str
+    ) -> LinkedEntitiesRead:
+        return self.link_read
+
+
+class FakeSignalRepository:
+    def __init__(self, row: dict[str, Any] | None) -> None:
+        self.row = row
+        self.calls: list[tuple[str, str]] = []
+
+    async def get_signal(self, tenant_id: str, signal_id: str) -> dict[str, Any] | None:
+        self.calls.append((tenant_id, signal_id))
+        return self.row
+
+
+class FakeIdentityRepository:
+    def __init__(
+        self,
+        *,
+        observations: list[dict[str, Any]] | None = None,
+        subjects: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
+        self.observations = observations or []
+        self.subjects = subjects or {}
+        self.event_calls: list[tuple[str, list[str], int]] = []
+        self.subject_calls: list[tuple[str, str]] = []
+
+    async def get_observations_for_events(
+        self, tenant_id: str, event_ids: list[str], limit: int = 500
+    ) -> list[dict[str, Any]]:
+        self.event_calls.append((tenant_id, event_ids, limit))
+        return [
+            row
+            for row in self.observations
+            if row.get("tenant_id") == tenant_id and row.get("source_event_id") in event_ids
+        ][:limit]
+
+    async def get_subject_by_canonical_entity_id(
+        self, tenant_id: str, entity_id: str
+    ) -> dict[str, Any] | None:
+        self.subject_calls.append((tenant_id, entity_id))
+        row = self.subjects.get(entity_id)
+        return row if row is not None and row.get("tenant_id") == tenant_id else None
+
+
+def _identity_subject(
+    entity_id: str,
+    *,
+    status: str = "active",
+    entity_type: str = "human",
+    merged_into_entity_id: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "id": f"identity-row-{entity_id}",
+        "tenant_id": TENANT_A,
+        "canonical_entity_id": entity_id,
+        "entity_type": entity_type,
+        "status": status,
+        "merged_into_entity_id": merged_into_entity_id,
+        "last_seen_at": "2026-10-18T10:00:00Z",
+    }
+
+
+def _identity_observation(
+    observation_id: str,
+    event_id: str,
+    entity_id: str,
+    *,
+    tenant_id: str = TENANT_A,
+) -> dict[str, Any]:
+    return {
+        "id": observation_id,
+        "tenant_id": tenant_id,
+        "source_event_id": event_id,
+        "canonical_entity_id": entity_id,
+        "observed_at": "2026-10-18T10:01:00Z",
+        "signal_value_hash": "sensitive-hash-must-not-escape",
+        "raw_value_redacted": "sensitive-value-must-not-escape",
+    }
 
 
 def _row(
@@ -292,6 +382,229 @@ async def test_signals360_quality_rejects_cross_tenant_bronze_evidence() -> None
     assert quality.content["reasonCode"] == "sdk_observation_scope_mismatch"
     assert "evidenceRefs" not in quality.content
     assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_signals360_exact_signal_to_active_canonical_entity_link() -> None:
+    signal_id = "MISSING_EXPECTED_ACTION:entity-signals-a:1234"
+    signals = FakeSignalRepository(
+        {
+            **_row(signal_id),
+            "entity_id": ENTITY_ID,
+            "tenant_id": TENANT_A,
+            "signal_id": signal_id,
+        }
+    )
+    identity = FakeIdentityRepository(subjects={ENTITY_ID: _identity_subject(ENTITY_ID)})
+    source = RepositorySignal360Source(signals=signals, identity_repository=identity)
+
+    result = await Signals360Provider(source=source).project(
+        _request(subject_kind="signal", subject_id=signal_id), _context()
+    )
+
+    linked = _sections(result)["linked_entities"]
+    assert signals.calls == [(TENANT_A, signal_id)]
+    assert identity.subject_calls == [(TENANT_A, ENTITY_ID)]
+    assert linked.state == "available"
+    assert linked.content["linkedEntities"] == [
+        {"id": ENTITY_ID, "entityType": "human", "state": "active"}
+    ]
+    assert {ref["source"] for ref in linked.content["evidenceRefs"]} == {
+        "behavioral_signals",
+        "identity_subjects",
+    }
+    assert len(result.claims) == 1
+    assert result.claims[0].domainSlotIds == ["linked_entities"]
+    assert result.claims[0].subject == ProjectionSubject(kind="signal", id=signal_id)
+    serialized = str(linked.content)
+    assert "explanation" not in serialized
+    assert "private-event-id" not in serialized
+    assert "sensitive-hash" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_signals360_drops_cross_tenant_signal_entity_binding() -> None:
+    signal_id = "signal-from-another-tenant"
+    signals = FakeSignalRepository(
+        {
+            **_row(signal_id, tenant_id="tenant-signals-b"),
+            "entity_id": "foreign-entity",
+            "tenant_id": "tenant-signals-b",
+            "signal_id": signal_id,
+        }
+    )
+    identity = FakeIdentityRepository(
+        subjects={"foreign-entity": _identity_subject("foreign-entity")}
+    )
+    source = RepositorySignal360Source(signals=signals, identity_repository=identity)
+
+    result = await Signals360Provider(source=source).project(
+        _request(subject_kind="signal", subject_id=signal_id), _context()
+    )
+
+    linked = _sections(result)["linked_entities"]
+    assert linked.state == "degraded"
+    assert linked.content["reasonCode"] == "behavioral_signal_scope_mismatch"
+    assert linked.content["linkedEntities"] == []
+    assert linked.content["evidenceRefs"] == []
+    assert identity.subject_calls == []
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_signals360_exact_event_identity_join_follows_merge_to_active_subject() -> None:
+    event_id = "evt-identity-exact-1"
+    identity = FakeIdentityRepository(
+        observations=[
+            _identity_observation("identity-observation-1", event_id, "entity-old"),
+            _identity_observation("identity-observation-2", event_id, "entity-old-2"),
+        ],
+        subjects={
+            "entity-old": _identity_subject(
+                "entity-old", status="merged", merged_into_entity_id="entity-current"
+            ),
+            "entity-old-2": _identity_subject(
+                "entity-old-2", status="merged", merged_into_entity_id="entity-current"
+            ),
+            "entity-current": _identity_subject("entity-current", entity_type="agent"),
+        },
+    )
+    source = RepositorySignal360Source(identity_repository=identity)
+
+    result = await Signals360Provider(source=source).project(
+        _request(subject_kind="event", subject_id=event_id), _context()
+    )
+
+    linked = _sections(result)["linked_entities"]
+    assert identity.event_calls == [(TENANT_A, [event_id], 20)]
+    assert linked.state == "available"
+    assert linked.content["linkedEntities"] == [
+        {"id": "entity-current", "entityType": "agent", "state": "active"}
+    ]
+    assert {ref["source"] for ref in linked.content["evidenceRefs"]} == {
+        "identity_signal_observations",
+        "identity_subjects",
+    }
+    assert {ref["id"] for ref in linked.content["evidenceRefs"]} >= {
+        "identity-observation-1",
+        "identity-observation-2",
+        "entity-old",
+        "entity-old-2",
+        "entity-current",
+    }
+    assert "sensitive-hash" not in str(linked.content)
+    assert "sensitive-value" not in str(linked.content)
+    assert len(result.claims) == 1
+
+
+@pytest.mark.asyncio
+async def test_signals360_observation_does_not_infer_resolver_event_id() -> None:
+    identity = FakeIdentityRepository(
+        observations=[
+            _identity_observation(
+                "identity-observation-2", "resolver-event-id", ENTITY_ID
+            )
+        ],
+        subjects={ENTITY_ID: _identity_subject(ENTITY_ID)},
+    )
+    source = RepositorySignal360Source(identity_repository=identity)
+    observation_id = "sdk-observation-id"
+
+    result = await Signals360Provider(source=source).project(
+        _request(subject_kind="observation", subject_id=observation_id), _context()
+    )
+
+    linked = _sections(result)["linked_entities"]
+    assert identity.event_calls == [(TENANT_A, [observation_id], 20)]
+    assert linked.state == "unknown"
+    assert linked.content["linkedEntities"] == []
+    assert linked.content["reasonCode"] == (
+        "exact_observation_id_not_bound_to_identity_event_id"
+    )
+    assert linked.content["evidenceRefs"] == []
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_signals360_rechecks_link_read_tenant_and_subject_scope() -> None:
+    subject = ProjectionSubject(kind="event", id="evt-signals-scope")
+    foreign_evidence = EvidenceRef(
+        id="foreign-entity",
+        type="entity",
+        source="identity_subjects",
+    )
+    source = FakeLinkedEntitySignalSource(
+        LinkedEntitiesRead(
+            tenant_id="tenant-signals-b",
+            subject_kind="event",
+            subject_id=subject.id,
+            entities=(
+                LinkedEntity(
+                    entity_id="foreign-entity",
+                    entity_type="human",
+                    evidence_refs=(foreign_evidence,),
+                ),
+            ),
+            available=True,
+            complete=True,
+        )
+    )
+
+    result = await Signals360Provider(source=source).project(
+        _request(subject_kind=subject.kind, subject_id=subject.id), _context()
+    )
+
+    linked = _sections(result)["linked_entities"]
+    assert linked.state == "degraded"
+    assert linked.content["reasonCode"] == "canonical_identity_join_scope_mismatch"
+    assert linked.content["linkedEntities"] == []
+    assert linked.content["evidenceRefs"] == []
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_signals360_rejects_conflicting_or_truncated_event_entity_joins() -> None:
+    event_id = "evt-identity-conflict"
+    conflict_source = RepositorySignal360Source(
+        identity_repository=FakeIdentityRepository(
+            observations=[
+                _identity_observation("identity-observation-a", event_id, "entity-a"),
+                _identity_observation("identity-observation-b", event_id, "entity-b"),
+            ],
+            subjects={
+                "entity-a": _identity_subject("entity-a"),
+                "entity-b": _identity_subject("entity-b", entity_type="organization"),
+            },
+        )
+    )
+
+    conflict_result = await Signals360Provider(source=conflict_source).project(
+        _request(subject_kind="event", subject_id=event_id), _context()
+    )
+    conflict = _sections(conflict_result)["linked_entities"]
+    assert conflict.state == "degraded"
+    assert conflict.content["linkedEntities"] == []
+    assert conflict.content["reasonCode"] == "identity_event_entity_join_conflicted"
+    assert conflict.content["evidenceRefs"] == []
+    assert conflict_result.claims == []
+
+    truncated_source = RepositorySignal360Source(
+        identity_repository=FakeIdentityRepository(
+            observations=[
+                _identity_observation(f"identity-observation-{index}", event_id, "entity-a")
+                for index in range(20)
+            ],
+            subjects={"entity-a": _identity_subject("entity-a")},
+        )
+    )
+    truncated_result = await Signals360Provider(source=truncated_source).project(
+        _request(subject_kind="event", subject_id=event_id), _context()
+    )
+    truncated = _sections(truncated_result)["linked_entities"]
+    assert truncated.state == "degraded"
+    assert truncated.content["linkedEntities"] == []
+    assert truncated.content["reasonCode"] == "identity_event_observation_read_truncated"
+    assert truncated_result.claims == []
 
 
 class FakeBronzeRepository:

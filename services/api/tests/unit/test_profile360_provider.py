@@ -193,11 +193,13 @@ def _request(
     time_range=None,
     include_sections: Optional[list[str]] = None,
     include_claims: Optional[bool] = None,
+    subject_kind: str = "entity",
+    subject_id: str = USER_ID,
 ) -> ProjectionRequest:
     return ProjectionRequest(
         projectionId="profile360",
         tenantId=TENANT,
-        subject=ProjectionSubject(kind="entity", id=USER_ID),
+        subject=ProjectionSubject(kind=subject_kind, id=subject_id),
         temporalMode=mode,
         timeRange=time_range,
         includeSections=include_sections,
@@ -1213,3 +1215,379 @@ async def test_relative_mode_without_bounds_is_not_silently_relabelled():
         item["code"] == "temporal_request_not_satisfied"
         for item in _section(result, "findings").content["items"]
     )
+
+
+class _AgentAuthoritySource:
+    """Small canonical Agent360 fixture exercising the real delegation provider."""
+
+    def __init__(self, *, active_scope_mismatch: bool = False) -> None:
+        self.actor_identity_calls: list[tuple[str, str]] = []
+        self.active_scope_mismatch = active_scope_mismatch
+        self.agent_id = "agent-runtime-1"
+        self.canonical_agent_id = "agent-entity-1"
+        self.grantor_id = "human-entity-1"
+        self.delegation = {
+            "tenant_id": TENANT,
+            "delegation_id": "delegation-1",
+            "grantor_entity_id": self.grantor_id,
+            "grantee_entity_id": self.canonical_agent_id,
+            "scope": {"actions": ["invoke"], "resources": ["capability:search"]},
+            "starts_at": "2026-05-01T00:00:00Z",
+            "ends_at": None,
+            "revoked_at": None,
+            "authorization_kind": "capability",
+            "capability_id": "search",
+        }
+
+    async def agent_configs(self, tenant_id, agent_id):
+        return []
+
+    async def actor_identity(self, tenant_id, agent_id):
+        from actions.agent.agent360_provider import Agent360ReadBatch
+
+        self.actor_identity_calls.append((tenant_id, agent_id))
+        direct_entity = agent_id == self.canonical_agent_id
+        return Agent360ReadBatch(
+            rows=[
+                {
+                    "tenant_id": tenant_id,
+                    "agent_id": agent_id,
+                    "canonical_agent_entity_id": self.canonical_agent_id,
+                    "identity_evidence_id": (
+                        self.canonical_agent_id if direct_entity else "agent-binding-1"
+                    ),
+                    "identity_evidence_source": (
+                        "entities" if direct_entity else "agent_deployment_identity_bindings"
+                    ),
+                    "identity_binding_authority": (
+                        "canonical_agent_entity" if direct_entity else "tenant_admin_explicit"
+                    ),
+                    "identity_bound_at": "2026-05-01T00:00:00Z",
+                }
+            ]
+        )
+
+    async def principal_identities(self, tenant_id, principal_user_ids, limit):
+        from actions.agent.agent360_provider import Agent360ReadBatch
+
+        return Agent360ReadBatch(rows=[])
+
+    async def executions(self, tenant_id, agent_id, limit):
+        return []
+
+    async def incoming_delegations(self, tenant_id, canonical_agent_entity_id, limit):
+        return (
+            [self.delegation]
+            if canonical_agent_entity_id == self.canonical_agent_id
+            else []
+        )
+
+    async def outgoing_delegations(self, tenant_id, canonical_agent_entity_id, limit):
+        return []
+
+    async def active_incoming_delegations(self, tenant_id, canonical_agent_entity_id):
+        from actions.agent.agent360_provider import Agent360ReadBatch
+
+        rows = (
+            [self.delegation]
+            if canonical_agent_entity_id == self.canonical_agent_id
+            else []
+        )
+        return Agent360ReadBatch(
+            rows=rows,
+            scope_mismatch=self.active_scope_mismatch,
+        )
+
+    async def delegation_party_identities(self, tenant_id, party_entity_ids):
+        from actions.agent.agent360_provider import Agent360ReadBatch
+
+        return Agent360ReadBatch(
+            rows=[
+                {
+                    "tenant_id": tenant_id,
+                    "party_entity_id": entity_id,
+                    "party_entity_type": (
+                        "agent" if entity_id == self.canonical_agent_id else "human"
+                    ),
+                    "identity_evidence_id": entity_id,
+                    "identity_evidence_source": "entities",
+                    "identity_observed_at": "2026-05-01T00:00:00Z",
+                }
+                for entity_id in sorted(party_entity_ids)
+            ]
+        )
+
+    async def activities(self, tenant_id, agent_id, limit):
+        return []
+
+    async def tools(self, tenant_id, agent_id, limit):
+        return []
+
+    async def capability_access_profile(
+        self, tenant_id, agent_id, canonical_agent_entity_id
+    ):
+        from actions.agent.agent360_provider import Agent360ReadBatch
+
+        return Agent360ReadBatch(
+            rows=[
+                {
+                    "tenant_id": tenant_id,
+                    "agent_id": agent_id,
+                    "canonical_agent_entity_id": canonical_agent_entity_id,
+                    "not_applicable": True,
+                }
+            ]
+        )
+
+    async def risk_signals(self, tenant_id, agent_id, limit):
+        return []
+
+    async def communications(self, tenant_id, agent_id, limit):
+        from actions.agent.agent360_provider import Agent360ReadBatch
+
+        return Agent360ReadBatch(rows=[])
+
+
+@pytest.mark.asyncio
+async def test_agent_delegations_reuses_exact_tenant_scoped_agent360_authority():
+    from actions.agent.agent360_provider import Agent360Provider
+    from shared.intelligence_projections.generated_registry import (
+        INTELLIGENCE_PROJECTION_DEFINITIONS,
+    )
+
+    source = _AgentAuthoritySource()
+    request = _request(
+        include_sections=["agent_delegations"],
+        subject_kind="agent",
+        subject_id=source.agent_id,
+    )
+    result = await _project(
+        Profile360Provider(
+            _FakeProfileSource(), agent_provider=Agent360Provider(source)
+        ),
+        request,
+    )
+
+    section = _section(result, "agent_delegations")
+    assert section.state == "available"
+    assert section.canonicalAuthorityRefs == [
+        "agent_access",
+        "agent_executions",
+        "identity",
+    ]
+    assert set(section.canonicalAuthorityRefs) <= set(
+        INTELLIGENCE_PROJECTION_DEFINITIONS["agent360"]["canonicalAuthorities"]
+    )
+    assert source.actor_identity_calls == [(TENANT, source.agent_id)]
+    assert section.content["identityBinding"] == {
+        "state": "matched",
+        "sourceAgentId": source.agent_id,
+        "canonicalAgentEntityId": source.canonical_agent_id,
+        "evidenceRefs": [
+            {
+                "id": "agent-binding-1",
+                "type": "entity",
+                "source": "agent_deployment_identity_bindings",
+                "observedAt": "2026-05-01T00:00:00Z",
+            }
+        ],
+    }
+    authority = section.content["delegationAuthority"]
+    assert authority["state"] == "available"
+    assert authority["delegationRecords"][0]["delegationId"] == "delegation-1"
+    assert authority["delegationRecords"][0]["granteeEntityId"] == source.canonical_agent_id
+    assert authority["delegationRecords"][0]["authorizationDecision"] == "unknown"
+    assert authority["effectiveAuthorizationDecision"] == "unknown"
+    assert section.content["policy"]["effectiveAuthorizationDecision"] == "unknown"
+    assert section.content["freshness"]["state"] == "unknown"
+    assert "current_repository_state" in section.content["temporalSemantics"]
+    assert result.claims
+    assert all(claim.domainSlotIds == ["agent_delegations"] for claim in result.claims)
+    assert all(claim.subject == request.subject for claim in result.claims)
+    assert all(claim.evidenceRefs for claim in result.claims)
+
+
+class _PartialAuthorityAgentProvider:
+    """Keep Agent360's real evidence while simulating its partial-state contract."""
+
+    def __init__(self, provider) -> None:
+        self.provider = provider
+
+    async def project(self, request, context):
+        result = await self.provider.project(request, context)
+        sections = []
+        for section in result.sections:
+            if section.id != "state" or not isinstance(section.content, dict):
+                sections.append(section)
+                continue
+            dimensions = [dict(item) for item in section.content.get("dimensions", [])]
+            for item in dimensions:
+                if item.get("id") == "authority_and_delegation":
+                    item["state"] = "partial"
+                    item["content"] = {**item["content"], "state": "partial"}
+            sections.append(
+                section.model_copy(
+                    update={
+                        "content": {
+                            **section.content,
+                            "dimensions": dimensions,
+                        }
+                    }
+                )
+            )
+        return result.model_copy(update={"sections": sections})
+
+
+@pytest.mark.asyncio
+async def test_agent_delegations_preserves_partial_authority_state_and_evidence():
+    from actions.agent.agent360_provider import Agent360Provider
+
+    source = _AgentAuthoritySource()
+    request = _request(
+        include_sections=["agent_delegations"],
+        subject_kind="agent",
+        subject_id=source.agent_id,
+    )
+    result = await _project(
+        Profile360Provider(
+            _FakeProfileSource(),
+            agent_provider=_PartialAuthorityAgentProvider(Agent360Provider(source)),
+        ),
+        request,
+    )
+
+    section = _section(result, "agent_delegations")
+    assert section.state == "degraded"
+    assert section.content["state"] == "degraded"
+    authority = section.content["delegationAuthority"]
+    assert authority["state"] == "partial"
+    assert authority["delegationRecords"][0]["delegationId"] == "delegation-1"
+    assert source.actor_identity_calls == [(TENANT, source.agent_id)]
+
+
+@pytest.mark.asyncio
+async def test_agent_delegations_preserves_degraded_authority_evidence():
+    from actions.agent.agent360_provider import Agent360Provider
+
+    source = _AgentAuthoritySource(active_scope_mismatch=True)
+    request = _request(
+        include_sections=["agent_delegations"],
+        subject_kind="agent",
+        subject_id=source.agent_id,
+    )
+    result = await _project(
+        Profile360Provider(
+            _FakeProfileSource(), agent_provider=Agent360Provider(source)
+        ),
+        request,
+    )
+
+    section = _section(result, "agent_delegations")
+    assert section.state == "degraded"
+    authority = section.content["delegationAuthority"]
+    assert authority["state"] == "degraded"
+    assert authority["delegationRecords"][0]["delegationId"] == "delegation-1"
+    assert section.content["identityBinding"]["state"] == "matched"
+
+
+@pytest.mark.asyncio
+async def test_agent_delegations_accepts_only_the_exact_canonical_agent_entity():
+    from actions.agent.agent360_provider import Agent360Provider
+
+    source = _AgentAuthoritySource()
+    profile_source = _FakeProfileSource(
+        entity=CanonicalEntityRead(
+            record={
+                "tenant_id": TENANT,
+                "entity_id": source.canonical_agent_id,
+                "entity_type": "agent",
+                "created_at": "2026-05-01T00:00:00Z",
+            },
+            available=True,
+            scope_known=True,
+        )
+    )
+    request = _request(
+        include_sections=["agent_delegations"],
+        subject_kind="entity",
+        subject_id=source.canonical_agent_id,
+    )
+    result = await _project(
+        Profile360Provider(
+            profile_source, agent_provider=Agent360Provider(source)
+        ),
+        request,
+    )
+
+    section = _section(result, "agent_delegations")
+    assert section.state == "available"
+    assert section.content["identityBinding"]["canonicalAgentEntityId"] == (
+        source.canonical_agent_id
+    )
+    assert section.content["delegationAuthority"]["delegationRecords"][0][
+        "delegationId"
+    ] == "delegation-1"
+    assert source.actor_identity_calls == [(TENANT, source.canonical_agent_id)]
+
+
+@pytest.mark.asyncio
+async def test_agent_delegations_keeps_non_agent_entity_unknown():
+    from actions.agent.agent360_provider import Agent360Provider
+
+    source = _AgentAuthoritySource()
+    profile_source = _FakeProfileSource(
+        entity=CanonicalEntityRead(
+            record={
+                "tenant_id": TENANT,
+                "entity_id": source.grantor_id,
+                "entity_type": "human",
+                "created_at": "2026-05-01T00:00:00Z",
+            },
+            available=True,
+            scope_known=True,
+        )
+    )
+    request = _request(
+        include_sections=["agent_delegations"],
+        subject_kind="entity",
+        subject_id=source.grantor_id,
+    )
+    result = await _project(
+        Profile360Provider(profile_source, agent_provider=Agent360Provider(source)),
+        request,
+    )
+
+    section = _section(result, "agent_delegations")
+    assert section.state == "unknown"
+    assert section.content["delegationAuthority"]["state"] == "unknown"
+    assert section.canonicalAuthorityRefs is None
+    assert not any(
+        "agent_delegations" in (claim.domainSlotIds or []) for claim in result.claims
+    )
+    assert source.actor_identity_calls == []
+
+
+@pytest.mark.asyncio
+async def test_agent_delegations_keeps_unbound_profile_subject_unknown_without_lookup():
+    from actions.agent.agent360_provider import Agent360Provider
+
+    source = _AgentAuthoritySource()
+    request = _request(
+        include_sections=["agent_delegations"],
+        subject_kind="profile",
+        subject_id=USER_ID,
+    )
+    result = await _project(
+        Profile360Provider(
+            _FakeProfileSource(), agent_provider=Agent360Provider(source)
+        ),
+        request,
+    )
+
+    section = _section(result, "agent_delegations")
+    assert section.state == "unknown"
+    assert section.content["identityBinding"]["reason"] == (
+        "profile_subject_has_no_exact_agent_binding"
+    )
+    assert result.claims == []
+    assert source.actor_identity_calls == []

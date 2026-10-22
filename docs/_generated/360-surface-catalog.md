@@ -40,9 +40,9 @@ Declared binding counts are registry coverage, not proof that a slot or surface 
 | [Journey 360](#journey-360) | source_aligned | `journey`, `profile`, `account`, `campaign`, `episode`, `entity` | 11 | 6/11 | 3 | 5 | 2 | `episode360`, `profile360` | — |
 | [Location 360](#location-360) | source_aligned | `location`, `place`, `geohash`, `timezone`, `region`, `entity`, `population`, `source` | 11 | 5/11 | 2 | 6 | 4 | `geographic360`, `population360`, `profile360` | — |
 | [Memory 360](#memory-360) | source_aligned | `entity`, `semantic_entity`, `memory`, `card`, `topic` | 10 | 7/10 | 1 | 3 | 0 | `memory360` | — |
-| [Profile 360](#profile-360) | source_aligned | `profile`, `entity`, `agent`, `anonymous_subject`, `account_member`, `cluster` | 13 | 6/13 | 2 | 7 | 6 | `economic360`, `outcome360`, `profile360`, `relationship360`, `risk360` | — |
+| [Profile 360](#profile-360) | source_aligned | `profile`, `entity`, `agent`, `anonymous_subject`, `account_member`, `cluster` | 13 | 7/13 | 3 | 6 | 6 | `economic360`, `outcome360`, `profile360`, `relationship360`, `risk360` | — |
 | [Risk 360](#risk-360) | source_aligned | `risk`, `entity`, `profile`, `agent`, `account`, `source`, `campaign`, `contagion_path`, `relationship`, `cluster` | 12 | 5/12 | 1 | 7 | 6 | `economic360`, `execution360`, `fraud360`, `relationship360`, `risk360`, `social360` | — |
-| [Signals 360](#signals-360) | source_aligned | `entity`, `signal`, `source`, `event`, `observation`, `stream` | 10 | 5/10 | 2 | 5 | 0 | `signals360` | — |
+| [Signals 360](#signals-360) | source_aligned | `entity`, `signal`, `source`, `event`, `observation`, `stream` | 10 | 6/10 | 3 | 4 | 0 | `signals360` | — |
 | [Social 360](#social-360) | source_aligned | `entity`, `profile`, `relationship`, `community`, `syndicate`, `source`, `population` | 10 | 5/10 | 2 | 5 | 5 | `geographic360`, `population360`, `relationship360`, `social360`, `source360` | — |
 | [Support 360](#support-360) | source_aligned | `support_case`, `callback`, `conversation`, `ticket`, `entity`, `agent`, `episode`, `source` | 10 | 3/10 | 2 | 7 | 6 | `agent360`, `episode360`, `outcome360`, `profile360`, `risk360`, `source360`, `support360` | — |
 | [Value 360](#value-360) | source_aligned | `value`, `profile`, `account`, `conversion`, `cluster`, `campaign`, `episode`, `journey`, `entity`, `agent`, `source` | 11 | 5/11 | 3 | 6 | 5 | `campaign360`, `economic360`, `outcome360`, `temporal360` | — |
@@ -669,7 +669,7 @@ Governed entity-level contextual frame combining identity, observations, relatio
 
 | Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
 |---|---|---|---|---|---|---|---|
-| `agent_delegations` | required |  | `agent_access`, `ai_execution_facts` | — | — | Unbound: `profile_agent_delegation_authority_not_joined` | Agent delegation and authority facts linked to the exact profile. |
+| `agent_delegations` | required |  | `agent_access`, `agent_executions`, `identity` | `profile360` (primary): subjects `agent`, `entity`; `agent_delegations` | — | Partial: `Exact Agent subjects and canonical Agent entities reuse Agent360 identity and delegation evidence; unbound profile links, historical replay, effective authorization, and freshness remain unknown.` | Current delegation and action-scoped authority evidence for an exact Agent subject or canonical Agent entity; unbound profiles remain unknown. |
 | `communications` | required |  | `communication_facts` | `profile360` (primary): subjects `entity`; `interactions` | — | Partial: `recipient_message_history_is_bounded_and_sender_thread_semantics_and_freshness_sla_are_unverified` | Exact tenant-scoped recipient messages for a resolved profile entity with recorded consent; sender identity, unknown consent, threads, and semantic interaction remain unknown. |
 | `economic_value_context` | optional |  | `economic_facts`, `outcome_facts`, `ai_execution_facts` | `economic360` (primary): subjects `entity`, `agent`; `summary`, `evidence`, `outcomes`; `outcome360` (supporting): subjects none; `outcomes`, `evidence` | — | — | Economic facts and measured outcomes. |
 | `entity_identity` | optional |  | `identity`, `entity_registry` | `profile360` (primary): subjects `entity`, `agent`; `summary`, `state` | — | — | Resolved entity identity and registry context. |
@@ -707,7 +707,7 @@ Governed entity-level contextual frame combining identity, observations, relatio
 
 ### Authority and governance contract
 
-Canonical authorities: `agent_access`, `ai_execution_facts`, `communication_facts`, `economic_facts`, `entity_registry`, `evidence`, `geo_observations`, `graph`, `identity`, `journeys`, `model_governance`, `observations`, `outcome_facts`, `relationship_facts`, `risk_outputs`, `temporal`.
+Canonical authorities: `agent_access`, `agent_executions`, `ai_execution_facts`, `communication_facts`, `economic_facts`, `entity_registry`, `evidence`, `geo_observations`, `graph`, `identity`, `journeys`, `model_governance`, `observations`, `outcome_facts`, `relationship_facts`, `risk_outputs`, `temporal`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -801,7 +801,7 @@ Governed view of risk, fraud, source, social, and outcome signals with evidence 
 | `classification` | required |  | `events`, `observations` | — | — | Unbound: `canonical_event_signal_classifier_not_joined` | Required signals360 slot: classification. |
 | `evidence_trace` | required |  | `behavioral_signals` | `signals360` (primary): subjects `entity`; `evidence_trace` | — | — | Evidence references for bounded derived signal records. |
 | `freshness` | required |  | `behavioral_signals` | `signals360` (primary): subjects `entity`; `freshness` | — | — | Source timestamps retained from bounded derived signal records; freshness threshold remains unknown. |
-| `linked_entities` | required |  | `identity`, `entity_graph` | — | — | Unbound: `exact_signal_event_identity_join_not_available` | Required signals360 slot: linked entities. |
+| `linked_entities` | required |  | `behavioral_signals`, `identity` | `signals360` (primary): subjects `signal`, `event`, `observation`; `linked_entities` | — | Partial: `Exact links are emitted for signal, event, and matching observation IDs; entity, source, stream, absent-link, and incomplete reads remain unknown or degraded.` | Exact tenant signal, event, or observation bindings to active canonical identity subjects; observation IDs join only when recorded as the matching source_event_id. |
 | `normalization` | required |  | `observations`, `source_schema` | — | — | Unbound: `canonical_observation_normalization_read_not_joined` | Required signals360 slot: normalization. |
 | `quality` | required |  | `ingestion_health`, `source_schema`, `observations` | `signals360` (primary): subjects `event`, `observation`; `quality` | — | Authority: `source_reliability_and_semantic_quality_authorities_not_joined`; Partial: `gateway_acceptance_only_no_reliability_semantic_quality_or_freshness_sla` | Exact SDK Bronze gateway acceptance for an event or observation; source reliability and semantic quality remain unknown. |
 | `risk_flags` | required |  | `risk_outputs` | — | — | Unbound: `canonical_signal_risk_join_not_available` | Required signals360 slot: risk flags. |
@@ -822,7 +822,7 @@ Governed view of risk, fraud, source, social, and outcome signals with evidence 
 
 ### Authority and governance contract
 
-Canonical authorities: `behavioral_signals`, `campaign_facts`, `campaign_touchpoints`, `entity_graph`, `events`, `identity`, `ingestion_health`, `observations`, `risk_outputs`, `source_facts`, `source_provenance`, `source_schema`.
+Canonical authorities: `behavioral_signals`, `campaign_facts`, `campaign_touchpoints`, `events`, `identity`, `ingestion_health`, `observations`, `risk_outputs`, `source_facts`, `source_provenance`, `source_schema`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 

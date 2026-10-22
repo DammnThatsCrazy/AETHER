@@ -33,6 +33,7 @@ from shared.intelligence_projections.contracts import (
 )
 from shared.intelligence_projections.generated_registry import (
     INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+    PROJECTION_SECTION_STATES,
 )
 from shared.intelligence_projections.provider import IntelligenceProjectionProvider
 from shared.intelligence_projections.registry import ProviderRegistry
@@ -54,6 +55,7 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
     "state",
     "summary",
     "timeline",
+    "agent_delegations",
 )
 
 # These are the exact Profile 360 product slots from SSOT §11.4. Generic
@@ -62,6 +64,8 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
 SLOT_ENTITY_IDENTITY = "identity_spine"
 SLOT_KNOWN_UNKNOWN_RESOLUTION = "known_unknown_resolution"
 SLOT_EVIDENCE_LIMITATIONS = "evidence_trace"
+SLOT_AGENT_DELEGATIONS = "agent_delegations"
+AGENT_DELEGATION_AUTHORITIES = ("agent_access", "agent_executions", "identity")
 
 DEFAULT_EVENT_LIMIT = 200
 MAX_EVENT_LIMIT = 500
@@ -923,8 +927,14 @@ class Profile360Provider:
     contract_version = INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION
     graph_mutation_policy = "read_only"
 
-    def __init__(self, source: Optional[Profile360Source] = None) -> None:
+    def __init__(
+        self,
+        source: Optional[Profile360Source] = None,
+        *,
+        agent_provider: Optional[IntelligenceProjectionProvider] = None,
+    ) -> None:
         self._source = source if source is not None else RepositoryProfile360Source()
+        self._agent_provider = agent_provider
 
     async def project(
         self,
@@ -936,6 +946,7 @@ class Profile360Provider:
         requested_sections = set(request.includeSections or OUTPUT_SECTIONS)
         needs_journeys = "journeys" in requested_sections
         needs_sessions = "sessions" in requested_sections
+        needs_agent_delegations = SLOT_AGENT_DELEGATIONS in requested_sections
         needs_identity = bool(
             {"summary", "state", "evidence", "journeys", "sessions", "interactions"}
             & requested_sections
@@ -948,6 +959,7 @@ class Profile360Provider:
                 "journeys",
                 "sessions",
                 "interactions",
+                SLOT_AGENT_DELEGATIONS,
             }
             & requested_sections
             or ("timeline" in requested_sections and request.subject.kind == "entity")
@@ -1069,6 +1081,19 @@ class Profile360Provider:
             history,
             limit=limit,
         )
+        if needs_agent_delegations:
+            agent_delegation_section, agent_delegation_claims = (
+                await self._agent_delegations(request, temporal, canonical_entity)
+            )
+            result = result.model_copy(
+                update={
+                    "sections": sorted(
+                        [*result.sections, agent_delegation_section],
+                        key=lambda section: OUTPUT_SECTIONS.index(section.id),
+                    ),
+                    "claims": [*result.claims, *agent_delegation_claims],
+                }
+            )
         if needs_journeys:
             journey_section, journey_claims = await self._journey_participation(
                 request, temporal, identity, canonical_entity
@@ -1117,6 +1142,264 @@ class Profile360Provider:
                 }
             )
         return _filter_projection_result(result, request)
+
+    async def _agent_delegations(
+        self,
+        request: ProjectionRequest,
+        temporal: _TemporalRequest,
+        canonical_entity: CanonicalEntityRead,
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        """Reuse Agent360's tenant-scoped authority path for exact Agent subjects.
+
+        A human/profile entity is not linked to an agent merely because it is
+        present in Profile360. Entity subjects are accepted only when Agent360
+        resolves that exact entity ID as a canonical Agent entity. Runtime
+        agent references are accepted only after Agent360 resolves them through
+        its tenant-owned identity authority.
+        """
+
+        def unknown(reason: str, *, state: str = "unknown") -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+            return (
+                ProjectionSection(
+                    id=SLOT_AGENT_DELEGATIONS,
+                    state=state,  # type: ignore[arg-type]
+                    title="Agent delegation and authority",
+                    content={
+                        "state": state,
+                        "identityBinding": {"state": "unknown", "reason": reason},
+                        "delegationAuthority": {"state": state, "reason": reason},
+                        "policy": {
+                            "state": "not_evaluated_by_projection",
+                            "effectiveAuthorizationDecision": "unknown",
+                            "reason": (
+                                "Profile access policy is enforced by the frame runtime; "
+                                "stored delegation evidence does not authorize a new action."
+                            ),
+                        },
+                        "freshness": {
+                            "state": "unknown",
+                            "observedAt": None,
+                            "reason": "No Profile360 agent-authority freshness threshold is available.",
+                        },
+                        "temporalSemantics": temporal.mode,
+                    },
+                ),
+                [],
+            )
+
+        if request.subject.kind not in {"agent", "entity"}:
+            return unknown("profile_subject_has_no_exact_agent_binding")
+        if request.subject.kind == "entity":
+            entity = canonical_entity.record
+            if (
+                entity is None
+                or entity.get("tenant_id") != request.tenantId
+                or _safe_text(entity.get("entity_id")) != request.subject.id
+            ):
+                return unknown("profile_entity_registry_binding_unavailable")
+            if entity.get("entity_type") != "agent":
+                return unknown("profile_entity_is_not_a_canonical_agent")
+        if temporal.error is not None:
+            return unknown(temporal.error)
+        if temporal.as_of is not None or temporal.mode == "compare":
+            return unknown("agent_authority_historical_replay_unavailable")
+
+        try:
+            if self._agent_provider is None:
+                from actions.agent.agent360_provider import Agent360Provider
+
+                self._agent_provider = Agent360Provider()
+            agent_request = ProjectionRequest(
+                projectionId="agent360",
+                tenantId=request.tenantId,
+                subject=request.subject,
+                page=request.page,
+                timeRange=request.timeRange,
+                includeSections=["state"],
+                includeClaims=request.includeClaims,
+                temporalMode=temporal.mode,
+            )
+            agent_context = await ProviderRegistry().build_context(
+                "agent360", agent_request
+            )
+            agent_result = await self._agent_provider.project(agent_request, agent_context)
+        except Exception:  # noqa: BLE001 - fail closed at the cross-projection boundary
+            return unknown("agent360_authority_provider_unavailable", state="degraded")
+
+        if (
+            agent_result.projectionId != "agent360"
+            or agent_result.tenantId != request.tenantId
+        ):
+            return unknown("agent360_authority_result_scope_mismatch", state="degraded")
+
+        state_sections = [section for section in agent_result.sections if section.id == "state"]
+        state_content = state_sections[0].content if len(state_sections) == 1 else None
+        dimensions = state_content.get("dimensions") if isinstance(state_content, dict) else None
+        if not isinstance(dimensions, list):
+            return unknown("agent360_exact_agent_identity_unavailable")
+
+        def dimension(name: str) -> Optional[dict[str, Any]]:
+            matches = [
+                item
+                for item in dimensions
+                if isinstance(item, dict) and item.get("id") == name
+            ]
+            return matches[0] if len(matches) == 1 else None
+
+        identity_dimension = dimension("agent_identity")
+        actor_dimension = dimension("actor_attribution")
+        authority_dimension = dimension("authority_and_delegation")
+        identity_content = (
+            identity_dimension.get("content")
+            if isinstance(identity_dimension, dict)
+            else None
+        )
+        actor_content = (
+            actor_dimension.get("content") if isinstance(actor_dimension, dict) else None
+        )
+        authority_content = (
+            authority_dimension.get("content")
+            if isinstance(authority_dimension, dict)
+            else None
+        )
+        if not all(
+            isinstance(value, dict)
+            for value in (identity_content, actor_content, authority_content)
+        ):
+            return unknown("agent360_exact_agent_identity_unavailable")
+
+        canonical_agent_id = _safe_text(identity_content.get("canonicalAgentEntityId"))
+        attributed_agent_id = _safe_text(actor_content.get("resolvedCanonicalActor"))
+        identity_refs: list[EvidenceRef] = []
+        raw_identity_refs = identity_content.get("evidenceRefs")
+        if isinstance(raw_identity_refs, list):
+            for raw_ref in raw_identity_refs:
+                try:
+                    ref = EvidenceRef.model_validate(raw_ref)
+                except Exception:  # noqa: BLE001 - malformed identity evidence is omitted
+                    continue
+                if (
+                    ref.type == "entity"
+                    and ref.source in {"entities", "agent_deployment_identity_bindings"}
+                ):
+                    identity_refs.append(ref)
+        if (
+            not canonical_agent_id
+            or attributed_agent_id != canonical_agent_id
+            or not identity_refs
+            or actor_content.get("state") != "matched"
+        ):
+            return unknown("agent360_exact_agent_identity_unavailable")
+        if request.subject.kind == "entity" and canonical_agent_id != request.subject.id:
+            return unknown("profile_entity_is_not_the_resolved_canonical_agent")
+
+        authority_state = (
+            authority_dimension.get("state")
+            if isinstance(authority_dimension, dict)
+            else None
+        )
+        if not isinstance(authority_state, str):
+            return unknown("agent360_authority_state_invalid", state="degraded")
+        if authority_state in PROJECTION_SECTION_STATES:
+            section_state = authority_state
+        elif authority_state in {"partial", "conflicted", "truncated", "unavailable"}:
+            # Keep more specific incomplete states in the authority payload,
+            # while mapping them to the shared section-state contract.
+            section_state = "degraded"
+        else:
+            return unknown("agent360_authority_state_invalid", state="degraded")
+
+        # Agent360 has already tenant-validated these records and party joins.
+        # Keep an explicit allowlist at the Profile360 boundary so new internal
+        # Agent360 fields do not silently become part of the Profile contract.
+        authority_view = {
+            "state": authority_state,
+            **{
+                key: authority_content[key]
+                for key in (
+                    "delegationRecords",
+                    "delegationReadConflicts",
+                    "actionScopedDecisions",
+                    "actionScopedDecisionState",
+                    "activeIncomingCount",
+                    "capabilityAccessProfile",
+                    "temporalSemantics",
+                    "truncated",
+                    "evidenceRefs",
+                )
+                if key in authority_content
+            },
+            "effectiveAuthorizationDecision": "unknown",
+        }
+        content = {
+            "state": section_state,
+            "identityBinding": {
+                "state": "matched",
+                "sourceAgentId": request.subject.id,
+                "canonicalAgentEntityId": canonical_agent_id,
+                "evidenceRefs": [
+                    ref.model_dump(mode="json", exclude_none=True)
+                    for ref in _dedupe_refs(identity_refs)
+                ],
+            },
+            "delegationAuthority": authority_view,
+            "policy": {
+                "state": "not_evaluated_by_projection",
+                "effectiveAuthorizationDecision": "unknown",
+                "reason": (
+                    "Profile access policy is enforced by the frame runtime. Agent360 "
+                    "reports stored grants and recorded action decisions; it does not "
+                    "authorize a new action or resource request."
+                ),
+            },
+            "freshness": {
+                "state": "unknown",
+                "observedAt": None,
+                "reason": "Agent360 exposes current repository state without a Profile360 freshness threshold.",
+            },
+            "temporalSemantics": authority_content.get(
+                "temporalSemantics", "current_repository_state; no historical replay"
+            ),
+        }
+        if request.timeRange is not None:
+            content["requestedTemporalMode"] = temporal.mode
+
+        exact_claim_kinds = {
+            "agent_delegation_record",
+            "agent_delegation_active_state_conflict",
+            "canonically_resolved_delegation_party",
+            "delegation_party_identity_resolution",
+            "server_recorded_delegation_decision",
+            "agent_capability_access_profile",
+        }
+        claims: list[ClaimEnvelope] = []
+        if request.includeClaims is not False:
+            for claim in agent_result.claims:
+                if (
+                    claim.kind not in exact_claim_kinds
+                    or claim.subject != request.subject
+                    or not claim.evidenceRefs
+                ):
+                    continue
+                claims.append(
+                    claim.model_copy(
+                        update={
+                            "subject": request.subject,
+                            "domainSlotIds": [SLOT_AGENT_DELEGATIONS],
+                        }
+                    )
+                )
+
+        return (
+            ProjectionSection(
+                id=SLOT_AGENT_DELEGATIONS,
+                state=section_state,  # type: ignore[arg-type]
+                title="Agent delegation and authority",
+                content=content,
+                canonicalAuthorityRefs=list(AGENT_DELEGATION_AUTHORITIES),
+            ),
+            claims,
+        )
 
     async def _profile_communications(
         self,

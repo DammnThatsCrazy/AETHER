@@ -116,6 +116,8 @@
         "journey"
       ],
       "canonicalAuthorities": [
+        "agent_access",
+        "agent_executions",
         "communication_facts",
         "entity_registry",
         "episode_facts",
@@ -151,7 +153,8 @@
         "timeline",
         "evidence",
         "interactions",
-        "findings"
+        "findings",
+        "agent_delegations"
       ],
       "supportedTemporalModes": [
         "window",
@@ -2380,6 +2383,7 @@
       ],
       "canonicalAuthorities": [
         "behavioral_signals",
+        "identity",
         "observations",
         "source_provenance"
       ],
@@ -2861,7 +2865,7 @@
           "description": "Observed current capability grants and recorded action-scoped delegation decisions; no standing action or resource authorization verdict.",
           "canonicalAuthorityRefs": [
             "agent_access",
-            "agent_executions",
+        "agent_executions",
             "identity"
           ],
           "projectionBindings": [
@@ -4396,13 +4400,26 @@
         {
           "id": "agent_delegations",
           "requirement": "required",
-          "description": "Agent delegation and authority facts linked to the exact profile.",
+          "description": "Current delegation and action-scoped authority evidence for an exact Agent subject or canonical Agent entity; unbound profiles remain unknown.",
           "canonicalAuthorityRefs": [
             "agent_access",
-            "ai_execution_facts"
+            "agent_executions",
+            "identity"
           ],
-          "projectionBindings": [],
-          "unboundReason": "profile_agent_delegation_authority_not_joined"
+          "projectionBindings": [
+            {
+              "projectionId": "profile360",
+              "role": "primary",
+              "sectionIds": [
+                "agent_delegations"
+              ],
+              "subjectKinds": [
+                "agent",
+                "entity"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Exact Agent subjects and canonical Agent entities reuse Agent360 identity and delegation evidence; unbound profile links, historical replay, effective authorization, and freshness remain unknown."
         },
         {
           "id": "communications",
@@ -4696,6 +4713,7 @@
       "sourceOfTruth": {
         "canonicalAuthorities": [
           "agent_access",
+          "agent_executions",
           "ai_execution_facts",
           "communication_facts",
           "economic_facts",
@@ -8020,13 +8038,26 @@
         {
           "id": "linked_entities",
           "requirement": "required",
-          "description": "Required signals360 slot: linked entities.",
+          "description": "Exact tenant signal, event, or observation bindings to active canonical identity subjects; observation IDs join only when recorded as the matching source_event_id.",
           "canonicalAuthorityRefs": [
-            "identity",
-            "entity_graph"
+            "behavioral_signals",
+            "identity"
           ],
-          "projectionBindings": [],
-          "unboundReason": "exact_signal_event_identity_join_not_available"
+          "projectionBindings": [
+            {
+              "projectionId": "signals360",
+              "role": "primary",
+              "sectionIds": [
+                "linked_entities"
+              ],
+              "subjectKinds": [
+                "signal",
+                "event",
+                "observation"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Exact links are emitted for signal, event, and matching observation IDs; entity, source, stream, absent-link, and incomplete reads remain unknown or degraded."
         },
         {
           "id": "campaign_links",
@@ -8103,7 +8134,6 @@
           "behavioral_signals",
           "campaign_facts",
           "campaign_touchpoints",
-          "entity_graph",
           "events",
           "identity",
           "ingestion_health",

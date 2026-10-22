@@ -74,6 +74,49 @@ class ObservationQualityRead:
     reason: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class LinkedEntity:
+    """Minimal canonical entity and the evidence for its exact source join."""
+
+    entity_id: str
+    entity_type: str
+    evidence_refs: tuple[EvidenceRef, ...]
+
+
+@dataclass(frozen=True)
+class LinkedEntitiesRead:
+    """Exact signal/event identity joins with explicit completeness."""
+
+    tenant_id: str
+    subject_kind: str
+    subject_id: str
+    entities: tuple[LinkedEntity, ...]
+    available: bool
+    complete: bool
+    reason: Optional[str] = None
+
+
+def _linked_read(
+    tenant_id: str,
+    subject_kind: str,
+    subject_id: str,
+    *,
+    entities: tuple[LinkedEntity, ...] = (),
+    available: bool,
+    complete: bool,
+    reason: Optional[str] = None,
+) -> LinkedEntitiesRead:
+    return LinkedEntitiesRead(
+        tenant_id=tenant_id,
+        subject_kind=subject_kind,
+        subject_id=subject_id,
+        entities=entities,
+        available=available,
+        complete=complete,
+        reason=reason,
+    )
+
+
 class Signal360Source(Protocol):
     """Tenant-scoped read seam for derived behavior signal records."""
 
@@ -85,12 +128,24 @@ class Signal360Source(Protocol):
         self, *, tenant_id: str, observation_id: str
     ) -> ObservationQualityRead: ...
 
+    async def linked_entities(
+        self, *, tenant_id: str, subject_kind: str, subject_id: str
+    ) -> LinkedEntitiesRead: ...
+
 
 class RepositorySignal360Source:
     """Adapter over behavioral signals and exact SDK observation Bronze rows."""
 
-    def __init__(self, *, bronze: Any = None) -> None:
+    def __init__(
+        self,
+        *,
+        bronze: Any = None,
+        signals: Any = None,
+        identity_repository: Any = None,
+    ) -> None:
         self._bronze = bronze
+        self._signals = signals
+        self._identity_repository = identity_repository
 
     async def entity_signals(
         self, *, tenant_id: str, entity_id: str, limit: int
@@ -197,6 +252,329 @@ class RepositorySignal360Source:
             )
         return ObservationQualityRead(row, True, True)
 
+    async def linked_entities(
+        self, *, tenant_id: str, subject_kind: str, subject_id: str
+    ) -> LinkedEntitiesRead:
+        """Resolve only exact signal or resolver-event identity bindings.
+
+        SDK observation ids and identity resolver event ids are not assumed to
+        be the same identifier. An observation is linked only when its exact id
+        is also present as ``source_event_id`` in the identity authority.
+        """
+        if not _safe_identifier(tenant_id) or not _safe_identifier(subject_id):
+            return _linked_read(
+                tenant_id,
+                subject_kind,
+                subject_id,
+                available=False,
+                complete=False,
+                reason="exact_link_subject_scope_required",
+            )
+        try:
+            if subject_kind == "signal":
+                return await self._linked_signal_entity(tenant_id, subject_id)
+            if subject_kind in {"event", "observation"}:
+                return await self._linked_event_entities(
+                    tenant_id, subject_kind, subject_id
+                )
+            return _linked_read(
+                tenant_id,
+                subject_kind,
+                subject_id,
+                available=True,
+                complete=True,
+                reason="subject_kind_has_no_exact_signal_entity_join",
+            )
+        except Exception:  # noqa: BLE001 - authority details stay private
+            return _linked_read(
+                tenant_id,
+                subject_kind,
+                subject_id,
+                available=False,
+                complete=False,
+                reason="canonical_identity_join_unavailable",
+            )
+
+    async def _linked_signal_entity(
+        self, tenant_id: str, signal_id: str
+    ) -> LinkedEntitiesRead:
+        try:
+            if self._signals is None:
+                from repositories.repos import SignalRepository
+
+                self._signals = SignalRepository()
+            row = await self._signals.get_signal(tenant_id, signal_id)
+        except Exception:  # noqa: BLE001 - authority details stay private
+            return _linked_read(
+                tenant_id,
+                "signal",
+                signal_id,
+                available=False,
+                complete=False,
+                reason="behavioral_signal_authority_unavailable",
+            )
+        if row is None:
+            return _linked_read(
+                tenant_id,
+                "signal",
+                signal_id,
+                available=True,
+                complete=True,
+                reason="exact_behavioral_signal_not_found",
+            )
+        if (
+            not isinstance(row, dict)
+            or row.get("tenant_id") != tenant_id
+            or row.get("signal_id") != signal_id
+        ):
+            return _linked_read(
+                tenant_id,
+                "signal",
+                signal_id,
+                available=False,
+                complete=False,
+                reason="behavioral_signal_scope_mismatch",
+            )
+        entity_id = _safe_identifier(row.get("entity_id"))
+        signal_evidence = _record_evidence(row)
+        if entity_id is None or signal_evidence is None:
+            return _linked_read(
+                tenant_id,
+                "signal",
+                signal_id,
+                available=True,
+                complete=False,
+                reason="behavioral_signal_entity_link_invalid",
+            )
+
+        linked, reason = await self._resolve_canonical_entity(
+            tenant_id, entity_id, (signal_evidence,)
+        )
+        if linked is None:
+            return _linked_read(
+                tenant_id,
+                "signal",
+                signal_id,
+                available=True,
+                complete=False,
+                reason=reason,
+            )
+        return _linked_read(
+            tenant_id,
+            "signal",
+            signal_id,
+            entities=(linked,),
+            available=True,
+            complete=True,
+        )
+
+    async def _linked_event_entities(
+        self, tenant_id: str, subject_kind: str, subject_id: str
+    ) -> LinkedEntitiesRead:
+        try:
+            identity = self._identity_repo()
+            rows = await identity.get_observations_for_events(
+                tenant_id, [subject_id], limit=20
+            )
+        except Exception:  # noqa: BLE001 - authority details stay private
+            return _linked_read(
+                tenant_id,
+                subject_kind,
+                subject_id,
+                available=False,
+                complete=False,
+                reason="identity_event_observation_authority_unavailable",
+            )
+        if not isinstance(rows, list):
+            return _linked_read(
+                tenant_id,
+                subject_kind,
+                subject_id,
+                available=False,
+                complete=False,
+                reason="identity_event_observation_read_invalid",
+            )
+        if not rows:
+            reason = (
+                "exact_observation_id_not_bound_to_identity_event_id"
+                if subject_kind == "observation"
+                else "exact_event_identity_observation_not_found"
+            )
+            return _linked_read(
+                tenant_id,
+                subject_kind,
+                subject_id,
+                available=True,
+                complete=True,
+                reason=reason,
+            )
+        # IdentityResolutionRepository currently caps this exact event lookup
+        # at 20 rows. Treat the cap as possible truncation so a hidden second
+        # canonical target can never be mistaken for a single safe join.
+        if len(rows) >= 20:
+            return _linked_read(
+                tenant_id,
+                subject_kind,
+                subject_id,
+                available=True,
+                complete=False,
+                reason="identity_event_observation_read_truncated",
+            )
+
+        evidence_refs: list[EvidenceRef] = []
+        canonical_ids: set[str] = set()
+        for row in rows:
+            if (
+                not isinstance(row, dict)
+                or row.get("tenant_id") != tenant_id
+                or row.get("source_event_id") != subject_id
+            ):
+                return _linked_read(
+                    tenant_id,
+                    subject_kind,
+                    subject_id,
+                    available=False,
+                    complete=False,
+                    reason="identity_event_observation_scope_mismatch",
+                )
+            observation_id = _safe_identifier(row.get("id"))
+            canonical_entity_id = _safe_identifier(row.get("canonical_entity_id"))
+            observed_at = _safe_timestamp(row.get("observed_at"))
+            if not observation_id or not canonical_entity_id:
+                return _linked_read(
+                    tenant_id,
+                    subject_kind,
+                    subject_id,
+                    available=True,
+                    complete=False,
+                    reason="identity_event_observation_canonical_entity_missing",
+                )
+            canonical_ids.add(canonical_entity_id)
+            evidence_refs.append(
+                EvidenceRef(
+                    id=observation_id,
+                    type="event",
+                    source="identity_signal_observations",
+                    observedAt=observed_at,
+                )
+            )
+
+        linked_entities: dict[str, LinkedEntity] = {}
+        for canonical_entity_id in sorted(canonical_ids):
+            linked, reason = await self._resolve_canonical_entity(
+                tenant_id, canonical_entity_id, tuple(evidence_refs)
+            )
+            if linked is None:
+                return _linked_read(
+                    tenant_id,
+                    subject_kind,
+                    subject_id,
+                    available=True,
+                    complete=False,
+                    reason=reason,
+                )
+            existing = linked_entities.get(linked.entity_id)
+            if existing is None:
+                linked_entities[linked.entity_id] = linked
+            else:
+                linked_entities[linked.entity_id] = LinkedEntity(
+                    entity_id=linked.entity_id,
+                    entity_type=linked.entity_type,
+                    evidence_refs=_unique_evidence_refs(
+                        (*existing.evidence_refs, *linked.evidence_refs)
+                    ),
+                )
+        if len(linked_entities) != 1:
+            return _linked_read(
+                tenant_id,
+                subject_kind,
+                subject_id,
+                available=True,
+                complete=False,
+                reason="identity_event_entity_join_conflicted",
+            )
+        return _linked_read(
+            tenant_id,
+            subject_kind,
+            subject_id,
+            entities=tuple(linked_entities.values()),
+            available=True,
+            complete=True,
+        )
+
+    def _identity_repo(self) -> Any:
+        if self._identity_repository is None:
+            from identity.identity.repository import IdentityResolutionRepository
+
+            self._identity_repository = IdentityResolutionRepository()
+        return self._identity_repository
+
+    async def _resolve_canonical_entity(
+        self,
+        tenant_id: str,
+        entity_id: str,
+        source_evidence: tuple[EvidenceRef, ...],
+    ) -> tuple[Optional[LinkedEntity], Optional[str]]:
+        """Follow tenant-owned merge tombstones to one active identity subject."""
+        identity = self._identity_repo()
+        current = entity_id
+        visited: set[str] = set()
+        identity_evidence: list[EvidenceRef] = []
+        for _ in range(10):
+            if current in visited:
+                return None, "canonical_identity_merge_chain_invalid"
+            visited.add(current)
+            row = await identity.get_subject_by_canonical_entity_id(tenant_id, current)
+            if (
+                not isinstance(row, dict)
+                or row.get("tenant_id") != tenant_id
+                or row.get("canonical_entity_id") != current
+            ):
+                return None, "canonical_entity_identity_subject_not_found"
+            identity_evidence.append(
+                EvidenceRef(
+                    id=current,
+                    type="entity",
+                    source="identity_subjects",
+                    observedAt=_safe_timestamp(row.get("last_seen_at")),
+                )
+            )
+            status = row.get("status")
+            if status == "active":
+                entity_type = _safe_token(
+                    row.get("entity_type"),
+                    allowed={
+                        "human",
+                        "anonymous_visitor",
+                        "device",
+                        "session",
+                        "wallet",
+                        "agent",
+                        "organization",
+                        "account",
+                        "campaign",
+                    },
+                )
+                if entity_type is None:
+                    return None, "canonical_entity_type_unavailable"
+                return (
+                    LinkedEntity(
+                        entity_id=current,
+                        entity_type=entity_type,
+                        evidence_refs=_unique_evidence_refs(
+                            (*source_evidence, *identity_evidence)
+                        ),
+                    ),
+                    None,
+                )
+            if status != "merged":
+                return None, "canonical_entity_identity_subject_not_active"
+            next_entity_id = _safe_identifier(row.get("merged_into_entity_id"))
+            if next_entity_id is None:
+                return None, "canonical_identity_merge_target_missing"
+            current = next_entity_id
+        return None, "canonical_identity_merge_chain_hop_limit"
+
 
 class Signals360Provider(IntelligenceProjectionProvider):
     """Tenant-safe, read-only projection for the Signals360 contract."""
@@ -249,6 +627,27 @@ class Signals360Provider(IntelligenceProjectionProvider):
                         False,
                         False,
                         "sdk_observation_bronze_unavailable",
+                    )
+
+        linked_read: Optional[LinkedEntitiesRead] = None
+        if "linked_entities" in requested_sections:
+            reader = getattr(self._source, "linked_entities", None)
+            if callable(reader):
+                try:
+                    linked_read = await reader(
+                        tenant_id=tenant_id,
+                        subject_kind=request.subject.kind,
+                        subject_id=request.subject.id,
+                    )
+                except Exception:  # noqa: BLE001 - source diagnostics stay private
+                    linked_read = LinkedEntitiesRead(
+                        tenant_id=tenant_id,
+                        subject_kind=request.subject.kind,
+                        subject_id=request.subject.id,
+                        entities=(),
+                        available=False,
+                        complete=False,
+                        reason="canonical_identity_join_unavailable",
                     )
 
         rows, scope_mismatch = _scoped_rows(
@@ -347,6 +746,14 @@ class Signals360Provider(IntelligenceProjectionProvider):
                 sections.append(quality_section)
                 if quality_claim is not None:
                     claims.append(quality_claim)
+            elif slot_id == "linked_entities":
+                linked_section, linked_claims = _linked_entities_section(
+                    request.subject,
+                    tenant_id=tenant_id,
+                    read=linked_read,
+                )
+                sections.append(linked_section)
+                claims.extend(linked_claims)
             else:
                 sections.append(_unknown_section(slot_id))
         sections.extend(
@@ -401,6 +808,144 @@ def _unknown_section(slot_id: str) -> ProjectionSection:
         # intake authority, so do not advertise the blueprint owner as a live
         # source for the unknown result.
     )
+
+
+def _linked_entities_section(
+    subject: ProjectionSubject,
+    *,
+    tenant_id: str,
+    read: Optional[LinkedEntitiesRead],
+) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+    """Publish exact identity-backed signal/event links with bounded claims."""
+    scope_mismatch = bool(
+        read is not None
+        and (
+            read.tenant_id != tenant_id
+            or read.subject_kind != subject.kind
+            or read.subject_id != subject.id
+        )
+    )
+    reason = (
+        "canonical_identity_join_scope_mismatch"
+        if scope_mismatch
+        else _safe_reason(read.reason)
+        if read is not None
+        else "exact_signal_event_identity_join_not_available"
+    )
+    entities: list[dict[str, str]] = []
+    evidence_refs: list[EvidenceRef] = []
+    invalid_entity = False
+    if read is not None and not scope_mismatch:
+        for linked in read.entities:
+            entity_id = _safe_identifier(linked.entity_id)
+            entity_type = _safe_token(
+                linked.entity_type,
+                allowed={
+                    "human",
+                    "anonymous_visitor",
+                    "device",
+                    "session",
+                    "wallet",
+                    "agent",
+                    "organization",
+                    "account",
+                    "campaign",
+                },
+            )
+            refs = [ref for ref in linked.evidence_refs if isinstance(ref, EvidenceRef)]
+            if entity_id is None or entity_type is None or not refs:
+                invalid_entity = True
+                break
+            entities.append({"id": entity_id, "entityType": entity_type, "state": "active"})
+            evidence_refs.extend(refs)
+    if invalid_entity:
+        entities = []
+        evidence_refs = []
+        reason = "canonical_entity_link_evidence_invalid"
+
+    evidence_refs = list(_unique_evidence_refs(evidence_refs))
+    if read is None or scope_mismatch or invalid_entity or not read.available or not read.complete:
+        state = "degraded" if read is not None else "unknown"
+        entities = []
+        evidence_refs = []
+    elif entities:
+        state = "available"
+    else:
+        # A bounded exact lookup that produced no link is not proof that an
+        # event/observation has no entity link; identity evidence may be absent.
+        state = "unknown"
+
+    content: dict[str, Any] = {
+        "tenantId": tenant_id,
+        "subject": {"kind": subject.kind, "id": subject.id},
+        "coverage": (
+            "exact_tenant_signal_record_to_identity_subject"
+            if subject.kind == "signal"
+            else "exact_tenant_identity_event_observation_to_identity_subject"
+            if subject.kind == "event"
+            else "exact_observation_id_to_identity_source_event_id"
+            if subject.kind == "observation"
+            else "unsupported_exact_entity_join"
+        ),
+        "linkedEntities": entities,
+        "authorityReadComplete": bool(
+            read is not None
+            and not scope_mismatch
+            and read.available
+            and read.complete
+        ),
+        "reasonCode": reason or ("exact_canonical_entity_link_observed" if entities else "canonical_entity_link_unknown"),
+        "evidenceRefs": [ref.model_dump(mode="json") for ref in evidence_refs],
+    }
+    if read is not None and read.available:
+        content["returnedEntityCount"] = len(entities)
+    canonical_authorities = (
+        ["behavioral_signals", "identity"]
+        if subject.kind == "signal"
+        else ["identity"]
+        if subject.kind in {"event", "observation"}
+        else []
+    )
+    section = ProjectionSection(
+        id="linked_entities",
+        state=state,
+        title="Canonical entities linked to signal or event",
+        content=content,
+        warnings=(
+            []
+            if entities
+            else [reason or "canonical entity links are unknown or unresolved"]
+        ),
+        canonicalAuthorityRefs=canonical_authorities,
+    )
+    claims: list[ClaimEnvelope] = []
+    if entities:
+        for entity, linked in zip(entities, read.entities):
+            source_label = {
+                "signal": "the exact tenant-scoped behavioral signal record",
+                "event": "the exact tenant-scoped identity resolution observation for this event",
+                "observation": (
+                    "the exact tenant-scoped identity resolution observation whose "
+                    "source_event_id equals this observation id"
+                ),
+            }.get(subject.kind, "the exact tenant-scoped source record")
+            claims.append(
+                ClaimEnvelope(
+                    id=(
+                        f"signals360.linked_entity.{subject.kind}."
+                        f"{subject.id}.{entity['id']}"
+                    ),
+                    kind=f"exact_{subject.kind}_canonical_entity_binding",
+                    subject=subject,
+                    evidenceRefs=list(linked.evidence_refs),
+                    claims=[
+                        f"{source_label} is associated with active canonical entity {entity['id']} under the same tenant scope."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["linked_entities"],
+                )
+            )
+    return section, claims
 
 
 def _quality_section(
@@ -810,6 +1355,19 @@ def _record_evidence(row: dict[str, Any]) -> Optional[EvidenceRef]:
         observedAt=_safe_timestamp(row.get("last_detected") or row.get("created_at")),
         confidence=_confidence(row.get("confidence")),
     )
+
+
+def _unique_evidence_refs(
+    refs: tuple[EvidenceRef, ...] | list[EvidenceRef],
+) -> tuple[EvidenceRef, ...]:
+    unique: list[EvidenceRef] = []
+    seen: set[tuple[str, str, str, Optional[str]]] = set()
+    for ref in refs:
+        key = (ref.source, ref.id, ref.type, ref.observedAt)
+        if key not in seen:
+            seen.add(key)
+            unique.append(ref)
+    return tuple(unique)
 
 
 def _count_values(records: list[dict[str, Any]], field: str) -> dict[str, int]:

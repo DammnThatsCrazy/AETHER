@@ -1053,12 +1053,12 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/blueprints/profile360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("agent", "entity", "episode", "journey"),
-        "canonicalAuthorities": ("communication_facts", "entity_registry", "episode_facts", "evidence", "graph", "identity", "journeys", "observations", "temporal"),
+        "canonicalAuthorities": ("agent_access", "agent_executions", "communication_facts", "entity_registry", "episode_facts", "evidence", "graph", "identity", "journeys", "observations", "temporal"),
         "hardDependencies": ("contract_spine", "evidence_provenance", "identity_resolution", "temporal_kernel"),
         "projectionDependencies": [],
         "optionalProjectionDependencies": ("risk360",),
         "inputRefs": ("EntityRef", "EvidenceRef", "GraphSnapshotRef", "PageRequest", "TimeRangeFilter"),
-        "outputSections": ("evidence", "findings", "interactions", "journeys", "sessions", "state", "summary", "timeline"),
+        "outputSections": ("agent_delegations", "evidence", "findings", "interactions", "journeys", "sessions", "state", "summary", "timeline"),
         "supportedTemporalModes": ("as_of", "relative", "window"),
         "surfaceIds": ("profile360",),
         "capabilityKeys": ("profile360.explore", "profile360.read"),
@@ -1233,7 +1233,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("entity", "event", "observation", "signal", "source", "stream"),
-        "canonicalAuthorities": ("behavioral_signals", "observations", "source_provenance"),
+        "canonicalAuthorities": ("behavioral_signals", "identity", "observations", "source_provenance"),
         "hardDependencies": ("contract_spine",),
         "projectionDependencies": [],
         "optionalProjectionDependencies": [],
@@ -4259,12 +4259,19 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         "displayName": "Profile 360",
         "domainSlots": [
             {
-                "canonicalAuthorityRefs": ("agent_access", "ai_execution_facts"),
-                "description": "Agent delegation and authority facts linked to the exact profile.",
+                "canonicalAuthorityRefs": ("agent_access", "agent_executions", "identity"),
+                "description": "Current delegation and action-scoped authority evidence for an exact Agent subject or canonical Agent entity; unbound profiles remain unknown.",
                 "id": "agent_delegations",
-                "projectionBindings": [],
-                "requirement": "required",
-                "unboundReason": "profile_agent_delegation_authority_not_joined"
+                "partialImplementationReason": "Exact Agent subjects and canonical Agent entities reuse Agent360 identity and delegation evidence; unbound profile links, historical replay, effective authorization, and freshness remain unknown.",
+                "projectionBindings": [
+                    {
+                        "projectionId": "profile360",
+                        "role": "primary",
+                        "subjectKinds": ("agent", "entity"),
+                        "sectionIds": ("agent_delegations",)
+                    }
+                ],
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("communication_facts",),
@@ -4546,7 +4553,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("agent_access", "ai_execution_facts", "communication_facts", "economic_facts", "entity_registry", "evidence", "geo_observations", "graph", "identity", "journeys", "model_governance", "observations", "outcome_facts", "relationship_facts", "risk_outputs", "temporal"),
+            "canonicalAuthorities": ("agent_access", "agent_executions", "ai_execution_facts", "communication_facts", "economic_facts", "entity_registry", "evidence", "geo_observations", "graph", "identity", "journeys", "model_governance", "observations", "outcome_facts", "relationship_facts", "risk_outputs", "temporal"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },
@@ -4926,12 +4933,19 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "canonicalAuthorityRefs": ("entity_graph", "identity"),
-                "description": "Required signals360 slot: linked entities.",
+                "canonicalAuthorityRefs": ("behavioral_signals", "identity"),
+                "description": "Exact tenant signal, event, or observation bindings to active canonical identity subjects; observation IDs join only when recorded as the matching source_event_id.",
                 "id": "linked_entities",
-                "projectionBindings": [],
-                "requirement": "required",
-                "unboundReason": "exact_signal_event_identity_join_not_available"
+                "partialImplementationReason": "Exact links are emitted for signal, event, and matching observation IDs; entity, source, stream, absent-link, and incomplete reads remain unknown or degraded.",
+                "projectionBindings": [
+                    {
+                        "projectionId": "signals360",
+                        "role": "primary",
+                        "subjectKinds": ("event", "observation", "signal"),
+                        "sectionIds": ("linked_entities",)
+                    }
+                ],
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("observations", "source_schema"),
@@ -5029,7 +5043,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("behavioral_signals", "campaign_facts", "campaign_touchpoints", "entity_graph", "events", "identity", "ingestion_health", "observations", "risk_outputs", "source_facts", "source_provenance", "source_schema"),
+            "canonicalAuthorities": ("behavioral_signals", "campaign_facts", "campaign_touchpoints", "events", "identity", "ingestion_health", "observations", "risk_outputs", "source_facts", "source_provenance", "source_schema"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },
