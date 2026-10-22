@@ -594,16 +594,9 @@ def _inventory_bound(value: Any) -> tuple[Optional[datetime], bool]:
 
 def _inventory_occurred_at(row: dict[str, Any]) -> Optional[datetime]:
     raw = row.get("occurred_at")
-    if isinstance(raw, datetime):
-        return (raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)).astimezone(timezone.utc)
-    if isinstance(raw, str):
-        try:
-            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        except ValueError:
-            return None
-        return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).astimezone(
-            timezone.utc
-        )
+    if isinstance(raw, (datetime, str)):
+        parsed = coerce_utc_lenient(raw)
+        return parsed.astimezone(timezone.utc) if parsed else None
     return None
 
 

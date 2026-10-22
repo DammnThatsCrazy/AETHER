@@ -20,7 +20,7 @@ estimated_read_minutes: 14
 toc_depth: 3
 source_hashes:
   "services/api/config/settings.py": "sha256:c1c63fd7fee53677c615e4a61b03b856c7658a37be96eed64ba587ac15d89700"
-  "services/api/connectors/provider_runtime/": "sha256:aa62f66c71646a1fc875f3156e6e02514061a87698ebc292af8eeb6697116bee"
+  "services/api/connectors/provider_runtime/": "sha256:7bc893666ac1be2acf3c02a8318ff9fdbeffac4ab46229ecdfbc28f29fbdc5e2"
   "services/api/connectors/providers/": "sha256:086060aa67b187df1b1ea59ab1d556fd0bca1df379b3162447117f3ecbff7aeb"
   "services/api/connectors/providers/shopify/": "sha256:4019dd90b0864d3f2b76fc1fac7a4a98bf10e98bfe41ae6c437c248f80814b09"
   "services/api/main.py": "sha256:785efdc38288d9d00e3493739316c46f99bde0126cc8f9c8ea69fb9b3501d2f3"
