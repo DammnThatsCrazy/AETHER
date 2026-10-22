@@ -1,7 +1,7 @@
 """Persist sub-agent spawn lineage on agent execution facts.
 
 Revision ID: 20261022_agent_spawn_lineage
-Revises: 20261018_comms_consent_lineage
+Revises: 20261022_support_case_authority
 Create Date: 2026-10-22
 
 Adds parent / child / root agent references and the parent run so an
@@ -18,7 +18,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20261022_agent_spawn_lineage"
-down_revision = "20261018_comms_consent_lineage"
+down_revision = "20261022_support_case_authority"
 branch_labels = None
 depends_on = None
 
