@@ -38,6 +38,7 @@ from shared.intelligence_projections.contracts import (
     ProjectionRequest,
     ProjectionResult,
     ProjectionSection,
+    ProjectionSubject,
 )
 from shared.intelligence_projections.errors import ProjectionError, ProjectionNotFound
 from shared.intelligence_projections.generated_registry import (
@@ -326,6 +327,50 @@ async def build_experience360_frame(
     if actor_attribution_by_slot:
         resolved_actor_metadata.update(actor_attribution_by_slot)
     if request.surfaceId == "account360" and account_identity_read is not None:
+        async def read_account_member_profile(
+            member: Any, account_request: Experience360FrameRequest
+        ) -> Experience360Frame:
+            """Build each member's profile through the governed Profile360 runtime."""
+
+            profile_surface = PRODUCT_360_SURFACE_DEFINITIONS.get("profile360", {})
+            profile_lens_contract = profile_surface.get("lensContract", {})
+            profile_lens_ids = profile_lens_contract.get("lensIds", [])
+            if account_request.lensIds is None:
+                profile_lens_ids_for_request = None
+            else:
+                allowed_profile_lenses = {
+                    lens_id for lens_id in profile_lens_ids if isinstance(lens_id, str)
+                }
+                profile_lens_ids_for_request = [
+                    lens_id
+                    for lens_id in account_request.lensIds
+                    if lens_id in allowed_profile_lenses
+                ] or None
+
+            profile_request = Experience360FrameRequest(
+                surfaceId="profile360",
+                tenantId=account_request.tenantId,
+                subject=ProjectionSubject(
+                    kind="agent" if member.entity_type == "agent" else "entity",
+                    id=member.entity_id,
+                ),
+                asOf=account_request.asOf,
+                timeRange=account_request.timeRange,
+                includeEvidence=account_request.includeEvidence,
+                lensIds=profile_lens_ids_for_request,
+                requestedBy=account_request.requestedBy,
+                purpose=account_request.purpose,
+                authorizationContextRef=account_request.authorizationContextRef,
+            )
+            return await build_experience360_frame(
+                profile_request,
+                policy_evaluator=evaluator,
+                projection_runtime=runner,
+                actor_attribution=actor_attribution,
+                generated_at=generated_timestamp,
+                max_concurrency=1,
+            )
+
         return await account_provider.compose(
             request,
             results,
@@ -336,6 +381,7 @@ async def build_experience360_frame(
             quality_by_slot=quality_by_slot,
             actor_attribution=actor_attribution,
             actor_attribution_by_slot=resolved_actor_metadata,
+            member_profile_reader=read_account_member_profile,
             generated_at=generated_timestamp,
         )
     frame = compose_experience360_frame(

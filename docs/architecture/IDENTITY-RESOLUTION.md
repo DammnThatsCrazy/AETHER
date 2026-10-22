@@ -35,7 +35,7 @@ source_hashes:
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/identity/identity/": "sha256:da9d91ff48b80fcc90aa121d9dc6a0eb7a92ef45fa127448ca53ca65b8876653"
+  "services/api/identity/identity/": "sha256:70f9b42036f7710cb064edf7a60e450aa24c38ece202f572cc462a81dcb32319"
   "services/api/identity/profile/aggregator.py": "sha256:228b48e5b06d6f4355c1d5fda2363ef5e3265570e750863bd7fd98941a41109f"
   "services/api/identity/profile/composer.py": "sha256:aae09f67a164f0e2b940676e52841ff325f36650ac4b1c022cc2a60a31505c20"
   "services/api/ingestion/ingestion/batch.py": "sha256:c1fddf5e0e2d31384b586ef0f4e73429f397c9351d35e8d6a12fdedd94896955"
@@ -96,6 +96,13 @@ evaluate identity, or write graph state. Repository results are rechecked
 against tenant and requested-subject scope. Missing or incomplete joins remain
 unknown, degraded, or truncated, so Identity360 does not replace the resolver
 or turn an absent read into a negative identity decision.
+
+When the `wallets` slot is requested, Identity360 may expose exact
+`wallet_ownership_verified` evidence joined to the same tenant-owned entity.
+The evidence proves control only at its recorded time: it is partial evidence,
+not a wallet inventory or proof of current control. Wallet addresses and
+identifier hashes remain omitted, and no observed proof keeps wallet presence
+unknown rather than empty.
 
 The batch backend stamps `context.identity_namespace` from the authenticated
 site binding. The SDK cannot select its own namespace. This lets profile and

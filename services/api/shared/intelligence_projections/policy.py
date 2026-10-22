@@ -86,6 +86,7 @@ AUTHORITY_DOMAIN_BY_REF: dict[str, str] = {
     "sync_state": "integrations",
     "temporal": "graph",
     "temporal_kernel": "graph",
+    "targeting_leakage_findings": "security",
     "tools": "actions",
     "touchpoints": "outcomes",
     "validity_state": "data_quality",

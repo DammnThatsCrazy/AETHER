@@ -1903,6 +1903,21 @@ The registry contains 24 technical projections; 9 are marked `implemented` and
 15 remain `in_flight`. All 24 register at application startup, and registration
 does not promote implementation status.
 
+The current provider paths add bounded evidence to four required surface
+slots without claiming surface completion. Account360's `profiles` slot follows
+tenant-scoped `MEMBER_OF` edges to exact entity-registry members and requests
+each member's Profile360 frame under that member's own policy; incomplete
+membership coverage remains degraded, and denied profile slots are omitted.
+Campaign360's `anomalies` slot includes exact campaign-scoped targeting-leakage
+findings with their targeting-observation and eligibility-snapshot evidence;
+general risk and source anomalies remain unresolved. Journey360's `stages` slot
+exposes only explicit `journey_role` markers from the exact current journey
+version's steps, with stage taxonomy and completeness unknown. Location360's
+`normalization` slot exposes canonical location-fact source/evidence links but
+leaves normalization version, transformation time, and timezone unknown. These
+bindings preserve partial or unknown states and do not promote the technical
+providers' `in_flight` registry status.
+
 ### Support case lifecycle evidence ingress
 
 `POST /v1/support/cases/ingest` accepts one allow-listed lifecycle event under

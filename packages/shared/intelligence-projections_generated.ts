@@ -282,12 +282,12 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/blueprints/campaign360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['campaign', 'episode', 'population', 'source'],
-    canonicalAuthorities: ['attribution_credits', 'campaign_facts', 'campaign_touchpoints', 'communication', 'economic', 'journeys', 'outcomes', 'population', 'source_provenance', 'touchpoints'],
+    canonicalAuthorities: ['attribution_credits', 'campaign_facts', 'campaign_touchpoints', 'communication', 'economic', 'journeys', 'outcomes', 'population', 'source_provenance', 'targeting_leakage_findings', 'touchpoints'],
     hardDependencies: ['attribution_architecture', 'contract_spine', 'measurement_outcome_contract'],
     projectionDependencies: ['communication360', 'economic360', 'episode360', 'outcome360', 'population360'],
     optionalProjectionDependencies: [],
     inputRefs: ['EntityRef', 'EvidenceRef', 'FilterExpression', 'GraphResult', 'PageRequest', 'TimeRangeFilter'],
-    outputSections: ['evidence', 'findings', 'outcomes', 'state', 'summary'],
+    outputSections: ['anomalies', 'evidence', 'findings', 'outcomes', 'state', 'summary'],
     supportedTemporalModes: ['compare', 'relative', 'window'],
     surfaceIds: ['campaign360', 'comparison_workbench'],
     capabilityKeys: ['campaign360.explore', 'campaign360.read'],
@@ -654,7 +654,7 @@ export const intelligenceProjectionDefinitions: Record<
     projectionDependencies: ['profile360', 'relationship360'],
     optionalProjectionDependencies: [],
     inputRefs: ['EntityRef', 'EvidenceRef', 'GraphSnapshotRef', 'PageRequest', 'RelationshipRef', 'TimeRangeFilter'],
-    outputSections: ['episode_context', 'evidence', 'interactions', 'outcomes', 'state', 'summary', 'timeline'],
+    outputSections: ['episode_context', 'evidence', 'interactions', 'outcomes', 'stages', 'state', 'summary', 'timeline'],
     supportedTemporalModes: ['relative', 'window'],
     surfaceIds: ['journeys', 'timeline'],
     capabilityKeys: ['episode360.explore', 'episode360.read'],
@@ -841,7 +841,7 @@ export const intelligenceProjectionDefinitions: Record<
     projectionDependencies: ['profile360', 'temporal360'],
     optionalProjectionDependencies: [],
     inputRefs: ['EntityRef', 'GraphSnapshotRef', 'PageRequest', 'TimeRangeFilter'],
-    outputSections: ['evidence', 'findings', 'state', 'summary', 'timeline'],
+    outputSections: ['evidence', 'findings', 'normalization', 'state', 'summary', 'timeline'],
     supportedTemporalModes: ['compare', 'relative', 'window'],
     surfaceIds: ['geographic360'],
     capabilityKeys: ['geographic360.explore', 'geographic360.read'],
@@ -1850,8 +1850,8 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
     directProviderBindings: [
       {
         bindingStatus: 'runtime_wired',
-        canonicalAuthorityRefs: ['entities', 'entity_registry', 'graph', 'risk_outputs'],
-        domainSlotIds: ['account_summary', 'agents', 'members', 'risk'],
+        canonicalAuthorityRefs: ['entities', 'entity_registry', 'graph', 'identity', 'risk_outputs'],
+        domainSlotIds: ['account_summary', 'agents', 'members', 'profiles', 'risk'],
         implementationRef: 'services/api/identity/account360_provider.py',
         providerClass: 'Account360Provider',
         providerKind: 'surface_frame_provider',
@@ -1977,12 +1977,12 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         projectionBindings: []
       },
       {
-        canonicalAuthorityRefs: ['entity_registry', 'identity'],
+        canonicalAuthorityRefs: ['entity_registry', 'graph', 'identity'],
         description: 'Profile views for validated account members with each profile policy independently applied.',
         id: 'profiles',
+        partialImplementationReason: 'Bounded exact-member Profile360 frames now run under per-member policy; roster completeness and a profile freshness SLA remain unknown.',
         projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'account_member_profile_fanout_and_policy_not_implemented'
+        requirement: 'required'
       },
       {
         id: 'relationships',
@@ -2433,12 +2433,21 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
     displayName: 'Campaign 360',
     domainSlots: [
       {
-        canonicalAuthorityRefs: ['risk_outputs', 'source_provenance'],
-        description: 'Campaign-linked risk and source anomalies backed by canonical findings.',
+        authorityGapReason: 'General campaign risk outputs are not joined by this targeting leakage finding provider.',
+        canonicalAuthorityRefs: ['risk_outputs', 'source_provenance', 'targeting_leakage_findings'],
+        description: 'Tenant-scoped targeting leakage findings backed by source observation and eligibility-snapshot evidence; broader risk and source anomalies stay unknown.',
         id: 'anomalies',
-        projectionBindings: [],
+        partialImplementationReason: 'Exact targeting leakage findings are joined with a bounded evidence chain; general risk outputs and source anomalies remain unknown.',
+        projectionBindings: [
+          {
+            projectionId: 'campaign360',
+            role: 'primary',
+            subjectKinds: ['campaign'],
+            sectionIds: ['anomalies']
+          }
+        ],
         requirement: 'required',
-        unboundReason: 'No exact campaign-to-risk or source-anomaly provider is connected.'
+        unboundCanonicalAuthorityRefs: ['risk_outputs']
       },
       {
         id: 'attribution',
@@ -2627,7 +2636,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       }
     ],
     sourceOfTruth: {
-      canonicalAuthorities: ['attribution_credits', 'campaign_facts', 'campaign_touchpoints', 'cluster_definitions', 'cluster_membership', 'cohort_membership', 'commerce', 'communication_facts', 'economic_facts', 'events', 'journeys', 'measurement_contract', 'observations', 'outcome_facts', 'payments', 'relationship_facts', 'risk_outputs', 'source_facts', 'source_provenance', 'touchpoints'],
+      canonicalAuthorities: ['attribution_credits', 'campaign_facts', 'campaign_touchpoints', 'cluster_definitions', 'cluster_membership', 'cohort_membership', 'commerce', 'communication_facts', 'economic_facts', 'events', 'journeys', 'measurement_contract', 'observations', 'outcome_facts', 'payments', 'relationship_facts', 'risk_outputs', 'source_facts', 'source_provenance', 'targeting_leakage_findings', 'touchpoints'],
       ownsCanonicalTruth: false,
       prohibitedOwnership: ['economic_facts', 'execution_facts', 'graph', 'identity', 'observations', 'risk_outputs', 'source_provenance']
     },
@@ -3828,11 +3837,18 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       },
       {
         canonicalAuthorityRefs: ['journeys'],
-        description: 'Required journey360 slot: stages.',
+        description: 'Explicit journey-role markers on exact current-version steps; no inferred stage boundaries or taxonomy.',
         id: 'stages',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'typed_journey_stage_authority_not_available'
+        partialImplementationReason: 'Only persisted explicit journey-role markers are exposed; stage taxonomy and completeness remain unknown.',
+        projectionBindings: [
+          {
+            projectionId: 'episode360',
+            role: 'primary',
+            subjectKinds: ['journey'],
+            sectionIds: ['stages']
+          }
+        ],
+        requirement: 'required'
       },
       {
         id: 'touchpoints',
@@ -4019,12 +4035,19 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
-        canonicalAuthorityRefs: ['geo_observations', 'locations'],
-        description: 'Source location normalization lineage.',
+        canonicalAuthorityRefs: ['locations'],
+        description: 'Source links recorded on canonical location facts, without claiming transformation-version or normalization-time lineage.',
         id: 'normalization',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'location_normalization_lineage_unavailable'
+        partialImplementationReason: 'Canonical location fact source links are surfaced, but normalization and validation versions, raw record refs, and normalization timestamps are unavailable.',
+        projectionBindings: [
+          {
+            projectionId: 'geographic360',
+            role: 'primary',
+            subjectKinds: ['entity', 'population', 'source'],
+            sectionIds: ['normalization']
+          }
+        ],
+        requirement: 'required'
       },
       {
         id: 'place_summary',

@@ -19,6 +19,7 @@ from graph.operational_intelligence.models import EvidenceRef  # noqa: E402
 from identity.account360_provider import (  # noqa: E402
     ACCOUNT_AGENTS_SLOT,
     ACCOUNT_MEMBERS_SLOT,
+    ACCOUNT_PROFILES_SLOT,
     ACCOUNT_RISK_SLOT,
     ACCOUNT_IDENTITY_SLOT,
     Account360Provider,
@@ -559,6 +560,7 @@ async def test_members_slot_does_not_read_when_slot_policy_is_denied(
     policy = _allowed_slots()
     policy[ACCOUNT_MEMBERS_SLOT] = Experience360PolicyDisposition(state="denied")
     policy[ACCOUNT_AGENTS_SLOT] = Experience360PolicyDisposition(state="denied")
+    policy[ACCOUNT_PROFILES_SLOT] = Experience360PolicyDisposition(state="denied")
 
     frame = await Account360Provider(source).compose(
         _request(),
@@ -749,6 +751,47 @@ async def test_agents_without_validated_agent_members_remain_unknown_not_empty(
     assert slot.content is None
     assert slot.evidenceRefs == []
     assert "account_agent_membership_not_observed_completeness_unknown" in slot.reasonCodes
+
+
+@pytest.mark.asyncio
+async def test_account_profiles_policy_denial_skips_membership_and_profile_reads(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _ensure_members_slot(monkeypatch)
+    member = _account_member("member-profile-denied", "human", "member-edge-denied")
+    source = _MembersSource(
+        AccountIdentityRead(
+            "resolved",
+            evidence_refs=(IDENTITY_EVIDENCE,),
+            entity_type="organization",
+            tenant_id=TENANT_ID,
+            entity_id=SUBJECT.id,
+        ),
+        AccountMembersRead(
+            "degraded", TENANT_ID, SUBJECT.id, members=(member,)
+        ),
+    )
+    profile_reader_calls: list[str] = []
+
+    async def profile_reader(member, _request):
+        profile_reader_calls.append(member.entity_id)
+        raise AssertionError("denied Account360 profile slot must not read profiles")
+
+    policy = _allowed_slots()
+    policy[ACCOUNT_PROFILES_SLOT] = Experience360PolicyDisposition(state="denied")
+    frame = await Account360Provider(source).compose(
+        _request(requested_slot_ids=[ACCOUNT_PROFILES_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=policy,
+        member_profile_reader=profile_reader,
+    )
+
+    assert source.member_calls == []
+    assert profile_reader_calls == []
+    slot = next(slot for slot in frame.slots if slot.id == ACCOUNT_PROFILES_SLOT)
+    assert slot.policyDisposition.state == "denied"
+    assert slot.content is None
 
 
 @pytest.mark.asyncio

@@ -97,6 +97,7 @@ def _fact(
     provider: str | None = "geoip",
     source_observation_id: str | None = None,
     source_evidence_refs: tuple[str, ...] = (),
+    schema_version: str | None = None,
 ) -> LocationRow:
     return LocationRow(
         location_id=location_id,
@@ -118,6 +119,7 @@ def _fact(
         provider=provider,
         source_observation_id=source_observation_id,
         source_evidence_refs=source_evidence_refs,
+        schema_version=schema_version,
     )
 
 
@@ -374,6 +376,103 @@ async def test_required_slots_preserve_source_evidence_and_temporal_provenance()
         "evidenceRefs": ["evidence:source-17"],
         "sourceProvider": "context_capsule",
     }
+    normalization = slots["normalization"]
+    assert normalization["state"] == "degraded"
+    assert normalization["reasonCode"] == (
+        "location_normalization_algorithm_lineage_unavailable"
+    )
+    assert normalization["content"]["lineageCompleteness"] == "partial"
+    assert normalization["content"]["entries"] == [
+        {
+            "locationFactId": "loc-source-linked",
+            "sourceLinkState": "linked",
+            "sourceObservationId": "capsule-observation-17",
+            "sourceProvider": "context_capsule",
+            "sourceEvidenceRefs": ["evidence:source-17"],
+            "sourceEvidenceRefsTruncated": False,
+            "locationFactSchemaVersion": None,
+            "sourceObservedAt": T_RECENT,
+        }
+    ]
+    assert normalization["freshness"] == {
+        "state": "unknown",
+        "reasonCode": "location_normalization_timestamp_unavailable",
+    }
+    assert normalization["evidenceRefs"] == [
+        {
+            "id": "location:loc-source-linked",
+            "type": "relationship",
+            "source": "location_facts",
+            "observedAt": T_RECENT,
+            "confidence": None,
+            "uri": None,
+        }
+    ]
+    normalization_claim = next(
+        claim
+        for claim in result.claims
+        if claim.id == "normalization.location_fact_lineage"
+    )
+    assert normalization_claim.domainSlotIds == ["normalization"]
+    assert "Portland" not in str(normalization)
+    assert "coarse_cell" not in str(normalization)
+
+
+@pytest.mark.asyncio
+async def test_location_fact_schema_version_alone_is_not_normalization_lineage():
+    row = _fact(
+        "loc-schema-only",
+        provider="geoip",
+        source_observation_id=None,
+        source_evidence_refs=(),
+        schema_version="1.0.0",
+    )
+    posture = _posture(facts=(row,))
+    provider = Geographic360Provider(
+        reader=_FakeGeoReader({
+            ("entity", "ent-portland"): _view("entity", "ent-portland", posture),
+        })
+    )
+    request = _request()
+
+    result = await provider.project(request, await _context(request))
+
+    normalization = _sections(result)["state"].content["requiredSlots"]["normalization"]
+    assert normalization["state"] == "unknown"
+    assert normalization["content"] is None
+    assert normalization["reasonCode"] == "location_normalization_lineage_unavailable"
+    assert not any(
+        claim.domainSlotIds == ["normalization"] for claim in result.claims
+    )
+
+
+@pytest.mark.asyncio
+async def test_normalization_lineage_bounds_source_entries_and_reports_truncation():
+    facts = tuple(
+        _fact(
+            f"loc-lineage-{index}",
+            source_observation_id=f"observation-{index}",
+            observed_at=T_RECENT,
+        )
+        for index in range(101)
+    )
+    posture = _posture(facts=facts)
+    provider = Geographic360Provider(reader=_FakeGeoReader({
+        ("entity", "ent-portland"): _view("entity", "ent-portland", posture),
+    }))
+    request = _request()
+
+    result = await provider.project(request, await _context(request))
+
+    normalization = _sections(result)["state"].content["requiredSlots"]["normalization"]
+    content = normalization["content"]
+    assert normalization["state"] == "degraded"
+    assert content["sourceLinkedFactCount"] == 101
+    assert content["listedSourceLinkedFactCount"] == 100
+    assert content["omittedSourceLinkedFactCount"] == 1
+    assert content["sourceLinkedFactListTruncated"] is True
+    assert len(content["entries"]) == 100
+    assert len(normalization["evidenceRefs"]) == 100
 
 
 @pytest.mark.asyncio

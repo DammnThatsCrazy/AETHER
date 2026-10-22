@@ -36,10 +36,13 @@ from shared.intelligence_projections.contracts import (  # noqa: E402
 from shared.intelligence_projections.errors import ProjectionError  # noqa: E402
 from shared.intelligence_projections.generated_registry import (  # noqa: E402
     INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+    PRODUCT_360_SURFACE_DEFINITIONS,
 )
 from identity.account360_provider import (  # noqa: E402
     Account360Provider,
     AccountIdentityRead,
+    AccountMember,
+    AccountMembersRead,
 )
 from identity.identity.identity360_provider import (  # noqa: E402
     Identity360Result,
@@ -1711,3 +1714,157 @@ async def test_episode360_entity_context_joins_exact_user_and_episode_evidence()
         ("relationship360", "evidence"): ("graph", "identity", "relationship_facts"),
         ("relationship360", "interactions"): ("graph", "relationship_facts"),
     }
+
+
+@pytest.mark.asyncio
+async def test_account360_member_profiles_use_exact_per_member_profile_policy() -> None:
+    account_id = "organization-profile-parent"
+    allowed_member_id = "member-profile-allowed"
+    denied_member_id = "member-profile-denied"
+    events: list[tuple[str, str, str]] = []
+
+    def member(entity_id: str, edge_id: str) -> AccountMember:
+        return AccountMember(
+            tenant_id=TENANT,
+            organization_entity_id=account_id,
+            entity_id=entity_id,
+            entity_type="human",
+            role=None,
+            membership_evidence_ref=EvidenceRef(
+                id=edge_id,
+                type="relationship",
+                source="graph",
+                observedAt="2026-10-18T12:00:00Z",
+            ),
+            entity_evidence_ref=EvidenceRef(
+                id=entity_id,
+                type="entity",
+                source="entity_registry",
+                observedAt="2026-10-18T12:00:00Z",
+            ),
+        )
+
+    class AccountSource:
+        async def canonical_entity(self, tenant_id: str, entity_id: str):
+            assert (tenant_id, entity_id) == (TENANT, account_id)
+            return AccountIdentityRead(
+                "resolved",
+                evidence_refs=(
+                    EvidenceRef(
+                        id=account_id,
+                        type="entity",
+                        source="entity_registry",
+                        observedAt="2026-10-18T12:00:00Z",
+                    ),
+                ),
+                entity_type="organization",
+                tenant_id=tenant_id,
+                entity_id=entity_id,
+            )
+
+        async def account_members(self, tenant_id: str, organization_entity_id: str):
+            assert (tenant_id, organization_entity_id) == (TENANT, account_id)
+            events.append(("membership", "account360", organization_entity_id))
+            return AccountMembersRead(
+                "degraded",
+                TENANT,
+                account_id,
+                members=(
+                    member(allowed_member_id, "member-allowed-edge"),
+                    member(denied_member_id, "member-denied-edge"),
+                ),
+                reason_codes=("account_member_edge_completeness_unproven",),
+            )
+
+    class Policy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            events.append(("policy", request.surfaceId, request.subject.id))
+            if request.surfaceId == "account360":
+                return Experience360PolicyEvaluation(
+                    surfaceId=request.surfaceId,
+                    tenantId=request.tenantId,
+                    evaluatedAt="2026-10-18T12:30:00Z",
+                    frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                    slotDispositions={
+                        "profiles": Experience360PolicyDisposition(state="allowed")
+                    },
+                )
+
+            dispositions = {
+                slot["id"]: Experience360PolicyDisposition(state="denied")
+                for slot in PRODUCT_360_SURFACE_DEFINITIONS["profile360"]["domainSlots"]
+            }
+            frame_state = "allowed"
+            if request.subject.id == allowed_member_id:
+                dispositions["entity_identity"] = Experience360PolicyDisposition(
+                    state="allowed"
+                )
+            else:
+                frame_state = "denied"
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-18T12:30:00Z",
+                frameDisposition=Experience360PolicyDisposition(state=frame_state),
+                slotDispositions=dispositions,
+            )
+
+    class Runtime:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str, tuple[str, ...]]] = []
+
+        async def execute_projection(self, projection_request, **_kwargs):
+            section_ids = tuple(sorted(projection_request.includeSections or []))
+            self.calls.append(
+                (projection_request.projectionId, projection_request.subject.id, section_ids)
+            )
+            events.append(("projection", projection_request.projectionId, projection_request.subject.id))
+            return ProjectionResult(
+                projectionId=projection_request.projectionId,
+                tenantId=projection_request.tenantId,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[ProjectionSection(id=section_id, state="empty") for section_id in section_ids],
+                claims=[],
+                dependencyState=[],
+                generatedAt="2026-10-18T12:30:00Z",
+                degradedReasons=[],
+            )
+
+    runtime = Runtime()
+    request = Experience360FrameRequest(
+        surfaceId="account360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="entity", id=account_id),
+        requestedSlotIds=["profiles"],
+    )
+    frame = await build_experience360_frame(
+        request,
+        policy_evaluator=Policy(),
+        projection_runtime=runtime,
+        account360_provider=Account360Provider(AccountSource()),
+        generated_at="2026-10-18T12:30:00Z",
+    )
+
+    account_policy_index = events.index(("policy", "account360", account_id))
+    membership_index = events.index(("membership", "account360", account_id))
+    profile_policy_index = events.index(("policy", "profile360", allowed_member_id))
+    profile_projection_index = events.index(("projection", "profile360", allowed_member_id))
+    assert account_policy_index < membership_index < profile_policy_index < profile_projection_index
+    assert ("policy", "profile360", denied_member_id) in events
+    assert all(subject_id == allowed_member_id for _, subject_id, _ in runtime.calls)
+    assert runtime.calls == [("profile360", allowed_member_id, ("state", "summary"))]
+
+    slot = next(slot for slot in frame.slots if slot.id == "profiles")
+    assert slot.state == "degraded"
+    assert [entry["member"]["id"] for entry in slot.content["profiles"]] == [
+        allowed_member_id
+    ]
+    assert denied_member_id not in str(slot.content)
+    nested_frame = slot.content["profiles"][0]["profileFrame"]
+    assert nested_frame["surfaceId"] == "profile360"
+    assert nested_frame["subject"]["id"] == allowed_member_id
+    assert nested_frame["policyDisposition"]["state"] == "denied"
+    nested_slots = {item["id"]: item for item in nested_frame["slots"]}
+    assert nested_slots["entity_identity"]["policyDisposition"]["state"] == "allowed"
+    assert nested_slots["identity_spine"]["policyDisposition"]["state"] == "denied"
+    assert nested_slots["identity_spine"].get("content") is None

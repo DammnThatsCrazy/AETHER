@@ -29,16 +29,16 @@ Declared binding counts are registry coverage, not proof that a slot or surface 
 
 | Product surface | Contract status | Subject kinds | Required slots | Declared required bindings | Explicit partial required slots | Unbound required slots | Optional slots | Projection providers | Direct surface providers |
 |---|---|---|---:|---:|---:|---:|---:|---|---|
-| [Account 360](#account-360) | source_aligned | `account`, `entity`, `workspace` | 11 | 7/11 | 1 | 4 | 4 | `economic360`, `profile360`, `relationship360` | `Account360Provider` (runtime_wired) |
+| [Account 360](#account-360) | source_aligned | `account`, `entity`, `workspace` | 11 | 8/11 | 2 | 3 | 4 | `economic360`, `profile360`, `relationship360` | `Account360Provider` (runtime_wired) |
 | [Agent 360](#agent-360) | source_aligned | `agent`, `entity` | 11 | 11/11 | 6 | 0 | 4 | `agent360`, `communication360`, `economic360`, `execution360`, `outcome360`, `relationship360`, `risk360` | — |
-| [Campaign 360](#campaign-360) | source_aligned | `campaign` | 11 | 8/11 | 1 | 3 | 0 | `campaign360`, `communication360`, `economic360`, `outcome360` | — |
+| [Campaign 360](#campaign-360) | source_aligned | `campaign` | 11 | 9/11 | 2 | 2 | 0 | `campaign360`, `communication360`, `economic360`, `outcome360` | — |
 | [Commerce 360](#commerce-360) | source_aligned | `entity`, `campaign`, `journey`, `commerce`, `product`, `offer`, `sku`, `checkout` | 11 | 6/11 | 2 | 5 | 0 | `commerce360` | — |
 | [Communications 360](#communications-360) | source_aligned | `message`, `thread`, `profile`, `campaign`, `episode`, `agent`, `journey`, `source` | 11 | 9/11 | 2 | 2 | 0 | `communication360` | — |
 | [Episode 360](#episode-360) | source_aligned | `episode`, `session`, `conversation`, `activity_window`, `entity`, `campaign` | 11 | 5/11 | 0 | 6 | 1 | `campaign360`, `episode360`, `profile360`, `relationship360` | — |
 | [Execution 360](#execution-360) | source_aligned | `agent`, `entity`, `episode`, `execution` | 11 | 9/11 | 3 | 2 | 0 | `execution360` | — |
 | [Identity 360](#identity-360) | source_aligned | `entity`, `agent`, `source` | 10 | 10/10 | 1 | 0 | 3 | `agent360`, `execution360`, `profile360`, `relationship360` | `Identity360Provider` (runtime_wired) |
-| [Journey 360](#journey-360) | source_aligned | `journey`, `profile`, `account`, `campaign`, `episode`, `entity` | 11 | 5/11 | 2 | 6 | 2 | `episode360`, `profile360` | — |
-| [Location 360](#location-360) | source_aligned | `location`, `place`, `geohash`, `timezone`, `region`, `entity`, `population`, `source` | 11 | 4/11 | 1 | 7 | 4 | `geographic360`, `population360`, `profile360` | — |
+| [Journey 360](#journey-360) | source_aligned | `journey`, `profile`, `account`, `campaign`, `episode`, `entity` | 11 | 6/11 | 3 | 5 | 2 | `episode360`, `profile360` | — |
+| [Location 360](#location-360) | source_aligned | `location`, `place`, `geohash`, `timezone`, `region`, `entity`, `population`, `source` | 11 | 5/11 | 2 | 6 | 4 | `geographic360`, `population360`, `profile360` | — |
 | [Memory 360](#memory-360) | source_aligned | `entity`, `semantic_entity`, `memory`, `card`, `topic` | 10 | 7/10 | 1 | 3 | 0 | `memory360` | — |
 | [Profile 360](#profile-360) | source_aligned | `profile`, `entity`, `agent`, `anonymous_subject`, `account_member`, `cluster` | 13 | 6/13 | 2 | 7 | 6 | `economic360`, `outcome360`, `profile360`, `relationship360`, `risk360` | — |
 | [Risk 360](#risk-360) | source_aligned | `risk`, `entity`, `profile`, `agent`, `account`, `source`, `campaign`, `contagion_path`, `relationship`, `cluster` | 12 | 5/12 | 1 | 7 | 6 | `economic360`, `execution360`, `fraud360`, `relationship360`, `risk360`, `social360` | — |
@@ -71,7 +71,7 @@ Governed account-level view composed from canonical entity, relationship, econom
 | `evidence_trace` | required |  | `evidence` | `profile360` (primary): subjects `entity`; `evidence`, `findings` | — | — | Evidence and limits for the account entity only, not a complete member aggregate. |
 | `journeys` | required |  | `journeys` | — | — | Unbound: `account_journey_membership_authority_not_joined` | Journeys directly linked to the account by a canonical relationship. |
 | `members` | required |  | `entity_registry`, `graph` | — | `Account360Provider` (runtime_wired) | — | Known current organization MEMBER_OF edges validated against canonical member entities; roster completeness unknown. |
-| `profiles` | required |  | `identity`, `entity_registry` | — | — | Unbound: `account_member_profile_fanout_and_policy_not_implemented` | Profile views for validated account members with each profile policy independently applied. |
+| `profiles` | required |  | `identity`, `entity_registry`, `graph` | — | `Account360Provider` (runtime_wired) | Partial: `Bounded exact-member Profile360 frames now run under per-member policy; roster completeness and a profile freshness SLA remain unknown.` | Profile views for validated account members with each profile policy independently applied. |
 | `relationships` | required |  | `relationship_facts`, `graph` | `relationship360` (primary): subjects `entity`; `summary`, `interactions`, `evidence` | — | — | Entity scoped relationship evidence for the exact account identity. |
 | `risk` | required |  | `risk_outputs` | — | `Account360Provider` (runtime_wired) | Partial: `Direct account-entity risk evidence is available; member and related-entity aggregation and a freshness SLA remain unimplemented.` | Exact resolved account-entity Risk360 outputs backed by canonical evidence; related-account coverage remains partial. |
 | `value` | required |  | `economic_facts` | `economic360` (primary): subjects `entity`; `summary` | — | — | Direct entity-scoped economic value for the canonical account profile, without member or execution-cost aggregation. |
@@ -88,7 +88,7 @@ Governed account-level view composed from canonical entity, relationship, econom
 
 | Provider class | Provider kind | Binding status | Subjects | Domain slots | Implementation | Frame-runtime call site |
 |---|---|---|---|---|---|---|
-| `Account360Provider` | `surface_frame_provider` | `runtime_wired` | `entity` | `account_summary`, `members`, `agents`, `risk` | `services/api/identity/account360_provider.py` | `services/api/shared/intelligence_projections/frame_runtime.py` |
+| `Account360Provider` | `surface_frame_provider` | `runtime_wired` | `entity` | `account_summary`, `members`, `agents`, `profiles`, `risk` | `services/api/identity/account360_provider.py` | `services/api/shared/intelligence_projections/frame_runtime.py` |
 
 ### Authority and governance contract
 
@@ -180,7 +180,7 @@ Governed view of canonical campaign identity, source classification, signals, to
 
 | Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
 |---|---|---|---|---|---|---|---|
-| `anomalies` | required |  | `risk_outputs`, `source_provenance` | — | — | Unbound: `No exact campaign-to-risk or source-anomaly provider is connected.` | Campaign-linked risk and source anomalies backed by canonical findings. |
+| `anomalies` | required |  | `targeting_leakage_findings`, `risk_outputs`, `source_provenance` | `campaign360` (primary): subjects `campaign`; `anomalies` | — | Authority: `General campaign risk outputs are not joined by this targeting leakage finding provider.`; Partial: `Exact targeting leakage findings are joined with a bounded evidence chain; general risk outputs and source anomalies remain unknown.` | Tenant-scoped targeting leakage findings backed by source observation and eligibility-snapshot evidence; broader risk and source anomalies stay unknown. |
 | `attribution` | required |  | `attribution_credits` | `campaign360` (primary): subjects `campaign`; `evidence`, `outcomes`, `findings` | — | — | Active, evidence-backed attribution credits associated with the campaign. |
 | `campaign_identity` | required |  | `campaign_facts` | `campaign360` (primary): subjects `campaign`; `summary`, `state`, `evidence` | — | — | Canonical Aether campaign identity and registered state. |
 | `cohorts_syndicates` | required |  | `cluster_definitions`, `cluster_membership`, `cohort_membership`, `relationship_facts` | — | — | Unbound: `No exact campaign-to-cohort or campaign-to-syndicate relationship is currently joined.` | Canonical cohort, cluster, and syndicate memberships associated with the campaign. |
@@ -209,7 +209,7 @@ Governed view of canonical campaign identity, source classification, signals, to
 
 ### Authority and governance contract
 
-Canonical authorities: `attribution_credits`, `campaign_facts`, `campaign_touchpoints`, `cluster_definitions`, `cluster_membership`, `cohort_membership`, `commerce`, `communication_facts`, `economic_facts`, `events`, `journeys`, `measurement_contract`, `observations`, `outcome_facts`, `payments`, `relationship_facts`, `risk_outputs`, `source_facts`, `source_provenance`, `touchpoints`.
+Canonical authorities: `attribution_credits`, `campaign_facts`, `campaign_touchpoints`, `cluster_definitions`, `cluster_membership`, `cohort_membership`, `commerce`, `communication_facts`, `economic_facts`, `events`, `journeys`, `measurement_contract`, `observations`, `outcome_facts`, `payments`, `relationship_facts`, `risk_outputs`, `source_facts`, `source_provenance`, `targeting_leakage_findings`, `touchpoints`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -515,7 +515,7 @@ Governed temporal view of journey state, stages, events, handoffs, and measured 
 | `evidence_trace` | required |  | `journeys`, `campaign_touchpoints`, `evidence` | `episode360` (primary): subjects `journey`; `evidence` | — | — | Journey version, step, and exact touchpoint record refs. |
 | `journey_summary` | required |  | `journeys` | `episode360` (primary): subjects `journey`; `summary` | — | Partial: `current_version_only_and_source_freshness_threshold_is_unconfigured` | Exact current JourneyVersion record and version evidence. |
 | `recommended_actions` | required |  | `actions` | — | — | Unbound: `governed_journey_recommendation_authority_not_joined` | Required journey360 slot: recommended actions. |
-| `stages` | required |  | `journeys` | — | — | Unbound: `typed_journey_stage_authority_not_available` | Required journey360 slot: stages. |
+| `stages` | required |  | `journeys` | `episode360` (primary): subjects `journey`; `stages` | — | Partial: `Only persisted explicit journey-role markers are exposed; stage taxonomy and completeness remain unknown.` | Explicit journey-role markers on exact current-version steps; no inferred stage boundaries or taxonomy. |
 | `touchpoints` | required |  | `journeys`, `campaign_touchpoints` | `episode360` (primary): subjects `journey`; `timeline`, `evidence` | — | — | Exact tenant touchpoints named by current JourneyVersion references. |
 
 ### Projection provider bindings
@@ -567,7 +567,7 @@ Governed view of locations and geographic observations linked to entities, popul
 | `geographic_observations` | optional |  | `geo_observations`, `temporal` | `geographic360` (primary): subjects `entity`, `population`, `source`; `timeline`, `evidence` | — | — | Observed geographic facts and their temporal context. |
 | `journeys` | required |  | `journeys`, `locations` | — | — | Unbound: `exact_location_journey_join_unavailable` | Exact journeys linked to a canonical location fact. |
 | `location_identity_and_state` | optional |  | `locations`, `context_capsules` | `geographic360` (primary): subjects `entity`, `population`, `source`; `summary`, `state`, `evidence` | — | — | Location registry and geographic context. |
-| `normalization` | required |  | `geo_observations`, `locations` | — | — | Unbound: `location_normalization_lineage_unavailable` | Source location normalization lineage. |
+| `normalization` | required |  | `locations` | `geographic360` (primary): subjects `entity`, `population`, `source`; `normalization` | — | Partial: `Canonical location fact source links are surfaced, but normalization and validation versions, raw record refs, and normalization timestamps are unavailable.` | Source links recorded on canonical location facts, without claiming transformation-version or normalization-time lineage. |
 | `place_summary` | required |  | `locations`, `geo_observations`, `context_capsules` | `geographic360` (primary): subjects `entity`, `population`, `source`; `summary`, `state` | — | — | Best supported place fact at policy capped precision. |
 | `population_context` | optional |  | `population_definitions`, `cohort_membership` | `population360` (primary): subjects `entity`, `population`; `summary`, `state`, `findings` | — | — | Population context for a location. |
 | `profiles` | required |  | `identity`, `locations` | — | — | Unbound: `exact_location_profile_join_and_policy_unavailable` | Profiles linked to place with profile policy applied. |

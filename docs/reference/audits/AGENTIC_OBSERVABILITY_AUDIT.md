@@ -117,15 +117,20 @@ timezone-aware start and end timestamps and carries the lifecycle evidence
 into `latency_cost`. This is not provider/tool latency or cost. It still lacks
 a general server-owned external effect receipt, canonical plan-step evidence,
 approval-chain evidence, complete input/output capture, detailed failures,
-and risk-event coverage.
+and risk-event coverage. Its `tool_calls` slot also joins `CALLED_TOOL`
+lifecycle edges only to exact tenant execution records with a canonical agent
+binding, validates the tenant-owned Tool vertex, and requires timestamp and
+edge-idempotency evidence. An observed edge proves only that AETHER recorded a
+tool-call lifecycle fact; graph completeness, tool outcome, action authority,
+and external effect remain unknown.
 
 The frame runtime joins available provider output to communication, risk,
 economic, and outcome projections. Tenant policy runs before provider reads.
 Delegation parties resolve only through exact tenant-scoped canonical entity
 rows; a missing or duplicate party binding leaves the authority slot unknown
 or conflicted. Event-time delegation evidence remains separate from verified
-external execution. All 20 technical providers register at app startup (9
-`implemented`, 11 `in_flight`), but registration does not prove required-slot
+external execution. All 24 technical providers register at app startup (9
+`implemented`, 15 `in_flight`), but registration does not prove required-slot
 conformance. Unknown, missing, and degraded states are preserved. Complete
 episode-to-payment references, complete source evidence, policy and freshness
 behavior, and surface-level golden coverage remain follow-on work across the

@@ -913,7 +913,44 @@ async def test_journey_subject_projects_tenant_version_and_evidenced_steps() -> 
     }
     assert slot_coverage["journey_summary"]["state"] == "available"
     assert slot_coverage["journey_summary"]["evidenceRefs"][0]["id"] == VERSION_ID
-    assert slot_coverage["stages"]["state"] == "unknown"
+    assert slot_coverage["stages"]["state"] == "partial"
+    assert slot_coverage["stages"]["coverage"] == "observed_role_markers"
+    stage_observations = _section(result, "timeline").content["stageObservations"]
+    assert stage_observations["stageTaxonomyState"] == "unknown"
+    assert [item["journeyRole"] for item in stage_observations["stageObservations"]] == [
+        "entry",
+        "entry",
+    ]
+    assert [item["stepId"] for item in stage_observations["stageObservations"]] == [
+        "step-1",
+        "step-2",
+    ]
+    assert all(item["evidenceRefs"] for item in stage_observations["stageObservations"])
+    stage_claims = [
+        claim for claim in result.claims if "stages" in (claim.domainSlotIds or [])
+    ]
+    assert [claim.kind for claim in stage_claims] == [
+        "explicit_journey_role_marker",
+        "explicit_journey_role_marker",
+    ]
+
+    frame = compose_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="journey360",
+            tenantId=TENANT,
+            subject=ProjectionSubject(kind="journey", id=JOURNEY_ID),
+            requestedSlotIds=["stages"],
+            includeEvidence=True,
+        ),
+        [result],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        generated_at="2026-10-22T10:01:00+00:00",
+    )
+    frame_stage_slot = frame.slots[0]
+    assert frame_stage_slot.state == "degraded"
+    assert {ref.id for ref in frame_stage_slot.evidenceRefs} == {"step-1", "step-2"}
+    assert all("stage taxonomy and stage completeness remain unknown" in claim.claims[0]
+               for claim in frame_stage_slot.claims)
     assert slot_coverage["episodes"]["reason"] == (
         "episode_record_contract_has_no_typed_journey_subject_reference"
     )
@@ -964,6 +1001,7 @@ async def test_journey_subject_projects_tenant_version_and_evidenced_steps() -> 
         "agent_interventions",
         "evidence_trace",
         "journey_summary",
+        "stages",
         "touchpoints",
     } == {slot_id for claim in result.claims for slot_id in claim.domainSlotIds}
     serialized = json.dumps(result.model_dump(mode="json"))
@@ -985,6 +1023,61 @@ async def test_journey_subject_requires_explicit_current_version_marker(is_curre
     assert source.step_calls == []
     assert result.claims == []
     assert result.degradedReasons == ["journey_current_version_not_proven"]
+
+
+async def test_journey_stage_slot_reports_empty_only_for_complete_unmarked_step_inventory() -> None:
+    source = FakeJourneySource(steps=[_step(journey_role=None)])
+    result = await Episode360Provider(
+        journey_source=source,
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+    ).project(_request(), _context())
+
+    stage_slot = _section(result, "summary").content["requiredSlotCoverage"]["stages"]
+    stage_observations = _section(result, "timeline").content["stageObservations"]
+    assert stage_slot["state"] == "empty"
+    assert stage_slot["coverage"] == "complete_for_explicit_role_markers"
+    assert stage_slot["reason"] == (
+        "complete_current_journey_step_inventory_has_no_explicit_role_markers"
+    )
+    assert stage_observations["stageObservations"] == []
+    assert [ref["id"] for ref in stage_observations["evidenceRefs"]] == ["step-1"]
+
+
+async def test_journey_stage_slot_keeps_unmarked_bounded_window_unknown() -> None:
+    source = FakeJourneySource(steps=[_step(journey_role=None)])
+    result = await Episode360Provider(
+        journey_source=source,
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+    ).project(
+        _request(timeRange={"from": "2026-10-16T09:00:00+00:00", "to": "2026-10-16T10:00:00+00:00"}),
+        _context(),
+    )
+
+    stage_slot = _section(result, "summary").content["requiredSlotCoverage"]["stages"]
+    stage_observations = _section(result, "timeline").content["stageObservations"]
+    assert stage_slot["state"] == "unknown"
+    assert stage_slot["coverage"] == "unknown"
+    assert stage_slot["reason"] == (
+        "incomplete_journey_step_inventory_cannot_establish_role_marker_absence"
+    )
+    assert stage_observations["inventoryComplete"] is False
+    assert stage_observations["stageObservations"] == []
+    assert stage_observations["evidenceRefs"] == []
+
+
+async def test_journey_stage_marker_without_step_evidence_is_degraded() -> None:
+    source = FakeJourneySource(steps=[_step(step_id=None, journey_role="handoff")])
+    result = await Episode360Provider(
+        journey_source=source,
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+    ).project(_request(), _context())
+
+    stage_slot = _section(result, "summary").content["requiredSlotCoverage"]["stages"]
+    stage_observations = _section(result, "timeline").content["stageObservations"]
+    assert stage_slot["state"] == "degraded"
+    assert stage_slot["reason"] == "journey_role_marker_invalid_or_missing_exact_step_evidence"
+    assert stage_observations["stageObservations"] == []
+    assert stage_observations["evidenceRefs"] == []
 
 
 async def test_journey_conversion_and_touchpoint_references_do_not_claim_outcome_or_attribution() -> (
@@ -1347,6 +1440,7 @@ async def test_journey_step_evidence_missing_degrades_and_does_not_misattribute_
     assert [claim.id for claim in result.claims] == [
         f"episode360:{JOURNEY_ID}:{VERSION_ID}:journey-version",
         f"episode360:{JOURNEY_ID}:{VERSION_ID}:step:step-2",
+        f"episode360:{JOURNEY_ID}:{VERSION_ID}:stage-marker:step-2",
     ]
     assert result.claims[1].evidenceRefs[0].id == "step-2"
 

@@ -64,6 +64,7 @@ from shared.intelligence_projections.contracts import (
     ProjectionRequest,
     ProjectionResult,
     ProjectionSection,
+    ProjectionSubject,
 )
 from shared.intelligence_projections.generated_registry import (
     INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
@@ -87,6 +88,7 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
     "timeline",
     "evidence",
     "findings",
+    "normalization",
 )
 
 # Product-contract slots from SSOT §11.14. Keep this provider output aligned
@@ -272,6 +274,10 @@ class LocationRow:
     valid_to: Optional[str] = None
     provider: Optional[str] = None
     source_observation_id: Optional[str] = None
+    # Version of the canonical LocationFact payload. This is not a
+    # normalization-algorithm version; the distinction is surfaced by the
+    # normalization slot rather than overclaimed as transformation lineage.
+    schema_version: Optional[str] = None
     # Source-owned evidence identifiers from LocationFact, kept distinct from
     # the stable location-fact EvidenceRef synthesized for this projection.
     source_evidence_refs: tuple[str, ...] = ()
@@ -437,6 +443,7 @@ def _row_from_stored_fact(stored: dict) -> LocationRow:
         valid_to=stored.get("valid_to"),
         provider=stored.get("provider"),
         source_observation_id=stored.get("source_observation_id"),
+        schema_version=stored.get("schema_version"),
         source_evidence_refs=(
             tuple(
                 reference
@@ -780,16 +787,49 @@ class Geographic360Provider:
         activity_slot, activity_claim = _activity_density_projection(
             request, posture=posture, read=activity_read
         )
+        normalization_slot, normalization_claim = _normalization_lineage_projection(
+            view, subject=request.subject
+        )
 
         sections = [
             self._summary_section(request, view, rows, surface_mode),
-            self._state_section(request, view, rows, activity_slot),
+            self._state_section(
+                request,
+                view,
+                rows,
+                activity_slot,
+                normalization_slot=normalization_slot,
+            ),
             self._timeline_section(request, view, rows),
             self._evidence_section(view),
             self._findings_section(request, view, rows),
+            ProjectionSection(
+                id="normalization",
+                state=(
+                    "degraded"
+                    if normalization_slot.get("state") == "degraded"
+                    else "unknown"
+                ),
+                title="Location normalization lineage",
+                content=(
+                    normalization_slot
+                    if normalization_slot.get("state") == "degraded"
+                    else None
+                ),
+                warnings=(
+                    [str(normalization_slot.get("reasonCode"))]
+                    if normalization_slot.get("reasonCode")
+                    else None
+                ),
+                canonicalAuthorityRefs=["locations"],
+            ),
         ]
         claims = self._build_claims(
-            request, view, rows, activity_claim=activity_claim
+            request,
+            view,
+            rows,
+            activity_claim=activity_claim,
+            normalization_claim=normalization_claim,
         )
 
         return ProjectionResult(
@@ -902,6 +942,8 @@ class Geographic360Provider:
         view: GeographicView,
         rows: list[LocationRow],
         activity_density_slot: dict[str, Any],
+        *,
+        normalization_slot: Optional[dict[str, Any]] = None,
     ) -> ProjectionSection:
         """state — typed per-dimension state (unknown != empty != 0 != missing)."""
         posture = view.posture
@@ -1031,7 +1073,10 @@ class Geographic360Provider:
 
         worst = _worst_state(dims)
         required_slots = _required_location_slots(
-            view, rows, activity_density_slot=activity_density_slot
+            view,
+            rows,
+            activity_density_slot=activity_density_slot,
+            normalization_slot=normalization_slot,
         )
         authorities = ["locations", "context_capsules"]
         if activity_density_slot.get("evidenceRefs"):
@@ -1249,6 +1294,7 @@ class Geographic360Provider:
         rows: list[LocationRow],
         *,
         activity_claim: Optional[ClaimEnvelope] = None,
+        normalization_claim: Optional[ClaimEnvelope] = None,
     ) -> list[ClaimEnvelope]:
         """Evidence-grounded claims (requiresEvidence: every claim is grounded)."""
         claims: list[ClaimEnvelope] = []
@@ -1370,6 +1416,8 @@ class Geographic360Provider:
             )
         if activity_claim is not None:
             claims.append(activity_claim)
+        if normalization_claim is not None:
+            claims.append(normalization_claim)
         return claims
 
     # ── Canonical read helper (defensive) ─────────────────────────────────
@@ -1653,6 +1701,7 @@ def _required_location_slots(
     rows: list[LocationRow],
     *,
     activity_density_slot: Optional[dict[str, Any]] = None,
+    normalization_slot: Optional[dict[str, Any]] = None,
 ) -> dict[str, dict[str, Any]]:
     """Expose every SSOT-required slot with source-backed state and gaps."""
     posture = view.posture
@@ -1706,6 +1755,8 @@ def _required_location_slots(
 
     if activity_density_slot is not None:
         slots["activity_density"] = activity_density_slot
+    if normalization_slot is not None:
+        slots["normalization"] = normalization_slot
 
     primary = _primary_row(rows)
     if primary is None:
@@ -1879,6 +1930,119 @@ def _required_location_slots(
         "policy": policy_boundary,
     }
     return {slot_id: slots[slot_id] for slot_id in LOCATION_REQUIRED_SLOT_IDS}
+
+
+def _normalization_lineage_projection(
+    view: GeographicView,
+    *,
+    subject: ProjectionSubject,
+) -> tuple[dict[str, Any], Optional[ClaimEnvelope]]:
+    """Expose only exact source lineage persisted on canonical LocationFacts.
+
+    The current location authority can link a fact to an upstream observation
+    and source evidence, but it does not persist the normalization/validation
+    versions or the time of that transformation. A source-linked read is
+    therefore useful but deliberately degraded; it never treats the
+    LocationFact schema version as a normalization algorithm version.
+    """
+    policy = {
+        "state": "not_evaluated_by_projection_provider",
+        "reasonCode": "policy_disposition_is_owned_by_frame_runtime",
+    }
+    unknown = {
+        "state": "unknown",
+        "reasonCode": "location_normalization_lineage_unavailable",
+        "content": None,
+        "evidenceRefs": [],
+        "freshness": {
+            "state": "unknown",
+            "reasonCode": "location_normalization_timestamp_unavailable",
+        },
+        "policy": policy,
+    }
+    posture = view.posture
+    if posture is None or not posture.facts:
+        return unknown, None
+
+    linked_rows: list[tuple[LocationRow, dict[str, Any]]] = []
+    for row in posture.facts:
+        source_observation_id = _safe_activity_identifier(row.source_observation_id)
+        source_provider = _safe_activity_identifier(row.provider)
+        source_evidence_refs_all = [
+            safe_ref
+            for value in row.source_evidence_refs
+            if (safe_ref := _safe_activity_identifier(value)) is not None
+        ]
+        if not source_observation_id and not source_evidence_refs_all:
+            continue
+        linked_rows.append(
+            (
+                row,
+                {
+                    "locationFactId": _safe_activity_identifier(row.location_id),
+                    "sourceLinkState": "linked",
+                    "sourceObservationId": source_observation_id,
+                    "sourceProvider": source_provider,
+                    "sourceEvidenceRefs": source_evidence_refs_all[:EVIDENCE_CAP],
+                    "sourceEvidenceRefsTruncated": len(source_evidence_refs_all)
+                    > EVIDENCE_CAP,
+                    "locationFactSchemaVersion": _safe_activity_identifier(
+                        row.schema_version
+                    ),
+                    "sourceObservedAt": row.observed_at,
+                },
+            )
+        )
+
+    if not linked_rows:
+        return unknown, None
+
+    # Location facts are ordered oldest -> newest by the canonical reader.
+    # Keep the newest source-linked entries within the evidence cap and make
+    # any truncation visible in the slot content.
+    linked_rows.sort(key=lambda item: _iso_aware(item[0].observed_at or item[0].valid_from))
+    listed_rows = linked_rows[-EVIDENCE_CAP:]
+    entries = [entry for _, entry in listed_rows]
+    evidence_refs = [_row_evidence(row) for row, _ in listed_rows]
+    omitted_linked_count = len(linked_rows) - len(listed_rows)
+    slot = {
+        "state": "degraded",
+        "reasonCode": "location_normalization_algorithm_lineage_unavailable",
+        "content": {
+            "lineageCompleteness": "partial",
+            "lineageBasis": "source_links_recorded_on_canonical_location_facts",
+            "entries": entries,
+            "sourceLinkedFactCount": len(linked_rows),
+            "listedSourceLinkedFactCount": len(listed_rows),
+            "omittedSourceLinkedFactCount": omitted_linked_count,
+            "sourceLinkedFactListTruncated": omitted_linked_count > 0,
+            "unavailableLineageFields": [
+                "normalizationVersion",
+                "validationVersion",
+                "rawRecordRef",
+                "normalizationTimestamp",
+            ],
+        },
+        "evidenceRefs": [ref.model_dump(mode="json") for ref in evidence_refs],
+        "freshness": {
+            "state": "unknown",
+            "reasonCode": "location_normalization_timestamp_unavailable",
+        },
+        "policy": policy,
+    }
+    claim = None
+    if evidence_refs:
+        claim = ClaimEnvelope(
+            id="normalization.location_fact_lineage",
+            kind="geographic_normalization_lineage",
+            subject=subject,
+            evidenceRefs=evidence_refs,
+            claims=[
+                "the canonical location facts expose explicit source observation or evidence links, but do not expose transformation-version or normalization-time lineage; normalization coverage is partial"
+            ],
+            domainSlotIds=["normalization"],
+        )
+    return slot, claim
 
 
 def _jurisdiction_content(rows: list[LocationRow]) -> Optional[dict[str, Any]]:

@@ -611,7 +611,8 @@
         "evidence",
         "episode_context",
         "interactions",
-        "outcomes"
+        "outcomes",
+        "stages"
       ],
       "supportedTemporalModes": [
         "window",
@@ -1076,7 +1077,8 @@
         "state",
         "timeline",
         "evidence",
-        "findings"
+        "findings",
+        "normalization"
       ],
       "supportedTemporalModes": [
         "window",
@@ -1605,6 +1607,7 @@
       "canonicalAuthorities": [
         "campaign_facts",
         "campaign_touchpoints",
+        "targeting_leakage_findings",
         "source_provenance",
         "touchpoints",
         "journeys",
@@ -1640,7 +1643,8 @@
         "state",
         "evidence",
         "outcomes",
-        "findings"
+        "findings",
+        "anomalies"
       ],
       "supportedTemporalModes": [
         "window",
@@ -5217,12 +5221,23 @@
         {
           "id": "stages",
           "requirement": "required",
-          "description": "Required journey360 slot: stages.",
+          "description": "Explicit journey-role markers on exact current-version steps; no inferred stage boundaries or taxonomy.",
+          "partialImplementationReason": "Only persisted explicit journey-role markers are exposed; stage taxonomy and completeness remain unknown.",
           "canonicalAuthorityRefs": [
             "journeys"
           ],
-          "projectionBindings": [],
-          "unboundReason": "typed_journey_stage_authority_not_available"
+          "projectionBindings": [
+            {
+              "projectionId": "episode360",
+              "role": "primary",
+              "sectionIds": [
+                "stages"
+              ],
+              "subjectKinds": [
+                "journey"
+              ]
+            }
+          ]
         },
         {
           "id": "episodes",
@@ -7639,13 +7654,29 @@
         {
           "id": "anomalies",
           "requirement": "required",
-          "description": "Campaign-linked risk and source anomalies backed by canonical findings.",
+          "description": "Tenant-scoped targeting leakage findings backed by source observation and eligibility-snapshot evidence; broader risk and source anomalies stay unknown.",
           "canonicalAuthorityRefs": [
+            "targeting_leakage_findings",
             "risk_outputs",
             "source_provenance"
           ],
-          "projectionBindings": [],
-          "unboundReason": "No exact campaign-to-risk or source-anomaly provider is connected."
+          "projectionBindings": [
+            {
+              "projectionId": "campaign360",
+              "role": "primary",
+              "sectionIds": [
+                "anomalies"
+              ],
+              "subjectKinds": [
+                "campaign"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Exact targeting leakage findings are joined with a bounded evidence chain; general risk outputs and source anomalies remain unknown.",
+          "unboundCanonicalAuthorityRefs": [
+            "risk_outputs"
+          ],
+          "authorityGapReason": "General campaign risk outputs are not joined by this targeting leakage finding provider."
         },
         {
           "id": "evidence_trace",
@@ -7719,6 +7750,7 @@
           "risk_outputs",
           "source_facts",
           "source_provenance",
+          "targeting_leakage_findings",
           "touchpoints"
         ],
         "ownsCanonicalTruth": false,
@@ -8150,10 +8182,11 @@
           "description": "Profile views for validated account members with each profile policy independently applied.",
           "canonicalAuthorityRefs": [
             "identity",
-            "entity_registry"
+            "entity_registry",
+            "graph"
           ],
           "projectionBindings": [],
-          "unboundReason": "account_member_profile_fanout_and_policy_not_implemented"
+          "partialImplementationReason": "Bounded exact-member Profile360 frames now run under per-member policy; roster completeness and a profile freshness SLA remain unknown."
         },
         {
           "id": "relationships",
@@ -8391,6 +8424,7 @@
             "account_summary",
             "members",
             "agents",
+            "profiles",
             "risk"
           ],
           "implementationRef": "services/api/identity/account360_provider.py",
@@ -8399,6 +8433,7 @@
             "entities",
             "entity_registry",
             "graph",
+            "identity",
             "risk_outputs"
           ]
         }
@@ -8669,13 +8704,25 @@
         {
           "id": "normalization",
           "requirement": "required",
-          "description": "Source location normalization lineage.",
+          "description": "Source links recorded on canonical location facts, without claiming transformation-version or normalization-time lineage.",
           "canonicalAuthorityRefs": [
-            "geo_observations",
             "locations"
           ],
-          "projectionBindings": [],
-          "unboundReason": "location_normalization_lineage_unavailable"
+          "projectionBindings": [
+            {
+              "projectionId": "geographic360",
+              "role": "primary",
+              "sectionIds": [
+                "normalization"
+              ],
+              "subjectKinds": [
+                "entity",
+                "population",
+                "source"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Canonical location fact source links are surfaced, but normalization and validation versions, raw record refs, and normalization timestamps are unavailable."
         },
         {
           "id": "evidence_trace",

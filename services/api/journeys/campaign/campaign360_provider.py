@@ -43,6 +43,7 @@ PROJECTION_ID = "campaign360"
 OUTPUT_SECTIONS: tuple[str, ...] = (
     "evidence",
     "findings",
+    "anomalies",
     "outcomes",
     "state",
     "summary",
@@ -127,11 +128,18 @@ MAX_PAGE_LIMIT = 500
 MAX_ATTRIBUTION_CREDITS = 500
 DEFAULT_PAGE_LIMIT = 100
 MAX_ASSOCIATED_CONTEXT_ROWS = 100
+MAX_CAMPAIGN_ANOMALIES = 100
 
 _JOURNEY_SOURCE = (
     "services/api/journeys/measurement/repositories/journey_repo.py:journey_versions"
 )
 _EPISODE_SOURCE = "services/api/shared/backend_interpretation/stores.py:episodes"
+_TARGETING_ANOMALY_SOURCE = (
+    "services/api/intelligence/targeting_intelligence/repository.py:targeting_leakage_findings"
+)
+_TARGETING_ANOMALY_EVIDENCE_SOURCES = frozenset(
+    {"targeting_observation", "eligibility_snapshot"}
+)
 
 
 @dataclass(frozen=True)
@@ -159,6 +167,16 @@ class AttributionRead:
     credits: list[dict[str, Any]]
     available: bool
     data_quality: Optional[str] = None
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class CampaignAnomalyRead:
+    """Exact campaign-scoped targeting findings with explicit completeness."""
+
+    rows: list[dict[str, Any]]
+    available: bool
+    complete: bool
     reason: Optional[str] = None
 
 
@@ -201,9 +219,13 @@ class Campaign360Source(Protocol):
 
     async def episode_record(self, tenant_id: str, episode_id: str) -> CampaignRead: ...
 
+    async def campaign_anomalies(
+        self, tenant_id: str, campaign_id: str, *, limit: int
+    ) -> CampaignAnomalyRead: ...
+
 
 class RepositoryCampaign360Source:
-    """Adapter over the canonical CampaignRegistry, touchpoint, and credit repos.
+    """Adapter over canonical campaign, measurement, and targeting repositories.
 
     The repositories themselves tenant-filter their SQL/local-store reads. The
     provider independently checks every returned row before exposing it.
@@ -346,6 +368,39 @@ class RepositoryCampaign360Source:
             reason=None if isinstance(record, dict) else "episode_record_shape_invalid",
         )
 
+    async def campaign_anomalies(
+        self, tenant_id: str, campaign_id: str, *, limit: int
+    ) -> CampaignAnomalyRead:
+        """Read exact campaign-linked targeting leakage findings.
+
+        The targeting store applies the tenant and campaign predicates before
+        returning rows. Campaign360 independently validates both fields before
+        projecting any record. Other risk outputs and source anomalies remain
+        outside this source and are not inferred from an empty targeting read.
+        """
+        try:
+            from intelligence.targeting_intelligence.repository import (
+                get_targeting_repositories,
+            )
+
+            rows = await get_targeting_repositories().leakage.list_for_tenant(
+                tenant_id,
+                campaignId=campaign_id,
+                limit=limit,
+            )
+        except Exception:  # noqa: BLE001 - anomaly-source outage is slot-local
+            return CampaignAnomalyRead(
+                rows=[],
+                available=False,
+                complete=False,
+                reason="targeting_anomaly_authority_unavailable",
+            )
+        return CampaignAnomalyRead(
+            rows=list(rows),
+            available=True,
+            complete=len(rows) < limit,
+        )
+
 
 @dataclass(frozen=True)
 class _TemporalScope:
@@ -439,6 +494,13 @@ def _parse_instant(value: str) -> datetime:
     if parsed.tzinfo is None:
         raise ValueError("timezone required")
     return parsed.astimezone(timezone.utc)
+
+
+def _safe_campaign_source_id(value: Any) -> bool:
+    """Accept bounded source identifiers that cannot alter evidence URIs."""
+    if not isinstance(value, str) or not value or len(value) > 128:
+        return False
+    return all(character.isalnum() or character in "_.:-" for character in value)
 
 
 def _scalar(value: Any) -> Any:
@@ -582,6 +644,18 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         touchpoint_items: list[dict[str, Any]] = []
         source_classification_items: list[dict[str, Any]] = []
         credit_items: list[dict[str, Any]] = []
+        campaign_anomaly_context: dict[str, Any] = {
+            "state": "unknown",
+            "subject": {"kind": subject.kind, "id": subject.id},
+            "findings": [],
+            "dimensionStates": {
+                "targetingLeakageFindings": "unknown",
+                "riskOutputs": "unknown",
+                "sourceAnomalies": "unknown",
+            },
+            "freshness": {"state": "unknown", "sourceTimestampsPreserved": True},
+            "reason": "campaign_anomaly_authority_not_connected",
+        }
         touchpoint_page: Optional[PageInfo] = None
         campaign_found = False
         campaign_id: Optional[str] = None
@@ -875,6 +949,39 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                         sourceAuthorities=["journeys"],
                         dimensionStates={"journeys": "unknown"},
                     )
+                if campaign_found and temporal.observations_supported:
+                    campaign_anomaly_context = await self._read_campaign_anomalies(
+                        request=request,
+                        campaign_id=campaign_id or "",
+                        temporal=temporal,
+                        slot_states=slot_states,
+                        evidence_by_key=evidence_by_key,
+                        claims=claims,
+                        degraded_reasons=degraded_reasons,
+                    )
+                else:
+                    slot_states[SLOT_ANOMALIES].update(
+                        state="unknown",
+                        reason=(
+                            temporal.reason
+                            if campaign_found
+                            else "campaign_registry_subject_not_available"
+                        ),
+                        sourceAuthorities=["risk_outputs", "source_provenance"],
+                        dimensionStates={
+                            "targetingLeakageFindings": "unknown",
+                            "riskOutputs": "unknown",
+                            "sourceAnomalies": "unknown",
+                        },
+                    )
+                    campaign_anomaly_context.update(
+                        state="unknown",
+                        reason=(
+                            temporal.reason
+                            if campaign_found
+                            else "campaign_registry_subject_not_available"
+                        ),
+                    )
                 slot_states[SLOT_COHORTS_SYNDICATES].setdefault("state", "unknown")
                 slot_states[SLOT_COHORTS_SYNDICATES].update(
                     state="unknown",
@@ -896,12 +1003,6 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                         "economic",
                         "outcomes",
                     ],
-                )
-                slot_states[SLOT_ANOMALIES].setdefault("state", "unknown")
-                slot_states[SLOT_ANOMALIES].update(
-                    state="unknown",
-                    reason="campaign_anomaly_authority_not_connected",
-                    sourceAuthorities=["risk_outputs", "source_provenance"],
                 )
 
         if temporal.reason is not None and temporal.reason not in {
@@ -1018,9 +1119,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                     "reason": slot_states[SLOT_PERFORMANCE].get("reason"),
                 },
                 SLOT_ANOMALIES: {
-                    "state": slot_states[SLOT_ANOMALIES]["state"],
-                    "subject": {"kind": subject.kind, "id": subject.id},
-                    "reason": slot_states[SLOT_ANOMALIES].get("reason"),
+                    **campaign_anomaly_context,
                 },
                 SLOT_EVIDENCE_TRACE: {
                     "state": slot_states[SLOT_EVIDENCE_TRACE]["state"],
@@ -1079,11 +1178,21 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                         "campaign-to-conversion joins are unresolved",
                         "cohort and syndicate membership requires canonical grouping authorities",
                         "performance metrics require a registered metric contract and value composition",
-                        "campaign anomalies require risk authority composition",
+                        "targeting leakage findings are a partial anomaly source; broader risk outputs and source anomalies remain unresolved",
                         "actor attribution, delegation, and authority are not resolved by this provider",
                         "current campaign state is not a historical snapshot",
                     ],
                 },
+            ),
+            _section(
+                "anomalies",
+                (
+                    "degraded"
+                    if campaign_anomaly_context.get("state")
+                    in {"partial", "truncated", "degraded"}
+                    else "unknown"
+                ),
+                campaign_anomaly_context,
             ),
             _section(
                 "outcomes",
@@ -1155,6 +1264,305 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             temporalMode=request.temporalMode,
             degradation=degradation,
         )
+
+    async def _read_campaign_anomalies(
+        self,
+        *,
+        request: ProjectionRequest,
+        campaign_id: str,
+        temporal: _TemporalScope,
+        slot_states: dict[str, dict[str, Any]],
+        evidence_by_key: dict[tuple[str, str], EvidenceRef],
+        claims: list[ClaimEnvelope],
+        degraded_reasons: list[str],
+    ) -> dict[str, Any]:
+        """Project exact campaign-targeting leakage findings as partial anomalies.
+
+        This joins one existing canonical finding authority by its exact
+        ``(tenantId, campaignId)`` key. It does not turn the absence of targeting
+        leakage into an all-risk clear state: general risk outputs and source
+        anomalies remain explicit unknown dimensions.
+        """
+        base: dict[str, Any] = {
+            "subject": {"kind": request.subject.kind, "id": request.subject.id},
+            "campaignId": campaign_id,
+            "findings": [],
+            "dimensionStates": {
+                "targetingLeakageFindings": "unknown",
+                "riskOutputs": "unknown",
+                "sourceAnomalies": "unknown",
+            },
+            "freshness": {"state": "unknown", "sourceTimestampsPreserved": True},
+            "temporalBounds": {
+                "from": _scalar(temporal.start),
+                "fromInclusive": True,
+                "to": _scalar(temporal.end),
+                "toExclusive": True,
+            },
+        }
+        source_read = getattr(self._source, "campaign_anomalies", None)
+        if not callable(source_read):
+            reason = "targeting_anomaly_authority_binding_unavailable"
+            slot_states[SLOT_ANOMALIES].update(
+                state="unknown",
+                reason=reason,
+                sourceAuthorities=["targeting_leakage_findings", "risk_outputs", "source_provenance"],
+                dimensionStates={**base["dimensionStates"], "targetingLeakageFindings": "unknown"},
+            )
+            return {**base, "state": "unknown", "reason": reason}
+
+        try:
+            read = await source_read(
+                request.tenantId,
+                campaign_id,
+                limit=MAX_CAMPAIGN_ANOMALIES + 1,
+            )
+        except Exception:  # noqa: BLE001 - source diagnostics stay private
+            read = CampaignAnomalyRead([], available=False, complete=False)
+        if not isinstance(read, CampaignAnomalyRead) or not read.available:
+            reason = "targeting_anomaly_authority_unavailable"
+            slot_states[SLOT_ANOMALIES].update(
+                state="degraded",
+                reason=reason,
+                sourceAuthorities=["targeting_leakage_findings", "risk_outputs", "source_provenance"],
+                dimensionStates={**base["dimensionStates"], "targetingLeakageFindings": "unavailable"},
+            )
+            degraded_reasons.append(reason)
+            return {
+                **base,
+                "state": "degraded",
+                "dimensionStates": {**base["dimensionStates"], "targetingLeakageFindings": "unavailable"},
+                "reason": reason,
+            }
+        if any(not isinstance(row, dict) for row in read.rows):
+            reason = "campaign_anomaly_record_shape_invalid"
+            slot_states[SLOT_ANOMALIES].update(
+                state="unknown",
+                reason=reason,
+                sourceAuthorities=["targeting_leakage_findings", "risk_outputs", "source_provenance"],
+                dimensionStates=base["dimensionStates"],
+            )
+            degraded_reasons.append(reason)
+            return {**base, "state": "unknown", "reason": reason}
+
+        # Import the source authority's typed contract lazily with the repository
+        # adapter so Campaign360 remains import-safe in lean deployments.
+        try:
+            from intelligence.targeting_intelligence.models import (
+                ExclusionLeakageFinding,
+            )
+
+            validated = [ExclusionLeakageFinding.model_validate(row) for row in read.rows]
+        except Exception:  # noqa: BLE001 - malformed canonical data fails closed
+            reason = "campaign_anomaly_record_invalid"
+            slot_states[SLOT_ANOMALIES].update(
+                state="unknown",
+                reason=reason,
+                sourceAuthorities=["targeting_leakage_findings", "risk_outputs", "source_provenance"],
+                dimensionStates=base["dimensionStates"],
+            )
+            degraded_reasons.append(reason)
+            return {**base, "state": "unknown", "reason": reason}
+
+        if any(
+            item.tenantId != request.tenantId or item.campaignId != campaign_id
+            for item in validated
+        ):
+            reason = "campaign_anomaly_record_scope_mismatch"
+            slot_states[SLOT_ANOMALIES].update(
+                state="unknown",
+                reason=reason,
+                sourceAuthorities=["targeting_leakage_findings", "risk_outputs", "source_provenance"],
+                dimensionStates=base["dimensionStates"],
+            )
+            degraded_reasons.append(reason)
+            return {**base, "state": "unknown", "reason": reason}
+
+        ids = [item.findingId for item in validated]
+        if len(ids) != len(set(ids)) or any(not _safe_campaign_source_id(value) for value in ids):
+            reason = "campaign_anomaly_identifier_invalid_or_duplicated"
+            slot_states[SLOT_ANOMALIES].update(
+                state="unknown",
+                reason=reason,
+                sourceAuthorities=["targeting_leakage_findings", "risk_outputs", "source_provenance"],
+                dimensionStates=base["dimensionStates"],
+            )
+            degraded_reasons.append(reason)
+            return {**base, "state": "unknown", "reason": reason}
+
+        truncated = not read.complete or len(validated) > MAX_CAMPAIGN_ANOMALIES
+        validated = validated[:MAX_CAMPAIGN_ANOMALIES]
+        anomaly_items: list[dict[str, Any]] = []
+        pending_evidence: list[EvidenceRef] = []
+        pending_claims: list[ClaimEnvelope] = []
+        timestamps: list[tuple[datetime, str]] = []
+        missing_timestamps = False
+        missing_window_timestamps = False
+        seen: set[str] = set()
+        for finding in validated:
+            if finding.findingId in seen:
+                continue
+            seen.add(finding.findingId)
+            observed_at = _string_or_none(finding.computedAt)
+            parsed_timestamp: Optional[datetime] = None
+            if observed_at is not None:
+                try:
+                    parsed_timestamp = _parse_instant(observed_at)
+                except ValueError:
+                    missing_timestamps = True
+                    observed_at = None
+            else:
+                missing_timestamps = True
+
+            if parsed_timestamp is None and (temporal.start is not None or temporal.end is not None):
+                # A timestamp-less finding cannot be placed into the requested
+                # period. Keep the result incomplete instead of guessing.
+                missing_window_timestamps = True
+                continue
+            if parsed_timestamp is not None and (
+                (temporal.start is not None and parsed_timestamp < temporal.start)
+                or (temporal.end is not None and parsed_timestamp >= temporal.end)
+            ):
+                continue
+            if parsed_timestamp is not None and observed_at is not None:
+                timestamps.append((parsed_timestamp, observed_at))
+
+            source_refs: list[EvidenceRef] = []
+            source_kinds: set[str] = set()
+            for source_ref in finding.evidenceRefs:
+                expected_type = {
+                    "targeting_observation": "event",
+                    "eligibility_snapshot": "annotation",
+                }.get(source_ref.source)
+                if (
+                    expected_type is None
+                    or source_ref.type != expected_type
+                    or not _safe_campaign_source_id(source_ref.id)
+                ):
+                    continue
+                source_kinds.add(source_ref.source)
+                source_refs.append(
+                    EvidenceRef(
+                        id=source_ref.id,
+                        type=source_ref.type,
+                        source=source_ref.source,
+                        observedAt=_string_or_none(source_ref.observedAt),
+                    )
+                )
+            if not {"targeting_observation", "eligibility_snapshot"}.issubset(source_kinds):
+                reason = "campaign_anomaly_evidence_chain_incomplete"
+                slot_states[SLOT_ANOMALIES].update(
+                    state="unknown",
+                    reason=reason,
+                    sourceAuthorities=["targeting_leakage_findings", "risk_outputs", "source_provenance"],
+                    dimensionStates=base["dimensionStates"],
+                )
+                degraded_reasons.append(reason)
+                return {**base, "state": "unknown", "reason": reason}
+
+            finding_ref = EvidenceRef(
+                id=finding.findingId,
+                type="model_output",
+                source=_TARGETING_ANOMALY_SOURCE,
+                observedAt=observed_at,
+                uri=f"store://targeting_leakage_findings/{finding.findingId}",
+            )
+            refs = [finding_ref, *source_refs]
+            pending_evidence.extend(refs)
+            anomaly_items.append(
+                {
+                    "findingId": finding.findingId,
+                    "reasonCode": finding.reasonCode,
+                    "severity": finding.severity,
+                    "leakageRate": finding.leakageRate,
+                    "excludedEntityCount": finding.excludedEntityCount,
+                    "reachedEntityCount": finding.reachedEntityCount,
+                    "computedAt": observed_at,
+                    "evidenceRefs": [
+                        item.model_dump(by_alias=True, exclude_none=True)
+                        for item in refs
+                    ],
+                    "domainSlotIds": [SLOT_ANOMALIES],
+                }
+            )
+            pending_claims.append(
+                ClaimEnvelope(
+                    id=f"campaign360:{campaign_id}:anomaly:{finding.findingId}",
+                    kind="campaign_targeting_leakage_finding",
+                    subject=request.subject,
+                    evidenceRefs=refs,
+                    claims=[
+                        "A tenant-scoped canonical targeting leakage finding is recorded for this campaign; this is not a complete campaign risk assessment."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=[SLOT_ANOMALIES],
+                )
+            )
+
+        for ref in pending_evidence:
+            _add_evidence(evidence_by_key, ref)
+        claims.extend(pending_claims)
+        missing_timestamps = missing_timestamps or missing_window_timestamps
+        if truncated:
+            state = "truncated"
+            reason = "campaign_targeting_leakage_findings_truncated"
+            targeting_state = "truncated"
+        else:
+            state = "partial"
+            reason = (
+                "campaign_targeting_leakage_findings_have_unplaced_timestamps"
+                if missing_window_timestamps
+                else "targeting_leakage_findings_only_other_anomaly_authorities_unresolved"
+            )
+            targeting_state = (
+                "partial"
+                if missing_window_timestamps
+                else "available"
+                if anomaly_items
+                else "empty"
+            )
+        freshness_state = (
+            "available"
+            if timestamps and not missing_timestamps and not truncated
+            else "unknown"
+        )
+        source_timestamp = max(timestamps, key=lambda pair: pair[0])[1] if timestamps else None
+        dimension_states = {
+            "targetingLeakageFindings": targeting_state,
+            "riskOutputs": "unknown",
+            "sourceAnomalies": "unknown",
+        }
+        slot_states[SLOT_ANOMALIES].update(
+            state=state,
+            reason=reason,
+            sourceAuthorities=[
+                "targeting_leakage_findings",
+                "risk_outputs",
+                "source_provenance",
+            ],
+            dimensionStates=dimension_states,
+            findingCount=len(anomaly_items),
+            freshnessState=freshness_state,
+            sourceTimestamp=source_timestamp,
+            findingsTruncated=truncated,
+        )
+        if truncated or missing_window_timestamps:
+            degraded_reasons.append(reason)
+        return {
+            **base,
+            "state": state,
+            "findings": anomaly_items,
+            "dimensionStates": dimension_states,
+            "freshness": {
+                "state": freshness_state,
+                "sourceTimestamp": source_timestamp,
+                "sourceTimestampsPreserved": True,
+                "missingTimestamp": "unknown",
+            },
+            "reason": reason,
+            "coverage": "targeting_leakage_findings_only",
+            "findingsTruncated": truncated,
+        }
 
     async def _read_campaign_journey_context(
         self,
@@ -1973,6 +2381,8 @@ def _slots_for_evidence(
             slots.append(SLOT_JOURNEY_EPISODE)
         elif evidence.source == "identity_populations":
             slots.append(SLOT_POPULATION)
+        elif evidence.source == _TARGETING_ANOMALY_SOURCE or evidence.source in _TARGETING_ANOMALY_EVIDENCE_SOURCES:
+            slots.append(SLOT_ANOMALIES)
     return list(dict.fromkeys(slots))
 
 
@@ -1995,6 +2405,7 @@ def register_provider(registry: ProviderRegistry) -> Campaign360Provider:
 
 __all__ = [
     "AttributionRead",
+    "CampaignAnomalyRead",
     "Campaign360Provider",
     "Campaign360Source",
     "CampaignRead",

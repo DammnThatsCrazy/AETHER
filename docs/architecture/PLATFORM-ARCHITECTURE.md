@@ -550,7 +550,7 @@ Canonical contract plane (single source of truth, codegen twins via
 
 A **360** is an intelligence projection over canonical Aether truth — it is
 never a competing system of record. The intelligence projection plane owns the
-single canonical registry (20 technical projections, nine of which — `outcome360`,
+single canonical registry (24 technical projections, nine of which — `outcome360`,
 `economic360`, `infrastructure360`, `communication360`, `risk360`, `fraud360`,
 the context-360 time leaf `temporal360`, the context-360 WHO/SET leaf
 `population360` and the context-360 WHERE leaf `geographic360` — are now
@@ -575,8 +575,8 @@ providers are registered at boot — `main.py`'s lifespan calls
 `dependencies.projection_plane.register_implemented_projection_providers` — so a
 projection surface answers live instead of degrading to `provider_unavailable`
 (a provider is not live until registered at this mount; the enforcement note is
-in the source-of-truth). All 20 providers register, with 9 still classified as
-`implemented` and 11 as `in_flight`; registration does not promote status. The
+in the source-of-truth). All 24 providers register, with 9 classified as
+`implemented` and 15 as `in_flight`; registration does not promote status. The
 tenant-scoped `POST /v1/experience360/frames` route composes the separate
 18-surface product catalog, and `GET /v1/experience360/catalog` reports catalog
 and provider-registration state. Policy runs before reads, and missing or
@@ -590,8 +590,13 @@ required slots, subjects, lenses, owner, and purpose. All 18 entries are now
 marked `source_aligned` for contract metadata and slot IDs. This is contract
 alignment only: it does not prove a complete provider path, evidence coverage,
 policy behavior, freshness, API reachability, or surface-level verification.
-The registry contains 24 technical projections; 9 are marked `implemented` and
-15 remain `in_flight`, and registration does not promote that state.
+
+Recent backend slices bind Account360 profiles through exact tenant membership
+and policy-scoped Profile360 reads, Campaign360 targeting-leakage findings,
+Journey360 explicit role markers, and Location360 source/evidence lineage.
+These slots remain partial where membership, anomaly, stage, or normalization
+authorities lack completeness or transformation metadata; none changes the
+technical provider's `in_flight` status.
 Exploration surfaces compose over the engine through projection-backed surface adapters
 
 (`services/api/journeys/exploration/adapters/projection.py`).

@@ -53,6 +53,7 @@ _SECTION_TITLES = {
     "interactions": "Episode interactions",
     "outcomes": "Episode outcomes",
     "timeline": "Episode timeline",
+    "stages": "Journey stage observations",
 }
 
 _JOURNEY_VERSION_SOURCE = (
@@ -1075,6 +1076,13 @@ class Episode360Provider:
         )
         return [
             ProjectionSection(
+                id="stages",
+                state="unknown",
+                title=_SECTION_TITLES["stages"],
+                content=None,
+                warnings=["typed_journey_stage_authority_requires_journey_subject"],
+            ),
+            ProjectionSection(
                 id="summary",
                 state=availability,
                 title=_SECTION_TITLES["summary"],
@@ -1695,6 +1703,12 @@ def _build_journey_sections(
     version_evidence = [journey_ref.model_dump(mode="json")]
     journey_view = _journey_view(journey)
     timeline = [_journey_step_view(row) for row in steps]
+    stage_context = _journey_stage_context(
+        steps=steps,
+        step_refs=step_refs,
+        steps_available=steps_available,
+        step_inventory_complete=step_inventory_complete,
+    )
     episode_evidence = episode_context["evidenceRefs"]
     touchpoint_evidence = touchpoint_context["evidenceRefs"]
     conversion_evidence = conversion_context["evidenceRefs"]
@@ -1705,6 +1719,7 @@ def _build_journey_sections(
         step_refs=step_refs,
         steps_available=steps_available,
         step_inventory_complete=step_inventory_complete,
+        stage_context=stage_context,
         touchpoint_context=touchpoint_context,
         conversion_context=conversion_context,
     )
@@ -1725,6 +1740,22 @@ def _build_journey_sections(
         "reason": conversion_context["reason"],
     }
     output: dict[str, ProjectionSection] = {
+        "stages": ProjectionSection(
+            id="stages",
+            state=(
+                "degraded"
+                if stage_context["state"] in {"partial", "degraded"}
+                else "empty"
+                if stage_context["state"] == "empty"
+                else "unknown"
+            ),
+            title=_SECTION_TITLES["stages"],
+            content=stage_context,
+            canonicalAuthorityRefs=["journeys"],
+            warnings=[stage_context["reason"]]
+            if isinstance(stage_context.get("reason"), str)
+            else None,
+        ),
         "summary": ProjectionSection(
             id="summary",
             state=summary_state,
@@ -1863,6 +1894,7 @@ def _build_journey_sections(
                 {
                     "journey": journey_view,
                     "timeline": timeline,
+                    "stageObservations": stage_context,
                     "evidenceRefs": (
                         version_evidence
                         + step_evidence
@@ -1887,6 +1919,95 @@ def _build_journey_sections(
         ),
     }
     return [output[section_id] for section_id in _EPISODE360_SECTIONS]
+
+
+def _journey_stage_context(
+    *,
+    steps: list[dict[str, Any]],
+    step_refs: list[EvidenceRef],
+    steps_available: bool,
+    step_inventory_complete: bool,
+) -> dict[str, Any]:
+    """Project explicit journey-role markers without inventing stage boundaries.
+
+    ``journey_role`` is persisted on canonical journey steps by the source
+    classifier. It can identify observed markers such as entry, campaign, or
+    handoff, but it is not a typed stage definition or a completeness claim.
+    Each marker therefore remains attached to its exact journey step and the
+    slot stays partial until a governed stage taxonomy/authority exists.
+    """
+    refs_by_step_id = {ref.id: ref for ref in step_refs}
+    observations: list[dict[str, Any]] = []
+    missing_evidence = False
+    invalid_role = False
+    for row in steps:
+        role = _journey_text(row.get("journey_role"))
+        if role is None:
+            continue
+        # Persisted journey roles are labels rather than an open-ended payload.
+        # Bound their projection size while marking malformed rows explicitly.
+        if len(role) > 128:
+            invalid_role = True
+            continue
+        step_id = _journey_text(row.get("step_id"))
+        evidence = refs_by_step_id.get(step_id or "")
+        if evidence is None:
+            missing_evidence = True
+            continue
+        observations.append(
+            {
+                "stepId": step_id,
+                "position": _journey_int(row.get("step_position"), 0),
+                "journeyRole": role,
+                "occurredAt": _journey_timestamp(row.get("occurred_at")),
+                "activityFamily": _journey_text(row.get("activity_family")),
+                "activityType": _journey_text(row.get("activity_type")),
+                "evidenceRefs": [evidence.model_dump(mode="json", exclude_none=True)],
+            }
+        )
+
+    observed_refs = [
+        evidence
+        for observation in observations
+        for evidence in observation["evidenceRefs"]
+    ]
+    complete_refs = [ref.model_dump(mode="json", exclude_none=True) for ref in step_refs]
+    if not steps_available:
+        state = "unknown"
+        coverage = "unknown"
+        reason = "journey_step_authority_unavailable"
+    elif invalid_role or missing_evidence:
+        state = "degraded"
+        coverage = "partial"
+        reason = "journey_role_marker_invalid_or_missing_exact_step_evidence"
+    elif observations:
+        state = "partial"
+        coverage = "observed_role_markers"
+        reason = (
+            "explicit_journey_role_markers_loaded_from_exact_current_version_steps;"
+            "stage_taxonomy_and_stage_completeness_are_unresolved"
+        )
+    elif step_inventory_complete:
+        state = "empty"
+        coverage = "complete_for_explicit_role_markers"
+        reason = "complete_current_journey_step_inventory_has_no_explicit_role_markers"
+    else:
+        state = "unknown"
+        coverage = "unknown"
+        reason = "incomplete_journey_step_inventory_cannot_establish_role_marker_absence"
+
+    return {
+        "state": state,
+        "coverage": coverage,
+        "reason": reason,
+        "authority": "tenant_scoped_current_journey_version_steps",
+        "stageTaxonomyState": "unknown",
+        "inventoryComplete": step_inventory_complete,
+        "stageObservations": observations,
+        # A complete empty step inventory is evidence only that this source
+        # recorded no explicit role markers; it does not prove no stages exist.
+        "evidenceRefs": observed_refs if observations else complete_refs if step_inventory_complete else [],
+    }
 
 
 def _unknown_journey_slot_coverage(
@@ -1914,6 +2035,7 @@ def _journey_required_slot_coverage(
     step_refs: list[EvidenceRef],
     steps_available: bool,
     step_inventory_complete: bool,
+    stage_context: dict[str, Any],
     touchpoint_context: dict[str, Any],
     conversion_context: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
@@ -2007,10 +2129,10 @@ def _journey_required_slot_coverage(
             "evidenceRefs": version_evidence,
         },
         "stages": {
-            "state": "unknown",
-            "coverage": "unknown",
-            "reason": "journey_step_contract_has_no_typed_stage_authority",
-            "evidenceRefs": [],
+            "state": stage_context["state"],
+            "coverage": stage_context["coverage"],
+            "reason": stage_context["reason"],
+            "evidenceRefs": stage_context["evidenceRefs"],
         },
         "episodes": {
             "state": "unknown",
@@ -2071,6 +2193,7 @@ def _build_journey_claims(
     version_id = _journey_text(journey.get("journey_version_id")) or journey_id
     version_slots = _journey_slot_ids_for_sections({"summary", "state", "evidence"})
     step_slots = _journey_slot_ids_for_sections({"timeline", "interactions", "evidence"})
+    stage_slots = _journey_slot_ids_for_sections({"stages"})
     touchpoint_slots = _journey_slot_ids_for_sections({"timeline", "evidence"})
     claims = [
         ClaimEnvelope(
@@ -2101,6 +2224,34 @@ def _build_journey_claims(
         )
         if len(claims) >= 101:
             break
+    if stage_slots:
+        for row in steps:
+            if len(claims) >= 201:
+                break
+            step_id = _journey_text(row.get("step_id"))
+            role = _journey_text(row.get("journey_role"))
+            evidence = _journey_step_ref(row)
+            if (
+                not step_id
+                or role is None
+                or len(role) > 128
+                or evidence is None
+            ):
+                continue
+            claims.append(
+                ClaimEnvelope(
+                    id=f"episode360:{journey_id}:{version_id}:stage-marker:{step_id}",
+                    kind="explicit_journey_role_marker",
+                    subject=request.subject,
+                    evidenceRefs=[evidence],
+                    claims=[
+                        f"Persisted journey step {step_id!r} has explicit journey_role marker "
+                        f"{role!r}; stage taxonomy and stage completeness remain unknown."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=stage_slots,
+                )
+            )
     for touchpoint_id, evidence in touchpoint_claims:
         if len(claims) >= 101:
             break
