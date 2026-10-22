@@ -17,8 +17,8 @@ from types import SimpleNamespace
 
 import pytest
 
+import actions.agent.deployment_routes as agent_routes
 from actions.agent.deployment_routes import agent_spawn_lineage
-from config.settings import settings
 from ingestion.silver import writer as silver_writer
 from ingestion.silver.projectors.agent_execution_projector import AgentExecutionProjector
 from intelligence.fraud_networks import fleet_routes
@@ -37,17 +37,22 @@ def _isolate(monkeypatch):
     silver_writer.reset_local_tables()
     journey_handoff_repo.reset_journey_handoff_memory()
     _seq["n"] = 0
+    # Each route module's own settings object (config.settings can be reloaded
+    # by other tests, leaving module-level references pointing at another copy).
     monkeypatch.setattr(
-        settings, "external_agent_telemetry",
-        dataclasses.replace(settings.external_agent_telemetry, enabled=True, registry_enabled=True),
+        agent_routes.settings, "external_agent_telemetry",
+        dataclasses.replace(agent_routes.settings.external_agent_telemetry,
+                            enabled=True, registry_enabled=True),
     )
+    hs = handoff_routes.settings
     monkeypatch.setattr(
-        settings, "identity_continuity",
-        dataclasses.replace(settings.identity_continuity, journey_handoff_enabled=True),
+        hs, "identity_continuity",
+        dataclasses.replace(hs.identity_continuity, journey_handoff_enabled=True),
     )
+    fs = fleet_routes.settings
     monkeypatch.setattr(
-        settings, "fraud_intelligence",
-        dataclasses.replace(settings.fraud_intelligence, fraud_networks_enabled=True),
+        fs, "fraud_intelligence",
+        dataclasses.replace(fs.fraud_intelligence, fraud_networks_enabled=True),
     )
     from governance.consent import authority
 

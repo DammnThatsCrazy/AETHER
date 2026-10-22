@@ -98,9 +98,13 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_lineage_route_is_tenant_scoped_and_reads_activity(monkeypatch):
+    import actions.agent.deployment_routes as routes_module
     from actions.agent.deployment_routes import agent_spawn_lineage
-    from config.settings import settings
     from repositories.repos import AnalyticsRepository
+
+    # Patch the settings object the route module actually holds: other tests
+    # reload config.settings, so importing it here can yield a different object.
+    settings = routes_module.settings
 
     calls = []
 

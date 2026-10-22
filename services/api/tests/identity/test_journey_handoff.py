@@ -118,8 +118,7 @@ def _request(site_ids=(APP,)):
 
 @pytest.fixture
 def enabled(monkeypatch):
-    from config.settings import settings
-
+    settings = handoff_routes.settings
     monkeypatch.setattr(
         settings, "identity_continuity",
         dataclasses.replace(settings.identity_continuity, journey_handoff_enabled=True),
@@ -169,8 +168,7 @@ async def test_routes_are_off_by_default_and_hide_failure_reason(monkeypatch):
         return True, "", {}
 
     monkeypatch.setattr(authority, "evaluate_identity_link_consent", allow)
-    from config.settings import settings
-
+    settings = handoff_routes.settings
     monkeypatch.setattr(
         settings, "identity_continuity",
         dataclasses.replace(settings.identity_continuity, journey_handoff_enabled=True),
