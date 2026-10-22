@@ -45,7 +45,7 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:ab6add1ae6ce35670de79264631eaac84057f0b315163d94abaa43371774e893"
+  "apps/aether-web/src/": "sha256:9478fde9910a28849d54a6850fc5de58e89def244b14091a74323be6c2083c35"
   "apps/kyber-web/src/": "sha256:df447130af2090e329c0620134a1b1dee8caf8597ac360b30f6862e74f3e6781"
   "packages/ui/core/src/": "sha256:01c95e007bc50d0b7378c5cb5274fd5e5d60b51f9575e5c28bf8549ab9cefde1"
 ---
@@ -411,7 +411,8 @@ The remaining nav pages follow the same design rules as Home: every figure comes
 from an existing read, loading, empty and unavailable states are distinct, and
 design elements without a backing read are omitted or empty-stated.
 
-- **Profiles** (`/users`) lists real profiles (search, sort, List /
+- **Profiles** (`/users`) lists real profiles from `GET /v1/entities` (search filters the tenant's list,
+  since there is no entity search route; sort, List /
   Relationship Map / Activity via `?view=`); a row expands in place with its
   graph relationships, and `?profile=<id>` opens with that profile expanded.
   **Profile 360** (`/users/:id`) has an identity hero and Overview, Timeline,
@@ -430,6 +431,9 @@ design elements without a backing read are omitted or empty-stated.
   Outcomes tabs over value-created events, the outcome ledger and campaign
   overviews; only Campaigns has a 7/30/90-day window because only that read
   accepts one. Agents value is empty-stated until value is attributed to agents.
+  Amounts are summed only within one currency (the one most events use);
+  events in other currencies are counted, not added, and the page says so.
+  Campaign and outcome-ledger reads that hit their limit are labelled partial.
 - **Agents** (`/agent-access`) is a read-only directory with an open-agent view
   (Overview, Authority, Exposure, Lifecycle); the selected agent and view live
   in the URL.

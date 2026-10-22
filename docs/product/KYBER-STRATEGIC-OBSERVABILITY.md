@@ -15,7 +15,7 @@ toc_depth: 3
 source_hashes:
   "services/api/governance/admin/routes.py": "sha256:7229a73876d927926fe1ac82741d0e058b215538a9e7c23a3c9a84509c0cbfe8"
   "services/api/intelligence/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
-  "services/api/intelligence/intelligence/routes.py": "sha256:58d87548dec926d8526d02b2b9cfd044adbf81569d3e6372cdaa80bf7496d5e6"
+  "services/api/intelligence/intelligence/routes.py": "sha256:4c153189bcb43a8909e8ca898d97204c7bf3ce167c4658efdf746de63770f559"
 ---
 # Kyber Strategic Observability
 

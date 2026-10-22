@@ -42,6 +42,8 @@ export function useOutcomeLedgerRead(tenant: string, enabled = true) {
 
 export interface CampaignValueRead {
   readonly total: number;
+  /** True when the campaign list has more pages than the first CAMPAIGN_LIMIT read here. */
+  readonly partial: boolean;
   readonly items: readonly CampaignValue[];
 }
 
@@ -73,7 +75,7 @@ export function useCampaignValues(tenant: string, days: number, enabled = true) 
           overview: result && result.status === 'fulfilled' ? parseCampaignOverview(result.value) : null,
         };
       });
-      return { total: typeof list.total === 'number' ? list.total : items.length, items };
+      return { total: items.length, partial: list.has_more === true, items };
     },
     staleTime: STALE,
     enabled,

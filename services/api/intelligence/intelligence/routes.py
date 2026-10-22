@@ -1275,22 +1275,31 @@ async def list_outcomes(request: Request, limit: int = 50):
     return APIResponse(data={"items": items, "count": len(items)}, meta=_probe_completeness(limit, len(fetched))).to_dict()
 
 
-async def _tenant_ledger(tenant_id: str, limit: int = 500) -> dict:
-    recommendations = await _recommendations.list_for_tenant(tenant_id, limit=limit)
-    decisions = await _decisions.find_many({"tenant_id": tenant_id}, limit=limit)
-    actions = await _actions.find_many({"tenant_id": tenant_id}, limit=limit)
-    outcomes = await _outcomes.list_for_tenant(tenant_id, limit=limit)
-    feedback = await _feedback.find_many({"tenant_id": tenant_id}, limit=limit)
-    playbooks = await _playbooks.find_many({"tenant_id": tenant_id}, limit=limit)
-    runs = await _playbook_runs.find_many({"tenant_id": tenant_id}, limit=limit)
-    return _ledger.build(recommendations, decisions, actions, outcomes, feedback, playbooks, runs)
+async def _tenant_ledger(tenant_id: str, limit: int = 500, *, with_completeness: bool = False) -> dict:
+    # Each collection is read with a limit + 1 probe so a capped read is a
+    # reported fact, never a silently partial ledger.
+    probe = limit + 1
+    rows = {
+        "recommendations": await _recommendations.list_for_tenant(tenant_id, limit=probe),
+        "decisions": await _decisions.find_many({"tenant_id": tenant_id}, limit=probe),
+        "actions": await _actions.find_many({"tenant_id": tenant_id}, limit=probe),
+        "outcomes": await _outcomes.list_for_tenant(tenant_id, limit=probe),
+        "feedback": await _feedback.find_many({"tenant_id": tenant_id}, limit=probe),
+        "playbooks": await _playbooks.find_many({"tenant_id": tenant_id}, limit=probe),
+        "runs": await _playbook_runs.find_many({"tenant_id": tenant_id}, limit=probe),
+    }
+    truncated = {name: len(items) > limit for name, items in rows.items()}
+    ledger = _ledger.build(*(items[:limit] for items in rows.values()))
+    if not with_completeness:
+        return ledger
+    return {**ledger, "completeness": {"limit": limit, "complete": not any(truncated.values()), "truncated": truncated}}
 
 
 @router.get("/outcome-ledger")
 async def get_outcome_ledger(request: Request, limit: int = 500):
     tenant = request.state.tenant
     tenant.require_permission("read")
-    ledger = await _tenant_ledger(tenant.tenant_id, limit=limit)
+    ledger = await _tenant_ledger(tenant.tenant_id, limit=limit, with_completeness=True)
     return APIResponse(data=ledger).to_dict()
 
 

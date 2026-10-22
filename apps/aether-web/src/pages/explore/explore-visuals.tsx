@@ -167,9 +167,8 @@ export function GraphGlobe({
   const located = places.filter((p): p is Place & { lat: number; lng: number } => p.lat !== null && p.lng !== null);
   const center = useMemo(() => {
     if (!located.length) return { lon: -40, lat: 30 };
-    const lons = located.map(p => p.lng);
     const lats = located.map(p => p.lat);
-    return { lon: (Math.min(...lons) + Math.max(...lons)) / 2, lat: (Math.min(...lats) + Math.max(...lats)) / 2 };
+    return { lon: circularMeanLongitude(located.map(p => p.lng)), lat: (Math.min(...lats) + Math.max(...lats)) / 2 };
   }, [located]);
   const project = useMemo(() => makeProjection(center.lon, center.lat), [center]);
   const dots = useMemo(
@@ -341,4 +340,20 @@ export function ReplayBar({
       </span>
     </div>
   );
+}
+
+/**
+ * Mean longitude on the circle, so places either side of the antimeridian
+ * (170° and -170°) centre the globe at 180°, not 0°.
+ */
+export function circularMeanLongitude(lons: readonly number[]): number {
+  let x = 0;
+  let y = 0;
+  for (const lon of lons) {
+    const r = (lon * Math.PI) / 180;
+    x += Math.cos(r);
+    y += Math.sin(r);
+  }
+  if (Math.abs(x) < 1e-9 && Math.abs(y) < 1e-9) return lons[0] ?? 0;
+  return (Math.atan2(y, x) * 180) / Math.PI;
 }

@@ -179,8 +179,9 @@ export function profileNetwork(graph: unknown, rootId: string): ProfileNetwork {
   const classCount = new Map<string, number>();
   asList(g.edges).forEach((raw, index) => {
     const e = asRecord(raw);
-    const from = str(e.from_entity_id);
-    const to = str(e.to_entity_id);
+    // Profile-graph rows use from_/to_entity_id; /v1/entities/{id}/graph uses source_/target_entity_id.
+    const from = str(e.from_entity_id) ?? str(e.source_entity_id);
+    const to = str(e.to_entity_id) ?? str(e.target_entity_id);
     const other = from === rootId ? to : to === rootId ? from : (to ?? from);
     if (!other || other === rootId) return;
     const otherKind = from === rootId ? str(e.to_kind) : str(e.from_kind);
@@ -190,9 +191,9 @@ export function profileNetwork(graph: unknown, rootId: string): ProfileNetwork {
     const cls = str(e.interaction_class);
     if (cls) classCount.set(cls, (classCount.get(cls) ?? 0) + 1);
     links.push({
-      id: str(e.edge_id) ?? `${from ?? '?'}-${to ?? '?'}-${index}`,
+      id: str(e.edge_id) ?? str(e.id) ?? `${from ?? '?'}-${to ?? '?'}-${index}`,
       other,
-      relation: str(e.relation_type),
+      relation: str(e.relation_type) ?? str(e.edge_type),
       interactionClass: cls,
       weight: num(e.weight),
       confidence: num(e.confidence),
@@ -209,10 +210,13 @@ export function profileNetwork(graph: unknown, rootId: string): ProfileNetwork {
 
 // ── Identifiers ─────────────────────────────────────────────────────────────
 
-export const IDENTIFIER_KINDS = ['emails', 'customer_ids', 'devices', 'wallets', 'social_handles', 'sessions'] as const;
+// Kinds as returned by /v1/profile/{id}/identifiers (ProfileResolver.get_all_identifiers).
+export const IDENTIFIER_KINDS = ['emails', 'phones', 'devices', 'wallets', 'social', 'sessions'] as const;
 
 export function identifierGroups(ids: unknown): Array<{ readonly kind: string; readonly values: string[] }> {
-  const r = asRecord(ids);
+  // The route wraps the record: { user_id, identifiers: { wallets: [...], ... } }.
+  const outer = asRecord(ids);
+  const r = outer.identifiers && typeof outer.identifiers === 'object' ? asRecord(outer.identifiers) : outer;
   return IDENTIFIER_KINDS
     .map(kind => ({ kind, values: asList(r[kind]).map(v => str(typeof v === 'object' ? (asRecord(v).value ?? asRecord(v).id) : v)).filter((v): v is string => v !== null) }))
     .filter(g => g.values.length > 0);

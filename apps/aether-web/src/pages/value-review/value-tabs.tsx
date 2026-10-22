@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Icon, formatCount, useTimeContext } from '@aether/ui';
 import { BrandMark } from '@aether-app/components/brand-mark';
-import { ChoiceChip, LinkButton, MetricTile, TonePill } from '@aether-app/components/ae-ui';
+import { ChoiceChip, InlineNotice, LinkButton, MetricTile, TonePill } from '@aether-app/components/ae-ui';
 import {
   AreaChart,
   Heatmap,
@@ -20,6 +20,7 @@ import {
   asList,
   asRecord,
   compactMoney,
+  inOneCurrency,
   concentration,
   dailySeries,
   entityValues,
@@ -84,7 +85,8 @@ export function OverviewTab({ tenant, review }: { readonly tenant: string; reado
   const timeCtx = useTimeContext();
   const events = useValueEvents(tenant);
   const [cell, setCell] = useState<{ day: number; band: number } | null>(null);
-  const rows = useMemo(() => events.data ?? [], [events.data]);
+  const cur = useMemo(() => inOneCurrency(events.data ?? []), [events.data]);
+  const rows = cur.events;
   const series = useMemo(() => dailySeries(rows), [rows]);
   const heat = useMemo(() => weekdayHeat(rows), [rows]);
   const bySource = useMemo(() => groupEvents(rows, e => e.sourceType), [rows]);
@@ -116,6 +118,7 @@ export function OverviewTab({ tenant, review }: { readonly tenant: string; reado
 
   return (
     <div className="flex flex-col gap-[18px]" data-testid="value-overview">
+      <CurrencyNotice money={cur} />
       <div className="grid gap-2.5" style={KPI_GRID} data-testid="value-kpis">
         <MetricTile label="Value created" value={money('observed_value')} sub="from observed outcomes" tone="sage" />
         <MetricTile label="Expected value" value={money('expected_value')} sub="from recommendations" />
@@ -138,7 +141,7 @@ export function OverviewTab({ tenant, review }: { readonly tenant: string; reado
             <AreaChart
               values={series.map(p => (anyAmount ? p.total : p.events))}
               labels={series.map(p => shortDay(p.day))}
-              format={v => (anyAmount ? compactMoney(v) : `${v} event${v === 1 ? '' : 's'}`)}
+              format={v => (anyAmount ? compactMoney(v, cur.currency) : `${v} event${v === 1 ? '' : 's'}`)}
               ariaLabel={anyAmount ? 'Value per day' : 'Value events per day'}
             />
           )}
@@ -165,7 +168,7 @@ export function OverviewTab({ tenant, review }: { readonly tenant: string; reado
                     cellEvents.slice(0, 5).map(e => (
                       <span key={e.id} className="flex justify-between gap-3 text-[12px]">
                         <span className="truncate">{humanize(e.valueType)} · {humanize(e.sourceType)}</span>
-                        <span className="ae-mono">{e.amount === null ? 'no amount' : compactMoney(e.amount)}</span>
+                        <span className="ae-mono">{e.amount === null ? 'no amount' : compactMoney(e.amount, cur.currency)}</span>
                       </span>
                     ))
                   )}
@@ -189,7 +192,7 @@ export function OverviewTab({ tenant, review }: { readonly tenant: string; reado
           ) : (
             <StackBar
               segments={bySource.map(g => ({ key: g.key, label: humanize(g.key), value: anyAmount ? g.total : g.events, detail: `${g.events} event${g.events === 1 ? '' : 's'}` }))}
-              format={v => (anyAmount ? compactMoney(v) : String(v))}
+              format={v => (anyAmount ? compactMoney(v, cur.currency) : String(v))}
             />
           )}
         </ValueCard>
@@ -203,7 +206,7 @@ export function OverviewTab({ tenant, review }: { readonly tenant: string; reado
           ) : (
             <StackBar
               segments={byType.map(g => ({ key: g.key, label: humanize(g.key), value: anyAmount ? g.total : g.events, ...(g.unpriced ? { detail: `${g.unpriced} without amount` } : {}) }))}
-              format={v => (anyAmount ? compactMoney(v) : String(v))}
+              format={v => (anyAmount ? compactMoney(v, cur.currency) : String(v))}
             />
           )}
         </ValueCard>
@@ -229,7 +232,8 @@ export function SourcesTab({ tenant }: { readonly tenant: string }) {
   const events = useValueEvents(tenant);
   const [sort, setSort] = useState<SourceSort>('value');
   const [open, setOpen] = useState<string | null>(null);
-  const rows = useMemo(() => events.data ?? [], [events.data]);
+  const cur = useMemo(() => inOneCurrency(events.data ?? []), [events.data]);
+  const rows = cur.events;
   const groups = useMemo(() => {
     const list = groupEvents(rows, e => e.sourceType);
     if (sort === 'events') return [...list].sort((a, b) => b.events - a.events);
@@ -239,6 +243,8 @@ export function SourcesTab({ tenant }: { readonly tenant: string }) {
   const total = groups.reduce((a, g) => a + g.total, 0);
 
   return (
+    <>
+    <CurrencyNotice money={cur} />
     <ValueCard
       title="Observed value by producing source"
       aside={
@@ -289,11 +295,11 @@ export function SourcesTab({ tenant }: { readonly tenant: string }) {
                     </span>
                     <span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>{total > 0 ? `${Math.round((g.total / total) * 100)}% of total` : 'no amounts'}</span>
                   </span>
-                  <span className="ae-mono text-right">{compactMoney(g.total)}</span>
+                  <span className="ae-mono text-right">{compactMoney(g.total, cur.currency)}</span>
                 </button>
                 {isOpen && (
                   <div className="flex flex-col gap-2.5 pb-3 pl-5">
-                    <StackBar segments={types.map(t => ({ key: t.key, label: humanize(t.key), value: t.total, detail: `${t.events} event${t.events === 1 ? '' : 's'}` }))} format={compactMoney} />
+                    <StackBar segments={types.map(t => ({ key: t.key, label: humanize(t.key), value: t.total, detail: `${t.events} event${t.events === 1 ? '' : 's'}` }))} format={v => compactMoney(v, cur.currency)} />
                     <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>
                       Last value {when(g.last)}{g.unpriced ? ` · ${g.unpriced} event${g.unpriced === 1 ? '' : 's'} reported without an amount` : ''}
                     </span>
@@ -308,6 +314,7 @@ export function SourcesTab({ tenant }: { readonly tenant: string }) {
         </div>
       )}
     </ValueCard>
+    </>
   );
 }
 
@@ -431,7 +438,7 @@ export function CampaignsTab({ tenant, days }: { readonly tenant: string; readon
         </ValueCard>
       )}
 
-      <ValueCard title={`${read.data.total} campaign${read.data.total === 1 ? '' : 's'} imported`} aside={<span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>select a row to inspect it</span>}>
+      <ValueCard title={read.data.partial ? `First ${read.data.total} campaigns (more exist; not compared here)` : `${read.data.total} campaign${read.data.total === 1 ? '' : 's'} imported`} aside={<span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>select a row to inspect it</span>}>
         <div className="overflow-x-auto">
           <div className="flex min-w-[560px] flex-col">
             <div className="ae-eyebrow grid gap-3 px-1 pb-1.5" style={{ gridTemplateColumns: 'minmax(160px,1.8fr) 90px 90px 90px 70px' }}>
@@ -525,6 +532,7 @@ export function CustomersTab({ tenant }: { readonly tenant: string }) {
 
   return (
     <div className="flex flex-col gap-[18px]" data-testid="value-customers">
+      <LedgerPartialNotice ledger={ledger.data} />
       <div className="grid gap-[18px]" style={GRID_2}>
         <ValueCard title="Value map" aside={<span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>area is observed value</span>}>
           <div className="relative w-full overflow-hidden rounded-xl" style={{ height: 260 }}>
@@ -634,6 +642,7 @@ export function OutcomesTab({ tenant }: { readonly tenant: string }) {
 
   return (
     <div className="flex flex-col gap-[18px]" data-testid="value-outcomes">
+      <LedgerPartialNotice ledger={ledger.data} />
       <ValueCard title="From recommendation to outcome" aside={<span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>select a step for detail</span>}>
         <div className="flex flex-col gap-1.5">
           {funnel.map((s, i) => {
@@ -710,5 +719,31 @@ export function OutcomesTab({ tenant }: { readonly tenant: string }) {
         )}
       </ValueCard>
     </div>
+  );
+}
+
+/**
+ * The outcome ledger reads each collection up to a server limit and reports
+ * which ones hit it; totals and rates computed from a capped read are partial.
+ */
+function LedgerPartialNotice({ ledger }: { readonly ledger: Record<string, unknown> }) {
+  const completeness = asRecord(ledger['completeness']);
+  if (completeness['complete'] !== false) return null;
+  const capped = Object.entries(asRecord(completeness['truncated'])).filter(([, hit]) => hit === true).map(([name]) => name);
+  const limit = num(completeness['limit']);
+  return (
+    <InlineNotice tone="amber">
+      Partial read: the outcome ledger returned the first {limit ?? 'capped'} {capped.length ? capped.join(', ') : 'records'}, so the totals and rates below cover only those records.
+    </InlineNotice>
+  );
+}
+
+/** Shown when value events in other currencies were counted but not summed. */
+function CurrencyNotice({ money }: { readonly money: ReturnType<typeof inOneCurrency> }) {
+  if (money.setAside === 0) return null;
+  return (
+    <InlineNotice tone="amber">
+      Amounts are shown in {money.currency ?? 'the reporting currency'} only. {money.setAside} event{money.setAside === 1 ? '' : 's'} in {money.otherCurrencies.join(', ')} {money.setAside === 1 ? 'is' : 'are'} counted but not added, because no exchange rate is applied.
+    </InlineNotice>
   );
 }
