@@ -594,9 +594,14 @@ policy behavior, freshness, API reachability, or surface-level verification.
 Recent backend slices bind Account360 profiles through exact tenant membership
 and policy-scoped Profile360 reads, Campaign360 targeting-leakage findings,
 Journey360 explicit role markers, and Location360 source/evidence lineage.
-These slots remain partial where membership, anomaly, stage, or normalization
-authorities lack completeness or transformation metadata; none changes the
-technical provider's `in_flight` status.
+Additional partial paths include Identity360 device/session identifier-type
+metadata, Execution360 exact execution-linked RiskSignals, Social360
+propagation-eligible observed paths, and Episode360 exact episode-linked
+communication facts. These paths remain partial where membership, anomaly,
+stage, normalization, device/session inventory, risk-signal
+production/freshness, propagation completeness, or the episode message-spine
+join is unavailable. They do not change the affected technical providers'
+`in_flight` status or establish complete product-surface conformance.
 Exploration surfaces compose over the engine through projection-backed surface adapters
 
 (`services/api/journeys/exploration/adapters/projection.py`).

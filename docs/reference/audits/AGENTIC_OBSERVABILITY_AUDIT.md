@@ -83,7 +83,7 @@ The historical gap matrices below retain their original audit date and should
 not be read as a current inventory without this addendum and the linked
 source-of-truth documents.
 
-## 360 provider addendum (2026-10-18)
+## 360 provider addendum (2026-10-22)
 
 The backend mounts `POST /v1/experience360/frames` and
 `GET /v1/experience360/catalog` for the exact 18-surface backend contract in
@@ -116,8 +116,13 @@ Execution360 now derives server-recorded lifecycle elapsed time from valid,
 timezone-aware start and end timestamps and carries the lifecycle evidence
 into `latency_cost`. This is not provider/tool latency or cost. It still lacks
 a general server-owned external effect receipt, canonical plan-step evidence,
-approval-chain evidence, complete input/output capture, detailed failures,
-and risk-event coverage. Its `tool_calls` slot also joins `CALLED_TOOL`
+approval-chain evidence, complete input/output capture, and detailed failures.
+Its `risk_events` slot now joins canonical RiskSignals only to exact execution
+IDs admitted by tenant server lifecycle records. Signal evidence is recorded
+risk context, not proof that the execution caused the signal or a complete risk
+assessment; producer coverage and freshness thresholds remain unknown. The
+agentic risk-signal compute/store producer described in Bucket 4 is still
+missing. Its `tool_calls` slot also joins `CALLED_TOOL`
 lifecycle edges only to exact tenant execution records with a canonical agent
 binding, validates the tenant-owned Tool vertex, and requires timestamp and
 edge-idempotency evidence. An observed edge proves only that AETHER recorded a

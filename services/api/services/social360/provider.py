@@ -49,6 +49,7 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
     "findings",
     "interactions",
     "paths",
+    "propagation",
     "state",
     "summary",
     "timeline",
@@ -59,6 +60,12 @@ _SOCIAL_PATH_NODE_LIMIT = 100
 _SOCIAL_PATH_EDGE_LIMIT = 500
 _SOCIAL_PATH_RESULT_LIMIT = 50
 _SOCIAL_PATH_AUTHORITIES = ["graph", "relationship_facts"]
+_SOCIAL_PROPAGATION_AUTHORITIES = [
+    "graph",
+    "relationship_facts",
+    "relationship_predicate_registry",
+    "influence_propagation",
+]
 _FACT_TABLES = (
     "identity",
     "connection",
@@ -211,6 +218,8 @@ class SocialObservedPath:
 
     entity_ids: tuple[str, ...]
     edge_evidence_refs: tuple[tuple[EvidenceRef, ...], ...]
+    graph_edges: tuple[Any, ...] = ()
+    edge_observed_at: tuple[Optional[str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -299,7 +308,9 @@ class RepositorySocialGraphPathReader:
         tenant_edges, edges_truncated = edge_page
 
         now = datetime.now(timezone.utc)
-        candidate_edges: dict[str, list[tuple[str, tuple[EvidenceRef, ...], str]]] = {}
+        candidate_edges: dict[
+            str, list[tuple[str, tuple[EvidenceRef, ...], str, Any, Optional[str]]]
+        ] = {}
         reasons: set[str] = set()
         if edges_truncated:
             reasons.add("canonical_social_path_edge_scan_capped")
@@ -339,13 +350,17 @@ class RepositorySocialGraphPathReader:
                 reasons.add("canonical_social_path_edge_evidence_unavailable")
                 continue
 
-            observed_at = valid_from.isoformat() if valid_from is not None else None
+            # valid_from is relationship validity time. Preserve an explicit
+            # source observation time separately; validity time cannot prove
+            # chronological order between social observations.
+            observed_at_value = _text(props.get("observed_at"))
+            observed_at = _parse_graph_time(observed_at_value)
             refs = [
                 EvidenceRef(
                     id=idempotency_key,
                     type="relationship",
                     source="entity_graph",
-                    observedAt=observed_at,
+                    observedAt=valid_from.isoformat() if valid_from is not None else None,
                 ),
                 *[
                     EvidenceRef(
@@ -357,7 +372,13 @@ class RepositorySocialGraphPathReader:
                 ],
             ]
             candidate_edges.setdefault(edge.from_vertex_id, []).append(
-                (edge.to_vertex_id, tuple(refs), idempotency_key)
+                (
+                    edge.to_vertex_id,
+                    tuple(refs),
+                    idempotency_key,
+                    edge,
+                    observed_at.isoformat() if observed_at is not None else None,
+                )
             )
 
         for outgoing in candidate_edges.values():
@@ -366,14 +387,18 @@ class RepositorySocialGraphPathReader:
         nodes = {start_entity_id: anchor}
         node_depths = {start_entity_id: 0}
         queue = [start_entity_id]
-        adjacency: dict[str, list[tuple[str, tuple[EvidenceRef, ...], str]]] = {}
+        adjacency: dict[
+            str, list[tuple[str, tuple[EvidenceRef, ...], str, Any, Optional[str]]]
+        ] = {}
         node_scan_truncated = False
         while queue:
             current_id = queue.pop(0)
             depth = node_depths[current_id]
             if depth >= _SOCIAL_PATH_DEPTH:
                 continue
-            for target_id, refs, edge_key in candidate_edges.get(current_id, []):
+            for target_id, refs, edge_key, graph_edge, observed_at in candidate_edges.get(
+                current_id, []
+            ):
                 if target_id not in nodes:
                     if len(nodes) >= _SOCIAL_PATH_NODE_LIMIT:
                         node_scan_truncated = True
@@ -394,7 +419,9 @@ class RepositorySocialGraphPathReader:
                     nodes[target_id] = target
                     node_depths[target_id] = depth + 1
                     queue.append(target_id)
-                adjacency.setdefault(current_id, []).append((target_id, refs, edge_key))
+                adjacency.setdefault(current_id, []).append(
+                    (target_id, refs, edge_key, graph_edge, observed_at)
+                )
 
         for outgoing in adjacency.values():
             outgoing.sort(key=lambda item: (item[0], item[2]))
@@ -406,6 +433,8 @@ class RepositorySocialGraphPathReader:
             current_id: str,
             entity_ids: tuple[str, ...],
             edge_refs: tuple[tuple[EvidenceRef, ...], ...],
+            graph_edges: tuple[Any, ...],
+            edge_observed_at: tuple[Optional[str], ...],
         ) -> None:
             nonlocal path_scan_truncated
             hops = len(edge_refs)
@@ -413,17 +442,27 @@ class RepositorySocialGraphPathReader:
                 if len(paths) >= _SOCIAL_PATH_RESULT_LIMIT:
                     path_scan_truncated = True
                     return
-                paths.append(SocialObservedPath(entity_ids, edge_refs))
+                paths.append(
+                    SocialObservedPath(entity_ids, edge_refs, graph_edges, edge_observed_at)
+                )
             if hops >= _SOCIAL_PATH_DEPTH or path_scan_truncated:
                 return
-            for next_id, refs, _edge_key in adjacency.get(current_id, []):
+            for next_id, refs, _edge_key, graph_edge, observed_at in adjacency.get(
+                current_id, []
+            ):
                 if next_id in entity_ids:
                     continue
-                visit(next_id, (*entity_ids, next_id), (*edge_refs, refs))
+                visit(
+                    next_id,
+                    (*entity_ids, next_id),
+                    (*edge_refs, refs),
+                    (*graph_edges, graph_edge),
+                    (*edge_observed_at, observed_at),
+                )
                 if path_scan_truncated:
                     return
 
-        visit(start_entity_id, (start_entity_id,), ())
+        visit(start_entity_id, (start_entity_id,), (), (), ())
         truncated = edges_truncated or node_scan_truncated or path_scan_truncated
         if truncated:
             reasons.add("canonical_social_path_read_bounded")
@@ -730,16 +769,26 @@ class Social360Provider(IntelligenceProjectionProvider):
             available=False,
             reason_codes=("multi_hop_paths_entity_subject_required",),
         )
-        if "paths" in include:
-            temporal_filter_requested = (
-                request.asOf is not None
-                or context.asOf is not None
-                or (
-                    request.timeRange is not None
-                    and (request.timeRange.from_ is not None or request.timeRange.to is not None)
-                )
-                or (request.temporalMode or "window") in {"as_of", "relative"}
+        propagation_read = SocialGraphPathRead(
+            request.tenantId,
+            request.subject.id,
+            available=False,
+            reason_codes=("social_propagation_subject_scope_unavailable",),
+        )
+        temporal_filter_requested = (
+            request.asOf is not None
+            or context.asOf is not None
+            or (
+                request.timeRange is not None
+                and (request.timeRange.from_ is not None or request.timeRange.to is not None)
             )
+            or (request.temporalMode or "window") in {"as_of", "relative"}
+        )
+        consent_by_endpoint = {
+            endpoint: _consent_allowed(consent)
+            for endpoint, consent in zip(endpoints, consent_results)
+        }
+        if "paths" in include:
             if request.subject.kind == "entity" and temporal_filter_requested:
                 path_read = SocialGraphPathRead(
                     request.tenantId,
@@ -753,10 +802,57 @@ class Social360Provider(IntelligenceProjectionProvider):
                     path_read,
                     request.tenantId,
                     request.subject.id,
-                    already_checked={
-                        endpoint: _consent_allowed(consent)
-                        for endpoint, consent in zip(endpoints, consent_results)
-                    },
+                    already_checked=consent_by_endpoint,
+                )
+
+        if "propagation" in include:
+            if temporal_filter_requested:
+                propagation_read = SocialGraphPathRead(
+                    request.tenantId,
+                    endpoints[0] if request.subject.kind == "relationship" else request.subject.id,
+                    available=False,
+                    reason_codes=("social_propagation_temporal_scope_unsupported",),
+                )
+            elif request.subject.kind == "entity" and "paths" in include:
+                # The entity path section and propagation section share the
+                # same authorized canonical graph read.
+                propagation_read = path_read
+            elif request.subject.kind in {"entity", "relationship"}:
+                propagation_start = endpoints[0]
+                propagation_read = await self._read_social_paths(
+                    request.tenantId, propagation_start
+                )
+                propagation_read = await self._authorize_social_paths(
+                    propagation_read,
+                    request.tenantId,
+                    propagation_start,
+                    already_checked=consent_by_endpoint,
+                )
+                if request.subject.kind == "relationship":
+                    target_entity_id = endpoints[1]
+                    pair_paths = tuple(
+                        path
+                        for path in propagation_read.paths
+                        if path.entity_ids[-1] == target_entity_id
+                    )
+                    if not pair_paths and not propagation_read.reason_codes:
+                        pair_reasons = ("no_bounded_observed_propagation_paths_for_pair",)
+                    else:
+                        pair_reasons = propagation_read.reason_codes
+                    propagation_read = SocialGraphPathRead(
+                        request.tenantId,
+                        propagation_start,
+                        paths=pair_paths,
+                        available=propagation_read.available,
+                        truncated=propagation_read.truncated,
+                        reason_codes=pair_reasons,
+                    )
+            else:
+                propagation_read = SocialGraphPathRead(
+                    request.tenantId,
+                    request.subject.id,
+                    available=False,
+                    reason_codes=("social_propagation_entity_or_relationship_subject_required",),
                 )
 
         reads: dict[str, Social360FactRead] = {}
@@ -1166,9 +1262,19 @@ class Social360Provider(IntelligenceProjectionProvider):
         path_section, path_claims = self._path_section_and_claims(request.subject, path_read)
         if "paths" in include:
             sections.append(path_section)
+        propagation_section, propagation_claims = self._propagation_section_and_claims(
+            request.subject,
+            request.tenantId,
+            propagation_read,
+            as_of=now,
+        )
+        if "propagation" in include:
+            sections.append(propagation_section)
 
         claims = self._claims(request.subject, rows_by_family, refs_by_family)
         claims.extend(path_claims)
+        if "propagation" in include:
+            claims.extend(propagation_claims)
         degraded_reasons = sorted(
             {
                 read.reason or f"{family}_source_unavailable"
@@ -1360,6 +1466,162 @@ class Social360Provider(IntelligenceProjectionProvider):
             claims,
         )
 
+    @staticmethod
+    def _propagation_section_and_claims(
+        subject: ProjectionSubject,
+        tenant_id: str,
+        result: SocialGraphPathRead,
+        *,
+        as_of: str,
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        """Expose only registry-authorized observed paths as propagation context.
+
+        The canonical influence-propagation substrate certifies whether the
+        registered predicates permit a path to carry propagation semantics.
+        This provider deliberately supplies no M7 measurements, so it emits
+        component coverage only (never values or a contagion conclusion).
+        """
+        from shared.relationship_spine.influence_propagation import (
+            decompose_influence_propagation,
+        )
+
+        reasons = set(result.reason_codes)
+        path_items: list[dict[str, Any]] = []
+        claims: list[ClaimEnvelope] = []
+        saw_invalid_path = False
+        for path in result.paths:
+            if not _valid_social_propagation_path(
+                path, tenant_id, result.start_entity_id, as_of=as_of
+            ):
+                saw_invalid_path = True
+                continue
+
+            decomposition = decompose_influence_propagation(
+                list(path.graph_edges),
+                source_ref=path.entity_ids[0],
+                target_ref=path.entity_ids[-1],
+                as_of=as_of,
+            )
+            edge_times = list(path.edge_observed_at)
+            parsed_times = [_parse_graph_time(value) for value in edge_times]
+            if any(value is None for value in parsed_times):
+                time_order_state = "unknown"
+                reasons.add("social_propagation_source_observation_time_missing")
+            elif parsed_times == sorted(parsed_times):
+                time_order_state = "ordered"
+            else:
+                time_order_state = "conflicted"
+                reasons.add("social_propagation_source_observation_order_conflicted")
+
+            component_coverage = [
+                {
+                    "componentId": component.component_id,
+                    "state": component.state,
+                    "reasonCode": component.reason_code or None,
+                    "measuredHopCount": component.measured_hops,
+                    "materialHopCount": component.material_hops,
+                }
+                for component in decomposition.all_components
+            ]
+            if not decomposition.available_component_ids:
+                reasons.add("social_propagation_components_unmeasured")
+            if not decomposition.propagation_certified:
+                reasons.update(decomposition.reason_codes)
+
+            edge_refs = [
+                _dedupe_refs(list(refs)) for refs in path.edge_evidence_refs
+            ]
+            evidence_refs = _dedupe_refs(
+                [ref for refs in path.edge_evidence_refs for ref in refs]
+            )
+            path_items.append(
+                {
+                    "entityPath": list(path.entity_ids),
+                    "edgePredicate": "FOLLOWS",
+                    "edgeEvidenceRefs": edge_refs,
+                    "sourceObservedAtByEdge": edge_times,
+                    "timeOrderState": time_order_state,
+                    "propagationAuthority": {
+                        "decision": decomposition.decision,
+                        "certifiedForPropagationAnalysis": decomposition.propagation_certified,
+                        "reasonCodes": list(decomposition.reason_codes),
+                        "hopCount": decomposition.hop_count,
+                        "epistemicCeiling": decomposition.min_epistemic_ceiling,
+                        "staleness": decomposition.staleness_status,
+                    },
+                    "componentCoverage": component_coverage,
+                    "evidenceRefs": evidence_refs,
+                }
+            )
+            if decomposition.propagation_certified:
+                digest_basis = "\x1f".join(
+                    [*path.entity_ids, *(ref.id for ref in evidence_refs)]
+                )
+                digest = hashlib.sha256(digest_basis.encode("utf-8")).hexdigest()[:24]
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"social360.propagation_path.{digest}",
+                        kind="social_propagation_path_observation",
+                        subject=subject,
+                        evidenceRefs=evidence_refs,
+                        claims=[
+                            "The tenant-scoped graph records this directed sequence of "
+                            "FOLLOWS relationships, and the governed predicate registry "
+                            "permits propagation analysis on the path. This does not "
+                            "establish that behavior, trust, risk, influence, or an outcome "
+                            "propagated."
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=["propagation"],
+                    )
+                )
+
+        if saw_invalid_path:
+            reasons.add("canonical_social_propagation_path_validation_failed")
+        if path_items:
+            reasons.add("social_propagation_component_measurements_unavailable")
+            state = "degraded"
+            content: Optional[dict[str, Any]] = {
+                "propagation": {
+                    "state": state,
+                    "paths": path_items,
+                    "coverage": "bounded_observed_propagation_eligible_paths",
+                    "completeness": "unknown",
+                    "freshness": "unknown",
+                    "componentValuesIncluded": False,
+                    "causalContagionEstablished": False,
+                    "evidenceRefs": _dedupe_refs(
+                        [ref for item in path_items for ref in item["evidenceRefs"]]
+                    ),
+                }
+            }
+        else:
+            content = None
+            unsupported_scope = any(
+                code in reasons
+                for code in {
+                    "social_propagation_subject_scope_unavailable",
+                    "social_propagation_entity_or_relationship_subject_required",
+                    "social_propagation_temporal_scope_unsupported",
+                }
+            )
+            unavailable = not result.available and not unsupported_scope
+            if not reasons:
+                reasons.add("no_bounded_observed_propagation_paths")
+            state = "degraded" if unavailable or result.truncated or saw_invalid_path else "unknown"
+
+        return (
+            ProjectionSection(
+                id="propagation",
+                state=state,
+                title="Observed propagation-eligible social paths",
+                content=content,
+                warnings=sorted(reasons) or None,
+                canonicalAuthorityRefs=list(_SOCIAL_PROPAGATION_AUTHORITIES),
+            ),
+            claims,
+        )
+
     async def _read(self, family: str, tenant_id: str) -> Social360FactRead:
         try:
             result = await self._source.read(family, tenant_id, limit=_MAX_READ_ROWS)
@@ -1460,6 +1722,17 @@ class Social360Provider(IntelligenceProjectionProvider):
                     )
                 )
                 continue
+            if section_id == "propagation":
+                sections.append(
+                    ProjectionSection(
+                        id="propagation",
+                        state="unknown",
+                        title="Observed propagation-eligible social paths",
+                        warnings=["empty_population_has_no_path_scope"],
+                        canonicalAuthorityRefs=list(_SOCIAL_PROPAGATION_AUTHORITIES),
+                    )
+                )
+                continue
             sections.append(
                 ProjectionSection(
                     id=section_id,
@@ -1496,7 +1769,11 @@ class Social360Provider(IntelligenceProjectionProvider):
                 state="unknown",
                 warnings=[reason],
                 canonicalAuthorityRefs=(
-                    list(_SOCIAL_PATH_AUTHORITIES) if section_id == "paths" else None
+                    list(_SOCIAL_PATH_AUTHORITIES)
+                    if section_id == "paths"
+                    else list(_SOCIAL_PROPAGATION_AUTHORITIES)
+                    if section_id == "propagation"
+                    else None
                 ),
             )
             for section_id in OUTPUT_SECTIONS
@@ -1529,7 +1806,11 @@ class Social360Provider(IntelligenceProjectionProvider):
                 state="suppressed",
                 warnings=[reason],
                 canonicalAuthorityRefs=(
-                    list(_SOCIAL_PATH_AUTHORITIES) if section_id == "paths" else None
+                    list(_SOCIAL_PATH_AUTHORITIES)
+                    if section_id == "paths"
+                    else list(_SOCIAL_PROPAGATION_AUTHORITIES)
+                    if section_id == "propagation"
+                    else None
                 ),
             )
             for section_id in OUTPUT_SECTIONS
@@ -1619,6 +1900,85 @@ def _valid_social_observed_path(path: Any, start_entity_id: str) -> bool:
         edge_refs and all(isinstance(ref, EvidenceRef) and _text(ref.id) for ref in edge_refs)
         for edge_refs in path.edge_evidence_refs
     )
+
+
+def _valid_social_propagation_path(
+    path: Any, tenant_id: str, start_entity_id: str, *, as_of: str
+) -> bool:
+    """Validate the exact graph hops and evidence before propagation analysis."""
+    from shared.graph.graph import tenant_of
+
+    if not _valid_social_observed_path(path, start_entity_id):
+        return False
+    edge_count = len(path.entity_ids) - 1
+    if len(path.graph_edges) != edge_count or len(path.edge_observed_at) != edge_count:
+        return False
+
+    reference = _parse_graph_time(as_of)
+    if reference is None:
+        return False
+    for index, edge in enumerate(path.graph_edges):
+        edge_type = (
+            edge.get("edge_type") or edge.get("type")
+            if isinstance(edge, dict)
+            else getattr(edge, "edge_type", None)
+        )
+        from_id = (
+            edge.get("from_vertex_id") or edge.get("from")
+            if isinstance(edge, dict)
+            else getattr(edge, "from_vertex_id", None)
+        )
+        to_id = (
+            edge.get("to_vertex_id") or edge.get("to")
+            if isinstance(edge, dict)
+            else getattr(edge, "to_vertex_id", None)
+        )
+        properties = (
+            edge.get("properties") or {}
+            if isinstance(edge, dict)
+            else getattr(edge, "properties", None) or {}
+        )
+        if not isinstance(properties, dict):
+            return False
+        if (
+            edge_type != "FOLLOWS_SOCIAL"
+            or from_id != path.entity_ids[index]
+            or to_id != path.entity_ids[index + 1]
+            or tenant_of(properties) != tenant_id
+            or properties.get("relationship_predicate") != "FOLLOWS"
+            or _truthy_marker(properties.get("revoked"))
+            or bool(properties.get("revoked_at"))
+        ):
+            return False
+
+        valid_from_value = properties.get("valid_from")
+        valid_to_value = properties.get("valid_to")
+        valid_from = _parse_graph_time(valid_from_value) if valid_from_value else None
+        valid_to = _parse_graph_time(valid_to_value) if valid_to_value else None
+        if (valid_from_value and valid_from is None) or (valid_to_value and valid_to is None):
+            return False
+        if valid_from is not None and valid_from > reference:
+            return False
+        if valid_to is not None and valid_to <= reference:
+            return False
+
+        idempotency_key = _text(properties.get("idempotency_key"))
+        evidence_ids = set(_graph_evidence_ids(properties.get("evidence_refs")))
+        edge_refs = path.edge_evidence_refs[index]
+        graph_ref_ids = {
+            ref.id for ref in edge_refs if ref.source == "entity_graph" and _text(ref.id)
+        }
+        fact_ref_ids = {
+            ref.id for ref in edge_refs if ref.source == "relationship_facts" and _text(ref.id)
+        }
+        if not idempotency_key or idempotency_key not in graph_ref_ids or evidence_ids != fact_ref_ids:
+            return False
+
+        observed_at = _parse_graph_time(properties.get("observed_at"))
+        expected_observed_at = observed_at.isoformat() if observed_at is not None else None
+        if path.edge_observed_at[index] != expected_observed_at:
+            return False
+    return True
 
 
 def _tenant_rows(read: Social360FactRead, tenant_id: str) -> tuple[list[dict[str, Any]], bool]:

@@ -480,9 +480,10 @@ async def test_unavailable_identity_source_is_degraded_and_does_not_join_partial
     assert all(
         section.state == "degraded"
         for section_id, section in sections.items()
-        if section_id != "paths"
+        if section_id not in {"paths", "propagation"}
     )
     assert sections["paths"].state == "unknown"
+    assert sections["propagation"].state == "unknown"
     assert sections["summary"].content["coverage"] == "unavailable"
     coverage = sections["evidence"].content["sourceCoverage"]
     assert coverage["state"] == "unavailable"
@@ -704,8 +705,13 @@ async def test_population_truncation_empty_membership_and_historical_scope_are_e
         population_scope_reader=FakePopulationScopeReader(_population_scope("empty", ())),
     ).project(_request("population", "population-a"), _context())
     assert empty_source.calls == []
-    assert {section.state for section in empty.sections if section.id != "paths"} == {"empty"}
+    assert {
+        section.state
+        for section in empty.sections
+        if section.id not in {"paths", "propagation"}
+    } == {"empty"}
     assert next(section for section in empty.sections if section.id == "paths").state == "unknown"
+    assert next(section for section in empty.sections if section.id == "propagation").state == "unknown"
 
     temporal_source = FakeSocialSource()
     temporal_scope = FakePopulationScopeReader(_population_scope())
@@ -852,13 +858,22 @@ async def test_source_subject_rejects_temporal_scope_before_identity_or_social_r
     assert result.degradedReasons == ["source_identity_temporal_scope_unknown"]
 
 
-def _observed_edge(from_id: str, to_id: str, evidence_id: str | None = None) -> Edge:
+def _observed_edge(
+    from_id: str,
+    to_id: str,
+    evidence_id: str | None = None,
+    *,
+    tenant_id: str = TENANT,
+    observed_at: str | None = None,
+) -> Edge:
     properties = {
-        "tenant_id": TENANT,
+        "tenant_id": tenant_id,
         "relationship_predicate": "FOLLOWS",
         "idempotency_key": f"follow:{from_id}:{to_id}",
         "valid_from": "2026-10-20T10:00:00Z",
     }
+    if observed_at is not None:
+        properties["observed_at"] = observed_at
     if evidence_id is not None:
         properties["evidence_refs"] = [evidence_id]
     return Edge(
@@ -921,6 +936,10 @@ async def test_repository_social_path_reader_returns_only_bounded_tenant_follows
     assert [(path.entity_ids, len(path.edge_evidence_refs)) for path in result.paths] == [
         (("entity-a", "entity-b", "entity-c"), 2)
     ]
+    assert [
+        (edge.from_vertex_id, edge.to_vertex_id) for edge in result.paths[0].graph_edges
+    ] == [("entity-a", "entity-b"), ("entity-b", "entity-c")]
+    assert result.paths[0].edge_observed_at == (None, None)
     refs = {ref.id for edge in result.paths[0].edge_evidence_refs for ref in edge}
     assert {
         "follow:entity-a:entity-b",
@@ -945,6 +964,19 @@ async def test_repository_social_path_reader_returns_only_bounded_tenant_follows
     # Graph validity time is not a substitute for the source observation time.
     assert all(ref.observedAt is None for ref in fact_refs)
     assert "entity-foreign" not in {entity for path in result.paths for entity in path.entity_ids}
+
+    projected = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        social_graph_path_reader=RepositorySocialGraphPathReader(graph_client=client),
+    ).project(_request(include_sections=["propagation"]), _context())
+    propagation = projected.sections[0].content["propagation"]
+    assert propagation["paths"][0]["entityPath"] == ["entity-a", "entity-b", "entity-c"]
+    assert propagation["paths"][0]["timeOrderState"] == "unknown"
+    assert propagation["paths"][0]["propagationAuthority"][
+        "certifiedForPropagationAnalysis"
+    ]
+    assert {ref.id for ref in propagation["evidenceRefs"]} == refs
     await client.close()
 
 
@@ -1038,6 +1070,197 @@ async def test_multi_hop_paths_has_exact_claim_evidence_and_composes_to_its_slot
     assert frame.degradation is not None
     assert frame.degradation.level == "partial"
     assert "multi_hop_paths:slot_partial_implementation" in frame.degradation.reasons
+
+
+@pytest.mark.asyncio
+async def test_propagation_slot_uses_exact_graph_path_and_governed_authority_without_scores():
+    edge_ab = _observed_edge("entity-a", "entity-b", "observation-ab")
+    edge_bc = _observed_edge("entity-b", "entity-c", "observation-bc")
+    edge_refs = (
+        (
+            EvidenceRef(
+                id="follow:entity-a:entity-b", type="relationship", source="entity_graph"
+            ),
+            EvidenceRef(id="observation-ab", type="event", source="relationship_facts"),
+        ),
+        (
+            EvidenceRef(
+                id="follow:entity-b:entity-c", type="relationship", source="entity_graph"
+            ),
+            EvidenceRef(id="observation-bc", type="event", source="relationship_facts"),
+        ),
+    )
+    path_reader = FakeSocialGraphPathReader(
+        SocialGraphPathRead(
+            TENANT,
+            "entity-a",
+            paths=(
+                SocialObservedPath(
+                    ("entity-a", "entity-b", "entity-c"),
+                    edge_refs,
+                    (edge_ab, edge_bc),
+                    (None, None),
+                ),
+            ),
+        )
+    )
+
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        social_graph_path_reader=path_reader,
+    ).project(_request(include_sections=["propagation"]), _context())
+
+    section = result.sections[0]
+    assert section.id == "propagation"
+    assert section.state == "degraded"
+    assert section.canonicalAuthorityRefs == [
+        "graph",
+        "relationship_facts",
+        "relationship_predicate_registry",
+        "influence_propagation",
+    ]
+    propagation = section.content["propagation"]
+    assert propagation["coverage"] == "bounded_observed_propagation_eligible_paths"
+    assert propagation["completeness"] == "unknown"
+    assert propagation["freshness"] == "unknown"
+    assert propagation["componentValuesIncluded"] is False
+    assert propagation["causalContagionEstablished"] is False
+    path = propagation["paths"][0]
+    assert path["entityPath"] == ["entity-a", "entity-b", "entity-c"]
+    assert path["timeOrderState"] == "unknown"
+    assert path["propagationAuthority"]["certifiedForPropagationAnalysis"] is True
+    assert path["propagationAuthority"]["decision"] == "pass"
+    assert all(
+        component["state"] in {"insufficient_data", "not_applicable"}
+        for component in path["componentCoverage"]
+    )
+    assert all(component["measuredHopCount"] == 0 for component in path["componentCoverage"])
+    assert all("value" not in component for component in path["componentCoverage"])
+    assert {ref.id for ref in propagation["evidenceRefs"]} == {
+        "follow:entity-a:entity-b",
+        "observation-ab",
+        "follow:entity-b:entity-c",
+        "observation-bc",
+    }
+    claim = next(claim for claim in result.claims if "propagation" in claim.domainSlotIds)
+    assert claim.domainSlotIds == ["propagation"]
+    assert {ref.id for ref in claim.evidenceRefs} == {
+        "follow:entity-a:entity-b",
+        "observation-ab",
+        "follow:entity-b:entity-c",
+        "observation-bc",
+    }
+    assert "does not establish" in claim.claims[0]
+
+
+@pytest.mark.asyncio
+async def test_propagation_slot_rejects_cross_tenant_graph_hops_before_emitting_evidence():
+    edge_ab = _observed_edge(
+        "entity-a", "entity-b", "observation-ab", tenant_id="tenant-other"
+    )
+    edge_bc = _observed_edge("entity-b", "entity-c", "observation-bc")
+    edge_refs = (
+        (
+            EvidenceRef(
+                id="follow:entity-a:entity-b", type="relationship", source="entity_graph"
+            ),
+            EvidenceRef(id="observation-ab", type="event", source="relationship_facts"),
+        ),
+        (
+            EvidenceRef(
+                id="follow:entity-b:entity-c", type="relationship", source="entity_graph"
+            ),
+            EvidenceRef(id="observation-bc", type="event", source="relationship_facts"),
+        ),
+    )
+    path_reader = FakeSocialGraphPathReader(
+        SocialGraphPathRead(
+            TENANT,
+            "entity-a",
+            paths=(
+                SocialObservedPath(
+                    ("entity-a", "entity-b", "entity-c"),
+                    edge_refs,
+                    (edge_ab, edge_bc),
+                    (None, None),
+                ),
+            ),
+        )
+    )
+
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        social_graph_path_reader=path_reader,
+    ).project(_request(include_sections=["propagation"]), _context())
+
+    section = result.sections[0]
+    assert section.id == "propagation"
+    assert section.state == "degraded"
+    assert section.content is None
+    assert section.warnings == ["canonical_social_propagation_path_validation_failed"]
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_propagation_time_order_requires_explicit_source_observation_times():
+    edge_ab = _observed_edge(
+        "entity-a",
+        "entity-b",
+        "observation-ab",
+        observed_at="2026-10-19T10:00:00Z",
+    )
+    edge_bc = _observed_edge(
+        "entity-b",
+        "entity-c",
+        "observation-bc",
+        observed_at="2026-10-20T10:00:00Z",
+    )
+    edge_refs = (
+        (
+            EvidenceRef(
+                id="follow:entity-a:entity-b", type="relationship", source="entity_graph"
+            ),
+            EvidenceRef(id="observation-ab", type="event", source="relationship_facts"),
+        ),
+        (
+            EvidenceRef(
+                id="follow:entity-b:entity-c", type="relationship", source="entity_graph"
+            ),
+            EvidenceRef(id="observation-bc", type="event", source="relationship_facts"),
+        ),
+    )
+    path_reader = FakeSocialGraphPathReader(
+        SocialGraphPathRead(
+            TENANT,
+            "entity-a",
+            paths=(
+                SocialObservedPath(
+                    ("entity-a", "entity-b", "entity-c"),
+                    edge_refs,
+                    (edge_ab, edge_bc),
+                    ("2026-10-19T10:00:00+00:00", "2026-10-20T10:00:00+00:00"),
+                ),
+            ),
+        )
+    )
+
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        social_graph_path_reader=path_reader,
+    ).project(_request(include_sections=["propagation"]), _context())
+
+    path = result.sections[0].content["propagation"]["paths"][0]
+    assert path["sourceObservedAtByEdge"] == [
+        "2026-10-19T10:00:00+00:00",
+        "2026-10-20T10:00:00+00:00",
+    ]
+    assert path["timeOrderState"] == "ordered"
+    assert "social_propagation_source_observation_time_missing" not in (
+        result.sections[0].warnings or []
+    )
 
 
 @pytest.mark.asyncio

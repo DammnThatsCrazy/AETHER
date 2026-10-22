@@ -716,7 +716,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/blueprints/execution360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['agent', 'entity', 'episode', 'execution'],
-    canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'economic_facts', 'entity_registry', 'episode_facts', 'events', 'evidence', 'execution_facts', 'graph', 'identity', 'outcome_facts', 'resources', 'temporal_kernel', 'tools'],
+    canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'economic_facts', 'entity_registry', 'episode_facts', 'events', 'evidence', 'execution_facts', 'graph', 'identity', 'outcome_facts', 'resources', 'risk_signals', 'temporal_kernel', 'tools'],
     hardDependencies: ['agentic_runtime_access', 'temporal_kernel'],
     projectionDependencies: ['agent360', 'episode360', 'outcome360', 'temporal360'],
     optionalProjectionDependencies: [],
@@ -1376,12 +1376,12 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/architecture/blueprints/social360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['agent', 'entity', 'population', 'relationship', 'source'],
-    canonicalAuthorities: ['agent_entities', 'cohort_membership', 'evidence', 'graph', 'identity', 'relationship_facts', 'social_observations', 'source_facts'],
+    canonicalAuthorities: ['agent_entities', 'cohort_membership', 'evidence', 'graph', 'identity', 'influence_propagation', 'relationship_facts', 'relationship_predicate_registry', 'social_observations', 'source_facts'],
     hardDependencies: ['relationship_fidelity', 'temporal_kernel', 'upr'],
     projectionDependencies: ['profile360', 'relationship360'],
     optionalProjectionDependencies: [],
     inputRefs: ['EntityRef', 'EvidenceRef', 'GraphSnapshotRef', 'PageRequest', 'RelationshipRef', 'TimeRangeFilter'],
-    outputSections: ['evidence', 'findings', 'interactions', 'paths', 'state', 'summary', 'timeline'],
+    outputSections: ['evidence', 'findings', 'interactions', 'paths', 'propagation', 'state', 'summary', 'timeline'],
     supportedTemporalModes: ['as_of', 'relative', 'window'],
     surfaceIds: ['profile360'],
     capabilityKeys: ['social360.explore', 'social360.read'],
@@ -3031,7 +3031,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
   episode360: {
     backendCapabilities: {
       required: ['experience360.evidence.provenance', 'experience360.frame.compose', 'experience360.freshness.evaluate', 'experience360.policy.evaluate', 'experience360.tenant_scope.enforce'],
-      projectionCapabilityKeys: ['campaign360.explore', 'campaign360.read', 'episode360.explore', 'episode360.read', 'profile360.explore', 'profile360.read', 'relationship360.explore', 'relationship360.read'],
+      projectionCapabilityKeys: ['campaign360.explore', 'campaign360.read', 'communication360.explore', 'communication360.read', 'episode360.explore', 'episode360.read', 'profile360.explore', 'profile360.read', 'relationship360.explore', 'relationship360.read'],
       providerCapabilityStatus: 'registry_requirements_not_route_attestation'
     },
     blueprintContract: {
@@ -3065,11 +3065,18 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       },
       {
         canonicalAuthorityRefs: ['communication_facts'],
-        description: 'Required episode360 slot: communications.',
+        description: 'Exact tenant episode_id-linked communication facts; message history and complete conversation membership remain unavailable.',
         id: 'communications',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'episode_communications_authority_not_joined'
+        partialImplementationReason: 'episode_communication_facts_are_exact_but_message_spine_join_and_completeness_are_unavailable',
+        projectionBindings: [
+          {
+            projectionId: 'communication360',
+            role: 'supporting',
+            subjectKinds: ['episode'],
+            sectionIds: ['interactions']
+          }
+        ],
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['outcome_facts'],
@@ -3226,6 +3233,12 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         role: 'primary',
         bindingStatus: 'catalog_only',
         providerImplementationState: 'in_flight'
+      },
+      {
+        projectionId: 'communication360',
+        role: 'supporting',
+        bindingStatus: 'catalog_only',
+        providerImplementationState: 'implemented'
       },
       {
         projectionId: 'episode360',
@@ -3409,13 +3422,20 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        canonicalAuthorityRefs: ['agent_executions', 'execution_facts'],
-        description: 'Required Execution 360 blueprint slot: risk events.',
+        canonicalAuthorityRefs: ['agent_executions', 'execution_facts', 'risk_signals'],
+        description: 'Recorded Risk360 signals joined to exact tenant-scoped executions admitted by lifecycle; producer coverage and freshness threshold remain unknown.',
         id: 'risk_events',
         implementationCrosswalk: ['execution_identity_and_state'],
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'execution_risk_event_exact_join_not_available'
+        partialImplementationReason: 'only_existing_execution_subject_risk_signals_joined_to_admitted_lifecycle_executions_producer_coverage_and_freshness_threshold_unknown',
+        projectionBindings: [
+          {
+            projectionId: 'execution360',
+            role: 'primary',
+            subjectKinds: ['agent', 'entity', 'episode', 'execution'],
+            sectionIds: ['interactions']
+          }
+        ],
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['actions', 'resources', 'tools'],
@@ -3465,7 +3485,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       }
     ],
     sourceOfTruth: {
-      canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'ai_execution_facts', 'economic_facts', 'episode_facts', 'events', 'evidence', 'execution_facts', 'identity', 'outcome_facts', 'resources', 'source_provenance', 'temporal_kernel', 'tools'],
+      canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'ai_execution_facts', 'economic_facts', 'episode_facts', 'events', 'evidence', 'execution_facts', 'identity', 'outcome_facts', 'resources', 'risk_signals', 'source_provenance', 'temporal_kernel', 'tools'],
       ownsCanonicalTruth: false,
       prohibitedOwnership: ['economic_facts', 'execution_facts', 'graph', 'identity', 'observations', 'risk_outputs', 'source_provenance']
     },
@@ -5254,12 +5274,19 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
-        canonicalAuthorityRefs: ['graph', 'social_observations'],
-        description: 'Observed propagation paths and time order.',
+        canonicalAuthorityRefs: ['graph', 'influence_propagation', 'relationship_facts', 'relationship_predicate_registry', 'social_observations'],
+        description: 'Exact tenant-scoped, consent-authorized FOLLOWS paths whose predicates permit propagation analysis; component measurements and full path completeness remain unavailable.',
         id: 'propagation',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'canonical_social_propagation_path_authority_unavailable'
+        partialImplementationReason: 'bounded_observed_paths_have_no_component_measurements_or_completeness_and_freshness_sla',
+        projectionBindings: [
+          {
+            projectionId: 'social360',
+            role: 'primary',
+            subjectKinds: ['entity', 'relationship'],
+            sectionIds: ['propagation']
+          }
+        ],
+        requirement: 'required'
       },
       {
         id: 'relationship_graph',
@@ -5391,7 +5418,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       }
     ],
     sourceOfTruth: {
-      canonicalAuthorities: ['cluster_membership', 'cohort_membership', 'evidence', 'geo_observations', 'graph', 'identity', 'locations', 'population_definitions', 'relationship_facts', 'risk_outputs', 'social_observations', 'source_coverage', 'source_facts'],
+      canonicalAuthorities: ['cluster_membership', 'cohort_membership', 'evidence', 'geo_observations', 'graph', 'identity', 'influence_propagation', 'locations', 'population_definitions', 'relationship_facts', 'relationship_predicate_registry', 'risk_outputs', 'social_observations', 'source_coverage', 'source_facts'],
       ownsCanonicalTruth: false,
       prohibitedOwnership: ['economic_facts', 'execution_facts', 'graph', 'identity', 'observations', 'risk_outputs', 'source_provenance']
     },

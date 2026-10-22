@@ -34,8 +34,8 @@ Declared binding counts are registry coverage, not proof that a slot or surface 
 | [Campaign 360](#campaign-360) | source_aligned | `campaign` | 11 | 9/11 | 2 | 2 | 0 | `campaign360`, `communication360`, `economic360`, `outcome360` | — |
 | [Commerce 360](#commerce-360) | source_aligned | `entity`, `campaign`, `journey`, `commerce`, `product`, `offer`, `sku`, `checkout` | 11 | 6/11 | 2 | 5 | 0 | `commerce360` | — |
 | [Communications 360](#communications-360) | source_aligned | `message`, `thread`, `profile`, `campaign`, `episode`, `agent`, `journey`, `source` | 11 | 9/11 | 2 | 2 | 0 | `communication360` | — |
-| [Episode 360](#episode-360) | source_aligned | `episode`, `session`, `conversation`, `activity_window`, `entity`, `campaign` | 11 | 5/11 | 0 | 6 | 1 | `campaign360`, `episode360`, `profile360`, `relationship360` | — |
-| [Execution 360](#execution-360) | source_aligned | `agent`, `entity`, `episode`, `execution` | 11 | 9/11 | 3 | 2 | 0 | `execution360` | — |
+| [Episode 360](#episode-360) | source_aligned | `episode`, `session`, `conversation`, `activity_window`, `entity`, `campaign` | 11 | 6/11 | 1 | 5 | 1 | `communication360`, `campaign360`, `episode360`, `profile360`, `relationship360` | — |
+| [Execution 360](#execution-360) | source_aligned | `agent`, `entity`, `episode`, `execution` | 11 | 10/11 | 4 | 1 | 0 | `execution360` | — |
 | [Identity 360](#identity-360) | source_aligned | `entity`, `agent`, `source` | 10 | 10/10 | 1 | 0 | 3 | `agent360`, `execution360`, `profile360`, `relationship360` | `Identity360Provider` (runtime_wired) |
 | [Journey 360](#journey-360) | source_aligned | `journey`, `profile`, `account`, `campaign`, `episode`, `entity` | 11 | 6/11 | 3 | 5 | 2 | `episode360`, `profile360` | — |
 | [Location 360](#location-360) | source_aligned | `location`, `place`, `geohash`, `timezone`, `region`, `entity`, `population`, `source` | 11 | 5/11 | 2 | 6 | 4 | `geographic360`, `population360`, `profile360` | — |
@@ -43,7 +43,7 @@ Declared binding counts are registry coverage, not proof that a slot or surface 
 | [Profile 360](#profile-360) | source_aligned | `profile`, `entity`, `agent`, `anonymous_subject`, `account_member`, `cluster` | 13 | 6/13 | 2 | 7 | 6 | `economic360`, `outcome360`, `profile360`, `relationship360`, `risk360` | — |
 | [Risk 360](#risk-360) | source_aligned | `risk`, `entity`, `profile`, `agent`, `account`, `source`, `campaign`, `contagion_path`, `relationship`, `cluster` | 12 | 5/12 | 1 | 7 | 6 | `economic360`, `execution360`, `fraud360`, `relationship360`, `risk360`, `social360` | — |
 | [Signals 360](#signals-360) | source_aligned | `entity`, `signal`, `source`, `event`, `observation`, `stream` | 10 | 5/10 | 2 | 5 | 0 | `signals360` | — |
-| [Social 360](#social-360) | source_aligned | `entity`, `profile`, `relationship`, `community`, `syndicate`, `source`, `population` | 10 | 4/10 | 1 | 6 | 5 | `geographic360`, `population360`, `relationship360`, `social360`, `source360` | — |
+| [Social 360](#social-360) | source_aligned | `entity`, `profile`, `relationship`, `community`, `syndicate`, `source`, `population` | 10 | 5/10 | 2 | 5 | 5 | `geographic360`, `population360`, `relationship360`, `social360`, `source360` | — |
 | [Support 360](#support-360) | source_aligned | `support_case`, `callback`, `conversation`, `ticket`, `entity`, `agent`, `episode`, `source` | 10 | 3/10 | 2 | 7 | 6 | `agent360`, `episode360`, `outcome360`, `profile360`, `risk360`, `source360`, `support360` | — |
 | [Value 360](#value-360) | source_aligned | `value`, `profile`, `account`, `conversion`, `cluster`, `campaign`, `episode`, `journey`, `entity`, `agent`, `source` | 11 | 5/11 | 3 | 6 | 5 | `campaign360`, `economic360`, `outcome360`, `temporal360` | — |
 | [Workflow 360](#workflow-360) | source_aligned | `workflow`, `automation`, `trigger`, `run`, `workflow_run` | 11 | 4/11 | 1 | 7 | 0 | `workflow360` | — |
@@ -341,7 +341,7 @@ Governed time-bounded view of related events and journey activity, with entity c
 |---|---|---|---|---|---|---|---|
 | `agent_handoffs` | required |  | `agent_executions` | — | — | Unbound: `episode_agent_handoff_authority_not_joined` | Required episode360 slot: agent handoffs. |
 | `attribution_links` | required |  | `attribution_credits` | — | — | Unbound: `episode_attribution_credit_authority_not_joined` | Required episode360 slot: attribution links. |
-| `communications` | required |  | `communication_facts` | — | — | Unbound: `episode_communications_authority_not_joined` | Required episode360 slot: communications. |
+| `communications` | required |  | `communication_facts` | `communication360` (supporting): subjects `episode`; `interactions` | — | Partial: `episode_communication_facts_are_exact_but_message_spine_join_and_completeness_are_unavailable` | Exact tenant episode_id-linked communication facts; message history and complete conversation membership remain unavailable. |
 | `conversion_events` | required |  | `outcome_facts` | — | — | Unbound: `episode_outcome_ids_are_not_conversion_records` | Required episode360 slot: conversion events. |
 | `entity_and_relationship_context` | optional |  | `campaign_facts`, `episode_facts`, `graph`, `identity`, `relationship_facts` | `profile360` (primary): subjects `entity`, `episode`; `evidence`, `state`, `summary`; `relationship360` (supporting): subjects `entity`, `episode`; `interactions`, `evidence`; `episode360` (supporting): subjects `campaign`, `entity`, `episode`; `episode_context`; `campaign360` (primary): subjects `campaign`; `evidence`, `state`, `summary` | — | — | Canonical identity for entity and episode subjects, campaign identity for campaign subjects, and graph relationships where the subject has a supported entity graph. |
 | `episode_summary` | required |  | `episode_facts`, `evidence` | `episode360` (primary): subjects `episode`; `summary`, `evidence` | — | — | Exact tenant episode record with evidence lineage. |
@@ -356,6 +356,7 @@ Governed time-bounded view of related events and journey activity, with entity c
 
 | Projection | Binding | Provider implementation metadata | Capability keys |
 |---|---|---|---|
+| `communication360` | `catalog_only` (supporting) | `implemented` | `communication360.read`, `communication360.explore` |
 | `campaign360` | `catalog_only` (primary) | `in_flight` | `campaign360.read`, `campaign360.explore` |
 | `episode360` | `catalog_only` (primary) | `in_flight` | `episode360.read`, `episode360.explore` |
 | `profile360` | `catalog_only` (primary) | `in_flight` | `profile360.read`, `profile360.explore` |
@@ -404,7 +405,7 @@ Governed view of one execution lifecycle, attributed actors and delegation, acti
 | `inputs_outputs` | required |  | `actions`, `agent_executions`, `execution_facts`, `resources`, `tools` | `execution360` (primary): subjects `agent`, `entity`, `episode`, `execution`; `evidence`, `interactions`, `state`, `summary`, `timeline` | — | — | Required Execution 360 blueprint slot: inputs outputs. |
 | `latency_cost` | required |  | `agent_executions`, `ai_execution_facts`, `economic_facts`, `execution_facts`, `outcome_facts` | `execution360` (primary): subjects `agent`, `entity`, `episode`, `execution`; `state`, `summary` | — | Authority: `exact_subject_authority_join_not_implemented` | Required Execution 360 blueprint slot: latency cost. |
 | `plan_steps` | required |  | `agent_executions`, `episode_facts`, `events`, `execution_facts`, `temporal_kernel` | `execution360` (primary): subjects `agent`, `entity`, `episode`, `execution`; `episode_context`, `evidence`, `state`, `summary`, `timeline` | — | — | Required Execution 360 blueprint slot: plan steps. |
-| `risk_events` | required |  | `agent_executions`, `execution_facts` | — | — | Unbound: `execution_risk_event_exact_join_not_available` | Required Execution 360 blueprint slot: risk events. |
+| `risk_events` | required |  | `agent_executions`, `execution_facts`, `risk_signals` | `execution360` (primary): subjects `agent`, `entity`, `episode`, `execution`; `interactions` | — | Partial: `only_existing_execution_subject_risk_signals_joined_to_admitted_lifecycle_executions_producer_coverage_and_freshness_threshold_unknown` | Recorded Risk360 signals joined to exact tenant-scoped executions admitted by lifecycle; producer coverage and freshness threshold remain unknown. |
 | `tool_calls` | required |  | `actions`, `resources`, `tools` | `execution360` (primary): subjects `agent`, `entity`, `episode`, `execution`; `evidence`, `interactions` | — | Partial: `Exact lifecycle edges are exposed, but source completeness, authorization outcome, and external execution receipt remain unknown.` | Tenant-scoped CALLED_TOOL lifecycle edges joined to admitted executions and canonical agent identity; source completeness and external receipt remain unknown. |
 
 ### Projection provider bindings
@@ -421,7 +422,7 @@ Governed view of one execution lifecycle, attributed actors and delegation, acti
 
 ### Authority and governance contract
 
-Canonical authorities: `actions`, `agent_access`, `agent_entities`, `agent_executions`, `ai_execution_facts`, `economic_facts`, `episode_facts`, `events`, `evidence`, `execution_facts`, `identity`, `outcome_facts`, `resources`, `source_provenance`, `temporal_kernel`, `tools`.
+Canonical authorities: `actions`, `agent_access`, `agent_entities`, `agent_executions`, `ai_execution_facts`, `economic_facts`, `episode_facts`, `events`, `evidence`, `execution_facts`, `identity`, `outcome_facts`, `resources`, `risk_signals`, `source_provenance`, `temporal_kernel`, `tools`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -854,7 +855,7 @@ Governed view of social observations, source-backed relationships, evidence, and
 | `influence_paths` | required |  | `relationship_facts`, `social_observations` | — | — | Unbound: `canonical_influence_path_derivation_unavailable` | Evidence backed influence paths and direction. |
 | `multi_hop_paths` | required |  | `graph`, `relationship_facts` | `social360` (primary): subjects `entity`; `paths` | — | Partial: `bounded_observed_paths_only_no_exhaustive_or_causal_social_semantics` | Bounded observed FOLLOWS edge sequences for an exact entity; no transitive trust, influence, or exhaustive path claim. |
 | `population_context` | optional |  | `population_definitions`, `cohort_membership` | `population360` (primary): subjects `entity`, `population`; `summary`, `state`, `evidence` | — | — | Population and cohort context for social observations. |
-| `propagation` | required |  | `graph`, `social_observations` | — | — | Unbound: `canonical_social_propagation_path_authority_unavailable` | Observed propagation paths and time order. |
+| `propagation` | required |  | `graph`, `influence_propagation`, `relationship_facts`, `relationship_predicate_registry`, `social_observations` | `social360` (primary): subjects `entity`, `relationship`; `propagation` | — | Partial: `bounded_observed_paths_have_no_component_measurements_or_completeness_and_freshness_sla` | Exact tenant-scoped, consent-authorized FOLLOWS paths whose predicates permit propagation analysis; component measurements and full path completeness remain unavailable. |
 | `relationship_graph` | optional |  | `relationship_facts`, `graph`, `identity`, `cohort_membership` | `relationship360` (primary): subjects `entity`, `relationship`, `source`, `population`; `summary`, `interactions`, `evidence` | — | — | Relationship facts and graph context. |
 | `relationship_map` | required |  | `social_observations` | `social360` (primary): subjects `entity`, `relationship`, `source`, `population`; `findings`, `evidence` | — | — | Recorded Social Silver connection facts; not canonical graph edges. |
 | `risk_edges` | required |  | `risk_outputs`, `graph` | — | — | Unbound: `social_risk_edge_derivation_not_connected` | Policy governed risk relationship edges. |
@@ -881,7 +882,7 @@ Governed view of social observations, source-backed relationships, evidence, and
 
 ### Authority and governance contract
 
-Canonical authorities: `cluster_membership`, `cohort_membership`, `evidence`, `geo_observations`, `graph`, `identity`, `locations`, `population_definitions`, `relationship_facts`, `risk_outputs`, `social_observations`, `source_coverage`, `source_facts`.
+Canonical authorities: `cluster_membership`, `cohort_membership`, `evidence`, `geo_observations`, `graph`, `identity`, `influence_propagation`, `locations`, `population_definitions`, `relationship_facts`, `relationship_predicate_registry`, `risk_outputs`, `social_observations`, `source_coverage`, `source_facts`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 

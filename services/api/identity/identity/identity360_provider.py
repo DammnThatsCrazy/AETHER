@@ -600,6 +600,12 @@ class Identity360Provider:
             for ref in (_row_ref(row, "identity_source_identities") for row in source_rows)
             if ref is not None
         ]
+        lineage_ref_by_source_id = {
+            source_id: ref
+            for row in source_rows
+            if (source_id := _safe_text(row.get("id")))
+            if (ref := _row_ref(row, "identity_source_identities")) is not None
+        }
         claim_items = [_safe_claim(row) for row in claim_rows]
         claim_refs = [
             ref
@@ -875,20 +881,36 @@ class Identity360Provider:
         )
 
         device_identifier_types = {"device_id", "installation_id", "session_id"}
-        device_session_items = [
-            {
-                "sourceIdentityId": item.get("id"),
-                "identifierTypes": [
-                    identifier_type
-                    for identifier_type in item.get("identifierTypes", [])
-                    if identifier_type in device_identifier_types
-                ],
-                "firstSeenAt": item.get("firstSeenAt"),
-                "lastSeenAt": item.get("lastSeenAt"),
-            }
-            for item in source_items
-            if device_identifier_types.intersection(item.get("identifierTypes", []))
-        ]
+        device_session_items: list[dict[str, Any]] = []
+        device_session_evidence_missing = False
+        for item in source_items:
+            observed_types = sorted(
+                device_identifier_types.intersection(item.get("identifierTypes", []))
+            )
+            if not observed_types:
+                continue
+            evidence_ref = lineage_ref_by_source_id.get(str(item.get("id") or ""))
+            if evidence_ref is None:
+                # Do not surface a device/session observation without a
+                # canonical source-identity evidence pointer.
+                device_session_evidence_missing = True
+                continue
+            device_session_items.append(
+                {
+                    "sourceIdentityId": item.get("id"),
+                    "identifierTypes": observed_types,
+                    "firstSeenAt": item.get("firstSeenAt"),
+                    "lastSeenAt": item.get("lastSeenAt"),
+                    "evidenceRef": evidence_ref.model_dump(mode="json", exclude_none=True),
+                }
+            )
+        device_session_refs = _dedupe_refs(
+            [
+                lineage_ref_by_source_id[str(item["sourceIdentityId"])]
+                for item in device_session_items
+                if str(item.get("sourceIdentityId") or "") in lineage_ref_by_source_id
+            ]
+        )
         if subject_kind == "source":
             devices_state: IdentitySlotState = (
                 "unknown"
@@ -898,6 +920,10 @@ class Identity360Provider:
                 else "suppressed"
                 if source_suppressed
                 else "degraded"
+                if device_session_evidence_missing
+                else "degraded"
+                if not source_record_read.available
+                else "partial"
                 if device_session_items
                 else "unknown"
             )
@@ -906,17 +932,27 @@ class Identity360Provider:
                 if source_row is None
                 else "source_identity_suppressed"
                 if source_suppressed
+                else "device_session_evidence_ref_missing"
+                if device_session_evidence_missing
+                else "source_identity_read_degraded"
+                if not source_record_read.available
                 else "device_session_inventory_authority_not_joined"
             )
         else:
             devices_state = (
                 "degraded"
-                if not source_rows_read.available or source_rows_read.truncated or device_session_items
+                if not source_rows_read.available or device_session_evidence_missing
+                else "truncated"
+                if source_rows_read.truncated
+                else "partial"
+                if device_session_items
                 else "unknown"
             )
             devices_reason = source_rows_read.reason or (
                 "identity_subject_not_resolved"
                 if not subject_scope_known
+                else "device_session_evidence_ref_missing"
+                if device_session_evidence_missing
                 else "device_session_inventory_authority_not_joined"
             )
 
@@ -1158,6 +1194,9 @@ class Identity360Provider:
                     {
                         "state": devices_state,
                         "sourceIdentityObservations": device_session_items,
+                        "sourceIdentityCoverage": source_identity_coverage,
+                        "observedIdentifierCount": len(device_session_items),
+                        "inventoryState": "unknown",
                         "identifierValuesIncluded": False,
                         "limitations": [
                             "This is source identity identifier metadata, not a device or session inventory.",
@@ -1168,9 +1207,7 @@ class Identity360Provider:
                     if want_devices
                     else {"state": "unknown", "reason": "identity_slot_not_requested"}
                 ),
-                evidence_refs=(
-                    _dedupe_refs([*lineage_refs, *subject_refs]) if want_devices else ()
-                ),
+                evidence_refs=device_session_refs if want_devices else (),
                 reason=devices_reason if want_devices else "identity_slot_not_requested",
                 truncated=source_rows_read.truncated if want_devices else False,
             ),

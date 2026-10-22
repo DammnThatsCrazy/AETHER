@@ -241,7 +241,24 @@ async def test_entity_identity_projects_scoped_evidence_without_sensitive_values
     assert result.slot("confidence").state == "available"
     assert result.slot("confidence").content["compositeConfidence"] is None
     assert result.slot("aliases").state == "available"
-    assert result.slot("devices_sessions").state == "degraded"
+    devices_sessions = result.slot("devices_sessions")
+    assert devices_sessions.state == "partial"
+    assert devices_sessions.content["inventoryState"] == "unknown"
+    assert devices_sessions.content["observedIdentifierCount"] == 1
+    assert devices_sessions.content["sourceIdentityObservations"] == [
+        {
+            "sourceIdentityId": "source-row-1",
+            "identifierTypes": ["device_id", "session_id"],
+            "firstSeenAt": "2026-09-05T00:00:00Z",
+            "lastSeenAt": "2026-10-14T00:00:00Z",
+            "evidenceRef": {
+                "id": "source-row-1",
+                "type": "annotation",
+                "source": "identity_source_identities",
+                "observedAt": "2026-10-14T00:00:00Z",
+            },
+        }
+    ]
     assert result.slot("wallets").state == "unknown"
     assert result.slot("policy_redactions").state == "degraded"
     assert result.slot("policy_redactions").content["projectionRedaction"]["state"] == "applied"
@@ -270,6 +287,64 @@ async def test_entity_identity_projects_scoped_evidence_without_sensitive_values
     assert "identity_source_identities" in rendered
     assert "identity_verification_evidence" in rendered
     assert "identity_conflicts" in rendered
+
+
+@pytest.mark.asyncio
+async def test_device_session_observations_require_exact_lineage_evidence() -> None:
+    source = FakeIdentity360Source()
+    source.source_rows = [
+        {
+            "tenant_id": "tenant-a",
+            "source_kind": "sdk",
+            "source_namespace": "sdk:web",
+            "canonical_entity_id": "entity-1",
+            "status": "resolved",
+            "device_id": "private-device-id",
+            "session_id": "private-session-id",
+            "first_seen_at": "2026-09-05T00:00:00Z",
+        }
+    ]
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"devices_sessions"}
+    )
+
+    devices_sessions = result.slot("devices_sessions")
+    assert devices_sessions.state == "degraded"
+    assert devices_sessions.reason == "device_session_evidence_ref_missing"
+    assert devices_sessions.content["inventoryState"] == "unknown"
+    assert devices_sessions.content["sourceIdentityObservations"] == []
+    assert devices_sessions.evidence_refs == ()
+    rendered = json.dumps(_payload(result), sort_keys=True)
+    assert "private-device-id" not in rendered
+    assert "private-session-id" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_missing_device_session_observations_remain_unknown_not_empty() -> None:
+    source = FakeIdentity360Source()
+    source.source_rows = [
+        {
+            "id": "source-row-without-device-session",
+            "tenant_id": "tenant-a",
+            "source_kind": "connector",
+            "source_namespace": "crm:customers",
+            "canonical_entity_id": "entity-1",
+            "status": "resolved",
+            "external_id": "private-external-id",
+        }
+    ]
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"devices_sessions"}
+    )
+
+    devices_sessions = result.slot("devices_sessions")
+    assert devices_sessions.state == "unknown"
+    assert devices_sessions.content["inventoryState"] == "unknown"
+    assert devices_sessions.content["sourceIdentityObservations"] == []
+    assert devices_sessions.reason == "device_session_inventory_authority_not_joined"
+    assert "private-external-id" not in json.dumps(_payload(result), sort_keys=True)
 
 
 @pytest.mark.asyncio

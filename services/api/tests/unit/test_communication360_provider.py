@@ -1112,11 +1112,15 @@ async def test_source_subject_without_canonical_facts_is_missing_not_zero() -> N
 
 
 @pytest.mark.parametrize(
-    ("subject_kind", "reference_key"),
-    [("episode", "episode_id"), ("journey", "journey_id"), ("source", "source_id")],
+    ("subject_kind", "reference_key", "expected_slot_ids"),
+    [
+        ("episode", "episode_id", ["communications"]),
+        ("journey", "journey_id", []),
+        ("source", "source_id", []),
+    ],
 )
 async def test_non_message_subjects_use_exact_tenant_canonical_communication_facts(
-    subject_kind: str, reference_key: str
+    subject_kind: str, reference_key: str, expected_slot_ids: list[str]
 ) -> None:
     subject_id = f"{subject_kind}-canonical-1"
     exact = _fact(
@@ -1174,7 +1178,7 @@ async def test_non_message_subjects_use_exact_tenant_canonical_communication_fac
     assert [ref["id"] for ref in evidence.content["evidence"]] == [f"{subject_kind}-act-1"]
     canonical_claims = [claim for claim in result.claims if claim.id.startswith("canonical_fact.")]
     assert [claim.id for claim in canonical_claims] == [f"canonical_fact.{subject_kind}-act-1"]
-    assert canonical_claims[0].domainSlotIds == []
+    assert canonical_claims[0].domainSlotIds == expected_slot_ids
     assert canonical_claims[0].claimState is EpistemicStatus.OBSERVED
     assert [ref.id for ref in canonical_claims[0].evidenceRefs] == [f"{subject_kind}-act-1"]
     assert source.message_read_count == 0

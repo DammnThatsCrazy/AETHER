@@ -1903,8 +1903,8 @@ The registry contains 24 technical projections; 9 are marked `implemented` and
 15 remain `in_flight`. All 24 register at application startup, and registration
 does not promote implementation status.
 
-The current provider paths add bounded evidence to four required surface
-slots without claiming surface completion. Account360's `profiles` slot follows
+The current provider paths add bounded evidence to required surface slots
+without claiming surface completion. Account360's `profiles` slot follows
 tenant-scoped `MEMBER_OF` edges to exact entity-registry members and requests
 each member's Profile360 frame under that member's own policy; incomplete
 membership coverage remains degraded, and denied profile slots are omitted.
@@ -1917,6 +1917,21 @@ version's steps, with stage taxonomy and completeness unknown. Location360's
 leaves normalization version, transformation time, and timezone unknown. These
 bindings preserve partial or unknown states and do not promote the technical
 providers' `in_flight` registry status.
+
+Additional partial paths expose Identity360 `devices_sessions` identifier-type
+metadata from exact tenant-scoped source-identity records, with per-observation
+evidence references and no raw values or hashes; a dedicated device/session
+inventory and its completeness/freshness authority remain unjoined. Execution360
+`risk_events` joins only canonical RiskSignals with exact execution subject IDs
+admitted from tenant server lifecycle records; signal producer coverage and a
+freshness threshold remain unknown, and the signals are not a complete risk
+assessment. Social360 `propagation` returns bounded tenant-scoped FOLLOWS paths
+only after endpoint consent, predicate eligibility, path timing, and evidence
+checks; it includes no component measurements and does not establish contagion
+or full path completeness. Episode360 `communications` binds only communication
+facts carrying the exact episode ID; the complete message spine and conversation
+membership are not joined. These additions remain partial provider paths and do
+not complete their respective 360 surfaces.
 
 ### Support case lifecycle evidence ingress
 

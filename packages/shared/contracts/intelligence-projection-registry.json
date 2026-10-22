@@ -471,7 +471,9 @@
         "evidence",
         "graph",
         "identity",
+        "influence_propagation",
         "relationship_facts",
+        "relationship_predicate_registry",
         "social_observations",
         "source_facts"
       ],
@@ -500,7 +502,8 @@
         "evidence",
         "interactions",
         "findings",
-        "paths"
+        "paths",
+        "propagation"
       ],
       "supportedTemporalModes": [
         "window",
@@ -840,6 +843,7 @@
         "identity",
         "outcome_facts",
         "resources",
+        "risk_signals",
         "temporal_kernel",
         "tools"
       ],
@@ -3711,16 +3715,31 @@
         {
           "id": "risk_events",
           "requirement": "required",
-          "description": "Required Execution 360 blueprint slot: risk events.",
+          "description": "Recorded Risk360 signals joined to exact tenant-scoped executions admitted by lifecycle; producer coverage and freshness threshold remain unknown.",
+          "partialImplementationReason": "only_existing_execution_subject_risk_signals_joined_to_admitted_lifecycle_executions_producer_coverage_and_freshness_threshold_unknown",
           "canonicalAuthorityRefs": [
             "agent_executions",
-            "execution_facts"
+            "execution_facts",
+            "risk_signals"
           ],
-          "projectionBindings": [],
+          "projectionBindings": [
+            {
+              "projectionId": "execution360",
+              "role": "primary",
+              "sectionIds": [
+                "interactions"
+              ],
+              "subjectKinds": [
+                "agent",
+                "entity",
+                "episode",
+                "execution"
+              ]
+            }
+          ],
           "implementationCrosswalk": [
             "execution_identity_and_state"
-          ],
-          "unboundReason": "execution_risk_event_exact_join_not_available"
+          ]
         },
         {
           "id": "evidence_trace",
@@ -3777,6 +3796,7 @@
           "identity",
           "outcome_facts",
           "resources",
+          "risk_signals",
           "source_provenance",
           "temporal_kernel",
           "tools"
@@ -3984,12 +4004,23 @@
         {
           "id": "communications",
           "requirement": "required",
-          "description": "Required episode360 slot: communications.",
+          "description": "Exact tenant episode_id-linked communication facts; message history and complete conversation membership remain unavailable.",
+          "partialImplementationReason": "episode_communication_facts_are_exact_but_message_spine_join_and_completeness_are_unavailable",
           "canonicalAuthorityRefs": [
             "communication_facts"
           ],
-          "projectionBindings": [],
-          "unboundReason": "episode_communications_authority_not_joined"
+          "projectionBindings": [
+            {
+              "projectionId": "communication360",
+              "role": "supporting",
+              "sectionIds": [
+                "interactions"
+              ],
+              "subjectKinds": [
+                "episode"
+              ]
+            }
+          ]
         },
         {
           "id": "agent_handoffs",
@@ -4118,6 +4149,12 @@
       ],
       "projectionBindings": [
         {
+          "projectionId": "communication360",
+          "role": "supporting",
+          "bindingStatus": "catalog_only",
+          "providerImplementationState": "implemented"
+        },
+        {
           "projectionId": "campaign360",
           "role": "primary",
           "bindingStatus": "catalog_only",
@@ -4196,6 +4233,8 @@
         "projectionCapabilityKeys": [
           "campaign360.explore",
           "campaign360.read",
+          "communication360.explore",
+          "communication360.read",
           "episode360.explore",
           "episode360.read",
           "profile360.explore",
@@ -7086,13 +7125,28 @@
         {
           "id": "propagation",
           "requirement": "required",
-          "description": "Observed propagation paths and time order.",
+          "description": "Exact tenant-scoped, consent-authorized FOLLOWS paths whose predicates permit propagation analysis; component measurements and full path completeness remain unavailable.",
+          "partialImplementationReason": "bounded_observed_paths_have_no_component_measurements_or_completeness_and_freshness_sla",
           "canonicalAuthorityRefs": [
             "graph",
+            "influence_propagation",
+            "relationship_facts",
+            "relationship_predicate_registry",
             "social_observations"
           ],
-          "projectionBindings": [],
-          "unboundReason": "canonical_social_propagation_path_authority_unavailable"
+          "projectionBindings": [
+            {
+              "projectionId": "social360",
+              "role": "primary",
+              "sectionIds": [
+                "propagation"
+              ],
+              "subjectKinds": [
+                "entity",
+                "relationship"
+              ]
+            }
+          ]
         },
         {
           "id": "social_contagion",
@@ -7335,9 +7389,11 @@
           "geo_observations",
           "graph",
           "identity",
+          "influence_propagation",
           "locations",
           "population_definitions",
           "relationship_facts",
+          "relationship_predicate_registry",
           "risk_outputs",
           "social_observations",
           "source_coverage",

@@ -34,6 +34,7 @@ from shared.intelligence_projections.contracts import (
     ProjectionResult,
     ProjectionSection,
     ProjectionSubject,
+    TimeRangeFilter,
 )
 from shared.intelligence_projections.generated_registry import (
     INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
@@ -68,12 +69,14 @@ SLOT_LATENCY_COST = "latency_cost"
 SLOT_INPUTS_OUTPUTS = "inputs_outputs"
 SLOT_FAILURES = "failures"
 SLOT_TOOL_CALLS = "tool_calls"
+SLOT_RISK_EVENTS = "risk_events"
 
 _SERVER_FAILURE_STATUSES = frozenset({"failed", "revoked"})
 _SOURCE_REPORTED_FAILURE_STATUSES = frozenset({"failed", "error", "denied", "revoked"})
 
 _MAX_ROWS = 500
 _MAX_TOOL_EDGE_SCAN = 10_000
+_MAX_EXECUTION_RISK_SIGNAL_SCAN = 1000
 _SILVER_QUERY_LIMIT = 1000
 _MAX_EPISODE_AGENT_SCAN = 200
 _SILVER_SOURCE = "silver_agent_execution_facts"
@@ -131,6 +134,29 @@ class ExecutionToolCallRead:
 
 
 @dataclass(frozen=True)
+class ExecutionRiskEventRead:
+    """Bounded canonical RiskSignal read for one exact execution subject."""
+
+    rows: list[dict[str, Any]]
+    available: bool
+    scope_known: bool
+    truncated: bool = False
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class ExecutionRiskEventContext:
+    """Validated, evidence-backed execution risk signals and coverage state."""
+
+    state: Literal["partial", "empty", "unknown", "degraded", "unavailable"]
+    signals: tuple[Any, ...] = ()
+    reason: Optional[str] = None
+    source_read_state: Literal["available", "unavailable", "not_read"] = "not_read"
+    truncated: bool = False
+    scope_known: bool = False
+
+
+@dataclass(frozen=True)
 class ExecutionRead:
     """One source read with explicit availability and subject-scope certainty."""
 
@@ -176,6 +202,11 @@ class Execution360Source(Protocol):
         self, *, tenant_id: str, subject: ProjectionSubject, limit: int
     ) -> ExecutionRead:
         """Read telemetry facts whose actor has been canonically resolved."""
+
+    async def execution_risk_events(
+        self, *, tenant_id: str, execution_ids: tuple[str, ...], limit: int
+    ) -> ExecutionRiskEventRead:
+        """Read canonical RiskSignals for admitted exact execution subjects."""
 
 
 class RepositoryExecution360Source:
@@ -760,6 +791,85 @@ class RepositoryExecution360Source:
             ),
             agent_ids=tuple(sorted(allowed_agent_ids)),
             subject_event_ids=scope.event_ids if scope is not None else (),
+        )
+
+    async def execution_risk_events(
+        self, *, tenant_id: str, execution_ids: tuple[str, ...], limit: int
+    ) -> ExecutionRiskEventRead:
+        """Read RiskSignals whose subjects match admitted tenant execution IDs."""
+        admitted_ids = {
+            value for raw in execution_ids if (value := _safe_text(raw)) is not None
+        }
+        if not admitted_ids:
+            return ExecutionRiskEventRead(rows=[], available=True, scope_known=True)
+        try:
+            from intelligence.risk360.store import RiskSignalRepository
+
+            repository = RiskSignalRepository()
+            if len(admitted_ids) == 1:
+                rows = await repository.list_by_subject(
+                    tenant_id,
+                    "execution",
+                    next(iter(admitted_ids)),
+                    limit=limit + 1,
+                )
+                scan_limit = limit
+            else:
+                rows = await repository.find_many(
+                    filters={"tenant_id": tenant_id, "subject_kind": "execution"},
+                    limit=_MAX_EXECUTION_RISK_SIGNAL_SCAN + 1,
+                )
+                scan_limit = _MAX_EXECUTION_RISK_SIGNAL_SCAN
+        except Exception:  # noqa: BLE001 - optional canonical source failure is isolated
+            return ExecutionRiskEventRead(
+                rows=[],
+                available=False,
+                scope_known=False,
+                reason="execution_risk_signal_source_unavailable",
+            )
+
+        if not isinstance(rows, list):
+            return ExecutionRiskEventRead(
+                rows=[],
+                available=False,
+                scope_known=False,
+                reason="execution_risk_signal_read_invalid",
+            )
+        scan_truncated = len(rows) > scan_limit
+        bounded = rows[:scan_limit]
+        mismatch = any(
+            not isinstance(row, dict)
+            or row.get("tenant_id") != tenant_id
+            or row.get("subject_kind") != "execution"
+            or (len(admitted_ids) == 1 and row.get("subject_id") not in admitted_ids)
+            for row in bounded
+        )
+        exact_rows = [
+            {
+                key: value
+                for key, value in row.items()
+                if key not in {"id", "created_at", "updated_at"}
+            }
+            for row in bounded
+            if isinstance(row, dict)
+            and row.get("tenant_id") == tenant_id
+            and row.get("subject_kind") == "execution"
+            and row.get("subject_id") in admitted_ids
+        ]
+        truncated = scan_truncated or len(exact_rows) > limit
+        exact_rows = exact_rows[:limit]
+        return ExecutionRiskEventRead(
+            rows=exact_rows,
+            available=True,
+            scope_known=not mismatch,
+            truncated=truncated,
+            reason=(
+                "execution_risk_signal_scope_mismatch"
+                if mismatch
+                else "execution_risk_signal_read_truncated"
+                if truncated
+                else None
+            ),
         )
 
 
@@ -1806,6 +1916,47 @@ class Execution360Provider:
             time_range=request.timeRange,
             temporal_unavailable=temporal_unavailable,
         )
+        execution_inventory_complete = (
+            server.available
+            and server.scope_known
+            and not server.truncated
+            and not episode_event_binding_mismatch
+            and not temporal_unavailable
+        )
+        if admitted_execution_ids and not temporal_unavailable:
+            risk_event_read = await self._safe_execution_risk_read(
+                tenant_id, tuple(sorted(admitted_execution_ids)), limit
+            )
+            risk_events = _execution_risk_event_context(
+                risk_event_read,
+                tenant_id=tenant_id,
+                execution_ids=admitted_execution_ids,
+                execution_inventory_complete=execution_inventory_complete,
+                time_range=request.timeRange,
+            )
+        elif (
+            request.subject.kind != "execution"
+            and not temporal_unavailable
+            and execution_inventory_complete
+        ):
+            risk_events = ExecutionRiskEventContext(
+                state="empty",
+                reason="no_admitted_execution_ids_in_subject_scope",
+                source_read_state="not_read",
+                scope_known=True,
+            )
+        else:
+            risk_events = ExecutionRiskEventContext(
+                state="unknown",
+                reason=(
+                    "temporal_anchor_not_reconstructable_from_current_sources"
+                    if temporal_unavailable
+                    else "execution_subject_not_admitted_from_server_lifecycle"
+                    if request.subject.kind == "execution"
+                    else "agent_risk_records_do_not_carry_a_canonical_agent_execution_id"
+                ),
+                source_read_state="not_read",
+            )
 
         reasons: list[str] = []
         if not server.available:
@@ -1828,13 +1979,24 @@ class Execution360Provider:
             reasons.append("task_decomposition_record_invalid")
         if any(row["subtaskIdsTruncated"] for row in plan_decompositions):
             reasons.append("task_decomposition_subtask_list_truncated")
+        if risk_events.state in {"degraded", "unavailable"} and risk_events.reason:
+            reasons.append(risk_events.reason)
         if request.subject.kind == "episode" and episode_event_binding_mismatch:
             reasons.append("episode_execution_event_binding_conflict")
 
         state = _section_state(server, observed, internal, external, temporal_unavailable)
-        evidence = self._all_evidence(internal, external, plan_decompositions, tool_calls)
+        evidence = self._all_evidence(
+            internal, external, plan_decompositions, tool_calls, risk_events
+        )
         claims = (
-            self._claims(request.subject, internal, external, plan_decompositions, tool_calls)
+            self._claims(
+                request.subject,
+                internal,
+                external,
+                plan_decompositions,
+                tool_calls,
+                risk_events,
+            )
             if request.includeClaims is not False
             else []
         )
@@ -1849,6 +2011,7 @@ class Execution360Provider:
             observed,
             temporal_unavailable,
             tool_calls,
+            risk_events,
         )
 
         return ProjectionResult(
@@ -1888,12 +2051,39 @@ class Execution360Provider:
                 reason=f"{method}_unavailable",
             )
 
+    async def _safe_execution_risk_read(
+        self, tenant_id: str, execution_ids: tuple[str, ...], limit: int
+    ) -> ExecutionRiskEventRead:
+        try:
+            reader = getattr(self._sources, "execution_risk_events")
+            result = await reader(
+                tenant_id=tenant_id,
+                execution_ids=execution_ids,
+                limit=limit,
+            )
+            if not isinstance(result, ExecutionRiskEventRead):
+                return ExecutionRiskEventRead(
+                    rows=[],
+                    available=False,
+                    scope_known=False,
+                    reason="execution_risk_event_source_returned_invalid_contract",
+                )
+            return result
+        except Exception:  # noqa: BLE001 - fail-isolate optional canonical source
+            return ExecutionRiskEventRead(
+                rows=[],
+                available=False,
+                scope_known=False,
+                reason="execution_risk_event_source_unavailable",
+            )
+
     @staticmethod
     def _all_evidence(
         internal: list[dict[str, Any]],
         external: list[dict[str, Any]],
         plan_decompositions: list[dict[str, Any]],
         tool_calls: ExecutionToolCallRead,
+        risk_events: ExecutionRiskEventContext,
     ) -> list[EvidenceRef]:
         refs: list[EvidenceRef] = []
         seen: set[tuple[str, str]] = set()
@@ -1919,6 +2109,12 @@ class Execution360Provider:
                 continue
             seen.add((ref.id, ref.source))
             refs.append(ref)
+        for signal in risk_events.signals:
+            for ref in signal.evidence_refs:
+                if (ref.id, ref.source) in seen:
+                    continue
+                seen.add((ref.id, ref.source))
+                refs.append(ref)
         return refs
 
     @staticmethod
@@ -1928,6 +2124,7 @@ class Execution360Provider:
         external: list[dict[str, Any]],
         plan_decompositions: list[dict[str, Any]],
         tool_calls: ExecutionToolCallRead,
+        risk_events: ExecutionRiskEventContext,
     ) -> list[ClaimEnvelope]:
         claims: list[ClaimEnvelope] = []
         for row in internal:
@@ -2216,6 +2413,25 @@ class Execution360Provider:
                     domainSlotIds=[SLOT_TOOL_CALLS, SLOT_EVIDENCE],
                 )
             )
+        for signal in risk_events.signals:
+            claims.append(
+                ClaimEnvelope(
+                    id=f"execution360:risk-signal:{signal.signal_id}",
+                    kind="execution_subject_risk_signal_context",
+                    # Claims must retain the exact subject of the projection
+                    # request so frame composition can enforce its subject
+                    # contract. The linked execution stays explicit in the
+                    # claim text, interaction payload, and evidence.
+                    subject=subject,
+                    evidenceRefs=list(signal.evidence_refs),
+                    claims=[
+                        f"Canonical Risk360 signal {signal.signal_id!r} records {signal.risk_dimension!r} context for execution {signal.subject_id!r} with claim state {signal.claim_state.value}; it does not establish that the execution caused the signal or provide a complete risk assessment."
+                    ],
+                    confidence=signal.confidence,
+                    claimState=signal.claim_state,
+                    domainSlotIds=[SLOT_RISK_EVENTS, SLOT_EVIDENCE],
+                )
+            )
         return claims
 
     @staticmethod
@@ -2230,6 +2446,7 @@ class Execution360Provider:
         observed: ExecutionRead,
         temporal_unavailable: bool,
         tool_calls: ExecutionToolCallRead,
+        risk_events: ExecutionRiskEventContext,
     ) -> list[ProjectionSection]:
         episode_context = server.episode_context or ExecutionEpisodeContextRead(
             "degraded" if not server.available else "unknown",
@@ -2425,11 +2642,52 @@ class Execution360Provider:
             "evidenceRefs": [],
         }
         risk_event_linkage = {
-            "state": "unknown",
-            "reason": "agent_risk_records_do_not_carry_a_canonical_agent_execution_id",
-            "sourceReadState": "not_read",
-            "joinedExecutionRiskEvents": [],
-            "evidenceRefs": [],
+            "state": risk_events.state,
+            "reason": risk_events.reason,
+            "sourceReadState": risk_events.source_read_state,
+            "completeness": "recorded_execution_subject_signals_only",
+            "scopeKnown": risk_events.scope_known,
+            "joinedExecutionRiskEvents": [
+                {
+                    "executionId": signal.subject_id,
+                    "signalId": signal.signal_id,
+                    "riskDimension": signal.risk_dimension,
+                    "source": signal.source,
+                    "detectorVersion": signal.detector_version,
+                    "claimState": signal.claim_state.value,
+                    "confidence": signal.confidence,
+                    "score": signal.score,
+                    "value": signal.value,
+                    "observedAt": (
+                        signal.observed_at.astimezone(timezone.utc).isoformat()
+                        if signal.observed_at is not None
+                        else None
+                    ),
+                    "evidenceRefs": [
+                        ref.model_dump(mode="json", by_alias=True, exclude_none=True)
+                        for ref in signal.evidence_refs
+                    ],
+                }
+                for signal in risk_events.signals
+            ],
+            "evidenceRefs": [
+                ref.model_dump(mode="json", by_alias=True, exclude_none=True)
+                for signal in risk_events.signals
+                for ref in signal.evidence_refs
+            ],
+            "freshness": {
+                "state": "unknown",
+                "latestObservedAt": max(
+                    (
+                        signal.observed_at.astimezone(timezone.utc).isoformat()
+                        for signal in risk_events.signals
+                        if signal.observed_at is not None
+                    ),
+                    default=None,
+                ),
+                "reason": "no_execution_risk_signal_freshness_threshold_is_configured",
+            },
+            "truncated": risk_events.truncated,
         }
         latency_cost = _latency_cost_summary(
             internal,
@@ -2602,6 +2860,127 @@ def _read_state(read: ExecutionRead) -> str:
     if read.truncated:
         return "degraded"
     return "available"
+
+
+def _execution_risk_event_context(
+    read: ExecutionRiskEventRead,
+    *,
+    tenant_id: str,
+    execution_ids: set[str],
+    execution_inventory_complete: bool,
+    time_range: Optional[TimeRangeFilter],
+) -> ExecutionRiskEventContext:
+    """Validate exact execution-scoped RiskSignals before projection.
+
+    A recorded signal is risk context, not a complete risk assessment or proof
+    that the execution caused the signal. Signals without evidence or with
+    invalid subject/time scope are omitted and downgrade the coverage state.
+    """
+    if not read.available:
+        return ExecutionRiskEventContext(
+            state="unavailable",
+            reason=read.reason or "execution_risk_signal_source_unavailable",
+            source_read_state="unavailable",
+            truncated=read.truncated,
+            scope_known=False,
+        )
+
+    lower = _parse_aware_instant(time_range.from_) if time_range and time_range.from_ else None
+    upper = _parse_aware_instant(time_range.to) if time_range and time_range.to else None
+    if (
+        time_range is not None
+        and (
+            (time_range.from_ is not None and lower is None)
+            or (time_range.to is not None and upper is None)
+            or (lower is not None and upper is not None and upper < lower)
+        )
+    ):
+        return ExecutionRiskEventContext(
+            state="unknown",
+            reason="execution_risk_event_time_window_invalid",
+            source_read_state="available",
+            truncated=read.truncated,
+            scope_known=False,
+        )
+
+    from intelligence.risk360.contracts import RiskSignal
+
+    signals: list[Any] = []
+    seen_ids: set[str] = set()
+    invalid_record_seen = False
+    for raw in read.rows:
+        if (
+            not isinstance(raw, dict)
+            or raw.get("tenant_id") != tenant_id
+            or raw.get("subject_kind") != "execution"
+            or raw.get("subject_id") not in execution_ids
+        ):
+            invalid_record_seen = True
+            continue
+        try:
+            signal = RiskSignal.model_validate(raw)
+        except Exception:  # noqa: BLE001 - invalid canonical row is not evidence
+            invalid_record_seen = True
+            continue
+        if (
+            not signal.signal_id.strip()
+            or not signal.source.strip()
+            or signal.signal_id in seen_ids
+            or not signal.evidence_refs
+        ):
+            invalid_record_seen = True
+            continue
+        if any(not ref.id.strip() or not ref.source.strip() for ref in signal.evidence_refs):
+            invalid_record_seen = True
+            continue
+
+        observed_at = signal.observed_at
+        if observed_at is not None:
+            if observed_at.tzinfo is None:
+                invalid_record_seen = True
+                continue
+            observed_at = observed_at.astimezone(timezone.utc)
+        if time_range is not None:
+            if observed_at is None:
+                invalid_record_seen = True
+                continue
+            if lower is not None and observed_at < lower:
+                continue
+            if upper is not None and observed_at > upper:
+                continue
+        seen_ids.add(signal.signal_id)
+        signals.append(signal)
+
+    complete_read = (
+        read.scope_known
+        and not read.truncated
+        and execution_inventory_complete
+        and not invalid_record_seen
+    )
+    if signals:
+        state: Literal["partial", "empty", "unknown", "degraded", "unavailable"] = (
+            "partial" if complete_read else "degraded"
+        )
+        reason = (
+            "risk_signals_are_recorded_context_not_a_complete_execution_risk_assessment"
+            if complete_read
+            else read.reason
+            or "execution_inventory_or_risk_signal_scope_incomplete"
+        )
+    elif complete_read:
+        state = "empty"
+        reason = "no_recorded_canonical_risk_signals_for_execution_subject"
+    else:
+        state = "degraded"
+        reason = read.reason or "execution_inventory_or_risk_signal_scope_incomplete"
+    return ExecutionRiskEventContext(
+        state=state,
+        signals=tuple(signals),
+        reason=reason,
+        source_read_state="available",
+        truncated=read.truncated,
+        scope_known=read.scope_known,
+    )
 
 
 def _lifecycle_elapsed_ms(row: dict[str, Any]) -> Optional[float]:

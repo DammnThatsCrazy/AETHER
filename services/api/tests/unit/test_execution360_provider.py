@@ -18,6 +18,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from actions.agent.execution360_provider import (  # noqa: E402
     ExecutionEpisodeContextRead,
+    ExecutionRiskEventRead,
     ExecutionToolCallRead,
     OUTPUT_SECTIONS,
     Execution360Provider,
@@ -315,6 +316,37 @@ def _task_decomposition_row(
     }
 
 
+def _execution_risk_signal_row(
+    *,
+    signal_id: str = "risk-exec-1",
+    tenant_id: str = TENANT,
+    subject_kind: str = "execution",
+    subject_id: str = "exec-1",
+    observed_at: str | None = "2026-10-16T10:00:01+00:00",
+) -> dict:
+    return {
+        "signal_id": signal_id,
+        "tenant_id": tenant_id,
+        "subject_kind": subject_kind,
+        "subject_id": subject_id,
+        "risk_dimension": "agentic",
+        "claim_state": "inferred",
+        "confidence": 0.82,
+        "evidence_refs": [
+            {
+                "id": f"evidence-{signal_id}",
+                "type": "model_output",
+                "source": "aether.fraud.detector.agentic",
+                "observedAt": observed_at,
+            }
+        ],
+        "source": "aether.fraud.detector.agentic",
+        "detector_version": "agentic-risk-v2",
+        "observed_at": observed_at,
+        "score": 0.64,
+    }
+
+
 class FakeSource:
     def __init__(
         self,
@@ -322,6 +354,7 @@ class FakeSource:
         observed: ExecutionRead | None = None,
         *,
         error: Exception | None = None,
+        risk_events: ExecutionRiskEventRead | None = None,
     ) -> None:
         self.server = server or ExecutionRead(
             rows=[_server_row()],
@@ -336,6 +369,10 @@ class FakeSource:
             agent_ids=(AGENT,),
         )
         self.error = error
+        self.risk_event_read = risk_events or ExecutionRiskEventRead(
+            rows=[], available=True, scope_known=True
+        )
+        self.risk_event_calls: list[tuple[str, tuple[str, ...], int]] = []
 
     async def server_executions(
         self, *, tenant_id: str, subject: ProjectionSubject, limit: int
@@ -350,6 +387,14 @@ class FakeSource:
         if self.error:
             raise self.error
         return self.observed
+
+    async def execution_risk_events(
+        self, *, tenant_id: str, execution_ids: tuple[str, ...], limit: int
+    ) -> ExecutionRiskEventRead:
+        if self.error:
+            raise self.error
+        self.risk_event_calls.append((tenant_id, execution_ids, limit))
+        return self.risk_event_read
 
 
 async def test_provider_emits_registry_sections_evidence_and_catalog_bound_claims() -> None:
@@ -856,11 +901,19 @@ async def test_tool_telemetry_remains_unlinked_from_server_execution_without_exa
         ],
     }
     assert interactions.content["riskEventLinkage"] == {
-        "state": "unknown",
-        "reason": "agent_risk_records_do_not_carry_a_canonical_agent_execution_id",
-        "sourceReadState": "not_read",
+        "state": "empty",
+        "reason": "no_recorded_canonical_risk_signals_for_execution_subject",
+        "sourceReadState": "available",
+        "completeness": "recorded_execution_subject_signals_only",
+        "scopeKnown": True,
         "joinedExecutionRiskEvents": [],
         "evidenceRefs": [],
+        "freshness": {
+            "state": "unknown",
+            "latestObservedAt": None,
+            "reason": "no_execution_risk_signal_freshness_threshold_is_configured",
+        },
+        "truncated": False,
     }
     assert interactions.content["approvalChainLinkage"] == {
         "state": "unknown",
@@ -1022,7 +1075,7 @@ async def test_untrusted_tool_and_risk_ids_do_not_complete_execution_slots() -> 
     interactions = next(section for section in result.sections if section.id == "interactions")
     assert interactions.content["toolInvocationLinkage"]["state"] == "unknown"
     assert interactions.content["toolInvocationLinkage"]["joinedExecutionToolCalls"] == []
-    assert interactions.content["riskEventLinkage"]["state"] == "unknown"
+    assert interactions.content["riskEventLinkage"]["state"] == "empty"
     assert interactions.content["riskEventLinkage"]["joinedExecutionRiskEvents"] == []
     serialized = str(result.model_dump(mode="json"))
     assert "spoofed-execution-join" not in serialized
@@ -1832,6 +1885,279 @@ async def test_provider_drops_cross_tenant_rows_and_unresolved_authority() -> No
         and slot.claims == []
         for slot in frame.slots
     )
+
+
+async def test_execution_subject_joins_canonical_risk_signal_with_evidence() -> None:
+    request = _request(subject=ProjectionSubject(kind="execution", id="exec-1"))
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row()],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        risk_events=ExecutionRiskEventRead(
+            rows=[_execution_risk_signal_row()],
+            available=True,
+            scope_known=True,
+        ),
+    )
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    assert source.risk_event_calls == [(TENANT, ("exec-1",), 50)]
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["riskEventLinkage"]
+    assert linkage["state"] == "partial"
+    assert linkage["completeness"] == "recorded_execution_subject_signals_only"
+    assert linkage["joinedExecutionRiskEvents"] == [
+        {
+            "executionId": "exec-1",
+            "signalId": "risk-exec-1",
+            "riskDimension": "agentic",
+            "source": "aether.fraud.detector.agentic",
+            "detectorVersion": "agentic-risk-v2",
+            "claimState": "inferred",
+            "confidence": 0.82,
+            "score": 0.64,
+            "value": None,
+            "observedAt": "2026-10-16T10:00:01+00:00",
+            "evidenceRefs": [
+                {
+                    "id": "evidence-risk-exec-1",
+                    "type": "model_output",
+                    "source": "aether.fraud.detector.agentic",
+                    "observedAt": "2026-10-16T10:00:01+00:00",
+                }
+            ],
+        }
+    ]
+    assert linkage["freshness"] == {
+        "state": "unknown",
+        "latestObservedAt": "2026-10-16T10:00:01+00:00",
+        "reason": "no_execution_risk_signal_freshness_threshold_is_configured",
+    }
+    assert linkage["evidenceRefs"][0]["id"] == "evidence-risk-exec-1"
+    assert any(
+        ref["id"] == "evidence-risk-exec-1"
+        for ref in result.sections[0].content["evidence"]
+    )
+    claim = next(
+        claim
+        for claim in result.claims
+        if claim.kind == "execution_subject_risk_signal_context"
+    )
+    assert claim.subject == request.subject
+    assert claim.claimState == EpistemicStatus.INFERRED
+    assert claim.domainSlotIds == ["risk_events", "evidence_trace"]
+    assert claim.evidenceRefs[0].id == "evidence-risk-exec-1"
+
+
+async def test_agent_subject_joins_risk_signals_only_to_admitted_execution_ids() -> None:
+    request = _request()
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row(), {**_server_row(), "execution_id": "exec-2"}],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        risk_events=ExecutionRiskEventRead(
+            rows=[
+                _execution_risk_signal_row(),
+                _execution_risk_signal_row(signal_id="risk-exec-2", subject_id="exec-2"),
+            ],
+            available=True,
+            scope_known=True,
+        ),
+    )
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    assert source.risk_event_calls == [(TENANT, ("exec-1", "exec-2"), 50)]
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["riskEventLinkage"]
+    assert linkage["state"] == "partial"
+    assert [row["executionId"] for row in linkage["joinedExecutionRiskEvents"]] == [
+        "exec-1",
+        "exec-2",
+    ]
+    risk_claims = [
+        claim
+        for claim in result.claims
+        if claim.kind == "execution_subject_risk_signal_context"
+    ]
+    assert all(claim.subject == request.subject for claim in risk_claims)
+    assert all(
+        "exec-1" in claim.claims[0] or "exec-2" in claim.claims[0]
+        for claim in risk_claims
+    )
+
+
+async def test_execution_risk_event_reader_drops_wrong_tenant_or_subject_and_degrades() -> None:
+    request = _request(subject=ProjectionSubject(kind="execution", id="exec-1"))
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row()],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        risk_events=ExecutionRiskEventRead(
+            rows=[
+                _execution_risk_signal_row(),
+                _execution_risk_signal_row(signal_id="wrong-subject", subject_id="exec-other"),
+                _execution_risk_signal_row(signal_id="wrong-tenant", tenant_id="tenant-other"),
+            ],
+            available=True,
+            scope_known=True,
+        ),
+    )
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["riskEventLinkage"]
+    assert linkage["state"] == "degraded"
+    assert linkage["joinedExecutionRiskEvents"][0]["signalId"] == "risk-exec-1"
+    serialized = result.model_dump_json()
+    assert "wrong-subject" not in serialized
+    assert "wrong-tenant" not in serialized
+    assert not any(
+        "risk_events" in claim.domainSlotIds
+        for claim in result.claims
+        if claim.kind != "execution_subject_risk_signal_context"
+    )
+
+
+async def test_execution_risk_signal_requires_evidence_and_aware_time_for_window() -> None:
+    request = _request(
+        subject=ProjectionSubject(kind="execution", id="exec-1"),
+        timeRange=TimeRangeFilter(
+            from_="2026-10-16T10:00:00+00:00",
+            to="2026-10-16T10:00:03+00:00",
+        ),
+    )
+    no_evidence = _execution_risk_signal_row(signal_id="no-evidence")
+    no_evidence["evidence_refs"] = []
+    naive_time = _execution_risk_signal_row(signal_id="naive-time", observed_at="2026-10-16T10:00:01")
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[_server_row()],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        risk_events=ExecutionRiskEventRead(
+            rows=[no_evidence, naive_time],
+            available=True,
+            scope_known=True,
+        ),
+    )
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["riskEventLinkage"]
+    assert linkage["state"] == "degraded"
+    assert linkage["joinedExecutionRiskEvents"] == []
+    assert linkage["evidenceRefs"] == []
+    serialized = result.model_dump_json()
+    assert "no-evidence" not in serialized
+    assert "naive-time" not in serialized
+
+
+async def test_as_of_execution_projection_does_not_read_current_risk_signals() -> None:
+    request = _request(
+        subject=ProjectionSubject(kind="execution", id="exec-1"),
+        asOf="2026-10-16T10:00:00+00:00",
+    )
+    source = FakeSource()
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    assert source.risk_event_calls == []
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["riskEventLinkage"]
+    assert linkage["state"] == "unknown"
+    assert linkage["sourceReadState"] == "not_read"
+    assert linkage["joinedExecutionRiskEvents"] == []
+    assert linkage["reason"] == "temporal_anchor_not_reconstructable_from_current_sources"
+
+
+async def test_repository_risk_reader_uses_canonical_exact_tenant_execution_subject(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from intelligence.risk360 import store as risk_store
+
+    calls: list[tuple[str, str, str, int]] = []
+
+    class RiskSignalRepo:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            calls.append((tenant_id, subject_kind, subject_id, limit))
+            return [
+                _execution_risk_signal_row(),
+                _execution_risk_signal_row(signal_id="other-subject", subject_id="exec-2"),
+            ]
+
+    monkeypatch.setattr(risk_store, "RiskSignalRepository", RiskSignalRepo)
+    result = await RepositoryExecution360Source().execution_risk_events(
+        tenant_id=TENANT,
+        execution_ids=("exec-1",),
+        limit=10,
+    )
+
+    assert calls == [(TENANT, "execution", "exec-1", 11)]
+    assert result.available is True
+    assert result.scope_known is False
+    assert [row["signal_id"] for row in result.rows] == ["risk-exec-1"]
+    assert result.reason == "execution_risk_signal_scope_mismatch"
+
+
+async def test_repository_risk_reader_batches_admitted_execution_ids_by_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from intelligence.risk360 import store as risk_store
+
+    calls: list[tuple[dict[str, str], int]] = []
+
+    class RiskSignalRepo:
+        async def find_many(self, *, filters, limit):
+            calls.append((filters, limit))
+            return [
+                {
+                    **_execution_risk_signal_row(),
+                    "id": f"{TENANT}:risk-exec-1",
+                    "created_at": "2026-10-16T10:00:00+00:00",
+                    "updated_at": "2026-10-16T10:00:00+00:00",
+                },
+                {
+                    **_execution_risk_signal_row(signal_id="risk-exec-2", subject_id="exec-2"),
+                    "id": f"{TENANT}:risk-exec-2",
+                    "created_at": "2026-10-16T10:00:00+00:00",
+                    "updated_at": "2026-10-16T10:00:00+00:00",
+                },
+                _execution_risk_signal_row(signal_id="risk-other", subject_id="exec-other"),
+                _execution_risk_signal_row(signal_id="risk-foreign", tenant_id="tenant-other"),
+            ]
+
+    monkeypatch.setattr(risk_store, "RiskSignalRepository", RiskSignalRepo)
+    result = await RepositoryExecution360Source().execution_risk_events(
+        tenant_id=TENANT,
+        execution_ids=("exec-1", "exec-2"),
+        limit=10,
+    )
+
+    assert calls == [({"tenant_id": TENANT, "subject_kind": "execution"}, 1001)]
+    assert result.available is True
+    assert result.scope_known is False
+    assert [row["signal_id"] for row in result.rows] == ["risk-exec-1", "risk-exec-2"]
+    assert all("id" not in row and "created_at" not in row for row in result.rows)
+    assert result.reason == "execution_risk_signal_scope_mismatch"
 
 
 async def test_unavailable_sources_degrade_without_leaking_diagnostics() -> None:

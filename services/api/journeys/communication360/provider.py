@@ -494,38 +494,42 @@ def _communication_slot_ids(
     slot_ids: set[str],
     section_ids: set[str],
 ) -> list[str]:
-    """Return exact Communications360 slots bound to this subject and evidence section.
+    """Return catalog slots bound to this subject and evidence section.
 
-    Keep claim attribution within the product surface catalog. A technical
-    communication fact may feed other projections, but that does not make its
-    claim part of every other surface's slot contract.
+    Keep claim attribution within explicit product-surface bindings. A
+    technical communication fact may feed other projections, but that does
+    not make its claim part of every other surface's slot contract.
     """
-    surface = PRODUCT_360_SURFACE_DEFINITIONS.get("communications360", {})
-    if not isinstance(surface, dict):
-        return []
     result: set[str] = set()
-    for slot in surface.get("domainSlots", []):
-        if not isinstance(slot, dict):
+    for surface in PRODUCT_360_SURFACE_DEFINITIONS.values():
+        if not isinstance(surface, dict):
             continue
-        slot_id = slot.get("id")
-        if not isinstance(slot_id, str) or slot_id not in slot_ids:
-            continue
-        for binding in slot.get("projectionBindings", []):
-            if not isinstance(binding, dict) or binding.get("projectionId") != "communication360":
+        for slot in surface.get("domainSlots", []):
+            if not isinstance(slot, dict):
                 continue
-            if subject_kind not in binding.get("subjectKinds", []):
+            slot_id = slot.get("id")
+            if not isinstance(slot_id, str) or slot_id not in slot_ids:
                 continue
-            if not set(binding.get("sectionIds", [])).intersection(section_ids):
-                continue
-            result.add(slot_id)
+            for binding in slot.get("projectionBindings", []):
+                if (
+                    not isinstance(binding, dict)
+                    or binding.get("projectionId") != "communication360"
+                ):
+                    continue
+                if subject_kind not in binding.get("subjectKinds", []):
+                    continue
+                if not set(binding.get("sectionIds", [])).intersection(section_ids):
+                    continue
+                result.add(slot_id)
     return sorted(result)
 
 
 def _canonical_communication_slot_ids(
     subject_kind: str,
+    subject_id: str,
     row: dict[str, Any],
 ) -> list[str]:
-    """Attribute a canonical fact only to the exact Communications360 slots it supports."""
+    """Attribute a canonical fact only to its exact catalog slots."""
     kind = str(row.get("kind") or "")
     payload = _payload_of(row)
     supported: set[str] = {"evidence_trace"}
@@ -559,6 +563,13 @@ def _canonical_communication_slot_ids(
 
     if subject_kind == "campaign" and _row_reference_values(row, "campaign_id", "campaign_ids"):
         supported.add("campaign_links")
+    if subject_kind == "episode" and subject_id in _row_reference_values(
+        row, "episode_id", "episode_ids"
+    ):
+        # Episode-linked communication facts are an exact canonical join. The
+        # message spine still has no episode join, so the product slot remains
+        # partial and receives no claims from unscoped message inventory.
+        supported.add("communications")
 
     bound = _communication_slot_ids(
         subject_kind,
@@ -2482,7 +2493,11 @@ class Communication360Provider:
             if not fact_id:
                 continue
             fact_kind = str(row.get("kind") or "unknown")
-            domain_slot_ids = _canonical_communication_slot_ids(request.subject.kind, row)
+            domain_slot_ids = _canonical_communication_slot_ids(
+                request.subject.kind,
+                request.subject.id,
+                row,
+            )
             payload = _payload_of(row)
             claim_text = [
                 f"canonical communication fact {fact_id} recorded",
