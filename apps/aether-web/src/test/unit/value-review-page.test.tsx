@@ -109,9 +109,9 @@ describe('Aether Value page', () => {
     expect(screen.getByText('Connect CRM')).toBeInTheDocument();
     expect(screen.getByText('Expansion routing')).toBeInTheDocument();
     // Producers come from real value events, with unpriced events counted not summed.
-    const producers = await screen.findByTestId('value-producers');
-    expect(within(producers).getByText('Outcome')).toBeInTheDocument();
-    expect(within(producers).getByText('Playbook')).toBeInTheDocument();
+    // The card renders before the value-events read settles, so wait for its content, not the card.
+    await waitFor(() => expect(within(screen.getByTestId('value-producers')).getByText('Outcome')).toBeInTheDocument());
+    expect(within(screen.getByTestId('value-producers')).getByText('Playbook')).toBeInTheDocument();
     expect(within(screen.getByTestId('value-types')).getByText(/1 without amount/)).toBeInTheDocument();
     // No day selector on tabs whose reads take no window.
     expect(screen.queryByTestId('value-window-7')).toBeNull();
