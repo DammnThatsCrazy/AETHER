@@ -754,7 +754,7 @@ def _filter_runs(
     return sorted(
         selected,
         key=lambda row: (
-            _parse_aware_timestamp(row.get("started_at")) or datetime.min.replace(tzinfo=timezone.utc),
+            _parse_aware_timestamp(row.get("started_at")) or datetime(1, 1, 1, tzinfo=timezone.utc),
             str(row.get("sync_run_id") or ""),
         ),
     ), sorted(set(warnings))
@@ -769,7 +769,7 @@ def _dedupe_runs(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(
         by_id.values(),
         key=lambda row: (
-            _parse_aware_timestamp(row.get("started_at")) or datetime.min.replace(tzinfo=timezone.utc),
+            _parse_aware_timestamp(row.get("started_at")) or datetime(1, 1, 1, tzinfo=timezone.utc),
             str(row.get("sync_run_id") or ""),
         ),
     )

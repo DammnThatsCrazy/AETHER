@@ -12,7 +12,7 @@ source_hashes:
   "services/api/alembic/versions/20260725_ai_referral_attribution.py": "sha256:09bcc2502136159d1b50a74181c1d06a7eed30c57ffc9c15da6e900776196189"
   "services/api/alembic/versions/20261010_economic_operation_journey_refs.py": "sha256:78479dca594fb9ac8f2ce19f317de933afae3ed1211d8c0c45120c9b023ea87a"
   "services/api/journeys/measurement/engine/journey_compiler.py": "sha256:1277ef95c3e047d7ab1b6ff04f20f2018d6a0c49dc644e4c6977232f66ca701f"
-  "services/api/journeys/measurement/repositories/activity_repo.py": "sha256:72f184f03433036cdbe9c3485c8e39377ba957ee30a74d773b9fa312345cd92b"
+  "services/api/journeys/measurement/repositories/activity_repo.py": "sha256:d692dd25c2dbb502add186fd6c8b0183c4cd48383d7b17079242aaee1de32751"
   "services/api/journeys/measurement/repositories/journey_step_repo.py": "sha256:b6ae724521d9e8aea583549eba3db22d38ca1ef50bcc1be190e0be8eecda9d0d"
 ---
 

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from shared.temporal.instant import coerce_utc_lenient
 from typing import Any, Literal, Optional, Protocol
 
 from graph.operational_intelligence.models import EvidenceRef
@@ -1652,12 +1653,10 @@ def _freshness(rows: list[dict[str, Any]]) -> dict[str, Any]:
     age: Optional[float] = None
     if latest:
         try:
-            parsed = datetime.fromisoformat(latest.replace("Z", "+00:00"))
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            age = max(
-                0.0, (datetime.now(timezone.utc) - parsed.astimezone(timezone.utc)).total_seconds()
-            )
+            parsed = coerce_utc_lenient(latest)
+            if parsed is None:
+                raise ValueError(latest)
+            age = max(0.0, (datetime.now(timezone.utc) - parsed).total_seconds())
         except ValueError:
             latest = None
     return {

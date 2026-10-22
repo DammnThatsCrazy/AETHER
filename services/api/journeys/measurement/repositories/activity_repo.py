@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from shared.temporal.instant import coerce_utc_lenient
 from typing import Any, Optional
 from uuid import UUID
 
@@ -720,8 +721,7 @@ class ActivityRepository:
                     received = _parse_ts(row.get("server_received_at"))
                     if received is None:
                         continue
-                    if received.tzinfo is None:
-                        received = received.replace(tzinfo=timezone.utc)
+                    received = coerce_utc_lenient(received) or received
                     if received > cutoff:
                         continue
                 rows.append(row)
