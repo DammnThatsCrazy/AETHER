@@ -1484,8 +1484,9 @@ def create_app() -> FastAPI:
     # ── External Agent observations (no hosting or execution) ──
     telemetry_flags = settings.external_agent_telemetry
     if telemetry_flags.registry_enabled or telemetry_flags.marketplace_catalog_enabled:
-        from actions.agent.deployment_routes import deployments_router
+        from actions.agent.deployment_routes import deployments_router, lineage_router
         app.include_router(deployments_router)
+        app.include_router(lineage_router)
         logger.info(
             "External Agent Telemetry: deployment/catalog routes mounted "
             "(/v1/agent/deployments)"

@@ -183,6 +183,29 @@ def test_agent_execution_projector_projects_validated_causality_and_bounds_refer
     assert row["policy_reason_codes"] == ["within_scope"]
 
 
+def test_agent_execution_projector_keeps_subagent_spawn_lineage_references():
+    result = AgentExecutionProjector().project({
+        "messageId": "spawn-1",
+        "type": "agent_subagent_spawned",
+        "timestamp": "2026-10-10T10:00:00Z",
+        "properties": {
+            "agentId": "orchestrator-1",
+            "parentAgentId": "orchestrator-1",
+            "childAgentId": "worker-1",
+            "rootAgentId": "orchestrator-1",
+            "parentRunId": "run-root",
+            "runId": "run-root",
+        },
+    })
+    assert result is not None
+    row = result.rows[0]
+    assert row["parent_agent_ref"] == "orchestrator-1"
+    assert row["child_agent_ref"] == "worker-1"
+    assert row["root_agent_ref"] == "orchestrator-1"
+    assert row["parent_run_id"] == "run-root"
+    assert row["delegated_to_ref"] == "worker-1"
+
+
 def test_agent_execution_projector_uses_source_event_for_missing_outcome_and_trace_fallback():
     result = AgentExecutionProjector().project({
         "messageId": "event-complete-1",

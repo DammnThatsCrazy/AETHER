@@ -32,6 +32,7 @@ from shared.logger.logger import get_logger, metrics
 logger = get_logger("aether.service.agent.deployments.routes")
 
 deployments_router = APIRouter(prefix="/v1/agent/deployments", tags=["Agent Deployments"])
+lineage_router = APIRouter(prefix="/v1/agent/agents", tags=["Agent Lineage"])
 kyber_router = APIRouter(
     prefix="/v1/admin/kyber/agent-telemetry", tags=["Kyber Agent Telemetry"]
 )
@@ -580,6 +581,68 @@ async def deployment_activity(
             "consent_blocked_count_24h": record.get("consent_blocked_count_24h", 0),
         },
     }).to_dict()
+
+
+@lineage_router.get("/{root_agent_ref}/lineage")
+async def agent_spawn_lineage(
+    root_agent_ref: str,
+    request: Request,
+    max_depth: int = Query(default=8, ge=1, le=8),
+):
+    """Orchestrator -> sub-agent tree with per-agent tool/outcome rollups.
+
+    Tenant-scoped and source-reported: the tree says which agent references
+    spawned which, never who controls them.
+    """
+    _require_registry_enabled()
+    tenant = _tenant(request)
+    from actions.agent.lineage import (
+        MAX_NODES, SPAWN_EVENT, agent_refs_in_tree, build_lineage_tree,
+    )
+
+    try:
+        from dependencies.providers import get_cache
+        from repositories.repos import AnalyticsRepository
+
+        analytics = AnalyticsRepository(get_cache())
+        spawn_rows = await analytics.query_silver(
+            "silver_agent_execution_facts",
+            {"tenant_id": tenant.tenant_id, "event_name": SPAWN_EVENT},
+            limit=1000,
+        )
+        shape = build_lineage_tree(
+            tenant_id=tenant.tenant_id,
+            root_agent_ref=root_agent_ref,
+            spawn_rows=spawn_rows,
+            max_depth=max_depth,
+        )
+        activity: dict[str, list[dict]] = {}
+        for ref in agent_refs_in_tree(shape["tree"])[:MAX_NODES]:
+            activity[ref] = await analytics.query_silver(
+                "silver_agent_execution_facts",
+                {"tenant_id": tenant.tenant_id, "agent_id": ref},
+                limit=200,
+            )
+        shape = build_lineage_tree(
+            tenant_id=tenant.tenant_id,
+            root_agent_ref=root_agent_ref,
+            spawn_rows=spawn_rows,
+            activity_rows=activity,
+            max_depth=max_depth,
+        )
+        shape["source_status"] = "available" if shape["totals"]["agent_count"] > 1 else "empty"
+    except Exception as exc:
+        logger.warning(
+            "agent spawn lineage unavailable",
+            extra={"tenant_id": tenant.tenant_id, "error": type(exc).__name__},
+        )
+        shape = {
+            "tenant_id": tenant.tenant_id,
+            "root_agent_ref": root_agent_ref,
+            "source_status": "unavailable",
+            "tree": None,
+        }
+    return APIResponse(data=shape).to_dict()
 
 
 @deployments_router.get("/{deployment_id}/runs")
