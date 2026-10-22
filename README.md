@@ -187,7 +187,7 @@ Every tracked root entry is allowlisted by [`scripts/validate_root_layout.py`](s
 | **Read first** | `README.md` `ARCHITECTURE.md` `DEVELOPMENT.md` `CONTRIBUTING.md` `RELEASES.md` `CHANGELOG.md` `SECURITY.md` `LICENSE` | Orientation, rules and history. `ARCHITECTURE.md`, `DEVELOPMENT.md` and `RELEASES.md` are short gateways into `docs/`. |
 | **Agent contracts** | `AGENTS.md` `CLAUDE.md` `.codex/` `.claude/` | How automated agents must work here (verification cadence, forbidden behavior). |
 | **Version and build** | `VERSION` `pyproject.toml` `Makefile` | `pyproject.toml` owns the platform version; `VERSION` mirrors it; `make` is the command surface. |
-| **JavaScript workspace** | `package.json` `pnpm-workspace.yaml` `pnpm-lock.yaml` `package-lock.json` `pnpm.config.*` `.npmrc` `tsconfig.json` `eslint.config.mjs` `vitest.config.fps.ts` `amplify.yml` | Workspace, dependency and build configuration for the web apps and packages. |
+| **JavaScript workspace** | `package.json` `pnpm-workspace.yaml` `pnpm-lock.yaml` `package-lock.json` `.npmrc` `tsconfig.json` `eslint.config.mjs` `vitest.config.fps.ts` `amplify.yml` | Workspace, dependency and build configuration for the web apps and packages. `pnpm-workspace.yaml` defines the workspace and its build allowlist (`allowBuilds`). Two lockfiles are intentional: `pnpm-lock.yaml` for the workspace, and `package-lock.json`, which the app Dockerfiles, delivery lockfile fingerprinting and `repo_doctor`'s `npm ci` use. |
 | **Hygiene** | `.gitignore` `.dockerignore` `.pre-commit-config.yaml` `.devcontainer/` | Ignore rules, hooks and a dev container. |
 | **Checked-in evidence** | `.artifacts/` | Generated readiness and frontend data-truth reports written and read by repository tooling. |
 
