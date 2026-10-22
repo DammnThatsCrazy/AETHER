@@ -1517,6 +1517,13 @@ def create_app() -> FastAPI:
         or ops_flags.command_center_enabled
     ):
         logger.info("One-Person Ops: disabled (KYBER_ONE_PERSON_OPS_ENABLED=false)")
+    # ── Prediction markets — observation-only; AETHER never places orders ──
+    if settings.prediction_markets.ingestion_enabled:
+        from value.prediction_markets.routes import router as prediction_markets_router
+        app.include_router(prediction_markets_router, tags=["Prediction Markets"])
+        logger.info("Prediction Markets API mounted (/v1/prediction-markets)")
+    else:
+        logger.info("Prediction Markets API disabled (AETHER_PREDICTION_MARKET_INGESTION_ENABLED=false)")
     # ── Stablecoin Intelligence — observation-only; AETHER never executes ──
     if settings.stablecoin.api_enabled:
         from value.stablecoin.routes import router as stablecoin_router

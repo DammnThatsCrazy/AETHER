@@ -119,6 +119,7 @@ services:
   policy: {class: core, stage: control-plane, reason: "consent policy decision evidence"}
   population: {class: beta, stage: intelligence, reason: "population segmentation and macro-to-micro intelligence"}
   population360: {class: beta, stage: product, reason: "Population360 projection provider and demographic lens"}
+  prediction_markets: {class: experimental, stage: intake, reason: "observation-only Polymarket and Kalshi market normalization"}
   product_catalog: {class: beta, stage: product, reason: "product catalog and instrumentation registry"}
   profile: {class: core, stage: product, reason: "Profile 360 entity omniview composition"}
   profile360_workers: {class: core, stage: intelligence, reason: "Profile 360 derived-data workers"}
