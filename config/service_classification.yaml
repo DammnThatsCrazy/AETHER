@@ -119,6 +119,7 @@ services:
   policy: {class: core, stage: control-plane, reason: "consent policy decision evidence"}
   population: {class: beta, stage: intelligence, reason: "population segmentation and macro-to-micro intelligence"}
   population360: {class: beta, stage: product, reason: "Population360 projection provider and demographic lens"}
+  prediction_markets: {class: experimental, stage: intake, reason: "observation-only Polymarket and Kalshi market normalization"}
   product_catalog: {class: beta, stage: product, reason: "product catalog and instrumentation registry"}
   profile: {class: core, stage: product, reason: "Profile 360 entity omniview composition"}
   profile360_workers: {class: core, stage: intelligence, reason: "Profile 360 derived-data workers"}
@@ -166,4 +167,5 @@ services:
   valuation: {class: beta, stage: intelligence, reason: "event-time valuation, versioned, multi-reporting-asset"}
   value: {class: core, stage: intelligence, reason: "canonical USD-first value semantics"}
   web3: {class: experimental, stage: graph, reason: "registry-first Web3 coverage and classification"}
+  workflow: {class: beta, stage: product, reason: "Workflow360 projection provider over canonical workflow runs"}
   x402: {class: experimental, stage: intake, reason: "x402 HTTP payment header capture and economic graph"}

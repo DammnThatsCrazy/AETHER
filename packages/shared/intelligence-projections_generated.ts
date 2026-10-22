@@ -1788,6 +1788,11 @@ export interface Product360DomainSlot {
   canonicalAuthorityRefs: readonly string[];
   projectionBindings: readonly Product360SlotProjectionBinding[];
   requiredFrameMetadata?: readonly Product360RequiredFrameMetadata[];
+  unboundReason?: string;
+  unboundCanonicalAuthorityRefs?: readonly string[];
+  implementationCrosswalk?: readonly string[];
+  authorityGapReason?: string;
+  partialImplementationReason?: string;
 }
 export interface Product360ProviderBinding {
   projectionId: IntelligenceProjectionId;
@@ -1803,6 +1808,7 @@ export interface Product360DirectProviderBinding {
   domainSlotIds: readonly string[];
   implementationRef: string;
   runtimeBindingRef: string;
+  canonicalAuthorityRefs?: readonly string[];
 }
 export interface Product360SurfaceDefinition {
   id: Product360SurfaceId;
@@ -1813,6 +1819,7 @@ export interface Product360SurfaceDefinition {
   domainSlots: readonly Product360DomainSlot[];
   projectionBindings: readonly Product360ProviderBinding[];
   directProviderBindings?: readonly Product360DirectProviderBinding[];
+  blueprintContract?: { sourceSection: string; priority: 'P0' | 'P1' | 'P2'; canonicalOwner: string; subjectIdentifiers: readonly string[]; requiredLensIds: readonly string[]; purpose: string; requiredSlotIds: readonly string[] };
   sourceOfTruth: { canonicalAuthorities: readonly string[]; ownsCanonicalTruth: false; prohibitedOwnership: readonly string[] };
   freshnessPolicy: { required: true; maxAgeSeconds: number | null; sourceTimestamps: string; missingTimestamp: string; onStale: string; requirementStatus: string };
   policyBehavior: { tenantScopeRequired: true; authorizationBeforeRead: true; policyEvaluation: string; historicalConsentEvaluation: string; redactionBehavior: string; requirementStatus: string };

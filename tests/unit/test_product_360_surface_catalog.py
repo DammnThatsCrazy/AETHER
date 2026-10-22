@@ -144,13 +144,18 @@ def test_product_surface_contract_metadata_matches_primary_blueprint() -> None:
         priority = re.search(r"\*\*Priority:\*\* ([^\n]+)", section_text)
         purpose = re.search(r"\*\*Purpose:\*\* ([^\n]+)", section_text)
         assert all(item is not None for item in (required_lenses, subjects, owner, priority, purpose))
+
+        def _field(match: re.Match[str]) -> str:
+            # The source document ends field lines with a markdown "<br>" line break.
+            return match.group(1).strip().removesuffix("<br>").strip()
+
         blueprint_by_surface[f"{surface_slug.group(1)}360"] = {
             "sourceSection": section_id,
-            "priority": priority.group(1).strip(),
+            "priority": _field(priority),
             "canonicalOwner": owner.group(1),
-            "subjectIdentifiers": [item.strip() for item in subjects.group(1).split(",")],
-            "requiredLensIds": [item.strip() for item in required_lenses.group(1).split(",")],
-            "purpose": purpose.group(1).strip(),
+            "subjectIdentifiers": [item.strip() for item in _field(subjects).split(",")],
+            "requiredLensIds": [item.strip() for item in _field(required_lenses).split(",")],
+            "purpose": _field(purpose),
             "requiredSlotIds": re.findall(r"- `([^`]+)`", required_section.group("slots")),
         }
 

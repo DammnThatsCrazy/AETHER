@@ -1018,6 +1018,43 @@ policies:
     requires_consent_invalidation: false
     requires_permission_hash: false
 
+  # Commerce catalog revisions are tenant business records (product and offer
+  # definitions with provider evidence refs); they hold no personal data and no
+  # consent-bearing content.
+  - resource_type: commerce_catalog_products
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  - resource_type: commerce_catalog_offers
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
   - resource_type: overage_invoices
     authoritative_store: postgres
     metadata_store: postgres

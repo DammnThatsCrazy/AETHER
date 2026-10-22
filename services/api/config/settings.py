@@ -1796,6 +1796,15 @@ class StablecoinDomainConfig:
 
 
 @dataclass(frozen=True)
+class PredictionMarketConfig:
+    """Prediction-market observation rollout flags. Observation-only — Aether
+    never places orders. All flags default False (fail-closed)."""
+    ingestion_enabled: bool = _env_bool("AETHER_PREDICTION_MARKET_INGESTION_ENABLED", False)
+    polymarket_enabled: bool = _env_bool("AETHER_PROVIDER_POLYMARKET_ENABLED", False)
+    kalshi_enabled: bool = _env_bool("AETHER_PROVIDER_KALSHI_ENABLED", False)
+
+
+@dataclass(frozen=True)
 class DerivativesIntelligenceConfig:
     """Derivatives Intelligence rollout flags. Observation-only domain —
     no execution capability exists behind any flag. All default False."""
@@ -2170,6 +2179,7 @@ class Settings:
     # and the universal asset registry (financial-normalization WP2/WP3).
     stablecoin: StablecoinDomainConfig = field(default_factory=StablecoinDomainConfig)
     derivatives: DerivativesIntelligenceConfig = field(default_factory=DerivativesIntelligenceConfig)
+    prediction_markets: PredictionMarketConfig = field(default_factory=PredictionMarketConfig)
     interop: InteropIntelligenceConfig = field(default_factory=InteropIntelligenceConfig)
     assets: UniversalAssetRegistryConfig = field(default_factory=UniversalAssetRegistryConfig)
     valuation: ValuationConfig = field(default_factory=ValuationConfig)
