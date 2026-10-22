@@ -3273,6 +3273,22 @@ Kyber operator routes require admin permission and an explicit tenant scope for 
 
 Run-explanation evidence separates `delegation_resolution` (canonical record/party binding), `delegation_authorization` (event-time scope result), and `execution_occurrence`. Canonical grant data may support `within_scope`, `out_of_scope`, or `indeterminate`; action, resource, and event time are source-asserted. Target party binding uses source `delegatedToNamespace` (`delegated_to_namespace` in Silver); missing/invalid namespace remains unresolved and does not fall back to the actor namespace. Without a server-owned external execution receipt, occurrence remains `source_reported` and `verified=false`. A grant match is not proof the reported action occurred.
 
+### Agent spawn lineage
+
+- `GET /v1/agent/agents/{root_agent_ref}/lineage?max_depth=8` — `agent:manage`. Orchestrator to sub-agent tree from `agent_subagent_spawned` facts with run, tool-call and outcome rollups. Source-reported, tenant-scoped, bounded (`truncated` lists applied bounds); it never identifies a controlling person.
+
+### Journey handoff (flag `JOURNEY_HANDOFF_ENABLED`)
+
+- `POST /sdk/journey-handoff` — SDK key. Issues a single-use handoff token for a journey/session; requires identity-link consent for the anonymous ID.
+- `POST /sdk/journey-handoff/redeem` — SDK key. Redeems it from the destination session and returns an `explicit_handoff` link; never merges identities. Every failure returns the same 404.
+- `GET /sdk/journey-handoff/journeys/{journey_id}` — `read`. Handoffs recorded for one journey.
+
+### Fleet hypotheses (flag `FEATURE_FRAUD_NETWORKS`)
+
+- `POST /v1/fraud/fleet-hypotheses/build` — `fraud:evaluate`. Builds an evidence-graded common-operator hypothesis for an orchestrator.
+- `GET /v1/fraud/fleet-hypotheses` and `GET /v1/fraud/fleet-hypotheses/{id}` — `fraud:read`.
+- `POST /v1/fraud/fleet-hypotheses/{id}/review` — `fraud:evaluate`. Human `confirm`/`reject` with a reason; the only path to a confirmed status.
+
 ## Agentic Observability Layer
 
 > **Invariant: AETHER observes. AETHER does not execute.**

@@ -304,6 +304,25 @@ policy, delegation, and outcome references. Frontend: Agent 360 evidence and
 graph presentation tests cover source labels, coverage gaps, and evidence
 authority.
 
+## Sub-agent spawn lineage
+
+`agent_subagent_spawned` events carry `parentAgentId`, `childAgentId`, an
+optional `rootAgentId` and `parentRunId`. Silver stores them as
+`parent_agent_ref`, `child_agent_ref`, `root_agent_ref` and `parent_run_id` on
+`silver_agent_execution_facts` (migration `20261022_agent_spawn_lineage`), and
+the lifecycle mapper writes the `SPAWNED_SUBAGENT` edge and a delegation row
+from the parent to the **child** (earlier code read the child from
+`parent_agent_id`, which produced self edges for SDK-shaped payloads).
+
+`GET /v1/agent/agents/{root_agent_ref}/lineage` (`agent:manage`, registry flag)
+returns the orchestrator tree with per-agent run, tool-call and outcome
+rollups. It is tenant-scoped, cycle-safe, and bounded (depth 8, 100 agents);
+bounds that apply are listed in `truncated`. Every node and edge is
+`source_reported` and the response states `attribution: "none"`: the tree shows
+which agent references spawned which, never who controls them. Silver stores
+the event type as `source_event_type`; the readers accept `event_name` only for
+locally held rows.
+
 ## Known limitations / non-goals
 
 - No Aether-operated marketplace, listing submissions/review/distribution, or
