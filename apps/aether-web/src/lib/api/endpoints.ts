@@ -65,6 +65,15 @@ const wrap = <T extends z.ZodType>(dataSchema: T) =>
 
 const unknownSchema = z.unknown();
 
+const campaignListSchema = z.object({
+  data: z.array(z.unknown()),
+  pagination: z.object({
+    limit: z.number().optional(),
+    next_cursor: z.string().nullish(),
+    has_more: z.boolean().optional(),
+  }).optional(),
+});
+
 const tenantReadinessCheckSchema = z.object({
   name: z.string(),
   status: z.enum(['pending', 'passed', 'failed', 'not_applicable']),
@@ -857,7 +866,15 @@ export const api = {
   // ── Campaigns ──────────────────────────────────────────────────────────────
   campaigns: {
     list: (params?: { status?: string; limit?: number; offset?: number; origin?: string; platform?: string; mapping_quality?: string }) =>
-      restClient.get(`/v1/campaigns${buildQS({ ...params })}`, wrap(z.object({ campaigns: z.array(z.unknown()), total: z.number() }))).then(r => r.data),
+      // GET /v1/campaigns is keyset-paginated and returns { data: [...], pagination }
+      // without the APIResponse status envelope. `total` is the page length; use
+      // `has_more` to tell a full count from a first page.
+      restClient.get(`/v1/campaigns${buildQS({ ...params })}`, campaignListSchema).then(r => ({
+        campaigns: r.data,
+        total: r.data.length,
+        has_more: r.pagination?.has_more === true,
+        next_cursor: r.pagination?.next_cursor ?? null,
+      })),
 
     get: (campaignId: string) =>
       restClient.get(`/v1/campaigns/${campaignId}`, wrap(unknownSchema)).then(r => r.data),
