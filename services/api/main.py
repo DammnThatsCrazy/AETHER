@@ -1296,6 +1296,8 @@ def create_app() -> FastAPI:
     if fi.fraud_networks_enabled:
         from intelligence.fraud_networks.routes import router as fraud_networks_router
         app.include_router(fraud_networks_router)
+        from intelligence.fraud_networks.fleet_routes import router as fleet_hypothesis_router
+        app.include_router(fleet_hypothesis_router)
         logger.info("Fraud Network Intelligence: routes mounted (/v1/fraud/networks)")
     else:
         logger.info("Fraud Network Intelligence: disabled (set FEATURE_FRAUD_NETWORKS=true to enable)")
