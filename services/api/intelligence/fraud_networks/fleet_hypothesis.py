@@ -32,6 +32,10 @@ CIRCUMSTANTIAL_CAP = 0.55
 DELEGATION_CAP = 0.9
 NEEDS_REVIEW_THRESHOLD = 0.35
 MIN_FLEET_SIZE = 3
+# Smaller fleets are kept as context but are not queued for review unless an
+# agent in them carries a Risk360 signal: a user's own orchestrator with two
+# workers is ordinary and should not add review load.
+MIN_REVIEW_FLEET = 5
 SPAWN_BURST_WINDOW_SECONDS = 120
 SPAWN_BURST_MIN = 3
 
@@ -209,6 +213,7 @@ def build_fleet_hypothesis(
     else:
         confidence = min(_combine(circumstantial), CIRCUMSTANTIAL_CAP)
 
+    review_worthy = bool(flagged) or len(members) + 1 >= MIN_REVIEW_FLEET
     kinds = {e["type"] for e in evidence}
     competing: list[dict[str, str]] = []
     if "shared_endpoint" in kinds:
@@ -247,7 +252,11 @@ def build_fleet_hypothesis(
         "evidence": evidence,
         "confidence": confidence,
         "confidence_cap": DELEGATION_CAP if principals else CIRCUMSTANTIAL_CAP,
-        "status": STATUS_NEEDS_REVIEW if confidence >= NEEDS_REVIEW_THRESHOLD else STATUS_UNCONFIRMED,
+        "status": (
+            STATUS_NEEDS_REVIEW
+            if confidence >= NEEDS_REVIEW_THRESHOLD and review_worthy
+            else STATUS_UNCONFIRMED
+        ),
         "person_link": (
             {
                 "principal_entity_ids": principals,
@@ -259,7 +268,10 @@ def build_fleet_hypothesis(
         ),
         "competing_explanations": competing,
         "risk_context": {"flagged_agent_refs": flagged, "risk_flagged": bool(flagged)},
-        "priority": "high" if flagged and confidence >= NEEDS_REVIEW_THRESHOLD else "normal",
+        "priority": (
+            "high" if flagged and confidence >= NEEDS_REVIEW_THRESHOLD
+            else "normal" if review_worthy else "low"
+        ),
         "review_history": [],
         "created_at": utc_now().isoformat(),
     }

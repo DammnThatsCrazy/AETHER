@@ -73,6 +73,14 @@ def test_principal_delegation_links_a_person_but_keeps_victim_explanation():
     assert h["status"] == STATUS_NEEDS_REVIEW
 
 
+def test_small_benign_fleet_is_kept_as_context_not_queued():
+    members, obs = _fleet(2, same_tools=False, shared_host=False, shared_target=False)
+    h = _build(members, obs, principal_entity_ids=["person-1"])
+    assert h["status"] == STATUS_UNCONFIRMED and h["priority"] == "low"
+    flagged = _build(members, obs, principal_entity_ids=["person-1"], risk_flagged_refs={"w00"})
+    assert flagged["status"] == STATUS_NEEDS_REVIEW and flagged["priority"] == "high"
+
+
 def test_risk_flag_raises_priority_not_confidence():
     members, obs = _fleet(12)
     plain = _build(members, obs)
