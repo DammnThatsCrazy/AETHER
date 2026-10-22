@@ -26,15 +26,17 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import copy
 import hashlib
 import heapq
 import json
 import os
+import random
 import secrets
 import threading
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 from urllib.parse import quote
 
 from shared.logger.logger import get_logger
@@ -114,6 +116,34 @@ class DurableStore(ABC):
         """
         raise NotImplementedError(f"{type(self).__name__} does not support paged scans")
 
+    async def get_versioned(self, key: str) -> tuple[Optional[dict], Any]:
+        """Read one record together with an opaque token naming its current state.
+
+        Pass the token to :meth:`set_if_unchanged`; the write succeeds only if
+        the record has not changed since this read. The token is meaningful to
+        the backend that issued it and must not be inspected or persisted.
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not support conditional writes")
+
+    async def set_if_unchanged(
+        self, key: str, value: dict, token: Any, ttl_seconds: int = 0,
+    ) -> bool:
+        """Write ``value`` only if the record still matches ``token``.
+
+        Returns ``False`` (and writes nothing) when another writer changed the
+        record after :meth:`get_versioned`, including across instances.
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not support conditional writes")
+
+    async def atomic_update(
+        self, key: str, mutate: Callable[[Optional[dict]], dict], *,
+        ttl_seconds: int = 0, max_attempts: int = 16,
+    ) -> dict:
+        """Read-modify-write one record without losing concurrent updates."""
+        return await update_atomically(
+            self, key, mutate, ttl_seconds=ttl_seconds, max_attempts=max_attempts,
+        )
+
     @abstractmethod
     async def append_list(self, key: str, value: dict) -> None:
         ...
@@ -125,6 +155,62 @@ class DurableStore(ABC):
     @abstractmethod
     async def count(self, **filters) -> int:
         ...
+
+
+class StoreConflictError(RuntimeError):
+    """A conditional write kept losing to concurrent writers."""
+
+
+def _supports_conditional_writes(store: Any) -> bool:
+    """True when the store implements conditional writes (not the base stubs).
+
+    Duck-typed stores that only provide ``get``/``set`` are accepted too; they
+    take the in-process lock fallback.
+    """
+    implementation = getattr(type(store), "get_versioned", None)
+    return (
+        implementation is not None
+        and implementation is not DurableStore.get_versioned
+        and hasattr(type(store), "set_if_unchanged")
+    )
+
+
+async def update_atomically(
+    store: Any, key: str, mutate: Callable[[Optional[dict]], dict], *,
+    ttl_seconds: int = 0, max_attempts: int = 16,
+) -> dict:
+    """Apply ``mutate`` to one record so concurrent updates are never lost.
+
+    ``mutate`` receives a private copy of the current record (``None`` if
+    absent) and returns the record to store. It must be a pure, synchronous
+    function of its argument because it is retried when another writer wins.
+
+    Stores that implement :meth:`DurableStore.get_versioned` and
+    :meth:`DurableStore.set_if_unchanged` (the in-memory, Redis and DynamoDB
+    stores) get an optimistic, cross-instance-safe update. A store without them
+    falls back to a per-key lock, which only serializes writers inside one
+    process.
+    """
+    if not _supports_conditional_writes(store):
+        locks = store.__dict__.setdefault("_atomic_update_locks", {})
+        lock = locks.setdefault(key, asyncio.Lock())
+        async with lock:
+            current = await store.get(key)
+            updated = mutate(copy.deepcopy(current) if current is not None else None)
+            if ttl_seconds > 0:
+                await store.set(key, updated, ttl_seconds)
+            else:
+                await store.set(key, updated)
+            return updated
+    for attempt in range(max_attempts):
+        current, token = await store.get_versioned(key)
+        updated = mutate(copy.deepcopy(current) if current is not None else None)
+        if await store.set_if_unchanged(key, updated, token, ttl_seconds):
+            return updated
+        await asyncio.sleep(random.uniform(0, min(0.2, 0.005 * (2 ** attempt))))
+    raise StoreConflictError(
+        f"could not update '{key}' after {max_attempts} conflicting attempts"
+    )
 
 
 _MAX_FIND_PAGE_SIZE = 1_000
@@ -189,6 +275,7 @@ class InMemoryStore(DurableStore):
         self._data: dict[str, dict] = {}
         self._lists: dict[str, list[dict]] = {}
         self._expiry: dict[str, float] = {}
+        self._versions: dict[str, int] = {}
         self._lock = threading.Lock()
 
     async def get(self, key: str) -> Optional[dict]:
@@ -199,14 +286,34 @@ class InMemoryStore(DurableStore):
     async def set(self, key: str, value: dict, ttl_seconds: int = 0) -> None:
         with self._lock:
             self._data[key] = value
+            self._versions[key] = self._versions.get(key, 0) + 1
             if ttl_seconds > 0:
                 self._expiry[key] = time.time() + ttl_seconds
+
+    async def get_versioned(self, key: str) -> tuple[Optional[dict], Any]:
+        with self._lock:
+            self._expire_check(key)
+            return self._data.get(key), self._versions.get(key, 0)
+
+    async def set_if_unchanged(
+        self, key: str, value: dict, token: Any, ttl_seconds: int = 0,
+    ) -> bool:
+        with self._lock:
+            self._expire_check(key)
+            if self._versions.get(key, 0) != token:
+                return False
+            self._data[key] = value
+            self._versions[key] = token + 1
+            if ttl_seconds > 0:
+                self._expiry[key] = time.time() + ttl_seconds
+            return True
 
     async def delete(self, key: str) -> bool:
         with self._lock:
             existed = key in self._data
             self._data.pop(key, None)
             self._expiry.pop(key, None)
+            self._versions[key] = self._versions.get(key, 0) + 1
             return existed
 
     async def find(self, **filters) -> list[dict]:
@@ -342,6 +449,40 @@ class RedisStore(DurableStore):
             await r.setex(self._prefix + key, ttl_seconds, json.dumps(value))
         else:
             await r.set(self._prefix + key, json.dumps(value))
+
+    async def get_versioned(self, key: str) -> tuple[Optional[dict], Any]:
+        r = await self._get_redis()
+        if r is None:
+            return await self._fallback_store().get_versioned(key)
+        raw = await r.get(self._prefix + key)
+        return (json.loads(raw) if raw else None), raw
+
+    async def set_if_unchanged(
+        self, key: str, value: dict, token: Any, ttl_seconds: int = 0,
+    ) -> bool:
+        r = await self._get_redis()
+        if r is None:
+            return await self._fallback_store().set_if_unchanged(key, value, token, ttl_seconds)
+        from redis.exceptions import WatchError
+
+        redis_key = self._prefix + key
+        async with r.pipeline(transaction=True) as pipe:
+            try:
+                # WATCH aborts EXEC if any client writes the key after this read,
+                # so the compare-and-set is atomic across API instances.
+                await pipe.watch(redis_key)
+                if await pipe.get(redis_key) != token:
+                    await pipe.unwatch()
+                    return False
+                pipe.multi()
+                if ttl_seconds > 0:
+                    pipe.setex(redis_key, ttl_seconds, json.dumps(value))
+                else:
+                    pipe.set(redis_key, json.dumps(value))
+                await pipe.execute()
+                return True
+            except WatchError:
+                return False
 
     async def delete(self, key: str) -> bool:
         r = await self._get_redis()
@@ -570,6 +711,49 @@ class DynamoDBStore(DurableStore):
         if ttl_seconds > 0:
             item["ttl"] = int(time.time()) + ttl_seconds
         await self._run(lambda: self._get_table().put_item(Item=item))
+
+    async def get_versioned(self, key: str) -> tuple[Optional[dict], Any]:
+        response = await self._run(
+            lambda: self._get_table().get_item(
+                Key={"cache_key": self._key(key)}, ConsistentRead=True,
+            )
+        )
+        item = response.get("Item")
+        if not item:
+            return None, None
+        raw = item.get("val")
+        # An expired or empty row still exists until DynamoDB's TTL sweep, so the
+        # token must name its exact content for the conditional write to replace it.
+        token = ("raw", raw)
+        if self._expired(item) or not raw:
+            return None, token
+        return json.loads(raw), token
+
+    async def set_if_unchanged(
+        self, key: str, value: dict, token: Any, ttl_seconds: int = 0,
+    ) -> bool:
+        from botocore.exceptions import ClientError
+
+        item = {"cache_key": self._key(key), "val": json.dumps(value)}
+        if ttl_seconds > 0:
+            item["ttl"] = int(time.time()) + ttl_seconds
+        kwargs: dict[str, Any] = {}
+        if token is None:
+            kwargs["ConditionExpression"] = "attribute_not_exists(cache_key)"
+        elif token[1] is None:
+            kwargs["ConditionExpression"] = "attribute_exists(cache_key) AND attribute_not_exists(#val)"
+            kwargs["ExpressionAttributeNames"] = {"#val": "val"}
+        else:
+            kwargs["ConditionExpression"] = "#val = :old"
+            kwargs["ExpressionAttributeNames"] = {"#val": "val"}
+            kwargs["ExpressionAttributeValues"] = {":old": token[1]}
+        try:
+            await self._run(lambda: self._get_table().put_item(Item=item, **kwargs))
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+                return False
+            raise
+        return True
 
     async def delete(self, key: str) -> bool:
         response = await self._run(

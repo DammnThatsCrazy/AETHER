@@ -301,3 +301,52 @@ async def test_concurrent_order_and_payment_writes_are_both_retained():
     record = await ledger.get("tenant-a", "shop:race")
     assert record["order"]["providerOrderId"] == "1"
     assert "stripe:pay_1" in record["payments"]
+
+
+@pytest.mark.asyncio
+async def test_all_four_ledger_writers_survive_concurrent_updates_to_one_reference():
+    """Order, payment, adjustment and settlement writers race on the same record.
+
+    A conditional-write store (the in-memory, Redis and DynamoDB stores) must keep
+    every fact; the previous read-then-set path kept only the last writer's.
+    """
+    import asyncio
+
+    from shared.store import InMemoryStore
+
+    class _Yielding(InMemoryStore):
+        async def get_versioned(self, key):
+            result = await super().get_versioned(key)
+            await asyncio.sleep(0)
+            return result
+
+    ledger = CommerceOrderPaymentLedger(_Yielding("ledger_race"))
+    ref = "shop:race-all"
+    await asyncio.gather(
+        ledger.record_order(
+            "tenant-a", commerce_order_ref=ref, provider="shopify", provider_order_id="1",
+            amount="10.00", currency="USD", revision_id="r1",
+            source_revision_at="2026-10-01T10:00:00Z", occurred_at="2026-10-01T10:00:00Z",
+        ),
+        ledger.record_payment(
+            "tenant-a", commerce_order_ref=ref, provider="stripe", provider_payment_id="pay_1",
+            amount="10.00", currency="USD", status="completed", occurred_at="2026-10-01T10:01:00Z",
+        ),
+        ledger.record_adjustment(
+            "tenant-a", commerce_order_ref=ref, provider="stripe", adjustment_id="re_1",
+            reverses_payment_id="pay_1", amount="2.00", currency="USD",
+            occurred_at="2026-10-01T10:02:00Z",
+        ),
+        ledger.record_settlement(
+            "tenant-a", commerce_order_ref=ref, provider="stripe", settlement_id="po_1",
+            amount="10.00", currency="USD",
+            settled_payment_refs=[{"provider": "stripe", "provider_payment_id": "pay_1"}],
+            occurred_at="2026-10-01T10:03:00Z",
+        ),
+    )
+
+    record = await ledger.get("tenant-a", ref)
+    assert record["order"]["providerOrderId"] == "1"
+    assert "stripe:pay_1" in record["payments"]
+    assert record["adjustments"], "refund was dropped"
+    assert record["settlements"], "settlement was dropped"
