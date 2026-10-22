@@ -18,7 +18,7 @@ source_files:
   - scripts/release/check_staging_task_definition_contract.py
 canonical_owner: platform@aether
 source_hashes:
-  "config/environments/.env.example": "sha256:4a7f0609898627bd2fac4f17f38e9c951855fd50129ca67680c3a3544fe5b948"
+  "config/environments/.env.example": "sha256:177fd70ce5976a6f94ae0757d388dc6c81ea2a4629ae7f7cae25e86382b1db8f"
   "infra/aws/terraform/modules/ecs/main.tf": "sha256:fcfc016058554a533e9e328101cf4cd726a1e8e61f94cb7599717f12275792c1"
   "infra/aws/terraform/modules/secrets/main.tf": "sha256:29607ea44951c132385a375626cb9dafd213a9f26fb87ce8d1694b6fd74524da"
   "infra/aws/terraform/modules/secrets/outputs.tf": "sha256:5c5a051e56e3e00f811c86663f6a2e8a9f8fd34df133723fef76e7ea1338f816"
@@ -26,7 +26,7 @@ source_hashes:
   "scripts/bootstrap_aws_secrets.py": "sha256:ae5e53eee269aad3fa855ad2b2494d99738b32532fe6101cf9d2f86134f81d9c"
   "scripts/lib/preflight_env.py": "sha256:e465c85941e68d7e0375827096a51a2783a03e99606d137090a4bec9582fbc94"
   "scripts/release/check_staging_task_definition_contract.py": "sha256:3b38ca65a936f122927c214b814d9742913e6b65f7b7b9295f040fdac5e61fa3"
-  "services/api/config/settings.py": "sha256:120775873521c402933065c3073b8f2d242589bca26b095f982952f6bb392f42"
+  "services/api/config/settings.py": "sha256:c1c63fd7fee53677c615e4a61b03b856c7658a37be96eed64ba587ac15d89700"
 ---
 
 # Deployment Profile Matrix
@@ -39,6 +39,7 @@ All flags default OFF; enabling is per-capability and per-domain.
 | Stablecoin finality (live chains) | fixture-driven only | needs RPC credentials | blocked |
 | Derivatives runtime + simulator | ✅ full conformance locally | Postgres via Alembic | blocked on venue adapters |
 | Derivatives streams | local asyncio transport | Kafka topics not provisioned | blocked |
+| Prediction-market normalization (Polymarket, Kalshi) | ✅ stateless normalize route (no persistence) | needs venue flags; no live validation | blocked |
 | Interop lifecycle/correlation | ✅ fixture-driven | Postgres via Alembic | blocked |
 | Public agent marketplace catalog | OFF by default; bounded parser tests | opt-in observer with durable store | opt-in observer with durable store |
 | LayerZero live scanning | ❌ (CREDENTIAL_GATED) | needs per-chain RPC | blocked |
@@ -46,7 +47,7 @@ All flags default OFF; enabling is per-capability and per-domain.
 | Frontend surfaces | ✅ against local backend | flag-gated | flag-gated |
 
 Env blocks are documented in `config/environments/.env.example`
-(`AETHER_STABLECOIN_*`, `AETHER_DERIVATIVES_*`, `AETHER_INTEROP_*`,
+(`AETHER_STABLECOIN_*`, `AETHER_DERIVATIVES_*`, `AETHER_PREDICTION_MARKET_*`, `AETHER_INTEROP_*`,
 `AETHER_AGENT_MARKETPLACE_CATALOG_*`,
 `KYBER_*_OPS_ENABLED`); `Settings.__post_init__` rejects incoherent
 combinations (LayerZero without adapters).
