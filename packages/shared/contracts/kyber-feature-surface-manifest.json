@@ -443,6 +443,198 @@
       ]
     },
     {
+      "feature_id": "signals",
+      "aether_route": "/signals",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/signals",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "risk",
+      "aether_route": "/risk",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/risk",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "syndicates",
+      "aether_route": "/syndicates",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/syndicates",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "syndicates-syndicateId",
+      "aether_route": "/syndicates/:syndicateId",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/syndicates/:syndicateId",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "relationships",
+      "aether_route": "/relationships",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/relationships",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "relationships-entityId",
+      "aether_route": "/relationships/:entityId",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/relationships/:entityId",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "communications",
+      "aether_route": "/communications",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/communications",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "communications-campaignId-messageId",
+      "aether_route": "/communications/:campaignId/:messageId",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/communications/:campaignId/:messageId",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "journeys",
+      "aether_route": "/journeys",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/journeys",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "journeys-profileId",
+      "aether_route": "/journeys/:profileId",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/journeys/:profileId",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "episodes",
+      "aether_route": "/episodes",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/episodes",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
+      "feature_id": "episodes-profileId-episodeId",
+      "aether_route": "/episodes/:profileId/:episodeId",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/episodes/:profileId/:episodeId",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
       "feature_id": "geo-level-geoId",
       "aether_route": "/geo/:level/:geoId",
       "tenant_parity_required": true,

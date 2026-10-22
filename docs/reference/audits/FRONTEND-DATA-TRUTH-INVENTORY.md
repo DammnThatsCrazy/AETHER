@@ -18,7 +18,7 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction. It uses the API response type directly; tenant-owned webhook state, delivery history, and one-time secret behavior are unchanged."
 source_hashes:
-  "apps/aether-web/": "sha256:ca49340a63c68b5aea4a268d1bc07b1baed02bceecd6acc9f82c79a5758168af"
+  "apps/aether-web/": "sha256:8aa848bf048973eedca3bb1f87d423aa350672b7790aa6138b3c507466645099"
   "apps/demo/": "sha256:68e3f82d5ac29330519e833dc50bca0023c83e9d6e5b448f09129917617d1b7c"
   "apps/kyber-web/": "sha256:e7e4bf28d26fd793757e3d85e5bb1f2e6ac0d9d8d34c340fda1f977a46c30a49"
   "scripts/docs_extract/extract_frontend_data_truth_inventory.py": "sha256:e51b21de00c3d6a4b38993c3aa40c3988477edf2c9987b5bf3b987d11b27dd47"
@@ -70,8 +70,9 @@ display does not treat public listings as tenant graph nodes, and run coverage
 is withheld when the evidence source is unavailable.
 
 The pages rebuilt from the Claude Design handoff (Home, onboarding, Profiles,
-Profile 360, Graph, Campaigns, Campaign 360, Geography, Value, Agents and
-Settings) ship none of the design's illustrative people, counts or live
+Profile 360, Graph, Campaigns, Campaign 360, Geography, Value, Agents,
+Settings, Signals, Risk, Syndicates, Relationships, Communications, Journeys
+and Episodes) ship none of the design's illustrative people, counts or live
 counters. Every figure comes from an existing tenant read, and a design element
 with no backing read is omitted or shown as not reported. The only static data
 they add is base geography for the Graph globe and the Geography dot map

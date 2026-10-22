@@ -45,7 +45,7 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:9478fde9910a28849d54a6850fc5de58e89def244b14091a74323be6c2083c35"
+  "apps/aether-web/src/": "sha256:c7319bf4b3e04410b5a6135427d8380e8c6a2658a54b08ca414cf01818f2a3e5"
   "apps/kyber-web/src/": "sha256:df447130af2090e329c0620134a1b1dee8caf8597ac360b30f6862e74f3e6781"
   "packages/ui/core/src/": "sha256:01c95e007bc50d0b7378c5cb5274fd5e5d60b51f9575e5c28bf8549ab9cefde1"
 ---
@@ -344,11 +344,12 @@ The authenticated shell (`components/app-shell.tsx`) is the Stone/Graphite
 glass shell from the Claude Design handoff: a collapsible rail (240px expanded,
 72px icon rail, overlay below 760px; the pin choice is remembered per browser)
 grouped as Home and Graph; Profiles (`/users`), Agents (`/agent-access`),
-Campaigns (`/campaigns`), Geography (`/geo`); Value (`/value-review`); and
-Connectors (`/settings/integrations`) and Settings (`/settings`). Connectors and
-the identity entries stay capability-gated. Syndicates, Relationships,
-Communications, Journeys, Episodes, Signals and Risk are listed as not ready
-(non-links) until their read models exist. Settings carries an amber dot only
+Syndicates (`/syndicates`), Relationships (`/relationships`), Campaigns
+(`/campaigns`), Communications (`/communications`), Journeys (`/journeys`),
+Episodes (`/episodes`), Geography (`/geo`); Signals (`/signals`), Value
+(`/value-review`), Risk (`/risk`); and Connectors (`/settings/integrations`) and
+Settings (`/settings`). Connectors and the identity entries stay
+capability-gated. Settings carries an amber dot only
 when `/v1/tenant-integrations` reports an enabled connection whose sync status
 failed. Pages not yet rebuilt to the new design render inside the shell's glass
 frame (`ae-legacy`); the design tokens live in `styles/glass.css` and follow the
@@ -442,6 +443,35 @@ design elements without a backing read are omitted or empty-stated.
   Governance and Personal groups; groups without their own route open at
   `/settings?section=<group>` and show read-only data or link to the existing
   pages, marking unbuilt controls as not available yet.
+
+The design pages added after those (all frameless, each with distinct loading,
+empty and unavailable states) are built only on reads that already exist:
+
+- **Signals** (`/signals`, `?tab=inbox|types|rules|history|digest`) is the
+  notification inbox on a timeline; Acknowledge archives the inbox row. Alert
+  rules are read-only (the backend can only create them) and the digest shows
+  the stored notification preference. Watchlist and snooze are not built.
+- **Risk** (`/risk`, `?view=overview|register&severity=`) combines agent
+  capability risk findings, investigation cases (status transitions persist;
+  cases carry no severity, so they show as not rated) and the Data Quality
+  overview. No posture score is computed.
+- **Syndicates** (`/syndicates[/:syndicateId]`) lists rule-defined population
+  groups (opened in place) and discovered graph clusters (opened in Cluster
+  360), with an overlap view computed from member reads.
+- **Relationships** (`/relationships[/:entityId]`) centres on a chosen entity
+  and draws graph traverse results (1–3 hops), relationship types, formation
+  history and a path explorer (graph path read, up to 6 hops).
+- **Communications** (`/communications`,
+  `/communications/:campaignId/:messageId`) indexes provider messages from
+  communications campaigns (bounded fan-out, disclosed when capped or failed)
+  and opens a message with the governed comms funnel, population, journeys and
+  conversions, which the backend reports per campaign.
+- **Journeys** (`/journeys[/:profileId]`) and **Episodes**
+  (`/episodes[/:profileId/:episodeId]`) read the compiled per-profile journey;
+  there is no tenant-wide journey list or aggregate-paths read yet, so journeys
+  are listed by profile and Aggregate Paths is empty-stated. Episodes are
+  derived on the page (a gap of 30 minutes starts a new one), which both pages
+  state.
 
 Activation joins its server-owned lifecycle state with the typed tenant
 readiness snapshot to show the current stage, next permitted action, graph
