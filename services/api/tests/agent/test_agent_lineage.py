@@ -11,7 +11,7 @@ T = "tenant-a"
 
 def _spawn(parent, child, at, **extra):
     return {
-        "tenant_id": T, "event_name": "agent_subagent_spawned",
+        "tenant_id": T, "source_event_type": "agent_subagent_spawned",
         "agent_id": parent, "parent_agent_ref": parent, "child_agent_ref": child,
         "occurred_at": at, "source_event_id": f"ev-{parent}-{child}", **extra,
     }
@@ -106,7 +106,7 @@ async def test_lineage_route_is_tenant_scoped_and_reads_activity(monkeypatch):
 
     async def query_silver(self, table, filters, *, limit=50):
         calls.append(dict(filters))
-        if filters.get("event_name") == "agent_subagent_spawned":
+        if filters.get("source_event_type") == "agent_subagent_spawned":
             return [_spawn("orch", "sub-1", "2026-10-22T10:00:01Z")]
         if filters.get("agent_id") == "sub-1":
             return [_tool("sub-1", "wallet_scan", "2026-10-22T10:01:00Z")]

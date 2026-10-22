@@ -85,7 +85,7 @@ async def build(body: BuildRequest, request: Request) -> dict:
     analytics = AnalyticsRepository(get_cache())
     spawn_rows = await analytics.query_silver(
         "silver_agent_execution_facts",
-        {"tenant_id": body.tenant_id, "event_name": SPAWN_EVENT},
+        {"tenant_id": body.tenant_id, "source_event_type": SPAWN_EVENT},
         limit=1000,
     )
     lineage = build_lineage_tree(

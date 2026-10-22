@@ -82,7 +82,7 @@ def observations_from_rows(
     for row in sorted(rows, key=lambda r: str(r.get("occurred_at") or "")):
         if row.get("tenant_id") != tenant_id:
             continue
-        name = str(row.get("event_name") or "")
+        name = str(row.get("source_event_type") or row.get("event_name") or "")
         occurred = str(row.get("occurred_at") or "") or None
         if name == "agent_subagent_spawned":
             child = row.get("child_agent_ref")

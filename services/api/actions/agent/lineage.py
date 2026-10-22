@@ -32,12 +32,18 @@ def _ref(value: Any) -> Optional[str]:
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
+def _event_name(row: dict[str, Any]) -> str:
+    """Silver stores the event type as ``source_event_type``; ``event_name`` only
+    exists on locally-held rows, so accept either."""
+    return str(row.get("source_event_type") or row.get("event_name") or row.get("event_type") or "")
+
+
 def _spawn_edges(rows: Iterable[dict[str, Any]], tenant_id: str) -> list[dict[str, Any]]:
     edges: dict[tuple[str, str], dict[str, Any]] = {}
     for row in rows:
         if row.get("tenant_id") != tenant_id:
             continue
-        if (row.get("event_name") or row.get("event_type")) != SPAWN_EVENT:
+        if _event_name(row) != SPAWN_EVENT:
             continue
         parent = _ref(row.get("parent_agent_ref")) or _ref(row.get("agent_id"))
         child = _ref(row.get("child_agent_ref"))
@@ -75,7 +81,7 @@ def _rollup(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
         run = _ref(row.get("run_id"))
         if run:
             runs.add(run)
-        name = str(row.get("event_name") or row.get("event_type") or "")
+        name = _event_name(row)
         tool = _ref(row.get("tool_name"))
         if tool and (name in TOOL_EVENTS or not name):
             tools[tool] += 1

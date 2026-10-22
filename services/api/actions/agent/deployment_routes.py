@@ -607,7 +607,7 @@ async def agent_spawn_lineage(
         analytics = AnalyticsRepository(get_cache())
         spawn_rows = await analytics.query_silver(
             "silver_agent_execution_facts",
-            {"tenant_id": tenant.tenant_id, "event_name": SPAWN_EVENT},
+            {"tenant_id": tenant.tenant_id, "source_event_type": SPAWN_EVENT},
             limit=1000,
         )
         shape = build_lineage_tree(
