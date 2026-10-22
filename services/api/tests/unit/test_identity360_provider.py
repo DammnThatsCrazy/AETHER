@@ -571,8 +571,99 @@ async def test_wallet_source_candidate_does_not_claim_wallet_ownership() -> None
     assert wallets.state == "unknown"
     assert wallets.content["ownershipState"] == "unknown"
     assert wallets.content["observedSourceCandidates"][0]["sourceKind"] == "sdk_wallet"
+    assert wallets.content["ownershipProofs"] == []
+    assert "verification" in source.batch_reads
     rendered = json.dumps(_payload(result), sort_keys=True)
     assert "private-wallet-hash" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_wallet_slot_reads_exact_entity_bound_proof_without_identifier_values() -> None:
+    source = FakeIdentity360Source()
+    source.verification = [
+        {
+            "id": "wallet-proof-1",
+            "tenant_id": "tenant-a",
+            "canonical_entity_id": "entity-1",
+            "evidence_type": "wallet_ownership_verified",
+            "identifier_type": "wallet",
+            "identifier_hash": "private-wallet-identifier-hash",
+            "verification_method": "wallet_signature",
+            "assurance_level": "verified",
+            "issuer": "aether",
+            "status": "active",
+            "proof_reference": "private-wallet-proof-reference",
+            "proof_digest": "private-wallet-proof-digest",
+            "subject_hint_ciphertext": "private-wallet-subject-ciphertext",
+            "metadata": {
+                "chain_namespace": "eip155:1",
+                "private_value": "private-wallet-metadata",
+            },
+            "verified_at": "2026-10-11T00:00:00Z",
+        }
+    ]
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"wallets"}
+    )
+
+    wallets = result.slot("wallets")
+    assert wallets.state == "partial"
+    assert wallets.content["ownershipState"] == "unknown"
+    assert wallets.content["currentControl"] == "unknown"
+    assert wallets.content["ownershipProofs"] == [
+        {
+            "id": "wallet-proof-1",
+            "evidenceType": "wallet_ownership_verified",
+            "identifierType": "wallet",
+            "chainNamespace": "eip155:1",
+            "verificationMethod": "wallet_signature",
+            "assuranceLevel": "verified",
+            "issuer": "aether",
+            "status": "active",
+            "verifiedAt": "2026-10-11T00:00:00Z",
+            "expiresAt": None,
+            "revokedAt": None,
+        }
+    ]
+    assert [(ref.source, ref.id) for ref in wallets.evidence_refs] == [
+        ("identity_verification_evidence", "wallet-proof-1")
+    ]
+    rendered = json.dumps(_payload(result), sort_keys=True)
+    for private_value in (
+        "private-wallet-identifier-hash",
+        "private-wallet-proof-reference",
+        "private-wallet-proof-digest",
+        "private-wallet-subject-ciphertext",
+        "private-wallet-metadata",
+    ):
+        assert private_value not in rendered
+
+
+@pytest.mark.asyncio
+async def test_wallet_slot_rejects_cross_tenant_verification_evidence() -> None:
+    source = FakeIdentity360Source()
+    source.verification = [
+        {
+            "id": "foreign-wallet-proof",
+            "tenant_id": "tenant-b",
+            "canonical_entity_id": "entity-1",
+            "evidence_type": "wallet_ownership_verified",
+            "identifier_type": "wallet",
+            "identifier_hash": "private-wallet-identifier-hash",
+            "status": "active",
+        }
+    ]
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"wallets"}
+    )
+
+    wallets = result.slot("wallets")
+    assert wallets.state == "degraded"
+    assert wallets.content["ownershipProofs"] == []
+    assert wallets.reason == "identity_row_tenant_mismatch"
+    assert "private-wallet-identifier-hash" not in json.dumps(_payload(result), sort_keys=True)
 
 
 @pytest.mark.asyncio

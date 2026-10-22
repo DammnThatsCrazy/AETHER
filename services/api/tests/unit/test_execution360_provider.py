@@ -18,6 +18,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from actions.agent.execution360_provider import (  # noqa: E402
     ExecutionEpisodeContextRead,
+    ExecutionToolCallRead,
     OUTPUT_SECTIONS,
     Execution360Provider,
     ExecutionRead,
@@ -838,11 +839,13 @@ async def test_tool_telemetry_remains_unlinked_from_server_execution_without_exa
     interactions = next(section for section in result.sections if section.id == "interactions")
     assert interactions.content["toolInvocationLinkage"] == {
         "state": "unknown",
-        "reason": "tool_observations_do_not_carry_a_canonical_agent_execution_id",
-        "sourceReadState": "available",
+        "reason": "execution_tool_call_exact_join_not_available",
+        "sourceReadState": "unavailable",
+        "completeness": "unknown",
         "sourceReportedToolRelatedFactCount": 1,
         "joinedExecutionToolCalls": [],
-        "evidenceRefs": [
+        "evidenceRefs": [],
+        "sourceReportedEvidenceRefs": [
             {
                 "id": "silver-event-1",
                 "type": "event",
@@ -855,7 +858,15 @@ async def test_tool_telemetry_remains_unlinked_from_server_execution_without_exa
     assert interactions.content["riskEventLinkage"] == {
         "state": "unknown",
         "reason": "agent_risk_records_do_not_carry_a_canonical_agent_execution_id",
+        "sourceReadState": "not_read",
         "joinedExecutionRiskEvents": [],
+        "evidenceRefs": [],
+    }
+    assert interactions.content["approvalChainLinkage"] == {
+        "state": "unknown",
+        "reason": "execution_approval_id_canonical_join_not_available",
+        "sourceReadState": "not_read",
+        "joinedExecutionApprovals": [],
         "evidenceRefs": [],
     }
     source_reported = next(
@@ -866,6 +877,127 @@ async def test_tool_telemetry_remains_unlinked_from_server_execution_without_exa
     assert source_reported["toolName"] == "payments.send"
     assert source_reported["runId"] == "source-run-1"
     assert "executionId" not in source_reported
+
+
+async def test_canonical_tool_call_edge_joins_exact_execution_and_remains_partial() -> None:
+    from types import SimpleNamespace
+
+    class Graph:
+        async def get_edges_for_tenant(self, tenant_id, *, limit, edge_types):
+            assert tenant_id == TENANT
+            assert limit == 10_000
+            assert edge_types == ["CALLED_TOOL"]
+            return (
+                [
+                    SimpleNamespace(
+                        edge_type="CALLED_TOOL",
+                        from_vertex_id=f"{TENANT}:agent:runtime-agent-1",
+                        to_vertex_id=f"{TENANT}:tool:payments.send",
+                        properties={
+                            "tenant_id": TENANT,
+                            "execution_id": "exec-1",
+                            "called_at": "2026-10-16T10:00:01+00:00",
+                            "idempotency_key": "lifecycle-edge-idempotency-1",
+                        },
+                    )
+                ],
+                False,
+            )
+
+        async def get_vertex_for_tenant(self, tenant_id, vertex_id):
+            assert tenant_id == TENANT
+            assert vertex_id == f"{TENANT}:tool:payments.send"
+            return SimpleNamespace(
+                vertex_type="Tool",
+                vertex_id=vertex_id,
+                properties={"tenant_id": TENANT, "tool_id": "payments.send"},
+            )
+
+    source_read = await RepositoryExecution360Source(graph_client=Graph())._read_execution_tool_calls(
+        TENANT,
+        [
+            {
+                "tenant_id": TENANT,
+                "agent_id": "runtime-agent-1",
+                "execution_id": "exec-1",
+                "event_type": None,
+                "canonical_agent_identity": True,
+                "canonical_agent_entity_id": AGENT,
+            }
+        ],
+    )
+    assert source_read.available is True
+    assert source_read.scope_known is True
+    assert source_read.truncated is False
+    assert source_read.rows[0]["executionId"] == "exec-1"
+    assert source_read.rows[0]["toolId"] == "payments.send"
+    assert source_read.rows[0]["externalExecutionReceipt"] == "unknown"
+
+    server_row = {
+        **_server_row(agent_id="runtime-agent-1"),
+        "canonical_agent_identity": True,
+        "canonical_agent_entity_id": AGENT,
+    }
+    request = _request()
+    result = await Execution360Provider(
+        FakeSource(
+            server=ExecutionRead(
+                rows=[server_row],
+                available=True,
+                scope_known=True,
+                agent_ids=(AGENT,),
+                tool_calls=source_read,
+            ),
+            observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        )
+    ).project(request, await _context(request))
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["toolInvocationLinkage"]
+    assert linkage["state"] == "partial"
+    assert linkage["completeness"] == "unknown"
+    assert linkage["joinedExecutionToolCalls"][0]["executionId"] == "exec-1"
+    assert linkage["joinedExecutionToolCalls"][0]["toolId"] == "payments.send"
+    assert linkage["joinedExecutionToolCalls"][0]["authorityDecision"] == (
+        "not_established_by_tool_call_edge"
+    )
+    claim = next(
+        claim
+        for claim in result.claims
+        if claim.kind == "server_recorded_execution_tool_call_observation"
+    )
+    assert claim.domainSlotIds == ["tool_calls", "evidence_trace"]
+    assert claim.evidenceRefs[0].id == "lifecycle-edge-idempotency-1"
+    assert not [claim for claim in result.claims if "approval_chain" in claim.domainSlotIds]
+    assert not [claim for claim in result.claims if "risk_events" in claim.domainSlotIds]
+
+
+async def test_ambiguous_execution_actor_binding_does_not_join_tool_edges() -> None:
+    read = await RepositoryExecution360Source()._read_execution_tool_calls(
+        TENANT,
+        [
+            {
+                "tenant_id": TENANT,
+                "agent_id": "runtime-agent-1",
+                "execution_id": "exec-ambiguous",
+                "event_type": None,
+                "canonical_agent_identity": True,
+                "canonical_agent_entity_id": AGENT,
+            },
+            {
+                "tenant_id": TENANT,
+                "agent_id": "runtime-agent-2",
+                "execution_id": "exec-ambiguous",
+                "event_type": None,
+                "canonical_agent_identity": True,
+                "canonical_agent_entity_id": "agent-entity-2",
+            },
+        ],
+    )
+
+    assert read.available is True
+    assert read.scope_known is False
+    assert read.rows == []
+    assert read.reason == "execution_identity_ambiguous_for_tool_join"
 
 
 async def test_untrusted_tool_and_risk_ids_do_not_complete_execution_slots() -> None:

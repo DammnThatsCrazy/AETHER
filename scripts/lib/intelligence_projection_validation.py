@@ -422,8 +422,13 @@ EXPECTED_DIRECT_PROVIDER_BINDINGS = {
             "providerKind": "surface_frame_provider",
             "bindingStatus": "runtime_wired",
             "subjectKinds": ["entity"],
-            "domainSlotIds": ["account_summary", "members", "agents"],
-            "canonicalAuthorityRefs": ["entities", "entity_registry", "graph"],
+            "domainSlotIds": ["account_summary", "members", "agents", "risk"],
+            "canonicalAuthorityRefs": [
+                "entities",
+                "entity_registry",
+                "graph",
+                "risk_outputs",
+            ],
             "implementationRef": "services/api/identity/account360_provider.py",
             "runtimeBindingRef": "services/api/shared/intelligence_projections/frame_runtime.py",
         }

@@ -29,14 +29,14 @@ Declared binding counts are registry coverage, not proof that a slot or surface 
 
 | Product surface | Contract status | Subject kinds | Required slots | Declared required bindings | Explicit partial required slots | Unbound required slots | Optional slots | Projection providers | Direct surface providers |
 |---|---|---|---:|---:|---:|---:|---:|---|---|
-| [Account 360](#account-360) | source_aligned | `account`, `entity`, `workspace` | 11 | 6/11 | 0 | 5 | 4 | `economic360`, `profile360`, `relationship360` | `Account360Provider` (runtime_wired) |
+| [Account 360](#account-360) | source_aligned | `account`, `entity`, `workspace` | 11 | 7/11 | 1 | 4 | 4 | `economic360`, `profile360`, `relationship360` | `Account360Provider` (runtime_wired) |
 | [Agent 360](#agent-360) | source_aligned | `agent`, `entity` | 11 | 11/11 | 6 | 0 | 4 | `agent360`, `communication360`, `economic360`, `execution360`, `outcome360`, `relationship360`, `risk360` | — |
 | [Campaign 360](#campaign-360) | source_aligned | `campaign` | 11 | 8/11 | 1 | 3 | 0 | `campaign360`, `communication360`, `economic360`, `outcome360` | — |
 | [Commerce 360](#commerce-360) | source_aligned | `entity`, `campaign`, `journey`, `commerce`, `product`, `offer`, `sku`, `checkout` | 11 | 6/11 | 2 | 5 | 0 | `commerce360` | — |
 | [Communications 360](#communications-360) | source_aligned | `message`, `thread`, `profile`, `campaign`, `episode`, `agent`, `journey`, `source` | 11 | 9/11 | 2 | 2 | 0 | `communication360` | — |
 | [Episode 360](#episode-360) | source_aligned | `episode`, `session`, `conversation`, `activity_window`, `entity`, `campaign` | 11 | 5/11 | 0 | 6 | 1 | `campaign360`, `episode360`, `profile360`, `relationship360` | — |
-| [Execution 360](#execution-360) | source_aligned | `agent`, `entity`, `episode`, `execution` | 11 | 8/11 | 2 | 3 | 0 | `execution360` | — |
-| [Identity 360](#identity-360) | source_aligned | `entity`, `agent`, `source` | 10 | 10/10 | 0 | 0 | 3 | `agent360`, `execution360`, `profile360`, `relationship360` | `Identity360Provider` (runtime_wired) |
+| [Execution 360](#execution-360) | source_aligned | `agent`, `entity`, `episode`, `execution` | 11 | 9/11 | 3 | 2 | 0 | `execution360` | — |
+| [Identity 360](#identity-360) | source_aligned | `entity`, `agent`, `source` | 10 | 10/10 | 1 | 0 | 3 | `agent360`, `execution360`, `profile360`, `relationship360` | `Identity360Provider` (runtime_wired) |
 | [Journey 360](#journey-360) | source_aligned | `journey`, `profile`, `account`, `campaign`, `episode`, `entity` | 11 | 5/11 | 2 | 6 | 2 | `episode360`, `profile360` | — |
 | [Location 360](#location-360) | source_aligned | `location`, `place`, `geohash`, `timezone`, `region`, `entity`, `population`, `source` | 11 | 4/11 | 1 | 7 | 4 | `geographic360`, `population360`, `profile360` | — |
 | [Memory 360](#memory-360) | source_aligned | `entity`, `semantic_entity`, `memory`, `card`, `topic` | 10 | 7/10 | 1 | 3 | 0 | `memory360` | — |
@@ -73,7 +73,7 @@ Governed account-level view composed from canonical entity, relationship, econom
 | `members` | required |  | `entity_registry`, `graph` | — | `Account360Provider` (runtime_wired) | — | Known current organization MEMBER_OF edges validated against canonical member entities; roster completeness unknown. |
 | `profiles` | required |  | `identity`, `entity_registry` | — | — | Unbound: `account_member_profile_fanout_and_policy_not_implemented` | Profile views for validated account members with each profile policy independently applied. |
 | `relationships` | required |  | `relationship_facts`, `graph` | `relationship360` (primary): subjects `entity`; `summary`, `interactions`, `evidence` | — | — | Entity scoped relationship evidence for the exact account identity. |
-| `risk` | required |  | `risk_outputs` | — | — | Unbound: `account_risk_subject_join_not_available` | Account linked risk outputs backed by canonical evidence. |
+| `risk` | required |  | `risk_outputs` | — | `Account360Provider` (runtime_wired) | Partial: `Direct account-entity risk evidence is available; member and related-entity aggregation and a freshness SLA remain unimplemented.` | Exact resolved account-entity Risk360 outputs backed by canonical evidence; related-account coverage remains partial. |
 | `value` | required |  | `economic_facts` | `economic360` (primary): subjects `entity`; `summary` | — | — | Direct entity-scoped economic value for the canonical account profile, without member or execution-cost aggregation. |
 
 ### Projection provider bindings
@@ -88,7 +88,7 @@ Governed account-level view composed from canonical entity, relationship, econom
 
 | Provider class | Provider kind | Binding status | Subjects | Domain slots | Implementation | Frame-runtime call site |
 |---|---|---|---|---|---|---|
-| `Account360Provider` | `surface_frame_provider` | `runtime_wired` | `entity` | `account_summary`, `members`, `agents` | `services/api/identity/account360_provider.py` | `services/api/shared/intelligence_projections/frame_runtime.py` |
+| `Account360Provider` | `surface_frame_provider` | `runtime_wired` | `entity` | `account_summary`, `members`, `agents`, `risk` | `services/api/identity/account360_provider.py` | `services/api/shared/intelligence_projections/frame_runtime.py` |
 
 ### Authority and governance contract
 
@@ -405,7 +405,7 @@ Governed view of one execution lifecycle, attributed actors and delegation, acti
 | `latency_cost` | required |  | `agent_executions`, `ai_execution_facts`, `economic_facts`, `execution_facts`, `outcome_facts` | `execution360` (primary): subjects `agent`, `entity`, `episode`, `execution`; `state`, `summary` | — | Authority: `exact_subject_authority_join_not_implemented` | Required Execution 360 blueprint slot: latency cost. |
 | `plan_steps` | required |  | `agent_executions`, `episode_facts`, `events`, `execution_facts`, `temporal_kernel` | `execution360` (primary): subjects `agent`, `entity`, `episode`, `execution`; `episode_context`, `evidence`, `state`, `summary`, `timeline` | — | — | Required Execution 360 blueprint slot: plan steps. |
 | `risk_events` | required |  | `agent_executions`, `execution_facts` | — | — | Unbound: `execution_risk_event_exact_join_not_available` | Required Execution 360 blueprint slot: risk events. |
-| `tool_calls` | required |  | `actions`, `resources`, `tools` | — | — | Unbound: `execution_tool_call_exact_join_not_available` | Tool calls exactly linked to this execution; source-reported agent tool telemetry does not establish that join. |
+| `tool_calls` | required |  | `actions`, `resources`, `tools` | `execution360` (primary): subjects `agent`, `entity`, `episode`, `execution`; `evidence`, `interactions` | — | Partial: `Exact lifecycle edges are exposed, but source completeness, authorization outcome, and external execution receipt remain unknown.` | Tenant-scoped CALLED_TOOL lifecycle edges joined to admitted executions and canonical agent identity; source completeness and external receipt remain unknown. |
 
 ### Projection provider bindings
 
@@ -459,7 +459,7 @@ Governed view of resolved identities, source identifiers, actor bindings, relati
 | `policy_redactions` | required |  | `identity`, `evidence` | — | `Identity360Provider` (runtime_wired) | — | Required Identity 360 blueprint slot: policy redactions. |
 | `relationship_identity_context` | optional |  | `graph`, `relationship_facts` | `relationship360` (primary): subjects `entity`; `evidence`, `interactions` | — | — | Optional Aether provider context retained for Identity 360: relationship identity context. |
 | `resolved_subject_identity` | optional |  | `entity_registry`, `identity` | `profile360` (primary): subjects `agent`, `entity`; `state`, `summary` | — | — | Optional Aether provider context retained for Identity 360: resolved subject identity. |
-| `wallets` | required |  | `identity`, `source_provenance`, `evidence` | — | `Identity360Provider` (runtime_wired) | — | Required Identity 360 blueprint slot: wallets. |
+| `wallets` | required |  | `identity`, `source_provenance`, `evidence` | — | `Identity360Provider` (runtime_wired) | Partial: `Historical ownership verification evidence can be surfaced, but wallet inventory and current control are not established.` | Historical canonical-subject-bound wallet verification proofs; wallet inventory and current control remain unknown. |
 
 ### Projection provider bindings
 

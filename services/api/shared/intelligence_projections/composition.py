@@ -61,6 +61,7 @@ _EVIDENCE_TYPES = {
     "annotation",
 }
 _SAFE_SLOT_STATES = {"available", "empty"}
+_USEFUL_SLOT_STATES = {*_SAFE_SLOT_STATES, "partial"}
 _UNAVAILABLE_STATES = {"missing", "unknown", "suppressed", "unavailable"}
 
 
@@ -930,7 +931,8 @@ def _aggregate_frame_state(slots: list[Experience360FrameSlot]) -> str:
     if "conflicted" in states:
         return "conflicted"
     useful = sum(
-        slot.state in _SAFE_SLOT_STATES or (slot.state == "degraded" and slot.content is not None)
+        slot.state in _USEFUL_SLOT_STATES
+        or (slot.state == "degraded" and slot.content is not None)
         for slot in evaluated_slots
     )
     incomplete = any(

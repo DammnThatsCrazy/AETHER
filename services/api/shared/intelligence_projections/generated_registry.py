@@ -1730,8 +1730,8 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         "directProviderBindings": [
             {
                 "bindingStatus": "runtime_wired",
-                "canonicalAuthorityRefs": ("entities", "entity_registry", "graph"),
-                "domainSlotIds": ("account_summary", "agents", "members"),
+                "canonicalAuthorityRefs": ("entities", "entity_registry", "graph", "risk_outputs"),
+                "domainSlotIds": ("account_summary", "agents", "members", "risk"),
                 "implementationRef": "services/api/identity/account360_provider.py",
                 "providerClass": "Account360Provider",
                 "providerKind": "surface_frame_provider",
@@ -1880,11 +1880,11 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             },
             {
                 "canonicalAuthorityRefs": ("risk_outputs",),
-                "description": "Account linked risk outputs backed by canonical evidence.",
+                "description": "Exact resolved account-entity Risk360 outputs backed by canonical evidence; related-account coverage remains partial.",
                 "id": "risk",
+                "partialImplementationReason": "Direct account-entity risk evidence is available; member and related-entity aggregation and a freshness SLA remain unimplemented.",
                 "projectionBindings": [],
-                "requirement": "required",
-                "unboundReason": "account_risk_subject_join_not_available"
+                "requirement": "required"
             },
             {
                 "id": "value",
@@ -3290,12 +3290,19 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             },
             {
                 "canonicalAuthorityRefs": ("actions", "resources", "tools"),
-                "description": "Tool calls exactly linked to this execution; source-reported agent tool telemetry does not establish that join.",
+                "description": "Tenant-scoped CALLED_TOOL lifecycle edges joined to admitted executions and canonical agent identity; source completeness and external receipt remain unknown.",
                 "id": "tool_calls",
                 "implementationCrosswalk": ("action_tool_resource_trace",),
-                "projectionBindings": [],
-                "requirement": "required",
-                "unboundReason": "execution_tool_call_exact_join_not_available"
+                "partialImplementationReason": "Exact lifecycle edges are exposed, but source completeness, authorization outcome, and external execution receipt remain unknown.",
+                "projectionBindings": [
+                    {
+                        "projectionId": "execution360",
+                        "role": "primary",
+                        "subjectKinds": ("agent", "entity", "episode", "execution"),
+                        "sectionIds": ("evidence", "interactions")
+                    }
+                ],
+                "requirement": "required"
             }
         ],
         "freshnessPolicy": {
@@ -3491,9 +3498,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             },
             {
                 "canonicalAuthorityRefs": ("evidence", "identity", "source_provenance"),
-                "description": "Required Identity 360 blueprint slot: wallets.",
+                "description": "Historical canonical-subject-bound wallet verification proofs; wallet inventory and current control remain unknown.",
                 "id": "wallets",
                 "implementationCrosswalk": ("source_identifier_lineage",),
+                "partialImplementationReason": "Historical ownership verification evidence can be surfaced, but wallet inventory and current control are not established.",
                 "projectionBindings": [],
                 "requirement": "required"
             }

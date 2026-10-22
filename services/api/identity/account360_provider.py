@@ -20,7 +20,7 @@ policy evaluation as an allow.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping, Optional, Protocol, Sequence
+from typing import Any, Mapping, Optional, Protocol, Sequence
 
 from graph.operational_intelligence.models import EvidenceRef
 from shared.intelligence_projections.composition import (
@@ -35,9 +35,16 @@ from shared.intelligence_projections.contracts import (
     Experience360PolicyDisposition,
     Experience360ProjectionProvenance,
     Experience360Quality,
+    ProjectionContext,
+    ProjectionDependencyState,
+    ProjectionRequest,
+    ProjectionSubject,
     ProjectionResult,
 )
 from shared.intelligence_projections.errors import ProjectionError
+from shared.intelligence_projections.generated_registry import (
+    INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+)
 
 
 SURFACE_ID = "account360"
@@ -45,6 +52,8 @@ ACCOUNT_IDENTITY_SLOT = "account_summary"
 LEGACY_ACCOUNT_IDENTITY_SLOT = "account_identity_and_state"
 ACCOUNT_MEMBERS_SLOT = "members"
 ACCOUNT_AGENTS_SLOT = "agents"
+ACCOUNT_RISK_SLOT = "risk"
+_RISK_CONTEXT_PROJECTION_ID = "risk360"
 _MAX_ACCOUNT_MEMBER_EDGES = 10_000
 # The canonical identity model distinguishes ``account`` from ``organization``;
 # the latter is the persisted entity-registry kind for a tenant's B2B business
@@ -89,6 +98,15 @@ class AccountMembersRead:
     members: tuple[AccountMember, ...] = ()
     reason_codes: tuple[str, ...] = ()
     source_as_of: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class AccountRiskRead:
+    """Exact entity-scoped Risk360 output with explicit limitations."""
+
+    state: str
+    result: Optional[ProjectionResult] = None
+    reason_codes: tuple[str, ...] = ()
 
 
 class Account360Source(Protocol):
@@ -405,8 +423,14 @@ class Account360Provider:
     owns_canonical_truth = False
     graph_mutation_policy = "read_only"
 
-    def __init__(self, source: Optional[Account360Source] = None) -> None:
+    def __init__(
+        self,
+        source: Optional[Account360Source] = None,
+        *,
+        risk_provider: Optional[object] = None,
+    ) -> None:
         self._source = source if source is not None else RepositoryAccount360Source()
+        self._risk_provider = risk_provider
 
     async def compose(
         self,
@@ -555,6 +579,15 @@ class Account360Provider:
                     reason_codes=("account_member_graph_subject_kind_unsupported",),
                 )
 
+        risk_read: Optional[AccountRiskRead] = None
+        if ACCOUNT_RISK_SLOT in requested_slot_ids:
+            risk_policy = effective_slot_policy[ACCOUNT_RISK_SLOT]
+            if risk_policy.state in {"allowed", "not_applicable"}:
+                risk_read = await self._read_risk(
+                    request,
+                    entity_type=identity.entity_type,
+                )
+
         frame = compose_experience360_frame(
             request,
             projection_results,
@@ -576,9 +609,15 @@ class Account360Provider:
                 and identity_slot_id in (freshness_by_slot or {})
             ),
         )
-        return self._attach_members_context(
+        frame = self._attach_members_context(
             frame,
             members_read,
+            include_evidence=request.includeEvidence,
+            requested_slot_ids=requested_slot_ids,
+        )
+        return self._attach_risk_context(
+            frame,
+            risk_read,
             include_evidence=request.includeEvidence,
             requested_slot_ids=requested_slot_ids,
         )
@@ -768,6 +807,99 @@ class Account360Provider:
             source_as_of=(result.source_as_of if isinstance(result.source_as_of, str) else None),
         )
 
+    async def _read_risk(
+        self,
+        request: Experience360FrameRequest,
+        *,
+        entity_type: Optional[str],
+    ) -> AccountRiskRead:
+        """Reuse Risk360's canonical entity read under Account's risk policy.
+
+        This path is intentionally limited to an exact, already-resolved
+        Account entity. It does not treat account_id as entity_id, aggregate
+        member risk, or imply coverage for related entities. The owning
+        Risk360 provider retains risk record validation and claim semantics.
+        """
+
+        if request.subject.kind != "entity" or entity_type not in _ACCOUNT_ENTITY_TYPES:
+            return AccountRiskRead(
+                "unknown",
+                reason_codes=("account_risk_entity_subject_unavailable",),
+            )
+        if request.asOf is not None or request.timeRange is not None:
+            return AccountRiskRead(
+                "unknown",
+                reason_codes=("account_risk_temporal_projection_unavailable",),
+            )
+        if not request.includeEvidence:
+            return AccountRiskRead(
+                "unknown",
+                reason_codes=("account_risk_evidence_not_requested",),
+            )
+
+        provider = self._risk_provider
+        if provider is None:
+            try:
+                from intelligence.risk360.provider import Risk360Provider
+
+                provider = Risk360Provider()
+                self._risk_provider = provider
+            except Exception:  # noqa: BLE001 - optional authority fails closed
+                return AccountRiskRead(
+                    "unavailable",
+                    reason_codes=("account_risk_provider_unavailable",),
+                )
+
+        projection_request = ProjectionRequest(
+            projectionId=_RISK_CONTEXT_PROJECTION_ID,
+            tenantId=request.tenantId,
+            subject=ProjectionSubject(kind="entity", id=request.subject.id),
+            includeSections=["summary", "state", "evidence"],
+            includeClaims=True,
+            temporalMode="window",
+        )
+        # Risk360's profile/cluster enrichments are not joined by Account360.
+        # Preserve the canonical provider's own degraded summary/state output
+        # instead of declaring those dependencies available from unrelated
+        # Account slots.
+        projection_context = ProjectionContext(
+            projectionId=_RISK_CONTEXT_PROJECTION_ID,
+            tenantId=request.tenantId,
+            registryState="implemented",
+            dependencyState=[
+                ProjectionDependencyState(
+                    projectionId="profile360",
+                    state="unknown",
+                    reason="account_risk_profile_context_not_joined",
+                ),
+                ProjectionDependencyState(
+                    projectionId="cluster360",
+                    state="unknown",
+                    reason="account_risk_cluster_context_not_joined",
+                ),
+            ],
+            warnings=["account_risk_related_entity_join_not_available"],
+        )
+        project = getattr(provider, "project", None)
+        if not callable(project):
+            return AccountRiskRead(
+                "unavailable",
+                reason_codes=("account_risk_provider_invalid",),
+            )
+        try:
+            result = await project(projection_request, projection_context)
+        except Exception:  # noqa: BLE001 - direct provider failure remains opaque
+            return AccountRiskRead(
+                "unavailable",
+                reason_codes=("account_risk_provider_unavailable",),
+            )
+        if not isinstance(result, ProjectionResult):
+            return AccountRiskRead(
+                "unknown",
+                reason_codes=("account_risk_provider_invalid_response",),
+            )
+        return AccountRiskRead("degraded", result=result)
+
     @staticmethod
     def _attach_members_context(
         frame: Experience360Frame,
@@ -952,6 +1084,186 @@ class Account360Provider:
                     "reasonCodes": sorted(set([*slot.reasonCodes, *reasons])),
                 }
             )
+        return frame.model_copy(update={"slots": slots})
+
+    @staticmethod
+    def _attach_risk_context(
+        frame: Experience360Frame,
+        risk_read: Optional[AccountRiskRead],
+        *,
+        include_evidence: bool,
+        requested_slot_ids: Sequence[str],
+    ) -> Experience360Frame:
+        """Attach only exact, evidence-backed direct-entity risk context."""
+
+        if ACCOUNT_RISK_SLOT not in requested_slot_ids:
+            return frame
+        slots = list(frame.slots)
+        risk_index = next(
+            (index for index, slot in enumerate(slots) if slot.id == ACCOUNT_RISK_SLOT),
+            None,
+        )
+        if risk_index is None:
+            return frame
+        slot = slots[risk_index]
+        if slot.policyDisposition.state not in {"allowed", "not_applicable"}:
+            return frame
+
+        base_reasons = set(risk_read.reason_codes if risk_read is not None else ())
+        if not include_evidence:
+            base_reasons.add("account_risk_evidence_not_requested")
+        if risk_read is None:
+            base_reasons.add("account_risk_projection_not_requested")
+
+        result = risk_read.result if risk_read is not None else None
+        if result is not None:
+            if (
+                result.projectionId != _RISK_CONTEXT_PROJECTION_ID
+                or result.tenantId != frame.tenantId
+                or result.contractVersion
+                != INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION
+                or any(claim.subject != frame.subject for claim in result.claims)
+            ):
+                result = None
+                base_reasons.add("account_risk_projection_scope_or_contract_invalid")
+
+        sections_by_id: dict[str, Any] = {}
+        if result is not None:
+            for section in result.sections:
+                if section.id in sections_by_id:
+                    base_reasons.add("account_risk_projection_section_ambiguous")
+                    sections_by_id.clear()
+                    result = None
+                    break
+                sections_by_id[section.id] = section
+
+        summary = sections_by_id.get("summary") if result is not None else None
+        state = sections_by_id.get("state") if result is not None else None
+        for section in (summary, state):
+            if section is None:
+                base_reasons.add("account_risk_projection_section_unavailable")
+                continue
+            content = section.content
+            if (
+                not isinstance(content, Mapping)
+                or content.get("tenantId") != frame.tenantId
+                or content.get("subject")
+                != {"kind": frame.subject.kind, "id": frame.subject.id}
+            ):
+                base_reasons.add("account_risk_projection_subject_mismatch")
+                result = None
+                break
+            if section.state not in {"available", "degraded", "empty", "missing"}:
+                base_reasons.add("account_risk_projection_section_state_unsupported")
+                result = None
+                break
+            if section.warnings:
+                base_reasons.add("account_risk_source_section_degraded")
+
+        risk_claims = []
+        evidence_refs: list[EvidenceRef] = []
+        if result is not None and include_evidence:
+            risk_claims = [
+                claim.model_copy(update={"domainSlotIds": [ACCOUNT_RISK_SLOT]})
+                for claim in result.claims
+                if claim.subject == frame.subject
+                and set(claim.domainSlotIds or [])
+                & {"risk_summary", "risk_assessment_state", "risk_evidence_and_limitations", "evidence_trace"}
+                and claim.evidenceRefs
+            ]
+            evidence_refs = _unique_evidence_refs(
+                [ref for claim in risk_claims for ref in claim.evidenceRefs]
+            )
+
+        # Never turn an absent assessment or an evidence-free payload into a
+        # positive/empty account-risk assertion. The Risk360 source's exact
+        # entity observations are required before content can be attached.
+        if (
+            result is None
+            or summary is None
+            or state is None
+            or summary.state == "missing"
+            or not risk_claims
+            or not evidence_refs
+        ):
+            if result is not None and summary is not None and summary.state == "missing":
+                base_reasons.add("account_risk_assessment_not_observed")
+            if result is not None and not evidence_refs:
+                base_reasons.add("account_risk_evidence_missing")
+            state_name = (
+                risk_read.state
+                if risk_read is not None
+                and risk_read.state in {"unavailable", "conflicted", "truncated"}
+                else "unknown"
+            )
+            slots[risk_index] = slot.model_copy(
+                update={
+                    "state": state_name,
+                    "content": None,
+                    "claims": [],
+                    "provenance": [],
+                    "evidenceRefs": [],
+                    "freshness": Experience360Freshness(state="unknown"),
+                    "quality": Experience360Quality(
+                        state="unknown", reasonCodes=sorted(base_reasons)
+                    ),
+                    "limitations": sorted(set([*slot.limitations, *base_reasons])),
+                    "reasonCodes": sorted(set([*slot.reasonCodes, *base_reasons])),
+                }
+            )
+            return frame.model_copy(update={"slots": slots})
+
+        partial_reasons = {
+            "account_risk_related_entity_join_not_available",
+            "account_risk_freshness_sla_unconfigured",
+            "account_risk_profile_context_not_joined",
+            "account_risk_cluster_context_not_joined",
+        }
+        reasons = base_reasons | partial_reasons
+        provenance: list[Experience360ProjectionProvenance] = []
+        for section in (summary, state):
+            provenance.append(
+                Experience360ProjectionProvenance(
+                    tenantId=frame.tenantId,
+                    projectionId=_RISK_CONTEXT_PROJECTION_ID,
+                    sourceKind="section",
+                    sectionId=section.id,
+                    sourceState=section.state,
+                    generatedAt=result.generatedAt,
+                    claimOrigin="unknown",
+                    evidenceRefs=evidence_refs,
+                    canonicalAuthorityRefs=["risk_outputs"],
+                )
+            )
+        content = {
+            "subject": {"kind": frame.subject.kind, "id": frame.subject.id},
+            "scope": "direct_account_entity_only",
+            "summary": dict(summary.content),
+            "state": dict(state.content),
+            "coverage": {
+                "state": "partial",
+                "reason": "account_risk_related_entity_join_not_available",
+            },
+        }
+        slots[risk_index] = slot.model_copy(
+            update={
+                "state": "degraded",
+                "content": content,
+                "claims": risk_claims,
+                "provenance": provenance,
+                "evidenceRefs": evidence_refs,
+                "freshness": Experience360Freshness(
+                    state="unknown",
+                ),
+                "quality": Experience360Quality(
+                    state="partial",
+                    evidenceRefs=evidence_refs,
+                    reasonCodes=sorted(reasons),
+                ),
+                "limitations": sorted(set([*slot.limitations, *reasons])),
+                "reasonCodes": sorted(set([*slot.reasonCodes, *reasons])),
+            }
+        )
         return frame.model_copy(update={"slots": slots})
 
     @staticmethod

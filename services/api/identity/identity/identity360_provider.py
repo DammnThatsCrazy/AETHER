@@ -24,7 +24,9 @@ from graph.operational_intelligence.models import EvidenceRef
 
 
 IdentitySubjectKind = Literal["entity", "agent", "source"]
-IdentitySlotState = Literal["available", "empty", "unknown", "degraded", "truncated", "suppressed"]
+IdentitySlotState = Literal[
+    "available", "empty", "partial", "unknown", "degraded", "truncated", "suppressed"
+]
 
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 500
@@ -402,7 +404,15 @@ class Identity360Provider:
         want_policy = "policy_redactions" in requested
         want_trace = "evidence_trace" in requested
         want_subject = bool(
-            requested & {"match_evidence", "conflicts", "confidence", "aliases", "evidence_trace"}
+            requested
+            & {
+                "match_evidence",
+                "conflicts",
+                "confidence",
+                "aliases",
+                "wallets",
+                "evidence_trace",
+            }
         )
         want_lineage = bool(
             requested
@@ -412,6 +422,7 @@ class Identity360Provider:
         want_evidence = bool(
             requested & {"match_evidence", "confidence", "aliases", "evidence_trace"}
         )
+        want_verification = bool(requested & {"match_evidence", "wallets", "evidence_trace"})
         want_claims = want_identifiers or want_trace
         needs_entity_scope = bool(requested)
 
@@ -536,6 +547,7 @@ class Identity360Provider:
                     "identity_decision_evidence",
                     self._source.decisions_for_entity(tenant_id, entity_id, limit=self._limit),
                 )
+            if want_verification:
                 verification_read = await self._safe_batch(
                     "identity_verification_evidence",
                     self._source.verification_for_entity(tenant_id, entity_id, limit=self._limit),
@@ -606,6 +618,23 @@ class Identity360Provider:
         decision_refs = [
             ref
             for ref in (_row_ref(row, "identity_decision_evidence") for row in decision_rows)
+            if ref is not None
+        ]
+        wallet_verification_rows = [
+            row
+            for row in verification_rows
+            if row.get("identifier_type") == "wallet"
+            and row.get("evidence_type") == "wallet_ownership_verified"
+        ]
+        wallet_verification_items = [
+            _safe_verification(row) for row in wallet_verification_rows
+        ]
+        wallet_verification_refs = [
+            ref
+            for ref in (
+                _row_ref(row, "identity_verification_evidence")
+                for row in wallet_verification_rows
+            )
             if ref is not None
         ]
         conflict_items = [_safe_conflict(row) for row in conflict_rows]
@@ -902,7 +931,28 @@ class Identity360Provider:
             if item.get("sourceKind") == "sdk_wallet"
             or "wallet" in str(item.get("sourceNamespace") or "").lower()
         ]
-        wallet_reason = "canonical_wallet_ownership_authority_not_joined"
+        if not want_wallets:
+            wallet_state: IdentitySlotState = "unknown"
+            wallet_reason = "identity_slot_not_requested"
+        elif not subject_scope_known:
+            wallet_state = "degraded" if warnings else "unknown"
+            wallet_reason = "identity_subject_not_resolved"
+        elif not verification_read.available:
+            wallet_state = "degraded"
+            wallet_reason = verification_read.reason or "wallet_proof_read_degraded"
+        elif verification_read.truncated:
+            wallet_state = "truncated"
+            wallet_reason = "wallet_proof_read_truncated"
+        elif wallet_verification_items:
+            # Verification evidence proves control at a point in time. It is
+            # not a wallet inventory and does not establish current control.
+            wallet_state = "partial"
+            wallet_reason = "wallet_ownership_proof_observed_current_control_unknown"
+        else:
+            # An empty proof query does not establish that the entity has no
+            # wallets, so preserve unknown rather than returning an empty set.
+            wallet_state = "unknown"
+            wallet_reason = "wallet_ownership_proof_not_observed_wallet_presence_unknown"
 
         all_refs = _dedupe_refs(
             [
@@ -1126,18 +1176,30 @@ class Identity360Provider:
             ),
             Identity360Slot(
                 id="wallets",
-                state=slot_state("wallets", "unknown"),
+                state=slot_state("wallets", wallet_state),
                 content=(
                     {
-                        "state": "unknown",
+                        "state": wallet_state,
                         "observedSourceCandidates": wallet_candidates,
+                        "ownershipProofs": wallet_verification_items,
                         "ownershipState": "unknown",
-                        "authority": "wallet_identity",
-                        "reason": wallet_reason,
-                        "freshness": {
-                            "state": "unknown",
-                            "reason": "canonical_wallet_freshness_authority_not_joined",
+                        "currentControl": "unknown",
+                        "addressIncluded": False,
+                        "identifierHashIncluded": False,
+                        "authority": "identity_verification_evidence",
+                        "coverage": {
+                            "verificationEvidence": _batch_coverage(
+                                verification_read, verification_rows
+                            ),
+                            "walletOwnershipProofsReturned": len(wallet_verification_items),
                         },
+                        "limitations": [
+                            "Wallet addresses and identifier hashes are omitted.",
+                            "Verification proves control at the recorded time only; current control is unknown.",
+                            "Source candidates do not establish ownership.",
+                        ],
+                        "reason": wallet_reason,
+                        "freshness": _freshness(wallet_verification_rows),
                     }
                     if want_wallets
                     else {"state": "unknown", "reason": "identity_slot_not_requested"}
@@ -1150,11 +1212,13 @@ class Identity360Provider:
                             if item.get("sourceKind") == "sdk_wallet"
                             or "wallet" in str(item.get("sourceNamespace") or "").lower()
                         ]
+                        + wallet_verification_refs
                     )
                     if want_wallets
                     else ()
                 ),
                 reason=wallet_reason if want_wallets else "identity_slot_not_requested",
+                truncated=verification_read.truncated if want_wallets else False,
             ),
             Identity360Slot(
                 id="policy_redactions",
@@ -1537,7 +1601,13 @@ def _safe_decision(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _safe_verification(row: dict[str, Any]) -> dict[str, Any]:
-    return {
+    metadata = row.get("metadata")
+    chain_namespace = (
+        _safe_text(metadata.get("chain_namespace"))
+        if row.get("identifier_type") == "wallet" and isinstance(metadata, dict)
+        else None
+    )
+    item = {
         "id": _safe_text(row.get("id")),
         "evidenceType": _safe_text(row.get("evidence_type")),
         "identifierType": _safe_text(row.get("identifier_type")),
@@ -1549,6 +1619,9 @@ def _safe_verification(row: dict[str, Any]) -> dict[str, Any]:
         "expiresAt": _safe_text(row.get("expires_at")),
         "revokedAt": _safe_text(row.get("revoked_at")),
     }
+    if row.get("identifier_type") == "wallet":
+        item["chainNamespace"] = chain_namespace
+    return item
 
 
 def _safe_conflict(row: dict[str, Any]) -> dict[str, Any]:

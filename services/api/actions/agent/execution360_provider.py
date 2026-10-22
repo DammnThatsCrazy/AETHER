@@ -67,11 +67,13 @@ SLOT_TEMPORAL_EPISODE = "plan_steps"
 SLOT_LATENCY_COST = "latency_cost"
 SLOT_INPUTS_OUTPUTS = "inputs_outputs"
 SLOT_FAILURES = "failures"
+SLOT_TOOL_CALLS = "tool_calls"
 
 _SERVER_FAILURE_STATUSES = frozenset({"failed", "revoked"})
 _SOURCE_REPORTED_FAILURE_STATUSES = frozenset({"failed", "error", "denied", "revoked"})
 
 _MAX_ROWS = 500
+_MAX_TOOL_EDGE_SCAN = 10_000
 _SILVER_QUERY_LIMIT = 1000
 _MAX_EPISODE_AGENT_SCAN = 200
 _SILVER_SOURCE = "silver_agent_execution_facts"
@@ -118,6 +120,17 @@ class ExecutionEpisodeContextRead:
 
 
 @dataclass(frozen=True)
+class ExecutionToolCallRead:
+    """Exact execution-linked AETHER tool-call lifecycle observations."""
+
+    rows: list[dict[str, Any]]
+    available: bool
+    scope_known: bool
+    truncated: bool = False
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class ExecutionRead:
     """One source read with explicit availability and subject-scope certainty."""
 
@@ -135,6 +148,9 @@ class ExecutionRead:
     # Agent requests may carry an additional bounded episode read. Other
     # subjects leave this unset because their product slots use Episode360.
     episode_context: Optional[ExecutionEpisodeContextRead] = None
+    # Lifecycle graph calls are attached only after exact execution, tenant,
+    # and canonical actor joins. Their completeness is still source-unknown.
+    tool_calls: Optional[ExecutionToolCallRead] = None
 
 
 @dataclass(frozen=True)
@@ -165,8 +181,9 @@ class Execution360Source(Protocol):
 class RepositoryExecution360Source:
     """Defensive adapter over existing agent repositories and Silver facts."""
 
-    def __init__(self, *, episode_store: Any = None) -> None:
+    def __init__(self, *, episode_store: Any = None, graph_client: Any = None) -> None:
         self._episode_store = episode_store
+        self._graph_client = graph_client
 
     async def server_executions(
         self, *, tenant_id: str, subject: ProjectionSubject, limit: int
@@ -384,6 +401,7 @@ class RepositoryExecution360Source:
                 identity_rows=list(identity_map.values()),
                 execution_rows=scoped,
             )
+        tool_calls = await self._read_execution_tool_calls(tenant_id, scoped)
         return ExecutionRead(
             rows=scoped[:limit],
             available=True,
@@ -401,6 +419,163 @@ class RepositoryExecution360Source:
                 )
             ),
             episode_context=episode_context,
+            tool_calls=tool_calls,
+        )
+
+    async def _read_execution_tool_calls(
+        self, tenant_id: str, execution_rows: list[dict[str, Any]]
+    ) -> ExecutionToolCallRead:
+        """Join lifecycle tool edges only to exact tenant execution records."""
+        execution_scope: dict[str, str] = {}
+        ambiguous_execution_ids: set[str] = set()
+        for row in execution_rows:
+            if (
+                not isinstance(row, dict)
+                or row.get("tenant_id") != tenant_id
+                or row.get("event_type") is not None
+                or row.get("canonical_agent_identity") is not True
+            ):
+                continue
+            execution_id = _safe_text(row.get("execution_id"))
+            source_agent_id = _safe_text(row.get("agent_id"))
+            canonical_agent_id = _safe_text(row.get("canonical_agent_entity_id"))
+            if execution_id and source_agent_id and canonical_agent_id:
+                prior_source_agent_id = execution_scope.get(execution_id)
+                if prior_source_agent_id is not None and prior_source_agent_id != source_agent_id:
+                    ambiguous_execution_ids.add(execution_id)
+                else:
+                    execution_scope[execution_id] = source_agent_id
+        for execution_id in ambiguous_execution_ids:
+            execution_scope.pop(execution_id, None)
+        if not execution_scope:
+            return ExecutionToolCallRead(
+                rows=[],
+                available=True,
+                scope_known=False,
+                reason=(
+                    "execution_identity_ambiguous_for_tool_join"
+                    if ambiguous_execution_ids
+                    else "canonical_execution_agent_binding_unavailable_for_tool_join"
+                ),
+            )
+
+        try:
+            if self._graph_client is None:
+                from shared.graph.graph import GraphClient
+
+                graph = GraphClient()
+            else:
+                graph = self._graph_client
+            from shared.graph.graph import EdgeType
+
+            edges, truncated = await graph.get_edges_for_tenant(
+                tenant_id,
+                limit=_MAX_TOOL_EDGE_SCAN,
+                edge_types=[EdgeType.CALLED_TOOL],
+            )
+        except Exception:  # noqa: BLE001 - optional source failure remains explicit
+            return ExecutionToolCallRead(
+                rows=[],
+                available=False,
+                scope_known=False,
+                reason="execution_tool_call_graph_source_unavailable",
+            )
+        if not isinstance(edges, list):
+            return ExecutionToolCallRead(
+                rows=[],
+                available=False,
+                scope_known=False,
+                reason="execution_tool_call_graph_read_invalid",
+            )
+
+        items: list[dict[str, Any]] = []
+        scope_known = not ambiguous_execution_ids
+        for edge in edges:
+            props = getattr(edge, "properties", None)
+            if (
+                getattr(edge, "edge_type", None) != EdgeType.CALLED_TOOL
+                or not isinstance(props, dict)
+            ):
+                scope_known = False
+                continue
+            if _safe_text(props.get("tenant_id") or props.get("tenantId")) != tenant_id:
+                scope_known = False
+                continue
+            execution_id = _safe_text(props.get("execution_id"))
+            if execution_id is None or execution_id not in execution_scope:
+                continue
+            source_agent_id = execution_scope[execution_id]
+            expected_agent_vertex = f"{tenant_id}:agent:{source_agent_id}"
+            if getattr(edge, "from_vertex_id", None) != expected_agent_vertex:
+                scope_known = False
+                continue
+            target_vertex_id = _safe_text(getattr(edge, "to_vertex_id", None))
+            target_prefix = f"{tenant_id}:tool:"
+            if not target_vertex_id or not target_vertex_id.startswith(target_prefix):
+                scope_known = False
+                continue
+            tool_id = _safe_text(target_vertex_id[len(target_prefix) :])
+            # The lifecycle mapper keeps its source-event key on the mutation
+            # intent and persists the resulting idempotency key on the graph
+            # edge. Use that exact edge key as evidence when the original
+            # source event id is not projected into edge properties.
+            graph_edge_id = _safe_text(
+                props.get("source_event_id") or props.get("idempotency_key")
+            )
+            called_at = _safe_text(props.get("called_at"))
+            if not tool_id or not graph_edge_id or _parse_aware_instant(called_at) is None:
+                scope_known = False
+                continue
+            try:
+                tool_vertex = await graph.get_vertex_for_tenant(tenant_id, target_vertex_id)
+            except Exception:  # noqa: BLE001 - unresolved tool identity is not a call claim
+                scope_known = False
+                continue
+            tool_properties = getattr(tool_vertex, "properties", None)
+            if (
+                tool_vertex is None
+                or getattr(tool_vertex, "vertex_type", None) != "Tool"
+                or not isinstance(tool_properties, dict)
+                or _safe_text(tool_properties.get("tenant_id") or tool_properties.get("tenantId"))
+                != tenant_id
+                or _safe_text(tool_properties.get("tool_id")) != tool_id
+            ):
+                scope_known = False
+                continue
+            evidence = _evidence_ref(
+                evidence_id=graph_edge_id,
+                source="graph_edges",
+                observed_at=called_at,
+                store="graph_edges",
+            )
+            if evidence is None:
+                scope_known = False
+                continue
+            items.append(
+                {
+                    "executionId": execution_id,
+                    "toolId": tool_id,
+                    "calledAt": called_at,
+                    "observationKind": "server_recorded_agent_tool_call_lifecycle_edge",
+                    "externalExecutionReceipt": "unknown",
+                    "authorityDecision": "not_established_by_tool_call_edge",
+                    "evidenceRef": evidence.model_dump(mode="json", by_alias=True, exclude_none=True),
+                }
+            )
+        return ExecutionToolCallRead(
+            rows=items,
+            available=True,
+            scope_known=scope_known,
+            truncated=bool(truncated),
+            reason=(
+                "execution_tool_call_graph_scan_truncated"
+                if truncated
+                else "execution_identity_ambiguous_for_tool_join"
+                if ambiguous_execution_ids
+                else "execution_tool_call_edge_scope_or_evidence_incomplete"
+                if not scope_known
+                else None
+            ),
         )
 
     async def observed_facts(
@@ -856,6 +1031,122 @@ def _safe_text(value: Any, *, limit: int = 256) -> Optional[str]:
     if not text or len(text) > limit or any(ord(ch) < 32 or ord(ch) == 127 for ch in text):
         return None
     return text
+
+
+def _project_tool_call_read(
+    read: Optional[ExecutionToolCallRead],
+    *,
+    admitted_execution_ids: set[str],
+    time_range: Any = None,
+    temporal_unavailable: bool = False,
+) -> ExecutionToolCallRead:
+    """Sanitize graph call edges against the already admitted execution scope."""
+    if temporal_unavailable:
+        return ExecutionToolCallRead(
+            rows=[],
+            available=bool(read and read.available),
+            scope_known=False,
+            truncated=bool(read and read.truncated),
+            reason="temporal_anchor_not_reconstructable_from_current_sources",
+        )
+    if read is None:
+        return ExecutionToolCallRead(
+            rows=[],
+            available=False,
+            scope_known=False,
+            reason="execution_tool_call_exact_join_not_available",
+        )
+
+    rows: list[dict[str, Any]] = []
+    scope_known = read.scope_known
+    seen: set[str] = set()
+    lower = _parse_aware_instant(getattr(time_range, "from_", None)) if time_range else None
+    upper = _parse_aware_instant(getattr(time_range, "to", None)) if time_range else None
+    if time_range and (
+        (getattr(time_range, "from_", None) is not None and lower is None)
+        or (getattr(time_range, "to", None) is not None and upper is None)
+        or (lower is not None and upper is not None and upper < lower)
+    ):
+        return ExecutionToolCallRead(
+            rows=[],
+            available=read.available,
+            scope_known=False,
+            truncated=read.truncated,
+            reason="execution_time_window_invalid",
+        )
+
+    for raw in read.rows:
+        if not isinstance(raw, dict):
+            scope_known = False
+            continue
+        execution_id = _safe_text(raw.get("executionId"))
+        tool_id = _safe_text(raw.get("toolId"))
+        called_at = _safe_text(raw.get("calledAt"))
+        instant = _parse_aware_instant(called_at)
+        if not execution_id or execution_id not in admitted_execution_ids:
+            # A reader-supplied foreign execution reference cannot broaden a
+            # projection whose server lifecycle rows were already filtered.
+            scope_known = False
+            continue
+        if (
+            not tool_id
+            or instant is None
+            or raw.get("observationKind") != "server_recorded_agent_tool_call_lifecycle_edge"
+            or raw.get("externalExecutionReceipt") != "unknown"
+            or raw.get("authorityDecision") != "not_established_by_tool_call_edge"
+        ):
+            scope_known = False
+            continue
+        if (lower is not None and instant < lower) or (upper is not None and instant > upper):
+            continue
+        try:
+            evidence = EvidenceRef.model_validate(raw.get("evidenceRef"))
+        except Exception:  # noqa: BLE001 - evidence contract fails closed
+            scope_known = False
+            continue
+        if (
+            evidence.source != "graph_edges"
+            or evidence.type != "event"
+            or evidence.observedAt != called_at
+            or evidence.uri != f"store://graph_edges/{quote(evidence.id, safe='')}"
+        ):
+            scope_known = False
+            continue
+        if evidence.id in seen:
+            continue
+        seen.add(evidence.id)
+        rows.append(
+            {
+                "executionId": execution_id,
+                "toolId": tool_id,
+                "calledAt": called_at,
+                "observationKind": "server_recorded_agent_tool_call_lifecycle_edge",
+                "externalExecutionReceipt": "unknown",
+                "authorityDecision": "not_established_by_tool_call_edge",
+                "evidenceRef": evidence.model_dump(
+                    mode="json", by_alias=True, exclude_none=True
+                ),
+            }
+        )
+
+    reason = read.reason
+    if rows and not reason:
+        reason = "execution_tool_call_source_completeness_unknown"
+    elif not rows and not reason:
+        reason = (
+            "execution_tool_call_graph_source_unavailable"
+            if not read.available
+            else "execution_tool_call_edge_scope_or_evidence_incomplete"
+            if not scope_known or read.truncated
+            else "execution_tool_call_exact_join_not_available"
+        )
+    return ExecutionToolCallRead(
+        rows=rows,
+        available=read.available,
+        scope_known=scope_known,
+        truncated=read.truncated,
+        reason=reason,
+    )
 
 
 async def _resolve_server_delegation_reference(
@@ -1506,6 +1797,16 @@ class Execution360Provider:
             external = []
             plan_decompositions = []
 
+        admitted_execution_ids = {
+            row["executionId"] for row in internal if row.get("executionId")
+        }
+        tool_calls = _project_tool_call_read(
+            server.tool_calls,
+            admitted_execution_ids=admitted_execution_ids,
+            time_range=request.timeRange,
+            temporal_unavailable=temporal_unavailable,
+        )
+
         reasons: list[str] = []
         if not server.available:
             reasons.append("server_execution_source_unavailable")
@@ -1531,9 +1832,9 @@ class Execution360Provider:
             reasons.append("episode_execution_event_binding_conflict")
 
         state = _section_state(server, observed, internal, external, temporal_unavailable)
-        evidence = self._all_evidence(internal, external, plan_decompositions)
+        evidence = self._all_evidence(internal, external, plan_decompositions, tool_calls)
         claims = (
-            self._claims(request.subject, internal, external, plan_decompositions)
+            self._claims(request.subject, internal, external, plan_decompositions, tool_calls)
             if request.includeClaims is not False
             else []
         )
@@ -1547,6 +1848,7 @@ class Execution360Provider:
             server,
             observed,
             temporal_unavailable,
+            tool_calls,
         )
 
         return ProjectionResult(
@@ -1591,6 +1893,7 @@ class Execution360Provider:
         internal: list[dict[str, Any]],
         external: list[dict[str, Any]],
         plan_decompositions: list[dict[str, Any]],
+        tool_calls: ExecutionToolCallRead,
     ) -> list[EvidenceRef]:
         refs: list[EvidenceRef] = []
         seen: set[tuple[str, str]] = set()
@@ -1607,6 +1910,15 @@ class Execution360Provider:
                     continue
                 seen.add((ref.id, ref.source))
                 refs.append(ref)
+        for row in tool_calls.rows:
+            try:
+                ref = EvidenceRef.model_validate(row.get("evidenceRef"))
+            except Exception:  # noqa: BLE001 - malformed source evidence is omitted
+                continue
+            if (ref.id, ref.source) in seen:
+                continue
+            seen.add((ref.id, ref.source))
+            refs.append(ref)
         return refs
 
     @staticmethod
@@ -1615,6 +1927,7 @@ class Execution360Provider:
         internal: list[dict[str, Any]],
         external: list[dict[str, Any]],
         plan_decompositions: list[dict[str, Any]],
+        tool_calls: ExecutionToolCallRead,
     ) -> list[ClaimEnvelope]:
         claims: list[ClaimEnvelope] = []
         for row in internal:
@@ -1885,6 +2198,24 @@ class Execution360Provider:
                     domainSlotIds=[SLOT_TEMPORAL_EPISODE, SLOT_EVIDENCE],
                 )
             )
+        for row in tool_calls.rows:
+            try:
+                evidence = EvidenceRef.model_validate(row.get("evidenceRef"))
+            except Exception:  # noqa: BLE001 - source evidence validation is fail closed
+                continue
+            claims.append(
+                ClaimEnvelope(
+                    id=f"execution360:tool-call:{evidence.id}",
+                    kind="server_recorded_execution_tool_call_observation",
+                    subject=subject,
+                    evidenceRefs=[evidence],
+                    claims=[
+                        f"AETHER recorded a tenant-scoped tool-call lifecycle edge for tool {row['toolId']} linked to execution {row['executionId']}; the record does not establish an external tool receipt or authorization decision."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=[SLOT_TOOL_CALLS, SLOT_EVIDENCE],
+                )
+            )
         return claims
 
     @staticmethod
@@ -1898,6 +2229,7 @@ class Execution360Provider:
         server: ExecutionRead,
         observed: ExecutionRead,
         temporal_unavailable: bool,
+        tool_calls: ExecutionToolCallRead,
     ) -> list[ProjectionSection]:
         episode_context = server.episode_context or ExecutionEpisodeContextRead(
             "degraded" if not server.available else "unknown",
@@ -2049,24 +2381,53 @@ class Execution360Provider:
             evidence_ref = _fact_evidence(row)
             if evidence_ref is not None:
                 tool_fact_evidence.append(evidence_ref)
+        tool_call_evidence: list[EvidenceRef] = []
+        for row in tool_calls.rows:
+            try:
+                tool_call_evidence.append(EvidenceRef.model_validate(row.get("evidenceRef")))
+            except Exception:  # noqa: BLE001 - malformed source evidence is omitted
+                continue
         tool_invocation_linkage = {
-            "state": "unknown",
-            "reason": "tool_observations_do_not_carry_a_canonical_agent_execution_id",
-            "sourceReadState": _read_state(observed),
+            "state": "partial" if tool_calls.rows else "unknown",
+            "reason": (
+                tool_calls.reason
+                or "execution_tool_call_source_completeness_unknown"
+                if tool_calls.rows
+                else tool_calls.reason
+                or "execution_tool_call_exact_join_not_available"
+            ),
+            "sourceReadState": (
+                "available"
+                if tool_calls.available
+                else "unavailable"
+            ),
+            "completeness": "unknown",
             "sourceReportedToolRelatedFactCount": (
                 len(tool_related_facts)
                 if observed.available and observed.scope_known and not observed.truncated
                 else None
             ),
-            "joinedExecutionToolCalls": [],
+            "joinedExecutionToolCalls": list(tool_calls.rows),
             "evidenceRefs": [
+                ref.model_dump(mode="json", by_alias=True, exclude_none=True)
+                for ref in tool_call_evidence
+            ],
+            "sourceReportedEvidenceRefs": [
                 ref.model_dump(mode="json", by_alias=True, exclude_none=True)
                 for ref in tool_fact_evidence
             ],
         }
+        approval_chain_linkage = {
+            "state": "unknown",
+            "reason": "execution_approval_id_canonical_join_not_available",
+            "sourceReadState": "not_read",
+            "joinedExecutionApprovals": [],
+            "evidenceRefs": [],
+        }
         risk_event_linkage = {
             "state": "unknown",
             "reason": "agent_risk_records_do_not_carry_a_canonical_agent_execution_id",
+            "sourceReadState": "not_read",
             "joinedExecutionRiskEvents": [],
             "evidenceRefs": [],
         }
@@ -2138,6 +2499,7 @@ class Execution360Provider:
                     "interactions": interactions,
                     "workerRunLinkage": worker_linkage,
                     "toolInvocationLinkage": tool_invocation_linkage,
+                    "approvalChainLinkage": approval_chain_linkage,
                     "riskEventLinkage": risk_event_linkage,
                 },
             ),

@@ -3526,17 +3526,32 @@
         {
           "id": "tool_calls",
           "requirement": "required",
-          "description": "Tool calls exactly linked to this execution; source-reported agent tool telemetry does not establish that join.",
+          "description": "Tenant-scoped CALLED_TOOL lifecycle edges joined to admitted executions and canonical agent identity; source completeness and external receipt remain unknown.",
           "canonicalAuthorityRefs": [
             "actions",
             "resources",
             "tools"
           ],
-          "projectionBindings": [],
+          "projectionBindings": [
+            {
+              "projectionId": "execution360",
+              "role": "primary",
+              "sectionIds": [
+                "evidence",
+                "interactions"
+              ],
+              "subjectKinds": [
+                "agent",
+                "entity",
+                "episode",
+                "execution"
+              ]
+            }
+          ],
           "implementationCrosswalk": [
             "action_tool_resource_trace"
           ],
-          "unboundReason": "execution_tool_call_exact_join_not_available"
+          "partialImplementationReason": "Exact lifecycle edges are exposed, but source completeness, authorization outcome, and external execution receipt remain unknown."
         },
         {
           "id": "approval_chain",
@@ -4870,13 +4885,14 @@
         {
           "id": "wallets",
           "requirement": "required",
-          "description": "Required Identity 360 blueprint slot: wallets.",
+          "description": "Historical canonical-subject-bound wallet verification proofs; wallet inventory and current control remain unknown.",
           "canonicalAuthorityRefs": [
             "identity",
             "source_provenance",
             "evidence"
           ],
           "projectionBindings": [],
+          "partialImplementationReason": "Historical ownership verification evidence can be surfaced, but wallet inventory and current control are not established.",
           "implementationCrosswalk": [
             "source_identifier_lineage"
           ]
@@ -8205,12 +8221,12 @@
         {
           "id": "risk",
           "requirement": "required",
-          "description": "Account linked risk outputs backed by canonical evidence.",
+          "description": "Exact resolved account-entity Risk360 outputs backed by canonical evidence; related-account coverage remains partial.",
           "canonicalAuthorityRefs": [
             "risk_outputs"
           ],
           "projectionBindings": [],
-          "unboundReason": "account_risk_subject_join_not_available"
+          "partialImplementationReason": "Direct account-entity risk evidence is available; member and related-entity aggregation and a freshness SLA remain unimplemented."
         },
         {
           "id": "agents",
@@ -8374,14 +8390,16 @@
           "domainSlotIds": [
             "account_summary",
             "members",
-            "agents"
+            "agents",
+            "risk"
           ],
           "implementationRef": "services/api/identity/account360_provider.py",
           "runtimeBindingRef": "services/api/shared/intelligence_projections/frame_runtime.py",
           "canonicalAuthorityRefs": [
             "entities",
             "entity_registry",
-            "graph"
+            "graph",
+            "risk_outputs"
           ]
         }
       ],

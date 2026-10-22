@@ -1069,6 +1069,10 @@ def _merge_identity360_authority_result(
         direct_state = direct.state
         if direct_state == "truncated":
             provenance_state = "degraded"
+        elif direct_state == "partial":
+            # The provider returned usable source evidence, while the frame
+            # slot retains the broader partial-completeness state.
+            provenance_state = "available"
         elif direct_state in {
             "available",
             "empty",
@@ -1118,6 +1122,7 @@ def _merge_identity360_authority_result(
         useful_direct_states = {
             "available",
             "empty",
+            "partial",
             "degraded",
             "truncated",
             "suppressed",
@@ -1126,7 +1131,7 @@ def _merge_identity360_authority_result(
             state = direct_state
         if direct_state not in {"unknown", "suppressed", "missing"} or slot.content is not None:
             content["identityAuthorityRead"] = payload
-        if state in {"available", "degraded"} and not (
+        if state in {"available", "partial", "degraded"} and not (
             evidence_refs or any(item.evidenceRefs for item in slot.provenance)
         ):
             state = "unknown" if state == "available" else "degraded"
@@ -1136,7 +1141,7 @@ def _merge_identity360_authority_result(
         reason_codes = set(slot.reasonCodes)
         if direct.reason:
             reason_codes.add(direct.reason)
-        if direct_state in {"available", "empty", "degraded", "truncated"}:
+        if direct_state in {"available", "empty", "partial", "degraded", "truncated"}:
             reason_codes.add("identity360_direct_freshness_threshold_unknown")
         freshness = Experience360Freshness(
             state="unknown",

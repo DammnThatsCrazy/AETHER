@@ -1042,6 +1042,76 @@ async def test_identity360_scopes_direct_authority_reads_and_attaches_lineage() 
 
 
 @pytest.mark.asyncio
+async def test_identity360_preserves_partial_direct_authority_slot_state() -> None:
+    evidence = EvidenceRef(
+        id="wallet-proof-1",
+        type="annotation",
+        source="identity_verification_evidence",
+        observedAt="2026-10-16T10:00:00Z",
+    )
+
+    class AllowPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-16T10:02:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "wallets": Experience360PolicyDisposition(state="allowed")
+                },
+            )
+
+    class IdentityProvider:
+        async def read(self, tenant_id, subject_kind, subject_id, *, requested_slot_ids=None):
+            return Identity360Result(
+                tenant_id=tenant_id,
+                subject_kind=subject_kind,
+                subject_id=subject_id,
+                state="partial",
+                slots=(
+                    Identity360Slot(
+                        id="wallets",
+                        state="partial",
+                        content={
+                            "state": "partial",
+                            "ownershipState": "unknown",
+                            "currentControl": "unknown",
+                        },
+                        evidence_refs=(evidence,),
+                    ),
+                ),
+                generated_at="2026-10-16T10:01:00Z",
+            )
+
+    class Runtime:
+        async def execute_projection(self, *args, **kwargs):
+            raise AssertionError("the direct Identity360 provider owns the requested slot")
+
+    frame = await build_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="identity360",
+            tenantId=TENANT,
+            subject=ProjectionSubject(kind="entity", id="identity-entity-1"),
+            requestedSlotIds=["wallets"],
+            includeEvidence=True,
+        ),
+        policy_evaluator=AllowPolicy(),
+        projection_runtime=Runtime(),
+        identity360_provider=IdentityProvider(),
+    )
+
+    slot = frame.slots[0]
+    assert frame.state == "partial"
+    assert slot.state == "partial"
+    assert slot.content["identityAuthorityRead"]["state"] == "partial"
+    assert slot.content["identityAuthorityRead"]["content"]["currentControl"] == "unknown"
+    assert [(item.source, item.id) for item in slot.evidenceRefs] == [
+        ("identity_verification_evidence", "wallet-proof-1")
+    ]
+
+
+@pytest.mark.asyncio
 async def test_identity360_source_subject_uses_identity_record_not_provider_source_id() -> None:
     authority_calls: list[tuple[str, str, str, frozenset[str] | None]] = []
     projection_calls: list[str] = []

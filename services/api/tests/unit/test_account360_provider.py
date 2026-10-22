@@ -19,6 +19,7 @@ from graph.operational_intelligence.models import EvidenceRef  # noqa: E402
 from identity.account360_provider import (  # noqa: E402
     ACCOUNT_AGENTS_SLOT,
     ACCOUNT_MEMBERS_SLOT,
+    ACCOUNT_RISK_SLOT,
     ACCOUNT_IDENTITY_SLOT,
     Account360Provider,
     AccountIdentityRead,
@@ -87,6 +88,82 @@ class _MembersSource(_Source):
     ) -> AccountMembersRead:
         self.member_calls.append((tenant_id, organization_entity_id))
         return self.members_response
+
+
+class _RiskProvider:
+    def __init__(self, response: ProjectionResult) -> None:
+        self.response = response
+        self.calls: list[tuple[object, object]] = []
+
+    async def project(self, request, context) -> ProjectionResult:
+        self.calls.append((request, context))
+        return self.response
+
+
+def _risk_result(
+    *,
+    tenant_id: str = TENANT_ID,
+    subject: ProjectionSubject = SUBJECT,
+    with_evidence: bool = True,
+) -> ProjectionResult:
+    risk_evidence = EvidenceRef(
+        id="risk-assessment-1",
+        type="model_output",
+        source="risk_assessments",
+        observedAt="2026-10-17T09:55:00Z",
+    )
+    return ProjectionResult(
+        projectionId="risk360",
+        tenantId=tenant_id,
+        contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+        sections=[
+            ProjectionSection(
+                id="summary",
+                state="degraded",
+                content={
+                    "tenantId": tenant_id,
+                    "subject": {"kind": subject.kind, "id": subject.id},
+                    "assessment": {
+                        "assessmentId": "risk-assessment-1",
+                        "evidenceRefs": (
+                            [risk_evidence.model_dump(mode="json", by_alias=True)]
+                            if with_evidence
+                            else []
+                        ),
+                    },
+                },
+                warnings=["profile context is unavailable"],
+            ),
+            ProjectionSection(
+                id="state",
+                state="degraded",
+                content={
+                    "tenantId": tenant_id,
+                    "subject": {"kind": subject.kind, "id": subject.id},
+                    "dimensionStates": [],
+                },
+                warnings=["cluster context is unavailable"],
+            ),
+        ],
+        claims=(
+            [
+                ClaimEnvelope(
+                    id="risk360.assessment.risk-assessment-1",
+                    kind="risk_assessment",
+                    subject=subject,
+                    evidenceRefs=[risk_evidence],
+                    claims=["A canonical risk assessment was observed."],
+                    claimState="observed",
+                    domainSlotIds=["risk_summary", "evidence_trace"],
+                )
+            ]
+            if with_evidence
+            else []
+        ),
+        dependencyState=[],
+        generatedAt="2026-10-17T10:01:00Z",
+        degradedReasons=[],
+    )
 
 
 def _request(
@@ -1125,3 +1202,162 @@ async def test_same_tenant_non_account_entity_cannot_expose_account_projection_d
     assert all(slot.content is None for slot in frame.slots)
     assert all(slot.evidenceRefs == [] for slot in frame.slots)
     assert "Private agent profile" not in str(frame.model_dump(mode="json"))
+
+
+@pytest.mark.asyncio
+async def test_account_risk_reuses_exact_entity_risk_provider_under_slot_policy():
+    risk_provider = _RiskProvider(_risk_result())
+    source = _Source(
+        AccountIdentityRead(
+            "resolved",
+            evidence_refs=(IDENTITY_EVIDENCE,),
+            entity_type="organization",
+        )
+    )
+
+    frame = await Account360Provider(
+        source,
+        risk_provider=risk_provider,
+    ).compose(
+        _request(requested_slot_ids=[ACCOUNT_RISK_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=_allowed_slots(),
+    )
+
+    assert source.calls == [(TENANT_ID, SUBJECT.id)]
+    assert len(risk_provider.calls) == 1
+    projection_request, projection_context = risk_provider.calls[0]
+    assert projection_request.projectionId == "risk360"
+    assert projection_request.tenantId == TENANT_ID
+    assert projection_request.subject == ProjectionSubject(kind="entity", id=SUBJECT.id)
+    assert projection_request.temporalMode == "window"
+    assert projection_context.tenantId == TENANT_ID
+    assert {
+        item.projectionId: item.state for item in projection_context.dependencyState
+    } == {"profile360": "unknown", "cluster360": "unknown"}
+
+    slot = next(item for item in frame.slots if item.id == ACCOUNT_RISK_SLOT)
+    risk_evidence = EvidenceRef(
+        id="risk-assessment-1",
+        type="model_output",
+        source="risk_assessments",
+        observedAt="2026-10-17T09:55:00Z",
+    )
+    assert slot.state == "degraded"
+    assert slot.content["scope"] == "direct_account_entity_only"
+    assert slot.content["coverage"] == {
+        "state": "partial",
+        "reason": "account_risk_related_entity_join_not_available",
+    }
+    assert risk_evidence in slot.evidenceRefs
+    assert slot.claims[0].domainSlotIds == [ACCOUNT_RISK_SLOT]
+    assert any(
+        provenance.projectionId == "risk360"
+        and provenance.canonicalAuthorityRefs == ["risk_outputs"]
+        for provenance in slot.provenance
+    )
+    assert slot.freshness.state == "unknown"
+    assert "account_risk_freshness_sla_unconfigured" in slot.reasonCodes
+
+
+@pytest.mark.asyncio
+async def test_account_risk_read_is_skipped_when_slot_policy_denies_it():
+    risk_provider = _RiskProvider(_risk_result())
+    policy = _allowed_slots()
+    policy[ACCOUNT_RISK_SLOT] = Experience360PolicyDisposition(state="denied")
+
+    frame = await Account360Provider(
+        _Source(
+            AccountIdentityRead(
+                "resolved",
+                evidence_refs=(IDENTITY_EVIDENCE,),
+                entity_type="organization",
+            )
+        ),
+        risk_provider=risk_provider,
+    ).compose(
+        _request(requested_slot_ids=[ACCOUNT_RISK_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=policy,
+    )
+
+    slot = next(item for item in frame.slots if item.id == ACCOUNT_RISK_SLOT)
+    assert risk_provider.calls == []
+    assert slot.state == "suppressed"
+    assert slot.content is None
+    assert slot.evidenceRefs == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("as_of", "include_evidence", "expected_reason"),
+    [
+        (
+            "2026-10-01T00:00:00Z",
+            True,
+            "account_entity_temporal_identity_unavailable",
+        ),
+        (None, False, "account_risk_evidence_not_requested"),
+    ],
+)
+async def test_account_risk_read_stays_unknown_when_time_or_evidence_is_unsupported(
+    as_of: str | None,
+    include_evidence: bool,
+    expected_reason: str,
+):
+    risk_provider = _RiskProvider(_risk_result())
+
+    frame = await Account360Provider(
+        _Source(
+            AccountIdentityRead(
+                "resolved",
+                evidence_refs=(IDENTITY_EVIDENCE,),
+                entity_type="organization",
+            )
+        ),
+        risk_provider=risk_provider,
+    ).compose(
+        _request(
+            as_of=as_of,
+            include_evidence=include_evidence,
+            requested_slot_ids=[ACCOUNT_RISK_SLOT],
+        ),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=_allowed_slots(),
+    )
+
+    slot = next(item for item in frame.slots if item.id == ACCOUNT_RISK_SLOT)
+    assert risk_provider.calls == []
+    assert slot.state == "unknown"
+    assert slot.content is None
+    assert expected_reason in slot.reasonCodes
+
+
+@pytest.mark.asyncio
+async def test_account_risk_result_without_evidenced_claims_remains_unknown():
+    risk_provider = _RiskProvider(_risk_result(with_evidence=False))
+
+    frame = await Account360Provider(
+        _Source(
+            AccountIdentityRead(
+                "resolved",
+                evidence_refs=(IDENTITY_EVIDENCE,),
+                entity_type="organization",
+            )
+        ),
+        risk_provider=risk_provider,
+    ).compose(
+        _request(requested_slot_ids=[ACCOUNT_RISK_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=_allowed_slots(),
+    )
+
+    slot = next(item for item in frame.slots if item.id == ACCOUNT_RISK_SLOT)
+    assert slot.state == "unknown"
+    assert slot.content is None
+    assert slot.evidenceRefs == []
+    assert "account_risk_evidence_missing" in slot.reasonCodes
