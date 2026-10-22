@@ -15,6 +15,7 @@ vi.mock('@aether-app/lib/api/rest/client', () => ({
 }));
 
 import { api } from '@aether-app/lib/api/endpoints';
+import { matchesQuery } from '@aether-app/features/users/use-users';
 import { identifierGroups, profileNetwork } from '@aether-app/pages/user-profile/profile-model';
 import { compactMoney, dailySeries, inOneCurrency, parseValueEvents, SERIES_MAX_DAYS } from '@aether-app/pages/value-review/value-model';
 import { nodeTime, objectLinks } from '@aether-app/pages/explore/explore-model';
@@ -34,6 +35,26 @@ describe('GET /v1/campaigns client', () => {
   it('reports a last page as complete', async () => {
     h.payload = { data: [], pagination: { limit: 50, next_cursor: null, has_more: false } };
     await expect(api.campaigns.list()).resolves.toMatchObject({ total: 0, has_more: false, next_cursor: null });
+  });
+});
+
+describe('GET /v1/entities client (Profiles)', () => {
+  it('reads the {entities, count} envelope the route returns', async () => {
+    h.payload = { status: 'success', timestamp: '2026-10-22T00:00:00Z', data: { entities: [{ entity_id: 'e1' }], count: 1 } };
+    await expect(api.entities.list({ limit: 100 })).resolves.toEqual({ entities: [{ entity_id: 'e1' }], total: 1, has_more: false });
+  });
+
+  it('reports another page when the route returns next_offset', async () => {
+    h.payload = { status: 'success', timestamp: '2026-10-22T00:00:00Z', data: { entities: [], count: 0, next_offset: 100 } };
+    await expect(api.entities.list({ limit: 100, offset: 0 })).resolves.toMatchObject({ has_more: true });
+  });
+
+  it('matches a search on name, email or id without a search route', () => {
+    const row = { id: 'ent_42', displayName: 'Jordan Lee', email: 'jordan@northpeak.co' };
+    expect(matchesQuery(row, 'jordan')).toBe(true);
+    expect(matchesQuery(row, 'northpeak')).toBe(true);
+    expect(matchesQuery(row, 'ent_4')).toBe(true);
+    expect(matchesQuery(row, 'nobody')).toBe(false);
   });
 });
 

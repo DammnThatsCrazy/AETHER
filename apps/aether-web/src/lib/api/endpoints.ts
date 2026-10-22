@@ -1357,11 +1357,16 @@ export const api = {
   entities: {
     /** List entities scoped to this tenant. type='user' returns all tracked users. */
     list: (params?: { type?: string; limit?: number; offset?: number; order_by?: string }) =>
-      restClient.get(`/v1/entities${buildQS({ ...params })}`, wrap(z.object({ entities: z.array(z.unknown()), total: z.number() }))).then(r => r.data),
-
-    /** Full-text search across entity fields — name, email, wallet address, device ID. */
-    search: (q: string, type?: string, limit = 50) =>
-      restClient.get(`/v1/entities/search${buildQS({ q, type, limit })}`, wrap(z.object({ results: z.array(z.unknown()), total: z.number() }))).then(r => r.data),
+      // The route returns { entities, count, next_offset? } — `count` is the page size.
+      restClient.get(`/v1/entities${buildQS({ ...params })}`, wrap(z.object({
+        entities: z.array(z.unknown()),
+        count: z.number().optional(),
+        next_offset: z.number().nullish(),
+      }))).then(r => ({
+        entities: r.data.entities,
+        total: r.data.count ?? r.data.entities.length,
+        has_more: typeof r.data.next_offset === 'number',
+      })),
 
     /** Single entity summary. */
     get: (entityId: string) =>

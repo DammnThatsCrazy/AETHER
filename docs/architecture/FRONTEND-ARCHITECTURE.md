@@ -45,7 +45,7 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:7a25aab4f62b4b836f579ad6c3e310dceaa61fbda7d5597b9ebabb8b20e4fd33"
+  "apps/aether-web/src/": "sha256:7098b3d3df4992cbeb794e7c9ee9510bedaa828098a09436cec4b379b8b59ba9"
   "apps/kyber-web/src/": "sha256:df447130af2090e329c0620134a1b1dee8caf8597ac360b30f6862e74f3e6781"
   "packages/ui/core/src/": "sha256:01c95e007bc50d0b7378c5cb5274fd5e5d60b51f9575e5c28bf8549ab9cefde1"
 ---
@@ -411,7 +411,8 @@ The remaining nav pages follow the same design rules as Home: every figure comes
 from an existing read, loading, empty and unavailable states are distinct, and
 design elements without a backing read are omitted or empty-stated.
 
-- **Profiles** (`/users`) lists real profiles (search, sort, List /
+- **Profiles** (`/users`) lists real profiles from `GET /v1/entities` (search filters the tenant's list,
+  since there is no entity search route; sort, List /
   Relationship Map / Activity via `?view=`); a row expands in place with its
   graph relationships, and `?profile=<id>` opens with that profile expanded.
   **Profile 360** (`/users/:id`) has an identity hero and Overview, Timeline,
