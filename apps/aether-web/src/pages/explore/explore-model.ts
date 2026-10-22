@@ -70,7 +70,8 @@ function timeField(meta: Record<string, unknown>, keys: readonly string[]): numb
 }
 
 const VALUE_KEYS = ['value', 'total_value', 'lifetime_value', 'ltv', 'revenue', 'value_usd', 'amount', 'amount_usd'] as const;
-const TIME_KEYS = ['valid_from', 'first_seen', 'first_seen_at', 'first_observed_at', 'observed_at', 'occurred_at', 'created_at'] as const;
+// Canonical graph vertices carry camelCase `createdAt` (_vertex_to_node); edges carry `valid_from`.
+const TIME_KEYS = ['valid_from', 'first_seen', 'first_seen_at', 'first_observed_at', 'observed_at', 'occurred_at', 'created_at', 'createdAt'] as const;
 const LAT_KEYS = ['latitude', 'lat', 'geo_lat'] as const;
 const LNG_KEYS = ['longitude', 'lng', 'lon', 'geo_lng', 'geo_lon'] as const;
 const PLACE_KEYS = ['city', 'geo_city', 'region', 'geo_region', 'country', 'geo_country', 'country_code'] as const;
@@ -429,7 +430,9 @@ export function objectLinks(node: GraphNode, clusters: readonly GraphCluster[]):
   const kind = node.kind.toLowerCase();
   if (kind === 'entity') out.push({ label: 'Open profile', to: `/users/${encodeURIComponent(node.id)}` });
   if (kind === 'agent') out.push({ label: 'Open agent', to: `/agents/${encodeURIComponent(node.id)}` });
-  if (clusters.some(c => c.id === node.id)) out.push({ label: 'Open cluster', to: `/clusters/${encodeURIComponent(node.id)}` });
+  // A member's cluster is the one whose nodeIds contain it; the node id is never the cluster id.
+  const cluster = clusters.find(c => c.nodeIds.includes(node.id));
+  if (cluster) out.push({ label: 'Open cluster', to: `/clusters/${encodeURIComponent(cluster.id)}` });
   const campaign = node.metadata['attributed_campaign_id'] ?? node.metadata['campaign_id'];
   if (typeof campaign === 'string' && campaign) out.push({ label: 'Open campaign', to: `/campaigns/${encodeURIComponent(campaign)}` });
   return out;

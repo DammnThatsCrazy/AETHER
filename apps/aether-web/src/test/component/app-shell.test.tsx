@@ -42,7 +42,7 @@ describe('Aether authenticated shell', () => {
     window.innerWidth = 1280;
   });
 
-  it('maps the available target destinations to existing routes and keeps unbuilt destinations non-links', () => {
+  it('maps every design destination to its route, in the design order', () => {
     render(
       <MemoryRouter initialEntries={['/explore']}>
         <AppShell><div>WORKSPACE</div></AppShell>
@@ -50,35 +50,29 @@ describe('Aether authenticated shell', () => {
     );
 
     const navigation = screen.getByRole('navigation');
-    expect(within(navigation).getAllByRole('link').map(link => link.getAttribute('aria-label'))).toEqual([
-      'Home',
-      'Graph',
-      'Profiles',
-      'Agents',
-      'Campaigns',
-      'Geography',
-      'Value',
-      'Connectors',
-      'Settings',
-    ]);
-    for (const label of ['Syndicates', 'Relationships', 'Communications', 'Journeys', 'Episodes', 'Signals', 'Risk']) {
-      expect(within(navigation).getByLabelText(`${label} (not ready)`)).toHaveAttribute('aria-disabled', 'true');
-      expect(within(navigation).queryByRole('link', { name: label })).not.toBeInTheDocument();
-    }
     const hrefs: Record<string, string> = {
       Home: '/home',
       Graph: '/explore',
       Profiles: '/users',
       Agents: '/agent-access',
+      Syndicates: '/syndicates',
+      Relationships: '/relationships',
       Campaigns: '/campaigns',
+      Communications: '/communications',
+      Journeys: '/journeys',
+      Episodes: '/episodes',
       Geography: '/geo',
+      Signals: '/signals',
       Value: '/value-review',
+      Risk: '/risk',
       Connectors: '/settings/integrations',
       Settings: '/settings',
     };
+    expect(within(navigation).getAllByRole('link').map(link => link.getAttribute('aria-label'))).toEqual(Object.keys(hrefs));
     for (const [name, href] of Object.entries(hrefs)) {
       expect(within(navigation).getByRole('link', { name })).toHaveAttribute('href', href);
     }
+    expect(within(navigation).queryByText(/not ready/)).not.toBeInTheDocument();
     expect(within(navigation).getByRole('link', { name: 'Graph' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByText('WORKSPACE')).toBeInTheDocument();
   });

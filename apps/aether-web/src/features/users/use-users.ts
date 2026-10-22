@@ -42,6 +42,13 @@ function toUserRow(raw: unknown, fallbackId: string): UserRow {
   };
 }
 
+/** Upper bound of the list a search filters (the route's maximum page size). */
+export const SEARCH_SCAN_LIMIT = 500;
+
+export function matchesQuery(row: UserRow, needle: string): boolean {
+  return [row.displayName, row.email, row.id].some(v => typeof v === 'string' && v.toLowerCase().includes(needle));
+}
+
 export function useUsers() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [search, setSearch] = useState('');
@@ -53,17 +60,12 @@ export function useUsers() {
     setIsLoading(true);
     setError(null);
     try {
-      if (q.trim()) {
-        const results = await api.entities.search(q.trim(), undefined, 50);
-        const raw = (results as Record<string, unknown>);
-        const items = Array.isArray(raw.results) ? raw.results : [];
-        setUsers(items.map((item, i) => toUserRow(item, `user-${i}`)));
-      } else {
-        const results = await api.entities.list({ type: 'user', limit: 100 });
-        const raw = (results as Record<string, unknown>);
-        const items = Array.isArray(raw.entities) ? raw.entities : [];
-        setUsers(items.map((item, i) => toUserRow(item, `user-${i}`)));
-      }
+      // There is no entity search route, so a query filters the tenant's own
+      // list (up to SEARCH_SCAN_LIMIT entities) on name, email and id.
+      const needle = q.trim().toLowerCase();
+      const results = await api.entities.list({ limit: needle ? SEARCH_SCAN_LIMIT : 100 });
+      const rows = results.entities.map((item, i) => toUserRow(item, `user-${i}`));
+      setUsers(needle ? rows.filter(r => matchesQuery(r, needle)) : rows);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load users');
       setUsers([]);

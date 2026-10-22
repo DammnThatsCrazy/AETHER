@@ -14,7 +14,7 @@ toc_depth: 3
 source_hashes:
   "services/api/intelligence/intelligence/action_targets/base.py": "sha256:455280d204f34cf4b774550f1d46024b320ae8e0f2f77eed44b3db8b6b7c2672"
   "services/api/intelligence/intelligence/action_targets/registry.py": "sha256:06edc4a24ff4a7e14927a05414e5ce40b8da8d187af3895b0e893b21cb98d56c"
-  "services/api/intelligence/intelligence/routes.py": "sha256:58d87548dec926d8526d02b2b9cfd044adbf81569d3e6372cdaa80bf7496d5e6"
+  "services/api/intelligence/intelligence/routes.py": "sha256:4c153189bcb43a8909e8ca898d97204c7bf3ce167c4658efdf746de63770f559"
 ---
 
 # Governed Action Dispatch

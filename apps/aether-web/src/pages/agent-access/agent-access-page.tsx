@@ -725,7 +725,8 @@ function AgentDirectory({
     );
   }
 
-  const selected = items.find(a => a.agent_id === selectedId) ?? filtered[0];
+  // Resolve within the visible results so the summary never describes an agent the filters hide.
+  const selected = filtered.find(a => a.agent_id === selectedId) ?? filtered[0];
 
   return (
     <div className="flex flex-col gap-3">

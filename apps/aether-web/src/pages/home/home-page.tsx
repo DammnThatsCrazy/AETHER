@@ -204,7 +204,7 @@ export function HomePage() {
           <MetricTile label="Events" value={compact(summary.data?.total_events ?? null)} sub="last 24h" />
           <MetricTile label="People seen" value={compact(summary.data?.unique_users ?? null)} sub="last 24h" />
           <MetricTile label="Sessions" value={compact(summary.data?.total_sessions ?? null)} sub="last 24h" />
-          <MetricTile label="Campaigns" value={campaigns.data ? compact(campaigns.data.total) : '—'} sub="imported" />
+          <MetricTile label="Campaigns" value={campaigns.data ? `${compact(campaigns.data.total)}${campaigns.data.has_more ? '+' : ''}` : '—'} sub="imported" />
           {anyFailing ? (
             <MetricTile label="Connections" value={`${connectedCount}/${items.length}`} sub="one needs attention" tone="amber" />
           ) : (
@@ -359,7 +359,7 @@ export function HomePage() {
             <span className="flex flex-wrap items-baseline gap-2.5">
               <Eyebrow style={{ color: 'var(--ae-blue-ink)' }}>What is happening</Eyebrow>
               <span className="text-[13px]" style={{ color: 'var(--ae-mute)' }}>
-                {campaigns.data ? `${campaigns.data.total} campaign${campaigns.data.total === 1 ? '' : 's'} imported from your systems` : 'Campaigns'}
+                {campaigns.data ? `${campaigns.data.total}${campaigns.data.has_more ? '+' : ''} campaign${campaigns.data.total === 1 && !campaigns.data.has_more ? '' : 's'} imported from your systems` : 'Campaigns'}
               </span>
             </span>
             <LinkButton onClick={() => void navigate('/campaigns')}>All campaigns →</LinkButton>

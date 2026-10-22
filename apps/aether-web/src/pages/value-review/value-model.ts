@@ -28,15 +28,19 @@ export function str(value: unknown): string | null {
   return text === '' ? null : text;
 }
 
-/** Compact currency for chart labels: $1.2M, $12.4k, $830. */
-export function compactMoney(value: number | null): string {
+/**
+ * Compact currency for chart labels: $1.2M, $12.4k, $830. A non-USD currency
+ * code is shown as a prefix (EUR 12.4k) rather than a dollar sign.
+ */
+export function compactMoney(value: number | null, currency: string | null = null): string {
   if (value === null) return '—';
   const abs = Math.abs(value);
   const sign = value < 0 ? '-' : '';
-  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
-  if (abs >= 10_000) return `${sign}$${Math.round(abs / 1_000)}k`;
-  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}k`;
-  return `${sign}$${Math.round(abs).toLocaleString('en-US')}`;
+  const unit = currency && currency !== 'USD' ? `${currency} ` : '$';
+  if (abs >= 1_000_000) return `${sign}${unit}${(abs / 1_000_000).toFixed(1)}M`;
+  if (abs >= 10_000) return `${sign}${unit}${Math.round(abs / 1_000)}k`;
+  if (abs >= 1_000) return `${sign}${unit}${(abs / 1_000).toFixed(1)}k`;
+  return `${sign}${unit}${Math.round(abs).toLocaleString('en-US')}`;
 }
 
 export function pct(value: number | null, digits = 0): string {
@@ -128,7 +132,9 @@ export interface DayPoint {
   readonly events: number;
 }
 
-/** Daily totals across the span the events actually cover (gaps filled with real zero-event days). */
+export const SERIES_MAX_DAYS = 400;
+
+/** Daily totals across the span the events actually cover (gaps filled with real zero-event days), capped to the most recent SERIES_MAX_DAYS. */
 export function dailySeries(events: readonly ValueEvent[]): DayPoint[] {
   const dated = events.filter((e): e is ValueEvent & { occurredAt: Date } => e.occurredAt !== null);
   if (dated.length === 0) return [];
@@ -145,10 +151,13 @@ export function dailySeries(events: readonly ValueEvent[]): DayPoint[] {
     if (event.occurredAt > max) max = event.occurredAt;
   }
   const out: DayPoint[] = [];
-  const cursor = new Date(min.getFullYear(), min.getMonth(), min.getDate());
   const end = new Date(max.getFullYear(), max.getMonth(), max.getDate());
-  // Bound the walk so a stray decade-old timestamp cannot build a huge array.
-  for (let i = 0; cursor <= end && i < 400; i += 1) {
+  // Bound the walk to the most recent SERIES_MAX_DAYS so a stray decade-old
+  // timestamp can neither build a huge array nor push current days out.
+  const earliest = new Date(end.getFullYear(), end.getMonth(), end.getDate() - (SERIES_MAX_DAYS - 1));
+  const first = new Date(min.getFullYear(), min.getMonth(), min.getDate());
+  const cursor = first < earliest ? earliest : first;
+  for (let i = 0; cursor <= end && i < SERIES_MAX_DAYS; i += 1) {
     const key = dayKey(cursor);
     const bucket = byDay.get(key);
     out.push({ day: key, total: bucket?.total ?? 0, events: bucket?.events ?? 0 });
@@ -321,4 +330,36 @@ export function parseCampaignOverview(payload: unknown): NonNullable<CampaignVal
     converted: num(d['converted_count']),
     observed: num(d['observed_count']),
   };
+}
+
+export interface OneCurrencyRead {
+  /** Events with amounts kept only in `currency`; amounts in other currencies become null. */
+  readonly events: ValueEvent[];
+  /** The currency the amounts are in (null when events carry no currency code). */
+  readonly currency: string | null;
+  /** Priced events whose amount was set aside because it is in another currency. */
+  readonly setAside: number;
+  readonly otherCurrencies: string[];
+}
+
+/**
+ * Value events carry an optional, unrestricted currency and there is no
+ * exchange-rate source here, so amounts are only ever summed within one
+ * currency: the one most priced events use. Events in other currencies are
+ * still counted, never added to that total.
+ */
+export function inOneCurrency(events: readonly ValueEvent[]): OneCurrencyRead {
+  const code = (e: ValueEvent) => (e.currency ? e.currency.toUpperCase() : null);
+  const counts = new Map<string | null, number>();
+  for (const e of events) if (e.amount !== null) counts.set(code(e), (counts.get(code(e)) ?? 0) + 1);
+  if (counts.size <= 1) return { events: [...events], currency: counts.size ? [...counts.keys()][0]! : null, setAside: 0, otherCurrencies: [] };
+  const [currency] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]!;
+  let setAside = 0;
+  const kept = events.map(e => {
+    if (e.amount === null || code(e) === currency) return e;
+    setAside += 1;
+    return { ...e, amount: null };
+  });
+  const otherCurrencies = [...counts.keys()].filter(k => k !== currency).map(k => k ?? 'unspecified');
+  return { events: kept, currency, setAside, otherCurrencies };
 }
