@@ -231,6 +231,10 @@ def compose_experience360_frame(
             tenant_id=request.tenantId,
             requested_as_of=request.asOf,
             subject_kind=request.subject.kind,
+            requires_exact_claim=(
+                definition.get("contractStatus") == "source_aligned"
+                and slot_definition.get("requirement") == "required"
+            ),
         )
         missing_projection_ids.update(missing)
 
@@ -460,6 +464,7 @@ def _compose_slot_content(
     tenant_id: str,
     requested_as_of: Optional[str],
     subject_kind: str,
+    requires_exact_claim: bool = False,
 ) -> tuple[dict[str, Any], list[str], set[str]]:
     reasons: list[str] = []
     missing_projection_ids: set[str] = set()
@@ -476,6 +481,17 @@ def _compose_slot_content(
     provenance: list[Experience360ProjectionProvenance] = []
     evidence_refs: list[EvidenceRef] = []
     bindings = slot_definition.get("projectionBindings", [])
+    if slot_definition.get("unboundCanonicalAuthorityRefs"):
+        incomplete_bound_source = True
+        reasons.append("slot_canonical_authority_gap")
+        authority_gap_reason = slot_definition.get("authorityGapReason")
+        if isinstance(authority_gap_reason, str) and authority_gap_reason:
+            reasons.append(authority_gap_reason)
+    partial_implementation_reason = slot_definition.get("partialImplementationReason")
+    if isinstance(partial_implementation_reason, str) and partial_implementation_reason:
+        incomplete_bound_source = True
+        reasons.append("slot_partial_implementation")
+        reasons.append(partial_implementation_reason)
     if not isinstance(bindings, list):
         return (
             _slot_result("unknown", reasons + ["invalid_slot_projection_bindings"]),
@@ -483,6 +499,16 @@ def _compose_slot_content(
             missing_projection_ids,
         )
     if not bindings:
+        unbound_reason = slot_definition.get("unboundReason")
+        if isinstance(unbound_reason, str) and unbound_reason.strip():
+            return (
+                _slot_result(
+                    "unknown",
+                    reasons + ["slot_provider_not_connected", unbound_reason.strip()],
+                ),
+                reasons + ["slot_provider_not_connected", unbound_reason.strip()],
+                missing_projection_ids,
+            )
         return (
             _slot_result("missing", reasons + ["slot_has_no_projection_binding"]),
             reasons,
@@ -734,6 +760,16 @@ def _compose_slot_content(
         evidence_refs = []
         provenance = []
         reasons.append("bound_source_conflicted")
+    elif content is not None and evidence_refs and requires_exact_claim and not claims:
+        # An available generic section can contain real evidence for a
+        # sibling capability. It does not prove this exact blueprint slot.
+        # Required source-aligned slots need a provider claim explicitly
+        # routed with domainSlotIds before exposing section content.
+        slot_state = "unknown"
+        content = None
+        evidence_refs = []
+        provenance = []
+        reasons.append("exact_slot_claim_missing")
     elif content is not None and evidence_refs:
         if incomplete_bound_source or missing_projection_ids:
             slot_state = "degraded"

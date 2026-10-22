@@ -1,4 +1,4 @@
-"""Signals360 routes source risk through exact Risk360 subject reads."""
+"""Source risk assessment routes through Risk360 without inventing a Signals flag."""
 
 from __future__ import annotations
 
@@ -103,7 +103,7 @@ class ExactSourceRiskReader:
 
 
 @pytest.mark.asyncio
-async def test_signals360_source_risk_slot_uses_exact_tenant_source_risk_records() -> None:
+async def test_risk360_source_summary_uses_exact_tenant_source_risk_records() -> None:
     reader = ExactSourceRiskReader()
     provider = Risk360Provider(sources=reader)
     projection_calls: list[tuple[str, str, str]] = []
@@ -116,7 +116,7 @@ async def test_signals360_source_risk_slot_uses_exact_tenant_source_risk_records
                 evaluatedAt="2026-10-18T12:02:00Z",
                 frameDisposition=Experience360PolicyDisposition(state="allowed"),
                 slotDispositions={
-                    "risk_signals": Experience360PolicyDisposition(state="allowed")
+                    "risk_summary": Experience360PolicyDisposition(state="allowed")
                 },
             )
 
@@ -138,10 +138,10 @@ async def test_signals360_source_risk_slot_uses_exact_tenant_source_risk_records
             )
 
     request = Experience360FrameRequest(
-        surfaceId="signals360",
+        surfaceId="risk360",
         tenantId=TENANT,
         subject=ProjectionSubject(kind="source", id=SOURCE_ID),
-        requestedSlotIds=["risk_signals"],
+        requestedSlotIds=["risk_summary"],
         includeEvidence=True,
     )
     frame = await build_experience360_frame(

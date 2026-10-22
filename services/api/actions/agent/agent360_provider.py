@@ -50,6 +50,7 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
     "evidence",
     "interactions",
     "outcomes",
+    "policy_boundary",
 )
 
 MAX_READ_LIMIT = 200
@@ -57,6 +58,8 @@ DEFAULT_READ_LIMIT = 100
 # DelegationRepository.active_for() currently applies this fixed source cap and
 # does not return its own truncation metadata.
 ACTIVE_DELEGATION_REPOSITORY_LIMIT = 200
+CAPABILITY_AUTHORIZATION_SCAN_LIMIT = 2000
+CAPABILITY_AUTHORIZATION_READ_LIMIT = CAPABILITY_AUTHORIZATION_SCAN_LIMIT + 1
 
 REASON_CONFIG_UNAVAILABLE = "agent_config_source_unavailable"
 REASON_EXECUTION_UNAVAILABLE = "agent_execution_source_unavailable"
@@ -121,7 +124,7 @@ class Agent360Source(Protocol):
     async def tools(self, tenant_id: str, agent_id: str, limit: int) -> list[dict[str, Any]]: ...
 
     async def capability_access_profile(
-        self, tenant_id: str, agent_id: str
+        self, tenant_id: str, agent_id: str, canonical_agent_entity_id: str
     ) -> Agent360ReadBatch: ...
 
     async def risk_signals(
@@ -403,19 +406,37 @@ class RepositoryAgent360Source:
         )
 
     async def capability_access_profile(
-        self, tenant_id: str, agent_id: str
+        self, tenant_id: str, agent_id: str, canonical_agent_entity_id: str
     ) -> Agent360ReadBatch:
-        """Read capability reach and active invoke grants through their authority.
+        """Read observed reach and exact canonical-agent grants through their authorities.
 
-        This service uses the existing tenant-scoped capability catalog,
-        installation, and delegation authorities. Its grant coverage is not an
-        authorization decision for a new action/resource request.
+        Installations are keyed by the runtime agent reference, while capability
+        authorizations are read by tenant plus the resolved canonical Agent entity.
+        This is not an authorization decision for a new action/resource request.
         """
+        from actions.agent_access_intelligence.authority import capability_authority_service
         from actions.agent_access_intelligence.profiles import capability_profile_service
 
         profile = await capability_profile_service.profile(tenant_id, agent_id)
+        grants = await capability_authority_service.list(
+            tenant_id=tenant_id,
+            agent_id=canonical_agent_entity_id,
+            limit=CAPABILITY_AUTHORIZATION_READ_LIMIT,
+            offset=0,
+        )
+        truncated = len(grants) > CAPABILITY_AUTHORIZATION_SCAN_LIMIT
         return Agent360ReadBatch(
-            rows=[{"tenant_id": tenant_id, "agent_id": agent_id, "profile": profile}]
+            rows=[
+                {
+                    "tenant_id": tenant_id,
+                    "agent_id": agent_id,
+                    "canonical_agent_entity_id": canonical_agent_entity_id,
+                    "profile": profile,
+                    "canonical_grant_records": grants[:CAPABILITY_AUTHORIZATION_SCAN_LIMIT],
+                    "canonical_grant_read_complete": not truncated,
+                }
+            ],
+            truncated=truncated,
         )
 
     async def risk_signals(self, tenant_id: str, agent_id: str, limit: int) -> list[dict[str, Any]]:
@@ -453,7 +474,22 @@ class RepositoryAgent360Source:
             if inbox_id is None:
                 scope_mismatch = True
                 continue
-            inboxes.append({**row, "_resolved_inbox_id": inbox_id})
+            inbox_ref = _evidence_ref(
+                row,
+                source="obs_agent_inboxes",
+                id_keys=("inbox_obs_id", "id"),
+                time_keys=("observed_at", "received_at"),
+            )
+            if inbox_ref is None:
+                scope_mismatch = True
+                continue
+            inboxes.append(
+                {
+                    **row,
+                    "_resolved_inbox_id": inbox_id,
+                    "_resolved_inbox_evidence_ref": inbox_ref.model_dump(mode="json"),
+                }
+            )
 
         messages: list[dict[str, Any]] = []
         seen_ids: set[str] = set()
@@ -491,6 +527,7 @@ class RepositoryAgent360Source:
                         **row,
                         "agent_id": agent_id,
                         "subject_binding_basis": "exact_tenant_inbox_agent_id",
+                        "inbox_evidence_ref": inbox["_resolved_inbox_evidence_ref"],
                     }
                 )
         return Agent360ReadBatch(
@@ -770,7 +807,7 @@ class Agent360Provider:
             "activities": lambda: self._source.activities(tenant_id, agent_id, limit),
             "tools": lambda: self._source.tools(tenant_id, agent_id, limit),
             "capability_access_profile": lambda: self._source.capability_access_profile(
-                tenant_id, agent_id
+                tenant_id, agent_id, delegation_agent_id or ""
             ),
             "risk_signals": lambda: self._source.risk_signals(tenant_id, agent_id, limit),
             "communications": lambda: self._source.communications(tenant_id, agent_id, limit),
@@ -965,16 +1002,16 @@ class Agent360Provider:
         )
         capability_profile_rows, capability_profile_mismatch = (
             self._tenant_capability_access_profile_rows(
-                data["capability_access_profile"], tenant_id, agent_id
+                data["capability_access_profile"],
+                tenant_id,
+                agent_id,
+                delegation_agent_id,
             )
         )
-        capability_profile_complete = bool(
-            len(capability_profile_rows) == 1
-            and isinstance(capability_profile_rows[0].get("profile"), dict)
-            and capability_profile_rows[0]["profile"].get("profile_known") is True
-            and not capability_profile_rows[0]["profile"].get("missing_inputs")
-            and isinstance(capability_profile_rows[0]["profile"].get("authorization"), dict)
-            and capability_profile_rows[0]["profile"]["authorization"].get("known") is True
+        capability_profile_complete = self._capability_profile_complete(
+            capability_profile_rows,
+            data["capability_access_profile"],
+            scope_mismatch=capability_profile_mismatch,
         )
         if capability_profile_rows and capability_profile_rows[0].get("not_applicable") is True:
             capability_profile_complete = True
@@ -1217,6 +1254,26 @@ class Agent360Provider:
             communications=timeline_communications.rows,
             principal_identities=principal_identity_rows,
         )
+        if historical_unavailable or invalid_window:
+            claim_evidence_refs: list[EvidenceRef] = []
+        elif request.timeRange is not None:
+            # Current config, grants, and identity rows cannot be replayed into
+            # an event-time window. Claim only refs from rows admitted by the
+            # temporal slices, without broadening the existing evidence view.
+            claim_evidence_refs, _ = self._collect_evidence(
+                config_rows=[],
+                agent_identities=[],
+                principal_identities=[],
+                executions=timeline_exec.rows,
+                delegations=[],
+                delegation_party_identities=[],
+                activities=timeline_activity.rows,
+                tools=timeline_tools.rows,
+                risks=timeline_risks.rows,
+                communications=timeline_communications.rows,
+            )
+        else:
+            claim_evidence_refs = evidence_refs
 
         source_states = {name: self._read_state(read) for name, read in data.items()}
         config_ref = (
@@ -1394,6 +1451,7 @@ class Agent360Provider:
             capability_profile_rows,
             data["capability_access_profile"],
             scope_mismatch=capability_profile_mismatch,
+            tenant_id=tenant_id,
         )
         authority_content = {
             "state": authority_state,
@@ -1731,13 +1789,22 @@ class Agent360Provider:
                         [data["communications"]], has_rows=bool(communication_items)
                     ),
                     "messages": communication_items,
-                    "count": self._count(data["communications"], communication_rows),
+                    "count": self._count(
+                        data["communications"], timeline_communications.rows
+                    ),
                     "truncated": data["communications"].truncated,
                     "binding": "exact_tenant_inbox_agent_id_to_observed_message",
+                    "temporalSemantics": (
+                        "message_observation_event_time_window; inbox_agent_binding_is_an_observed_source_reference_without_historical_ownership_replay"
+                        if request.timeRange is not None
+                        else "current_bounded_observation_read; inbox_agent_binding_is_an_observed_source_reference"
+                    ),
                     "contentPolicy": "metadata_only; addresses_subjects_and_message_bodies_omitted",
                     "reason": (
                         "agent messages are observed through exact tenant inbox agent_id references; this does not resolve a canonical Agent and is not a complete provider communication history"
                         if communication_items
+                        else "no linked agent message observation was admitted by the requested event-time window"
+                        if request.timeRange is not None
                         else "no observed agent messages are linked through tenant-scoped inbox records"
                     ),
                 },
@@ -1831,6 +1898,20 @@ class Agent360Provider:
                 communication_rows=timeline_communications.rows,
             )
         )
+        if claim_evidence_refs:
+            claims.append(
+                ClaimEnvelope(
+                    id=f"agent360:validated-evidence-trace:{agent_id}",
+                    kind="agent360_validated_evidence_trace",
+                    subject=request.subject,
+                    evidenceRefs=claim_evidence_refs[:MAX_READ_LIMIT],
+                    claims=[
+                        "Tenant-scoped Agent360 source rows contributed the cited stable evidence references; this bounded trace does not establish complete source coverage or an authorization decision."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["evidence_trace"],
+                )
+            )
         capability_access_refs: list[EvidenceRef] = []
         for raw_ref in capability_access_profile_view.get("evidenceRefs", []):
             try:
@@ -1849,11 +1930,77 @@ class Agent360Provider:
                     subject=request.subject,
                     evidenceRefs=_dedupe_refs(capability_access_refs),
                     claims=[
-                        "The tenant-scoped capability access profile reports observed capability reach and coverage by active invoke grants; it does not evaluate effective authorization for a new action or resource."
+                        "Tenant-scoped capability reach is joined to exact active invoke-grant records for the resolved canonical Agent and reflects current repository state at read time; it does not evaluate authorization for a new action or resource."
                     ],
                     claimState=EpistemicStatus.OBSERVED,
-                    domainSlotIds=["authority_and_delegation"],
+                    domainSlotIds=["capabilities"],
                 )
+            )
+        policy_boundary_claims = [
+            claim
+            for claim in claims
+            if claim.kind == "server_recorded_delegation_decision"
+            and "policy_boundary" in (claim.domainSlotIds or [])
+        ]
+        execution_read = data["executions"]
+        policy_boundary_warnings = ["standing_policy_boundary_not_exposed"]
+        if execution_read.truncated:
+            policy_boundary_warnings.append("action_scoped_policy_decision_read_truncated")
+        if execution_read.scope_mismatch or not execution_read.scope_known:
+            policy_boundary_warnings.append("action_scoped_policy_decision_read_scope_incomplete")
+        if invalid_window:
+            policy_boundary_warnings.append("action_scoped_policy_decision_window_invalid")
+        if policy_boundary_claims:
+            policy_boundary_section = ProjectionSection(
+                id="policy_boundary",
+                state="degraded",
+                title="Observed action-scoped policy decisions",
+                content={
+                    "state": "partial",
+                    "effectivePolicyState": "unknown",
+                    "decisionScope": "historical_action_scoped_only",
+                    "decisions": [
+                        claim.model_dump(mode="json", by_alias=True, exclude_none=True)
+                        for claim in policy_boundary_claims
+                    ],
+                    "limitations": [
+                        "A recorded decision is evidence about one request at its recorded time; it does not establish standing policy or current authorization."
+                    ],
+                },
+                warnings=policy_boundary_warnings,
+                canonicalAuthorityRefs=["agent_executions"],
+            )
+        elif not execution_read.available:
+            policy_boundary_section = ProjectionSection(
+                id="policy_boundary",
+                state="degraded",
+                title="Policy boundary evidence unavailable",
+                content=None,
+                warnings=["action_scoped_policy_decision_source_unavailable"],
+                canonicalAuthorityRefs=["agent_executions"],
+            )
+        elif (
+            execution_read.truncated
+            or execution_read.scope_mismatch
+            or not execution_read.scope_known
+            or invalid_window
+        ):
+            policy_boundary_section = ProjectionSection(
+                id="policy_boundary",
+                state="degraded",
+                title="Policy boundary evidence is incomplete",
+                content=None,
+                warnings=policy_boundary_warnings,
+                canonicalAuthorityRefs=["agent_executions"],
+            )
+        else:
+            policy_boundary_section = ProjectionSection(
+                id="policy_boundary",
+                state="unknown",
+                title="Policy boundary not established",
+                content=None,
+                warnings=["standing_policy_boundary_not_exposed"],
+                canonicalAuthorityRefs=["agent_executions"],
             )
         sections = [
             summary_section,
@@ -1862,13 +2009,14 @@ class Agent360Provider:
             evidence_section,
             interactions_section,
             outcomes_section,
+            policy_boundary_section,
         ]
         return ProjectionResult(
             projectionId=self.projection_id,
             tenantId=tenant_id,
             contractVersion=self.contract_version,
             sections=sections,
-            claims=claims,
+            claims=claims if request.includeClaims is not False else [],
             dependencyState=list(context.dependencyState),
             asOf=None,
             generatedAt=_utc_now_iso(),
@@ -2002,18 +2150,29 @@ class Agent360Provider:
 
     @staticmethod
     def _tenant_capability_access_profile_rows(
-        read: _Read, tenant_id: str, agent_id: str
+        read: _Read,
+        tenant_id: str,
+        agent_id: str,
+        canonical_agent_entity_id: Optional[str],
     ) -> tuple[list[dict[str, Any]], bool]:
-        """Accept only the exact tenant/agent profile returned by its authority."""
+        """Accept only the exact runtime profile and canonical-agent grant read."""
         if not read.available or read.rows is None:
             return [], read.scope_mismatch
         rows: list[dict[str, Any]] = []
         mismatch = read.scope_mismatch
         for row in read.rows:
+            not_applicable = row.get("not_applicable") is True
             if (
                 row.get("tenant_id") != tenant_id
                 or row.get("agent_id") != agent_id
-                or (not row.get("not_applicable") and not isinstance(row.get("profile"), dict))
+                or (
+                    not not_applicable
+                    and (
+                        not canonical_agent_entity_id
+                        or row.get("canonical_agent_entity_id") != canonical_agent_entity_id
+                        or not isinstance(row.get("profile"), dict)
+                    )
+                )
             ):
                 mismatch = True
                 continue
@@ -2030,11 +2189,115 @@ class Agent360Provider:
         return rows, mismatch
 
     @staticmethod
+    def _validate_capability_grant_records(
+        records: Any,
+        tenant_id: Any,
+        canonical_agent_entity_id: Any,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Validate canonical grant rows and their invoke scope before projection."""
+        from actions.agent_access_intelligence.authority import AUTHORIZATION_KIND
+
+        if (
+            not isinstance(records, list)
+            or not isinstance(tenant_id, str)
+            or not isinstance(canonical_agent_entity_id, str)
+        ):
+            return [], False
+        validated: list[dict[str, Any]] = []
+        complete = True
+        seen_ids: set[str] = set()
+        for row in records:
+            if not isinstance(row, dict):
+                complete = False
+                continue
+            record_id = _first(row, "authorization_id", "delegation_id", "id")
+            scope = row.get("scope")
+            actions = scope.get("actions") if isinstance(scope, dict) else None
+            resources = scope.get("resources") if isinstance(scope, dict) else None
+            capability_id = row.get("capability_id")
+            server_ref = row.get("server_ref")
+            expected_resource = (
+                f"capability:{capability_id}"
+                if isinstance(capability_id, str) and capability_id
+                else f"capability-server:{server_ref}"
+                if isinstance(server_ref, str) and server_ref
+                else None
+            )
+            exact = bool(
+                row.get("tenant_id") == tenant_id
+                and row.get("agent_id") == canonical_agent_entity_id
+                and row.get("grantee_entity_id") == canonical_agent_entity_id
+                and row.get("authorization_kind") == AUTHORIZATION_KIND
+                and isinstance(record_id, str)
+                and record_id
+                and record_id not in seen_ids
+                and isinstance(actions, list)
+                and actions == ["invoke"]
+                and isinstance(resources, list)
+                and expected_resource is not None
+                and resources == [expected_resource]
+                and row.get("state") in {"active", "pending", "revoked", "expired"}
+            )
+            if not exact:
+                complete = False
+                continue
+            seen_ids.add(record_id)
+            validated.append(row)
+        return validated, complete
+
+    @staticmethod
+    def _capability_profile_complete(
+        rows: list[dict[str, Any]],
+        read: _Read,
+        *,
+        scope_mismatch: bool,
+    ) -> bool:
+        """Whether observed reach and canonical-grant inputs can be counted."""
+        if not read.available or read.truncated or scope_mismatch or read.scope_mismatch:
+            return False
+        if len(rows) != 1 or rows[0].get("not_applicable") is True:
+            return False
+        row = rows[0]
+        profile = row.get("profile")
+        if not isinstance(profile, dict):
+            return False
+        missing = profile.get("missing_inputs")
+        if missing is not None and not isinstance(missing, list):
+            return False
+        missing = [item for item in missing or [] if isinstance(item, str)]
+        # The profile's aggregate grant scan is runtime-keyed. Its status does not
+        # substitute for, or invalidate, the separate canonical-grantee scan.
+        reach_missing = [
+            item for item in missing if not item.startswith("capability_authorizations:")
+        ]
+        profile_known_for_reach = profile.get("profile_known") is True or (
+            bool(missing) and not reach_missing
+        )
+        reach = profile.get("reach")
+        identity = profile.get("identity")
+        grants = row.get("canonical_grant_records")
+        _, grants_valid = Agent360Provider._validate_capability_grant_records(
+            grants, row.get("tenant_id"), row.get("canonical_agent_entity_id")
+        )
+        return bool(
+            not reach_missing
+            and profile_known_for_reach
+            and isinstance(reach, dict)
+            and isinstance(reach.get("capabilities"), list)
+            and isinstance(identity, dict)
+            and isinstance(identity.get("installation_ids"), list)
+            and identity.get("installation_ids")
+            and row.get("canonical_grant_read_complete") is True
+            and grants_valid
+        )
+
+    @staticmethod
     def _capability_access_profile_view(
         rows: list[dict[str, Any]],
         read: _Read,
         *,
         scope_mismatch: bool,
+        tenant_id: str,
     ) -> dict[str, Any]:
         """Project observed capability reach and invoke-grant coverage without
         turning it into an authorization verdict for an arbitrary new action.
@@ -2093,17 +2356,15 @@ class Agent360Provider:
             }
 
         missing_inputs = profile.get("missing_inputs")
-        missing_inputs = (
-            [item for item in missing_inputs if isinstance(item, str)]
-            if isinstance(missing_inputs, list)
-            else []
+        if not isinstance(missing_inputs, list):
+            missing_inputs = []
+        missing_inputs = [item for item in missing_inputs if isinstance(item, str)]
+        reach_missing = [
+            item for item in missing_inputs if not item.startswith("capability_authorizations:")
+        ]
+        profile_known_for_reach = profile.get("profile_known") is True or (
+            bool(missing_inputs) and not reach_missing
         )
-        known = profile.get("profile_known") is True
-        authorization = profile.get("authorization")
-        authorization = authorization if isinstance(authorization, dict) else {}
-        authorization_known = authorization.get("known") is True
-        complete = known and not missing_inputs and authorization_known
-        state = "available" if complete else "partial" if known else "unknown"
 
         reach = profile.get("reach")
         reach = reach if isinstance(reach, dict) else {}
@@ -2115,13 +2376,52 @@ class Agent360Provider:
                 "provider": item.get("provider"),
                 "toolName": item.get("tool_name"),
                 "basis": item.get("basis"),
-                "invokeGrantCoversCapability": (
-                    item.get("authorized") if authorization_known else None
-                ),
+                "invokeGrantCoversCapability": None,
+                "activeGrantRecordIds": [],
             }
             for item in raw_capabilities
             if isinstance(item, dict) and isinstance(item.get("capability_id"), str)
         ] if isinstance(raw_capabilities, list) else []
+
+        canonical_agent_entity_id = row.get("canonical_agent_entity_id")
+        grant_rows, grant_rows_valid = Agent360Provider._validate_capability_grant_records(
+            row.get("canonical_grant_records"),
+            tenant_id,
+            canonical_agent_entity_id,
+        )
+        grant_read_complete = bool(
+            row.get("canonical_grant_read_complete") is True
+            and not read.truncated
+            and grant_rows_valid
+        )
+        active_grants = [grant for grant in grant_rows if grant.get("state") == "active"]
+        from actions.agent_access_intelligence.authority import server_ref_for
+
+        for capability in capabilities:
+            server_key = capability.get("serverKey")
+            server_ref = (
+                server_ref_for(tenant_id, server_key)
+                if isinstance(server_key, str) and server_key
+                else None
+            )
+            matching = [
+                grant
+                for grant in active_grants
+                if grant.get("capability_id") == capability["capabilityId"]
+                or (server_ref is not None and grant.get("server_ref") == server_ref)
+            ]
+            capability["invokeGrantCoversCapability"] = (
+                bool(matching) if grant_read_complete else None
+            )
+            capability["activeGrantRecordIds"] = [
+                record_id
+                for grant in matching[:MAX_READ_LIMIT]
+                if isinstance(
+                    (record_id := _first(grant, "authorization_id", "delegation_id", "id")),
+                    str,
+                )
+            ]
+            capability["activeGrantRecordIdsTruncated"] = len(matching) > MAX_READ_LIMIT
 
         evidence_refs: list[dict[str, Any]] = []
         identity = profile.get("identity")
@@ -2147,33 +2447,100 @@ class Agent360Provider:
                     source="capability_catalog",
                 ).model_dump(mode="json", exclude_none=True)
             )
-        record_ids = authorization.get("activeRecordIds")
-        record_ids = record_ids if isinstance(record_ids, list) else []
-        for record_id in record_ids:
-            if isinstance(record_id, str) and record_id:
-                evidence_refs.append(
-                    EvidenceRef(
-                        id=record_id,
-                        type="relationship",
-                        source="delegations",
-                    ).model_dump(mode="json", exclude_none=True)
-                )
+        active_record_ids = [
+            record_id
+            for grant in active_grants
+            if isinstance(
+                (record_id := _first(grant, "authorization_id", "delegation_id", "id")),
+                str,
+            )
+        ]
+        visible_active_records = active_grants[:MAX_READ_LIMIT] if grant_read_complete else []
+        for grant in visible_active_records:
+            evidence_refs.append(
+                EvidenceRef(
+                    id=_first(grant, "authorization_id", "delegation_id", "id"),
+                    type="relationship",
+                    source="delegations",
+                    observedAt=_first(grant, "created_at", "starts_at"),
+                ).model_dump(mode="json", exclude_none=True)
+            )
+
+        installation_ids = identity.get("installation_ids")
+        reach_complete = bool(
+            not reach_missing
+            and profile_known_for_reach
+            and isinstance(installation_ids, list)
+            and installation_ids
+            and isinstance(raw_capabilities, list)
+        )
+        complete = reach_complete and grant_read_complete
+        state = (
+            "available"
+            if complete
+            else "partial"
+            if reach_complete
+            or isinstance(raw_capabilities, list)
+            or isinstance(row.get("canonical_grant_records"), list)
+            else "unknown"
+        )
+        servers = identity.get("servers_observed")
+        invoked_count = sum(1 for item in capabilities if item.get("basis") == "invoked")
+        covered_count = sum(
+            1 for item in capabilities if item.get("invokeGrantCoversCapability") is True
+        )
+        uncovered_count = sum(
+            1 for item in capabilities if item.get("invokeGrantCoversCapability") is False
+        )
+        counts = (
+            {
+                "servers_observed": len(servers) if isinstance(servers, list) else None,
+                "capabilities_reachable": len(capabilities),
+                "capabilities_invoked": invoked_count,
+                "capabilities_authorized": covered_count,
+                "capabilities_unauthorized": uncovered_count,
+                "authorizations_active": len(active_grants),
+            }
+            if complete
+            else None
+        )
+        last_observed_at = observation.get("last_seen_at")
+        visible_active_record_ids = active_record_ids[:MAX_READ_LIMIT] if grant_read_complete else []
 
         return {
             "state": state,
-            "profileKnown": known,
+            "profileKnown": complete,
             "basis": profile.get("basis") or "observed_only",
-            "counts": profile.get("counts") if complete else None,
+            "counts": counts,
             "capabilities": capabilities,
             "authorization": {
-                "known": authorization_known,
-                "activeGrantCount": authorization.get("authorizations_active")
-                if authorization_known
-                else None,
-                "activeGrantRecordIds": record_ids,
-                "activeGrantRecordIdsTruncated": authorization.get(
-                    "activeRecordIdsTruncated", False
+                "known": grant_read_complete,
+                "canonicalAgentEntityId": canonical_agent_entity_id,
+                "activeGrantCount": len(active_grants) if grant_read_complete else None,
+                "activeGrantRecordIds": visible_active_record_ids,
+                "activeGrantRecordIdsTruncated": (
+                    read.truncated or len(active_record_ids) > MAX_READ_LIMIT
                 ),
+                "activeGrantRecords": [
+                    {
+                        "recordId": _first(grant, "authorization_id", "delegation_id", "id"),
+                        "state": grant.get("state"),
+                        "capabilityId": grant.get("capability_id"),
+                        "serverRef": grant.get("server_ref"),
+                        "action": "invoke",
+                        "evidenceRef": {
+                            "id": _first(grant, "authorization_id", "delegation_id", "id"),
+                            "type": "relationship",
+                            "source": "delegations",
+                            **(
+                                {"observedAt": _first(grant, "created_at", "starts_at")}
+                                if _first(grant, "created_at", "starts_at")
+                                else {}
+                            ),
+                        },
+                    }
+                    for grant in visible_active_records
+                ],
                 "action": "invoke",
                 "effectiveAuthorizationDecision": "unknown",
                 "reason": (
@@ -2181,9 +2548,14 @@ class Agent360Provider:
                     "they do not evaluate a new action/resource request"
                 ),
             },
-            "missingInputs": missing_inputs,
+            "missingInputs": (
+                reach_missing
+                + ([] if grant_read_complete else ["canonical_capability_grant_read_incomplete"])
+            ),
             "evidenceRefs": _dedupe_json_refs(evidence_refs),
-            "reason": None if complete else "capability access inputs are incomplete or unknown",
+            "freshnessSemantics": "current_repository_state; active grant state is derived at read time; no historical replay",
+            "lastObservedAt": last_observed_at if isinstance(last_observed_at, str) else None,
+            "reason": None if complete else "exact canonical reach or grant evidence is incomplete",
         }
 
     @staticmethod
@@ -2333,11 +2705,20 @@ class Agent360Provider:
         rows: list[dict[str, Any]] = []
         mismatch = read.scope_mismatch
         for row in read.rows:
+            inbox_id = _first(row, "inbox_obs_id")
+            try:
+                inbox_ref = EvidenceRef.model_validate(row.get("inbox_evidence_ref"))
+            except Exception:  # noqa: BLE001 - missing join evidence fails closed
+                mismatch = True
+                continue
             if (
                 row.get("tenant_id") != tenant_id
                 or row.get("agent_id") != agent_id
                 or row.get("subject_binding_basis") != "exact_tenant_inbox_agent_id"
-                or not _first(row, "inbox_obs_id")
+                or not inbox_id
+                or inbox_ref.source != "obs_agent_inboxes"
+                or inbox_ref.id != inbox_id
+                or inbox_ref.type != "event"
             ):
                 mismatch = True
                 continue
@@ -2570,6 +2951,13 @@ class Agent360Provider:
                     rows_missing += 1
                 else:
                     refs.append(ref)
+        for row in communications:
+            try:
+                inbox_ref = EvidenceRef.model_validate(row.get("inbox_evidence_ref"))
+            except Exception:  # noqa: BLE001 - malformed binding evidence is omitted
+                rows_missing += 1
+                continue
+            refs.append(inbox_ref)
         for row in agent_identities:
             source = _first(row, "identity_evidence_source")
             ref = (
@@ -2784,6 +3172,7 @@ class Agent360Provider:
             ("message_obs_id", "id"),
             ("observed_at", "received_at"),
         )
+        inbox_ref = EvidenceRef.model_validate(row["inbox_evidence_ref"])
         return {
             "messageObservationId": _first(row, "message_obs_id", "id"),
             "inboxObservationId": _first(row, "inbox_obs_id"),
@@ -2796,6 +3185,10 @@ class Agent360Provider:
             "receivedAt": _first(row, "received_at"),
             "subjectBindingBasis": _first(row, "subject_binding_basis"),
             "evidenceRef": ref.model_dump(mode="json") if ref else None,
+            "bindingEvidenceRefs": [
+                inbox_ref.model_dump(mode="json"),
+                *([ref.model_dump(mode="json")] if ref else []),
+            ],
             "contentBoundary": "observed_message_metadata_only",
         }
 
@@ -2879,7 +3272,7 @@ class Agent360Provider:
                     evidenceRefs=[ref],
                     claims=[claim_text],
                     claimState=EpistemicStatus.RESOLVED,
-                    domainSlotIds=["actor_attribution"],
+                    domainSlotIds=["identity", "actor_attribution"],
                 )
             )
         if config is not None and config_ref is not None:
@@ -2978,7 +3371,11 @@ class Agent360Provider:
                             f"AETHER recorded a {decision} delegation-engine decision for {action} on {resource} in execution {execution_id}; this decision was action-scoped at request time and does not establish standing authority or prove external execution."
                         ],
                         claimState=EpistemicStatus.OBSERVED,
-                        domainSlotIds=["authority_and_delegation"],
+                        domainSlotIds=[
+                            "authority_envelope",
+                            "authority_check",
+                            "policy_boundary",
+                        ],
                     )
                 )
         for row, _, active in delegation_records:
@@ -3052,7 +3449,7 @@ class Agent360Provider:
                             )
                         ],
                         claimState=claim_state,
-                        domainSlotIds=["authority_and_delegation"],
+                        domainSlotIds=["owner_delegator", "delegation_chain", "actor_attribution"],
                     )
                 )
         for conflict in active_delegation_conflicts:
@@ -3079,7 +3476,7 @@ class Agent360Provider:
                         f"Tenant-scoped delegation reads disagreed on fields for record {delegation_id}; its active state is unknown."
                     ],
                     claimState=EpistemicStatus.DISPUTED,
-                    domainSlotIds=["authority_and_delegation"],
+                    domainSlotIds=["delegation_chain", "authority_check"],
                 )
             )
         for row in activity_rows:
@@ -3154,15 +3551,16 @@ class Agent360Provider:
             )
             if ref is None:
                 continue
+            inbox_ref = EvidenceRef.model_validate(row["inbox_evidence_ref"])
             direction = _first(row, "direction")
             claims.append(
                 ClaimEnvelope(
                     id=f"agent_message.{ref.id}",
                     kind="agent_communication_observation",
                     subject=subject,
-                    evidenceRefs=[ref],
+                    evidenceRefs=[inbox_ref, ref],
                     claims=[
-                        "A tenant-scoped agent inbox is linked to an observed message record"
+                        "A tenant-scoped observed agent inbox is linked by exact inbox ID to an observed message record"
                         + (f" with direction {direction}." if direction else ".")
                     ],
                     claimState=EpistemicStatus.OBSERVED,
@@ -3180,9 +3578,14 @@ class Agent360Provider:
                 "reason": "authenticated initiating users resolve to canonical Humans only when an active tenant USER_ID alias exists; service principals and configured owner references remain unresolved",
             },
             {
-                "slot": "authority_decision",
+                "slot": "authority_envelope",
                 "state": "unknown",
-                "reason": "delegation parties resolve only through exact tenant-owned entity records; stored grants do not evaluate a requested action/resource or policy",
+                "reason": "stored grants and historical action-scoped decisions do not establish a current standing authority envelope",
+            },
+            {
+                "slot": "policy_boundary",
+                "state": "unknown",
+                "reason": "the provider exposes no tenant policy snapshot or current effective authorization boundary",
             },
             {
                 "slot": "communications",
@@ -3200,14 +3603,14 @@ class Agent360Provider:
                 "reason": "economic360 owns payment and settlement facts; no canonical economic fact is joined here",
             },
             {
-                "slot": "risk_and_contagion",
+                "slot": "risk_summary",
                 "state": "partial",
-                "reason": "stored risk signals are listed as observations; no composite risk or cross-entity contagion is computed",
+                "reason": "risk, social, and relationship assessments are composed by their canonical projections; this provider's stored signals are observations, not a composite score",
             },
             {
-                "slot": "temporal_relationship_context",
+                "slot": "spawned_agents",
                 "state": "unknown",
-                "reason": "this provider has no bitemporal replay or relationship path authority",
+                "reason": "spawned-agent graph relationships are delegated to Relationship360 and may remain incomplete without a ledger coverage watermark",
             },
         ]
 

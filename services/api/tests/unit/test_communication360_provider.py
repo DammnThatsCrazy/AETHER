@@ -155,6 +155,37 @@ class FakeSource:
         return self._raises is None
 
 
+class FakeJourneyReader:
+    """Exact-current-journey reader double used by Communication360 join tests."""
+
+    def __init__(self, records: dict[str, dict] | None = None, *, raises: bool = False) -> None:
+        self.records = dict(records or {})
+        self.raises = raises
+        self.calls: list[tuple[str, str]] = []
+
+    async def get_current(self, tenant_id: str, journey_id: str):
+        self.calls.append((tenant_id, journey_id))
+        if self.raises:
+            raise RuntimeError("journey read failed: private backend detail")
+        record = self.records.get(journey_id)
+        return dict(record) if record is not None else None
+
+
+class FakeRiskSignalReader:
+    """Tenant and typed-subject risk reader double."""
+
+    def __init__(self, rows: list[dict] | None = None, *, raises: bool = False) -> None:
+        self.rows = list(rows or [])
+        self.raises = raises
+        self.calls: list[tuple[str, str, str, int]] = []
+
+    async def signals(self, *, tenant_id, subject, limit):
+        self.calls.append((tenant_id, subject.kind, subject.id, limit))
+        if self.raises:
+            raise RuntimeError("risk read failed: private backend detail")
+        return list(self.rows)
+
+
 def _msg(
     tenant: str,
     mid: str,
@@ -365,7 +396,10 @@ async def test_claims_are_evidence_grounded_and_observed_capped(
     result = await provider.project(request, context)
 
     assert result.claims, "expected timeline claims"
-    assert all("communications" in (claim.domainSlotIds or []) for claim in result.claims)
+    assert all(
+        claim.domainSlotIds == ["campaign_links", "evidence_trace", "message_inventory"]
+        for claim in result.claims
+    )
     for claim in result.claims:
         assert isinstance(claim.subject, ProjectionSubject)
         assert claim.claimState is EpistemicStatus.OBSERVED  # never verified
@@ -813,8 +847,110 @@ async def test_agent_subject_filters_messages_and_canonical_facts_by_exact_actor
     assert summary.content["counts"]["messages_total"] == 1
     interactions = next(section for section in result.sections if section.id == "interactions")
     assert interactions.content["count"] == 2
-    assert {claim.id for claim in result.claims} == {"timeline.m-agent"}
+    claims_by_id = {claim.id: claim for claim in result.claims}
+    assert set(claims_by_id) == {
+        "timeline.m-agent",
+        "canonical_fact.act-agent",
+        "canonical_fact.act-payload",
+    }
+    assert claims_by_id["canonical_fact.act-agent"].domainSlotIds == ["evidence_trace"]
+    assert claims_by_id["canonical_fact.act-payload"].domainSlotIds == ["evidence_trace"]
     assert "act-other" not in result.model_dump_json()
+
+
+async def test_communications_claims_use_exact_agent_authorship_and_response_slots() -> None:
+    binding_ref = EvidenceRef(
+        id="agent-sender-binding",
+        type="entity",
+        source="agent_deployment_identity_bindings",
+        uri="store://agent_identity_bindings/agent-sender-binding",
+    )
+    message = _msg(TENANT_A, "agent-authored-message", sender_entity_id="agent-1").model_copy(
+        update={
+            "sender_identity_binding_id": binding_ref.id,
+            "sender_identity_evidence_ref": binding_ref,
+        }
+    )
+    facts = [
+        _fact(
+            TENANT_A,
+            "agent-author-binding",
+            kind="participant_binding",
+            actor_id="agent-1",
+            payload={
+                "role": "author",
+                "entity_id": "agent-1",
+                "entity_type": "agent",
+                "agent_id": "agent-1",
+            },
+        ),
+        _fact(
+            TENANT_A,
+            "agent-response-act",
+            kind="communication_act",
+            actor_id="agent-1",
+            payload={"act_type": "reply", "agent_id": "agent-1", "message_id": "m-1"},
+        ),
+        _fact(
+            TENANT_A,
+            "agent-response-expectation",
+            kind="response_expectation",
+            actor_id="agent-1",
+            payload={"expectation_type": "reply_by", "agent_id": "agent-1"},
+        ),
+    ]
+
+    class CanonicalAgentReader:
+        async def resolve(self, tenant_id: str, source_agent_ref: str):
+            return AgentIdentityRead(
+                state="resolved",
+                canonical_agent_entity_id="agent-1",
+                evidence=(
+                    EvidenceRef(
+                        id="agent-1",
+                        type="entity",
+                        source="entities",
+                    ),
+                ),
+            )
+
+    provider = Communication360Provider(
+        sources=FakeSource(messages=[message], facts=facts),
+        agent_identity_reader=CanonicalAgentReader(),
+    )
+    request, context = await _make_context(
+        ProviderRegistry(),
+        subject=ProjectionSubject(kind="agent", id="agent-1"),
+    )
+
+    result = await provider.project(request, context)
+
+    claims_by_id = {claim.id: claim for claim in result.claims}
+    assert claims_by_id["timeline.agent-authored-message"].domainSlotIds == [
+        "agent_authorship",
+        "evidence_trace",
+        "message_inventory",
+    ]
+    assert binding_ref.id in {
+        ref.id for ref in claims_by_id["timeline.agent-authored-message"].evidenceRefs
+    }
+    assert claims_by_id["canonical_fact.agent-author-binding"].domainSlotIds == [
+        "agent_authorship",
+        "evidence_trace",
+        "participants",
+    ]
+    assert claims_by_id["canonical_fact.agent-response-act"].domainSlotIds == [
+        "evidence_trace",
+        "response_events",
+    ]
+    assert claims_by_id["canonical_fact.agent-response-expectation"].domainSlotIds == [
+        "evidence_trace"
+    ]
+    assert all(
+        not ({"profile_links", "journey_links", "policy_state", "risk_flags"}
+             & set(claim.domainSlotIds or []))
+        for claim in result.claims
+    )
 
 
 async def test_agent_source_alias_resolves_before_communication_reads() -> None:
@@ -1022,6 +1158,9 @@ async def test_non_message_subjects_use_exact_tenant_canonical_communication_fac
         "messages_total": None,
         "communication_facts_total": 1,
         "communication_fact_kinds": {"communication_act": 1},
+        "active_conversations": None,
+        "open_requests": None,
+        "open_commitments": None,
     }
     assert summary.content["sourceCompleteness"] == "canonical_facts_only"
     timeline = next(section for section in result.sections if section.id == "timeline")
@@ -1033,7 +1172,605 @@ async def test_non_message_subjects_use_exact_tenant_canonical_communication_fac
     assert interactions.content["count"] == 1
     evidence = next(section for section in result.sections if section.id == "evidence")
     assert [ref["id"] for ref in evidence.content["evidence"]] == [f"{subject_kind}-act-1"]
+    canonical_claims = [claim for claim in result.claims if claim.id.startswith("canonical_fact.")]
+    assert [claim.id for claim in canonical_claims] == [f"canonical_fact.{subject_kind}-act-1"]
+    assert canonical_claims[0].domainSlotIds == []
+    assert canonical_claims[0].claimState is EpistemicStatus.OBSERVED
+    assert [ref.id for ref in canonical_claims[0].evidenceRefs] == [f"{subject_kind}-act-1"]
     assert source.message_read_count == 0
+
+
+async def test_canonical_campaign_fact_claim_uses_event_slot_and_store_evidence() -> None:
+    fact = _fact(
+        TENANT_A,
+        "campaign-act-1",
+        kind="communication_act",
+        payload={"campaign_id": "camp_1", "act_type": "recorded"},
+    )
+    provider = Communication360Provider(sources=FakeSource(facts=[fact]))
+    request, context = await _make_context(ProviderRegistry())
+
+    result = await provider.project(request, context)
+
+    assert [claim.id for claim in result.claims] == ["canonical_fact.campaign-act-1"]
+    claim = result.claims[0]
+    assert claim.domainSlotIds == ["campaign_links", "evidence_trace"]
+    assert claim.claimState is EpistemicStatus.OBSERVED
+    assert claim.evidenceRefs[0].source == (
+        "services/api/journeys/communication360/communication360_facts"
+    )
+    assert claim.evidenceRefs[0].uri == "store://communication360_facts/campaign-act-1"
+
+
+async def test_campaign_projects_supported_canonical_communication_object_families() -> None:
+    facts = [
+        _fact(
+            TENANT_A,
+            "conversation-1",
+            kind="conversation",
+            payload={
+                "campaign_id": "camp_1",
+                "conversation_id": "conversation-1",
+                "kind": "conversation",
+                "provider_thread_ids": ["thread-1"],
+                "message_ids": ["message-1"],
+                "state": "active",
+                "topic": "PRIVATE TOPIC",
+            },
+        ),
+        _fact(
+            TENANT_A,
+            "thread-1",
+            kind="provider_thread",
+            payload={
+                "campaign_id": "camp_1",
+                "thread_id": "thread-1",
+                "provider": "mail.provider.v1",
+                "message_ids": ["message-1"],
+                "subject": "PRIVATE SUBJECT",
+            },
+        ),
+        _fact(
+            TENANT_A,
+            "matter-1",
+            kind="matter",
+            payload={
+                "matter_id": "matter-1",
+                "campaign_ids": ["camp_1"],
+                "conversation_ids": ["conversation-1"],
+                "episode_ids": [],
+            },
+        ),
+        _fact(
+            TENANT_A,
+            "request-1",
+            kind="request",
+            payload={
+                "campaign_id": "camp_1",
+                "requester_entity_id": "entity-1",
+                "assignee_entity_id": "entity-2",
+                "state": "open",
+                "deadline": "2026-09-04T00:00:00Z",
+                "description": "PRIVATE REQUEST",
+            },
+        ),
+        _fact(
+            TENANT_A,
+            "commitment-1",
+            kind="commitment",
+            payload={
+                "campaign_id": "camp_1",
+                "committer_entity_id": "entity-1",
+                "beneficiary_entity_id": "entity-2",
+                "state": "open",
+                "due_at": "2026-09-05T00:00:00Z",
+                "description": "PRIVATE COMMITMENT",
+            },
+        ),
+        _fact(
+            TENANT_A,
+            "response-1",
+            kind="response_expectation",
+            payload={
+                "campaign_id": "camp_1",
+                "expectation_type": "reply_by",
+                "communication_ref": "message-1",
+                "state": "met",
+                "due_at": "2026-09-04T00:00:00Z",
+            },
+        ),
+        _fact(
+            TENANT_A,
+            "binding-1",
+            kind="participant_binding",
+            payload={
+                "campaign_id": "camp_1",
+                "role": "author",
+                "entity_id": "entity-1",
+                "principal_entity_id": "entity-2",
+                "delegation_grant_id": "grant-1",
+                "valid_from": "2026-09-03T00:00:00Z",
+            },
+        ),
+    ]
+    provider = Communication360Provider(sources=FakeSource(facts=facts))
+    request, context = await _make_context(ProviderRegistry())
+
+    result = await provider.project(request, context)
+
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    records = {item["kind"]: item for item in interactions.content["interactions"]}
+    assert set(records) == {
+        "conversation",
+        "provider_thread",
+        "matter",
+        "request",
+        "commitment",
+        "response_expectation",
+        "participant_binding",
+    }
+    assert records["conversation"]["conversationState"] == "active"
+    assert records["conversation"]["messageIds"] == ["message-1"]
+    assert records["provider_thread"]["messageIds"] == ["message-1"]
+    assert records["matter"]["campaignIds"] == ["camp_1"]
+    assert records["request"]["requestState"] == "open"
+    assert records["commitment"]["commitmentState"] == "open"
+    assert records["response_expectation"]["expectationState"] == "met"
+    assert records["participant_binding"]["role"] == "author"
+    assert all(item["evidenceRefIds"] for item in records.values())
+
+    summary = next(section for section in result.sections if section.id == "summary")
+    assert summary.content["counts"]["active_conversations"] == 1
+    assert summary.content["counts"]["open_requests"] == 1
+    assert summary.content["counts"]["open_commitments"] == 1
+    canonical_claims = [claim for claim in result.claims if claim.id.startswith("canonical_fact.")]
+    assert len(canonical_claims) == len(facts)
+    slots_by_kind = {
+        row["kind"]: next(
+            claim.domainSlotIds
+            for claim in canonical_claims
+            if claim.id == f"canonical_fact.{row['fact_id']}"
+        )
+        for row in facts
+    }
+    assert slots_by_kind == {
+        "conversation": ["campaign_links", "evidence_trace", "thread_summary"],
+        "provider_thread": ["campaign_links", "evidence_trace", "thread_summary"],
+        "matter": ["campaign_links", "evidence_trace"],
+        "request": ["campaign_links", "evidence_trace"],
+        "commitment": ["campaign_links", "evidence_trace"],
+        # A response expectation is not an observed response event.
+        "response_expectation": ["campaign_links", "evidence_trace"],
+        "participant_binding": ["campaign_links", "evidence_trace", "participants"],
+    }
+    assert all(
+        not ({"profile_links", "journey_links", "policy_state", "risk_flags"}
+             & set(claim.domainSlotIds or []))
+        for claim in canonical_claims
+    )
+    assert all(claim.evidenceRefs for claim in canonical_claims)
+    assert "PRIVATE TOPIC" not in result.model_dump_json()
+    assert "PRIVATE SUBJECT" not in result.model_dump_json()
+    assert "PRIVATE REQUEST" not in result.model_dump_json()
+    assert "PRIVATE COMMITMENT" not in result.model_dump_json()
+
+
+async def test_canonical_fact_without_reusable_evidence_is_not_asserted_as_claim() -> None:
+    row_without_evidence = {
+        "tenant_id": TENANT_A,
+        "kind": "communication_act",
+        "occurred_at": "2026-09-03T11:00:00Z",
+        "payload": {
+            "campaign_id": "camp_1",
+            "act_type": "recorded",
+            "provider_id": "mail.provider.v1",
+        },
+    }
+    provider = Communication360Provider(sources=FakeSource(facts=[row_without_evidence]))
+    request, context = await _make_context(ProviderRegistry())
+
+    result = await provider.project(request, context)
+
+    assert result.claims == []
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert evidence.content["evidence"] == []
+    source_policy = next(section for section in result.sections if section.id == "state").content[
+        "sourcePolicyContext"
+    ]
+    assert source_policy["sourceLineage"]["state"] == "unknown"
+    assert source_policy["sourceLineage"]["references"] == []
+
+
+async def test_communications_ssot_slots_report_supported_evidence_and_unknown_authorities() -> None:
+    message = _msg(
+        TENANT_A,
+        "message-coverage",
+        sender_entity_id="agent-1",
+        recipient_entity_id="profile-1",
+    ).model_copy(update={"external_thread_id": "provider-thread-1"})
+    facts = [
+        _fact(
+            TENANT_A,
+            "conversation-coverage",
+            kind="conversation",
+            payload={
+                "campaign_id": "camp_1",
+                "profile_id": "profile-1",
+                "journey_id": "journey-1",
+                "conversation_id": "conversation-1",
+                "message_ids": ["message-coverage"],
+                "state": "active",
+            },
+        ),
+        _fact(
+            TENANT_A,
+            "author-binding-coverage",
+            kind="participant_binding",
+            payload={
+                "campaign_id": "camp_1",
+                "role": "author",
+                "entity_id": "agent-1",
+                "entity_type": "agent",
+            },
+        ),
+        _fact(
+            TENANT_A,
+            "response-act-coverage",
+            kind="communication_act",
+            payload={
+                "campaign_id": "camp_1",
+                "act_type": "acknowledge",
+                "message_id": "message-coverage",
+            },
+        ),
+    ]
+    provider = Communication360Provider(
+        sources=FakeSource(messages=[message], facts=facts)
+    )
+    request, context = await _make_context(ProviderRegistry())
+
+    result = await provider.project(request, context)
+
+    coverage = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]
+    assert set(coverage) == {
+        "thread_summary",
+        "message_inventory",
+        "participants",
+        "campaign_links",
+        "profile_links",
+        "journey_links",
+        "response_events",
+        "agent_authorship",
+        "policy_state",
+        "risk_flags",
+        "evidence_trace",
+    }
+    assert coverage["thread_summary"]["state"] == "degraded"
+    assert coverage["thread_summary"]["evidenceRefs"]
+    assert coverage["message_inventory"]["state"] == "available"
+    assert coverage["message_inventory"]["evidenceRefs"][0]["id"] == "ev-message-coverage"
+    assert coverage["participants"]["state"] == "degraded"
+    assert coverage["campaign_links"]["state"] == "available"
+    assert coverage["profile_links"]["state"] == "degraded"
+    assert coverage["journey_links"]["state"] == "degraded"
+    assert coverage["response_events"]["state"] == "degraded"
+    assert coverage["agent_authorship"]["state"] == "degraded"
+    assert coverage["agent_authorship"]["evidenceRefs"][0]["id"] == "author-binding-coverage"
+    assert coverage["policy_state"]["state"] == "unknown"
+    assert coverage["risk_flags"]["state"] == "unknown"
+    assert coverage["evidence_trace"]["state"] == "degraded"
+    assert {ref["id"] for ref in coverage["evidence_trace"]["evidenceRefs"]} >= {
+        "ev-message-coverage",
+        "conversation-coverage",
+        "author-binding-coverage",
+        "response-act-coverage",
+    }
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    rows_by_kind = {row["kind"]: row for row in interactions.content["interactions"]}
+    assert rows_by_kind["conversation"]["campaignIds"] == ["camp_1"]
+    assert rows_by_kind["conversation"]["profileIds"] == ["profile-1"]
+    assert rows_by_kind["conversation"]["journeyIds"] == ["journey-1"]
+    assert rows_by_kind["conversation"]["messageIds"] == ["message-coverage"]
+    assert rows_by_kind["participant_binding"]["entityType"] == "agent"
+
+
+async def test_communications_unsupported_slots_stay_unknown_without_exact_evidence() -> None:
+    provider = Communication360Provider(sources=FakeSource())
+    request, context = await _make_context(
+        ProviderRegistry(),
+        subject=ProjectionSubject(kind="journey", id="journey-without-comms"),
+    )
+
+    result = await provider.project(request, context)
+
+    coverage = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]
+    assert coverage["message_inventory"]["state"] == "unknown"
+    assert coverage["participants"]["state"] == "unknown"
+    assert coverage["journey_links"]["state"] == "unknown"
+    assert coverage["policy_state"]["state"] == "unknown"
+    assert coverage["risk_flags"]["state"] == "unknown"
+
+
+async def test_communication360_resolves_explicit_journey_reference_with_tenant_evidence() -> None:
+    from uuid import uuid4
+
+    journey_uuid = uuid4()
+    version_uuid = uuid4()
+    journey_id = str(journey_uuid)
+    version_id = str(version_uuid)
+    fact = _fact(
+        TENANT_A,
+        "communication-journey-reference",
+        kind="conversation",
+        payload={"campaign_id": "camp_1", "journey_id": journey_id},
+    )
+    journey = {
+        "tenant_id": TENANT_A,
+        "journey_id": journey_uuid,
+        "journey_version_id": version_uuid,
+        "is_current": True,
+        "computed_at": "2026-10-20T12:34:56Z",
+        "private_profile_notes": "must not enter the projection",
+    }
+    reader = FakeJourneyReader({journey_id: journey})
+    provider = Communication360Provider(
+        sources=FakeSource(facts=[fact]), journey_reader=reader
+    )
+    request, context = await _make_context(ProviderRegistry())
+
+    result = await provider.project(request, context)
+
+    coverage = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]
+    journey_slot = coverage["journey_links"]
+    assert journey_slot["state"] == "available"
+    assert journey_slot["coverage"] == "complete"
+    assert journey_slot["reason"] == "explicit_tenant_journey_reference_resolved_to_current_version"
+    refs = {ref["id"]: ref for ref in journey_slot["evidenceRefs"]}
+    assert refs["communication-journey-reference"]["source"].endswith(
+        "communication360_facts"
+    )
+    assert refs[version_id]["source"].endswith("measurement/journey_versions")
+    assert refs[version_id]["observedAt"] == "2026-10-20T12:34:56Z"
+    assert reader.calls == [(TENANT_A, journey_id)]
+
+    linked_claims = [claim for claim in result.claims if claim.kind == "communication_journey_link"]
+    assert len(linked_claims) == 1
+    assert {ref.id for ref in linked_claims[0].evidenceRefs} == {
+        "communication-journey-reference",
+        version_id,
+    }
+    assert linked_claims[0].claimState == EpistemicStatus.OBSERVED
+    assert linked_claims[0].domainSlotIds == ["journey_links"]
+    assert "must not enter" not in result.model_dump_json()
+
+
+async def test_communication360_rejects_cross_tenant_current_journey_record() -> None:
+    from uuid import uuid4
+
+    journey_id = str(uuid4())
+    foreign_version_id = str(uuid4())
+    fact = _fact(
+        TENANT_A,
+        "cross-tenant-journey-reference",
+        kind="conversation",
+        payload={"campaign_id": "camp_1", "journey_id": journey_id},
+    )
+    reader = FakeJourneyReader(
+        {
+            journey_id: {
+                "tenant_id": TENANT_B,
+                "journey_id": journey_id,
+                "journey_version_id": foreign_version_id,
+                "is_current": True,
+                "computed_at": "2026-10-20T12:34:56Z",
+            }
+        }
+    )
+    provider = Communication360Provider(
+        sources=FakeSource(facts=[fact]), journey_reader=reader
+    )
+    request, context = await _make_context(ProviderRegistry())
+
+    result = await provider.project(request, context)
+
+    coverage = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]
+    journey_slot = coverage["journey_links"]
+    assert journey_slot["state"] == "degraded"
+    assert journey_slot["reason"] == (
+        "explicit_journey_reference_not_resolved_to_current_tenant_record"
+    )
+    assert {ref["id"] for ref in journey_slot["evidenceRefs"]} == {
+        "cross-tenant-journey-reference"
+    }
+    assert not [claim for claim in result.claims if claim.kind == "communication_journey_link"]
+    assert reader.calls == [(TENANT_A, journey_id)]
+
+
+async def test_communication360_degrades_journey_link_when_current_authority_is_unavailable() -> None:
+    from uuid import uuid4
+
+    journey_id = str(uuid4())
+    fact = _fact(
+        TENANT_A,
+        "unavailable-journey-reference",
+        kind="conversation",
+        payload={"campaign_id": "camp_1", "journey_id": journey_id},
+    )
+    reader = FakeJourneyReader(raises=True)
+    provider = Communication360Provider(
+        sources=FakeSource(facts=[fact]), journey_reader=reader
+    )
+    request, context = await _make_context(ProviderRegistry())
+
+    result = await provider.project(request, context)
+
+    coverage = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]
+    journey_slot = coverage["journey_links"]
+    assert journey_slot["state"] == "degraded"
+    assert journey_slot["reason"] == "current_journey_authority_unavailable"
+    assert {ref["id"] for ref in journey_slot["evidenceRefs"]} == {
+        "unavailable-journey-reference"
+    }
+    assert not [claim for claim in result.claims if claim.kind == "communication_journey_link"]
+
+
+async def test_communication360_reads_risk_flags_only_for_exact_source_subject() -> None:
+    risk_rows = [
+        {
+            "signal_id": "source-risk-a",
+            "tenant_id": TENANT_A,
+            "subject_kind": "source",
+            "subject_id": "source-a",
+            "risk_dimension": "data_quality",
+            "claim_state": "inferred",
+            "confidence": 0.6,
+            "evidence_refs": [
+                {
+                    "id": "source-risk-evidence-a",
+                    "type": "event",
+                    "source": "risk360/risk_signals",
+                    "observedAt": "2026-10-20T12:30:00Z",
+                }
+            ],
+            "source": "source_integrity_detector",
+            "observed_at": "2026-10-20T12:30:00Z",
+        },
+    ]
+    reader = FakeRiskSignalReader(risk_rows)
+    provider = Communication360Provider(
+        sources=FakeSource(), risk_signal_reader=reader
+    )
+    request, context = await _make_context(
+        ProviderRegistry(),
+        subject=ProjectionSubject(kind="source", id="source-a"),
+    )
+
+    result = await provider.project(request, context)
+
+    coverage = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]
+    risk_slot = coverage["risk_flags"]
+    assert risk_slot["state"] == "available"
+    assert risk_slot["reason"] == "tenant_scoped_risk_signals_observed_for_exact_subject"
+    risk_evidence = {ref["id"]: ref for ref in risk_slot["evidenceRefs"]}
+    assert risk_evidence["source-risk-evidence-a"]["observedAt"] == "2026-10-20T12:30:00Z"
+    risk_claims = [claim for claim in result.claims if claim.kind == "communication_risk_signal_record"]
+    assert len(risk_claims) == 1
+    assert risk_claims[0].claimState == EpistemicStatus.INFERRED
+    assert risk_claims[0].domainSlotIds == ["risk_flags"]
+    assert {ref.id for ref in risk_claims[0].evidenceRefs} == {"source-risk-evidence-a"}
+    assert reader.calls == [(TENANT_A, "source", "source-a", 101)]
+
+    foreign = {
+        **risk_rows[0],
+        "signal_id": "source-risk-b",
+        "tenant_id": TENANT_B,
+        "evidence_refs": [
+            {**risk_rows[0]["evidence_refs"][0], "id": "source-risk-evidence-b"}
+        ],
+    }
+    leaking_reader = FakeRiskSignalReader([risk_rows[0], foreign])
+    provider = Communication360Provider(
+        sources=FakeSource(), risk_signal_reader=leaking_reader
+    )
+    result = await provider.project(request, context)
+    coverage = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]
+    assert coverage["risk_flags"]["state"] == "degraded"
+    assert {ref["id"] for ref in coverage["risk_flags"]["evidenceRefs"]} == {
+        "source-risk-evidence-a"
+    }
+    assert not any(
+        ref.id == "source-risk-evidence-b"
+        for claim in result.claims
+        for ref in claim.evidenceRefs
+    )
+    assert leaking_reader.calls == [(TENANT_A, "source", "source-a", 101)]
+
+
+async def test_communication360_keeps_risk_flags_unknown_for_unsupported_subject_and_degrades_on_outage() -> None:
+    unsupported_reader = FakeRiskSignalReader()
+    provider = Communication360Provider(
+        sources=FakeSource(), risk_signal_reader=unsupported_reader
+    )
+    request, context = await _make_context(ProviderRegistry())
+    result = await provider.project(request, context)
+    coverage = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]
+    assert coverage["risk_flags"]["state"] == "unknown"
+    assert unsupported_reader.calls == []
+
+    reader = FakeRiskSignalReader(raises=True)
+    provider = Communication360Provider(sources=FakeSource(), risk_signal_reader=reader)
+    request, context = await _make_context(
+        ProviderRegistry(), subject=ProjectionSubject(kind="source", id="source-a")
+    )
+    result = await provider.project(request, context)
+    coverage = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]
+    assert coverage["risk_flags"]["state"] == "degraded"
+    assert coverage["risk_flags"]["reason"] == "risk_signal_authority_unavailable"
+
+
+async def test_communication360_does_not_join_current_journey_or_risk_for_as_of_request() -> None:
+    from uuid import uuid4
+
+    journey_uuid = uuid4()
+    journey_id = str(journey_uuid)
+    fact = _fact(
+        TENANT_A,
+        "historical-journey-reference",
+        kind="conversation",
+        payload={"source_id": "source-a", "journey_id": journey_id},
+    )
+    journey_reader = FakeJourneyReader(
+        {
+            journey_id: {
+                "tenant_id": TENANT_A,
+                "journey_id": journey_id,
+                "journey_version_id": str(uuid4()),
+                "is_current": True,
+                "computed_at": "2026-10-20T12:34:56Z",
+            }
+        }
+    )
+    risk_reader = FakeRiskSignalReader()
+    provider = Communication360Provider(
+        sources=FakeSource(facts=[fact]),
+        journey_reader=journey_reader,
+        risk_signal_reader=risk_reader,
+    )
+    request, context = await _make_context(
+        ProviderRegistry(),
+        subject=ProjectionSubject(kind="source", id="source-a"),
+        asOf="2026-10-20T13:00:00Z",
+    )
+
+    result = await provider.project(request, context)
+
+    coverage = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]
+    assert coverage["journey_links"]["state"] == "unknown"
+    assert coverage["journey_links"]["reason"] == "historical_current_journey_lookup_unavailable"
+    assert coverage["risk_flags"]["state"] == "unknown"
+    assert coverage["risk_flags"]["reason"] == "risk_signal_temporal_lookup_unavailable"
+    assert journey_reader.calls == []
+    assert risk_reader.calls == []
 
 
 @pytest.mark.parametrize(
@@ -1080,10 +1817,16 @@ async def test_source_policy_context_preserves_exact_provider_refs_for_episode_a
     assert source_policy["sourceLineage"]["state"] == "observed_references"
     assert source_policy["policyEvaluation"]["state"] == "unknown"
     assert source_policy["policyEvaluation"]["authority"] == "experience360_frame_policy_runtime"
-    assert source_policy["freshness"]["state"] == "available"
+    assert source_policy["freshness"]["state"] == "unknown"
+    assert source_policy["freshness"]["evaluation"] == "not_performed"
+    assert (
+        source_policy["freshness"]["reason"] == "freshness_window_not_evaluated_by_communication360"
+    )
 
 
-async def test_source_policy_context_is_tenant_filtered_and_keeps_recorded_consent_evidence() -> None:
+async def test_source_policy_context_is_tenant_filtered_and_keeps_recorded_consent_evidence() -> (
+    None
+):
     receipt_ref = EvidenceRef(
         id="consent-receipt-1",
         type="event",
@@ -1131,16 +1874,17 @@ async def test_source_policy_context_is_tenant_filtered_and_keeps_recorded_conse
 
     state = next(section for section in result.sections if section.id == "state")
     source_policy = state.content["sourcePolicyContext"]
-    assert [
-        item["providerIdentity"] for item in source_policy["sourceLineage"]["references"]
-    ] == ["mail.provider.v1"]
+    assert [item["providerIdentity"] for item in source_policy["sourceLineage"]["references"]] == [
+        "mail.provider.v1"
+    ]
     assert source_policy["historicalConsent"]["state"] == "recorded"
     assert source_policy["historicalConsent"]["receipts"][0]["receiptId"] == receipt_ref.id
     assert {
         ref["id"] for ref in source_policy["historicalConsent"]["receipts"][0]["evidenceRefs"]
     } == {receipt_ref.id, identity_ref.id}
     assert "foreign.provider.v1" not in str(source_policy)
-    assert source_policy["freshness"]["state"] == "available"
+    assert source_policy["freshness"]["state"] == "unknown"
+    assert source_policy["freshness"]["evaluation"] == "not_performed"
 
 
 async def test_source_policy_context_degrades_when_a_required_source_is_unavailable() -> None:
@@ -1155,6 +1899,59 @@ async def test_source_policy_context_degrades_when_a_required_source_is_unavaila
     assert source_policy["sourceLineage"]["state"] == "degraded"
     assert source_policy["historicalConsent"]["state"] == "degraded"
     assert source_policy["freshness"]["state"] == "unknown"
+
+
+async def test_source_policy_context_does_not_infer_freshness_from_timestamps() -> None:
+    provider = Communication360Provider(
+        sources=FakeSource(
+            messages=[_msg(TENANT_A, "timestamped-message", provider="mail.provider.v1")]
+        )
+    )
+    request, context = await _make_context(ProviderRegistry())
+
+    result = await provider.project(request, context)
+
+    source_policy = next(section for section in result.sections if section.id == "state").content[
+        "sourcePolicyContext"
+    ]
+    assert source_policy["sourceLineage"]["references"][0]["observedAt"]
+    assert source_policy["historicalConsent"]["state"] == "unknown"
+    assert source_policy["policyEvaluation"]["state"] == "unknown"
+    assert source_policy["freshness"] == {
+        "state": "unknown",
+        "sourceTimestampsPreserved": True,
+        "evaluation": "not_performed",
+        "reason": "freshness_window_not_evaluated_by_communication360",
+    }
+
+
+async def test_source_lineage_preserves_evidence_for_each_provider_observation() -> None:
+    source = FakeSource(
+        messages=[
+            _msg(TENANT_A, "message-one", provider="mail.provider.v1"),
+            _msg(
+                TENANT_A,
+                "message-two",
+                provider="mail.provider.v1",
+                occurred_at="2026-09-03T10:05:00Z",
+            ),
+        ]
+    )
+    provider = Communication360Provider(sources=source)
+    request, context = await _make_context(ProviderRegistry())
+
+    result = await provider.project(request, context)
+
+    source_policy = next(section for section in result.sections if section.id == "state").content[
+        "sourcePolicyContext"
+    ]
+    references = source_policy["sourceLineage"]["references"]
+    assert len(references) == 2
+    assert {reference["providerIdentity"] for reference in references} == {"mail.provider.v1"}
+    assert {reference["evidenceRefs"][0]["id"] for reference in references} == {
+        "ev-message-one",
+        "ev-message-two",
+    }
 
 
 # ---------------------------------------------------------------------------

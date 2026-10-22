@@ -185,8 +185,9 @@ def _kyber_device_eraser(repo_cls: type) -> Any:
 # rows silently survived a DSR erasure that reported "completed". This handler
 # now erases the semantic plane and marks each component with its OWN real
 # erased-row receipt, derived from the privacy handler's per-table counts:
-#   semantic_observations → silver_semantic_observations + entity_mentions
-#                           + subject_links + claims + shadow_divergences
+#   semantic_observations → silver_semantic_observations + semantic memories
+#                           + entity_mentions + subject_links + claims
+#                           + shadow_divergences
 #   sentiment_observations → silver_sentiment_observations
 #   semantic_gold_state    → gold_entity_semantic_state + gold_entity_sentiment_state
 #   semantic_review_queue  → semantic_review_queue
@@ -207,6 +208,7 @@ def _semantic_component_receipts(deleted: dict) -> dict[str, int]:
     return {
         SEMANTIC_OBSERVATIONS_COMPONENT: (
             _n("silver_semantic_observations")
+            + _n("semantic_memory_records")
             + _n("silver_semantic_entity_mentions")
             + _n("silver_semantic_subject_links")
             + _n("silver_semantic_claims")

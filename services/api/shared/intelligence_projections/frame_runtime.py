@@ -202,14 +202,17 @@ async def build_experience360_frame(
 
     identity_provider = None
     identity_result: Optional[Any] = None
+    identity_direct_slot_ids = {
+        slot_id
+        for binding in surface.get("directProviderBindings", [])
+        if isinstance(binding, Mapping)
+        and binding.get("providerClass") == "Identity360Provider"
+        and isinstance(binding.get("domainSlotIds"), (list, tuple))
+        for slot_id in binding["domainSlotIds"]
+        if isinstance(slot_id, str)
+    }
     identity_readable_slot_ids = (
-        readable_slot_ids
-        & {
-            "resolved_subject_identity",
-            "source_identifier_lineage",
-            "relationship_identity_context",
-            "identity_evidence",
-        }
+        readable_slot_ids & identity_direct_slot_ids
         if request.surfaceId == "identity360"
         else set()
     )
@@ -397,6 +400,11 @@ def _derive_agent_actor_metadata(
         for slot_id, requirements in required_slots.items()
         if slot_id in requested_slots and "slotActorAttribution" in requirements
     }
+    # Agent 360 retains actor_attribution as an optional compatibility slot.
+    # When explicitly requested, it carries the same evidence-backed metadata
+    # as the required authority and delegation slots.
+    if request.surfaceId == "agent360" and "actor_attribution" in requested_slots:
+        metadata_slots.add("actor_attribution")
     if not metadata_slots:
         return {}
 
@@ -612,7 +620,10 @@ def _derive_agent_actor_metadata(
                         or claim_state != "observed"
                         or claim.subject.kind != request.subject.kind
                         or claim.subject.id != request.subject.id
-                        or claim.domainSlotIds != ["authority_and_delegation"]
+                        or "authority_envelope" not in (claim.domainSlotIds or [])
+                        or not set(claim.domainSlotIds or []).issubset(
+                            {"authority_envelope", "authority_check"}
+                        )
                         or not any(
                             evidence.source == "agent_executions"
                             and evidence.type == "event"
@@ -763,7 +774,9 @@ def _derive_agent_actor_metadata(
                     if (
                         claim.kind != "canonically_resolved_agent_identity"
                         or claim_state != "resolved"
-                        or "actor_attribution" not in (claim.domainSlotIds or [])
+                        or not {"identity", "actor_attribution"}.issubset(
+                            set(claim.domainSlotIds or [])
+                        )
                         or not claim.evidenceRefs
                     ):
                         continue

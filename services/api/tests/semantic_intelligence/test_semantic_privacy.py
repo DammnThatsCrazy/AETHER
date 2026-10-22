@@ -19,6 +19,9 @@ from intelligence.semantic_intelligence.engine import classify_event, get_store,
 from intelligence.semantic_intelligence.graph_projector import project_tenant
 from intelligence.semantic_intelligence.models import ObservationStatus
 from intelligence.semantic_intelligence.privacy import SemanticPrivacyHandler
+from intelligence.semantic_intelligence.repositories.base_fact_repo import (
+    SemanticFactRepository,
+)
 from intelligence.semantic_intelligence.repositories.review_queue_repo import (
     SemanticReviewQueueRepository,
 )
@@ -80,6 +83,62 @@ async def test_erasure_deletes_semantic_data_and_reports():
     # Nothing remains for the subject.
     assert await get_store().list_semantic(TENANT, SUBJECT) == []
     assert await SemanticReviewQueueRepository().list_open(TENANT) == []
+
+
+async def test_erasure_deletes_tenant_subject_memory_records():
+    await SemanticFactRepository("semantic_memory_records").upsert(
+        {
+            "id": "mem-privacy-erasure-0001",
+            "tenant_id": TENANT,
+            "subject_ref": SUBJECT,
+            "occurred_at": "2026-10-19T10:00:00+00:00",
+            "idempotency_key": "semantic-memory:tenant_privacy:mem-privacy-erasure-0001",
+            "data": {
+                "memory_id": "mem-privacy-erasure-0001",
+                "tenant_id": TENANT,
+                "subject_ref": SUBJECT,
+                "status": "classified",
+                "retention_class": "standard_90d",
+                "idempotency_key": "semantic-memory:tenant_privacy:mem-privacy-erasure-0001",
+            },
+        }
+    )
+
+    result = await service_mod.get_semantic_service().erase_subject(TENANT, SUBJECT)
+
+    assert result["completed"] is True
+    assert result["deleted"]["semantic_memory_records"] == 1
+    assert "mem-privacy-erasure-0001" not in SemanticFactRepository(
+        "semantic_memory_records"
+    )._store
+
+
+async def test_restriction_tombstones_tenant_subject_memory_records():
+    await SemanticFactRepository("semantic_memory_records").upsert(
+        {
+            "id": "mem-privacy-restrict-0001",
+            "tenant_id": TENANT,
+            "subject_ref": SUBJECT,
+            "occurred_at": "2026-10-19T10:00:00+00:00",
+            "idempotency_key": "semantic-memory:tenant_privacy:mem-privacy-restrict-0001",
+            "data": {
+                "memory_id": "mem-privacy-restrict-0001",
+                "tenant_id": TENANT,
+                "subject_ref": SUBJECT,
+                "status": "classified",
+                "retention_class": "standard_90d",
+                "idempotency_key": "semantic-memory:tenant_privacy:mem-privacy-restrict-0001",
+            },
+        }
+    )
+
+    result = await service_mod.get_semantic_service().restrict_subject(TENANT, SUBJECT)
+
+    assert result["completed"] is True
+    assert result["restricted"]["semantic_memory_records"] == 1
+    assert SemanticFactRepository("semantic_memory_records")._store[
+        "mem-privacy-restrict-0001"
+    ]["data"]["status"] == "consent_restricted"
 
 
 async def test_erasure_is_tenant_scoped():

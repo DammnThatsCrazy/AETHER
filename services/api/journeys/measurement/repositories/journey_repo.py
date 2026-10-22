@@ -251,6 +251,7 @@ class JourneyRepository:
         profile_id: str,
         *,
         identity_type: Optional[str] = None,
+        limit: Optional[int] = None,
     ) -> list[dict[str, Any]]:
         """Return current journeys for one typed identity.
 
@@ -261,6 +262,8 @@ class JourneyRepository:
         """
         if identity_type not in {None, "profile", "cluster", "anonymous"}:
             raise ValueError(f"unsupported identity_type: {identity_type}")
+        if limit is not None and limit <= 0:
+            raise ValueError("limit must be positive")
 
         def matches_identity(version: dict[str, Any]) -> bool:
             if identity_type == "cluster":
@@ -285,12 +288,14 @@ class JourneyRepository:
 
         pool = await self._pool()
         if pool is None:
-            return [
+            rows = [
                 v for v in _local_store.values()
                 if v.get("tenant_id") == tenant_id
                 and v.get("is_current")
                 and matches_identity(v)
             ]
+            rows.sort(key=lambda v: str(v.get("computed_at") or ""), reverse=True)
+            return rows[:limit] if limit is not None else rows
 
         identity_condition = {
             "profile": "profile_id=$2 AND journey_type IS DISTINCT FROM 'anonymous'",
@@ -305,8 +310,9 @@ class JourneyRepository:
                 WHERE tenant_id=$1 AND is_current=TRUE
                 AND {identity_condition}
                 ORDER BY computed_at DESC
+                {"LIMIT $3" if limit is not None else ""}
                 """,
-                tenant_id, profile_id,
+                *([tenant_id, profile_id, limit] if limit is not None else [tenant_id, profile_id]),
             )
             return [dict(r) for r in rows]
 

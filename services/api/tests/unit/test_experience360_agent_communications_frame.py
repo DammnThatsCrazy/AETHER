@@ -129,7 +129,7 @@ async def test_agent360_communications_composes_evidenced_primary_and_supporting
     )
 
     assert sorted(calls, key=lambda call: call[0]) == [
-        ("agent360", TENANT, "agent", AGENT_ID, ("evidence", "interactions")),
+        ("agent360", TENANT, "agent", AGENT_ID, ("interactions",)),
         (
             "communication360",
             TENANT,
@@ -194,6 +194,12 @@ async def test_agent360_communications_composes_real_providers_over_scoped_sourc
         id="agent-message-observation-1",
         type="event",
         source="obs_agent_messages",
+        observedAt=AS_OF,
+    )
+    agent_inbox_evidence = EvidenceRef(
+        id="agent-inbox-observation-1",
+        type="event",
+        source="obs_agent_inboxes",
         observedAt=AS_OF,
     )
     communication_message_evidence = EvidenceRef(
@@ -273,6 +279,39 @@ async def test_agent360_communications_composes_real_providers_over_scoped_sourc
             assert tenant_id == TENANT
             return []
 
+        async def capability_access_profile(self, tenant_id, agent_id):
+            self.calls.append(("capability_access_profile", tenant_id, agent_id))
+            assert (tenant_id, agent_id) == (TENANT, SOURCE_AGENT_ID)
+            return Agent360ReadBatch(
+                rows=[
+                    {
+                        "tenant_id": tenant_id,
+                        "agent_id": agent_id,
+                        "profile": {
+                            "subject": {"kind": "agent", "id": agent_id},
+                            "profile_known": True,
+                            "missing_inputs": [],
+                            "identity": {"installation_ids": ["capability-installation-1"]},
+                            "observation": {"last_seen_at": AS_OF},
+                            "counts": {
+                                "capabilities_reachable": 0,
+                                "capabilities_invoked": 0,
+                                "capabilities_authorized": 0,
+                                "capabilities_unauthorized": 0,
+                                "authorizations_active": 0,
+                            },
+                            "reach": {"capabilities": []},
+                            "authorization": {
+                                "known": True,
+                                "authorizations_active": 0,
+                                "activeRecordIds": [],
+                                "activeRecordIdsTruncated": False,
+                            },
+                        },
+                    }
+                ]
+            )
+
         async def risk_signals(self, tenant_id, agent_id, limit):
             self.calls.append(("risk_signals", tenant_id, agent_id))
             assert tenant_id == TENANT
@@ -288,6 +327,7 @@ async def test_agent360_communications_composes_real_providers_over_scoped_sourc
                         "agent_id": SOURCE_AGENT_ID,
                         "subject_binding_basis": "exact_tenant_inbox_agent_id",
                         "inbox_obs_id": "agent-inbox-observation-1",
+                        "inbox_evidence_ref": agent_inbox_evidence.model_dump(mode="json"),
                         "message_obs_id": agent_message_evidence.id,
                         "thread_obs_id": "agent-thread-observation-1",
                         "direction": "outbound",

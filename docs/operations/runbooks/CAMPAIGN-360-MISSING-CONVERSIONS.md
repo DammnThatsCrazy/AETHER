@@ -12,7 +12,7 @@ toc_depth: 2
 source_files: [services/api/journeys/campaign/exploration.py, services/api/journeys/measurement/repositories/conversion_repo.py]
 source_hashes:
   "services/api/journeys/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
-  "services/api/journeys/measurement/repositories/conversion_repo.py": "sha256:ed4dacb42d8b93f67af9e2c819edf3e98fb7b7f407c9187d1502cd1df340144c"
+  "services/api/journeys/measurement/repositories/conversion_repo.py": "sha256:7b3f6cdb71101a726f21444595ef22224b8cc57f7b02fa37313f478e546eebb8"
 ---
 
 # Runbook — Missing Conversions (Campaign 360)
@@ -29,6 +29,10 @@ Conversions exist in the system but are not being linked to this campaign.
 The most common cause is a missing or misconfigured campaign attribution
 join — the `canonical_conversions` table records are not associated with the
 campaign's active attribution run.
+
+Account360 and Agent360 also read conversions by explicit account or agent ID.
+Those subject-scoped reads do not establish a campaign association, so their
+presence alone does not explain a missing Campaign360 conversion count.
 
 ## Diagnosis steps
 

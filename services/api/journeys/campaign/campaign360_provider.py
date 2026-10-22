@@ -48,20 +48,37 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
     "summary",
 )
 
-SLOT_CAMPAIGN_IDENTITY = "campaign_identity_and_state"
-SLOT_TOUCHPOINTS = "touchpoints_and_communications"
-SLOT_JOURNEY_EPISODE = "journey_and_episode_context"
-SLOT_ATTRIBUTION_OUTCOMES = "attribution_and_outcomes"
-SLOT_POPULATION = "population_context"
-SLOT_ECONOMIC = "economic_context"
+SLOT_CAMPAIGN_IDENTITY = "campaign_identity"
+SLOT_SOURCE_CLASSIFICATION = "source_classification"
+SLOT_SIGNAL_SOURCES = "signal_sources"
+SLOT_TOUCHPOINTS = "touchpoints"
+SLOT_JOURNEYS = "journeys"
+SLOT_CONVERSIONS = "conversions"
+SLOT_ATTRIBUTION = "attribution"
+SLOT_COHORTS_SYNDICATES = "cohorts_syndicates"
+SLOT_PERFORMANCE = "performance"
+SLOT_ANOMALIES = "anomalies"
+SLOT_EVIDENCE_TRACE = "evidence_trace"
+
+# Kept as internal aliases for the legacy subject-context helpers below. These
+# helpers are not called for Campaign360's campaign-only subject contract.
+SLOT_JOURNEY_EPISODE = SLOT_JOURNEYS
+SLOT_POPULATION = SLOT_COHORTS_SYNDICATES
+SLOT_ATTRIBUTION_OUTCOMES = SLOT_ATTRIBUTION
+SLOT_ECONOMIC = SLOT_PERFORMANCE
 
 _SLOT_REQUIREMENTS: tuple[tuple[str, str], ...] = (
     (SLOT_CAMPAIGN_IDENTITY, "required"),
+    (SLOT_SOURCE_CLASSIFICATION, "required"),
+    (SLOT_SIGNAL_SOURCES, "required"),
     (SLOT_TOUCHPOINTS, "required"),
-    (SLOT_JOURNEY_EPISODE, "required"),
-    (SLOT_ATTRIBUTION_OUTCOMES, "required"),
-    (SLOT_POPULATION, "optional"),
-    (SLOT_ECONOMIC, "optional"),
+    (SLOT_JOURNEYS, "required"),
+    (SLOT_CONVERSIONS, "required"),
+    (SLOT_ATTRIBUTION, "required"),
+    (SLOT_COHORTS_SYNDICATES, "required"),
+    (SLOT_PERFORMANCE, "required"),
+    (SLOT_ANOMALIES, "required"),
+    (SLOT_EVIDENCE_TRACE, "required"),
 )
 
 # Keep this allowlist narrow. Campaign ``properties`` are source-controlled
@@ -563,34 +580,31 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         }
         campaign_facts: Optional[dict[str, Any]] = None
         touchpoint_items: list[dict[str, Any]] = []
+        source_classification_items: list[dict[str, Any]] = []
         credit_items: list[dict[str, Any]] = []
         touchpoint_page: Optional[PageInfo] = None
         campaign_found = False
         campaign_id: Optional[str] = None
-        journey_episode_context: dict[str, Any] = {
+        journey_context: dict[str, Any] = {
             "state": "unknown",
             "subject": {"kind": subject.kind, "id": subject.id},
             "journeys": [],
             "episodes": [],
             "dimensionStates": {"journeys": "unknown", "episodes": "unknown"},
             "freshness": {"state": "unknown", "sourceTimestampsPreserved": True},
-            "reason": "journey_and_episode_context_not_resolved",
+            "reason": "journey_context_not_resolved",
         }
-        population_context: dict[str, Any] = {
+        source_classification: dict[str, Any] = {
             "state": "unknown",
             "subject": {"kind": subject.kind, "id": subject.id},
-            "reason": "population360_is_canonical_provider_for_population_context",
+            "reason": "source_classification_authority_not_connected",
         }
 
         if subject.kind != "campaign":
-            for slot_id, requirement in _SLOT_REQUIREMENTS:
+            for slot_id, _requirement in _SLOT_REQUIREMENTS:
                 slot_states[slot_id].update(
-                    state="not_applicable" if slot_id == SLOT_CAMPAIGN_IDENTITY else "unknown",
-                    reason=(
-                        "subject_kind_is_not_campaign"
-                        if slot_id == SLOT_CAMPAIGN_IDENTITY
-                        else "campaign_binding_for_subject_kind_unavailable"
-                    ),
+                    state="not_applicable",
+                    reason="campaign_360_requires_campaign_subject",
                 )
             findings.append(
                 {
@@ -599,20 +613,6 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                     "state": "unknown",
                 }
             )
-            if subject.kind == "episode":
-                journey_episode_context = await self._read_episode_context(
-                    request=request,
-                    slot_states=slot_states,
-                    evidence_by_key=evidence_by_key,
-                    claims=claims,
-                )
-            elif subject.kind == "population":
-                population_context = await self._read_population_context(
-                    request=request,
-                    slot_states=slot_states,
-                    evidence_by_key=evidence_by_key,
-                    claims=claims,
-                )
         else:
             try:
                 parsed_campaign_id = UUID(subject.id)
@@ -716,6 +716,63 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                         reason=None,
                         sourceAuthorities=["campaign_facts"],
                     )
+                    # The campaign registry records whether an identity came
+                    # from an external connector or a custom source, but it is
+                    # not the canonical source-classification authority. Keep
+                    # that distinction visible and leave the classification
+                    # slot unknown until source provenance is joined.
+                    source_classification = {
+                        "state": "unknown",
+                        "subject": {"kind": subject.kind, "id": subject.id},
+                        "registryOrigin": _string_or_none(
+                            campaign_record.get("origin")
+                        ),
+                        "primaryPlatform": _string_or_none(
+                            campaign_record.get("primary_platform")
+                        ),
+                        "reason": "canonical_source_classification_join_unavailable",
+                    }
+                    slot_states[SLOT_SOURCE_CLASSIFICATION].update(
+                        state="unknown",
+                        reason="canonical_source_classification_join_unavailable",
+                        sourceAuthorities=["source_facts", "source_provenance"],
+                    )
+                    slot_states[SLOT_SIGNAL_SOURCES].update(
+                        state="unknown",
+                        reason="campaign_signal_source_join_unavailable",
+                        sourceAuthorities=["events", "observations", "source_facts"],
+                    )
+                    slot_states[SLOT_CONVERSIONS].update(
+                        state="unknown",
+                        reason="canonical_campaign_conversion_join_unavailable",
+                        sourceAuthorities=["outcome_facts", "outcomes"],
+                    )
+                    slot_states[SLOT_COHORTS_SYNDICATES].update(
+                        state="unknown",
+                        reason="campaign_cohort_and_syndicate_membership_unavailable",
+                        sourceAuthorities=[
+                            "cohort_membership",
+                            "cluster_definitions",
+                            "cluster_membership",
+                            "relationship_facts",
+                        ],
+                    )
+                    slot_states[SLOT_PERFORMANCE].update(
+                        state="unknown",
+                        reason="campaign_performance_metric_contract_unavailable",
+                        sourceAuthorities=[
+                            "attribution_credits",
+                            "campaign_touchpoints",
+                            "computation",
+                            "economic",
+                            "outcomes",
+                        ],
+                    )
+                    slot_states[SLOT_ANOMALIES].update(
+                        state="unknown",
+                        reason="campaign_anomaly_authority_not_connected",
+                        sourceAuthorities=["risk_outputs", "source_provenance"],
+                    )
 
                 if campaign_found:
                     if temporal.observations_supported:
@@ -726,10 +783,23 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                             temporal=temporal,
                             slot_states=slot_states,
                             touchpoint_items=touchpoint_items,
+                            source_classification_items=source_classification_items,
                             evidence_by_key=evidence_by_key,
                             claims=claims,
                             degraded_reasons=degraded_reasons,
                         )
+                        if source_classification_items:
+                            source_classification = {
+                                "state": "degraded",
+                                "subject": {"kind": subject.kind, "id": subject.id},
+                                "touchpointClassifications": source_classification_items,
+                                "reason": "observed_touchpoint_classifications_only_campaign_registry_source_unresolved",
+                            }
+                            slot_states[SLOT_SOURCE_CLASSIFICATION].update(
+                                state="degraded",
+                                reason="observed_touchpoint_classifications_only_campaign_registry_source_unresolved",
+                                sourceAuthorities=["campaign_touchpoints", "source_provenance"],
+                            )
                         await self._read_attribution(
                             request=request,
                             subject=subject,
@@ -744,7 +814,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                     else:
                         for slot_id in (
                             SLOT_TOUCHPOINTS,
-                            SLOT_ATTRIBUTION_OUTCOMES,
+                            SLOT_ATTRIBUTION,
                         ):
                             slot_states[slot_id].update(
                                 state="unknown",
@@ -752,7 +822,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                                 sourceAuthorities=(
                                     ["touchpoints"]
                                     if slot_id == SLOT_TOUCHPOINTS
-                                    else ["attribution_credits", "outcomes"]
+                                    else ["attribution_credits"]
                                 ),
                             )
                         findings.append(
@@ -760,7 +830,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                                 "code": temporal.reason or "temporal_scope_unavailable",
                                 "domainSlotIds": [
                                     SLOT_TOUCHPOINTS,
-                                    SLOT_ATTRIBUTION_OUTCOMES,
+                                    SLOT_ATTRIBUTION,
                                 ],
                                 "state": "unknown",
                             }
@@ -775,17 +845,17 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                         reason="campaign_registry_subject_not_available",
                         sourceAuthorities=["touchpoints"],
                     )
-                    slot_states[SLOT_ATTRIBUTION_OUTCOMES].update(
+                    slot_states[SLOT_ATTRIBUTION].update(
                         state="unknown",
                         reason="campaign_registry_subject_not_available",
-                        sourceAuthorities=["attribution_credits", "outcomes"],
+                        sourceAuthorities=["attribution_credits"],
                     )
 
                 # Join the canonical journey authority by its explicit
                 # campaign_ids membership. Episode records have no typed
                 # campaign relation, so that dimension remains unknown.
                 if campaign_found and temporal.observations_supported:
-                    journey_episode_context = await self._read_campaign_journey_context(
+                    journey_context = await self._read_campaign_journey_context(
                         request=request,
                         campaign_id=campaign_id or "",
                         temporal=temporal,
@@ -795,25 +865,43 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                         degraded_reasons=degraded_reasons,
                     )
                 else:
-                    slot_states[SLOT_JOURNEY_EPISODE].update(
+                    slot_states[SLOT_JOURNEYS].update(
                         state="unknown",
                         reason=(
                             temporal.reason
                             if campaign_found
                             else "campaign_registry_subject_not_available"
                         ),
-                        sourceAuthorities=["journeys", "episode_facts"],
-                        dimensionStates={"journeys": "unknown", "episodes": "unknown"},
+                        sourceAuthorities=["journeys"],
+                        dimensionStates={"journeys": "unknown"},
                     )
-                slot_states[SLOT_POPULATION].update(
+                slot_states[SLOT_COHORTS_SYNDICATES].setdefault("state", "unknown")
+                slot_states[SLOT_COHORTS_SYNDICATES].update(
                     state="unknown",
-                    reason="population360_is_canonical_provider_for_population_context",
-                    sourceAuthorities=["population", "population_definitions"],
+                    reason="campaign_cohort_and_syndicate_membership_unavailable",
+                    sourceAuthorities=[
+                        "cohort_membership",
+                        "cluster_definitions",
+                        "cluster_membership",
+                        "relationship_facts",
+                    ],
                 )
-                slot_states[SLOT_ECONOMIC].update(
+                slot_states[SLOT_PERFORMANCE].update(
                     state="unknown",
-                    reason="economic360_is_canonical_provider_for_economic_context",
-                    sourceAuthorities=["economic", "economic_facts"],
+                    reason="campaign_performance_metric_contract_unavailable",
+                    sourceAuthorities=[
+                        "attribution_credits",
+                        "campaign_touchpoints",
+                        "computation",
+                        "economic",
+                        "outcomes",
+                    ],
+                )
+                slot_states[SLOT_ANOMALIES].setdefault("state", "unknown")
+                slot_states[SLOT_ANOMALIES].update(
+                    state="unknown",
+                    reason="campaign_anomaly_authority_not_connected",
+                    sourceAuthorities=["risk_outputs", "source_provenance"],
                 )
 
         if temporal.reason is not None and temporal.reason not in {
@@ -832,13 +920,40 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         if request.includeClaims is False:
             claims = []
 
-        evidence_items = [
-            {
-                "evidence": ref.model_dump(by_alias=True, exclude_none=True),
-                "domainSlotIds": _slots_for_evidence(ref, claims, campaign_id),
-            }
-            for ref in evidence_by_key.values()
-        ]
+        evidence_items = []
+        for ref in evidence_by_key.values():
+            slots = _slots_for_evidence(ref, claims, campaign_id)
+            slots.append(SLOT_EVIDENCE_TRACE)
+            slots = list(dict.fromkeys(slots))
+            evidence_items.append(
+                {
+                    "evidence": ref.model_dump(by_alias=True, exclude_none=True),
+                    "domainSlotIds": slots,
+                }
+            )
+            if request.includeClaims is not False:
+                claims.append(
+                    _claim(
+                        claim_id=f"campaign360:{campaign_id or subject.id}:evidence:{ref.source}:{ref.id}",
+                        kind="campaign_evidence_trace_entry",
+                        subject=subject,
+                        evidence=ref,
+                        text="A canonical source record is included in the campaign evidence trace.",
+                        slot_id=SLOT_EVIDENCE_TRACE,
+                    )
+                )
+        slot_states[SLOT_EVIDENCE_TRACE].update(
+            state=(
+                "available"
+                if evidence_items
+                else "empty"
+                if campaign_found
+                else "unknown"
+            ),
+            reason=None if evidence_items else "campaign_evidence_trace_not_resolved",
+            sourceAuthorities=["evidence", "source_provenance"],
+            evidenceCount=len(evidence_items),
+        )
         evidence_section_state = (
             "available" if evidence_items else "empty" if campaign_found else "unknown"
         )
@@ -858,6 +973,8 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             )
         elif attribution_state == "available":
             outcomes_section_state = "available"
+        elif attribution_state == "empty":
+            outcomes_section_state = "empty"
         elif attribution_state == "degraded":
             outcomes_section_state = "degraded"
         else:
@@ -878,12 +995,36 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             "temporalScope": temporal.as_dict(),
             "slots": [slot_states[slot_id] for slot_id, _ in _SLOT_REQUIREMENTS],
             "domainContexts": {
-                SLOT_JOURNEY_EPISODE: journey_episode_context,
-                SLOT_POPULATION: population_context,
-                "source_context": {
-                    "state": "unknown",
+                SLOT_SOURCE_CLASSIFICATION: source_classification,
+                SLOT_SIGNAL_SOURCES: {
+                    "state": slot_states[SLOT_SIGNAL_SOURCES]["state"],
                     "subject": {"kind": subject.kind, "id": subject.id},
-                    "reason": "campaign_source_to_canonical_campaign_join_unavailable",
+                    "reason": slot_states[SLOT_SIGNAL_SOURCES].get("reason"),
+                },
+                SLOT_JOURNEYS: journey_context,
+                SLOT_CONVERSIONS: {
+                    "state": slot_states[SLOT_CONVERSIONS]["state"],
+                    "subject": {"kind": subject.kind, "id": subject.id},
+                    "reason": slot_states[SLOT_CONVERSIONS].get("reason"),
+                },
+                SLOT_COHORTS_SYNDICATES: {
+                    "state": slot_states[SLOT_COHORTS_SYNDICATES]["state"],
+                    "subject": {"kind": subject.kind, "id": subject.id},
+                    "reason": slot_states[SLOT_COHORTS_SYNDICATES].get("reason"),
+                },
+                SLOT_PERFORMANCE: {
+                    "state": slot_states[SLOT_PERFORMANCE]["state"],
+                    "subject": {"kind": subject.kind, "id": subject.id},
+                    "reason": slot_states[SLOT_PERFORMANCE].get("reason"),
+                },
+                SLOT_ANOMALIES: {
+                    "state": slot_states[SLOT_ANOMALIES]["state"],
+                    "subject": {"kind": subject.kind, "id": subject.id},
+                    "reason": slot_states[SLOT_ANOMALIES].get("reason"),
+                },
+                SLOT_EVIDENCE_TRACE: {
+                    "state": slot_states[SLOT_EVIDENCE_TRACE]["state"],
+                    "items": evidence_items,
                 },
             },
             "dependencyState": [
@@ -908,10 +1049,16 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                     "touchpoints": touchpoint_items,
                     "domainSlotIds": [
                         SLOT_CAMPAIGN_IDENTITY,
+                        SLOT_SOURCE_CLASSIFICATION,
+                        SLOT_SIGNAL_SOURCES,
                         SLOT_TOUCHPOINTS,
-                        SLOT_ATTRIBUTION_OUTCOMES,
-                        SLOT_JOURNEY_EPISODE,
-                        SLOT_POPULATION,
+                        SLOT_JOURNEYS,
+                        SLOT_CONVERSIONS,
+                        SLOT_ATTRIBUTION,
+                        SLOT_COHORTS_SYNDICATES,
+                        SLOT_PERFORMANCE,
+                        SLOT_ANOMALIES,
+                        SLOT_EVIDENCE_TRACE,
                     ],
                     "provenance": {
                         "projectionId": PROJECTION_ID,
@@ -926,10 +1073,13 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                     "items": findings,
                     "domainSlotIds": [slot_id for slot_id, _ in _SLOT_REQUIREMENTS],
                     "limitations": [
-                        "journey_and_episode_context is supplied by episode360",
-                        "population_context is supplied by population360",
-                        "economic_context is supplied by economic360",
-                        "communication facts are supplied by communication360",
+                        "touchpoint source classifications do not classify campaign registry provenance",
+                        "signal_sources require source and signal authority composition",
+                        "communication content remains governed by communication360",
+                        "campaign-to-conversion joins are unresolved",
+                        "cohort and syndicate membership requires canonical grouping authorities",
+                        "performance metrics require a registered metric contract and value composition",
+                        "campaign anomalies require risk authority composition",
                         "actor attribution, delegation, and authority are not resolved by this provider",
                         "current campaign state is not a historical snapshot",
                     ],
@@ -941,14 +1091,14 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                 {
                     "attribution": {
                         "state": attribution_state,
-                        "dataQuality": slot_states[SLOT_ATTRIBUTION_OUTCOMES].get(
+                        "dataQuality": slot_states[SLOT_ATTRIBUTION].get(
                             "qualityState", "unknown"
                         ),
                         "credits": credit_items,
                         "creditsTruncated": slot_states[
-                            SLOT_ATTRIBUTION_OUTCOMES
+                            SLOT_ATTRIBUTION
                         ].get("creditsTruncated", False),
-                        "domainSlotIds": [SLOT_ATTRIBUTION_OUTCOMES],
+                        "domainSlotIds": [SLOT_ATTRIBUTION],
                         "zeroDefaulted": False,
                     },
                     "outcome360Dependency": _dependency_state(
@@ -1020,8 +1170,9 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         """Project exact current journey versions that declare this campaign.
 
         Campaign ids are taken only from the canonical journey version's
-        ``campaign_ids`` array. Episode records have no typed campaign join, so
-        their dimension remains unknown and the combined slot stays degraded.
+        ``campaign_ids`` array. Episode records have no typed campaign join;
+        their separate context remains unknown and does not change Journey slot
+        state.
         """
         source_read = getattr(self._source, "journeys_for_campaign", None)
         base = {
@@ -1036,7 +1187,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             slot_states[SLOT_JOURNEY_EPISODE].update(
                 state="unknown",
                 reason="journey_authority_binding_unavailable",
-                sourceAuthorities=["journeys", "episode_facts"],
+                sourceAuthorities=["journeys"],
                 dimensionStates=base["dimensionStates"],
             )
             return {**base, "state": "unknown", "reason": "journey_authority_binding_unavailable"}
@@ -1056,7 +1207,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             slot_states[SLOT_JOURNEY_EPISODE].update(
                 state="degraded",
                 reason="journey_authority_unavailable",
-                sourceAuthorities=["journeys", "episode_facts"],
+                sourceAuthorities=["journeys"],
                 dimensionStates={"journeys": "unavailable", "episodes": "unknown"},
             )
             degraded_reasons.append("journey_authority_unavailable")
@@ -1071,7 +1222,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             slot_states[SLOT_JOURNEY_EPISODE].update(
                 state="unknown",
                 reason="journey_row_shape_invalid",
-                sourceAuthorities=["journeys", "episode_facts"],
+                sourceAuthorities=["journeys"],
                 dimensionStates={"journeys": "unknown", "episodes": "unknown"},
             )
             degraded_reasons.append("journey_row_shape_invalid")
@@ -1088,7 +1239,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             slot_states[SLOT_JOURNEY_EPISODE].update(
                 state="unknown",
                 reason="journey_row_scope_mismatch",
-                sourceAuthorities=["journeys", "episode_facts"],
+                sourceAuthorities=["journeys"],
                 dimensionStates={"journeys": "unknown", "episodes": "unknown"},
             )
             degraded_reasons.append("journey_row_scope_mismatch")
@@ -1164,20 +1315,20 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             "episodes": "unknown",
         }
         slot_states[SLOT_JOURNEY_EPISODE].update(
-            state="degraded",
-            reason=journey_reason or "campaign_episode_association_unavailable",
-            sourceAuthorities=["journeys", "episode_facts"],
+            state=journey_state,
+            reason=journey_reason,
+            sourceAuthorities=["journeys"],
             dimensionStates=dimension_states,
-            journeyCount=len(journey_items) if journey_state in {"available", "empty"} else None,
+            journeyCount=len(journey_items)
+            if journey_state in {"available", "empty"}
+            else None,
             episodeCount=None,
         )
         if journey_reason:
             degraded_reasons.append(journey_reason)
-        if journey_state in {"available", "empty"}:
-            degraded_reasons.append("campaign_episode_association_unavailable")
         return {
             **base,
-            "state": "degraded",
+            "state": journey_state,
             "journeys": journey_items,
             "dimensionStates": dimension_states,
             "freshness": {
@@ -1186,7 +1337,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                 "sourceTimestampsPreserved": True,
                 "missingTimestamp": "unknown",
             },
-            "reason": slot_states[SLOT_JOURNEY_EPISODE]["reason"],
+            "reason": journey_reason,
         }
 
     async def _read_episode_context(
@@ -1420,6 +1571,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         temporal: _TemporalScope,
         slot_states: dict[str, dict[str, Any]],
         touchpoint_items: list[dict[str, Any]],
+        source_classification_items: list[dict[str, Any]],
         evidence_by_key: dict[tuple[str, str], EvidenceRef],
         claims: list[ClaimEnvelope],
         degraded_reasons: list[str],
@@ -1522,6 +1674,52 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                     slot_id=SLOT_TOUCHPOINTS,
                 )
             )
+            classification_id = row.get("source_classification_id")
+            source_class = row.get("source_class")
+            classifier_version = row.get("source_classifier_version")
+            source_event_id = row.get("source_event_id")
+            if all(
+                value is not None and str(value).strip()
+                for value in (
+                    classification_id,
+                    row.get("touchpoint_id"),
+                    source_class,
+                    classifier_version,
+                    source_event_id,
+                )
+            ):
+                classification_ref = EvidenceRef(
+                    id=str(classification_id),
+                    type="event",
+                    source="services/api/journeys/measurement/repositories/touchpoint_repo.py:touchpoint_source_classification_revisions",
+                    observedAt=_string_or_none(row.get("source_classified_at")),
+                    uri=f"store://touchpoint_source_classification_revisions/{classification_id}",
+                )
+                _add_evidence(evidence_by_key, classification_ref)
+                source_classification_items.append(
+                    {
+                        "touchpointId": str(row["touchpoint_id"]),
+                        "sourceEventId": str(source_event_id),
+                        "sourceClass": str(source_class),
+                        "classifierVersion": str(classifier_version),
+                        "classificationId": str(classification_id),
+                        "classifiedAt": _string_or_none(row.get("source_classified_at")),
+                        "domainSlotIds": [SLOT_SOURCE_CLASSIFICATION],
+                    }
+                )
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"campaign360:{campaign_id}:source-classification:{classification_id}",
+                        kind="campaign_touchpoint_source_classification",
+                        subject=subject,
+                        evidenceRefs=[evidence, classification_ref],
+                        claims=[
+                            "A tenant-scoped campaign touchpoint has a recorded source classification."
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=[SLOT_SOURCE_CLASSIFICATION],
+                    )
+                )
         if unreferenced_rows:
             degraded_reasons.append("touchpoint_evidence_reference_missing")
         if has_more:
@@ -1593,11 +1791,8 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             slot_states[SLOT_ATTRIBUTION_OUTCOMES].update(
                 state="degraded",
                 reason="attribution_repository_unavailable",
-                sourceAuthorities=["attribution_credits", "outcomes"],
-                dimensionStates={
-                    "attributionCredits": "unavailable",
-                    "outcomes": "unknown",
-                },
+                sourceAuthorities=["attribution_credits"],
+                dimensionStates={"attributionCredits": "unavailable"},
                 qualityState="unknown",
             )
             degraded_reasons.append("attribution_repository_unavailable")
@@ -1606,11 +1801,8 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             slot_states[SLOT_ATTRIBUTION_OUTCOMES].update(
                 state="unknown",
                 reason="attribution_credit_row_shape_invalid",
-                sourceAuthorities=["attribution_credits", "outcomes"],
-                dimensionStates={
-                    "attributionCredits": "unknown",
-                    "outcomes": "unknown",
-                },
+                sourceAuthorities=["attribution_credits"],
+                dimensionStates={"attributionCredits": "unknown"},
                 qualityState="unknown",
             )
             degraded_reasons.append("attribution_credit_row_shape_invalid")
@@ -1620,11 +1812,8 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             slot_states[SLOT_ATTRIBUTION_OUTCOMES].update(
                 state="unknown",
                 reason="attribution_credit_scope_mismatch",
-                sourceAuthorities=["attribution_credits", "outcomes"],
-                dimensionStates={
-                    "attributionCredits": "unknown",
-                    "outcomes": "unknown",
-                },
+                sourceAuthorities=["attribution_credits"],
+                dimensionStates={"attributionCredits": "unknown"},
                 qualityState=result.data_quality or "unknown",
             )
             degraded_reasons.append("attribution_credit_scope_mismatch")
@@ -1636,6 +1825,9 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             elif result.data_quality is None:
                 slot_state = "unknown"
                 reason = "attribution_data_quality_unavailable"
+            elif result.data_quality == "complete":
+                slot_state = "empty"
+                reason = None
             else:
                 # An empty credit set can be a known empty measurement only if
                 # the authority explicitly attests to a complete run. The
@@ -1645,14 +1837,13 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             slot_states[SLOT_ATTRIBUTION_OUTCOMES].update(
                 state=slot_state,
                 reason=reason,
-                sourceAuthorities=["attribution_credits", "outcomes"],
+                sourceAuthorities=["attribution_credits"],
                 dimensionStates={
                     "attributionCredits": "missing"
                     if slot_state == "missing"
                     else "empty"
                     if result.data_quality == "complete"
                     else "unknown",
-                    "outcomes": "unknown",
                 },
                 qualityState=result.data_quality or "unknown",
                 creditsTruncated=False,
@@ -1686,31 +1877,37 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                     slot_id=SLOT_ATTRIBUTION_OUTCOMES,
                 )
             )
-        slot_state = "degraded"
+        slot_state = "available"
         if credits_truncated:
+            slot_state = "degraded"
             reason = "attribution_credit_page_truncated"
         elif unreferenced:
+            slot_state = "degraded"
             reason = "attribution_credit_evidence_reference_missing"
         elif result.data_quality == "partial":
+            slot_state = "degraded"
             reason = "attribution_repository_reports_partial_data_quality"
+        elif result.data_quality not in {"complete", "partial"}:
+            slot_state = "degraded"
+            reason = "attribution_data_quality_unverified"
         else:
-            reason = "outcome_records_require_outcome360"
+            reason = None
         slot_states[SLOT_ATTRIBUTION_OUTCOMES].update(
             state=slot_state,
             reason=reason,
-            sourceAuthorities=["attribution_credits", "outcomes"],
+            sourceAuthorities=["attribution_credits"],
             dimensionStates={
                 "attributionCredits": "truncated"
                 if credits_truncated
                 else "partial"
                 if unreferenced
                 else "available",
-                "outcomes": "unknown",
             },
             qualityState=result.data_quality or "unknown",
             creditsTruncated=credits_truncated,
         )
-        degraded_reasons.append(reason)
+        if reason is not None:
+            degraded_reasons.append(reason)
 
 
 def _campaign_matches_scope(

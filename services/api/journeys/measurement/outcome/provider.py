@@ -42,6 +42,7 @@ from shared.intelligence_projections.contracts import (
 )
 from shared.intelligence_projections.generated_registry import (
     INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+    PRODUCT_360_SURFACE_DEFINITIONS,
 )
 from shared.intelligence_projections.provider import IntelligenceProjectionProvider
 from shared.intelligence_projections.registry import ProviderRegistry
@@ -59,6 +60,37 @@ _JOURNEY_COMPLETION_DEFINITION_REF = "journey_completion"
 # Registry outputSections for outcome360 (mirrors the registry row; kept local
 # only as the provider's own render plan — the registry owns the canonical list).
 _OUTCOME360_SECTIONS = ("summary", "state", "evidence", "outcomes", "findings")
+
+
+def _outcome_slot_ids_for_subject(subject_kind: str) -> list[str]:
+    """Return exact product slots bound to outcome360's outcomes section.
+
+    The generated product catalog owns this cross-surface mapping. Keeping
+    claim routing derived from those explicit bindings lets every eligible
+    consumer receive the same canonical, evidence-backed outcome claim without
+    guessing from the claim kind or duplicating slot IDs here.
+    """
+    slot_ids: set[str] = set()
+    for surface in PRODUCT_360_SURFACE_DEFINITIONS.values():
+        slots = surface.get("domainSlots", ()) if isinstance(surface, dict) else ()
+        if not isinstance(slots, (list, tuple)):
+            continue
+        for slot in slots:
+            if not isinstance(slot, dict) or not isinstance(slot.get("id"), str):
+                continue
+            bindings = slot.get("projectionBindings", ())
+            if not isinstance(bindings, (list, tuple)):
+                continue
+            if any(
+                isinstance(binding, dict)
+                and binding.get("projectionId") == "outcome360"
+                and "outcomes" in binding.get("sectionIds", ())
+                and isinstance(binding.get("subjectKinds"), (list, tuple))
+                and subject_kind in binding.get("subjectKinds", ())
+                for binding in bindings
+            ):
+                slot_ids.add(slot["id"])
+    return sorted(slot_ids)
 
 _SECTION_TITLES = {
     "summary": "Outcome summary",
@@ -298,6 +330,7 @@ class Outcome360Provider:
         outcomes: list[Outcome],
     ) -> list[ClaimEnvelope]:
         claims: list[ClaimEnvelope] = []
+        domain_slot_ids = _outcome_slot_ids_for_subject(request.subject.kind)
         for outcome in outcomes:
             claims.append(
                 ClaimEnvelope(
@@ -306,6 +339,7 @@ class Outcome360Provider:
                     subject=request.subject,
                     evidenceRefs=outcome.evidence_refs,
                     claims=[f"outcome {outcome.id!r} is {outcome.state.value}"],
+                    domainSlotIds=domain_slot_ids or None,
                 )
             )
         completion = [
@@ -321,6 +355,7 @@ class Outcome360Provider:
                     subject=request.subject,
                     evidenceRefs=_collect_evidence(completion),
                     claims=[f"journey completion rate: {rate:.4f}"],
+                    domainSlotIds=domain_slot_ids or None,
                 )
             )
         return claims

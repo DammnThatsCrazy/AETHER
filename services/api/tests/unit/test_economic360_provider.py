@@ -34,7 +34,9 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from value.economic.economic360_provider import (  # noqa: E402
     OUTPUT_SECTIONS,
+    RepositoryAttributionCreditReader,
     Economic360Provider,
+    RepositoryConversionInventoryReader,
     RepositoryCampaignIdentityReader,
     RepositoryEconomicSourceReader,
     register_provider,
@@ -89,6 +91,51 @@ class FakeSource:
     async def is_canonical_campaign(self, tenant_id: str, campaign_id: str) -> bool:
         # The fake source represents an exact, already-resolved campaign scope.
         return True
+
+
+class FakeConversionInventory:
+    def __init__(self, *, state: str, records: list[dict], evidence_refs: list[dict]) -> None:
+        self.state = state
+        self.records = records
+        self.evidence_refs = evidence_refs
+        self.calls = 0
+
+    async def read(self, request: ProjectionRequest) -> dict:
+        self.calls += 1
+        return {
+            "tenantId": request.tenantId,
+            "subject": request.subject.model_dump(),
+            "canonicalAuthority": "canonical_conversions",
+            "state": self.state,
+            "reason": None,
+            "joinBasis": "exact_canonical_conversion_id",
+            "completeness": "complete" if self.state == "available" else "partial",
+            "records": self.records,
+            "evidenceRefs": self.evidence_refs,
+            "measurementOutcomeLinkage": {
+                "state": "unknown",
+                "reason": "outcome360_rows_do_not_expose_canonical_conversion_id",
+            },
+            "freshness": {
+                "state": "unknown",
+                "reason": "conversion_freshness_threshold_not_configured",
+            },
+            "timeScope": {
+                "mode": "current_canonical_state",
+                "historicalState": "unknown",
+            },
+            "limitations": ["records_are_canonical_conversion_rows_not_outcome360_measured_outcomes"],
+        }
+
+
+class FakeAttributionCredits:
+    def __init__(self, result: dict) -> None:
+        self.result = result
+        self.calls: list[tuple[str, list[str]]] = []
+
+    async def read(self, tenant_id: str, conversion_ids: list[str]) -> dict:
+        self.calls.append((tenant_id, list(conversion_ids)))
+        return self.result
 
 
 def _record(
@@ -191,6 +238,306 @@ async def test_claims_are_evidence_grounded(healthy_source: FakeSource) -> None:
     assert spend_claims
 
 
+async def test_economic_claims_route_to_value360_facts_slot(
+    healthy_source: FakeSource,
+) -> None:
+    result = await Economic360Provider(sources=healthy_source).project(
+        _request(), await _make_context(ProviderRegistry())
+    )
+
+    assert {claim.id for claim in result.claims} >= {
+        "summary.total_value_observed",
+        "summary.campaign_spend",
+    }
+    summary_claim = next(
+        claim for claim in result.claims if claim.id == "summary.total_value_observed"
+    )
+    spend_claim = next(claim for claim in result.claims if claim.id == "summary.campaign_spend")
+    assert summary_claim.domainSlotIds == [
+        "economic_facts_and_state",
+        "performance",
+        "value_summary",
+        "evidence_trace",
+    ]
+    assert spend_claim.domainSlotIds == ["economic_facts_and_state", "performance"]
+    assert summary_claim.evidenceRefs
+
+
+async def test_economic_campaign_claims_compose_into_campaign_performance_slot(
+    healthy_source: FakeSource,
+) -> None:
+    from shared.intelligence_projections.composition import compose_experience360_frame
+    from shared.intelligence_projections.contracts import (
+        Experience360FrameRequest,
+        Experience360PolicyDisposition,
+    )
+
+    subject = ProjectionSubject(kind="campaign", id="camp_1")
+    result = await Economic360Provider(sources=healthy_source).project(
+        _request(subject=subject), await _make_context(ProviderRegistry())
+    )
+    frame = compose_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="campaign360",
+            tenantId="tenant-a",
+            subject=subject,
+            requestedSlotIds=["performance"],
+            includeEvidence=True,
+        ),
+        [result],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        generated_at="2026-10-20T12:00:00Z",
+    )
+
+    performance_slot = frame.slots[0]
+    assert performance_slot.id == "performance"
+    assert {claim.kind for claim in performance_slot.claims} >= {
+        "economic_rollup",
+        "campaign_spend",
+    }
+    assert {ref.id for ref in performance_slot.evidenceRefs} >= {"a_spend", "a_gross"}
+
+
+async def test_value_attribution_credit_uses_exact_conversion_and_active_run_evidence() -> None:
+    conversion_id = "00000000-0000-4000-8000-000000000101"
+    run_id = "00000000-0000-4000-8000-000000000102"
+    credit_id = "00000000-0000-4000-8000-000000000103"
+    conversion_inventory = FakeConversionInventory(
+        state="available",
+        records=[{"conversionId": conversion_id}],
+        evidence_refs=[
+            EvidenceRef(
+                id=conversion_id,
+                type="transaction",
+                source="canonical_conversions",
+                uri=f"store://canonical_conversions/{conversion_id}",
+                observedAt="2026-10-19T10:00:00Z",
+            ).model_dump(mode="json")
+        ],
+    )
+    attribution_reader = FakeAttributionCredits(
+        {
+            "tenantId": "tenant-a",
+            "conversionIds": [conversion_id],
+            "state": "available",
+            "reason": None,
+            "completeness": "complete",
+            "runs": [
+                {
+                    "tenantId": "tenant-a",
+                    "conversionId": conversion_id,
+                    "attributionRunId": run_id,
+                    "modelType": "last_touch",
+                    "modelVersion": "v3",
+                    "status": "complete",
+                    "completedAt": "2026-10-19T10:02:00Z",
+                    "modelConfidence": 0.91,
+                }
+            ],
+            "records": [
+                {
+                    "tenantId": "tenant-a",
+                    "conversionId": conversion_id,
+                    "attributionRunId": run_id,
+                    "creditId": credit_id,
+                    "touchpointId": "touchpoint-7",
+                    "campaignId": "campaign-3",
+                    "channel": "web",
+                    "source": "newsletter",
+                    "sourceClass": "owned",
+                    "actorType": "human",
+                    "journeyRole": "assist",
+                    "attributionEligible": True,
+                    "creditWeight": "0.75",
+                    "modelConfidence": 0.91,
+                    "createdAt": "2026-10-19T10:02:00Z",
+                }
+            ],
+            "freshness": {
+                "state": "unknown",
+                "reason": "attribution_freshness_threshold_not_configured",
+                "completedAtCoverage": 1.0,
+                "oldestCompletedAt": "2026-10-19T10:02:00Z",
+                "latestCompletedAt": "2026-10-19T10:02:00Z",
+            },
+            "limitations": [
+                "credit_weights_are_canonical_model_outputs_not_independently_measured_value",
+                "attributed_revenue_and_agent_roi_are_not_inferred_or_projected",
+            ],
+        }
+    )
+    request = _request()
+    result = await Economic360Provider(
+        sources=FakeSource([]),
+        conversion_inventory_reader=conversion_inventory,
+        attribution_credit_reader=attribution_reader,
+    ).project(request, await _make_context(ProviderRegistry()))
+
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    attribution = evidence.content["attribution_credits"]
+    assert attribution_reader.calls == [("tenant-a", [conversion_id])]
+    assert attribution["state"] == "available"
+    assert attribution["freshness"]["state"] == "unknown"
+    assert attribution["freshness"]["latestCompletedAt"] == "2026-10-19T10:02:00+00:00"
+    assert attribution["records"][0]["creditWeight"] == "0.75"
+    assert "attributedGrossRevenue" not in attribution["records"][0]
+
+    claim = next(claim for claim in result.claims if claim.kind == "canonical_attribution_credit")
+    assert claim.domainSlotIds == ["attribution_credits", "evidence_trace"]
+    assert {ref.source for ref in claim.evidenceRefs} == {
+        "attribution_runs",
+        "attribution_credits",
+        "canonical_conversions",
+    }
+    assert "attribution-model output" in claim.claims[0]
+    assert "not independently measured realized value or agent ROI" in claim.claims[0]
+
+
+async def test_value_attribution_credit_does_not_turn_missing_active_run_into_empty() -> None:
+    conversion_id = "00000000-0000-4000-8000-000000000201"
+    inventory = FakeConversionInventory(
+        state="available",
+        records=[{"conversionId": conversion_id}],
+        evidence_refs=[
+            EvidenceRef(
+                id=conversion_id,
+                type="transaction",
+                source="canonical_conversions",
+                uri=f"store://canonical_conversions/{conversion_id}",
+            ).model_dump(mode="json")
+        ],
+    )
+    reader = FakeAttributionCredits(
+        {
+            "tenantId": "tenant-a",
+            "conversionIds": [conversion_id],
+            "state": "unknown",
+            "reason": "canonical_active_attribution_run_unavailable",
+            "completeness": "unknown",
+            "runs": [],
+            "records": [],
+        }
+    )
+    result = await Economic360Provider(
+        sources=FakeSource([]),
+        conversion_inventory_reader=inventory,
+        attribution_credit_reader=reader,
+    ).project(_request(), await _make_context(ProviderRegistry()))
+
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    attribution = evidence.content["attribution_credits"]
+    assert attribution["state"] == "unknown"
+    assert attribution["reason"] == "canonical_active_attribution_run_unavailable"
+    assert attribution["records"] == []
+    assert not any(claim.kind == "canonical_attribution_credit" for claim in result.claims)
+
+
+async def test_value_attribution_credit_discards_cross_tenant_run_and_credit_rows() -> None:
+    conversion_id = "00000000-0000-4000-8000-000000000301"
+    run_id = "00000000-0000-4000-8000-000000000302"
+    credit_id = "00000000-0000-4000-8000-000000000303"
+    inventory = FakeConversionInventory(
+        state="available",
+        records=[{"conversionId": conversion_id}],
+        evidence_refs=[
+            EvidenceRef(
+                id=conversion_id,
+                type="transaction",
+                source="canonical_conversions",
+                uri=f"store://canonical_conversions/{conversion_id}",
+            ).model_dump(mode="json")
+        ],
+    )
+    reader = FakeAttributionCredits(
+        {
+            "tenantId": "tenant-a",
+            "conversionIds": [conversion_id],
+            "state": "available",
+            "completeness": "complete",
+            "runs": [
+                {
+                    "tenantId": "tenant-b",
+                    "conversionId": conversion_id,
+                    "attributionRunId": run_id,
+                    "modelType": "last_touch",
+                }
+            ],
+            "records": [
+                {
+                    "tenantId": "tenant-b",
+                    "conversionId": conversion_id,
+                    "attributionRunId": run_id,
+                    "creditId": credit_id,
+                    "creditWeight": "1",
+                }
+            ],
+        }
+    )
+    result = await Economic360Provider(
+        sources=FakeSource([]),
+        conversion_inventory_reader=inventory,
+        attribution_credit_reader=reader,
+    ).project(_request(), await _make_context(ProviderRegistry()))
+
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    attribution = evidence.content["attribution_credits"]
+    assert attribution["state"] == "degraded"
+    assert attribution["reason"] == "canonical_attribution_credit_scope_or_record_invalid"
+    assert attribution["records"] == []
+    assert attribution["runs"] == []
+    assert not any(claim.kind == "canonical_attribution_credit" for claim in result.claims)
+
+
+async def test_repository_attribution_reader_uses_tenant_and_exact_conversion(monkeypatch) -> None:
+    from journeys.measurement.repositories import attribution_run_repo
+
+    tenant_id = "tenant-a"
+    conversion_id = "00000000-0000-4000-8000-000000000401"
+    run_id = "00000000-0000-4000-8000-000000000402"
+    credit_id = "00000000-0000-4000-8000-000000000403"
+    observed: list[tuple[str, str]] = []
+
+    class ExactRepository:
+        async def get_active_run(self, requested_tenant: str, requested_conversion: str):
+            observed.append((requested_tenant, requested_conversion))
+            return {
+                "tenant_id": tenant_id,
+                "conversion_id": conversion_id,
+                "attribution_run_id": run_id,
+                "model_type": "first_touch",
+                "model_version": "v2",
+                "status": "complete",
+                "is_active": True,
+                "completed_at": "2026-10-20T09:00:00Z",
+                "model_confidence": 0.8,
+            }
+
+        async def list_credits_for_run(self, requested_tenant: str, requested_run: str):
+            assert (requested_tenant, requested_run) == (tenant_id, run_id)
+            return [
+                {
+                    "tenant_id": tenant_id,
+                    "conversion_id": conversion_id,
+                    "attribution_run_id": run_id,
+                    "credit_id": credit_id,
+                    "credit_weight": "1.0",
+                    "created_at": "2026-10-20T09:00:00Z",
+                    "source_classifier_version": "source-v4",
+                }
+            ]
+
+    monkeypatch.setattr(attribution_run_repo, "AttributionRunRepository", ExactRepository)
+    result = await RepositoryAttributionCreditReader().read(tenant_id, [conversion_id])
+
+    assert observed == [(tenant_id, conversion_id)]
+    assert result["state"] == "available"
+    assert result["canonicalAuthorityRefs"] == ["attribution_runs", "attribution_credits"]
+    assert result["records"][0]["conversionId"] == conversion_id
+    assert result["records"][0]["creditWeight"] == "1.0"
+    assert result["records"][0]["sourceClassifierVersion"] == "source-v4"
+    assert result["freshness"]["state"] == "unknown"
+
+
 async def test_summary_surfaces_absorbed_metrics(healthy_source: FakeSource) -> None:
     provider = Economic360Provider(sources=healthy_source)
     result = await provider.project(_request(), await _make_context(ProviderRegistry()))
@@ -210,12 +557,8 @@ async def test_summary_metric_lineage_points_to_exact_value_and_cost_evidence() 
     spend_usd = _record(
         "tenant-a", "1000", "USD", usd="1000", metric="campaign_spend", ident="spend-usd"
     )
-    spend_eur = _record(
-        "tenant-a", "500", "EUR", metric="campaign_spend", ident="spend-eur"
-    )
-    revenue = _record(
-        "tenant-a", "2500", "USD", usd="2500", metric="gross_value", ident="revenue"
-    )
+    spend_eur = _record("tenant-a", "500", "EUR", metric="campaign_spend", ident="spend-eur")
+    revenue = _record("tenant-a", "2500", "USD", usd="2500", metric="gross_value", ident="revenue")
     ai_cost = _record(
         "tenant-a", "2.50", "USD", usd="2.50", metric="ai_execution_cost", ident="ai-cost"
     )
@@ -471,9 +814,7 @@ async def test_repository_ai_cost_reader_reports_unsupported_exact_subject_scope
 
 
 @pytest.mark.parametrize("subject_kind", ["episode", "journey"])
-async def test_value360_keeps_unbound_ai_cost_scope_unknown(
-    monkeypatch, subject_kind: str
-) -> None:
+async def test_value360_keeps_unbound_ai_cost_scope_unknown(monkeypatch, subject_kind: str) -> None:
     from intelligence.computation import repositories
     from value.economic import ai_aggregation, journey_operation_evidence
 
@@ -505,9 +846,7 @@ async def test_value360_keeps_unbound_ai_cost_scope_unknown(
         }
 
     monkeypatch.setattr(ai_aggregation, "list_facts", unsupported_fact_query)
-    monkeypatch.setattr(
-        repositories, "get_computation_repository", ExactEmptyComputedRepository
-    )
+    monkeypatch.setattr(repositories, "get_computation_repository", ExactEmptyComputedRepository)
     monkeypatch.setattr(
         journey_operation_evidence,
         "journey_commerce_operation_evidence",
@@ -770,6 +1109,162 @@ async def test_campaign_commerce_payment_facts_flow_through_canonical_activity_r
     assert operation["association_evidence"][0]["activityId"] == "activity-campaign-payment"
     assert evidence.content["operationEvidenceCompleteness"] == "bounded_read"
     assert "campaign_commerce_evidence_partial" not in result.degradedReasons
+
+
+async def test_campaign_commerce_payment_claim_routes_to_value360_slot_with_evidence(
+    monkeypatch,
+) -> None:
+    from shared.intelligence_projections.composition import compose_experience360_frame
+    from shared.intelligence_projections.contracts import (
+        Experience360FrameRequest,
+        Experience360PolicyDisposition,
+    )
+    from value.economic import journey_operation_evidence
+
+    async def exact_campaign_evidence(
+        tenant_id: str, campaign_id: str, *, as_of: str | None = None
+    ):
+        assert (tenant_id, campaign_id) == ("tenant-a", "campaign-a")
+        return {
+            "campaign_id": campaign_id,
+            "join_basis": "explicit_campaign_scoped_canonical_activity_commerce_order_ref",
+            "operation_links": [],
+            "payment_facts": [
+                {
+                    "factId": "commerce:order-hash:payment:provider-a:payment-revision:fact-hash",
+                    "kind": "payment",
+                    "joinBasis": "explicit_campaign_scoped_canonical_activity_commerce_order_ref",
+                    "amount": "23.40",
+                    "currency": "USD",
+                    "lifecycleState": "settled",
+                    "reconciliationState": "matched",
+                    "evidence": [
+                        {
+                            "id": "payment-revision",
+                            "type": "transaction",
+                            "source": "provider-a",
+                            "observedAt": "2026-10-17T10:59:00Z",
+                        }
+                    ],
+                }
+            ],
+            "amounts_included": True,
+            "operation_link_amounts_included": False,
+            "facts_are_aggregated": False,
+            "evidence_truncated": False,
+        }
+
+    monkeypatch.setattr(
+        journey_operation_evidence,
+        "campaign_commerce_operation_evidence",
+        exact_campaign_evidence,
+    )
+    subject = ProjectionSubject(kind="campaign", id="campaign-a")
+    result = await Economic360Provider(sources=FakeSource([])).project(
+        _request(subject=subject), await _make_context(ProviderRegistry())
+    )
+
+    payment_claim = next(claim for claim in result.claims if claim.kind == "commerce_economic_fact")
+    assert payment_claim.domainSlotIds == [
+        "payments_and_commerce_evidence",
+        "performance",
+        "evidence_trace",
+        "revenue_events",
+    ]
+    assert [ref.id for ref in payment_claim.evidenceRefs] == ["payment-revision"]
+    assert getattr(payment_claim.claimState, "value", payment_claim.claimState) == "observed"
+    assert "23.40 USD" in payment_claim.claims[0]
+    assert "lifecycle state: settled" in payment_claim.claims[0]
+    assert "reconciliation state: matched" in payment_claim.claims[0]
+    assert "settled payment event" in payment_claim.claims[0]
+
+    frame = compose_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="value360",
+            tenantId="tenant-a",
+            subject=subject,
+            requestedSlotIds=["payments_and_commerce_evidence"],
+            includeEvidence=True,
+        ),
+        [result],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        generated_at="2026-10-18T12:00:00Z",
+    )
+    payment_slot = frame.slots[0]
+    assert payment_slot.id == "payments_and_commerce_evidence"
+    assert [claim.id for claim in payment_slot.claims] == [payment_claim.id]
+    assert {ref.id for ref in payment_slot.evidenceRefs} == {"payment-revision"}
+    assert payment_slot.freshness.state == "unknown"
+
+
+async def test_entity_value_slot_is_profile_verified_and_direct_scope_only() -> None:
+    class CanonicalProfile:
+        async def is_canonical_profile(self, tenant_id: str, entity_id: str):
+            assert (tenant_id, entity_id) == ("tenant-a", "entity-a")
+            return True
+
+    subject = ProjectionSubject(kind="entity", id="entity-a")
+    result = await Economic360Provider(
+        sources=FakeSource(
+            [_record("tenant-a", "19.00", "USD", usd="19.00", ident="entity-value")]
+        ),
+        profile_identity_reader=CanonicalProfile(),
+    ).project(_request(subject=subject), await _make_context(ProviderRegistry()))
+
+    value_claim = next(
+        claim for claim in result.claims if claim.id == "summary.total_value_observed"
+    )
+    assert value_claim.domainSlotIds == [
+        "economic_facts_and_state",
+        "value_summary",
+        "evidence_trace",
+        "value",
+    ]
+    assert [ref.id for ref in value_claim.evidenceRefs] == ["entity-value"]
+    assert "entity-scoped" in value_claim.claims[0]
+    assert "member or descendant economics" in value_claim.claims[0]
+
+
+async def test_completed_payment_fact_does_not_claim_value_revenue_event(monkeypatch) -> None:
+    from value.economic import journey_operation_evidence
+
+    async def completed_payment(tenant_id: str, journey_id: str, *, as_of=None):
+        assert (tenant_id, journey_id) == ("tenant-a", "journey-1")
+        return {
+            "join_basis": "explicit_journey_step_commerce_order_ref",
+            "payment_facts": [
+                {
+                    "factId": "commerce:order-hash:payment:provider-a:payment-revision:fact-hash",
+                    "kind": "payment",
+                    "joinBasis": "explicit_journey_step_commerce_order_ref",
+                    "amount": "23.40",
+                    "currency": "USD",
+                    "lifecycleState": "completed",
+                    "reconciliationState": "matched",
+                    "evidence": [
+                        {
+                            "id": "payment-revision",
+                            "type": "transaction",
+                            "source": "provider-a",
+                        }
+                    ],
+                }
+            ],
+        }
+
+    monkeypatch.setattr(
+        journey_operation_evidence,
+        "journey_commerce_operation_evidence",
+        completed_payment,
+    )
+    result = await Economic360Provider(sources=FakeSource([])).project(
+        _request(subject=ProjectionSubject(kind="journey", id="journey-1")),
+        await _make_context(ProviderRegistry()),
+    )
+    payment_claim = next(claim for claim in result.claims if claim.kind == "commerce_economic_fact")
+    assert "evidence_trace" in payment_claim.domainSlotIds
+    assert "revenue_events" not in payment_claim.domainSlotIds
+    assert "source-recorded settled payment event" not in payment_claim.claims[0]
 
 
 async def test_entity_commerce_evidence_requires_canonical_profile_before_activity_read(
@@ -1300,6 +1795,385 @@ async def test_tenant_a_never_surfaces_tenant_b_economics() -> None:
     serialized = result.model_dump_json()
     assert "tenant-b" not in serialized
     assert "999999" not in serialized
+
+
+async def test_untagged_economic_records_are_not_assumed_to_belong_to_request_tenant() -> None:
+    unscoped_record = _record(
+        "tenant-a",
+        "7000.00",
+        "USD",
+        usd="7000.00",
+        metric="gross_value",
+        ident="unscoped_gross",
+    )
+    del unscoped_record["tenant_id"]
+    source = FakeSource([unscoped_record])
+    result = await Economic360Provider(sources=source).project(
+        _request(tenant="tenant-a"),
+        await _make_context(ProviderRegistry(), tenant="tenant-a"),
+    )
+
+    summary = next(section for section in result.sections if section.id == "summary")
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert summary.state == "degraded"
+    assert summary.content["total_usd"] is None
+    assert evidence.content["evidence"] == []
+    assert "economic_source_tenant_scope_mismatch" in result.degradedReasons
+    assert result.claims == []
+    assert "7000.00" not in result.model_dump_json()
+
+
+async def test_conversion_inventory_claim_is_exact_and_preserves_native_unknowns() -> None:
+    subject = ProjectionSubject(kind="conversion", id="conversion-1")
+    evidence_ref = EvidenceRef(
+        id="conversion-1",
+        type="transaction",
+        source="canonical_conversions",
+        observedAt="2026-10-20T10:00:00Z",
+        uri="store://canonical_conversions/conversion-1",
+    )
+    inventory = FakeConversionInventory(
+        state="available",
+        records=[
+            {
+                "conversionId": "conversion-1",
+                "conversionType": "purchase",
+                "status": "confirmed",
+                "occurredAt": "2026-10-19T09:00:00Z",
+                "observedAt": "2026-10-20T10:00:00Z",
+                "grossValue": None,
+                "netValue": "0",
+                "currency": "EUR",
+                "normalizedCurrency": "USD",
+                "exchangeRate": None,
+                "attributionEligible": True,
+                "evidenceRefs": [evidence_ref.model_dump(mode="json")],
+            }
+        ],
+        evidence_refs=[evidence_ref.model_dump(mode="json")],
+    )
+    result = await Economic360Provider(
+        sources=FakeSource([]),
+        conversion_inventory_reader=inventory,
+    ).project(
+        _request(subject=subject),
+        await _make_context(ProviderRegistry()),
+    )
+
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    payload = evidence.content["conversion_inventory"]
+    claim = next(
+        claim for claim in result.claims if claim.kind == "canonical_conversion_inventory"
+    )
+    assert payload["state"] == "available"
+    assert payload["canonicalAuthority"] == "canonical_conversions"
+    assert payload["canonicalAuthorityRefs"] == ["canonical_conversions"]
+    assert payload["measurementOutcomeLinkage"]["state"] == "unknown"
+    assert payload["records"][0]["grossValue"] is None
+    assert payload["records"][0]["netValue"] == "0"
+    assert payload["records"][0]["currency"] == "EUR"
+    assert payload["records"][0]["exchangeRate"] is None
+    assert claim.domainSlotIds == ["conversion_inventory", "evidence_trace"]
+    assert claim.claimState.value == "observed"
+    assert [ref.id for ref in claim.evidenceRefs] == ["conversion-1"]
+    assert "not a join to Outcome360" in claim.claims[0]
+    assert "0.00" not in claim.claims[0]
+    assert "conversion-1" in {ref.id for ref in claim.evidenceRefs}
+
+
+async def test_conversion_inventory_rejects_evidence_outside_canonical_conversion_authority() -> None:
+    subject = ProjectionSubject(kind="conversion", id="conversion-1")
+    foreign_ref = EvidenceRef(
+        id="conversion-1",
+        type="transaction",
+        source="untrusted_source",
+        observedAt="2026-10-20T10:00:00Z",
+        uri="https://example.test/conversion-1",
+    )
+    inventory = FakeConversionInventory(
+        state="available",
+        records=[{"conversionId": "conversion-1", "netValue": "10.00"}],
+        evidence_refs=[foreign_ref.model_dump(mode="json")],
+    )
+    result = await Economic360Provider(
+        sources=FakeSource([]),
+        conversion_inventory_reader=inventory,
+    ).project(
+        _request(subject=subject),
+        await _make_context(ProviderRegistry()),
+    )
+
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    payload = evidence.content["conversion_inventory"]
+    assert payload["state"] == "degraded"
+    assert payload["reason"] == "canonical_conversion_inventory_evidence_missing"
+    assert payload["records"] == []
+    assert payload["evidenceRefs"] == []
+    assert not any(claim.kind == "canonical_conversion_inventory" for claim in result.claims)
+
+
+async def test_conversion_inventory_as_of_request_fails_closed_before_reader() -> None:
+    inventory = FakeConversionInventory(state="available", records=[], evidence_refs=[])
+    subject = ProjectionSubject(kind="conversion", id="conversion-1")
+    result = await Economic360Provider(
+        sources=FakeSource([]),
+        conversion_inventory_reader=inventory,
+    ).project(
+        _request(subject=subject, asOf="2026-10-19T00:00:00Z"),
+        await _make_context(ProviderRegistry()),
+    )
+
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    payload = evidence.content["conversion_inventory"]
+    assert inventory.calls == 0
+    assert payload["state"] == "unknown"
+    assert payload["reason"] == "canonical_conversion_history_not_bitemporal"
+    assert not any(claim.kind == "canonical_conversion_inventory" for claim in result.claims)
+
+
+async def test_repository_conversion_inventory_uses_journey_recorded_conversion_ids(
+    monkeypatch,
+) -> None:
+    from journeys.measurement.repositories import conversion_repo, journey_repo
+
+    class ExactJourneyRepository:
+        async def get_current(self, tenant_id: str, journey_id: str):
+            assert (tenant_id, journey_id) == ("tenant-a", "journey-1")
+            return {
+                "tenant_id": "tenant-a",
+                "journey_id": "journey-1",
+                "journey_version_id": "journey-version-1",
+                "is_current": True,
+                "conversion_ids": '["conversion-1", "missing-conversion"]',
+            }
+
+    class ExactConversionRepository:
+        def __init__(self):
+            self.lookups = []
+
+        async def get(self, tenant_id: str, conversion_id: str):
+            self.lookups.append((tenant_id, conversion_id))
+            if conversion_id == "missing-conversion":
+                return None
+            return {
+                "tenant_id": "tenant-a",
+                "conversion_id": "conversion-1",
+                "conversion_type": "purchase",
+                "conversion_status": "confirmed",
+                "occurred_at": "2026-10-19T09:00:00Z",
+                "observed_at": "2026-10-20T10:00:00Z",
+                "gross_value": "10.00",
+                "net_value": None,
+                "currency": "USD",
+                "normalized_currency": "USD",
+                "attribution_eligible": True,
+            }
+
+    conversion_repository = ExactConversionRepository()
+    monkeypatch.setattr(journey_repo, "JourneyRepository", ExactJourneyRepository)
+    monkeypatch.setattr(
+        conversion_repo,
+        "ConversionRepository",
+        lambda: conversion_repository,
+    )
+
+    request = _request(subject=ProjectionSubject(kind="journey", id="journey-1"))
+    result = await RepositoryConversionInventoryReader().read(request)
+
+    assert conversion_repository.lookups == [
+        ("tenant-a", "conversion-1"),
+        ("tenant-a", "missing-conversion"),
+    ]
+    assert result["state"] == "degraded"
+    assert result["reason"] == "canonical_conversion_references_unresolved"
+    assert result["joinBasis"] == "current_tenant_journey_version_conversion_ids"
+    assert [record["conversionId"] for record in result["records"]] == ["conversion-1"]
+    assert result["records"][0]["netValue"] is None
+    assert [ref["id"] for ref in result["evidenceRefs"]] == ["conversion-1"]
+    assert result["measurementOutcomeLinkage"]["state"] == "unknown"
+
+
+@pytest.mark.parametrize(
+    ("subject_kind", "expected_join_basis"),
+    [
+        ("conversion", "exact_canonical_conversion_id"),
+        ("profile", "exact_canonical_profile_conversion_id"),
+        ("entity", "exact_canonical_profile_conversion_id"),
+        ("cluster", "exact_canonical_conversion_cluster_id"),
+        ("campaign", "canonical_campaign_touchpoint_or_attribution_conversion_join"),
+        ("account", "exact_tenant_conversion_account_id"),
+        ("agent", "validated_agent_identity_exact_conversion_agent_id"),
+    ],
+)
+async def test_repository_conversion_inventory_uses_exact_supported_subject_joins(
+    monkeypatch,
+    subject_kind: str,
+    expected_join_basis: str,
+) -> None:
+    from journeys.measurement.repositories import conversion_repo
+
+    subject_id = "conversion-1" if subject_kind == "conversion" else "subject-1"
+    row = {
+        "tenant_id": "tenant-a",
+        "conversion_id": "conversion-1",
+        "conversion_type": "purchase",
+        "conversion_status": "confirmed",
+        "occurred_at": "2026-10-19T09:00:00Z",
+        "observed_at": "2026-10-20T10:00:00Z",
+        "gross_value": "10.00",
+        "currency": "USD",
+    }
+    identity_column = {
+        "profile": "profile_id",
+        "entity": "profile_id",
+        "cluster": "cluster_id",
+        "account": "account_id",
+        "agent": "agent_id",
+    }.get(subject_kind)
+    if identity_column:
+        row[identity_column] = subject_id
+
+    class ExactIdentityReader:
+        async def is_canonical_profile(self, tenant_id: str, identity_id: str):
+            assert (tenant_id, identity_id) == ("tenant-a", subject_id)
+            return True
+
+        async def is_canonical_campaign(self, tenant_id: str, identity_id: str):
+            assert (tenant_id, identity_id) == ("tenant-a", subject_id)
+            return True
+
+        async def is_canonical_agent(self, tenant_id: str, identity_id: str):
+            assert (tenant_id, identity_id) == ("tenant-a", subject_id)
+            return True
+
+    class ExactConversionRepository:
+        calls: list[tuple[str, tuple, dict]] = []
+
+        async def get(self, tenant_id: str, conversion_id: str):
+            self.calls.append(("get", (tenant_id, conversion_id), {}))
+            return row
+
+        async def list_by_profile(self, tenant_id: str, identity_id: str, **kwargs):
+            self.calls.append(("profile", (tenant_id, identity_id), kwargs))
+            return [row]
+
+        async def list_by_campaign(self, tenant_id: str, campaign_id: str, **kwargs):
+            self.calls.append(("campaign", (tenant_id, campaign_id), kwargs))
+            return [row]
+
+        async def list_by_tenant(self, tenant_id: str, **kwargs):
+            self.calls.append(("tenant", (tenant_id,), kwargs))
+            return [row]
+
+        async def list_by_account(self, tenant_id: str, account_id: str, **kwargs):
+            self.calls.append(("account", (tenant_id, account_id), kwargs))
+            return [row]
+
+        async def list_by_agent(self, tenant_id: str, agent_id: str, **kwargs):
+            self.calls.append(("agent", (tenant_id, agent_id), kwargs))
+            return [row]
+
+    repository = ExactConversionRepository()
+    monkeypatch.setattr(conversion_repo, "ConversionRepository", lambda: repository)
+    identities = ExactIdentityReader()
+    result = await RepositoryConversionInventoryReader(
+        agent_identity_reader=identities,
+        campaign_identity_reader=identities,
+        profile_identity_reader=identities,
+    ).read(
+        _request(subject=ProjectionSubject(kind=subject_kind, id=subject_id))
+    )
+
+    if subject_kind in {"account", "cluster"}:
+        assert result["state"] == "degraded"
+        assert result["completeness"] == "partial"
+    else:
+        assert result["state"] == "available"
+        assert result["completeness"] == "complete"
+    assert result["joinBasis"] == expected_join_basis
+    assert [record["conversionId"] for record in result["records"]] == ["conversion-1"]
+    assert [ref["id"] for ref in result["evidenceRefs"]] == ["conversion-1"]
+    assert all(call[1][0] == "tenant-a" for call in repository.calls)
+    if subject_kind in {"profile", "entity"}:
+        assert repository.calls[0][2]["identity_type"] == "profile"
+    elif subject_kind == "cluster":
+        assert repository.calls[0][2]["identity_type"] == "cluster"
+    elif subject_kind == "campaign":
+        assert repository.calls[0][2]["include_unattributed"] is True
+    elif subject_kind in {"account", "agent"}:
+        assert repository.calls[0][0] == subject_kind
+        assert row[f"{subject_kind}_id"] == subject_id
+        assert repository.calls[0][2]["limit"] == 501
+    if subject_kind == "agent":
+        roster = result["agentRoster"]
+        assert roster["identityState"] == "validated"
+        assert roster["completeness"] == "unknown"
+        assert roster["freshness"]["state"] == "unknown"
+
+
+@pytest.mark.parametrize("subject_kind", ["account", "cluster"])
+async def test_unvalidated_or_bounded_conversion_subject_empties_remain_unknown(
+    monkeypatch,
+    subject_kind: str,
+) -> None:
+    from journeys.measurement.repositories import conversion_repo
+
+    class ExactIdentityReader:
+        async def is_canonical_agent(self, tenant_id: str, agent_id: str):
+            return True
+
+    class EmptyConversionRepository:
+        async def list_by_profile(self, tenant_id: str, identity_id: str, **kwargs):
+            return []
+
+        async def list_by_tenant(self, tenant_id: str, **kwargs):
+            return []
+
+        async def list_by_account(self, tenant_id: str, account_id: str, **kwargs):
+            return []
+
+    monkeypatch.setattr(
+        conversion_repo,
+        "ConversionRepository",
+        EmptyConversionRepository,
+    )
+    identity_reader = ExactIdentityReader()
+    result = await RepositoryConversionInventoryReader(
+        agent_identity_reader=identity_reader,
+    ).read(
+        _request(subject=ProjectionSubject(kind=subject_kind, id="subject-1"))
+    )
+
+    assert result["state"] == "unknown"
+    assert result["completeness"] == "unknown"
+    assert result["records"] == []
+    assert result["evidenceRefs"] == []
+
+
+async def test_exact_agent_conversion_empty_is_complete_but_roster_is_unknown(monkeypatch) -> None:
+    from journeys.measurement.repositories import conversion_repo
+
+    class ExactIdentityReader:
+        async def is_canonical_agent(self, tenant_id: str, agent_id: str):
+            return True
+
+    class EmptyConversionRepository:
+        async def list_by_agent(self, tenant_id: str, agent_id: str, **kwargs):
+            assert (tenant_id, agent_id) == ("tenant-a", "agent-1")
+            return []
+
+    monkeypatch.setattr(conversion_repo, "ConversionRepository", EmptyConversionRepository)
+    result = await RepositoryConversionInventoryReader(
+        agent_identity_reader=ExactIdentityReader(),
+    ).read(
+        _request(subject=ProjectionSubject(kind="agent", id="agent-1"))
+    )
+
+    assert result["state"] == "empty"
+    assert result["completeness"] == "complete"
+    assert result["agentRoster"]["identityState"] == "validated"
+    assert result["agentRoster"]["completeness"] == "unknown"
+    assert result["agentRoster"]["freshness"]["state"] == "unknown"
 
 
 # ---------------------------------------------------------------------------

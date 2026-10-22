@@ -54,8 +54,11 @@ Section content schema (stable for central integration):
               declared lineage fields (none exist in Phase 4).
 ``evidence``  ``{count, evidence}`` — the reused EvidenceRefs grounding the
               sequence, deduped by id.
-``interactions`` ``{count, interactions}`` — communication_act /
-              participant_binding facts bound to the subject scope.
+``interactions`` ``{count, interactions}`` — exact subject-bound canonical
+              communication records, including threads/conversations,
+              participants, requests/commitments, knowledge, authority, and
+              provider capability/quality metadata. Message or interpretation
+              body text is not exposed.
 ``outcomes``  ``{outcomeLinks | None, dependencies, reason}`` — degraded until
               the outcome360 slice (and its links) lands; never a redefinition
               of Outcome.
@@ -63,11 +66,13 @@ Section content schema (stable for central integration):
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional, Protocol, Union
+from uuid import UUID
 
 # Lightweight plane imports — always importable.
 from shared.intelligence_projections.contracts import (
@@ -92,6 +97,7 @@ from journeys.communication360.reader import (
     default_sources,
 )
 from graph.operational_intelligence.models import EvidenceRef
+from intelligence.risk360.contracts import RiskSignal
 from shared.contracts_models.epistemic import EpistemicStatus
 
 # Sections the registry declares for communication360 (JSON output order —
@@ -118,6 +124,8 @@ REASON_CANONICAL_SOURCE_UNAVAILABLE = "canonical_source_unavailable"
 REASON_SOURCE_READ_TRUNCATED = "communication_source_read_truncated"
 _DEFAULT_READ_LIMIT = 100
 _MAX_READ_LIMIT = 500
+_MAX_JOURNEY_LINK_READS = 50
+_MAX_RISK_SIGNAL_READS = 100
 
 # Section-level limitation note for subjects without a message-spine join.
 _SCOPE_NOTES: dict[str, str] = {
@@ -136,7 +144,26 @@ _SCOPE_NOTES: dict[str, str] = {
 _KINDS_INFORMATION = frozenset({"information", "information_transformation"})
 _KINDS_KNOWLEDGE = frozenset({"knowledge_state", "context_inclusion", "interpretation"})
 _KINDS_AUTHORITY = frozenset({"authority_evaluation"})
-_KINDS_INTERACTIONS = frozenset({"communication_act", "participant_binding"})
+_KINDS_INTERACTIONS = frozenset(
+    {
+        "communication_act",
+        "participant_binding",
+        "conversation",
+        "provider_thread",
+        "matter",
+        "request",
+        "commitment",
+        "response_expectation",
+        "knowledge_state",
+        "interpretation",
+        "context_inclusion",
+        "authority_evaluation",
+        "provider_capability",
+        "communication_quality",
+        "information",
+        "information_transformation",
+    }
+)
 
 # Engagement states are a strict subset of the delivery ladder.
 _ENGAGEMENT_STATES: tuple[str, ...] = ("opened", "clicked", "replied")
@@ -145,6 +172,19 @@ _DIRECTION_KEYS: tuple[str, ...] = (
     "inbound",
     "internal",
     "system_generated",
+)
+_COMMUNICATION_REQUIRED_SLOT_IDS = (
+    "thread_summary",
+    "message_inventory",
+    "participants",
+    "campaign_links",
+    "profile_links",
+    "journey_links",
+    "response_events",
+    "agent_authorship",
+    "policy_state",
+    "risk_flags",
+    "evidence_trace",
 )
 
 _FACT_REF_SOURCE = "services/api/journeys/communication360/communication360_facts"
@@ -200,6 +240,63 @@ class AgentIdentityReader(Protocol):
     async def resolve(self, tenant_id: str, source_agent_ref: str) -> AgentIdentityRead:
         """Resolve only through a tenant-owned canonical Agent identity authority."""
         ...
+
+
+class CurrentJourneyReader(Protocol):
+    async def get_current(self, tenant_id: str, journey_id: str) -> Optional[dict[str, Any]]:
+        """Read the current version by the exact tenant and canonical journey ID."""
+        ...
+
+
+class RepositoryCurrentJourneyReader:
+    """Exact current journey lookup over the canonical ``journey_versions`` authority."""
+
+    async def get_current(self, tenant_id: str, journey_id: str) -> Optional[dict[str, Any]]:
+        from journeys.measurement.repositories.journey_repo import JourneyRepository
+
+        return await JourneyRepository().get_current(tenant_id, journey_id)
+
+
+@dataclass(frozen=True)
+class JourneyLinkRead:
+    """Evidence-backed explicit communication-to-current-journey joins."""
+
+    state: str
+    reason: str
+    evidence_refs: tuple[EvidenceRef, ...] = ()
+    links: tuple[tuple[str, EvidenceRef, EvidenceRef], ...] = ()
+
+
+class RiskSignalReader(Protocol):
+    async def signals(
+        self, *, tenant_id: str, subject: ProjectionSubject, limit: int
+    ) -> list[dict[str, Any]]:
+        """Read signals for one exact tenant and typed Risk360 subject."""
+        ...
+
+
+class RepositoryRiskSignalReader:
+    """Exact subject read over the canonical tenant-scoped RiskSignal store."""
+
+    async def signals(
+        self, *, tenant_id: str, subject: ProjectionSubject, limit: int
+    ) -> list[dict[str, Any]]:
+        from intelligence.risk360.store import RiskSignalRepository
+
+        return await RiskSignalRepository().list_by_subject(
+            tenant_id, subject.kind, subject.id, limit=limit
+        )
+
+
+@dataclass(frozen=True)
+class RiskFlagRead:
+    """Exact-subject canonical risk signals safe to cite in Communication360."""
+
+    state: str
+    reason: str
+    evidence_refs: tuple[EvidenceRef, ...] = ()
+    signals: tuple[RiskSignal, ...] = ()
+    identity_refs: tuple[EvidenceRef, ...] = ()
 
 
 class RepositoryAgentIdentityReader:
@@ -339,9 +436,9 @@ def _row_matches_scope(
         return False
     reference_keys = {
         "agent": {"agent_id", "actor_id", "actor_entity_id", "agent_entity_id", "entity_id"},
-        "campaign": {"campaign_id"},
-        "episode": {"episode_id"},
-        "journey": {"journey_id"},
+        "campaign": {"campaign_id", "campaign_ids"},
+        "episode": {"episode_id", "episode_ids"},
+        "journey": {"journey_id", "journey_ids"},
         "source": {"source_id", "source_namespace", "provider_id"},
     }.get(scope.kind, set())
     reference_ids = scope.participant_identity_ids if scope.kind == "agent" else (scope.id,)
@@ -357,8 +454,14 @@ def _payload_has_exact_reference(value: Any, keys: set[str], reference: str) -> 
     """Match typed reference fields exactly; never substring-search payload text."""
     if isinstance(value, dict):
         for key, item in value.items():
-            if key in keys and not isinstance(item, (dict, list)) and str(item or "") == reference:
-                return True
+            if key in keys:
+                if not isinstance(item, (dict, list)) and str(item or "") == reference:
+                    return True
+                if isinstance(item, list) and any(
+                    not isinstance(candidate, (dict, list)) and str(candidate or "") == reference
+                    for candidate in item
+                ):
+                    return True
             if _payload_has_exact_reference(item, keys, reference):
                 return True
     elif isinstance(value, list):
@@ -377,37 +480,452 @@ def _message_matches_scope(message: CommunicationMessage, scope: _Scope) -> bool
     return False
 
 
-def _communication_slot_ids() -> list[str]:
-    """Catalog slots whose declared authority and section binding cover messages."""
+def _projection_requests_noncurrent_scope(request: ProjectionRequest) -> bool:
+    """Current-only authorities must not leak into an anchored or bounded frame."""
+    return bool(
+        request.asOf is not None
+        or request.timeRange is not None
+        or request.temporalMode in {"window", "as_of", "compare", "relative"}
+    )
+
+
+def _communication_slot_ids(
+    subject_kind: str,
+    slot_ids: set[str],
+    section_ids: set[str],
+) -> list[str]:
+    """Return exact Communications360 slots bound to this subject and evidence section.
+
+    Keep claim attribution within the product surface catalog. A technical
+    communication fact may feed other projections, but that does not make its
+    claim part of every other surface's slot contract.
+    """
+    surface = PRODUCT_360_SURFACE_DEFINITIONS.get("communications360", {})
+    if not isinstance(surface, dict):
+        return []
     result: set[str] = set()
-    relevant_sections = {"evidence", "interactions", "timeline"}
-    for surface in PRODUCT_360_SURFACE_DEFINITIONS.values():
-        if not isinstance(surface, dict):
+    for slot in surface.get("domainSlots", []):
+        if not isinstance(slot, dict):
             continue
-        for slot in surface.get("domainSlots", []):
-            if not isinstance(slot, dict):
+        slot_id = slot.get("id")
+        if not isinstance(slot_id, str) or slot_id not in slot_ids:
+            continue
+        for binding in slot.get("projectionBindings", []):
+            if not isinstance(binding, dict) or binding.get("projectionId") != "communication360":
                 continue
-            authorities = set(slot.get("canonicalAuthorityRefs", []))
-            if not authorities.intersection({"communication_facts", "campaign_touchpoints"}):
+            if subject_kind not in binding.get("subjectKinds", []):
                 continue
-            for binding in slot.get("projectionBindings", []):
-                if (
-                    not isinstance(binding, dict)
-                    or binding.get("projectionId") != "communication360"
-                ):
-                    continue
-                if not set(binding.get("sectionIds", [])).intersection(relevant_sections):
-                    continue
-                slot_id = slot.get("id")
-                if isinstance(slot_id, str):
-                    result.add(slot_id)
+            if not set(binding.get("sectionIds", [])).intersection(section_ids):
+                continue
+            result.add(slot_id)
     return sorted(result)
 
 
+def _canonical_communication_slot_ids(
+    subject_kind: str,
+    row: dict[str, Any],
+) -> list[str]:
+    """Attribute a canonical fact only to the exact Communications360 slots it supports."""
+    kind = str(row.get("kind") or "")
+    payload = _payload_of(row)
+    supported: set[str] = {"evidence_trace"}
+    evidence_sections = {"evidence"}
+    interaction_sections = {"interactions"}
+
+    if kind in {"conversation", "provider_thread"}:
+        supported.add("thread_summary")
+    if kind == "participant_binding":
+        supported.add("participants")
+        role = str(payload.get("role") or "").strip().lower()
+        entity_type = str(payload.get("entity_type") or "").strip().lower()
+        has_agent_identity = (
+            entity_type == "agent"
+            or bool(payload.get("agent_id"))
+            or bool(row.get("agent_id"))
+        )
+        has_author = bool(
+            payload.get("entity_id")
+            or payload.get("principal_entity_id")
+            or row.get("actor_id")
+        )
+        if subject_kind == "agent" and role == "author" and has_agent_identity and has_author:
+            supported.add("agent_authorship")
+    if (
+        kind == "communication_act"
+        and str(payload.get("act_type") or "").strip().lower()
+        in {"acknowledge", "reply", "replied", "respond", "responded"}
+    ):
+        supported.add("response_events")
+
+    if subject_kind == "campaign" and _row_reference_values(row, "campaign_id", "campaign_ids"):
+        supported.add("campaign_links")
+
+    bound = _communication_slot_ids(
+        subject_kind,
+        supported,
+        evidence_sections | interaction_sections,
+    )
+    return bound
+
+
 def _communication_fact_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Keep canonical communication families for non-message subject timelines."""
+    """Keep known canonical communication objects for timeline and evidence."""
     kinds = _KINDS_INFORMATION | _KINDS_KNOWLEDGE | _KINDS_AUTHORITY | _KINDS_INTERACTIONS
     return [row for row in rows if row.get("kind") in kinds]
+
+
+def _has_typed_reference(value: Any, keys: frozenset[str]) -> bool:
+    """Recognize non-empty typed IDs without scanning free-text values."""
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key in keys:
+                if isinstance(item, str) and item.strip():
+                    return True
+                if isinstance(item, (list, tuple)) and any(
+                    isinstance(candidate, str) and candidate.strip() for candidate in item
+                ):
+                    return True
+            if _has_typed_reference(item, keys):
+                return True
+    elif isinstance(value, (list, tuple)):
+        return any(_has_typed_reference(item, keys) for item in value)
+    return False
+
+
+def _typed_reference_values(value: Any, keys: frozenset[str]) -> list[str]:
+    """Return stable scalar IDs from named reference fields only."""
+    found: list[str] = []
+
+    def visit(item: Any) -> None:
+        if isinstance(item, dict):
+            for key, child in item.items():
+                if key in keys:
+                    candidates = child if isinstance(child, (list, tuple)) else [child]
+                    for candidate in candidates:
+                        if isinstance(candidate, str) and candidate.strip() and candidate not in found:
+                            found.append(candidate)
+                visit(child)
+        elif isinstance(item, (list, tuple)):
+            for child in item:
+                visit(child)
+
+    visit(value)
+    return found
+
+
+def _row_reference_values(row: dict[str, Any], singular: str, plural: str) -> list[str]:
+    """Read explicit communication relationship IDs from envelope and payload fields."""
+    keys = frozenset({singular, plural})
+    return _typed_reference_values(
+        {"row": row, "payload": _payload_of(row)},
+        keys,
+    )
+
+
+def _communication_required_slot_coverage(
+    *,
+    request: ProjectionRequest,
+    scope: _Scope,
+    messages: list[CommunicationMessage],
+    fact_rows: list[dict[str, Any]],
+    silver_up: bool,
+    silver_truncated: bool,
+    canonical_up: bool,
+    canonical_truncated: bool,
+    journey_links: JourneyLinkRead,
+    risk_flags: RiskFlagRead,
+) -> dict[str, dict[str, Any]]:
+    """Expose all SSOT slots without promoting IDs, transport, or policy inputs to truth."""
+    message_refs = _dedupe_refs(
+        [ref for message in messages for ref in message.evidence_refs if isinstance(ref, EvidenceRef)]
+    )
+    fact_rows_with_evidence = [
+        (row, evidence)
+        for row in fact_rows
+        if (evidence := _row_evidence(row)) is not None
+    ]
+    fact_refs = _dedupe_refs([evidence for _, evidence in fact_rows_with_evidence])
+    all_refs = _dedupe_refs([*message_refs, *fact_refs])
+
+    def slot(
+        state: str,
+        coverage: str,
+        reason: str,
+        refs: list[EvidenceRef] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "state": state,
+            "coverage": coverage,
+            "reason": reason,
+            "evidenceRefs": [ref.model_dump(mode="json", exclude_none=True) for ref in refs or []],
+        }
+
+    messages_complete = scope.bindable and silver_up and not silver_truncated
+    canonical_complete = canonical_up and not canonical_truncated
+    conversation_rows = [
+        row for row in fact_rows if row.get("kind") in {"conversation", "provider_thread"}
+    ]
+    conversation_refs = _dedupe_refs(
+        [ref for row in conversation_rows if (ref := _row_evidence(row)) is not None]
+    )
+    thread_message_refs = [
+        ref
+        for message in messages
+        if isinstance(message.external_thread_id, str) and message.external_thread_id.strip()
+        for ref in message.evidence_refs
+        if isinstance(ref, EvidenceRef)
+    ]
+    thread_refs = _dedupe_refs([*conversation_refs, *thread_message_refs])
+
+    participant_rows = [row for row in fact_rows if row.get("kind") == "participant_binding"]
+    participant_refs = _dedupe_refs(
+        [ref for row in participant_rows if (ref := _row_evidence(row)) is not None]
+    )
+    message_endpoint_refs = [
+        ref
+        for message in messages
+        if message.sender_entity_id or message.recipient_entity_id
+        for ref in message.evidence_refs
+        if isinstance(ref, EvidenceRef)
+    ]
+    participant_evidence = _dedupe_refs([*participant_refs, *message_endpoint_refs])
+
+    campaign_rows = [
+        row
+        for row in fact_rows
+        if _has_typed_reference(
+            {"row": row, "payload": _payload_of(row)}, frozenset({"campaign_id", "campaign_ids"})
+        )
+    ]
+    campaign_refs = _dedupe_refs(
+        [ref for row in campaign_rows if (ref := _row_evidence(row)) is not None]
+        + [
+            ref
+            for message in messages
+            if message.campaign_id
+            for ref in message.evidence_refs
+            if isinstance(ref, EvidenceRef)
+        ]
+    )
+    profile_rows = [
+        row
+        for row in fact_rows
+        if _has_typed_reference(
+            {"row": row, "payload": _payload_of(row)}, frozenset({"profile_id", "profile_ids"})
+        )
+    ]
+    profile_refs = _dedupe_refs(
+        [ref for row in profile_rows if (ref := _row_evidence(row)) is not None]
+    )
+    response_rows = [
+        row
+        for row in fact_rows
+        if row.get("kind") == "communication_act"
+        and str(_payload_of(row).get("act_type") or "").strip().lower()
+        in {"acknowledge", "reply", "replied", "respond", "responded"}
+    ]
+    response_refs = _dedupe_refs(
+        [ref for row in response_rows if (ref := _row_evidence(row)) is not None]
+    )
+    author_rows = [
+        row
+        for row in participant_rows
+        if str(_payload_of(row).get("role") or "").strip().lower() == "author"
+        and (
+            str(_payload_of(row).get("entity_type") or "").strip().lower() == "agent"
+            or _payload_of(row).get("agent_id")
+            or row.get("agent_id")
+        )
+        and (
+            _payload_of(row).get("entity_id")
+            or _payload_of(row).get("principal_entity_id")
+            or row.get("actor_id")
+        )
+    ]
+    author_refs = _dedupe_refs(
+        [ref for row in author_rows if (ref := _row_evidence(row)) is not None]
+    )
+    if scope.kind == "agent" and scope.identity_resolution_state == "resolved":
+        agent_message_refs = [
+            ref
+            for message in messages
+            if message.sender_entity_id in scope.participant_identity_ids
+            for ref in message.evidence_refs
+            if isinstance(ref, EvidenceRef)
+        ]
+        author_refs = _dedupe_refs([*author_refs, *agent_message_refs])
+
+    consent_refs = _dedupe_refs(
+        [
+            ref
+            for message in messages
+            if message.consent_evidence.state == "recorded"
+            for ref in message.consent_evidence.evidence_refs
+            if isinstance(ref, EvidenceRef)
+        ]
+    )
+
+    if conversation_refs:
+        thread_slot = slot(
+            "degraded",
+            "partial",
+            "canonical_thread_rows_available_without_complete_message_thread_composition",
+            thread_refs,
+        )
+    elif thread_refs:
+        thread_slot = slot(
+            "degraded",
+            "partial",
+            "provider_thread_ids_observed_without_canonical_conversation_resolution",
+            thread_refs,
+        )
+    else:
+        thread_slot = slot("unknown", "unknown", "canonical_conversation_thread_join_unavailable")
+
+    if messages_complete:
+        message_slot = slot(
+            "available" if messages else "empty",
+            "complete",
+            "tenant_scoped_message_reader_completed_for_bound_subject",
+            message_refs,
+        )
+    elif messages:
+        message_slot = slot(
+            "degraded",
+            "partial",
+            "tenant_scoped_message_read_is_truncated_or_unavailable",
+            message_refs,
+        )
+    else:
+        message_ids_exist = any(
+            _has_typed_reference(
+                {"row": row, "payload": _payload_of(row)},
+                frozenset({"message_id", "message_ids"}),
+            )
+            for row in fact_rows
+        )
+        message_slot = slot(
+            "degraded" if message_ids_exist else "unknown",
+            "partial" if message_ids_exist else "unknown",
+            "canonical_message_references_exist_without_message_record_lookup"
+            if message_ids_exist
+            else "subject_has_no_supported_message_spine_binding",
+            fact_refs if message_ids_exist else None,
+        )
+
+    if participant_evidence:
+        participant_slot = slot(
+            "degraded",
+            "partial",
+            "observed_message_endpoints_or_participant_bindings_do_not_establish_full_participant_roles",
+            participant_evidence,
+        )
+    else:
+        participant_slot = slot("unknown", "unknown", "participant_authority_not_joined")
+
+    if campaign_refs:
+        campaign_slot_state = (
+            "available"
+            if scope.kind == "campaign" and messages_complete and bool(messages)
+            else "degraded"
+        )
+        campaign_slot = slot(
+            campaign_slot_state,
+            "complete" if campaign_slot_state == "available" else "partial",
+            "tenant_scoped_message_campaign_reference_observed"
+            if campaign_slot_state == "available"
+            else "typed_campaign_references_observed_without_campaign_entity_resolution",
+            campaign_refs,
+        )
+    else:
+        campaign_slot = slot("unknown", "unknown", "communication_campaign_link_not_observed")
+
+    journey_slot = slot(
+        journey_links.state,
+        "complete" if journey_links.state == "available" else (
+            "unknown" if journey_links.state == "unknown" else "partial"
+        ),
+        journey_links.reason,
+        list(journey_links.evidence_refs),
+    )
+
+    if response_refs:
+        response_slot = slot(
+            "degraded",
+            "partial",
+            "response_like_canonical_acts_observed_without_complete_response_event_linkage",
+            response_refs,
+        )
+    else:
+        response_slot = slot("unknown", "unknown", "canonical_response_event_authority_not_joined")
+
+    if author_refs:
+        author_slot = slot(
+            "degraded",
+            "partial",
+            "observed_sender_or_author_binding_lacks_complete_actor_authority_evaluation",
+            author_refs,
+        )
+    else:
+        author_slot = slot("unknown", "unknown", "canonical_authorship_binding_not_observed")
+
+    evidence_slot = (
+        slot(
+            "degraded",
+            "partial",
+            "message_and_fact_evidence_refs_available_source_provenance_not_fully_resolved",
+            all_refs,
+        )
+        if all_refs
+        else slot("unknown", "unknown", "communication_evidence_refs_unavailable")
+    )
+
+    return {
+        "thread_summary": thread_slot,
+        "message_inventory": message_slot,
+        "participants": participant_slot,
+        "campaign_links": campaign_slot,
+        "profile_links": (
+            slot("degraded", "partial", "typed_profile_reference_observed_without_profile_resolution", profile_refs)
+            if profile_refs
+            else slot("unknown", "unknown", "communication_profile_link_not_observed")
+        ),
+        "journey_links": journey_slot,
+        "response_events": response_slot,
+        "agent_authorship": author_slot,
+        "policy_state": slot(
+            "unknown",
+            "unknown",
+            "consent_receipts_are_lineage_inputs_not_a_policy_decision",
+            consent_refs,
+        ),
+        "risk_flags": slot(
+            risk_flags.state,
+            "complete" if risk_flags.state == "available" else (
+                "unknown" if risk_flags.state == "unknown" else "partial"
+            ),
+            risk_flags.reason,
+            list(risk_flags.evidence_refs),
+        ),
+        "evidence_trace": evidence_slot,
+    }
+
+
+def _canonical_open_state_count(
+    rows: list[dict[str, Any]],
+    *,
+    kind: str,
+    expected_state: str,
+    known_states: frozenset[str],
+) -> Optional[int]:
+    """Count explicit canonical states only when that fact family is present and typed."""
+    candidates = [row for row in rows if row.get("kind") == kind]
+    if not candidates:
+        return None
+    states = [_payload_of(row).get("state") or row.get("state") for row in candidates]
+    if any(not isinstance(state, str) or state not in known_states for state in states):
+        return None
+    return sum(state == expected_state for state in states)
 
 
 def _source_policy_context(
@@ -430,7 +948,7 @@ def _source_policy_context(
     are preserved as observed references only; Source360 must still resolve
     source rights/provenance and the frame runtime owns policy evaluation.
     """
-    source_refs: dict[tuple[str, str], dict[str, Any]] = {}
+    source_refs: dict[tuple[str, str, str], dict[str, Any]] = {}
     for message in messages:
         provider = message.provider
         if not isinstance(provider, str) or not provider.strip():
@@ -440,7 +958,9 @@ def _source_policy_context(
             for ref in message.evidence_refs
             if isinstance(ref, EvidenceRef)
         ]
-        source_refs[("silver_comms_facts", provider)] = {
+        if not refs:
+            continue
+        source_refs[("silver_comms_facts", provider, message.message_id)] = {
             "providerIdentity": provider,
             "referenceSource": "silver_comms_facts.provider",
             "observedAt": message.received_at or message.occurred_at,
@@ -455,15 +975,19 @@ def _source_policy_context(
         if not isinstance(provider, str) or not provider.strip():
             continue
         evidence = _row_evidence(row)
-        source_refs[("communication360_facts", provider)] = {
+        if evidence is None:
+            continue
+        source_refs[
+            (
+                "communication360_facts",
+                provider,
+                evidence.id,
+            )
+        ] = {
             "providerIdentity": provider,
             "referenceSource": "communication360_facts.provider_identity",
             "observedAt": str(row.get("occurred_at") or "") or None,
-            "evidenceRefs": (
-                [evidence.model_dump(mode="json", exclude_none=True)]
-                if evidence is not None
-                else []
-            ),
+            "evidenceRefs": [evidence.model_dump(mode="json", exclude_none=True)],
         }
 
     consent_receipts: dict[str, dict[str, Any]] = {}
@@ -487,9 +1011,8 @@ def _source_policy_context(
             ],
         }
 
-    source_incomplete = (
-        (scope.bindable and (not silver_up or silver_truncated))
-        or (scope.canonical_fact_bindable and (not canonical_up or canonical_truncated))
+    source_incomplete = (scope.bindable and (not silver_up or silver_truncated)) or (
+        scope.canonical_fact_bindable and (not canonical_up or canonical_truncated)
     )
     if source_incomplete:
         lineage_state = "degraded"
@@ -536,15 +1059,13 @@ def _source_policy_context(
             "reason": "policy_is_evaluated_by_the_governing_frame_runtime",
         },
         "freshness": {
-            "state": "available"
-            if all(
-                item.get("observedAt")
-                for item in list(source_refs.values()) + list(consent_receipts.values())
-            )
-            and (source_refs or consent_receipts)
-            else "unknown",
+            # Preserved timestamps are freshness inputs, not a freshness
+            # judgment. This provider has no registered freshness window or
+            # Temporal360 result to decide whether those inputs are current.
+            "state": "unknown",
             "sourceTimestampsPreserved": True,
-            "missingTimestamp": "unknown",
+            "evaluation": "not_performed",
+            "reason": "freshness_window_not_evaluated_by_communication360",
         },
         "reason": reason,
     }
@@ -597,6 +1118,8 @@ class Communication360Provider:
         sources: Optional[Union[CommunicationSource, dict[str, CommunicationSource]]] = None,
         *,
         agent_identity_reader: Optional[AgentIdentityReader] = None,
+        journey_reader: Optional[CurrentJourneyReader] = None,
+        risk_signal_reader: Optional[RiskSignalReader] = None,
     ) -> None:
         """Injectable sources (test seam); default = ``default_sources()``.
 
@@ -623,6 +1146,8 @@ class Communication360Provider:
             if agent_identity_reader is not None
             else RepositoryAgentIdentityReader()
         )
+        self._journeys = journey_reader or RepositoryCurrentJourneyReader()
+        self._risk_signals = risk_signal_reader or RepositoryRiskSignalReader()
 
     # ── IntelligenceProjectionProvider ─────────────────────────────────────
 
@@ -683,6 +1208,14 @@ class Communication360Provider:
             else (True, [], False)
         )
         in_scope_rows = [r for r in canonical_rows if _row_matches_scope(r, tenant_id, scope)]
+        journey_links = await self._read_journey_links(
+            tenant_id,
+            in_scope_rows,
+            noncurrent_scope=_projection_requests_noncurrent_scope(request),
+            canonical_up=canonical_up,
+            canonical_truncated=canonical_truncated,
+        )
+        risk_flags = await self._read_risk_flags(request, scope)
 
         # Read the message spine only when the subject binds to it.
         messages: list[CommunicationMessage] = []
@@ -717,6 +1250,8 @@ class Communication360Provider:
                 canonical_up,
                 canonical_truncated,
                 context,
+                journey_links,
+                risk_flags,
             ),
             self._state_section(
                 request,
@@ -758,7 +1293,15 @@ class Communication360Provider:
             ),
             self._outcomes_section(context),
         ]
-        claims = self._build_claims(request, messages, scope.identity_evidence)
+        claims = self._build_claims(
+            request,
+            messages,
+            in_scope_rows,
+            scope,
+            scope.identity_evidence,
+        )
+        claims.extend(self._journey_link_claims(request, journey_links))
+        claims.extend(self._risk_flag_claims(request, risk_flags))
         if request.subject.kind == "agent" and scope.identity_resolution_state != "resolved":
             degraded_reasons.append(scope.note or "agent_identity_unresolved")
 
@@ -774,6 +1317,271 @@ class Communication360Provider:
         )
 
     # ── Defensive reads ────────────────────────────────────────────────────
+
+    async def _read_risk_flags(
+        self,
+        request: ProjectionRequest,
+        scope: _Scope,
+    ) -> RiskFlagRead:
+        """Read only exact Risk360 subject keys; never infer a link to risk output."""
+        tenant_id = request.tenantId
+        subject = request.subject
+        if _projection_requests_noncurrent_scope(request):
+            return RiskFlagRead("unknown", "risk_signal_temporal_lookup_unavailable")
+        if subject.kind == "source":
+            risk_subject = subject
+        elif (
+            subject.kind == "agent"
+            and scope.identity_resolution_state == "resolved"
+            and scope.participant_entity_id
+        ):
+            risk_subject = ProjectionSubject(kind="agent", id=scope.participant_entity_id)
+        else:
+            return RiskFlagRead(
+                "unknown",
+                "risk360_does_not_serve_this_communication_subject_kind_or_identity_is_unresolved",
+            )
+
+        try:
+            rows = await self._risk_signals.signals(
+                tenant_id=tenant_id,
+                subject=risk_subject,
+                limit=_MAX_RISK_SIGNAL_READS + 1,
+            )
+        except Exception:  # noqa: BLE001 - backing-source details stay private
+            return RiskFlagRead("degraded", "risk_signal_authority_unavailable")
+        if not isinstance(rows, list):
+            return RiskFlagRead("degraded", "risk_signal_authority_returned_invalid_rows")
+
+        signals: list[RiskSignal] = []
+        invalid_rows = False
+        for raw in rows[:_MAX_RISK_SIGNAL_READS]:
+            if (
+                not isinstance(raw, dict)
+                or str(raw.get("tenant_id") or "") != tenant_id
+                or str(raw.get("subject_kind") or "") != risk_subject.kind
+                or str(raw.get("subject_id") or "") != risk_subject.id
+            ):
+                invalid_rows = True
+                continue
+            try:
+                signal = RiskSignal(**raw)
+            except Exception:  # noqa: BLE001 - skip malformed canonical record
+                invalid_rows = True
+                continue
+            if not signal.evidence_refs:
+                invalid_rows = True
+                continue
+            signals.append(signal)
+
+        refs = _dedupe_refs([ref for signal in signals for ref in signal.evidence_refs])
+        identity_refs = (
+            scope.identity_evidence if risk_subject.kind == "agent" else ()
+        )
+        refs = _dedupe_refs([*identity_refs, *refs])
+        if len(rows) > _MAX_RISK_SIGNAL_READS or invalid_rows:
+            return RiskFlagRead(
+                "degraded",
+                "risk_signal_read_truncated_or_contained_unscoped_records",
+                tuple(refs),
+                tuple(signals),
+                tuple(identity_refs),
+            )
+        if not signals:
+            return RiskFlagRead("unknown", "no_exact_subject_risk_signal_observed")
+        return RiskFlagRead(
+            "available",
+            "tenant_scoped_risk_signals_observed_for_exact_subject",
+            tuple(refs),
+            tuple(signals),
+            tuple(identity_refs),
+        )
+
+    def _risk_flag_claims(
+        self, request: ProjectionRequest, read: RiskFlagRead
+    ) -> list[ClaimEnvelope]:
+        """Render risk signal records while preserving their epistemic status."""
+        domain_slot_ids = _communication_slot_ids(
+            request.subject.kind, {"risk_flags"}, {"evidence", "state"}
+        )
+        return [
+            ClaimEnvelope(
+                id=f"risk-signal.{signal.signal_id}",
+                kind="communication_risk_signal_record",
+                subject=request.subject,
+                evidenceRefs=_dedupe_refs([*read.identity_refs, *signal.evidence_refs]),
+                claims=[
+                    f"Canonical risk signal {signal.signal_id} is recorded for this exact subject.",
+                    f"Risk dimension: {signal.risk_dimension}; source: {signal.source}.",
+                ],
+                confidence=signal.confidence,
+                claimState=signal.claim_state,
+                domainSlotIds=domain_slot_ids,
+            )
+            for signal in read.signals
+            if signal.evidence_refs
+        ]
+
+    async def _read_journey_links(
+        self,
+        tenant_id: str,
+        rows: list[dict[str, Any]],
+        *,
+        noncurrent_scope: bool,
+        canonical_up: bool,
+        canonical_truncated: bool,
+    ) -> JourneyLinkRead:
+        """Resolve only explicit, evidence-backed journey IDs to current tenant rows."""
+        refs_by_id: dict[str, list[EvidenceRef]] = {}
+        invalid_reference = False
+        for row in rows:
+            raw_ids = _row_reference_values(row, "journey_id", "journey_ids")
+            if not raw_ids:
+                continue
+            fact_ref = _row_evidence(row)
+            if fact_ref is None:
+                invalid_reference = True
+                continue
+            for raw_id in raw_ids:
+                try:
+                    journey_id = str(UUID(raw_id))
+                except (ValueError, TypeError, AttributeError):
+                    invalid_reference = True
+                    continue
+                refs = refs_by_id.setdefault(journey_id, [])
+                if all(existing.id != fact_ref.id for existing in refs):
+                    refs.append(fact_ref)
+
+        source_refs = _dedupe_refs(
+            [ref for refs in refs_by_id.values() for ref in refs]
+            + [
+                ref
+                for row in rows
+                if _row_reference_values(row, "journey_id", "journey_ids")
+                and (ref := _row_evidence(row)) is not None
+            ]
+        )
+        if not refs_by_id:
+            if invalid_reference:
+                return JourneyLinkRead(
+                    "degraded", "typed_journey_reference_is_not_evidence_backed_or_canonical", tuple(source_refs)
+                )
+            if not canonical_up or canonical_truncated:
+                return JourneyLinkRead(
+                    "degraded",
+                    REASON_CANONICAL_SOURCE_UNAVAILABLE
+                    if not canonical_up
+                    else REASON_SOURCE_READ_TRUNCATED,
+                )
+            return JourneyLinkRead("unknown", "communication_journey_link_not_observed")
+        if noncurrent_scope:
+            return JourneyLinkRead(
+                "unknown", "historical_current_journey_lookup_unavailable", tuple(source_refs)
+            )
+        if not canonical_up or canonical_truncated:
+            return JourneyLinkRead(
+                "degraded",
+                REASON_CANONICAL_SOURCE_UNAVAILABLE
+                if not canonical_up
+                else REASON_SOURCE_READ_TRUNCATED,
+                tuple(source_refs),
+            )
+
+        journey_ids = list(refs_by_id)
+        read_ids = journey_ids[:_MAX_JOURNEY_LINK_READS]
+        truncated = len(journey_ids) > len(read_ids)
+        semaphore = asyncio.Semaphore(8)
+
+        async def read_one(journey_id: str) -> tuple[str, Optional[dict[str, Any]], bool]:
+            async with semaphore:
+                try:
+                    row = await self._journeys.get_current(tenant_id, journey_id)
+                except Exception:  # noqa: BLE001 - source details stay private
+                    return journey_id, None, False
+            return journey_id, row, True
+
+        results = await asyncio.gather(*(read_one(journey_id) for journey_id in read_ids))
+        links: list[tuple[str, EvidenceRef, EvidenceRef]] = []
+        journey_refs: list[EvidenceRef] = []
+        missing = False
+        unavailable = False
+        for journey_id, record, available in results:
+            if not available:
+                unavailable = True
+                continue
+            if record is None:
+                missing = True
+                continue
+            if (
+                not isinstance(record, dict)
+                or str(record.get("tenant_id") or "") != tenant_id
+                or str(record.get("journey_id") or "") != journey_id
+                or record.get("is_current") is not True
+            ):
+                missing = True
+                continue
+            raw_version_id = record.get("journey_version_id")
+            if not isinstance(raw_version_id, (str, UUID)) or not str(raw_version_id).strip():
+                missing = True
+                continue
+            journey_version_id = str(raw_version_id)
+            version_ref = EvidenceRef(
+                id=journey_version_id,
+                type="entity",
+                source="services/api/journeys/measurement/journey_versions",
+                observedAt=_state_value(record.get("computed_at")),
+                uri=f"store://journey_versions/{journey_version_id}",
+            )
+            journey_refs.append(version_ref)
+            for fact_ref in refs_by_id[journey_id]:
+                links.append((journey_id, fact_ref, version_ref))
+
+        all_refs = _dedupe_refs([*source_refs, *journey_refs])
+        if unavailable or missing or invalid_reference or truncated:
+            reason = (
+                "current_journey_authority_unavailable"
+                if unavailable
+                else "explicit_journey_reference_not_resolved_to_current_tenant_record"
+                if missing
+                else "journey_link_read_truncated"
+                if truncated
+                else "one_or_more_typed_journey_references_not_canonical"
+            )
+            return JourneyLinkRead("degraded", reason, tuple(all_refs), tuple(links))
+        return JourneyLinkRead(
+            "available",
+            "explicit_tenant_journey_reference_resolved_to_current_version",
+            tuple(all_refs),
+            tuple(links),
+        )
+
+    def _journey_link_claims(
+        self, request: ProjectionRequest, read: JourneyLinkRead
+    ) -> list[ClaimEnvelope]:
+        """Ground successful joins in both the communication fact and journey version."""
+        claims: list[ClaimEnvelope] = []
+        domain_slot_ids = _communication_slot_ids(
+            request.subject.kind, {"journey_links"}, {"evidence", "state"}
+        )
+        for journey_id, fact_ref, journey_ref in read.links:
+            claims.append(
+                ClaimEnvelope(
+                    id=f"journey-link.{fact_ref.id}.{journey_id}",
+                    kind="communication_journey_link",
+                    subject=request.subject,
+                    evidenceRefs=[fact_ref, journey_ref],
+                    claims=[
+                        f"Communication fact {fact_ref.id} explicitly references journey {journey_id}.",
+                        f"A current journey version for {journey_id} exists in the same tenant.",
+                    ],
+                    confidence=1.0,
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=domain_slot_ids,
+                )
+            )
+        return claims
+
+
 
     async def _read_messages(
         self, tenant_id: str, scope: _Scope, *, limit: int
@@ -815,10 +1623,12 @@ class Communication360Provider:
         canonical_up: bool,
         canonical_truncated: bool,
         context: ProjectionContext,
+        journey_links: JourneyLinkRead,
+        risk_flags: RiskFlagRead,
     ) -> ProjectionSection:
         """Summary of a complete message scope or exact canonical fact scope."""
+        fact_rows = _communication_fact_rows(rows)
         if not scope.bindable:
-            fact_rows = _communication_fact_rows(rows)
             if not scope.canonical_fact_bindable:
                 state = "degraded"
                 counts = None
@@ -845,6 +1655,24 @@ class Communication360Provider:
                     "messages_total": None,
                     "communication_facts_total": len(fact_rows),
                     "communication_fact_kinds": fact_kinds,
+                    "active_conversations": _canonical_open_state_count(
+                        fact_rows,
+                        kind="conversation",
+                        expected_state="active",
+                        known_states=frozenset({"active", "idle", "paused", "archived", "closed"}),
+                    ),
+                    "open_requests": _canonical_open_state_count(
+                        fact_rows,
+                        kind="request",
+                        expected_state="open",
+                        known_states=frozenset({"open", "resolved", "cancelled", "expired"}),
+                    ),
+                    "open_commitments": _canonical_open_state_count(
+                        fact_rows,
+                        kind="commitment",
+                        expected_state="open",
+                        known_states=frozenset({"open", "fulfilled", "broken", "cancelled"}),
+                    ),
                 }
                 reasons = [scope.note]
         elif not silver_up:
@@ -857,7 +1685,10 @@ class Communication360Provider:
             reasons = [REASON_SOURCE_READ_TRUNCATED]
         else:
             state = "available"
-            counts = self._summary_counts(messages)
+            counts = self._summary_counts(
+                messages,
+                fact_rows if canonical_up and not canonical_truncated else [],
+            )
             reasons = []
         return ProjectionSection(
             id="summary",
@@ -879,12 +1710,28 @@ class Communication360Provider:
                     if scope.canonical_fact_bindable
                     else "not_read"
                 ),
+                "requiredSlotCoverage": _communication_required_slot_coverage(
+                    request=request,
+                    scope=scope,
+                    messages=messages,
+                    fact_rows=fact_rows,
+                    silver_up=silver_up,
+                    silver_truncated=silver_truncated,
+                    canonical_up=canonical_up,
+                    canonical_truncated=canonical_truncated,
+                    journey_links=journey_links,
+                    risk_flags=risk_flags,
+                ),
             },
             warnings=reasons or None,
         )
 
-    def _summary_counts(self, messages: list[CommunicationMessage]) -> dict[str, Any]:
-        """Fully-enumerated real counts over the reachable message spine."""
+    def _summary_counts(
+        self,
+        messages: list[CommunicationMessage],
+        canonical_rows: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Message counts plus explicit state counts from canonical fact rows."""
         channels: dict[str, int] = {}
         directions: dict[str, int] = {k: 0 for k in _DIRECTION_KEYS}
         states: dict[str, int] = {}
@@ -908,11 +1755,26 @@ class Communication360Provider:
             "by_direction": directions,
             "by_communication_state": states,
             "engagement": engagement,
-            # Honest absence — conversation resolution (Phase 6) and the
-            # request/commitment surface (Phase 5) land later; never a 0.
-            "active_conversations": None,
-            "open_requests": None,
-            "open_commitments": None,
+            # These remain unknown when the canonical family is absent or a
+            # state is untyped; only explicit stored states produce counts.
+            "active_conversations": _canonical_open_state_count(
+                canonical_rows,
+                kind="conversation",
+                expected_state="active",
+                known_states=frozenset({"active", "idle", "paused", "archived", "closed"}),
+            ),
+            "open_requests": _canonical_open_state_count(
+                canonical_rows,
+                kind="request",
+                expected_state="open",
+                known_states=frozenset({"open", "resolved", "cancelled", "expired"}),
+            ),
+            "open_commitments": _canonical_open_state_count(
+                canonical_rows,
+                kind="commitment",
+                expected_state="open",
+                known_states=frozenset({"open", "fulfilled", "broken", "cancelled"}),
+            ),
         }
 
     def _state_section(
@@ -1323,7 +2185,7 @@ class Communication360Provider:
         canonical_up: bool,
         canonical_truncated: bool,
     ) -> ProjectionSection:
-        """interactions — participant/act rows bound to the subject scope."""
+        """interactions — tenant-bound canonical communication records."""
         if not scope.canonical_fact_bindable:
             state = "degraded"
             interactions: list[dict[str, Any]] = []
@@ -1365,6 +2227,7 @@ class Communication360Provider:
     def _interaction_row(self, row: dict[str, Any]) -> dict[str, Any]:
         payload = _payload_of(row)
         kind = str(row.get("kind") or "unknown")
+        evidence = _row_evidence(row)
         base = {
             "interactionId": row.get("fact_id") or row.get("idempotency_key"),
             "kind": kind,
@@ -1373,16 +2236,119 @@ class Communication360Provider:
             "agentId": row.get("agent_id"),
             "sourceEventId": row.get("source_event_id"),
             "claimState": _state_value(row.get("claim_state")) or "observed",
+            "evidenceRefIds": [evidence.id] if evidence is not None else [],
+            # These are typed relationship references from the canonical fact
+            # envelope/payload. Keep IDs only; do not expose arbitrary payloads.
+            "campaignIds": _row_reference_values(row, "campaign_id", "campaign_ids"),
+            "episodeIds": _row_reference_values(row, "episode_id", "episode_ids"),
+            "journeyIds": _row_reference_values(row, "journey_id", "journey_ids"),
+            "profileIds": _row_reference_values(row, "profile_id", "profile_ids"),
+            "messageIds": _row_reference_values(row, "message_id", "message_ids"),
+            "threadIds": _row_reference_values(row, "thread_id", "thread_ids"),
         }
         if kind == "communication_act":
             base["actType"] = payload.get("act_type")
             base["targetEntityId"] = payload.get("target_entity_id")
             base["objectRef"] = payload.get("object_ref")
+            base["messageId"] = payload.get("message_id")
+            base["conversationId"] = payload.get("conversation_id")
         elif kind == "participant_binding":
             base["role"] = payload.get("role")
             base["entityId"] = payload.get("entity_id") or row.get("actor_id")
+            base["entityType"] = payload.get("entity_type")
             base["communicationScope"] = payload.get("communication_scope")
             base["principalEntityId"] = payload.get("principal_entity_id")
+            base["delegationGrantId"] = payload.get("delegation_grant_id")
+            base["validFrom"] = payload.get("valid_from")
+            base["validTo"] = payload.get("valid_to")
+        elif kind == "conversation":
+            base["conversationId"] = payload.get("conversation_id") or base["interactionId"]
+            base["conversationKind"] = payload.get("kind")
+            base["providerThreadIds"] = payload.get("provider_thread_ids") or []
+            base["messageIds"] = payload.get("message_ids") or []
+            base["matterId"] = payload.get("matter_id")
+            base["conversationState"] = payload.get("state")
+            base["openedAt"] = payload.get("opened_at")
+            base["lastActivityAt"] = payload.get("last_activity_at")
+        elif kind == "provider_thread":
+            base["threadId"] = payload.get("thread_id") or base["interactionId"]
+            base["provider"] = payload.get("provider")
+            base["providerAccountId"] = payload.get("provider_account_id")
+            base["messageIds"] = payload.get("message_ids") or []
+            base["firstSeenAt"] = payload.get("first_seen_at")
+            base["lastSeenAt"] = payload.get("last_seen_at")
+        elif kind == "matter":
+            base["matterId"] = payload.get("matter_id") or base["interactionId"]
+            base["matterKind"] = payload.get("kind")
+            base["conversationIds"] = payload.get("conversation_ids") or []
+            base["campaignIds"] = payload.get("campaign_ids") or []
+            base["episodeIds"] = payload.get("episode_ids") or []
+            base["createdAt"] = payload.get("created_at")
+            base["updatedAt"] = payload.get("updated_at")
+        elif kind == "request":
+            base["requesterEntityId"] = payload.get("requester_entity_id")
+            base["assigneeEntityId"] = payload.get("assignee_entity_id")
+            base["requestState"] = payload.get("state")
+            base["actId"] = payload.get("act_id")
+            base["deadline"] = payload.get("deadline")
+            base["resolvedAt"] = payload.get("resolved_at")
+        elif kind == "commitment":
+            base["committerEntityId"] = payload.get("committer_entity_id")
+            base["beneficiaryEntityId"] = payload.get("beneficiary_entity_id")
+            base["commitmentState"] = payload.get("state")
+            base["actId"] = payload.get("act_id")
+            base["dueAt"] = payload.get("due_at")
+        elif kind == "response_expectation":
+            base["expectationType"] = payload.get("expectation_type")
+            base["communicationRef"] = payload.get("communication_ref")
+            base["expectationState"] = payload.get("state")
+            base["dueAt"] = payload.get("due_at")
+        elif kind == "information":
+            base["informationId"] = payload.get("information_id") or base["interactionId"]
+            base["informationKind"] = payload.get("kind")
+        elif kind == "information_transformation":
+            source = payload.get("source_information_ref")
+            derived = payload.get("derived_information_ref")
+            base["transformationKind"] = payload.get("kind")
+            base["sourceInformationId"] = (
+                source.get("information_id") if isinstance(source, dict) else None
+            )
+            base["derivedInformationId"] = (
+                derived.get("information_id") if isinstance(derived, dict) else None
+            )
+            base["agentEntityId"] = payload.get("agent_entity_id")
+        elif kind == "knowledge_state":
+            base["subjectEntityId"] = payload.get("subject_entity_id")
+            base["knowledgeState"] = payload.get("state")
+            base["knownSince"] = payload.get("known_since")
+            base["observedAt"] = payload.get("observed_at")
+        elif kind == "interpretation":
+            base["agentEntityId"] = payload.get("agent_entity_id")
+            base["informationRef"] = payload.get("information_ref")
+            base["confidence"] = payload.get("confidence")
+        elif kind == "context_inclusion":
+            base["agentEntityId"] = payload.get("agent_entity_id")
+            base["contextRef"] = payload.get("context_ref")
+            base["included"] = payload.get("included")
+            base["includedAt"] = payload.get("included_at")
+            base["sourceObservationId"] = payload.get("source_observation_id")
+        elif kind == "authority_evaluation":
+            base["agentEntityId"] = payload.get("agent_entity_id")
+            base["communicationScope"] = payload.get("communication_scope")
+            base["communicationScopeKind"] = payload.get("communication_scope_kind")
+            base["delegationGrantId"] = payload.get("delegation_grant_id")
+            base["authorityDecision"] = payload.get("decision")
+            base["evaluatedAt"] = payload.get("evaluated_at")
+        elif kind == "provider_capability":
+            base["provider"] = payload.get("provider")
+            base["providerAccountId"] = payload.get("provider_account_id")
+            base["capabilities"] = payload.get("capabilities") or {}
+        elif kind == "communication_quality":
+            base["communicationRef"] = payload.get("communication_ref")
+            base["communicationScopeKind"] = payload.get("communication_scope_kind")
+            base["completeness"] = payload.get("completeness")
+            base["qualityState"] = payload.get("state")
+            base["degradedReasons"] = payload.get("degraded_reasons") or []
         return base
 
     def _outcomes_section(self, context: ProjectionContext) -> ProjectionSection:
@@ -1434,19 +2400,37 @@ class Communication360Provider:
         self,
         request: ProjectionRequest,
         messages: list[CommunicationMessage],
+        canonical_rows: list[dict[str, Any]],
+        scope: _Scope,
         identity_evidence: tuple[EvidenceRef, ...] = (),
     ) -> list[ClaimEnvelope]:
-        """One observed claim per evidenced message in the timeline.
+        """Build observed claims for evidenced messages and canonical facts.
 
-        Every claim is capped at ``observed`` (message facts never escalate to
-        ``verified``), carries its reused EvidenceRefs, and never infers
-        causality / knowledge from delivery. A message that carries no evidence
-        ref is shown in the timeline but not asserted as a claim (requiresEvidence).
+        Every claim is capped at ``observed``, carries its reused EvidenceRefs,
+        and never infers causality / knowledge from delivery. Claims receive
+        only the exact Communications360 slots bound to their evidence family.
+        A record without a reusable evidence ref is shown in its section but
+        not asserted as a claim (requiresEvidence).
         """
         claims: list[ClaimEnvelope] = []
         subject = ProjectionSubject(kind=request.subject.kind, id=request.subject.id)
         for message in messages:
-            refs = _dedupe_refs([*identity_evidence, *message.evidence_refs])
+            refs = _dedupe_refs(
+                [
+                    *identity_evidence,
+                    *message.evidence_refs,
+                    *(
+                        [message.sender_identity_evidence_ref]
+                        if message.sender_identity_evidence_ref is not None
+                        else []
+                    ),
+                    *(
+                        [message.recipient_identity_evidence_ref]
+                        if message.recipient_identity_evidence_ref is not None
+                        else []
+                    ),
+                ]
+            )
             if not refs:
                 continue
             state = _message_state_value(message)
@@ -1455,19 +2439,91 @@ class Communication360Provider:
                 if state is not None
                 else "communication state: unclassified"
             )
+            message_slots = {"message_inventory", "evidence_trace"}
+            claim_text = [
+                f"message {message.message_id} observed",
+                state_line,
+            ]
+            if request.subject.kind == "campaign" and message.campaign_id == request.subject.id:
+                message_slots.add("campaign_links")
+                claim_text.append(f"message {message.message_id} is linked to this campaign")
+            is_agent_author = bool(
+                request.subject.kind == "agent"
+                and scope.identity_resolution_state == "resolved"
+                and message.sender_entity_id in scope.participant_identity_ids
+                and message.sender_identity_binding_id
+                and message.sender_identity_evidence_ref is not None
+            )
+            if is_agent_author:
+                message_slots.add("agent_authorship")
+                claim_text.append("the message sender has an observed agent identity binding")
+            domain_slot_ids = _communication_slot_ids(
+                request.subject.kind,
+                message_slots,
+                {"timeline", "evidence"},
+            )
             claims.append(
                 ClaimEnvelope(
                     id=f"timeline.{message.message_id}",
                     kind="communication_sequence",
                     subject=subject,
                     evidenceRefs=refs,
-                    claims=[
-                        f"message {message.message_id} observed",
-                        state_line,
-                    ],
+                    claims=claim_text,
                     confidence=1.0,
                     claimState=EpistemicStatus.OBSERVED,
-                    domainSlotIds=_communication_slot_ids(),
+                    domainSlotIds=domain_slot_ids,
+                )
+            )
+        for row in _communication_fact_rows(canonical_rows):
+            evidence = _row_evidence(row)
+            if evidence is None:
+                continue
+            fact_id = row.get("fact_id") or row.get("idempotency_key") or row.get("source_event_id")
+            if not fact_id:
+                continue
+            fact_kind = str(row.get("kind") or "unknown")
+            domain_slot_ids = _canonical_communication_slot_ids(request.subject.kind, row)
+            payload = _payload_of(row)
+            claim_text = [
+                f"canonical communication fact {fact_id} recorded",
+                f"canonical communication fact kind: {fact_kind}",
+            ]
+            campaign_ids = _row_reference_values(row, "campaign_id", "campaign_ids")
+            if request.subject.kind == "campaign" and request.subject.id in campaign_ids:
+                claim_text.append(f"canonical communication fact references campaign {request.subject.id}")
+            if fact_kind in {"conversation", "provider_thread"}:
+                claim_text.append(f"canonical {fact_kind} record {fact_id} observed")
+            if fact_kind == "participant_binding":
+                claim_text.append("canonical communication participant binding observed")
+                is_agent_author = (
+                    request.subject.kind == "agent"
+                    and str(payload.get("role") or "").strip().lower() == "author"
+                    and (
+                        str(payload.get("entity_type") or "").strip().lower() == "agent"
+                        or bool(payload.get("agent_id"))
+                        or bool(row.get("agent_id"))
+                    )
+                )
+                if is_agent_author:
+                    claim_text.append("canonical participant binding records agent authorship")
+            if (
+                fact_kind == "communication_act"
+                and str(payload.get("act_type") or "").strip().lower()
+                in {"acknowledge", "reply", "replied", "respond", "responded"}
+            ):
+                claim_text.append(
+                    f"canonical response act type: {str(payload.get('act_type')).strip().lower()}"
+                )
+            claims.append(
+                ClaimEnvelope(
+                    id=f"canonical_fact.{fact_id}",
+                    kind="communication_fact_observation",
+                    subject=subject,
+                    evidenceRefs=[evidence],
+                    claims=claim_text,
+                    confidence=1.0,
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=domain_slot_ids,
                 )
             )
         return claims

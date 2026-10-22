@@ -17,6 +17,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from graph.operational_intelligence.models import EvidenceRef  # noqa: E402
 from shared.intelligence_projections.composition import (  # noqa: E402
+    _compose_slot_content,
     compose_experience360_frame,
 )
 from shared.intelligence_projections.frame_runtime import (  # noqa: E402
@@ -61,6 +62,83 @@ EVIDENCE = EvidenceRef(
     source="profile360/test",
     observedAt="2026-10-16T10:00:00Z",
 )
+
+
+def test_explicitly_unbound_required_slot_remains_unknown_with_gap_reason() -> None:
+    slot, reasons, missing = _compose_slot_content(
+        slot_id="contracts",
+        slot_definition={
+            "id": "contracts",
+            "canonicalAuthorityRefs": ["contract_registry"],
+            "projectionBindings": [],
+            "unboundReason": "contract_registry_provider_not_connected",
+        },
+        results={},
+        include_evidence=True,
+        tenant_id=TENANT,
+        requested_as_of=None,
+        subject_kind="entity",
+    )
+
+    assert slot["state"] == "unknown"
+    assert slot["content"] is None
+    assert "slot_provider_not_connected" in reasons
+    assert "contract_registry_provider_not_connected" in slot["limitations"]
+    assert missing == set()
+
+
+def test_required_source_aligned_slot_needs_an_exact_evidence_backed_claim() -> None:
+    definition = {
+        "id": "identity_spine",
+        "requirement": "required",
+        "canonicalAuthorityRefs": ["identity"],
+        "projectionBindings": [
+            {
+                "projectionId": "profile360",
+                "role": "primary",
+                "sectionIds": ["summary"],
+                "subjectKinds": ["entity"],
+            }
+        ],
+    }
+    result = _result([
+        ProjectionSection(
+            id="summary",
+            state="available",
+            content={"evidenceRefs": [EVIDENCE.model_dump(mode="json")]},
+        )
+    ])
+    kwargs = {
+        "slot_id": "identity_spine",
+        "slot_definition": definition,
+        "results": {"profile360": result},
+        "include_evidence": True,
+        "tenant_id": TENANT,
+        "requested_as_of": None,
+        "subject_kind": "entity",
+        "requires_exact_claim": True,
+    }
+    unclaimed, reasons, _ = _compose_slot_content(**kwargs)
+    assert unclaimed["state"] == "unknown"
+    assert unclaimed["content"] is None
+    assert unclaimed["evidenceRefs"] == []
+    assert "exact_slot_claim_missing" in reasons
+
+    claim = ClaimEnvelope(
+        id="profile360.identity.fixture",
+        kind="canonical_identity",
+        subject=SUBJECT,
+        evidenceRefs=[EVIDENCE],
+        claims=["Exact identity fixture."],
+        domainSlotIds=["identity_spine"],
+    )
+    claimed = result.model_copy(update={"claims": [claim]})
+    supported, reasons, _ = _compose_slot_content(
+        **{**kwargs, "results": {"profile360": claimed}}
+    )
+    assert supported["state"] == "available"
+    assert supported["claims"] == [claim]
+    assert "exact_slot_claim_missing" not in reasons
 
 
 def _request() -> Experience360FrameRequest:
@@ -280,8 +358,8 @@ def test_binding_for_an_unsupported_subject_stays_unknown_without_missing_depend
     request = Experience360FrameRequest(
         surfaceId="workflow360",
         tenantId=TENANT,
-        subject=ProjectionSubject(kind="agent", id="agent-1"),
-        requestedSlotIds=["integration_and_sync_context"],
+        subject=ProjectionSubject(kind="workflow", id="workflow-1"),
+        requestedSlotIds=["runs"],
         includeEvidence=True,
     )
     frame = compose_experience360_frame(
@@ -310,7 +388,7 @@ async def test_frame_runtime_does_not_execute_provider_for_unsupported_binding_s
                 evaluatedAt="2026-10-16T10:02:00Z",
                 frameDisposition=Experience360PolicyDisposition(state="allowed"),
                 slotDispositions={
-                    "integration_and_sync_context": Experience360PolicyDisposition(state="allowed")
+                    "runs": Experience360PolicyDisposition(state="allowed")
                 },
             )
 
@@ -322,8 +400,8 @@ async def test_frame_runtime_does_not_execute_provider_for_unsupported_binding_s
     request = Experience360FrameRequest(
         surfaceId="workflow360",
         tenantId=TENANT,
-        subject=ProjectionSubject(kind="agent", id="agent-1"),
-        requestedSlotIds=["integration_and_sync_context"],
+        subject=ProjectionSubject(kind="workflow", id="workflow-1"),
+        requestedSlotIds=["runs"],
         includeEvidence=True,
     )
     frame = await build_experience360_frame(
@@ -398,7 +476,7 @@ async def test_frame_runtime_routes_journey_subject_to_episode360() -> None:
 
 
 @pytest.mark.asyncio
-async def test_signals360_agent_risk_slot_routes_to_risk360() -> None:
+async def test_signals360_unjoined_risk_flags_do_not_query_risk360() -> None:
     projection_calls: list[tuple[str, str, tuple[str, ...]]] = []
 
     class AllowPolicy:
@@ -408,7 +486,7 @@ async def test_signals360_agent_risk_slot_routes_to_risk360() -> None:
                 tenantId=request.tenantId,
                 evaluatedAt="2026-10-18T10:02:00Z",
                 frameDisposition=Experience360PolicyDisposition(state="allowed"),
-                slotDispositions={"risk_signals": Experience360PolicyDisposition(state="allowed")},
+                slotDispositions={"risk_flags": Experience360PolicyDisposition(state="allowed")},
             )
 
     class Runtime:
@@ -439,8 +517,8 @@ async def test_signals360_agent_risk_slot_routes_to_risk360() -> None:
     request = Experience360FrameRequest(
         surfaceId="signals360",
         tenantId=TENANT,
-        subject=ProjectionSubject(kind="agent", id="agent-signals-1"),
-        requestedSlotIds=["risk_signals"],
+        subject=ProjectionSubject(kind="signal", id="signal-1"),
+        requestedSlotIds=["risk_flags"],
         includeEvidence=True,
     )
     frame = await build_experience360_frame(
@@ -449,16 +527,23 @@ async def test_signals360_agent_risk_slot_routes_to_risk360() -> None:
         projection_runtime=Runtime(),
     )
 
-    assert projection_calls == [
-        ("risk360", "agent-signals-1", ("evidence", "findings", "health", "summary"))
-    ]
-    assert frame.slots[0].state == "available"
-    assert frame.slots[0].evidenceRefs == [EVIDENCE]
+    assert projection_calls == []
+    assert frame.slots[0].state == "unknown"
+    assert "slot_provider_not_connected" in frame.slots[0].reasonCodes
+    assert frame.slots[0].evidenceRefs == []
 
 
 @pytest.mark.asyncio
-async def test_agent360_risk_slot_routes_agent_subject_to_risk_social_and_relationship360() -> None:
+async def test_agent360_risk_slot_routes_agent_subject_to_canonical_risk360() -> None:
     calls: list[tuple[str, str, tuple[str, ...]]] = []
+    risk_claim = ClaimEnvelope(
+        id="risk360.agent-assessment-1",
+        kind="risk_assessment",
+        subject=ProjectionSubject(kind="agent", id="agent-frame-1"),
+        evidenceRefs=[EVIDENCE],
+        claims=["Canonical Risk360 assessment evidence is available for this agent."],
+        domainSlotIds=["risk_summary"],
+    )
 
     class AllowPolicy:
         async def evaluate(self, request: Experience360FrameRequest):
@@ -468,7 +553,7 @@ async def test_agent360_risk_slot_routes_agent_subject_to_risk_social_and_relati
                 evaluatedAt="2026-10-18T12:30:00Z",
                 frameDisposition=Experience360PolicyDisposition(state="allowed"),
                 slotDispositions={
-                    "risk_and_contagion": Experience360PolicyDisposition(state="allowed")
+                    "risk_summary": Experience360PolicyDisposition(state="allowed")
                 },
             )
 
@@ -489,7 +574,7 @@ async def test_agent360_risk_slot_routes_agent_subject_to_risk_social_and_relati
                 tenantId=request.tenantId,
                 contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
                 sections=sections,
-                claims=[],
+                claims=[risk_claim] if request.projectionId == "risk360" else [],
                 dependencyState=[],
                 generatedAt="2026-10-18T12:30:00Z",
                 degradedReasons=[],
@@ -499,7 +584,7 @@ async def test_agent360_risk_slot_routes_agent_subject_to_risk_social_and_relati
         surfaceId="agent360",
         tenantId=TENANT,
         subject=ProjectionSubject(kind="agent", id="agent-frame-1"),
-        requestedSlotIds=["risk_and_contagion"],
+        requestedSlotIds=["risk_summary"],
         includeEvidence=True,
     )
     frame = await build_experience360_frame(
@@ -509,20 +594,10 @@ async def test_agent360_risk_slot_routes_agent_subject_to_risk_social_and_relati
         generated_at="2026-10-18T12:30:00Z",
     )
 
-    assert calls == [
-        ("relationship360", "agent", ("evidence", "interactions")),
-        ("risk360", "agent", ("evidence", "findings")),
-        ("social360", "agent", ("evidence", "findings")),
-    ]
-    assert frame.slots[0].state == "available"
-    relationship_payload = next(
-        payload
-        for payload in frame.slots[0].content["sections"]
-        if payload["projectionId"] == "relationship360"
-    )
-    relationship_evidence = relationship_payload["content"]["evidenceRefs"][0]
-    assert relationship_evidence.id == EVIDENCE.id
-    assert relationship_evidence.source == EVIDENCE.source
+    assert calls == [("risk360", "agent", ("evidence", "findings"))]
+    assert frame.slots[0].state == "degraded"
+    assert "slot_canonical_authority_gap" in frame.slots[0].reasonCodes
+    assert "exact_subject_authority_join_not_implemented" in frame.slots[0].reasonCodes
     risk_payload = next(
         payload
         for payload in frame.slots[0].content["sections"]
@@ -531,14 +606,111 @@ async def test_agent360_risk_slot_routes_agent_subject_to_risk_social_and_relati
     risk_evidence = risk_payload["content"]["evidenceRefs"][0]
     assert risk_evidence.id == EVIDENCE.id
     assert risk_evidence.source == EVIDENCE.source
-    social_payload = next(
-        payload
-        for payload in frame.slots[0].content["sections"]
-        if payload["projectionId"] == "social360"
+    assert [claim.id for claim in frame.slots[0].claims] == [risk_claim.id]
+    assert frame.slots[0].claims[0].evidenceRefs == [EVIDENCE]
+    assert EVIDENCE in frame.slots[0].evidenceRefs
+
+
+def test_partial_financial_contagion_claim_does_not_complete_risk_slot() -> None:
+    subject = ProjectionSubject(kind="contagion_path", id="path-1")
+    request = Experience360FrameRequest(
+        surfaceId="risk360",
+        tenantId=TENANT,
+        subject=subject,
+        requestedSlotIds=["financial_contagion"],
+        includeEvidence=True,
     )
-    social_evidence = social_payload["content"]["evidenceRefs"][0]
-    assert social_evidence.id == EVIDENCE.id
-    assert social_evidence.source == EVIDENCE.source
+    result = ProjectionResult(
+        projectionId="risk360",
+        tenantId=TENANT,
+        contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+        sections=[
+            ProjectionSection(
+                id="findings",
+                state="available",
+                content={"evidenceRefs": [EVIDENCE]},
+            )
+        ],
+        claims=[
+            ClaimEnvelope(
+                id="risk360.path-1.transfer-risk-link",
+                kind="financial_flow_risk_link",
+                subject=subject,
+                evidenceRefs=[EVIDENCE],
+                claims=["A transfer path and risk evidence are linked."],
+                domainSlotIds=["financial_contagion"],
+            )
+        ],
+        dependencyState=[],
+        generatedAt="2026-10-18T12:30:00Z",
+        degradedReasons=[],
+    )
+
+    slot = compose_experience360_frame(
+        request,
+        [result],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+    ).slots[0]
+
+    assert slot.state == "degraded"
+    assert "slot_partial_implementation" in slot.reasonCodes
+    assert "causal_contagion_exposure_and_loss_model_not_available" in slot.reasonCodes
+    assert slot.evidenceRefs == [EVIDENCE]
+
+
+def test_value_conversion_inventory_routes_exact_conversion_claim_with_partial_state() -> None:
+    subject = ProjectionSubject(kind="conversion", id="conversion-1")
+    conversion_ref = EvidenceRef(
+        id="conversion-1",
+        type="transaction",
+        source="canonical_conversions",
+        observedAt="2026-10-18T12:00:00Z",
+        uri="store://canonical_conversions/conversion-1",
+    )
+    request = Experience360FrameRequest(
+        surfaceId="value360",
+        tenantId=TENANT,
+        subject=subject,
+        requestedSlotIds=["conversion_inventory"],
+        includeEvidence=True,
+    )
+    result = ProjectionResult(
+        projectionId="economic360",
+        tenantId=TENANT,
+        contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+        sections=[
+            ProjectionSection(
+                id="evidence",
+                state="available",
+                content={"conversion_inventory": {"evidenceRefs": [conversion_ref]}},
+            )
+        ],
+        claims=[
+            ClaimEnvelope(
+                id="economic360.conversion-1.inventory",
+                kind="canonical_conversion_inventory",
+                subject=subject,
+                evidenceRefs=[conversion_ref],
+                claims=["The canonical conversion row is linked to this exact subject."],
+                domainSlotIds=["conversion_inventory", "evidence_trace"],
+            )
+        ],
+        dependencyState=[],
+        generatedAt="2026-10-18T12:30:00Z",
+        degradedReasons=[],
+    )
+
+    slot = compose_experience360_frame(
+        request,
+        [result],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+    ).slots[0]
+
+    assert slot.state == "degraded"
+    assert "slot_partial_implementation" in slot.reasonCodes
+    assert "value_subject_wallet_cluster_and_historical_inventory_joins_not_available" in slot.reasonCodes
+    assert [claim.kind for claim in slot.claims] == ["canonical_conversion_inventory"]
+    assert slot.evidenceRefs == [conversion_ref]
 
 
 def test_agent360_value_slot_preserves_cost_evidence_and_unknown_freshness():
@@ -668,7 +840,8 @@ async def test_account360_resolves_canonical_entity_before_projection_reads() ->
 
     assert identity_calls == [(TENANT, "account-1")]
     assert projection_calls == []
-    assert frame.slots[0].state == "missing"
+    assert frame.slots[0].state == "unknown"
+    assert "account_entity_identity_unresolved" in frame.slots[0].reasonCodes
     assert "account_entity_identity_unresolved" in frame.warnings
 
 
@@ -692,7 +865,20 @@ async def test_account360_composes_sibling_projection_after_identity_resolution(
     class AccountSource:
         async def canonical_entity(self, tenant_id: str, entity_id: str):
             identity_calls.append((tenant_id, entity_id))
-            return AccountIdentityRead("resolved")
+            return AccountIdentityRead(
+                "resolved",
+                evidence_refs=(
+                    EvidenceRef(
+                        id=entity_id,
+                        type="entity",
+                        source="entity_registry",
+                        observedAt="2026-10-16T10:00:00Z",
+                    ),
+                ),
+                entity_type="organization",
+                tenant_id=tenant_id,
+                entity_id=entity_id,
+            )
 
     class Runtime:
         async def execute_projection(self, projection_request, **kwargs):
@@ -733,7 +919,10 @@ async def test_account360_composes_sibling_projection_after_identity_resolution(
 
     assert identity_calls == [(TENANT, "account-1")]
     assert projection_calls == [("profile360", "account-1", ("state", "summary"))]
-    assert frame.slots[0].state == "available"
+    assert frame.slots[0].state == "degraded"
+    assert frame.slots[0].content["canonicalEntity"]["entityType"] == "organization"
+    assert frame.slots[0].content["accountState"]["state"] == "unknown"
+    assert "account_lifecycle_state_not_exposed_by_entity_registry" in frame.slots[0].limitations
     assert frame.slots[0].provenance
     assert frame.slots[0].evidenceRefs
 
@@ -751,7 +940,7 @@ async def test_identity360_scopes_direct_authority_reads_and_attaches_lineage() 
                 evaluatedAt="2026-10-16T10:02:00Z",
                 frameDisposition=Experience360PolicyDisposition(state="allowed"),
                 slotDispositions={
-                    "resolved_subject_identity": Experience360PolicyDisposition(state="allowed")
+                    "identifier_inventory": Experience360PolicyDisposition(state="allowed")
                 },
             )
 
@@ -772,7 +961,7 @@ async def test_identity360_scopes_direct_authority_reads_and_attaches_lineage() 
                 state="available",
                 slots=(
                     Identity360Slot(
-                        id="resolved_subject_identity",
+                        id="identifier_inventory",
                         state="available",
                         content={
                             "state": "available",
@@ -817,7 +1006,7 @@ async def test_identity360_scopes_direct_authority_reads_and_attaches_lineage() 
         surfaceId="identity360",
         tenantId=TENANT,
         subject=ProjectionSubject(kind="entity", id="identity-entity-1"),
-        requestedSlotIds=["resolved_subject_identity"],
+        requestedSlotIds=["identifier_inventory"],
         includeEvidence=True,
     )
     frame = await build_experience360_frame(
@@ -828,9 +1017,9 @@ async def test_identity360_scopes_direct_authority_reads_and_attaches_lineage() 
     )
 
     assert authority_calls == [
-        (TENANT, "entity", "identity-entity-1", frozenset({"resolved_subject_identity"}))
+        (TENANT, "entity", "identity-entity-1", frozenset({"identifier_inventory"}))
     ]
-    assert projection_calls == [("profile360", ("state", "summary"))]
+    assert projection_calls == []
     slot = frame.slots[0]
     authority = [item for item in slot.provenance if item.sourceKind == "authority"]
     assert len(authority) == 1, (
@@ -841,7 +1030,11 @@ async def test_identity360_scopes_direct_authority_reads_and_attaches_lineage() 
         slot.provenance,
         frame.warnings,
     )
-    assert set(authority[0].canonicalAuthorityRefs) == {"identity", "entity_registry"}
+    assert set(authority[0].canonicalAuthorityRefs) == {
+        "identity",
+        "source_provenance",
+        "evidence",
+    }
     assert [item.id for item in authority[0].evidenceRefs] == ["identity-subject-1"]
     assert slot.content["identityAuthorityRead"]["content"]["canonicalEntity"]["id"] == (
         "identity-entity-1"
@@ -869,9 +1062,7 @@ async def test_identity360_source_subject_uses_identity_record_not_provider_sour
                 slotDispositions={
                     slot_id: Experience360PolicyDisposition(state="allowed")
                     for slot_id in (
-                        "resolved_subject_identity",
-                        "source_identifier_lineage",
-                        "identity_evidence",
+                        "identifier_inventory",
                     )
                 },
             )
@@ -893,7 +1084,7 @@ async def test_identity360_source_subject_uses_identity_record_not_provider_sour
                 state="partial",
                 slots=(
                     Identity360Slot(
-                        id="resolved_subject_identity",
+                        id="identifier_inventory",
                         state="available",
                         content={
                             "state": "available",
@@ -901,28 +1092,6 @@ async def test_identity360_source_subject_uses_identity_record_not_provider_sour
                             "canonicalEntity": {"id": "canonical-entity-1", "kind": "human"},
                             "resolution": {"state": "resolved", "exactIdMatch": False},
                         },
-                        evidence_refs=(source_evidence,),
-                    ),
-                    Identity360Slot(
-                        id="source_identifier_lineage",
-                        state="degraded",
-                        content={
-                            "state": "degraded",
-                            "sourceIdentities": [
-                                {"id": subject_id, "identifierValuesIncluded": False}
-                            ],
-                            "claims": [],
-                            "limitations": [
-                                "Provider and connector registry metadata are not joined."
-                            ],
-                        },
-                        evidence_refs=(source_evidence,),
-                        reason="source_provider_registry_join_not_performed",
-                    ),
-                    Identity360Slot(
-                        id="identity_evidence",
-                        state="available",
-                        content={"state": "available", "sourceClaims": []},
                         evidence_refs=(source_evidence,),
                     ),
                 ),
@@ -934,11 +1103,7 @@ async def test_identity360_source_subject_uses_identity_record_not_provider_sour
             projection_calls.append(projection_request.projectionId)
             raise AssertionError("source identity records must not be queried as provider sources")
 
-    requested_slots = [
-        "resolved_subject_identity",
-        "source_identifier_lineage",
-        "identity_evidence",
-    ]
+    requested_slots = ["identifier_inventory"]
     frame = await build_experience360_frame(
         Experience360FrameRequest(
             surfaceId="identity360",
@@ -956,19 +1121,13 @@ async def test_identity360_source_subject_uses_identity_record_not_provider_sour
     assert authority_calls == [(TENANT, "source", "source-record-1", frozenset(requested_slots))]
     assert projection_calls == []
     slots = {slot.id: slot for slot in frame.slots}
-    assert slots["resolved_subject_identity"].state == "available"
+    assert slots["identifier_inventory"].state == "available"
     assert (
-        slots["resolved_subject_identity"].content["identityAuthorityRead"]["content"][
+        slots["identifier_inventory"].content["identityAuthorityRead"]["content"][
             "canonicalEntity"
         ]["id"]
         == "canonical-entity-1"
     )
-    assert slots["source_identifier_lineage"].state == "degraded"
-    assert (
-        "source_provider_registry_join_not_performed"
-        in slots["source_identifier_lineage"].reasonCodes
-    )
-    assert slots["identity_evidence"].state == "available"
 
 
 @pytest.mark.asyncio
@@ -981,7 +1140,7 @@ async def test_agent360_partial_request_does_not_attach_unrequested_actor_metada
                 evaluatedAt="2026-10-16T10:02:00Z",
                 frameDisposition=Experience360PolicyDisposition(state="allowed"),
                 slotDispositions={
-                    "agent_identity": Experience360PolicyDisposition(state="allowed")
+                    "identity": Experience360PolicyDisposition(state="allowed")
                 },
             )
 
@@ -999,7 +1158,16 @@ async def test_agent360_partial_request_does_not_attach_unrequested_actor_metada
                     )
                     for section_id in projection_request.includeSections or []
                 ],
-                claims=[],
+                claims=[
+                    ClaimEnvelope(
+                        id="agent360.identity.fixture",
+                        kind="canonical_agent_identity",
+                        subject=projection_request.subject,
+                        evidenceRefs=[EVIDENCE],
+                        claims=["An exact agent identity fixture is present."],
+                        domainSlotIds=["identity"],
+                    )
+                ] if projection_request.projectionId == "agent360" else [],
                 dependencyState=[],
                 generatedAt="2026-10-16T10:02:00Z",
                 degradedReasons=[],
@@ -1009,7 +1177,7 @@ async def test_agent360_partial_request_does_not_attach_unrequested_actor_metada
         surfaceId="agent360",
         tenantId=TENANT,
         subject=ProjectionSubject(kind="agent", id="agent-partial-1"),
-        requestedSlotIds=["agent_identity"],
+        requestedSlotIds=["identity"],
         includeEvidence=True,
     )
     frame = await build_experience360_frame(
@@ -1019,7 +1187,7 @@ async def test_agent360_partial_request_does_not_attach_unrequested_actor_metada
     )
 
     assert len(frame.slots) == 1
-    assert frame.slots[0].id == "agent_identity"
+    assert frame.slots[0].id == "identity"
     assert frame.slots[0].state == "available"
     assert frame.slots[0].actorAttribution is None
 
@@ -1160,7 +1328,14 @@ async def test_social360_source_frame_routes_identity_bound_relationship_and_soc
 
 
 @pytest.mark.asyncio
-async def test_execution360_agent_frame_routes_episode_temporal_authority() -> None:
+@pytest.mark.parametrize(
+    "subject_kind,subject_id",
+    [("agent", "agent-temporal-1"), ("execution", "execution-temporal-1")],
+)
+async def test_execution360_frame_routes_plan_steps_for_agent_and_exact_execution_subjects(
+    subject_kind: str,
+    subject_id: str,
+) -> None:
     calls: list[tuple[str, str, tuple[str, ...]]] = []
 
     class AllowPolicy:
@@ -1171,7 +1346,7 @@ async def test_execution360_agent_frame_routes_episode_temporal_authority() -> N
                 evaluatedAt="2026-10-18T12:30:00Z",
                 frameDisposition=Experience360PolicyDisposition(state="allowed"),
                 slotDispositions={
-                    "temporal_and_episode_context": Experience360PolicyDisposition(state="allowed")
+                    "plan_steps": Experience360PolicyDisposition(state="allowed")
                 },
             )
 
@@ -1197,7 +1372,16 @@ async def test_execution360_agent_frame_routes_episode_temporal_authority() -> N
                     )
                     for section_id in section_ids
                 ],
-                claims=[],
+                claims=[
+                    ClaimEnvelope(
+                        id="execution360.plan_steps.fixture",
+                        kind="execution_linked_plan_step",
+                        subject=projection_request.subject,
+                        evidenceRefs=[EVIDENCE],
+                        claims=["An exact execution plan step fixture is present."],
+                        domainSlotIds=["plan_steps"],
+                    )
+                ] if projection_request.projectionId == "execution360" else [],
                 dependencyState=[],
                 generatedAt="2026-10-18T12:30:00Z",
                 degradedReasons=[],
@@ -1206,8 +1390,8 @@ async def test_execution360_agent_frame_routes_episode_temporal_authority() -> N
     request = Experience360FrameRequest(
         surfaceId="execution360",
         tenantId=TENANT,
-        subject=ProjectionSubject(kind="agent", id="agent-temporal-1"),
-        requestedSlotIds=["temporal_and_episode_context"],
+        subject=ProjectionSubject(kind=subject_kind, id=subject_id),
+        requestedSlotIds=["plan_steps"],
         includeEvidence=True,
     )
     frame = await build_experience360_frame(
@@ -1216,11 +1400,21 @@ async def test_execution360_agent_frame_routes_episode_temporal_authority() -> N
         projection_runtime=Runtime(),
     )
 
-    assert len(calls) == 1
-    assert calls[0][0:2] == ("execution360", "agent")
-    assert set(calls[0][2]) == {"episode_context", "evidence", "timeline"}
+    assert {(projection_id, routed_kind) for projection_id, routed_kind, _ in calls} == {
+        ("execution360", subject_kind),
+    }
+    execution_sections = next(
+        sections for projection_id, _, sections in calls if projection_id == "execution360"
+    )
+    assert set(execution_sections) == {
+        "episode_context",
+        "evidence",
+        "state",
+        "summary",
+        "timeline",
+    }
     assert frame.slots[0].state == "degraded"
-    assert "projection_binding_subject_kind_unsupported" in frame.slots[0].reasonCodes
+    assert "slot_contains_partial_evidence" in frame.slots[0].reasonCodes
     assert frame.slots[0].evidenceRefs == [EVIDENCE]
 
 

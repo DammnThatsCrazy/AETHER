@@ -40,7 +40,7 @@ if str(BACKEND_ROOT) not in sys.path:
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
-from repositories.repos import reset_in_memory_stores  # noqa: E402
+from repositories.repos import _IN_MEMORY_STORES, reset_in_memory_stores  # noqa: E402
 from graph.operational_intelligence.models import EvidenceRef as _OI_EvidenceRef  # noqa: E402
 from intelligence.risk360 import router as _package_router  # noqa: E402  (re-export smoke)
 from intelligence.risk360.contracts import (  # noqa: E402
@@ -215,6 +215,86 @@ def _signal(signal_id: str, tenant_id: str, *, subject_id: str = "usr_1") -> Ris
     )
 
 
+def _financial_risk_records(
+    *, entity_id: str, index: int
+) -> tuple[dict, dict]:
+    """One exact economic RiskSignal and its policy-versioned assessment."""
+    evidence = _evidence(f"financial-risk-evidence-{index}")
+    observed_at = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
+    assessment = RiskAssessment(
+        assessment_id=f"financial-assessment-{index}",
+        tenant_id=TENANT_A,
+        subject_kind="entity",
+        subject_id=entity_id,
+        policy_id="economic-risk-policy",
+        policy_version="5",
+        dimensions=["economic"],
+        vector=RiskVector(
+            components=[
+                RiskComponent(
+                    dimension="economic",
+                    state=ValueState.OBSERVED,
+                    score=0.42,
+                    claim_state=EpistemicStatus.DERIVED,
+                    confidence=0.8,
+                    evidence_refs=[evidence],
+                )
+            ]
+        ),
+        claim_state=EpistemicStatus.DERIVED,
+        evidence_refs=[evidence],
+        assessed_at=datetime(2026, 10, 20, 12, 2, tzinfo=timezone.utc),
+    )
+    signal = RiskSignal(
+        signal_id=f"financial-signal-{index}",
+        tenant_id=TENANT_A,
+        subject_kind="entity",
+        subject_id=entity_id,
+        risk_dimension="economic",
+        claim_state=EpistemicStatus.INFERRED,
+        confidence=0.7,
+        evidence_refs=[evidence],
+        source="economic.risk.detector",
+        detector_version="3",
+        observed_at=observed_at,
+        score=0.35,
+    )
+    return assessment.model_dump(mode="json"), signal.model_dump(mode="json")
+
+
+def _financial_flow_path(path_id: str = "path-financial-1") -> dict:
+    """Fixture for two exact transfer-linked entities with trace timestamps."""
+    transfer_id = "transfer-financial-1"
+    transfer_at = "2026-10-20T12:01:00+00:00"
+    return {
+        "tenant_id": TENANT_A,
+        "path_id": path_id,
+        "trace_id": "trace-financial-1",
+        "path_nodes": ["entity-financial-a", "entity-financial-b"],
+        "hop_count": 1,
+        "path_discovered_at": "2026-10-20T12:03:00+00:00",
+        "trace_completed_at": "2026-10-20T12:04:00+00:00",
+        "transfer_edges": [
+            {
+                "from_entity_id": "entity-financial-a",
+                "to_entity_id": "entity-financial-b",
+                "transfer_id": transfer_id,
+                "asset_id": "asset-usd",
+                "amount": "12.50",
+                "occurred_at": transfer_at,
+                "evidence_ref": {
+                    "id": transfer_id,
+                    "type": "transaction",
+                    "source": "transfers",
+                    "observedAt": transfer_at,
+                    "uri": f"store://transfers/{transfer_id}",
+                },
+            }
+        ],
+        "linkage_reason": None,
+    }
+
+
 async def _seed(assessment: RiskAssessment | None, signals: list[RiskSignal] | None = None) -> None:
     assessment_repo = RiskAssessmentRepository()
     signal_repo = RiskSignalRepository()
@@ -258,23 +338,114 @@ class _FakeReader:
         assessment: dict | None = None,
         signals: list[dict] | None = None,
         *,
+        assessments_by_subject: dict[tuple[str, str], dict] | None = None,
+        signals_by_subject: dict[tuple[str, str], list[dict]] | None = None,
         raise_assessment: bool = False,
         raise_signals: bool = False,
+        source_provenance: list[dict] | None = None,
+        source_provenance_truncated: bool = False,
+        raise_source_provenance: bool = False,
+        financial_flow_path: dict | None = None,
     ) -> None:
         self._assessment = assessment
         self._signals = list(signals or [])
+        self._assessments_by_subject = assessments_by_subject
+        self._signals_by_subject = signals_by_subject
         self._raise_assessment = raise_assessment
         self._raise_signals = raise_signals
+        self._source_provenance = list(source_provenance or [])
+        self._source_provenance_truncated = source_provenance_truncated
+        self._raise_source_provenance = raise_source_provenance
+        self.source_provenance_calls = 0
+        self._financial_flow_path = financial_flow_path
 
     async def latest_assessment(self, *, tenant_id: str, subject: object) -> dict | None:
         if self._raise_assessment:
             raise RuntimeError("boom: secret-detail")
+        if self._assessments_by_subject is not None:
+            return self._assessments_by_subject.get((subject.kind, subject.id))
         return self._assessment
 
     async def signals(self, *, tenant_id: str, subject: object) -> list[dict]:
         if self._raise_signals:
             raise RuntimeError("boom: secret-detail")
+        if self._signals_by_subject is not None:
+            return list(self._signals_by_subject.get((subject.kind, subject.id), []))
         return list(self._signals)
+
+    async def source_provenance_observations(
+        self, *, tenant_id: str, source_id: str
+    ) -> tuple[list[dict], bool]:
+        self.source_provenance_calls += 1
+        if self._raise_source_provenance:
+            raise RuntimeError("boom: secret-detail")
+        return list(self._source_provenance), self._source_provenance_truncated
+
+    async def financial_flow_path(self, *, tenant_id: str, path_id: str) -> dict | None:
+        return self._financial_flow_path
+
+
+def _bronze_source_row(
+    *,
+    row_id: str,
+    event_id: str,
+    tenant_id: str,
+    source_id: str,
+    source_trust: str | None = "partner_api",
+) -> dict:
+    """One Bronze observation with exact source and ingress provenance links."""
+    return {
+        "id": row_id,
+        "tenant_id": tenant_id,
+        "event_id": event_id,
+        "event_timestamp": "2026-10-19T12:00:00Z",
+        "received_at": "2026-10-19T12:00:02Z",
+        "payload": {
+            "observation_envelope": {
+                "observation": {
+                    "observation_id": event_id,
+                    "occurred_at": "2026-10-19T12:00:00Z",
+                },
+                "tenancy": {"tenant_id": tenant_id},
+                "rights": {"source_id": source_id},
+                "provenance": {
+                    "source_trust": source_trust,
+                    "credential_class": "partner_api",
+                    "signature_status": "verified",
+                    "adapter": "shopify_adapter",
+                    "adapter_version": "2",
+                },
+                "payload": {"private": "must-not-render"},
+            }
+        },
+    }
+
+
+def _source_provenance_claim_row(
+    *,
+    event_id: str = "source-event-1",
+    tenant_id: str = TENANT_A,
+    source_id: str = "provider:crm",
+    source_trust: str | None = "partner_api",
+) -> dict:
+    return {
+        "tenant_id": tenant_id,
+        "source_id": source_id,
+        "observation_id": event_id,
+        "source_trust": source_trust,
+        "credential_class": "partner_api",
+        "signature_status": "verified",
+        "adapter": "crm_adapter",
+        "adapter_version": "4",
+        "observed_at": "2026-10-19T12:00:00Z",
+        "evidence_ref": {
+            "id": event_id,
+            "type": "event",
+            "source": "bronze_sdk_events",
+            "observedAt": "2026-10-19T12:00:00Z",
+            "uri": f"store://bronze_sdk_events/bronze-{event_id}",
+        },
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -329,6 +500,436 @@ def test_provider_contract_version_matches_registry() -> None:
     assert Risk360Provider.contract_version == INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION
     # The default reader is the repository-backed one (no injection).
     assert isinstance(Risk360Provider()._sources, RepositoryRiskSourceReader)
+
+
+@pytest.mark.asyncio
+async def test_repository_source_provenance_reads_exact_tenant_and_source_with_bound() -> None:
+    store = _IN_MEMORY_STORES.setdefault("bronze_sdk_events", {})
+    store["source-row"] = _bronze_source_row(
+        row_id="bronze-source-row",
+        event_id="source-event-1",
+        tenant_id=TENANT_A,
+        source_id="provider:crm",
+    )
+    store["other-source-row"] = _bronze_source_row(
+        row_id="bronze-other-source-row",
+        event_id="source-event-2",
+        tenant_id=TENANT_A,
+        source_id="provider:other",
+    )
+    store["other-tenant-row"] = _bronze_source_row(
+        row_id="bronze-other-tenant-row",
+        event_id="source-event-3",
+        tenant_id=TENANT_B,
+        source_id="provider:crm",
+    )
+
+    observations, truncated = await RepositoryRiskSourceReader().source_provenance_observations(
+        tenant_id=TENANT_A,
+        source_id="provider:crm",
+    )
+
+    assert truncated is False
+    assert len(observations) == 1
+    row = observations[0]
+    assert row["tenant_id"] == TENANT_A
+    assert row["source_id"] == "provider:crm"
+    assert row["source_trust"] == "partner_api"
+    assert row["evidence_ref"]["id"] == "source-event-1"
+    assert row["evidence_ref"]["uri"] == "store://bronze_sdk_events/bronze-source-row"
+    assert "private" not in str(row)
+
+
+@pytest.mark.asyncio
+async def test_repository_source_provenance_reports_bounded_partial_scan() -> None:
+    store = _IN_MEMORY_STORES.setdefault("bronze_sdk_events", {})
+    for index in range(101):
+        store[f"source-row-{index}"] = _bronze_source_row(
+            row_id=f"bronze-source-row-{index}",
+            event_id=f"source-event-{index}",
+            tenant_id=TENANT_A,
+            source_id="provider:crm",
+        )
+
+    observations, truncated = await RepositoryRiskSourceReader().source_provenance_observations(
+        tenant_id=TENANT_A,
+        source_id="provider:crm",
+    )
+
+    assert len(observations) == 100
+    assert truncated is True
+
+
+@pytest.mark.asyncio
+async def test_repository_financial_path_rejoins_one_exact_tenant_transfer_per_hop() -> None:
+    from repositories.repos import (
+        FlowTracePathRepository,
+        FlowTraceRepository,
+        TransferRepository,
+    )
+
+    await FlowTraceRepository().create(
+        {
+            "id": "trace-financial-1",
+            "tenant_id": TENANT_A,
+            "status": "complete",
+            "completed_at": "2026-10-20T12:04:00+00:00",
+        }
+    )
+    await FlowTracePathRepository().create(
+        {
+            "id": "path-financial-1",
+            "tenant_id": TENANT_A,
+            "trace_id": "trace-financial-1",
+            "path_nodes": ["entity-financial-a", "entity-financial-b"],
+            "hop_count": 1,
+            "discovered_at": "2026-10-20T12:03:00+00:00",
+        }
+    )
+    await TransferRepository().record_transfer(
+        transfer_id="transfer-financial-1",
+        tenant_id=TENANT_A,
+        from_entity_id="entity-financial-a",
+        to_entity_id="entity-financial-b",
+        asset_id="asset-usd",
+        amount="12.50",
+    )
+
+    read = await RepositoryRiskSourceReader().financial_flow_path(
+        tenant_id=TENANT_A,
+        path_id="path-financial-1",
+    )
+
+    assert read is not None
+    assert read["path_nodes"] == ["entity-financial-a", "entity-financial-b"]
+    assert len(read["transfer_edges"]) == 1
+    assert read["transfer_edges"][0]["evidence_ref"]["id"] == "transfer-financial-1"
+    assert read["transfer_edges"][0]["evidence_ref"]["source"] == "transfers"
+    assert read["linkage_reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_repository_financial_path_rejects_lossy_or_cross_tenant_paths() -> None:
+    from repositories.repos import FlowTracePathRepository, FlowTraceRepository
+    from intelligence.risk360.provider import RiskSourceReadIncomplete
+
+    await FlowTraceRepository().create(
+        {
+            "id": "trace-financial-b",
+            "tenant_id": TENANT_A,
+            "status": "complete",
+            "completed_at": "2026-10-20T12:04:00+00:00",
+        }
+    )
+    await FlowTracePathRepository().create(
+        {
+            "id": "path-financial-lossy",
+            "tenant_id": TENANT_A,
+            "trace_id": "trace-financial-b",
+            "path_nodes": ["entity-financial-a", "entity-financial-b"],
+            "hop_count": 3,
+            "discovered_at": "2026-10-20T12:03:00+00:00",
+        }
+    )
+
+    read = await RepositoryRiskSourceReader().financial_flow_path(
+        tenant_id=TENANT_A,
+        path_id="path-financial-lossy",
+    )
+
+    assert read is not None
+    assert read["path_nodes"] == []
+    assert read["linkage_reason"] == "financial_flow_path_sequence_not_exact"
+
+    await FlowTraceRepository().create(
+        {
+            "id": "trace-financial-cross-tenant",
+            "tenant_id": TENANT_B,
+            "status": "complete",
+            "completed_at": "2026-10-20T12:04:00+00:00",
+        }
+    )
+    await FlowTracePathRepository().create(
+        {
+            "id": "path-financial-cross-tenant",
+            "tenant_id": TENANT_A,
+            "trace_id": "trace-financial-cross-tenant",
+            "path_nodes": ["entity-financial-a", "entity-financial-b"],
+            "hop_count": 1,
+            "discovered_at": "2026-10-20T12:03:00+00:00",
+        }
+    )
+    with pytest.raises(RiskSourceReadIncomplete):
+        await RepositoryRiskSourceReader().financial_flow_path(
+            tenant_id=TENANT_A,
+            path_id="path-financial-cross-tenant",
+        )
+
+
+@pytest.mark.asyncio
+async def test_source_trust_projects_only_ingress_classification_and_marks_other_slots_unknown() -> (
+    None
+):
+    source_id = "provider:crm"
+    reader = _FakeReader(source_provenance=[_source_provenance_claim_row(source_id=source_id)])
+    request = _request(subject=ProjectionSubject(kind="source", id=source_id))
+    result = await Risk360Provider(sources=reader).project(
+        request,
+        await _context(_available_registry()),
+    )
+
+    health = next(section for section in result.sections if section.id == "health")
+    source_summary = health.content["sourceProvenance"]
+    assert source_summary["state"] == "partial"
+    assert source_summary["semantics"] == "gateway_stamped_ingress_classification_only"
+    assert source_summary["reliabilityEvaluation"] == "unknown"
+    assert source_summary["observations"][0]["sourceTrustClassification"] == "partner_api"
+    assert "must-not-render" not in result.model_dump_json()
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    coverage = findings.content["requiredSlotCoverage"]
+    assert coverage["source_trust"]["state"] == "partial"
+    for slot_id in (
+        "poisoning_evidence",
+        "propagation_paths",
+        "financial_contagion",
+        "social_contagion",
+    ):
+        assert coverage[slot_id]["state"] == "unknown"
+        assert coverage[slot_id]["reason"]
+
+    source_claims = [
+        claim for claim in result.claims if claim.kind == "source_ingress_trust_classification"
+    ]
+    assert len(source_claims) == 1
+    assert source_claims[0].claimState == EpistemicStatus.OBSERVED
+    assert source_claims[0].evidenceRefs[0].id == "source-event-1"
+    assert source_claims[0].domainSlotIds == ["source_trust", "evidence_trace"]
+
+
+@pytest.mark.asyncio
+async def test_as_of_source_trust_stays_unknown_without_bitemporal_bronze_reader() -> None:
+    source_id = "provider:crm"
+    reader = _FakeReader(source_provenance=[_source_provenance_claim_row(source_id=source_id)])
+    request = _request(
+        subject=ProjectionSubject(kind="source", id=source_id),
+        asOf="2026-10-18T12:00:00Z",
+        temporalMode="as_of",
+    )
+    result = await Risk360Provider(sources=reader).project(
+        request,
+        await _context(_available_registry()),
+    )
+
+    health = next(section for section in result.sections if section.id == "health")
+    source_summary = health.content["sourceProvenance"]
+    assert source_summary["state"] == "unknown"
+    assert source_summary["reason"] == "source_provenance_bitemporal_history_unavailable"
+    assert source_summary["observations"] == []
+    assert reader.source_provenance_calls == 0
+    assert not [
+        claim for claim in result.claims if claim.kind == "source_ingress_trust_classification"
+    ]
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    coverage = findings.content["requiredSlotCoverage"]["source_trust"]
+    assert coverage == {
+        "state": "unknown",
+        "reason": "source_provenance_bitemporal_history_unavailable",
+    }
+
+
+@pytest.mark.asyncio
+async def test_financial_contagion_emits_only_exact_partial_value_risk_link() -> None:
+    assessment_a, signal_a = _financial_risk_records(entity_id="entity-financial-a", index=1)
+    assessment_b, signal_b = _financial_risk_records(entity_id="entity-financial-b", index=2)
+    reader = _FakeReader(
+        assessments_by_subject={
+            ("entity", "entity-financial-a"): assessment_a,
+            ("entity", "entity-financial-b"): assessment_b,
+        },
+        signals_by_subject={
+            ("entity", "entity-financial-a"): [signal_a],
+            ("entity", "entity-financial-b"): [signal_b],
+        },
+        financial_flow_path=_financial_flow_path(),
+    )
+    request = _request(
+        subject=ProjectionSubject(kind="contagion_path", id="path-financial-1")
+    )
+
+    result = await Risk360Provider(sources=reader).project(
+        request, await _context(_available_registry())
+    )
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    coverage = findings.content["requiredSlotCoverage"]
+    assert coverage["financial_contagion"] == {
+        "state": "partial",
+        "reason": "financial_value_risk_link_observed_contagion_attribution_unavailable",
+    }
+    assert coverage["social_contagion"]["state"] == "unknown"
+    assert coverage["propagation_paths"]["state"] == "unknown"
+
+    claim = next(claim for claim in result.claims if claim.kind == "financial_flow_risk_link")
+    assert claim.claimState == EpistemicStatus.DERIVED
+    assert claim.domainSlotIds == ["financial_contagion", "evidence_trace"]
+    assert {ref.id for ref in claim.evidenceRefs} == {
+        "transfer-financial-1",
+        "financial-risk-evidence-1",
+        "financial-risk-evidence-2",
+    }
+    assert "economic-risk-policy v5" in claim.claims[0]
+    assert "does not establish contagion, causal transmission" in claim.claims[0]
+    assert "freshness against an SLA" in claim.claims[0]
+
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert evidence.content["count"] == 3
+    assert {row["source"] for row in evidence.content["evidence"]} == {
+        "transfers",
+        "ledger",
+    }
+
+
+@pytest.mark.asyncio
+async def test_financial_contagion_degrades_when_transfer_evidence_timestamp_disagrees() -> None:
+    path = _financial_flow_path()
+    path["transfer_edges"][0]["evidence_ref"]["observedAt"] = "2026-10-20T12:02:00+00:00"
+    request = _request(
+        subject=ProjectionSubject(kind="contagion_path", id="path-financial-1")
+    )
+
+    result = await Risk360Provider(sources=_FakeReader(financial_flow_path=path)).project(
+        request, await _context(_available_registry())
+    )
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    assert findings.content["requiredSlotCoverage"]["financial_contagion"] == {
+        "state": "degraded",
+        "reason": "financial_transfer_evidence_scope_incomplete",
+    }
+    assert not [claim for claim in result.claims if claim.kind == "financial_flow_risk_link"]
+
+
+@pytest.mark.asyncio
+async def test_financial_contagion_degrades_when_path_transfers_are_not_chronological() -> None:
+    path = _financial_flow_path()
+    path["path_nodes"] = ["entity-a", "entity-b", "entity-c"]
+    path["hop_count"] = 2
+    path["transfer_edges"] = [
+        {
+            "from_entity_id": "entity-a",
+            "to_entity_id": "entity-b",
+            "transfer_id": "transfer-first-edge",
+            "asset_id": "asset-usd",
+            "amount": "12.50",
+            "occurred_at": "2026-10-20T12:02:00+00:00",
+            "evidence_ref": {
+                "id": "transfer-first-edge",
+                "type": "transaction",
+                "source": "transfers",
+                "observedAt": "2026-10-20T12:02:00+00:00",
+                "uri": "store://transfers/transfer-first-edge",
+            },
+        },
+        {
+            "from_entity_id": "entity-b",
+            "to_entity_id": "entity-c",
+            "transfer_id": "transfer-second-edge",
+            "asset_id": "asset-usd",
+            "amount": "8.00",
+            "occurred_at": "2026-10-20T12:01:00+00:00",
+            "evidence_ref": {
+                "id": "transfer-second-edge",
+                "type": "transaction",
+                "source": "transfers",
+                "observedAt": "2026-10-20T12:01:00+00:00",
+                "uri": "store://transfers/transfer-second-edge",
+            },
+        },
+    ]
+    request = _request(
+        subject=ProjectionSubject(kind="contagion_path", id="path-financial-1")
+    )
+
+    result = await Risk360Provider(sources=_FakeReader(financial_flow_path=path)).project(
+        request, await _context(_available_registry())
+    )
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    assert findings.content["requiredSlotCoverage"]["financial_contagion"] == {
+        "state": "degraded",
+        "reason": "financial_transfer_temporal_order_inconsistent",
+    }
+    assert not [claim for claim in result.claims if claim.kind == "financial_flow_risk_link"]
+
+
+@pytest.mark.asyncio
+async def test_financial_contagion_stays_unknown_for_historical_path_request() -> None:
+    reader = _FakeReader(
+        financial_flow_path=_financial_flow_path(),
+        raise_assessment=True,
+        raise_signals=True,
+    )
+    request = _request(
+        subject=ProjectionSubject(kind="contagion_path", id="path-financial-1"),
+        asOf="2026-10-19T00:00:00Z",
+        temporalMode="as_of",
+    )
+
+    result = await Risk360Provider(sources=reader).project(
+        request, await _context(_available_registry())
+    )
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    assert findings.content["requiredSlotCoverage"]["financial_contagion"] == {
+        "state": "unknown",
+        "reason": "financial_flow_risk_bitemporal_history_unavailable",
+    }
+    assert not [claim for claim in result.claims if claim.kind == "financial_flow_risk_link"]
+    assert next(section for section in result.sections if section.id == "summary").state == "missing"
+
+
+@pytest.mark.asyncio
+async def test_financial_contagion_stays_unknown_without_risk_on_every_path_entity() -> None:
+    assessment_a, signal_a = _financial_risk_records(entity_id="entity-financial-a", index=1)
+    reader = _FakeReader(
+        assessments_by_subject={("entity", "entity-financial-a"): assessment_a},
+        signals_by_subject={("entity", "entity-financial-a"): [signal_a]},
+        financial_flow_path=_financial_flow_path(),
+    )
+    request = _request(
+        subject=ProjectionSubject(kind="contagion_path", id="path-financial-1")
+    )
+
+    result = await Risk360Provider(sources=reader).project(
+        request, await _context(_available_registry())
+    )
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    assert findings.content["requiredSlotCoverage"]["financial_contagion"] == {
+        "state": "unknown",
+        "reason": "financial_risk_assessment_missing_for_path_entity",
+    }
+    assert not [claim for claim in result.claims if claim.kind == "financial_flow_risk_link"]
+
+
+@pytest.mark.asyncio
+async def test_source_provenance_scope_mismatch_degrades_without_leaking_rows() -> None:
+    request = _request(subject=ProjectionSubject(kind="source", id="provider:crm"))
+    leaked = _source_provenance_claim_row(tenant_id=TENANT_B)
+    result = await Risk360Provider(sources=_FakeReader(source_provenance=[leaked])).project(
+        request, await _context(_available_registry())
+    )
+
+    health = next(section for section in result.sections if section.id == "health")
+    assert health.content["sourceProvenance"]["state"] == "degraded"
+    assert health.content["sourceProvenance"]["observations"] == []
+    assert "source-event-1" not in result.model_dump_json()
+    coverage = next(section for section in result.sections if section.id == "findings").content[
+        "requiredSlotCoverage"
+    ]
+    assert coverage["source_trust"]["state"] == "degraded"
 
 
 def test_importing_the_package_does_not_auto_register_globally() -> None:
@@ -483,6 +1084,64 @@ async def test_evidence_section_lists_the_canonical_refs() -> None:
     assert "ev-assessment-a-1" in ref_ids
     assert "ev-economic-a-1" in ref_ids
     assert "ev-sig-1" in ref_ids
+
+
+@pytest.mark.asyncio
+async def test_freshness_reports_timestamp_coverage_without_fresh_stale_claims() -> None:
+    assessed_at = datetime(2026, 10, 18, 10, 0, tzinfo=timezone.utc)
+    observed_at = datetime(2026, 10, 18, 9, 30, tzinfo=timezone.utc)
+    timestamped = _signal("sig-timestamped", TENANT_A)
+    timestamped.observed_at = observed_at
+    untimestamped_row = _signal("sig-untimestamped", TENANT_A).model_dump(mode="json")
+    untimestamped_row["observed_at"] = None
+    provider = Risk360Provider(
+        sources=_FakeReader(
+            assessment=_assessment(assessed_at=assessed_at).model_dump(mode="json"),
+            signals=[timestamped.model_dump(mode="json"), untimestamped_row],
+        )  # type: ignore[arg-type]
+    )
+
+    result = await provider.project(_request(), await _context(_available_registry()))
+
+    health = next(section for section in result.sections if section.id == "health")
+    freshness = health.content["freshness"]
+    assert freshness["assessment"] == {
+        "state": "known",
+        "assessmentId": "a-1",
+        "assessedAt": assessed_at.isoformat(),
+    }
+    assert freshness["signals"] == {
+        "state": "unknown",
+        "signalCount": 2,
+        "timestampedSignalCount": 1,
+        "untimestampedSignalCount": 1,
+        "latestObservedAt": observed_at.isoformat(),
+    }
+    assert "fresh" not in str(freshness).lower()
+    assert "stale" not in str(freshness).lower()
+
+
+@pytest.mark.asyncio
+async def test_request_tenant_cannot_override_runtime_tenant_scope() -> None:
+    class _NeverRead:
+        async def latest_assessment(self, *, tenant_id: str, subject: object) -> dict | None:
+            raise AssertionError("canonical read must not run across tenant scope")
+
+        async def signals(self, *, tenant_id: str, subject: object) -> list[dict]:
+            raise AssertionError("canonical read must not run across tenant scope")
+
+    context = await _context(_available_registry(), tenant=TENANT_A)
+    result = await Risk360Provider(sources=_NeverRead()).project(_request(tenant=TENANT_B), context)
+
+    by_id = {section.id: section for section in result.sections}
+    assert by_id["summary"].state == "degraded"
+    assert by_id["state"].state == "degraded"
+    assert by_id["evidence"].state == "degraded"
+    assert by_id["findings"].state == "degraded"
+    assert by_id["health"].state == "degraded"
+    assert by_id["health"].content["freshness"]["assessment"]["state"] == "degraded"
+    assert by_id["health"].content["freshness"]["signals"]["state"] == "degraded"
+    assert result.claims == []
 
 
 @pytest.mark.asyncio
@@ -695,12 +1354,37 @@ async def test_agent_signal_context_preserves_observation_and_inferred_risk_stat
     assert context[0]["evidenceRefs"] == [ref.model_dump(mode="json")]
 
     claims = {claim.id: claim for claim in result.claims}
-    assert claims[f"risk360.signal.{signal.signal_id}"].claimState == EpistemicStatus.INFERRED
-    assert claims[f"risk360.signal.{signal.signal_id}"].evidenceRefs == [ref]
+    assessment_claim = claims[f"risk360.assessment.{assessment.assessment_id}"]
+    assert assessment_claim.evidenceRefs == [ref]
+    assert assessment_claim.domainSlotIds == [
+        "risk_assessment_state",
+        "risk_evidence_and_limitations",
+        "risk_summary",
+        "evidence_trace",
+    ]
+    signal_claim = claims[f"risk360.signal.{signal.signal_id}"]
+    assert signal_claim.claimState == EpistemicStatus.INFERRED
+    assert signal_claim.evidenceRefs == [ref]
+    assert signal_claim.domainSlotIds == [
+        "risk_evidence_and_limitations",
+        "evidence_trace",
+        "risk_summary",
+        "agent_amplification",
+    ]
+    assert "risk_signals" not in signal_claim.domainSlotIds
     assert (
         claims["risk360.health.aether.fraud.detector.delegation"].claimState
         == EpistemicStatus.OBSERVED
     )
+    assert claims["risk360.health.aether.fraud.detector.delegation"].domainSlotIds == [
+        "risk_assessment_state",
+        "risk_evidence_and_limitations",
+        "risk_summary",
+        "evidence_trace",
+    ]
+    findings = next(section for section in result.sections if section.id == "findings")
+    assert findings.content["requiredSlotCoverage"]["agent_amplification"]["state"] == "available"
+    assert findings.content["requiredSlotCoverage"]["propagation_paths"]["state"] == "unknown"
     state = next(section for section in result.sections if section.id == "state")
     agentic = next(row for row in state.content["dimensionStates"] if row["dimension"] == "agentic")
     assert agentic["state"] == ValueState.INSUFFICIENT_DATA.value
@@ -737,7 +1421,7 @@ async def test_reader_marks_same_tenant_rows_for_a_different_subject_degraded() 
     by_id = {section.id: section for section in result.sections}
     assert by_id["summary"].state == "degraded"
     assert by_id["state"].state == "degraded"
-    assert by_id["evidence"].state == "empty"
+    assert by_id["evidence"].state == "degraded"
     assert by_id["findings"].state == "degraded"
     assert by_id["health"].state == "degraded"
     assert result.claims == []

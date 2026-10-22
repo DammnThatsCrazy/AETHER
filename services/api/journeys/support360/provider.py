@@ -1,4 +1,4 @@
-"""Bounded Support360 projection over canonical support communication facts.
+"""Support360 projection over observed support case and communication facts.
 
 The provider reads only the exact support category from tenant-scoped
 ``silver_comms_facts``. Entity subjects use the canonical recipient ID;
@@ -8,15 +8,18 @@ references carried by an exact tenant-owned EpisodeRecord; source subjects
 resolve through exact tenant-owned provider connection rows and match their
 connection IDs. Every candidate is rechecked after the repository read.
 
-These joins expose observed communication metadata and provenance only. The
-provider does not promote ``support_case_id`` into canonical case identity,
-infer case lifecycle, derive a journey, or invent an outcome. Connection
-membership has no historical authority, and source/agent/episode coverage is
-degraded when the canonical read cannot establish a complete scoped set.
+Communication joins expose observed metadata and provenance only. Canonical
+case IDs are minted by the SupportCase authority from tenant-owned verified
+provider connections; lifecycle remains an observed source assertion. This
+projection never promotes ``support_case_id`` into canonical identity or
+derives a journey, assignment, SLA, risk, or outcome. Connection membership has
+no historical authority, and source/agent/episode coverage is degraded when a
+read cannot establish a complete scoped set.
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -24,7 +27,9 @@ from typing import Any, Optional, Protocol
 from urllib.parse import quote
 
 from graph.operational_intelligence.models import EvidenceRef
+from shared.contracts_models.epistemic import EpistemicStatus
 from shared.intelligence_projections.contracts import (
+    ClaimEnvelope,
     ProjectionContext,
     PageInfo,
     ProjectionRequest,
@@ -37,6 +42,7 @@ from shared.intelligence_projections.generated_registry import (
 )
 from shared.intelligence_projections.provider import IntelligenceProjectionProvider
 from shared.intelligence_projections.registry import ProviderRegistry
+from journeys.support360.cases import SupportCaseAuthorityRead, SupportCaseRepository
 
 PROJECTION_ID = "support360"
 OUTPUT_SECTIONS: tuple[str, ...] = (
@@ -65,8 +71,58 @@ _REASON_EPISODE_LINK_MISSING = "support_episode_communication_event_link_unavail
 _REASON_SOURCE_LINK_MISSING = "support_source_connection_binding_unavailable"
 _REASON_SOURCE_CONNECTION_SCOPE_MISMATCH = "support_source_connection_tenant_scope_mismatch"
 _REASON_CASE_AUTHORITY_MISSING = "canonical_support_case_authority_unavailable"
+_REASON_TICKET_CASE_JOIN_MISSING = "canonical_support_ticket_case_join_unavailable"
+_REASON_CONVERSATION_AUTHORITY_MISSING = "canonical_support_conversation_authority_unavailable"
+_REASON_CASE_NOT_FOUND = "support_case_not_found_for_tenant"
+_REASON_CASE_AUTHORITY_UNAVAILABLE = "support_case_authority_unavailable"
+_REASON_CASE_RETENTION_EXPIRED = "support_case_retention_expired"
+_REASON_CASE_EVIDENCE_UNAVAILABLE = "support_case_lifecycle_evidence_unavailable"
+_REASON_CASE_HISTORY_PARTIAL = "support_case_source_history_coverage_unverified"
+_REASON_CASE_COMMUNICATION_JOIN_MISSING = "support_case_conversation_join_unavailable"
 _REASON_JOURNEY_JOIN_MISSING = "canonical_support_case_journey_join_unavailable"
 _REASON_OUTCOME_JOIN_MISSING = "canonical_support_outcome_join_unavailable"
+_REASON_CALLBACK_AUTHORITY_MISSING = "canonical_support_callback_authority_unavailable"
+_REASON_PARTICIPANT_AUTHORITY_MISSING = "canonical_support_case_participants_unavailable"
+_REASON_SLA_AUTHORITY_MISSING = "canonical_support_sla_authority_unavailable"
+_REASON_AGENT_ASSIGNMENT_MISSING = "canonical_support_case_agent_assignment_unavailable"
+_REASON_RISK_COMPOSITION_MISSING = "support_risk_projection_composition_unavailable"
+_REASON_RESOLUTION_AUTHORITY_MISSING = "canonical_support_resolution_authority_unavailable"
+_REASON_CONTENT_PERMISSION_UNVERIFIED = "support_communication_content_permission_unverified"
+_REQUIRED_SUPPORT_SLOT_IDS: tuple[str, ...] = (
+    "case_summary",
+    "conversation_history",
+    "callbacks",
+    "participants",
+    "sla",
+    "journey_links",
+    "agents",
+    "risk",
+    "resolution",
+    "evidence_trace",
+)
+_SAFE_SUPPORT_READ_REASONS = frozenset(
+    {
+        _REASON_UNSUPPORTED_SUBJECT,
+        _REASON_SOURCE_UNAVAILABLE,
+        _REASON_AGENT_IDENTITY_UNAVAILABLE,
+        _REASON_EPISODE_AUTHORITY_UNAVAILABLE,
+        _REASON_EPISODE_LINK_MISSING,
+        _REASON_SOURCE_AUTHORITY_UNAVAILABLE,
+        _REASON_SOURCE_LINK_MISSING,
+        _REASON_SOURCE_CONNECTION_SCOPE_MISMATCH,
+    }
+)
+_CANONICAL_SUBJECT_AUTHORITY_REASONS = {
+    "support_case": _REASON_CASE_AUTHORITY_MISSING,
+    "callback": _REASON_CALLBACK_AUTHORITY_MISSING,
+    "conversation": _REASON_CONVERSATION_AUTHORITY_MISSING,
+    "ticket": _REASON_TICKET_CASE_JOIN_MISSING,
+}
+
+
+def _safe_read_reason(reason: Optional[str]) -> str:
+    """Keep source-provided diagnostics from leaking into projection content."""
+    return reason if reason in _SAFE_SUPPORT_READ_REASONS else _REASON_UNSUPPORTED_SUBJECT
 
 
 @dataclass(frozen=True)
@@ -299,7 +355,9 @@ class RepositorySupport360Source:
             )
 
         source_event_ids: set[str] = set()
-        if (source_event_id := _safe_reference(getattr(episode, "source_event_id", None))) is not None:
+        if (
+            source_event_id := _safe_reference(getattr(episode, "source_event_id", None))
+        ) is not None:
             source_event_ids.add(source_event_id)
         fact_ids: set[str] = set()
         raw_evidence = getattr(episode, "evidence_refs", ())
@@ -396,7 +454,11 @@ class RepositorySupport360Source:
                 available=False,
                 reason=_REASON_SOURCE_AUTHORITY_UNAVAILABLE,
                 subject_join="provider_identity_to_connection_to_source_connector_id_exact_match",
-                canonical_authority_refs=("communication_facts", "provider_connections", "evidence"),
+                canonical_authority_refs=(
+                    "communication_facts",
+                    "provider_connections",
+                    "evidence",
+                ),
             )
 
         complete = len(rows) <= source_limit
@@ -416,15 +478,15 @@ class RepositorySupport360Source:
                 scope_known=False,
                 reason=_REASON_SOURCE_CONNECTION_SCOPE_MISMATCH,
                 subject_join="provider_identity_to_connection_to_source_connector_id_exact_match",
-                join_evidence_refs=tuple(
-                    _connection_evidence(row) for row in scoped_connections
+                join_evidence_refs=tuple(_connection_evidence(row) for row in scoped_connections),
+                canonical_authority_refs=(
+                    "communication_facts",
+                    "provider_connections",
+                    "evidence",
                 ),
-                canonical_authority_refs=("communication_facts", "provider_connections", "evidence"),
             )
         connection_ids = sorted({str(row["connection_id"]) for row in scoped_connections})
-        connection_refs = tuple(
-            _connection_evidence(row) for row in scoped_connections
-        )
+        connection_refs = tuple(_connection_evidence(row) for row in scoped_connections)
         if not connection_ids:
             return SupportFactsRead(
                 rows=[],
@@ -433,7 +495,11 @@ class RepositorySupport360Source:
                 truncated=not complete,
                 reason=_REASON_SOURCE_LINK_MISSING,
                 subject_join="provider_identity_to_connection_to_source_connector_id_exact_match",
-                canonical_authority_refs=("communication_facts", "provider_connections", "evidence"),
+                canonical_authority_refs=(
+                    "communication_facts",
+                    "provider_connections",
+                    "evidence",
+                ),
             )
         try:
             facts, next_cursor = await self._facts_repository().list_for_source_connectors(
@@ -454,7 +520,11 @@ class RepositorySupport360Source:
                 subject_join="provider_identity_to_connection_to_source_connector_id_exact_match",
                 join_reference_ids=tuple(connection_ids),
                 join_evidence_refs=connection_refs,
-                canonical_authority_refs=("communication_facts", "provider_connections", "evidence"),
+                canonical_authority_refs=(
+                    "communication_facts",
+                    "provider_connections",
+                    "evidence",
+                ),
             )
         return SupportFactsRead(
             rows=[row for row in facts if isinstance(row, dict)],
@@ -495,12 +565,16 @@ class Support360Provider(IntelligenceProjectionProvider):
         source: Optional[Support360Source] = None,
         *,
         agent_identity_reader: Optional[SupportAgentIdentityReader] = None,
+        case_repository: Optional[SupportCaseRepository] = None,
     ) -> None:
         self._source = source if source is not None else RepositorySupport360Source()
         self._agent_identity = (
             agent_identity_reader
             if agent_identity_reader is not None
             else RepositorySupportAgentIdentityReader()
+        )
+        self._case_repository = (
+            case_repository if case_repository is not None else SupportCaseRepository()
         )
 
     async def project(
@@ -514,8 +588,19 @@ class Support360Provider(IntelligenceProjectionProvider):
                 projection_id=request.projectionId,
             )
 
-        if request.subject.kind not in {"entity", "agent", "episode", "source"}:
-            return self._unknown_result(request, context, _REASON_UNSUPPORTED_SUBJECT)
+        if request.subject.kind not in {"entity", "agent", "episode", "source", "support_case"}:
+            # These are valid SSOT subject identifiers, but the repository
+            # currently has no canonical case/callback/conversation/ticket
+            # authority to resolve them. Preserve them as typed unknowns
+            # instead of labeling a supported contract subject as invalid.
+            subject_authority_reason = _CANONICAL_SUBJECT_AUTHORITY_REASONS.get(
+                request.subject.kind
+            )
+            return self._unknown_result(
+                request,
+                context,
+                subject_authority_reason or _REASON_UNSUPPORTED_SUBJECT,
+            )
 
         if context.tenantId != request.tenantId:
             return self._unknown_result(request, context, "support_tenant_scope_mismatch")
@@ -557,22 +642,20 @@ class Support360Provider(IntelligenceProjectionProvider):
             max(request.page.limit if request.page is not None else _DEFAULT_LIMIT, 1),
             _MAX_LIMIT,
         )
+        if request.subject.kind == "support_case":
+            return await self._project_case(request, context, limit=limit)
         join_evidence_refs: tuple[EvidenceRef, ...] = ()
         canonical_subject_id = request.subject.id
         binding_ids: list[str] = []
         if request.subject.kind == "agent":
             try:
-                identity = await self._agent_identity.resolve(
-                    request.tenantId, request.subject.id
-                )
+                identity = await self._agent_identity.resolve(request.tenantId, request.subject.id)
             except Exception:  # noqa: BLE001 - fail closed on identity resolution
                 identity = None
             if (
                 identity is None
                 or getattr(identity, "state", None) != "resolved"
-                or not isinstance(
-                    getattr(identity, "canonical_agent_entity_id", None), str
-                )
+                or not isinstance(getattr(identity, "canonical_agent_entity_id", None), str)
                 or not getattr(identity, "canonical_agent_entity_id", "").strip()
                 or not getattr(identity, "evidence", ())
             ):
@@ -583,9 +666,7 @@ class Support360Provider(IntelligenceProjectionProvider):
                 )
             canonical_subject_id = identity.canonical_agent_entity_id
             join_evidence_refs = tuple(
-                reference
-                for reference in identity.evidence
-                if isinstance(reference, EvidenceRef)
+                reference for reference in identity.evidence if isinstance(reference, EvidenceRef)
             )
             binding_ids = sorted({reference.id for reference in join_evidence_refs if reference.id})
             if not binding_ids:
@@ -643,13 +724,9 @@ class Support360Provider(IntelligenceProjectionProvider):
                 set(binding_ids),
             )
         elif request.subject.kind == "episode":
-            subject_matches = lambda row: _episode_row_matches(
-                row, set(read.join_reference_ids)
-            )
+            subject_matches = lambda row: _episode_row_matches(row, set(read.join_reference_ids))
         else:
-            subject_matches = lambda row: _source_row_matches(
-                row, set(read.join_reference_ids)
-            )
+            subject_matches = lambda row: _source_row_matches(row, set(read.join_reference_ids))
         tenant_mismatch = any(
             isinstance(row, dict) and row.get("tenant_id") != request.tenantId
             for row in source_rows
@@ -669,7 +746,7 @@ class Support360Provider(IntelligenceProjectionProvider):
         if not read.available:
             read_reasons.append(_REASON_SOURCE_UNAVAILABLE)
         if not read.scope_known:
-            read_reasons.append(read.reason or _REASON_UNSUPPORTED_SUBJECT)
+            read_reasons.append(_safe_read_reason(read.reason))
         if tenant_mismatch:
             read_reasons.append("support_authority_tenant_scope_mismatch")
         if read.truncated:
@@ -692,9 +769,7 @@ class Support360Provider(IntelligenceProjectionProvider):
         subject_evidence_refs = list(join_evidence_refs) + list(read.join_evidence_refs)
         evidence_refs = _dedupe_evidence_refs(subject_evidence_refs + communication_evidence_refs)
         events = [
-            _timeline_entry(row, ref)
-            for row, ref in zip(rows, evidence, strict=False)
-            if ref
+            _timeline_entry(row, ref) for row, ref in zip(rows, evidence, strict=False) if ref
         ]
         support_case_refs = _source_reported_case_refs(rows, evidence_refs)
         read_state = (
@@ -794,6 +869,28 @@ class Support360Provider(IntelligenceProjectionProvider):
             if rows or read.truncated or read_reasons or not read.complete
             else "empty"
         )
+        state_content["requiredSlots"] = _required_support_slots(
+            section_state=section_state,
+            read=read,
+            support_case_refs=support_case_refs,
+            timeline_content=timeline_content,
+            communication_evidence_refs=communication_evidence_refs,
+            evidence_refs=evidence_refs,
+        )
+        claims = [
+            ClaimEnvelope(
+                id=f"support360.communication.{reference.id}",
+                kind="support_communication_metadata",
+                subject=request.subject,
+                evidenceRefs=_dedupe_evidence_refs(subject_evidence_refs + [reference]),
+                claims=[
+                    "A support communication metadata record is observed for the exact tenant-scoped subject."
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=["conversation_history", "evidence_trace"],
+            )
+            for reference in communication_evidence_refs
+        ]
         if not read.available or not read.scope_known:
             section_content = [None, state_content, None, None, None, None]
         else:
@@ -814,14 +911,16 @@ class Support360Provider(IntelligenceProjectionProvider):
                 warnings=sorted(set(read_reasons)) or None,
                 canonicalAuthorityRefs=list(read.canonical_authority_refs),
             )
-            for section_id, state, content in zip(OUTPUT_SECTIONS, states, section_content, strict=True)
+            for section_id, state, content in zip(
+                OUTPUT_SECTIONS, states, section_content, strict=True
+            )
         ]
         return ProjectionResult(
             projectionId=self.projection_id,
             tenantId=request.tenantId,
             contractVersion=self.contract_version,
             sections=sections,
-            claims=[],
+            claims=claims,
             dependencyState=list(context.dependencyState),
             generatedAt=datetime.now(timezone.utc).isoformat(),
             degradedReasons=sorted(set(read_reasons)) if read_reasons else [],
@@ -829,6 +928,220 @@ class Support360Provider(IntelligenceProjectionProvider):
                 nextCursor=read.next_cursor,
                 hasNextPage=read.truncated or read.next_cursor is not None,
             ),
+        )
+
+    async def _project_case(
+        self,
+        request: ProjectionRequest,
+        context: ProjectionContext,
+        *,
+        limit: int,
+    ) -> ProjectionResult:
+        """Read exact tenant/canonical case state without guessing related slots."""
+        try:
+            read = await self._case_repository.get_case(
+                request.tenantId,
+                request.subject.id,
+                limit=limit,
+            )
+        except Exception:  # noqa: BLE001 - authority failure is a typed unknown
+            return self._unknown_result(request, context, _REASON_CASE_AUTHORITY_UNAVAILABLE)
+        if not isinstance(read, SupportCaseAuthorityRead) or not read.available:
+            return self._unknown_result(request, context, _REASON_CASE_AUTHORITY_UNAVAILABLE)
+        if read.expired:
+            return self._unknown_result(request, context, _REASON_CASE_RETENTION_EXPIRED)
+        record = read.record
+        if not isinstance(record, dict):
+            return self._unknown_result(request, context, _REASON_CASE_NOT_FOUND)
+        if record.get("tenant_id") != request.tenantId or record.get("case_id") != request.subject.id:
+            return self._unknown_result(request, context, "support_case_tenant_scope_mismatch")
+
+        events = [event for event in read.events if isinstance(event, dict)]
+        evidence_refs: list[EvidenceRef] = []
+        timeline_entries: list[dict[str, Any]] = []
+        for event in events:
+            raw_refs = event.get("evidence_refs")
+            if isinstance(raw_refs, str):
+                try:
+                    raw_refs = json.loads(raw_refs)
+                except json.JSONDecodeError:
+                    raw_refs = None
+            if isinstance(raw_refs, (list, tuple)):
+                for raw_ref in raw_refs:
+                    try:
+                        reference = (
+                            raw_ref
+                            if isinstance(raw_ref, EvidenceRef)
+                            else EvidenceRef.model_validate(raw_ref)
+                        )
+                    except (TypeError, ValueError):
+                        continue
+                    evidence_refs.append(reference)
+            timeline_entries.append(
+                {
+                    "eventType": _safe_reference(_text(event.get("event_type"))),
+                    "occurredAt": _safe_reference(_text(event.get("source_occurred_at"))),
+                    "receivedAt": _safe_reference(_text(event.get("received_at"))),
+                    "lifecycleApplied": event.get("lifecycle_applied") is True,
+                }
+            )
+        evidence_refs = _dedupe_evidence_refs(evidence_refs)
+        if not evidence_refs or not timeline_entries:
+            return self._unknown_result(request, context, _REASON_CASE_EVIDENCE_UNAVAILABLE)
+
+        partial_reasons = [_REASON_CASE_HISTORY_PARTIAL]
+        if not read.complete:
+            partial_reasons.append("support_case_event_history_truncated")
+        lifecycle_state = _safe_reference(_text(record.get("lifecycle_state")))
+        lifecycle_observed_at = _safe_reference(_text(record.get("lifecycle_observed_at")))
+        newest_received_at = max(
+            (
+                _safe_reference(_text(event.get("received_at"))) or ""
+                for event in events
+            ),
+            default="",
+        ) or None
+        case_summary = {
+            "canonicalCaseId": request.subject.id,
+            "lifecycle": {
+                "state": lifecycle_state,
+                "claimState": "observed",
+                "sourceOccurredAt": lifecycle_observed_at,
+                "lastSourceEventId": _safe_reference(_text(record.get("last_source_event_id"))),
+            },
+            "sourceProvider": _safe_reference(_text(record.get("source_provider_identity"))),
+            "sourceConnectionId": _safe_reference(_text(record.get("source_connection_id"))),
+            "sourceEventCount": len(events),
+            "persistedHistoryComplete": read.complete,
+            "freshness": {
+                "state": "unknown",
+                "newestObservedAt": newest_received_at,
+                "reasonCode": "support_case_freshness_sla_unavailable",
+            },
+            "reasonCodes": partial_reasons,
+        }
+        slots = _unknown_support_slots(_REASON_CASE_COMMUNICATION_JOIN_MISSING)
+        slots["case_summary"] = {
+            "state": "degraded",
+            "reasonCodes": partial_reasons,
+            "canonicalCaseId": request.subject.id,
+            "lifecycleState": lifecycle_state,
+            "claimState": "observed",
+            "sourceOccurredAt": lifecycle_observed_at,
+            "evidenceRefs": evidence_refs,
+        }
+        slots["evidence_trace"] = {
+            "state": "degraded",
+            "reasonCodes": partial_reasons,
+            "count": len(evidence_refs),
+            "evidenceRefs": evidence_refs,
+        }
+        state_content = {
+            "supportCommunications": {
+                "state": "unknown",
+                "reasonCode": _REASON_CASE_COMMUNICATION_JOIN_MISSING,
+            },
+            "supportCases": {
+                "state": "observed",
+                "canonicalCaseId": request.subject.id,
+                "lifecycleState": lifecycle_state,
+                "claimState": "observed",
+                "sourceOccurredAt": lifecycle_observed_at,
+                "sourceEventCount": len(events),
+                "sourceHistoryComplete": read.complete,
+            },
+            "journeyLinkage": {
+                "state": "unknown",
+                "reasonCode": _REASON_JOURNEY_JOIN_MISSING,
+            },
+            "measuredOutcomes": {
+                "state": "unknown",
+                "reasonCode": _REASON_OUTCOME_JOIN_MISSING,
+            },
+            "requiredSlots": slots,
+        }
+        timeline_content = {
+            "order": "source_occurred_at_descending",
+            "causalRelationsDeclared": False,
+            "entryCount": len(timeline_entries),
+            "entries": timeline_entries,
+            "coverage": "persisted_case_events_only",
+        }
+        evidence_content = {
+            "count": len(evidence_refs),
+            "evidenceRefs": evidence_refs,
+            "caseLifecycleEvidenceRefs": evidence_refs,
+        }
+        claims = [
+            ClaimEnvelope(
+                id=f"support360.case.{request.subject.id}.{record['last_source_event_id']}",
+                kind="support_case_lifecycle_observation",
+                subject=request.subject,
+                evidenceRefs=evidence_refs,
+                claims=[
+                    "The tenant-owned provider connection reported this canonical support case lifecycle state."
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=["case_summary", "evidence_trace"],
+            )
+        ]
+        sections = [
+            ProjectionSection(
+                id="summary",
+                state="degraded",
+                content=case_summary,
+                warnings=partial_reasons,
+                canonicalAuthorityRefs=["support_cases", "support_case_events", "provider_connections", "evidence"],
+            ),
+            ProjectionSection(
+                id="state",
+                state="degraded",
+                content=state_content,
+                warnings=partial_reasons,
+                canonicalAuthorityRefs=["support_cases", "support_case_events", "provider_connections", "evidence"],
+            ),
+            ProjectionSection(
+                id="timeline",
+                state="degraded",
+                content=timeline_content,
+                warnings=partial_reasons,
+                canonicalAuthorityRefs=["support_case_events", "evidence"],
+            ),
+            ProjectionSection(
+                id="evidence",
+                state="degraded",
+                content=evidence_content,
+                warnings=partial_reasons,
+                canonicalAuthorityRefs=["support_case_events", "provider_connections", "evidence"],
+            ),
+            ProjectionSection(
+                id="interactions",
+                state="unknown",
+                content=None,
+                warnings=[_REASON_CASE_COMMUNICATION_JOIN_MISSING],
+                canonicalAuthorityRefs=["communication_facts"],
+            ),
+            ProjectionSection(
+                id="outcomes",
+                state="unknown",
+                content=None,
+                warnings=[_REASON_RESOLUTION_AUTHORITY_MISSING],
+                canonicalAuthorityRefs=["outcome_facts"],
+            ),
+        ]
+        return ProjectionResult(
+            projectionId=self.projection_id,
+            tenantId=request.tenantId,
+            contractVersion=self.contract_version,
+            sections=sections,
+            claims=claims,
+            dependencyState=list(context.dependencyState),
+            generatedAt=datetime.now(timezone.utc).isoformat(),
+            degradedReasons=partial_reasons,
+            # History is bounded but has no stable opaque cursor yet. Mark
+            # incomplete coverage in content instead of advertising a page
+            # the caller cannot request.
+            page=PageInfo(nextCursor=None, hasNextPage=False),
         )
 
     def _unknown_result(
@@ -860,6 +1173,7 @@ class Support360Provider(IntelligenceProjectionProvider):
                             "state": "unknown",
                             "reasonCode": _REASON_OUTCOME_JOIN_MISSING,
                         },
+                        "requiredSlots": _unknown_support_slots(reason),
                     }
                     if section_id == "state"
                     else None
@@ -939,9 +1253,7 @@ def _connection_evidence(row: dict[str, Any]) -> EvidenceRef:
         id=connection_id,
         type="entity",
         source="provider_connections",
-        observedAt=_safe_reference(
-            _text(row.get("updated_at")) or _text(row.get("created_at"))
-        ),
+        observedAt=_safe_reference(_text(row.get("updated_at")) or _text(row.get("created_at"))),
         uri=f"store://provider_connections/{quote(connection_id, safe='')}",
     )
 
@@ -963,6 +1275,137 @@ def _subject_authorities(subject_kind: str) -> tuple[str, ...]:
     if subject_kind == "source":
         return ("communication_facts", "provider_connections", "evidence")
     return ("communication_facts", "evidence")
+
+
+def _required_support_slots(
+    *,
+    section_state: str,
+    read: SupportFactsRead,
+    support_case_refs: list[dict[str, Any]],
+    timeline_content: dict[str, Any],
+    communication_evidence_refs: list[EvidenceRef],
+    evidence_refs: list[EvidenceRef],
+) -> dict[str, dict[str, Any]]:
+    """Expose the SSOT-required slots while preserving each missing authority."""
+    scope_known = read.available and read.scope_known
+    observed_case_refs = support_case_refs if scope_known else None
+    communication_evidence = communication_evidence_refs if scope_known else None
+    all_evidence = evidence_refs if scope_known else None
+    conversation_reasons: set[str] = set()
+    if not scope_known:
+        conversation_reasons.add(
+            _REASON_SOURCE_UNAVAILABLE if not read.available else _safe_read_reason(read.reason)
+        )
+    if read.truncated:
+        conversation_reasons.add(_REASON_READ_TRUNCATED)
+    if scope_known and not read.complete:
+        conversation_reasons.add("support_communication_history_scope_incomplete")
+    evidence_reason = None
+    if not scope_known:
+        evidence_reason = (
+            _REASON_SOURCE_UNAVAILABLE if not read.available else _safe_read_reason(read.reason)
+        )
+    elif read.truncated:
+        evidence_reason = _REASON_READ_TRUNCATED
+    elif not read.complete:
+        evidence_reason = "support_evidence_trace_scope_incomplete"
+    slots = {
+        "case_summary": {
+            "state": "unknown",
+            "reasonCode": _REASON_CASE_AUTHORITY_MISSING,
+            "sourceReportedReferences": observed_case_refs,
+            "sourceReportedReferencesAreCanonical": False,
+        },
+        "conversation_history": {
+            "state": section_state,
+            "reasonCodes": sorted(conversation_reasons),
+            "contentMode": "metadata_only",
+            "contentAccessState": "unknown",
+            "messageBodyState": "suppressed",
+            "messageBodyReasonCode": _REASON_CONTENT_PERMISSION_UNVERIFIED,
+            "entryCount": timeline_content["entryCount"] if scope_known else None,
+            "entries": timeline_content if scope_known else None,
+            "evidenceRefs": communication_evidence,
+        },
+        "callbacks": {
+            "state": "unknown",
+            "reasonCode": _REASON_CALLBACK_AUTHORITY_MISSING,
+        },
+        "participants": {
+            "state": "unknown",
+            "reasonCode": _REASON_PARTICIPANT_AUTHORITY_MISSING,
+        },
+        "sla": {
+            "state": "unknown",
+            "reasonCode": _REASON_SLA_AUTHORITY_MISSING,
+        },
+        "journey_links": {
+            "state": "unknown",
+            "reasonCode": _REASON_JOURNEY_JOIN_MISSING,
+        },
+        "agents": {
+            "state": "unknown",
+            "reasonCode": _REASON_AGENT_ASSIGNMENT_MISSING,
+        },
+        "risk": {
+            "state": "unknown",
+            "reasonCode": _REASON_RISK_COMPOSITION_MISSING,
+        },
+        "resolution": {
+            "state": "unknown",
+            "reasonCode": _REASON_RESOLUTION_AUTHORITY_MISSING,
+        },
+        "evidence_trace": {
+            "state": section_state,
+            "count": len(evidence_refs) if scope_known else None,
+            "evidenceRefs": all_evidence,
+            "reasonCode": evidence_reason,
+        },
+    }
+    return {slot_id: slots[slot_id] for slot_id in _REQUIRED_SUPPORT_SLOT_IDS}
+
+
+def _unknown_support_slots(reason: str) -> dict[str, dict[str, Any]]:
+    """Return a complete required-slot map when no exact source join exists."""
+    slots = {
+        "case_summary": {
+            "state": "unknown",
+            "reasonCode": _REASON_CASE_AUTHORITY_MISSING,
+            "sourceReportedReferences": None,
+            "sourceReportedReferencesAreCanonical": False,
+        },
+        "conversation_history": {
+            "state": "unknown",
+            "reasonCode": reason,
+            "contentMode": "metadata_only",
+            "contentAccessState": "unknown",
+            "messageBodyState": "suppressed",
+            "messageBodyReasonCode": _REASON_CONTENT_PERMISSION_UNVERIFIED,
+            "entryCount": None,
+            "entries": None,
+            "evidenceRefs": None,
+        },
+        "callbacks": {"state": "unknown", "reasonCode": _REASON_CALLBACK_AUTHORITY_MISSING},
+        "participants": {
+            "state": "unknown",
+            "reasonCode": _REASON_PARTICIPANT_AUTHORITY_MISSING,
+        },
+        "sla": {"state": "unknown", "reasonCode": _REASON_SLA_AUTHORITY_MISSING},
+        "journey_links": {"state": "unknown", "reasonCode": _REASON_JOURNEY_JOIN_MISSING},
+        "agents": {"state": "unknown", "reasonCode": _REASON_AGENT_ASSIGNMENT_MISSING},
+        "risk": {"state": "unknown", "reasonCode": _REASON_RISK_COMPOSITION_MISSING},
+        "resolution": {
+            "state": "unknown",
+            "reasonCode": _REASON_RESOLUTION_AUTHORITY_MISSING,
+        },
+        "evidence_trace": {
+            "state": "unknown",
+            "reasonCode": reason,
+            "count": None,
+            "evidenceRefs": None,
+        },
+    }
+    return {slot_id: slots[slot_id] for slot_id in _REQUIRED_SUPPORT_SLOT_IDS}
 
 
 def _window_bounds(time_range: Any) -> tuple[tuple[Optional[str], Optional[str]], Optional[str]]:
@@ -999,9 +1442,7 @@ def _window_bounds(time_range: Any) -> tuple[tuple[Optional[str], Optional[str]]
     ), None
 
 
-def _row_in_window(
-    row: dict[str, Any], *, after: Optional[str], before: Optional[str]
-) -> bool:
+def _row_in_window(row: dict[str, Any], *, after: Optional[str], before: Optional[str]) -> bool:
     """Defensively enforce the same exact inclusive bounds as the repository."""
     if after is None and before is None:
         return True
@@ -1100,7 +1541,11 @@ def _newest_timestamp(rows: list[dict[str, Any]]) -> Optional[str]:
     timestamps = [
         timestamp
         for row in rows
-        if (timestamp := _safe_reference(_text(row.get("received_at")) or _text(row.get("occurred_at"))))
+        if (
+            timestamp := _safe_reference(
+                _text(row.get("received_at")) or _text(row.get("occurred_at"))
+            )
+        )
     ]
     return max(timestamps) if timestamps else None
 

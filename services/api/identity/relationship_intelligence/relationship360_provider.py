@@ -62,6 +62,7 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
     "state",
     "summary",
     "timeline",
+    "agent_spawned_agents",
 )
 SUPPORTED_TEMPORAL_MODES: frozenset[str] = frozenset({"as_of", "relative", "window"})
 
@@ -70,6 +71,7 @@ _MAX_INTERACTION_EDGES = 500
 _MAX_EVIDENCE_REFS = 100
 _MAX_CLAIMS = 50
 _LEDGER_SOURCE = "graph_mutation_ledger"
+_SPAWNED_SUBAGENT_EDGE = "SPAWNED_SUBAGENT"
 
 
 class RelationshipRead(Protocol):
@@ -365,6 +367,12 @@ class Relationship360Provider:
         edge_events = _subject_edge_events(history, pair)
         visible_events, temporal_warnings = _window_events(edge_events, request, mode)
         bounded_events, page, page_warnings = _page_events(visible_events, request)
+        spawned_agent_events = [
+            event
+            for event in visible_events
+            if event.edge_type == _SPAWNED_SUBAGENT_EDGE
+            and event.from_vertex_id == request.subject.id
+        ]
         event_refs = _evidence_refs(edge_events)
         live_edges = _live_edge_views(history, edge_events, pair)
 
@@ -400,6 +408,11 @@ class Relationship360Provider:
                 history,
                 read_error,
                 [*temporal_warnings, *page_warnings],
+            ),
+            _agent_spawned_agents_section(
+                spawned_agent_events,
+                history,
+                read_error,
             ),
         ]
         claims = _claims(request, edge_events, event_refs)
@@ -1098,12 +1111,19 @@ def _claims(
     refs: list[EvidenceRef],
 ) -> list[ClaimEnvelope]:
     ref_by_id = {ref.id: ref for ref in refs}
-    domain_slot_ids = _domain_slot_ids(request.subject.kind)
+    base_domain_slot_ids = _domain_slot_ids(request.subject.kind)
     claims: list[ClaimEnvelope] = []
     for index, event in enumerate(edge_events):
         ref = ref_by_id.get(event.mutation_id)
         if ref is None:
             continue
+        domain_slot_ids = list(base_domain_slot_ids)
+        if (
+            event.edge_type == _SPAWNED_SUBAGENT_EDGE
+            and event.from_vertex_id == request.subject.id
+            and "spawned_agents" not in domain_slot_ids
+        ):
+            domain_slot_ids.append("spawned_agents")
         edge = f"{event.from_vertex_id} -[{event.edge_type}]-> {event.to_vertex_id}"
         claims.append(
             ClaimEnvelope(
@@ -1138,9 +1158,83 @@ def _domain_slot_ids(subject_kind: str) -> list[str]:
                     and binding.get("projectionId") == PROJECTION_ID
                     and subject_kind in binding.get("subjectKinds", [])
                     and isinstance(slot.get("id"), str)
+                    and slot.get("id") != "spawned_agents"
                 ):
                     slot_ids.add(slot["id"])
     return sorted(slot_ids)
+
+
+def _agent_spawned_agents_section(
+    events: list[SubjectEvent],
+    history: Optional[SubjectHistory],
+    read_error: Optional[str],
+) -> ProjectionSection:
+    """Expose only outgoing SPAWNED_SUBAGENT edges with ledger evidence.
+
+    The history reader is a bounded ledger-prefix replay without a completeness
+    watermark. A recorded edge can be shown as present in that replay, but an
+    empty result cannot prove that no child agents exist.
+    """
+    refs_by_id = {ref.id: ref for ref in _evidence_refs(events)}
+    live_edges = set(history.live_edges) if history is not None else set()
+    spawned_agents: list[dict[str, Any]] = []
+    for event in events:
+        if (
+            event.edge_type != _SPAWNED_SUBAGENT_EDGE
+            or event.kind not in {"edge_added", "edge_revoked"}
+            or not event.from_vertex_id
+            or not event.to_vertex_id
+        ):
+            continue
+        evidence_ref = refs_by_id.get(event.mutation_id)
+        if evidence_ref is None:
+            continue
+        edge_key = (
+            _SPAWNED_SUBAGENT_EDGE,
+            event.from_vertex_id,
+            event.to_vertex_id,
+        )
+        spawned_agents.append(
+            {
+                "parentGraphAgentReference": event.from_vertex_id,
+                "spawnedGraphAgentReference": event.to_vertex_id,
+                "relationshipState": (
+                    "live_in_replayed_prefix"
+                    if edge_key in live_edges
+                    else "revoked_in_replayed_prefix"
+                ),
+                "recordedAt": event.recorded_at,
+                "validFrom": event.valid_from,
+                "evidenceRef": evidence_ref.model_dump(mode="json", by_alias=True),
+            }
+        )
+
+    if read_error:
+        state = "degraded"
+        content = None
+        warnings = ["spawned_agent_graph_read_unavailable"]
+    elif spawned_agents:
+        state = "degraded"
+        content = {
+            "spawnedAgents": spawned_agents,
+            "stateBasis": "tenant_graph_mutation_ledger_replay",
+            "coverage": "unknown",
+            "coverageReason": "the replayed ledger prefix has no completeness watermark",
+        }
+        warnings = ["spawned_agent_ledger_prefix_incomplete"]
+    else:
+        state = "unknown"
+        content = None
+        warnings = ["no_spawned_agent_edge_observed_in_incomplete_ledger_prefix"]
+
+    return ProjectionSection(
+        id="agent_spawned_agents",
+        state=state,  # type: ignore[arg-type]
+        title="Observed spawned-agent relationships",
+        content=content,
+        warnings=warnings,
+        canonicalAuthorityRefs=["graph", "relationship_facts", "temporal"],
+    )
 
 
 __all__ = [

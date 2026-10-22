@@ -41,11 +41,14 @@ from shared.intelligence_projections.registry import ProviderRegistry
 from graph.geographic360.provider import (
     Geographic360Provider,
     Geographic360Reader,
+    GeographicActivityDensityRead,
     GeographicLocationReader,
     GeographicPosture,
     GeographicView,
+    LOCATION_REQUIRED_SLOT_IDS,
     LocationRow,
     OUTPUT_SECTIONS,
+    RepositoryGeographicActivityDensityReader,
     RENDER_CAP_CITY,
     RENDER_CAP_METRO,
     RENDER_CAP_NONE,
@@ -90,7 +93,10 @@ def _fact(
     coordinate_present: bool = False,
     precision_state: str = STATE_FULL,
     observed_at: str | None = T_RECENT,
+    valid_to: str | None = None,
     provider: str | None = "geoip",
+    source_observation_id: str | None = None,
+    source_evidence_refs: tuple[str, ...] = (),
 ) -> LocationRow:
     return LocationRow(
         location_id=location_id,
@@ -108,7 +114,10 @@ def _fact(
         coordinate_present=coordinate_present,
         precision_state=precision_state,
         observed_at=observed_at,
+        valid_to=valid_to,
         provider=provider,
+        source_observation_id=source_observation_id,
+        source_evidence_refs=source_evidence_refs,
     )
 
 
@@ -173,6 +182,18 @@ class _ExplodingReader:
     async def view(self, *, tenant_id: str, subject_kind: str,
                    subject_id: str) -> GeographicView:
         raise RuntimeError("location authority unreachable")
+
+
+class _FakeActivityReader:
+    def __init__(self, read: GeographicActivityDensityRead) -> None:
+        self.read = read
+        self.calls: list[tuple[str, str, int]] = []
+
+    async def activity_density(
+        self, *, tenant_id: str, entity_id: str, limit: int
+    ) -> GeographicActivityDensityRead:
+        self.calls.append((tenant_id, entity_id, limit))
+        return self.read
 
 
 def _request(*, kind: str = "entity", sid: str = "ent-portland",
@@ -297,6 +318,263 @@ async def test_entity_projection_is_a_valid_typed_result():
     ids = {e["id"] for e in evidence.content["evidence"]}
     assert ids == {"location:loc-primary", "location:loc-egress"}
     assert all(e["source"] == "location_facts" for e in evidence.content["evidence"])
+    required_slots = state.content["requiredSlots"]
+    assert list(required_slots) == list(LOCATION_REQUIRED_SLOT_IDS)
+    assert required_slots["place_summary"]["state"] == "available"
+    assert required_slots["geo_hierarchy"]["state"] == "available"
+    assert required_slots["evidence_trace"]["state"] == "available"
+    for slot_id in (
+        "timezone", "activity_density", "journeys", "campaigns", "profiles",
+        "value", "risk", "normalization",
+    ):
+        assert required_slots[slot_id]["state"] == "unknown"
+        assert required_slots[slot_id]["content"] is None
+    assert all(
+        slot["policy"]["state"] == "not_evaluated_by_projection_provider"
+        for slot in required_slots.values()
+    )
+    assert primary_claim.domainSlotIds == ["place_summary"]
+    assert next(c for c in claims if c.id == "evidence.location_fact_trace").domainSlotIds == [
+        "evidence_trace"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_required_slots_preserve_source_evidence_and_temporal_provenance():
+    row = _fact(
+        "loc-source-linked",
+        role="declared_address",
+        precision_class="city",
+        country_code="US",
+        region_name="Oregon",
+        city="Portland",
+        observed_at=T_RECENT,
+        provider="context_capsule",
+        source_observation_id="capsule-observation-17",
+        source_evidence_refs=("evidence:source-17",),
+    )
+    posture = _posture(facts=(row,))
+    provider = Geographic360Provider(reader=_FakeGeoReader({
+        ("entity", "ent-portland"): _view("entity", "ent-portland", posture),
+    }))
+    result = await provider.project(
+        _request(), await _context(_request())
+    )
+
+    slots = _sections(result)["state"].content["requiredSlots"]
+    place = slots["place_summary"]
+    assert place["content"]["source_observation_id"] == "capsule-observation-17"
+    assert place["content"]["source_evidence_refs"] == ["evidence:source-17"]
+    assert place["content"]["currentPresenceAsserted"] is False
+    assert place["freshness"]["observedAt"] == T_RECENT
+    trace = slots["evidence_trace"]["content"]["sourceEvidenceRefs"][0]
+    assert trace == {
+        "locationId": "loc-source-linked",
+        "sourceObservationId": "capsule-observation-17",
+        "evidenceRefs": ["evidence:source-17"],
+        "sourceProvider": "context_capsule",
+    }
+
+
+@pytest.mark.asyncio
+async def test_activity_density_is_exact_entity_temporal_only_and_evidence_backed():
+    posture = _posture(facts=_portland_facts())
+    activity_reader = _FakeActivityReader(
+        GeographicActivityDensityRead(
+            rows=(
+                {
+                    "id": "gold-activity-1",
+                    "tenant_id": TENANT,
+                    "entity_id": "ent-portland",
+                    "value": {},
+                    "dimensions": {
+                        "day_of_week": "monday",
+                        "hour_utc": 14,
+                        "activity_count": 7,
+                        # These values are intentionally not a location authority.
+                        "timezone": "America/Los_Angeles",
+                        "city": "Portland",
+                        "coarse_cell": "8628h3cell",
+                        "latitude": 45.5,
+                    },
+                    "materialized_at": T_RECENT,
+                    "lineage_id": "gold-lineage-1",
+                },
+            ),
+            available=True,
+            complete=True,
+        )
+    )
+    provider = Geographic360Provider(
+        reader=_FakeGeoReader({
+            ("entity", "ent-portland"): _view("entity", "ent-portland", posture),
+        }),
+        activity_reader=activity_reader,
+    )
+    request = _request()
+    result = await provider.project(request, await _context(request))
+
+    slot = _sections(result)["state"].content["requiredSlots"]["activity_density"]
+    assert activity_reader.calls == [(TENANT, "ent-portland", 200)]
+    assert slot["state"] == "degraded"
+    assert slot["reasonCode"] == "temporal_activity_density_not_linked_to_place"
+    assert slot["content"]["locationCorrelationState"] == "unknown"
+    assert slot["content"]["spatialDensityAsserted"] is False
+    assert slot["content"]["points"] == [
+        {
+            "dayOfWeek": "monday",
+            "hourUtc": 14,
+            "activityCount": 7,
+            "materializedAt": datetime.fromisoformat(T_RECENT).isoformat(),
+        }
+    ]
+    assert {ref["source"] for ref in slot["evidenceRefs"]} == {
+        "gold_temporal_heatmap"
+    }
+    assert "America/Los_Angeles" not in str(slot)
+    assert "Portland" not in str(slot)
+    assert "8628h3cell" not in str(slot)
+    assert "latitude" not in str(slot)
+    assert _sections(result)["state"].content["requiredSlots"]["timezone"]["state"] == "unknown"
+    claim = next(claim for claim in result.claims if claim.id == "activity.temporal_density")
+    assert claim.domainSlotIds == ["activity_density"]
+    assert claim.evidenceRefs[0].source == "gold_temporal_heatmap"
+    assert "no timezone is inferred" in claim.claims[0]
+
+
+@pytest.mark.asyncio
+async def test_activity_density_drops_foreign_rows_and_marks_partial_coverage():
+    activity_reader = _FakeActivityReader(
+        GeographicActivityDensityRead(
+            rows=(
+                {
+                    "id": "gold-activity-1",
+                    "tenant_id": TENANT,
+                    "entity_id": "ent-portland",
+                    "dimensions": {
+                        "day_of_week": "monday",
+                        "hour_utc": 14,
+                        "activity_count": 7,
+                    },
+                    "materialized_at": T_RECENT,
+                },
+                {
+                    "id": "foreign-activity",
+                    "tenant_id": OTHER_TENANT,
+                    "entity_id": "ent-portland",
+                    "dimensions": {
+                        "day_of_week": "tuesday",
+                        "hour_utc": 10,
+                        "activity_count": 99,
+                    },
+                },
+            ),
+            available=True,
+            complete=True,
+        )
+    )
+    provider = Geographic360Provider(
+        reader=_FakeGeoReader({
+            ("entity", "ent-portland"): _view(
+                "entity", "ent-portland", _posture(facts=_portland_facts())
+            ),
+        }),
+        activity_reader=activity_reader,
+    )
+    request = _request()
+
+    result = await provider.project(request, await _context(request))
+
+    slot = _sections(result)["state"].content["requiredSlots"]["activity_density"]
+    assert slot["state"] == "degraded"
+    assert slot["reasonCode"] == "temporal_activity_density_read_incomplete"
+    assert slot["content"]["pointCountComplete"] is False
+    assert [point["activityCount"] for point in slot["content"]["points"]] == [7]
+    assert "foreign-activity" not in str(slot)
+
+
+@pytest.mark.asyncio
+async def test_repository_activity_density_reader_uses_tenant_and_entity_and_drops_legacy(
+    monkeypatch,
+):
+    from repositories import lake
+
+    class _GoldRows:
+        async def get_metrics(self, entity_id: str, *, tenant_id: str):
+            assert entity_id == "ent-portland"
+            assert tenant_id == TENANT
+            return [
+                {"id": "legacy", "tenant_id": "", "entity_id": entity_id},
+                {"id": "current", "tenant_id": TENANT, "entity_id": entity_id},
+            ]
+
+    monkeypatch.setattr(lake, "gold_temporal_heatmap", _GoldRows())
+    read = await RepositoryGeographicActivityDensityReader().activity_density(
+        tenant_id=TENANT, entity_id="ent-portland", limit=20
+    )
+
+    assert read.available is True
+    assert read.complete is True
+    assert read.scope_mismatch is False
+    assert read.rows == ({"id": "current", "tenant_id": TENANT, "entity_id": "ent-portland"},)
+
+
+@pytest.mark.asyncio
+async def test_context_tenant_mismatch_does_not_query_location_reader():
+    reader = _FakeGeoReader({
+        ("entity", "ent-portland"): _view(
+            "entity", "ent-portland", _posture(facts=_portland_facts())
+        ),
+    })
+    provider = Geographic360Provider(reader=reader)
+    request = _request()
+    context = await _context(request)
+    mismatched_context = context.model_copy(update={"tenantId": OTHER_TENANT})
+
+    result = await provider.project(request, mismatched_context)
+
+    assert reader.calls == []
+    assert _sections(result)["summary"].state == "unknown"
+    assert _sections(result)["state"].content["requiredSlots"]["place_summary"][
+        "state"
+    ] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_mismatched_reader_subject_fails_closed():
+    provider = Geographic360Provider(reader=_FakeGeoReader({
+        ("entity", "ent-portland"): _view(
+            "entity", "ent-other", _posture("entity", "ent-other", _portland_facts())
+        ),
+    }))
+
+    result = await provider.project(_request(), await _context(_request()))
+
+    assert _sections(result)["summary"].state == "unknown"
+    assert _sections(result)["summary"].content["primary"] is None
+    assert _sections(result)["state"].content["requiredSlots"]["evidence_trace"][
+        "state"
+    ] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_unparseable_observation_time_degrades_freshness_without_raising():
+    posture = _posture(sid="ent-x", facts=(
+        _fact("loc-bad-time", country_code="US", observed_at="not-an-iso-time"),
+    ))
+    provider = Geographic360Provider(reader=_FakeGeoReader({
+        ("entity", "ent-x"): _view("entity", "ent-x", posture),
+    }))
+
+    result = await provider.project(
+        _request(sid="ent-x"), await _context(_request(sid="ent-x"))
+    )
+
+    assert _dim(result, "freshness")["state"] == "degraded"
+    assert _dim(result, "freshness")["reason"] == "location_observation_timestamp_unparseable"
+    assert _sections(result)["state"].content["requiredSlots"]["place_summary"][
+        "freshness"
+    ]["state"] == "degraded"
 
 
 @pytest.mark.asyncio
@@ -326,7 +604,7 @@ async def test_timeline_is_ordered_newest_first_and_grounded():
 @pytest.mark.asyncio
 async def test_precision_never_exceeds_evidence_and_no_coordinate_value_is_echoed():
     # Evidence is a precise coordinate + coarse cell with NO city/region label.
-    posture = _posture(facts=(
+    posture = _posture(sid="ent-x", facts=(
         _fact(
             "loc-precise",
             role="observed_presence",
@@ -364,7 +642,7 @@ async def test_precision_never_exceeds_evidence_and_no_coordinate_value_is_echoe
 
 @pytest.mark.asyncio
 async def test_city_cap_downgrades_exact_to_city_precision_reduced():
-    posture = _posture(facts=(
+    posture = _posture(sid="ent-x", facts=(
         _fact(
             "loc-exact",
             role="observed_presence",
@@ -404,7 +682,7 @@ async def test_city_cap_downgrades_exact_to_city_precision_reduced():
 
 @pytest.mark.asyncio
 async def test_metro_cap_downgrades_city_to_region_granularity():
-    posture = _posture(facts=(
+    posture = _posture(sid="ent-x", facts=(
         _fact(
             "loc-exact",
             role="observed_presence",
@@ -469,7 +747,7 @@ async def test_invalid_cap_falls_back_to_evidence_only():
 
 @pytest.mark.asyncio
 async def test_suppressed_facts_render_coarse_only_and_stay_suppressed():
-    posture = _posture(facts=(
+    posture = _posture(sid="ent-x", facts=(
         _fact(
             "loc-suppressed",
             role="primary_residence",
@@ -539,7 +817,9 @@ async def test_unknown_subject_is_never_zero():
 @pytest.mark.asyncio
 async def test_empty_authority_read_is_empty_not_missing_or_zero():
     provider = Geographic360Provider(reader=_FakeGeoReader({
-        ("entity", "ent-x"): _view("entity", "ent-x", _posture(facts=())),
+        ("entity", "ent-x"): _view(
+            "entity", "ent-x", _posture(sid="ent-x", facts=())
+        ),
     }))
     result = await provider.project(
         _request(sid="ent-x"), await _context(_request(sid="ent-x"))
@@ -553,7 +833,7 @@ async def test_empty_authority_read_is_empty_not_missing_or_zero():
 
 @pytest.mark.asyncio
 async def test_stale_freshness_is_typed_stale():
-    posture = _posture(facts=(
+    posture = _posture(sid="ent-x", facts=(
         _fact("loc-old", role="observed_presence", precision_class="country",
               country_code="US", observed_at=T_STALE),
     ))
@@ -564,8 +844,37 @@ async def test_stale_freshness_is_typed_stale():
         _request(sid="ent-x"), await _context(_request(sid="ent-x"))
     )
     assert _dim(result, "freshness")["state"] == "stale"
+    assert _sections(result)["state"].content["requiredSlots"]["place_summary"][
+        "state"
+    ] == "stale"
     findings = _sections(result)["findings"].content["findings"]
     assert any(f["code"] == "geographic360.stale_location" for f in findings)
+
+
+@pytest.mark.asyncio
+async def test_expired_fact_is_stale_even_when_recently_observed():
+    posture = _posture(
+        sid="ent-x",
+        facts=(
+            _fact(
+                "loc-expired",
+                country_code="US",
+                observed_at=T_RECENT,
+                valid_to=_days_ago(1),
+            ),
+        ),
+    )
+    provider = Geographic360Provider(reader=_FakeGeoReader({
+        ("entity", "ent-x"): _view("entity", "ent-x", posture),
+    }))
+
+    result = await provider.project(
+        _request(sid="ent-x"), await _context(_request(sid="ent-x"))
+    )
+
+    slot = _sections(result)["state"].content["requiredSlots"]["place_summary"]
+    assert slot["state"] == "stale"
+    assert slot["freshness"]["reasonCode"] == "location_fact_past_valid_to"
 
 
 @pytest.mark.asyncio
@@ -628,7 +937,7 @@ async def test_default_reader_is_honest_missing_when_store_has_no_facts():
 
 @pytest.mark.asyncio
 async def test_conflicting_country_and_jurisdiction_surface_findings():
-    posture = _posture(facts=(
+    posture = _posture(sid="ent-x", facts=(
         _fact("loc-a", role="observed_presence", precision_class="country",
               country_code="US", jurisdiction_name="United States",
               jurisdiction_kind="country", observed_at=T_RECENT),

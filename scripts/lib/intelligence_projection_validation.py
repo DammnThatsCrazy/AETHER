@@ -100,15 +100,20 @@ AUTHORITY_INDEX = frozenset(
         "agent_executions",
         "ai_execution_facts",
         "attribution_credits",
+        "attribution_runs",
+        "behavioral_signals",
         "campaign_facts",
         "campaign_touchpoints",
+        "canonical_conversions",
         "cluster_definitions",
         "cluster_membership",
         "cohort_membership",
         "commerce",
+        "commerce_product_offer_graph",
         "communication",
         "communication_facts",
         "computation",
+        "consent_policy_decisions",
         "connection_config",
         "connection_permissions",
         "context_capsules",
@@ -124,8 +129,11 @@ AUTHORITY_INDEX = frozenset(
         "evidence",
         "events",
         "execution_facts",
+        "flow_trace_paths",
+        "flow_traces",
         "fraud_synthesis",
         "geo_observations",
+        "gold_temporal_heatmap",
         "graph",
         "graph_motifs",
         "graph_snapshots",
@@ -145,21 +153,30 @@ AUTHORITY_INDEX = frozenset(
         "payments",
         "population",
         "population_definitions",
+        "provider_connections",
         "provider_health",
         "provider_registry",
         "relationship_facts",
         "resources",
+        "risk_assessments",
         "risk_outputs",
+        "risk_signals",
+        "semantic_memory_graph",
+        "semantic_memory_records",
+        "silver_semantic_observations",
         "social_observations",
         "source_coverage",
         "source_facts",
         "source_provenance",
         "source_schema",
+        "support_cases",
+        "support_case_events",
         "sync_state",
         "temporal",
         "temporal_kernel",
         "tools",
         "touchpoints",
+        "transfers",
         "validity_state",
     }
 )
@@ -216,12 +233,53 @@ _OUTPUT_SECTIONS = frozenset(
         "timeline",
         "evidence",
         "interactions",
+        "journeys",
+        "paths",
+        "sessions",
         "outcomes",
         "findings",
         "health",
         "coverage",
         "deployments",
         "episode_context",
+        "policy_boundary",
+        "agent_spawned_agents",
+        "signal_summary",
+        "source_inventory",
+        "classification",
+        "quality",
+        "normalization",
+        "linked_entities",
+        "campaign_links",
+        "risk_flags",
+        "freshness",
+        "evidence_trace",
+        "semantic_summary",
+        "memories",
+        "cards",
+        "topics",
+        "embeddings_meta",
+        "source_links",
+        "decay",
+        "conflicts",
+        "policy_state",
+        "product_offer_summary",
+        "catalog_links",
+        "exposures",
+        "intent",
+        "cart_checkout",
+        "purchase",
+        "availability_price",
+        "value",
+        "risk",
+        "workflow_summary",
+        "triggers",
+        "runs",
+        "actors",
+        "approvals",
+        "agent_steps",
+        "actions",
+        "failures",
     }
 )
 
@@ -364,7 +422,8 @@ EXPECTED_DIRECT_PROVIDER_BINDINGS = {
             "providerKind": "surface_frame_provider",
             "bindingStatus": "runtime_wired",
             "subjectKinds": ["entity"],
-            "domainSlotIds": ["account_identity_and_state"],
+            "domainSlotIds": ["account_summary", "members", "agents"],
+            "canonicalAuthorityRefs": ["entities", "entity_registry", "graph"],
             "implementationRef": "services/api/identity/account360_provider.py",
             "runtimeBindingRef": "services/api/shared/intelligence_projections/frame_runtime.py",
         }
@@ -376,10 +435,23 @@ EXPECTED_DIRECT_PROVIDER_BINDINGS = {
             "bindingStatus": "runtime_wired",
             "subjectKinds": ["agent", "entity", "source"],
             "domainSlotIds": [
-                "identity_evidence",
-                "relationship_identity_context",
-                "resolved_subject_identity",
-                "source_identifier_lineage",
+                "identifier_inventory",
+                "namespace_map",
+                "match_evidence",
+                "conflicts",
+                "confidence",
+                "aliases",
+                "devices_sessions",
+                "wallets",
+                "policy_redactions",
+                "evidence_trace",
+            ],
+            "canonicalAuthorityRefs": [
+                "entities",
+                "entity_registry",
+                "evidence",
+                "identity",
+                "source_provenance",
             ],
             "implementationRef": "services/api/identity/identity/identity360_provider.py",
             "runtimeBindingRef": "services/api/shared/intelligence_projections/frame_runtime.py",
@@ -1792,6 +1864,26 @@ def validate_product_surface_catalog(reg: dict) -> list[Violation]:
         slot_authorities: set[str] = set()
         aggregate_bindings: dict[str, str] = {}
         aggregate_capabilities: set[str] = set()
+        direct_provider_bindings = surface.get("directProviderBindings", [])
+        direct_authorities_by_slot: dict[str, set[str]] = {}
+        if isinstance(direct_provider_bindings, list):
+            for direct_binding in direct_provider_bindings:
+                if not isinstance(direct_binding, dict):
+                    continue
+                direct_slot_ids = direct_binding.get("domainSlotIds")
+                direct_authorities = direct_binding.get("canonicalAuthorityRefs")
+                if not isinstance(direct_slot_ids, list) or not isinstance(direct_authorities, list):
+                    continue
+                authority_set = {
+                    authority
+                    for authority in direct_authorities
+                    if isinstance(authority, str) and authority in AUTHORITY_INDEX
+                }
+                for direct_slot_id in direct_slot_ids:
+                    if isinstance(direct_slot_id, str):
+                        direct_authorities_by_slot.setdefault(direct_slot_id, set()).update(
+                            authority_set
+                        )
         for slot in slots:
             if not isinstance(slot, dict):
                 violations.append(
@@ -1844,13 +1936,75 @@ def validate_product_surface_catalog(reg: dict) -> list[Violation]:
             slot_authorities.update(authorities)
 
             bindings = slot.get("projectionBindings")
-            if not isinstance(bindings, list) or not bindings:
+            if not isinstance(bindings, list):
                 violations.append(
-                    Violation("product_surface_catalog", "error", "each slot needs at least one explicit projection binding", sid)
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "projectionBindings must be an array",
+                        sid,
+                    )
                 )
                 continue
+            direct_authorities = direct_authorities_by_slot.get(slot_id, set())
+            if "partialImplementationReason" in slot and (
+                not isinstance(slot["partialImplementationReason"], str)
+                or not slot["partialImplementationReason"].strip()
+                or not (bindings or direct_authorities)
+            ):
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "partialImplementationReason requires a bound slot and non-empty reason",
+                        sid,
+                    )
+                )
+            if not bindings:
+                if direct_authorities:
+                    if slot.get("unboundReason") is not None:
+                        violations.append(
+                            Violation(
+                                "product_surface_catalog",
+                                "error",
+                                "unboundReason is invalid when a direct provider is bound to the slot",
+                                sid,
+                            )
+                        )
+                    if isinstance(authorities, list) and not set(authorities).issubset(
+                        direct_authorities
+                    ):
+                        violations.append(
+                            Violation(
+                                "product_surface_catalog",
+                                "error",
+                                "domain slot authorities lack a bound direct provider",
+                                sid,
+                            )
+                        )
+                else:
+                    unbound_reason = slot.get("unboundReason")
+                    if not isinstance(unbound_reason, str) or not unbound_reason.strip():
+                        violations.append(
+                            Violation(
+                                "product_surface_catalog",
+                                "error",
+                                "an unbound slot must declare its implementation gap in unboundReason",
+                                sid,
+                            )
+                        )
+                continue
+            if slot.get("unboundReason") is not None:
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "unboundReason is valid only when no projection or direct provider is bound",
+                        sid,
+                    )
+                )
             slot_projection_ids: set[str] = set()
-            slot_provider_authorities: set[str] = set()
+            slot_provider_authorities: set[str] = set(direct_authorities)
             for binding in bindings:
                 if not isinstance(binding, dict):
                     violations.append(
@@ -1927,17 +2081,45 @@ def validate_product_surface_catalog(reg: dict) -> list[Violation]:
                             sid,
                         )
                     )
-            if isinstance(authorities, list) and not set(authorities).issubset(slot_provider_authorities):
-                violations.append(
-                    Violation(
-                        "product_surface_catalog",
-                        "error",
-                        f"domain slot authorities lack a bound provider: {sorted(set(authorities) - slot_provider_authorities)}",
-                        sid,
+            if isinstance(authorities, list):
+                missing_authorities = set(authorities) - slot_provider_authorities
+                declared_gap = slot.get("unboundCanonicalAuthorityRefs", [])
+                if (
+                    not isinstance(declared_gap, list)
+                    or not all(isinstance(ref, str) for ref in declared_gap)
+                    or len(set(declared_gap)) != len(declared_gap)
+                    or set(declared_gap) != missing_authorities
+                ):
+                    violations.append(
+                        Violation(
+                            "product_surface_catalog",
+                            "error",
+                            f"unboundCanonicalAuthorityRefs must exactly list authorities without a bound provider: {sorted(missing_authorities)}",
+                            sid,
+                        )
                     )
-                )
+                if missing_authorities and not (
+                    isinstance(slot.get("authorityGapReason"), str)
+                    and slot["authorityGapReason"].strip()
+                ):
+                    violations.append(
+                        Violation(
+                            "product_surface_catalog",
+                            "error",
+                            "a partially bound slot must explain its unbound authorities",
+                            sid,
+                        )
+                    )
+                if not missing_authorities and slot.get("authorityGapReason") is not None:
+                    violations.append(
+                        Violation(
+                            "product_surface_catalog",
+                            "error",
+                            "authorityGapReason is invalid when all authorities are bound",
+                            sid,
+                        )
+                    )
 
-        direct_provider_bindings = surface.get("directProviderBindings", [])
         if not isinstance(direct_provider_bindings, list):
             violations.append(
                 Violation(
@@ -1953,7 +2135,7 @@ def validate_product_surface_catalog(reg: dict) -> list[Violation]:
                 Violation(
                     "product_surface_catalog",
                     "error",
-                    "directProviderBindings must match the runtime-wired Account360 and Identity360 paths",
+                    "directProviderBindings must match the registered runtime-wired surface paths",
                     sid,
                 )
             )
@@ -2003,6 +2185,24 @@ def validate_product_surface_catalog(reg: dict) -> list[Violation]:
                         "product_surface_catalog",
                         "error",
                         "direct provider status must attest only a runtime-wired call path",
+                        sid,
+                    )
+                )
+            direct_authority_refs = binding.get("canonicalAuthorityRefs")
+            if (
+                not isinstance(direct_authority_refs, list)
+                or not direct_authority_refs
+                or not all(
+                    isinstance(authority, str) and authority in AUTHORITY_INDEX
+                    for authority in direct_authority_refs
+                )
+                or len(set(direct_authority_refs)) != len(direct_authority_refs)
+            ):
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "direct provider canonicalAuthorityRefs must be unique registered authorities",
                         sid,
                     )
                 )
@@ -2174,15 +2374,83 @@ def validate_product_surface_catalog(reg: dict) -> list[Violation]:
 
         lens_contract = surface.get("lensContract")
         if (
-            not isinstance(lens_contract, dict)
-            or not isinstance(lens_contract.get("lensIds"), list)
-            or lens_contract.get("sourceAlignmentStatus") != "pending_source_alignment"
+            surface.get("contractStatus") == "source_aligned"
+            and isinstance(lens_contract, dict)
+            and lens_contract.get("sourceAlignmentStatus") != "source_aligned"
         ):
             violations.append(
-                Violation("product_surface_catalog", "error", "lensContract must keep unaligned lens ids explicit", sid)
+                Violation(
+                    "product_surface_catalog",
+                    "error",
+                    "source-aligned surface must have a source-aligned lensContract",
+                    sid,
+                )
             )
+        if (
+            not isinstance(lens_contract, dict)
+            or not isinstance(lens_contract.get("lensIds"), list)
+            or not all(isinstance(lens_id, str) for lens_id in lens_contract.get("lensIds", []))
+            or len(set(lens_contract.get("lensIds", []))) != len(lens_contract.get("lensIds", []))
+            or lens_contract.get("sourceAlignmentStatus")
+            not in {"pending_source_alignment", "source_aligned"}
+        ):
+            violations.append(
+                Violation("product_surface_catalog", "error", "lensContract must declare unique lens ids and an explicit alignment state", sid)
+            )
+        elif lens_contract.get("sourceAlignmentStatus") == "source_aligned":
+            blueprint = surface.get("blueprintContract")
+            blueprint_lens_ids = blueprint.get("requiredLensIds") if isinstance(blueprint, dict) else None
+            lens_ids = lens_contract["lensIds"]
+            if (
+                not isinstance(blueprint_lens_ids, list)
+                or not all(isinstance(lens_id, str) for lens_id in blueprint_lens_ids)
+                or lens_ids != blueprint_lens_ids
+                or lens_contract.get("expectedCount") != len(blueprint_lens_ids)
+            ):
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "source-aligned lensContract must match blueprint requiredLensIds and expectedCount",
+                        sid,
+                    )
+                )
+            blueprint_slot_ids = (
+                blueprint.get("requiredSlotIds") if isinstance(blueprint, dict) else None
+            )
+            required_slot_ids = [
+                slot.get("id")
+                for slot in slots
+                if isinstance(slot, dict) and slot.get("requirement") == "required"
+            ]
+            if (
+                not isinstance(blueprint_slot_ids, list)
+                or required_slot_ids != blueprint_slot_ids
+            ):
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "source-aligned required domain slots must match blueprint requiredSlotIds in order",
+                        sid,
+                    )
+                )
         elif sid == "agent360":
-            if lens_contract.get("expectedCount") != 8 or len(slots) != 11:
+            blueprint = surface.get("blueprintContract")
+            blueprint_required_ids = (
+                blueprint.get("requiredSlotIds") if isinstance(blueprint, dict) else None
+            )
+            actual_required_ids = {
+                slot.get("id")
+                for slot in slots
+                if isinstance(slot, dict) and slot.get("requirement") == "required"
+            }
+            if (
+                lens_contract.get("expectedCount") != 8
+                or not isinstance(blueprint_required_ids, list)
+                or len(blueprint_required_ids) != 11
+                or actual_required_ids != set(blueprint_required_ids)
+            ):
                 violations.append(
                     Violation("product_surface_catalog", "error", "Agent 360 must preserve the recovered 11-slot and 8-lens counts", sid)
                 )

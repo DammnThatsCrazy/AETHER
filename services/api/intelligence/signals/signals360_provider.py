@@ -1,0 +1,900 @@
+"""Read-only Signals360 projection over the tenant's derived signal records.
+
+The current ``behavioral_signals`` repository stores translator-produced
+behavior-profile signals, not the canonical event/observation stream described
+by the Signals360 blueprint. This provider therefore projects only the exact
+entity-scoped signal summary that repository can prove. The other SSOT slots
+are returned explicitly as unknown until their canonical intake authorities
+and exact-scope joins are wired.
+
+Signal explanations and raw evidence-reference strings are intentionally
+omitted: existing translators use those fields for model features as well as
+event identifiers, so they are not a safe, typed source-evidence contract.
+The provider never writes, recomputes, or validates a raw event.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any, Optional, Protocol
+
+from graph.operational_intelligence.models import EvidenceRef
+from shared.contracts_models.epistemic import EpistemicStatus
+from shared.intelligence_projections.contracts import (
+    ClaimEnvelope,
+    ProjectionContext,
+    ProjectionRequest,
+    ProjectionResult,
+    ProjectionSection,
+    ProjectionSubject,
+)
+from shared.intelligence_projections.generated_registry import (
+    INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+)
+from shared.intelligence_projections.provider import IntelligenceProjectionProvider
+from shared.intelligence_projections.registry import ProviderRegistry
+
+
+PROJECTION_ID = "signals360"
+OUTPUT_SECTIONS: tuple[str, ...] = (
+    "signal_summary",
+    "source_inventory",
+    "classification",
+    "quality",
+    "normalization",
+    "linked_entities",
+    "campaign_links",
+    "risk_flags",
+    "freshness",
+    "evidence_trace",
+)
+
+_MAX_SIGNAL_RECORDS = 100
+_SUMMARY_SOURCE = "repositories.repos.SignalRepository:behavioral_signals"
+
+
+@dataclass(frozen=True)
+class SignalSummaryRead:
+    """Bounded exact-entity signal read with explicit completeness."""
+
+    rows: tuple[dict[str, Any], ...]
+    available: bool
+    complete: bool
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class ObservationQualityRead:
+    """One exact tenant-scoped SDK Bronze event row, when available."""
+
+    record: Optional[dict[str, Any]]
+    available: bool
+    complete: bool
+    reason: Optional[str] = None
+
+
+class Signal360Source(Protocol):
+    """Tenant-scoped read seam for derived behavior signal records."""
+
+    async def entity_signals(
+        self, *, tenant_id: str, entity_id: str, limit: int
+    ) -> SignalSummaryRead: ...
+
+    async def observation_quality(
+        self, *, tenant_id: str, observation_id: str
+    ) -> ObservationQualityRead: ...
+
+
+class RepositorySignal360Source:
+    """Adapter over behavioral signals and exact SDK observation Bronze rows."""
+
+    def __init__(self, *, bronze: Any = None) -> None:
+        self._bronze = bronze
+
+    async def entity_signals(
+        self, *, tenant_id: str, entity_id: str, limit: int
+    ) -> SignalSummaryRead:
+        if not tenant_id or not entity_id:
+            return SignalSummaryRead((), False, False, "exact_entity_scope_required")
+        try:
+            from repositories.repos import SignalRepository
+
+            rows = await SignalRepository().list_for_entity(
+                entity_id,
+                tenant_id,
+                include_stale=True,
+                limit=min(max(int(limit), 1), _MAX_SIGNAL_RECORDS) + 1,
+            )
+        except Exception:  # noqa: BLE001 - source details stay private
+            return SignalSummaryRead((), False, False, "behavioral_signal_repository_unavailable")
+
+        complete = len(rows) <= min(max(int(limit), 1), _MAX_SIGNAL_RECORDS)
+        scoped: list[dict[str, Any]] = []
+        scope_invalid = False
+        for row in rows:
+            if (
+                not isinstance(row, dict)
+                or row.get("tenant_id") != tenant_id
+                or row.get("entity_id") != entity_id
+                or not _safe_identifier(row.get("signal_id"))
+            ):
+                scope_invalid = True
+                continue
+            scoped.append(row)
+        if scope_invalid:
+            return SignalSummaryRead(
+                tuple(scoped[:_MAX_SIGNAL_RECORDS]),
+                True,
+                False,
+                "unscoped_or_invalid_signal_rows_dropped",
+            )
+        if not complete:
+            return SignalSummaryRead(
+                tuple(scoped[:_MAX_SIGNAL_RECORDS]),
+                True,
+                False,
+                "behavioral_signal_read_truncated",
+            )
+        return SignalSummaryRead(tuple(scoped), True, True)
+
+    async def observation_quality(
+        self, *, tenant_id: str, observation_id: str
+    ) -> ObservationQualityRead:
+        """Read gateway quality metadata for one exact SDK observation.
+
+        SDK ingress stores the accepted event under its exact event id in the
+        tenant-scoped ``sdk_events`` Bronze domain. Envelope-B uses that same
+        id as ``observation_id``. No entity, alias, provider, or time-window
+        join is performed here.
+        """
+        if not _safe_identifier(tenant_id) or not _safe_identifier(observation_id):
+            return ObservationQualityRead(None, False, False, "exact_observation_scope_required")
+        try:
+            if self._bronze is None:
+                from repositories.lake import BronzeRepository
+
+                self._bronze = BronzeRepository("sdk_events")
+            rows = await self._bronze.find_many(
+                filters={
+                    "tenant_id": tenant_id,
+                    "provider_record_id": observation_id,
+                },
+                limit=2,
+            )
+        except Exception:  # noqa: BLE001 - storage diagnostics stay private
+            return ObservationQualityRead(None, False, False, "sdk_observation_bronze_unavailable")
+
+        if not isinstance(rows, list):
+            return ObservationQualityRead(None, False, False, "sdk_observation_read_invalid")
+        if not rows:
+            return ObservationQualityRead(None, True, True, "exact_sdk_observation_not_found")
+        if len(rows) != 1:
+            return ObservationQualityRead(None, True, False, "duplicate_exact_sdk_observation_rows")
+        row = rows[0]
+        if (
+            not isinstance(row, dict)
+            or row.get("tenant_id") != tenant_id
+            or row.get("provider_record_id") != observation_id
+            or row.get("source") != "sdk"
+        ):
+            return ObservationQualityRead(None, False, False, "sdk_observation_scope_mismatch")
+        payload = row.get("payload")
+        envelope = payload.get("observation_envelope") if isinstance(payload, dict) else None
+        observation = envelope.get("observation") if isinstance(envelope, dict) else None
+        tenancy = envelope.get("tenancy") if isinstance(envelope, dict) else None
+        if (
+            not isinstance(observation, dict)
+            or observation.get("observation_id") != observation_id
+            or not isinstance(tenancy, dict)
+            or tenancy.get("tenant_id") != tenant_id
+        ):
+            return ObservationQualityRead(
+                row,
+                True,
+                False,
+                "canonical_observation_envelope_missing_or_mismatched",
+            )
+        return ObservationQualityRead(row, True, True)
+
+
+class Signals360Provider(IntelligenceProjectionProvider):
+    """Tenant-safe, read-only projection for the Signals360 contract."""
+
+    projection_id = PROJECTION_ID
+    contract_version = INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION
+    graph_mutation_policy = "read_only"
+
+    def __init__(self, *, source: Optional[Signal360Source] = None) -> None:
+        self._source = source or RepositorySignal360Source()
+
+    async def project(
+        self,
+        request: ProjectionRequest,
+        context: ProjectionContext,
+    ) -> ProjectionResult:
+        tenant_id = request.tenantId
+        if context.tenantId != tenant_id or context.projectionId != self.projection_id:
+            raise ValueError("Signals360 request and projection context scope must match")
+
+        read: Optional[SignalSummaryRead] = None
+        if request.subject.kind == "entity":
+            try:
+                read = await self._source.entity_signals(
+                    tenant_id=tenant_id,
+                    entity_id=request.subject.id,
+                    limit=_MAX_SIGNAL_RECORDS,
+                )
+            except Exception:  # noqa: BLE001 - source diagnostics stay private
+                read = SignalSummaryRead(
+                    (), False, False, "behavioral_signal_repository_unavailable"
+                )
+
+        requested_sections = set(request.includeSections or OUTPUT_SECTIONS)
+        quality_read: Optional[ObservationQualityRead] = None
+        if {"quality", "source_inventory"}.intersection(requested_sections) and request.subject.kind in {
+            "event",
+            "observation",
+        }:
+            reader = getattr(self._source, "observation_quality", None)
+            if callable(reader):
+                try:
+                    quality_read = await reader(
+                        tenant_id=tenant_id,
+                        observation_id=request.subject.id,
+                    )
+                except Exception:  # noqa: BLE001 - diagnostics stay private
+                    quality_read = ObservationQualityRead(
+                        None,
+                        False,
+                        False,
+                        "sdk_observation_bronze_unavailable",
+                    )
+
+        rows, scope_mismatch = _scoped_rows(
+            read.rows if read is not None else (),
+            tenant_id=tenant_id,
+            entity_id=request.subject.id if request.subject.kind == "entity" else None,
+        )
+        read_complete = bool(
+            read is not None and read.available and read.complete and not scope_mismatch
+        )
+        read_available = bool(read is not None and read.available)
+        read_reason = (
+            "unscoped_or_invalid_signal_rows_dropped"
+            if scope_mismatch
+            else _safe_reason(read.reason)
+            if read is not None
+            else "subject_kind_not_supported_by_signal_repository"
+        )
+        refs = [_record_evidence(row) for row in rows]
+        valid_refs = [ref for ref in refs if ref is not None]
+        records = [_public_signal(row) for row in rows]
+        if read is not None and read.available and read.complete and not read.rows:
+            summary_state = "empty"
+            summary_warnings = None
+        elif read_available and read_complete:
+            summary_state = "available" if records else "degraded"
+            summary_warnings = None if records else ["signal rows lacked safe display identifiers"]
+        else:
+            summary_state = (
+                "degraded" if read_available or request.subject.kind == "entity" else "unknown"
+            )
+            summary_warnings = [read_reason or "behavioral signal summary is unavailable"]
+
+        summary_content: dict[str, Any] = {
+            "tenantId": tenant_id,
+            "subject": {"kind": request.subject.kind, "id": request.subject.id},
+            "authority": _SUMMARY_SOURCE,
+            "signalKind": "translator_derived_behavioral_signal",
+            "scopeState": "complete" if read_complete else "partial_or_unknown",
+            "signals": records,
+            "evidenceRefs": [ref.model_dump(mode="json") for ref in valid_refs],
+        }
+        if read_available:
+            summary_content["returnedSignalCount"] = len(records)
+        if read_complete:
+            summary_content["signalCount"] = len(records)
+            summary_content["countsBySeverity"] = _count_values(records, "severity")
+            summary_content["countsBySentiment"] = _count_values(records, "sentiment")
+        else:
+            summary_content["reasonCode"] = read_reason or "signal_summary_read_incomplete"
+
+        claims: list[ClaimEnvelope] = []
+        if request.subject.kind == "entity":
+            for row, record, evidence in zip(rows, records, valid_refs):
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"signals360.behavioral_signal_record.{record['signalId']}",
+                        kind="stored_behavioral_signal_record",
+                        subject=request.subject,
+                        evidenceRefs=[evidence],
+                        claims=[
+                            "A translator-derived behavioral signal record is stored for this entity; its label is a derived signal and is not a source-event truth claim."
+                        ],
+                        confidence=_confidence(row.get("confidence")),
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=["signal_summary"],
+                    )
+                )
+
+        sections: list[ProjectionSection] = [
+            ProjectionSection(
+                id="signal_summary",
+                state=summary_state,
+                title="Stored behavioral signal summary",
+                content=summary_content,
+                warnings=summary_warnings,
+                canonicalAuthorityRefs=["behavioral_signals"],
+            )
+        ]
+        for slot_id in OUTPUT_SECTIONS[1:8]:
+            if slot_id == "source_inventory":
+                source_section, source_claim = _source_inventory_section(
+                    request.subject,
+                    tenant_id=tenant_id,
+                    read=quality_read,
+                )
+                sections.append(source_section)
+                if source_claim is not None:
+                    claims.append(source_claim)
+            elif slot_id == "quality":
+                quality_section, quality_claim = _quality_section(
+                    request.subject,
+                    tenant_id=tenant_id,
+                    read=quality_read,
+                )
+                sections.append(quality_section)
+                if quality_claim is not None:
+                    claims.append(quality_claim)
+            else:
+                sections.append(_unknown_section(slot_id))
+        sections.extend(
+            [
+                _freshness_section(
+                    request.subject,
+                    tenant_id=tenant_id,
+                    rows=rows,
+                    available=read_available,
+                    complete=read_complete,
+                    reason=read_reason,
+                ),
+                _evidence_trace_section(
+                    request.subject,
+                    tenant_id=tenant_id,
+                    refs=valid_refs,
+                    available=read_available,
+                    complete=read_complete,
+                    reason=read_reason,
+                ),
+            ]
+        )
+        return ProjectionResult(
+            projectionId=self.projection_id,
+            tenantId=tenant_id,
+            contractVersion=self.contract_version,
+            sections=sections,
+            claims=claims,
+            dependencyState=list(context.dependencyState),
+            generatedAt=_utc_now_iso(),
+            degradedReasons=[],
+        )
+
+
+def _unknown_section(slot_id: str) -> ProjectionSection:
+    reasons = {
+        "source_inventory": "canonical_signal_source_inventory_not_joined",
+        "classification": "canonical_event_signal_classifier_not_joined",
+        "quality": "canonical_ingestion_quality_read_not_joined",
+        "normalization": "canonical_observation_normalization_read_not_joined",
+        "linked_entities": "exact_signal_event_identity_join_not_available",
+        "campaign_links": "canonical_signal_campaign_join_not_available",
+        "risk_flags": "canonical_signal_risk_join_not_available",
+    }
+    return ProjectionSection(
+        id=slot_id,
+        state="unknown",
+        title=slot_id.replace("_", " ").title(),
+        content={"state": "unknown", "reasonCode": reasons[slot_id]},
+        warnings=[reasons[slot_id]],
+        # This slot is not currently connected to a canonical signal-event
+        # intake authority, so do not advertise the blueprint owner as a live
+        # source for the unknown result.
+    )
+
+
+def _quality_section(
+    subject: ProjectionSubject,
+    *,
+    tenant_id: str,
+    read: Optional[ObservationQualityRead],
+) -> tuple[ProjectionSection, Optional[ClaimEnvelope]]:
+    """Expose only gateway-stamped quality from an exact SDK observation."""
+    reason: Optional[str] = None
+    row: Optional[dict[str, Any]] = None
+    if subject.kind not in {"event", "observation"}:
+        reason = "exact_event_or_observation_quality_subject_required"
+    elif read is None:
+        reason = "exact_observation_quality_read_not_requested_or_available"
+    elif not read.available:
+        reason = read.reason or "sdk_observation_quality_authority_unavailable"
+    elif not read.complete:
+        reason = read.reason or "sdk_observation_quality_scope_incomplete"
+    elif read.record is None:
+        reason = read.reason or "exact_sdk_observation_not_found"
+    elif (
+        not isinstance(read.record, dict)
+        or read.record.get("tenant_id") != tenant_id
+        or read.record.get("provider_record_id") != subject.id
+        or read.record.get("source") != "sdk"
+    ):
+        reason = "sdk_observation_scope_mismatch"
+    else:
+        row = read.record
+
+    if row is None:
+        state = (
+            "degraded"
+            if read is not None and (not read.available or not read.complete)
+            else "unknown"
+        )
+        return (
+            ProjectionSection(
+                id="quality",
+                state=state,
+                title="Observation ingestion quality",
+                content={
+                    "tenantId": tenant_id,
+                    "subject": {"kind": subject.kind, "id": subject.id},
+                    "qualityState": "unknown",
+                    "reasonCode": reason or "canonical_observation_quality_unknown",
+                },
+                warnings=[reason or "canonical observation quality is unknown"],
+                canonicalAuthorityRefs=["observations"],
+            ),
+            None,
+        )
+
+    payload = row.get("payload")
+    envelope = payload.get("observation_envelope") if isinstance(payload, dict) else None
+    observation = envelope.get("observation") if isinstance(envelope, dict) else None
+    tenancy = envelope.get("tenancy") if isinstance(envelope, dict) else None
+    quality = envelope.get("quality") if isinstance(envelope, dict) else None
+    if (
+        not isinstance(observation, dict)
+        or observation.get("observation_id") != subject.id
+        or not isinstance(tenancy, dict)
+        or tenancy.get("tenant_id") != tenant_id
+    ):
+        reason = "canonical_observation_envelope_missing_or_mismatched"
+    validation_state = (
+        _safe_token(quality.get("validation_state")) if isinstance(quality, dict) else None
+    )
+    if validation_state != "gateway:accepted":
+        reason = reason or "observation_gateway_validation_state_not_stamped"
+
+    if reason is not None:
+        return (
+            ProjectionSection(
+                id="quality",
+                state="unknown",
+                title="Observation ingestion quality",
+                content={
+                    "tenantId": tenant_id,
+                    "subject": {"kind": subject.kind, "id": subject.id},
+                    "qualityState": "unknown",
+                    "reasonCode": reason,
+                },
+                warnings=[reason],
+                canonicalAuthorityRefs=["observations"],
+            ),
+            None,
+        )
+
+    # The gateway's accepted disposition is one quality dimension. It does not
+    # establish end-to-end source reliability, a freshness SLA, or event meaning.
+    quality_values = {
+        key: _safe_token(quality.get(key)) if isinstance(quality, dict) else None
+        for key in (
+            "completeness",
+            "freshness",
+            "sequencing_state",
+        )
+    }
+    observed_at = _safe_timestamp(observation.get("ingested_at"))
+    evidence = EvidenceRef(
+        id=subject.id,
+        type="event",
+        source="bronze_sdk_events",
+        observedAt=observed_at,
+    )
+    section = ProjectionSection(
+        id="quality",
+        state="degraded",
+        title="Observation ingestion quality",
+        content={
+            "tenantId": tenant_id,
+            "subject": {"kind": subject.kind, "id": subject.id},
+            "authority": "repositories.lake.BronzeRepository:sdk_events",
+            "coverage": "one_exact_sdk_observation",
+            "qualityState": "gateway_validation_only",
+            "validationState": validation_state,
+            "completeness": quality_values["completeness"],
+            "freshness": quality_values["freshness"],
+            "sequencingState": quality_values["sequencing_state"],
+            "sourceReliability": "unknown",
+            "eventSemanticQuality": "unknown",
+            "freshnessSla": "unknown",
+            "evidenceRefs": [evidence.model_dump(mode="json")],
+            "reasonCode": "gateway_validation_only_quality",
+        },
+        warnings=[
+            "gateway validation is observed; source reliability, event semantics, and freshness SLA remain unknown"
+        ],
+        canonicalAuthorityRefs=["observations"],
+    )
+    claim = ClaimEnvelope(
+        id=f"signals360.observation_quality.{subject.id}",
+        kind="gateway_observation_validation_record",
+        subject=subject,
+        evidenceRefs=[evidence],
+        claims=[
+            "The tenant-scoped SDK observation envelope records gateway:accepted validation; this does not establish source reliability, event semantic quality, or a freshness SLA."
+        ],
+        confidence=1.0,
+        claimState=EpistemicStatus.OBSERVED,
+        domainSlotIds=["quality"],
+    )
+    return section, claim
+
+
+def _source_inventory_section(
+    subject: ProjectionSubject,
+    *,
+    tenant_id: str,
+    read: Optional[ObservationQualityRead],
+) -> tuple[ProjectionSection, Optional[ClaimEnvelope]]:
+    """Expose authenticated source envelope facts for one exact SDK event."""
+    reason: Optional[str] = None
+    row: Optional[dict[str, Any]] = None
+    if subject.kind not in {"event", "observation"}:
+        reason = "exact_sdk_event_or_observation_subject_required"
+    elif read is None:
+        reason = "exact_sdk_source_inventory_read_unavailable"
+    elif not read.available or not read.complete:
+        reason = read.reason or "exact_sdk_source_inventory_read_incomplete"
+    elif read.record is None:
+        reason = read.reason or "exact_sdk_source_inventory_not_found"
+    elif (
+        read.record.get("tenant_id") != tenant_id
+        or read.record.get("provider_record_id") != subject.id
+        or read.record.get("source") != "sdk"
+    ):
+        reason = "sdk_source_inventory_scope_mismatch"
+    else:
+        row = read.record
+
+    envelope = None
+    if row is not None:
+        payload = row.get("payload")
+        envelope = payload.get("observation_envelope") if isinstance(payload, dict) else None
+        observation = envelope.get("observation") if isinstance(envelope, dict) else None
+        tenancy = envelope.get("tenancy") if isinstance(envelope, dict) else None
+        if (
+            not isinstance(observation, dict)
+            or observation.get("observation_id") != subject.id
+            or not isinstance(tenancy, dict)
+            or tenancy.get("tenant_id") != tenant_id
+        ):
+            reason = "canonical_observation_envelope_missing_or_mismatched"
+
+    source = envelope.get("source") if isinstance(envelope, dict) else None
+    provenance = envelope.get("provenance") if isinstance(envelope, dict) else None
+    source_type = _safe_token(source.get("source_type")) if isinstance(source, dict) else None
+    source_relationship = (
+        _safe_token(source.get("source_relationship")) if isinstance(source, dict) else None
+    )
+    ingress_path = _safe_path(source.get("ingress_path")) if isinstance(source, dict) else None
+    adapter = _safe_token(provenance.get("adapter")) if isinstance(provenance, dict) else None
+    adapter_version = (
+        _safe_token(provenance.get("adapter_version")) if isinstance(provenance, dict) else None
+    )
+    if not all((source_type, source_relationship, ingress_path, adapter, adapter_version)):
+        reason = reason or "canonical_observation_source_provenance_incomplete"
+
+    if row is None or reason is not None:
+        return (
+            ProjectionSection(
+                id="source_inventory",
+                state="unknown",
+                title="Exact observation source inventory",
+                content={
+                    "tenantId": tenant_id,
+                    "subject": {"kind": subject.kind, "id": subject.id},
+                    "coverage": "unknown",
+                    "sourceReliability": "unknown",
+                    "reasonCode": reason or "canonical_observation_source_inventory_unknown",
+                },
+                warnings=[reason or "canonical observation source inventory is unknown"],
+                canonicalAuthorityRefs=["observations", "source_provenance"],
+            ),
+            None,
+        )
+
+    observation = envelope["observation"]
+    observed_at = _safe_timestamp(observation.get("ingested_at"))
+    evidence = EvidenceRef(
+        id=subject.id,
+        type="event",
+        source="bronze_sdk_events",
+        observedAt=observed_at,
+    )
+    item = {
+        "observationId": subject.id,
+        "sourceType": source_type,
+        "sourceRelationship": source_relationship,
+        "ingressPath": ingress_path,
+        "adapter": adapter,
+        "adapterVersion": adapter_version,
+        "observedAt": observed_at,
+        "evidenceRefs": [evidence.model_dump(mode="json")],
+    }
+    section = ProjectionSection(
+        id="source_inventory",
+        state="degraded",
+        title="Exact observation source inventory",
+        content={
+            "tenantId": tenant_id,
+            "subject": {"kind": subject.kind, "id": subject.id},
+            "coverage": "one_exact_sdk_observation",
+            "sources": [item],
+            "sourceReliability": "unknown",
+            "reasonCode": "single_event_source_seen_no_inventory_completeness_or_reliability",
+            "evidenceRefs": [evidence.model_dump(mode="json")],
+        },
+        warnings=[
+            "only authenticated source metadata for this SDK observation is available; fleet inventory and source reliability remain unknown"
+        ],
+        canonicalAuthorityRefs=["observations", "source_provenance"],
+    )
+    claim = ClaimEnvelope(
+        id=f"signals360.source_inventory.{subject.id}",
+        kind="authenticated_observation_source_metadata",
+        subject=subject,
+        evidenceRefs=[evidence],
+        claims=[
+            "The exact tenant SDK observation records authenticated source and adapter metadata; this does not establish source reliability or inventory completeness."
+        ],
+        confidence=1.0,
+        claimState=EpistemicStatus.OBSERVED,
+        domainSlotIds=["source_inventory"],
+    )
+    return section, claim
+
+
+def _freshness_section(
+    subject: ProjectionSubject,
+    *,
+    tenant_id: str,
+    rows: tuple[dict[str, Any], ...] | list[dict[str, Any]],
+    available: bool,
+    complete: bool,
+    reason: Optional[str],
+) -> ProjectionSection:
+    observed = [
+        {
+            "signalId": _safe_identifier(row.get("signal_id")),
+            "lastDetected": _safe_timestamp(row.get("last_detected")),
+            "translatorStaleFlag": row.get("is_stale")
+            if isinstance(row.get("is_stale"), bool)
+            else None,
+        }
+        for row in rows
+        if _safe_identifier(row.get("signal_id"))
+    ]
+    state = "degraded" if available and observed else "unknown"
+    return ProjectionSection(
+        id="freshness",
+        state=state,
+        title="Signal freshness",
+        content={
+            "tenantId": tenant_id,
+            "subject": {"kind": subject.kind, "id": subject.id},
+            "derivedSignalTimestamps": observed,
+            "sourceFreshnessState": "unknown",
+            "freshnessThresholdSeconds": None,
+            "readComplete": complete,
+            "reasonCode": (
+                "translator_stale_flag_is_not_a_canonical_source_freshness_sla"
+                if observed
+                else reason or "canonical_signal_freshness_not_available"
+            ),
+        },
+        warnings=(
+            [
+                "only translator timestamps and local stale flags are available; canonical freshness is unknown"
+            ]
+            if observed
+            else [reason or "canonical signal freshness is unknown"]
+        ),
+        canonicalAuthorityRefs=["behavioral_signals"],
+    )
+
+
+def _evidence_trace_section(
+    subject: ProjectionSubject,
+    *,
+    tenant_id: str,
+    refs: list[EvidenceRef],
+    available: bool,
+    complete: bool,
+    reason: Optional[str],
+) -> ProjectionSection:
+    state = "degraded" if available and refs else "unknown"
+    return ProjectionSection(
+        id="evidence_trace",
+        state=state,
+        title="Signal evidence trace",
+        content={
+            "tenantId": tenant_id,
+            "subject": {"kind": subject.kind, "id": subject.id},
+            "storedSignalRecordRefs": [ref.model_dump(mode="json") for ref in refs],
+            "sourceEventEvidenceState": "unknown",
+            "readComplete": complete,
+            "reasonCode": (
+                "signal_source_event_lineage_not_joined"
+                if refs
+                else reason or "signal_evidence_trace_not_available"
+            ),
+        },
+        warnings=(
+            [
+                "stored signal records are referenced, but translator evidence strings are not typed source EvidenceRefs"
+            ]
+            if refs
+            else [reason or "canonical signal evidence trace is unknown"]
+        ),
+        canonicalAuthorityRefs=["behavioral_signals"],
+    )
+
+
+def _scoped_rows(
+    rows: tuple[dict[str, Any], ...] | list[dict[str, Any]],
+    *,
+    tenant_id: str,
+    entity_id: Optional[str],
+) -> tuple[list[dict[str, Any]], bool]:
+    scoped: list[dict[str, Any]] = []
+    scope_mismatch = False
+    for row in rows:
+        if (
+            not isinstance(row, dict)
+            or row.get("tenant_id") != tenant_id
+            or (entity_id is not None and row.get("entity_id") != entity_id)
+            or not _safe_identifier(row.get("signal_id"))
+        ):
+            scope_mismatch = True
+            continue
+        scoped.append(row)
+    return scoped[:_MAX_SIGNAL_RECORDS], scope_mismatch
+
+
+def _public_signal(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "signalId": _safe_identifier(row.get("signal_id")),
+        "signalType": _safe_token(row.get("signal_type")),
+        "family": _safe_token(row.get("family")),
+        "severity": _safe_token(
+            row.get("severity"), allowed={"critical", "high", "medium", "low", "info"}
+        ),
+        "sentiment": _safe_token(
+            row.get("sentiment"), allowed={"positive", "caution", "negative", "informational"}
+        ),
+        "confidence": _confidence(row.get("confidence")),
+        "lastDetected": _safe_timestamp(row.get("last_detected")),
+        "translatorStaleFlag": row.get("is_stale")
+        if isinstance(row.get("is_stale"), bool)
+        else None,
+        "signalKind": "translator_derived_behavioral_signal",
+    }
+
+
+def _record_evidence(row: dict[str, Any]) -> Optional[EvidenceRef]:
+    signal_id = _safe_identifier(row.get("signal_id"))
+    if signal_id is None:
+        return None
+    return EvidenceRef(
+        id=signal_id,
+        type="model_output",
+        source="behavioral_signals",
+        observedAt=_safe_timestamp(row.get("last_detected") or row.get("created_at")),
+        confidence=_confidence(row.get("confidence")),
+    )
+
+
+def _count_values(records: list[dict[str, Any]], field: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for record in records:
+        value = record.get(field)
+        if isinstance(value, str):
+            counts[value] = counts.get(value, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _safe_identifier(value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text or len(text) > 256 or any(ord(char) < 32 or ord(char) == 127 for char in text):
+        return None
+    return text
+
+
+def _safe_token(value: Any, *, allowed: Optional[set[str]] = None) -> Optional[str]:
+    token = _safe_identifier(value)
+    if token is None or len(token) > 128:
+        return None
+    if any(not (char.isalnum() or char in "._:-") for char in token):
+        return None
+    return token if allowed is None or token in allowed else None
+
+
+def _safe_path(value: Any) -> Optional[str]:
+    path = _safe_identifier(value)
+    if path is None or len(path) > 256 or not path.startswith("/"):
+        return None
+    if any(not (char.isalnum() or char in "._:/-") for char in path):
+        return None
+    return path
+
+
+def _safe_reason(value: Any) -> Optional[str]:
+    return _safe_token(value)
+
+
+def _confidence(value: Any) -> Optional[float]:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if 0 <= number <= 1 else None
+
+
+def _safe_timestamp(value: Any) -> Optional[str]:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def register_provider(registry: ProviderRegistry) -> None:
+    """Register the Signals360 provider when its generated id is available."""
+    registry.register(
+        Signals360Provider(),
+        source="services/api/intelligence/signals/signals360_provider",
+    )
+
+
+__all__ = [
+    "OUTPUT_SECTIONS",
+    "PROJECTION_ID",
+    "RepositorySignal360Source",
+    "Signals360Provider",
+    "Signal360Source",
+    "SignalSummaryRead",
+    "register_provider",
+]

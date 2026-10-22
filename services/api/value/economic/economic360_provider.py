@@ -29,9 +29,12 @@ reader), each wrapped so an unavailable backing source degrades its section.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional, Protocol
+from urllib.parse import quote
 
 # Lightweight plane imports — always importable.
 from shared.intelligence_projections.contracts import (
@@ -48,6 +51,7 @@ from shared.intelligence_projections.generated_registry import (
 )
 from shared.intelligence_projections.provider import IntelligenceProjectionProvider
 from shared.intelligence_projections.registry import ProviderRegistry
+from shared.contracts_models.epistemic import EpistemicStatus
 
 # Reused canonical primitives (never redefined here).
 from graph.operational_intelligence.models import EvidenceRef
@@ -65,6 +69,58 @@ from value.economic.economic360_contracts import (
 # Sections the registry declares for economic360 (must match outputSections).
 OUTPUT_SECTIONS: tuple[str, ...] = ("summary", "state", "evidence", "outcomes", "findings")
 
+# Product-frame slots are explicit routing metadata. The composer deliberately
+# does not infer a slot from a projection section or claim kind.
+ECONOMIC_FACTS_SLOT_ID = "economic_facts_and_state"
+PAYMENTS_COMMERCE_SLOT_ID = "payments_and_commerce_evidence"
+CAMPAIGN_PERFORMANCE_SLOT_ID = "performance"
+VALUE_SUMMARY_SLOT_ID = "value_summary"
+VALUE_CONVERSION_INVENTORY_SLOT_ID = "conversion_inventory"
+VALUE_ATTRIBUTION_CREDITS_SLOT_ID = "attribution_credits"
+VALUE_REVENUE_EVENTS_SLOT_ID = "revenue_events"
+VALUE_EVIDENCE_TRACE_SLOT_ID = "evidence_trace"
+ACCOUNT_VALUE_SLOT_ID = "value"
+_MAX_CONVERSION_INVENTORY_ROWS = 500
+_MAX_ATTRIBUTION_CONVERSIONS = 100
+
+
+def _economic_domain_slot_ids(subject: ProjectionSubject, primary_slot_id: str) -> list[str]:
+    """Route exact campaign-scoped economic evidence into Campaign360 performance.
+
+    Economic360 retains its own canonical value slots. Campaign 360 also binds
+    Economic360 as the provider for its performance slot, so campaign subjects
+    receive both routing IDs without changing other subject surfaces.
+    """
+    slot_ids = [primary_slot_id]
+    if subject.kind == "campaign":
+        slot_ids.append(CAMPAIGN_PERFORMANCE_SLOT_ID)
+    return slot_ids
+
+
+def _value_summary_domain_slot_ids(
+    subject: ProjectionSubject,
+    *,
+    entity_profile_verified: bool = False,
+) -> list[str]:
+    """Route an evidence-backed economic rollup to its exact product slots.
+
+    Entity ``value`` claims are emitted only after project() verifies the
+    canonical tenant profile and reads direct subject-scoped records. This is
+    an entity's own economic evidence, never a member/descendant aggregate.
+    """
+    slot_ids = _economic_domain_slot_ids(subject, ECONOMIC_FACTS_SLOT_ID)
+    slot_ids.extend([VALUE_SUMMARY_SLOT_ID, VALUE_EVIDENCE_TRACE_SLOT_ID])
+    if subject.kind == "entity" and entity_profile_verified:
+        slot_ids.append(ACCOUNT_VALUE_SLOT_ID)
+    return list(dict.fromkeys(slot_ids))
+
+
+_COMMERCE_JOIN_BASIS_BY_SUBJECT_KIND = {
+    "journey": "explicit_journey_step_commerce_order_ref",
+    "campaign": "explicit_campaign_scoped_canonical_activity_commerce_order_ref",
+    "entity": "explicit_canonical_profile_scoped_activity_commerce_order_ref",
+}
+
 # Registry projection dependencies we degrade for honestly while they are
 # still in_flight (profile360 / relationship360 / outcome360). Each entry maps
 # the section whose enrichment depends on that sibling projection.
@@ -74,13 +130,9 @@ SECTION_DEPENDENCIES: dict[str, str] = {
     "outcomes": "outcome360",
 }
 
-AI_EXECUTION_FACTS_SUBJECT_SCOPE_UNAVAILABLE = (
-    "ai_execution_facts_subject_scope_unavailable"
-)
+AI_EXECUTION_FACTS_SUBJECT_SCOPE_UNAVAILABLE = "ai_execution_facts_subject_scope_unavailable"
 AI_EXECUTION_FACTS_SCOPE_READ_FAILED = "ai_execution_facts_scope_read_failed"
-EPISODE_COMMERCE_ORDER_SCOPE_UNAVAILABLE = (
-    "episode_commerce_order_reference_scope_unavailable"
-)
+EPISODE_COMMERCE_ORDER_SCOPE_UNAVAILABLE = "episode_commerce_order_reference_scope_unavailable"
 
 
 def _dependency_missing(dep_state: list[Any], projection_id: str) -> bool:
@@ -139,6 +191,22 @@ class ProfileIdentityReader(Protocol):
 
     async def is_canonical_profile(self, tenant_id: str, entity_id: str) -> Optional[bool]:
         """True for a canonical tenant profile, False for mismatch, None on outage."""
+        ...
+
+
+class ConversionInventoryReader(Protocol):
+    """Narrow read seam for exact, tenant-scoped canonical conversion rows."""
+
+    async def read(self, request: ProjectionRequest) -> dict[str, Any]:
+        """Return canonical conversion rows linked through one exact subject join."""
+        ...
+
+
+class AttributionCreditReader(Protocol):
+    """Narrow tenant-scoped read seam for active canonical attribution runs."""
+
+    async def read(self, tenant_id: str, conversion_ids: list[str]) -> dict[str, Any]:
+        """Return active runs and their credit rows for exact conversion IDs."""
         ...
 
 
@@ -202,6 +270,921 @@ class RepositoryProfileIdentityReader:
         )
 
 
+def _attribution_timestamp(value: Any) -> Optional[str]:
+    """Normalize an aware canonical timestamp, preserving missing as unknown."""
+    if isinstance(value, datetime):
+        value = value.isoformat()
+    parsed, valid = _inventory_bound(value)
+    return parsed.isoformat() if valid and parsed is not None else None
+
+
+def _attribution_uuid(value: Any) -> Optional[str]:
+    """Accept only canonical UUID identifiers for conversion/run/credit joins."""
+    from uuid import UUID
+
+    text = _inventory_text(value, limit=64)
+    if text is None:
+        return None
+    try:
+        UUID(text)
+    except (TypeError, ValueError, AttributeError):
+        return None
+    return text
+
+
+def _attribution_confidence(value: Any) -> Optional[float]:
+    """Keep only finite confidence values in the canonical probability range."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        confidence = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not 0 <= confidence <= 1:
+        return None
+    return confidence
+
+
+def _attribution_run_ref(run_id: str, completed_at: Optional[str]) -> EvidenceRef:
+    return EvidenceRef(
+        id=run_id,
+        type="model_output",
+        source="attribution_runs",
+        observedAt=completed_at,
+        uri=f"store://attribution_runs/{quote(run_id, safe='')}",
+    )
+
+
+def _attribution_credit_ref(credit_id: str, created_at: Optional[str]) -> EvidenceRef:
+    return EvidenceRef(
+        id=credit_id,
+        type="model_output",
+        source="attribution_credits",
+        observedAt=created_at,
+        uri=f"store://attribution_credits/{quote(credit_id, safe='')}",
+    )
+
+
+class RepositoryAttributionCreditReader:
+    """Read active attribution runs and credits for exact canonical conversions.
+
+    The reader never joins by campaign name, amount, timestamp, source label, or
+    agent correlation. A conversion row's exact canonical UUID is the only
+    bridge from a Value subject to attribution credit rows.
+    """
+
+    async def read(self, tenant_id: str, conversion_ids: list[str]) -> dict[str, Any]:
+        from uuid import UUID
+
+        requested_ids: list[str] = []
+        invalid_ids = 0
+        for raw_id in conversion_ids:
+            try:
+                conversion_id = str(UUID(str(raw_id)))
+            except (TypeError, ValueError, AttributeError):
+                invalid_ids += 1
+                continue
+            if conversion_id not in requested_ids:
+                requested_ids.append(conversion_id)
+
+        truncated = len(requested_ids) > _MAX_ATTRIBUTION_CONVERSIONS
+        scoped_ids = requested_ids[:_MAX_ATTRIBUTION_CONVERSIONS]
+        base: dict[str, Any] = {
+            "tenantId": tenant_id,
+            "conversionIds": scoped_ids,
+            "canonicalAuthorityRefs": ["attribution_runs", "attribution_credits"],
+            "state": "unknown",
+            "reason": "canonical_active_attribution_run_unavailable",
+            "completeness": "unknown",
+            "records": [],
+            "runs": [],
+            "evidenceRefs": [],
+            "freshness": {
+                "state": "unknown",
+                "reason": "attribution_freshness_threshold_not_configured",
+            },
+            "limitations": [
+                "credit_weights_are_canonical_model_outputs_not_independently_measured_value",
+                "attributed_revenue_and_agent_roi_are_not_inferred_or_projected",
+                "historical_attribution_state_is_not_bitemporal",
+            ],
+        }
+        if not scoped_ids:
+            return {
+                **base,
+                "reason": "canonical_conversion_ids_unavailable_for_attribution_join",
+            }
+
+        try:
+            from journeys.measurement.repositories.attribution_run_repo import (
+                AttributionRunRepository,
+            )
+
+            repository = AttributionRunRepository()
+            runs: list[dict[str, Any]] = []
+            records: list[dict[str, Any]] = []
+            refs: list[EvidenceRef] = []
+            missing_run_ids: list[str] = []
+            invalid_rows = invalid_ids
+            errors = 0
+
+            for conversion_id in scoped_ids:
+                try:
+                    run = await repository.get_active_run(tenant_id, conversion_id)
+                except Exception:  # noqa: BLE001 - keep partial evidence on source faults
+                    errors += 1
+                    continue
+                if run is None:
+                    missing_run_ids.append(conversion_id)
+                    continue
+                run_id = _attribution_uuid(run.get("attribution_run_id"))
+                if (
+                    run.get("tenant_id") != tenant_id
+                    or str(run.get("conversion_id", "")) != conversion_id
+                    or run.get("is_active") is not True
+                    or run.get("status") != "complete"
+                    or run_id is None
+                ):
+                    invalid_rows += 1
+                    continue
+                completed_at = _attribution_timestamp(run.get("completed_at"))
+                run_ref = _attribution_run_ref(run_id, completed_at)
+                runs.append(
+                    {
+                        "tenantId": tenant_id,
+                        "conversionId": conversion_id,
+                        "attributionRunId": run_id,
+                        "modelType": _inventory_text(run.get("model_type"), limit=128),
+                        "modelVersion": _inventory_text(run.get("model_version"), limit=128),
+                        "status": _inventory_text(run.get("status"), limit=64),
+                        "completedAt": completed_at,
+                        "dataWatermark": _attribution_timestamp(run.get("data_watermark")),
+                        "modelConfidence": _attribution_confidence(run.get("model_confidence")),
+                        "evidenceRef": run_ref.model_dump(mode="json"),
+                    }
+                )
+                refs.append(run_ref)
+                try:
+                    credits = await repository.list_credits_for_run(tenant_id, run_id)
+                except Exception:  # noqa: BLE001 - run evidence remains, credits degrade
+                    errors += 1
+                    continue
+                if not isinstance(credits, list):
+                    invalid_rows += 1
+                    continue
+                for credit in credits:
+                    if (
+                        not isinstance(credit, dict)
+                        or credit.get("tenant_id") != tenant_id
+                        or str(credit.get("conversion_id", "")) != conversion_id
+                        or str(credit.get("attribution_run_id", "")) != run_id
+                    ):
+                        invalid_rows += 1
+                        continue
+                    credit_id = _attribution_uuid(credit.get("credit_id"))
+                    weight = _inventory_amount(credit.get("credit_weight"))
+                    weight_value = _to_decimal(weight)
+                    if (
+                        credit_id is None
+                        or weight_value is None
+                        or not weight_value.is_finite()
+                        or weight_value < 0
+                        or weight_value > 1
+                    ):
+                        invalid_rows += 1
+                        continue
+                    created_at = _attribution_timestamp(credit.get("created_at"))
+                    credit_ref = _attribution_credit_ref(credit_id, created_at)
+                    refs.append(credit_ref)
+                    records.append(
+                        {
+                            "tenantId": tenant_id,
+                            "conversionId": conversion_id,
+                            "attributionRunId": run_id,
+                            "creditId": credit_id,
+                            "touchpointId": _inventory_text(credit.get("touchpoint_id")),
+                            "campaignId": _inventory_text(credit.get("campaign_id")),
+                            "channel": _inventory_text(credit.get("channel"), limit=128),
+                            "source": _inventory_text(credit.get("source"), limit=128),
+                            "sourceClass": _inventory_text(credit.get("source_class"), limit=128),
+                            "actorType": _inventory_text(credit.get("actor_type"), limit=64),
+                            "journeyRole": _inventory_text(credit.get("journey_role"), limit=128),
+                            "attributionEligible": (
+                                credit.get("attribution_eligible")
+                                if isinstance(credit.get("attribution_eligible"), bool)
+                                else None
+                            ),
+                            "creditWeight": format(weight_value, "f"),
+                            "evidenceConfidence": _attribution_confidence(
+                                credit.get("evidence_confidence")
+                            ),
+                            "identityConfidence": _attribution_confidence(
+                                credit.get("identity_confidence")
+                            ),
+                            "modelConfidence": _attribution_confidence(
+                                credit.get("model_confidence")
+                            ),
+                            "verificationLevel": _inventory_text(
+                                credit.get("verification_level"), limit=64
+                            ),
+                            "sourceClassifierVersion": _inventory_text(
+                                credit.get("source_classifier_version"), limit=128
+                            ),
+                            "createdAt": created_at,
+                            "evidenceRefs": [
+                                run_ref.model_dump(mode="json"),
+                                credit_ref.model_dump(mode="json"),
+                            ],
+                        }
+                    )
+
+            distinct_times = [run.get("completedAt") for run in runs if run.get("completedAt")]
+            ordered_times = sorted(distinct_times)
+            freshness = {
+                "state": "unknown",
+                "reason": "attribution_freshness_threshold_not_configured",
+                "completedAtCoverage": round(len(distinct_times) / len(scoped_ids), 4),
+                "oldestCompletedAt": ordered_times[0] if ordered_times else None,
+                "latestCompletedAt": ordered_times[-1] if ordered_times else None,
+            }
+            incomplete = truncated or bool(missing_run_ids) or bool(invalid_rows) or bool(errors)
+            if errors and not runs:
+                state = "missing"
+                reason = "canonical_attribution_credit_read_failed"
+            elif records:
+                state = "degraded" if incomplete else "available"
+                reason = (
+                    "canonical_attribution_credits_partial"
+                    if incomplete
+                    else None
+                )
+            elif runs and not incomplete:
+                state = "empty"
+                reason = "active_attribution_runs_have_no_credit_rows"
+            elif runs:
+                state = "degraded"
+                reason = "canonical_attribution_run_coverage_partial"
+            else:
+                state = "unknown"
+                reason = "canonical_active_attribution_run_unavailable"
+            if invalid_rows:
+                reason = "canonical_attribution_credit_scope_or_record_invalid"
+            elif truncated:
+                reason = "canonical_attribution_conversion_inventory_truncated"
+            elif missing_run_ids and records:
+                reason = "canonical_attribution_run_missing_for_some_conversions"
+            return {
+                **base,
+                "state": state,
+                "reason": reason,
+                "completeness": (
+                    "complete" if state in {"available", "empty"}
+                    else "partial" if state == "degraded"
+                    else "unknown"
+                ),
+                "records": records,
+                "runs": runs,
+                "evidenceRefs": [ref.model_dump(mode="json") for ref in refs],
+                "freshness": freshness,
+                "unresolvedConversionIds": missing_run_ids,
+                "invalidRowCount": invalid_rows,
+                "readErrorCount": errors,
+            }
+        except Exception:  # noqa: BLE001 - adapter failure is explicit missing data
+            return {
+                **base,
+                "state": "missing",
+                "reason": "canonical_attribution_credit_repository_unavailable",
+            }
+
+
+def _inventory_text(value: Any, *, limit: int = 512) -> Optional[str]:
+    """Return a bounded scalar identifier without coercing missing values."""
+    if value is None:
+        return None
+    if hasattr(value, "value") and isinstance(value.value, str):
+        value = value.value
+    if not isinstance(value, str):
+        value = str(value)
+    value = value.strip()
+    if (
+        not value
+        or len(value) > limit
+        or any(ord(char) < 32 or ord(char) == 127 for char in value)
+    ):
+        return None
+    return value
+
+
+def _inventory_bound(value: Any) -> tuple[Optional[datetime], bool]:
+    """Parse an aware ISO timestamp bound; naive or malformed bounds fail closed."""
+    if value is None:
+        return None, True
+    if not isinstance(value, str):
+        return None, False
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None, False
+    if parsed.tzinfo is None:
+        return None, False
+    return parsed.astimezone(timezone.utc), True
+
+
+def _inventory_occurred_at(row: dict[str, Any]) -> Optional[datetime]:
+    raw = row.get("occurred_at")
+    if isinstance(raw, datetime):
+        return (raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)).astimezone(timezone.utc)
+    if isinstance(raw, str):
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).astimezone(
+            timezone.utc
+        )
+    return None
+
+
+def _inventory_iso(value: Any) -> Optional[str]:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return _inventory_text(value, limit=128)
+
+
+def _inventory_amount(value: Any) -> Optional[str]:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        amount = Decimal(str(value))
+    except Exception:  # noqa: BLE001 - malformed amount stays unknown
+        return None
+    return format(amount, "f") if amount.is_finite() else None
+
+
+def _inventory_evidence_refs(value: Any) -> list[EvidenceRef]:
+    if not isinstance(value, list):
+        return []
+    refs: list[EvidenceRef] = []
+    seen: set[tuple[str, str, str]] = set()
+    for raw in value:
+        try:
+            ref = EvidenceRef.model_validate(raw)
+        except Exception:  # noqa: BLE001 - malformed source evidence fails closed
+            continue
+        expected_uri = f"store://canonical_conversions/{quote(ref.id, safe='')}"
+        if (
+            ref.source != "canonical_conversions"
+            or ref.type != "transaction"
+            or ref.uri != expected_uri
+        ):
+            continue
+        key = (ref.id, ref.type, ref.source)
+        if key not in seen:
+            refs.append(ref)
+            seen.add(key)
+    return refs
+
+
+def _attribution_evidence_refs(value: Any) -> list[EvidenceRef]:
+    """Validate evidence refs against the canonical attribution/conversion stores."""
+    if not isinstance(value, list):
+        return []
+    allowed_sources = {
+        "canonical_conversions": "transaction",
+        "attribution_runs": "model_output",
+        "attribution_credits": "model_output",
+    }
+    refs: list[EvidenceRef] = []
+    seen: set[tuple[str, str, str]] = set()
+    for raw in value:
+        try:
+            ref = EvidenceRef.model_validate(raw)
+        except Exception:  # noqa: BLE001 - malformed source evidence fails closed
+            continue
+        if ref.type != allowed_sources.get(ref.source):
+            continue
+        expected_uri = f"store://{ref.source}/{quote(ref.id, safe='')}"
+        if ref.uri != expected_uri:
+            continue
+        key = (ref.id, ref.type, ref.source)
+        if key not in seen:
+            refs.append(ref)
+            seen.add(key)
+    return refs
+
+
+class RepositoryConversionInventoryReader:
+    """Read exact conversion records from the canonical conversion ledger.
+
+    This reader does not turn Outcome360 IDs into conversion IDs. It uses only
+    explicit ledger keys, a current journey version's recorded conversion ID
+    list, or canonical campaign/profile/cluster subject queries. The repository
+    does not expose a coordinated bitemporal snapshot, so historical/as-of and
+    comparison requests remain unknown.
+    """
+
+    def __init__(
+        self,
+        *,
+        agent_identity_reader: Optional[AgentIdentityReader] = None,
+        campaign_identity_reader: Optional[CampaignIdentityReader] = None,
+        profile_identity_reader: Optional[ProfileIdentityReader] = None,
+    ) -> None:
+        self._agent_identity = agent_identity_reader or RepositoryAgentIdentityReader()
+        self._campaign_identity = campaign_identity_reader or RepositoryCampaignIdentityReader()
+        self._profile_identity = profile_identity_reader or RepositoryProfileIdentityReader()
+
+    async def read(self, request: ProjectionRequest) -> dict[str, Any]:
+        subject = request.subject
+        base = {
+            "tenantId": request.tenantId,
+            "subject": subject.model_dump(),
+            "canonicalAuthority": "canonical_conversions",
+            "canonicalAuthorityRefs": ["canonical_conversions"],
+            "measurementOutcomeLinkage": {
+                "state": "unknown",
+                "reason": "outcome360_rows_do_not_expose_canonical_conversion_id",
+            },
+            "freshness": {
+                "state": "unknown",
+                "reason": "conversion_freshness_threshold_not_configured",
+            },
+        }
+        if subject.kind == "agent":
+            base["agentRoster"] = {
+                "identityState": "not_validated",
+                "completeness": "unknown",
+                "freshness": {
+                    "state": "unknown",
+                    "reason": "agent_roster_completeness_and_freshness_not_read",
+                },
+            }
+
+        if request.asOf is not None or request.temporalMode in {"as_of", "compare", "relative"}:
+            return {
+                **base,
+                "state": "unknown",
+                "reason": "canonical_conversion_history_not_bitemporal",
+                "joinBasis": None,
+                "completeness": "unknown",
+                "records": [],
+                "evidenceRefs": [],
+            }
+        if request.page is not None and request.page.cursor:
+            return {
+                **base,
+                "state": "unknown",
+                "reason": "conversion_inventory_cursor_contract_unavailable",
+                "joinBasis": None,
+                "completeness": "unknown",
+                "records": [],
+                "evidenceRefs": [],
+            }
+
+        time_range = request.timeRange
+        after, after_ok = _inventory_bound(time_range.from_ if time_range else None)
+        before, before_ok = _inventory_bound(time_range.to if time_range else None)
+        if not after_ok or not before_ok or (after is not None and before is not None and after >= before):
+            return {
+                **base,
+                "state": "unknown",
+                "reason": "conversion_inventory_time_range_invalid",
+                "joinBasis": None,
+                "completeness": "unknown",
+                "records": [],
+                "evidenceRefs": [],
+            }
+
+        limit = request.page.limit if request.page is not None else _MAX_CONVERSION_INVENTORY_ROWS
+        limit = min(max(limit, 1), _MAX_CONVERSION_INVENTORY_ROWS)
+        try:
+            from journeys.measurement.repositories.conversion_repo import ConversionRepository
+
+            conversions = ConversionRepository()
+        except Exception:  # noqa: BLE001 - missing canonical reader is not an empty inventory
+            return {
+                **base,
+                "state": "missing",
+                "reason": "canonical_conversion_repository_unavailable",
+                "joinBasis": None,
+                "completeness": "unknown",
+                "records": [],
+                "evidenceRefs": [],
+            }
+
+        join_basis: Optional[str] = None
+        rows: list[dict[str, Any]] = []
+        resolved_subject = False
+        truncated = False
+        unresolved_ids = 0
+        scope_violation = False
+        try:
+            if subject.kind == "conversion":
+                join_basis = "exact_canonical_conversion_id"
+                row = await conversions.get(request.tenantId, subject.id)
+                if row is not None:
+                    if (
+                        str(row.get("tenant_id", "")) == request.tenantId
+                        and str(row.get("conversion_id", "")) == subject.id
+                    ):
+                        rows = [row]
+                        resolved_subject = True
+                    else:
+                        scope_violation = True
+
+            elif subject.kind in {"profile", "entity"}:
+                identity = await self._profile_identity.is_canonical_profile(
+                    request.tenantId, subject.id
+                )
+                if identity is not True:
+                    return {
+                        **base,
+                        "agentRoster": {
+                            **base["agentRoster"],
+                            "identityState": "unresolved" if identity is False else "unknown",
+                        },
+                        "state": "unknown",
+                        "reason": (
+                            "profile_identity_authority_unavailable"
+                            if identity is None
+                            else "profile_canonical_identity_unresolved"
+                        ),
+                        "joinBasis": None,
+                        "completeness": "unknown",
+                        "records": [],
+                        "evidenceRefs": [],
+                    }
+                join_basis = "exact_canonical_profile_conversion_id"
+                rows = await conversions.list_by_profile(
+                    request.tenantId,
+                    subject.id,
+                    identity_type="profile",
+                    after_occurred=after,
+                    before_occurred=before,
+                    limit=limit + 1,
+                )
+                resolved_subject = True
+
+            elif subject.kind == "campaign":
+                identity = await self._campaign_identity.is_canonical_campaign(
+                    request.tenantId, subject.id
+                )
+                if identity is not True:
+                    return {
+                        **base,
+                        "state": "unknown",
+                        "reason": (
+                            "campaign_identity_authority_unavailable"
+                            if identity is None
+                            else "campaign_canonical_identity_unresolved"
+                        ),
+                        "joinBasis": None,
+                        "completeness": "unknown",
+                        "records": [],
+                        "evidenceRefs": [],
+                    }
+                join_basis = "canonical_campaign_touchpoint_or_attribution_conversion_join"
+                rows = await conversions.list_by_campaign(
+                    request.tenantId,
+                    subject.id,
+                    after_occurred=after,
+                    before_occurred=before,
+                    include_unattributed=True,
+                    limit=limit + 1,
+                )
+                if not rows:
+                    # The in-memory repository adapter cannot execute the
+                    # canonical touchpoint join. An empty local result is
+                    # therefore unknown, not proof of an empty campaign.
+                    pool_reader = getattr(conversions, "_pool", None)
+                    if callable(pool_reader) and await pool_reader() is None:
+                        return {
+                            **base,
+                            "state": "unknown",
+                            "reason": "campaign_conversion_touchpoint_join_unavailable_in_local_store",
+                            "joinBasis": join_basis,
+                            "completeness": "unknown",
+                            "records": [],
+                            "evidenceRefs": [],
+                        }
+                    base["agentRoster"]["identityState"] = "validated"
+                resolved_subject = True
+
+            elif subject.kind == "cluster":
+                join_basis = "exact_canonical_conversion_cluster_id"
+                rows = await conversions.list_by_profile(
+                    request.tenantId,
+                    subject.id,
+                    identity_type="cluster",
+                    after_occurred=after,
+                    before_occurred=before,
+                    limit=limit + 1,
+                )
+
+            elif subject.kind == "journey":
+                from journeys.measurement.repositories.journey_repo import JourneyRepository
+
+                join_basis = "current_tenant_journey_version_conversion_ids"
+                journey = await JourneyRepository().get_current(request.tenantId, subject.id)
+                if not isinstance(journey, dict):
+                    return {
+                        **base,
+                        "state": "unknown",
+                        "reason": "canonical_journey_conversion_reference_unavailable",
+                        "joinBasis": join_basis,
+                        "completeness": "unknown",
+                        "records": [],
+                        "evidenceRefs": [],
+                    }
+                if (
+                    str(journey.get("tenant_id", "")) != request.tenantId
+                    or str(journey.get("journey_id", "")) != subject.id
+                    or journey.get("is_current") is False
+                ):
+                    return {
+                        **base,
+                        "state": "unknown",
+                        "reason": "canonical_journey_subject_scope_unresolved",
+                        "joinBasis": join_basis,
+                        "completeness": "unknown",
+                        "records": [],
+                        "evidenceRefs": [],
+                    }
+                conversion_ids = journey.get("conversion_ids") or []
+                if isinstance(conversion_ids, str):
+                    try:
+                        conversion_ids = json.loads(conversion_ids)
+                    except (TypeError, ValueError):
+                        conversion_ids = None
+                if not isinstance(conversion_ids, list):
+                    conversion_ids = []
+                    unresolved_ids += 1
+                unique_ids = list(
+                    dict.fromkeys(
+                        item.strip()
+                        for item in conversion_ids
+                        if isinstance(item, str) and item.strip()
+                    )
+                )
+                if len(unique_ids) != len(conversion_ids):
+                    unresolved_ids += 1
+                truncated = len(unique_ids) > limit
+                for conversion_id in unique_ids[:limit]:
+                    row = await conversions.get(request.tenantId, conversion_id)
+                    if not isinstance(row, dict):
+                        unresolved_ids += 1
+                        continue
+                    if (
+                        str(row.get("tenant_id", "")) != request.tenantId
+                        or str(row.get("conversion_id", "")) != conversion_id
+                    ):
+                        scope_violation = True
+                        continue
+                    rows.append(row)
+                resolved_subject = True
+
+            elif subject.kind in {"account", "agent"}:
+                if subject.kind == "agent":
+                    identity = await self._agent_identity.is_canonical_agent(
+                        request.tenantId, subject.id
+                    )
+                    if identity is not True:
+                        return {
+                            **base,
+                            "state": "unknown",
+                            "reason": (
+                                "agent_identity_authority_unavailable"
+                                if identity is None
+                                else "agent_canonical_identity_unresolved"
+                            ),
+                            "joinBasis": None,
+                            "completeness": "unknown",
+                            "records": [],
+                            "evidenceRefs": [],
+                        }
+                    base["agentRoster"]["identityState"] = "validated"
+                if subject.kind == "account":
+                    join_basis = "exact_tenant_conversion_account_id"
+                    rows = await conversions.list_by_account(
+                        request.tenantId,
+                        subject.id,
+                        after_occurred=after,
+                        before_occurred=before,
+                        limit=limit + 1,
+                    )
+                else:
+                    join_basis = "validated_agent_identity_exact_conversion_agent_id"
+                    rows = await conversions.list_by_agent(
+                        request.tenantId,
+                        subject.id,
+                        after_occurred=after,
+                        before_occurred=before,
+                        limit=limit + 1,
+                    )
+                truncated = len(rows) > limit
+                resolved_subject = subject.kind == "agent"
+
+            else:
+                return {
+                    **base,
+                    "state": "unknown",
+                    "reason": "canonical_conversion_subject_join_unavailable",
+                    "joinBasis": None,
+                    "completeness": "unknown",
+                    "records": [],
+                    "evidenceRefs": [],
+                }
+        except Exception:  # noqa: BLE001 - source outages stay visible as missing
+            return {
+                **base,
+                "state": "missing",
+                "reason": "canonical_conversion_inventory_read_failed",
+                "joinBasis": join_basis,
+                "completeness": "unknown",
+                "records": [],
+                "evidenceRefs": [],
+            }
+
+        filtered: list[dict[str, Any]] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                unresolved_ids += 1
+                continue
+            if str(row.get("tenant_id", "")) != request.tenantId:
+                scope_violation = True
+                continue
+            if subject.kind in {"conversion", "profile", "entity", "cluster", "account", "agent"}:
+                expected_field = {
+                    "conversion": "conversion_id",
+                    "profile": "profile_id",
+                    "entity": "profile_id",
+                    "cluster": "cluster_id",
+                    "account": "account_id",
+                    "agent": "agent_id",
+                }[subject.kind]
+                if str(row.get(expected_field, "")) != subject.id:
+                    scope_violation = True
+                    continue
+            occurred = _inventory_occurred_at(row)
+            if (after is not None or before is not None) and occurred is None:
+                unresolved_ids += 1
+                continue
+            if occurred is not None and (
+                (after is not None and occurred <= after)
+                or (before is not None and occurred >= before)
+            ):
+                continue
+            filtered.append(row)
+
+        if len(filtered) > limit:
+            truncated = True
+            filtered = filtered[:limit]
+        # If a source query returned rows outside the exact subject or tenant,
+        # do not silently treat the resulting partial set as exhaustive.
+        # Account and cluster conversion columns give positive row evidence,
+        # but the canonical identity plane cannot validate those subjects yet.
+        # Keep positive rows partial and empty results unknown. Agent identity
+        # is validated and uses an exact indexed conversion query; its roster
+        # completeness/freshness is reported separately from these rows.
+        subject_join_incomplete = subject.kind == "account" or (
+            subject.kind == "cluster" and bool(filtered)
+        )
+        partial = (
+            truncated
+            or bool(unresolved_ids)
+            or scope_violation
+            or subject_join_incomplete
+        )
+        if filtered:
+            state = "degraded" if partial else "available"
+        elif partial:
+            state = "degraded"
+        elif resolved_subject:
+            state = "empty"
+        else:
+            state = "unknown"
+
+        rendered_records: list[dict[str, Any]] = []
+        evidence_refs: list[EvidenceRef] = []
+        for row in filtered:
+            conversion_id = _inventory_text(row.get("conversion_id"))
+            if conversion_id is None:
+                partial = True
+                continue
+            ref = EvidenceRef(
+                id=conversion_id,
+                type="transaction",
+                source="canonical_conversions",
+                observedAt=_inventory_iso(row.get("observed_at")),
+                uri=f"store://canonical_conversions/{quote(conversion_id, safe='')}",
+            )
+            evidence_refs.append(ref)
+            rendered_records.append(_render_conversion_inventory_record(row, ref))
+        if partial and state == "available":
+            state = "degraded"
+        if not evidence_refs and state == "available":
+            state = "degraded"
+            partial = True
+        if subject.kind in {"account", "cluster"} and not filtered:
+            # These canonical rows have exact subject columns, but the current
+            # identity plane has no reader that can prove an empty account or
+            # cluster inventory for a canonical subject.
+            state = "unknown"
+        reason = None
+        if scope_violation:
+            reason = "canonical_conversion_subject_scope_violation"
+        elif unresolved_ids:
+            reason = "canonical_conversion_references_unresolved"
+        elif truncated:
+            reason = "canonical_conversion_inventory_truncated"
+        elif subject.kind == "account":
+            reason = (
+                "canonical_account_identity_unvalidated_and_conversion_inventory_partial"
+                if filtered
+                else "canonical_account_identity_unvalidated"
+            )
+        elif subject.kind == "cluster":
+            reason = (
+                "canonical_cluster_identity_unvalidated_and_conversion_inventory_partial"
+                if filtered
+                else "canonical_cluster_identity_unvalidated"
+            )
+        elif state == "empty":
+            reason = "no_canonical_conversion_rows_for_exact_subject"
+        elif state == "unknown":
+            reason = "canonical_conversion_subject_identity_unresolved"
+        completeness = (
+            "complete" if state in {"available", "empty"} else "partial" if state == "degraded" else "unknown"
+        )
+        return {
+            **base,
+            "state": state,
+            "reason": reason,
+            "joinBasis": join_basis,
+            "completeness": completeness,
+            "records": rendered_records,
+            "recordCount": len(rendered_records),
+            "evidenceRefs": [ref.model_dump(mode="json") for ref in evidence_refs],
+            "timeScope": {
+                "mode": "current_canonical_state",
+                "occurredAtFrom": time_range.from_ if time_range else None,
+                "occurredAtTo": time_range.to if time_range else None,
+                "historicalState": "unknown",
+            },
+            "limitations": [
+                "records_are_canonical_conversion_rows_not_outcome360_measured_outcomes",
+                "missing_amounts_remain_unknown_and_values_are_not_aggregated",
+            ],
+        }
+
+
+def _render_conversion_inventory_record(
+    row: dict[str, Any], evidence_ref: EvidenceRef
+) -> dict[str, Any]:
+    """Render a safe value-preserving view of one canonical conversion row."""
+    field_map = {
+        "conversionId": "conversion_id",
+        "conversionType": "conversion_type",
+        "status": "conversion_status",
+        "occurredAt": "occurred_at",
+        "observedAt": "observed_at",
+        "confirmedAt": "confirmed_at",
+        "adjustedAt": "adjusted_at",
+        "reversedAt": "reversed_at",
+        "grossValue": "gross_value",
+        "netValue": "net_value",
+        "refundValue": "refund_value",
+        "chargebackValue": "chargeback_value",
+        "currency": "currency",
+        "normalizedCurrency": "normalized_currency",
+        "exchangeRate": "exchange_rate",
+        "attributionEligible": "attribution_eligible",
+        "conversionSource": "conversion_source",
+        "sourceConnectorId": "source_connector_id",
+        "sourceEventId": "source_event_id",
+    }
+    record: dict[str, Any] = {}
+    for output, source in field_map.items():
+        value = row.get(source)
+        if source.endswith("_at"):
+            record[output] = _inventory_iso(value)
+        elif source in {
+            "gross_value",
+            "net_value",
+            "refund_value",
+            "chargeback_value",
+            "exchange_rate",
+        }:
+            record[output] = _inventory_amount(value)
+        elif isinstance(value, bool):
+            record[output] = value
+        else:
+            record[output] = _inventory_text(value)
+    record["evidenceRefs"] = [evidence_ref.model_dump(mode="json")]
+    return record
+
+
 class RepositoryEconomicSourceReader:
     """Default canonical reader over the existing ``services/api/value/economic`` stores.
 
@@ -248,9 +1231,7 @@ class RepositoryEconomicSourceReader:
                 return [
                     {
                         "tenant_id": tenant_id,
-                        "_source_incomplete_reason": (
-                            AI_EXECUTION_FACTS_SUBJECT_SCOPE_UNAVAILABLE
-                        ),
+                        "_source_incomplete_reason": (AI_EXECUTION_FACTS_SUBJECT_SCOPE_UNAVAILABLE),
                     }
                 ]
             facts = await ai_aggregation.list_facts(
@@ -706,6 +1687,126 @@ def _evidence_from_record(record: dict[str, Any]) -> Optional[EvidenceRef]:
     )
 
 
+def _commerce_fact_claims(
+    subject: ProjectionSubject,
+    operation_evidence: Optional[dict[str, Any]],
+) -> list[ClaimEnvelope]:
+    """Expose exact-reference commerce facts as evidence-backed Value360 claims.
+
+    This accepts only the subject-specific explicit-reference joins produced
+    by ``journey_operation_evidence``. An amount, timestamp, order ID, or
+    payment ID alone never creates a claim, and a fact without a canonical
+    transaction EvidenceRef remains section data only.
+    """
+    if not isinstance(operation_evidence, dict):
+        return []
+    expected_join_basis = _COMMERCE_JOIN_BASIS_BY_SUBJECT_KIND.get(subject.kind)
+    if expected_join_basis is None or operation_evidence.get("join_basis") != expected_join_basis:
+        return []
+
+    payment_facts = operation_evidence.get("payment_facts")
+    if not isinstance(payment_facts, list):
+        return []
+
+    claims: list[ClaimEnvelope] = []
+    seen_fact_ids: set[str] = set()
+    for fact in payment_facts:
+        if not isinstance(fact, dict):
+            continue
+        fact_id = fact.get("factId")
+        fact_kind = fact.get("kind")
+        amount = fact.get("amount")
+        currency = fact.get("currency")
+        if (
+            not isinstance(fact_id, str)
+            or not fact_id.strip()
+            or fact_id in seen_fact_ids
+            or not isinstance(fact_kind, str)
+            or fact_kind.strip() not in {"order", "payment", "adjustment", "settlement"}
+            or not isinstance(amount, str)
+            or not amount.strip()
+            or not isinstance(currency, str)
+            or not currency.strip()
+            or len(fact_id) > 512
+            or len(amount.strip()) > 128
+            or not currency.strip().isascii()
+            or not currency.strip().isalnum()
+            or len(currency.strip()) > 16
+            or not fact_id.startswith("commerce:")
+            or fact.get("joinBasis", expected_join_basis) != expected_join_basis
+        ):
+            continue
+        amount_value = _to_decimal(amount)
+        if amount_value is None or not amount_value.is_finite():
+            continue
+
+        raw_evidence = fact.get("evidence")
+        if not isinstance(raw_evidence, list):
+            continue
+        fact_evidence: list[EvidenceRef] = []
+        for raw_ref in raw_evidence:
+            try:
+                evidence_ref = EvidenceRef.model_validate(raw_ref)
+            except Exception:  # noqa: BLE001 - malformed source evidence fails closed
+                continue
+            if evidence_ref.type == "transaction":
+                fact_evidence.append(evidence_ref)
+        if not fact_evidence:
+            continue
+
+        seen_fact_ids.add(fact_id)
+        lifecycle_state = fact.get("lifecycleState")
+        reconciliation_state = fact.get("reconciliationState")
+        text = (
+            f"canonical commerce {fact_kind.strip()} fact records "
+            f"{format(amount_value, 'f')} {currency.strip()}"
+        )
+        if _safe_source_label(lifecycle_state):
+            text += f"; lifecycle state: {lifecycle_state.strip()}"
+        if _safe_source_label(reconciliation_state):
+            text += f"; reconciliation state: {reconciliation_state.strip()}"
+
+        slot_ids = [PAYMENTS_COMMERCE_SLOT_ID, VALUE_EVIDENCE_TRACE_SLOT_ID]
+        if (
+            fact_kind.strip() == "payment"
+            and isinstance(lifecycle_state, str)
+            and lifecycle_state.strip().lower() == "settled"
+        ):
+            # Only an explicit source-settled payment is a revenue-event
+            # candidate. The wording below preserves the source semantics and
+            # does not claim attribution or recognized revenue.
+            slot_ids.append(VALUE_REVENUE_EVENTS_SLOT_ID)
+            text += "; source-recorded settled payment event, not an attributed revenue total"
+
+        claims.append(
+            ClaimEnvelope(
+                id=f"commerce.fact.{hashlib.sha256(fact_id.encode('utf-8')).hexdigest()[:32]}",
+                kind="commerce_economic_fact",
+                subject=subject,
+                evidenceRefs=fact_evidence,
+                claims=[text],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=list(
+                    dict.fromkeys(
+                        _economic_domain_slot_ids(subject, PAYMENTS_COMMERCE_SLOT_ID) + slot_ids
+                    )
+                ),
+            )
+        )
+    return claims
+
+
+def _safe_source_label(value: Any) -> bool:
+    """Allow bounded source enum-like values in claim text without controls."""
+    return bool(
+        isinstance(value, str)
+        and value.strip()
+        and len(value.strip()) <= 64
+        and value.strip().isascii()
+        and all(char.isalnum() or char in {"_", "-"} for char in value.strip())
+    )
+
+
 class Economic360Provider:
     """Intelligence-projection provider for ``economic360`` (read-only)."""
 
@@ -719,6 +1820,8 @@ class Economic360Provider:
         agent_identity_reader: Optional[AgentIdentityReader] = None,
         campaign_identity_reader: Optional[CampaignIdentityReader] = None,
         profile_identity_reader: Optional[ProfileIdentityReader] = None,
+        conversion_inventory_reader: Optional[ConversionInventoryReader] = None,
+        attribution_credit_reader: Optional[AttributionCreditReader] = None,
     ) -> None:
         # Injected canonical reader (test seam); default reads repositories.
         self._sources = sources if sources is not None else RepositoryEconomicSourceReader()
@@ -739,6 +1842,20 @@ class Economic360Provider:
             profile_identity_reader
             if profile_identity_reader is not None
             else RepositoryProfileIdentityReader()
+        )
+        self._conversion_inventory = (
+            conversion_inventory_reader
+            if conversion_inventory_reader is not None
+            else RepositoryConversionInventoryReader(
+                agent_identity_reader=self._agent_identity,
+                campaign_identity_reader=self._campaign_identity,
+                profile_identity_reader=self._profile_identity,
+            )
+        )
+        self._attribution_credits = (
+            attribution_credit_reader
+            if attribution_credit_reader is not None
+            else RepositoryAttributionCreditReader()
         )
 
     # ── IntelligenceProjectionProvider ─────────────────────────────────────
@@ -764,6 +1881,19 @@ class Economic360Provider:
                     else "agent_canonical_identity_unresolved"
                 )
                 return self._unknown_subject_scope_result(request, context, reason)
+        entity_profile_verified = False
+        entity_profile_identity_state: Optional[bool] = None
+        if request.subject.kind == "entity":
+            # Account360's `value` slot may contain only economics for a
+            # canonical tenant profile. This identity check does not create a
+            # graph join or authorize member/descendant aggregation.
+            try:
+                entity_profile_identity_state = await self._profile_identity.is_canonical_profile(
+                    tenant_id, request.subject.id
+                )
+            except Exception:  # noqa: BLE001 - unresolved identity remains unknown
+                entity_profile_identity_state = None
+            entity_profile_verified = entity_profile_identity_state is True
         elif request.subject.kind == "campaign":
             try:
                 canonical_campaign = await self._campaign_identity.is_canonical_campaign(
@@ -784,13 +1914,16 @@ class Economic360Provider:
         source_incomplete_reasons: set[str] = set()
         for record in records:
             # Tenant scope is server-authoritative: never project another
-            # tenant's economic sections/evidence.
-            if str(record.get("tenant_id", tenant_id)) == tenant_id:
-                incomplete_reason = record.get("_source_incomplete_reason")
-                if isinstance(incomplete_reason, str) and incomplete_reason:
-                    source_incomplete_reasons.add(incomplete_reason)
-                else:
-                    tenant_filtered.append(record)
+            # tenant's economic sections/evidence. Missing tenant attribution
+            # is incomplete source data, never an implicit match to the caller.
+            if record.get("tenant_id") != tenant_id:
+                source_incomplete_reasons.add("economic_source_tenant_scope_mismatch")
+                continue
+            incomplete_reason = record.get("_source_incomplete_reason")
+            if isinstance(incomplete_reason, str) and incomplete_reason:
+                source_incomplete_reasons.add(incomplete_reason)
+            else:
+                tenant_filtered.append(record)
         source_truncated = any(
             record.get("_source_truncated") is True for record in tenant_filtered
         )
@@ -824,6 +1957,11 @@ class Economic360Provider:
             tenant_id,
             request.subject,
             as_of=operation_as_of,
+            entity_profile_identity_state=entity_profile_identity_state,
+        )
+        conversion_inventory = await self._safe_conversion_inventory(request)
+        attribution_credits = await self._safe_attribution_credits(
+            request, conversion_inventory
         )
         operation_evidence_partial = bool(
             operation_evidence
@@ -849,8 +1987,7 @@ class Economic360Provider:
             == "explicit_canonical_profile_scoped_activity_commerce_order_ref"
             else EPISODE_COMMERCE_ORDER_SCOPE_UNAVAILABLE
             if operation_evidence
-            and operation_evidence.get("reason")
-            == EPISODE_COMMERCE_ORDER_SCOPE_UNAVAILABLE
+            and operation_evidence.get("reason") == EPISODE_COMMERCE_ORDER_SCOPE_UNAVAILABLE
             else "commerce_operation_evidence_partial"
         )
 
@@ -874,11 +2011,23 @@ class Economic360Provider:
                 operation_evidence_warning=operation_evidence_warning,
                 source_provenance=source_provenance,
                 source_incomplete_reasons=sorted(source_incomplete_reasons),
+                conversion_inventory=conversion_inventory,
+                attribution_credits=attribution_credits,
             ),
             self._outcomes_section(tenant_filtered, dep_state, source_partial),
             self._findings_section(warnings, evidence, source_partial),
         ]
-        claims = self._build_claims(request, tenant_filtered, rollup, warnings, evidence)
+        claims = self._build_claims(
+            request,
+            tenant_filtered,
+            rollup,
+            warnings,
+            evidence,
+            operation_evidence=operation_evidence,
+            entity_profile_verified=entity_profile_verified,
+            conversion_inventory=conversion_inventory,
+            attribution_credits=attribution_credits,
+        )
 
         degraded_reasons = []
         if source_truncated:
@@ -886,6 +2035,17 @@ class Economic360Provider:
         degraded_reasons.extend(sorted(source_incomplete_reasons))
         if operation_evidence_partial:
             degraded_reasons.append(operation_evidence_warning)
+        if conversion_inventory.get("state") == "degraded":
+            degraded_reasons.append(
+                str(conversion_inventory.get("reason") or "canonical_conversion_inventory_partial")
+            )
+        if attribution_credits.get("state") in {"degraded", "missing"}:
+            degraded_reasons.append(
+                str(
+                    attribution_credits.get("reason")
+                    or "canonical_attribution_credit_inventory_partial"
+                )
+            )
         return ProjectionResult(
             projectionId=self.projection_id,
             tenantId=tenant_id,
@@ -967,7 +2127,9 @@ class Economic360Provider:
         gross_usd, _ = safe_usd_total(gross_amounts)
         value_records = [record for record in records if not _is_ai_execution_cost(record)]
         value_usd_records = [
-            record for record in value_records if _monetary_from_record(record).usd_value is not None
+            record
+            for record in value_records
+            if _monetary_from_record(record).usd_value is not None
         ]
         ai_cost_records = [record for record in records if _is_ai_execution_cost(record)]
         ai_cost_amounts = [_monetary_from_record(record) for record in ai_cost_records]
@@ -1163,6 +2325,8 @@ class Economic360Provider:
         operation_evidence_warning: str = "commerce_operation_evidence_partial",
         source_provenance: Optional[list[dict[str, str]]] = None,
         source_incomplete_reasons: Optional[list[str]] = None,
+        conversion_inventory: Optional[dict[str, Any]] = None,
+        attribution_credits: Optional[dict[str, Any]] = None,
     ) -> ProjectionSection:
         """evidence — the canonical evidence refs grounding this projection."""
         source_incomplete_reasons = source_incomplete_reasons or []
@@ -1184,17 +2348,39 @@ class Economic360Provider:
                 if operation_evidence_partial
                 else "bounded_read"
             )
+        conversion_inventory = conversion_inventory or {}
+        if conversion_inventory:
+            content["conversion_inventory"] = conversion_inventory
+        attribution_credits = attribution_credits or {}
+        if attribution_credits:
+            content["attribution_credits"] = attribution_credits
         warnings = []
         if source_truncated:
             warnings.append("economic_source_read_truncated")
         warnings.extend(source_incomplete_reasons)
         if operation_evidence_partial:
             warnings.append(operation_evidence_warning)
+        if conversion_inventory.get("state") == "degraded":
+            warnings.append(
+                str(
+                    conversion_inventory.get("reason")
+                    or "canonical_conversion_inventory_partial"
+                )
+            )
+        if attribution_credits.get("state") in {"degraded", "missing"}:
+            warnings.append(
+                str(
+                    attribution_credits.get("reason")
+                    or "canonical_attribution_credit_inventory_partial"
+                )
+            )
         return ProjectionSection(
             id="evidence",
             state=(
                 "degraded"
-                if source_partial or operation_evidence_partial
+                if source_partial
+                or operation_evidence_partial
+                or attribution_credits.get("state") in {"degraded", "missing"}
                 else "available"
                 if evidence or operation_evidence
                 else "empty"
@@ -1205,7 +2391,12 @@ class Economic360Provider:
         )
 
     async def _subject_operation_evidence(
-        self, tenant_id: str, subject: Any, *, as_of: Optional[str] = None
+        self,
+        tenant_id: str,
+        subject: Any,
+        *,
+        as_of: Optional[str] = None,
+        entity_profile_identity_state: Optional[bool] = None,
     ) -> Optional[dict[str, Any]]:
         """Attach exact-reference commerce links for supported canonical subjects.
 
@@ -1249,12 +2440,7 @@ class Economic360Provider:
                     "as_of": as_of,
                 }
             if getattr(subject, "kind", None) == "entity":
-                try:
-                    canonical_profile = await self._profile_identity.is_canonical_profile(
-                        tenant_id, subject.id
-                    )
-                except Exception:  # noqa: BLE001 - fail closed on identity authority errors
-                    canonical_profile = None
+                canonical_profile = entity_profile_identity_state
                 if canonical_profile is not True:
                     return {
                         "entity_id": subject.id,
@@ -1384,33 +2570,51 @@ class Economic360Provider:
         rollup: dict[str, Any],
         warnings: list[EconomicWarning],
         evidence: list[EvidenceRef],
+        *,
+        operation_evidence: Optional[dict[str, Any]] = None,
+        entity_profile_verified: bool = False,
+        conversion_inventory: Optional[dict[str, Any]] = None,
+        attribution_credits: Optional[dict[str, Any]] = None,
     ) -> list[ClaimEnvelope]:
         """Evidence-grounded claims (requiresEvidence: every claim is grounded)."""
         claims: list[ClaimEnvelope] = []
         subject = request.subject  # canonical subject — never re-derived
 
         total_usd = rollup.get("total_usd")
-        if total_usd is not None:
-            value_evidence = [
-                ref
-                for record in records
-                if not _is_ai_execution_cost(record)
-                for ref in [_evidence_from_record(record)]
-                if ref is not None
-            ]
+        value_evidence = [
+            ref
+            for record in records
+            if not _is_ai_execution_cost(record)
+            for ref in [_evidence_from_record(record)]
+            if ref is not None
+        ]
+        if total_usd is not None and value_evidence:
             claims.append(
                 ClaimEnvelope(
                     id="summary.total_value_observed",
                     kind="economic_rollup",
                     subject=subject,
                     evidenceRefs=value_evidence,
-                    claims=[
-                        f"trusted USD total observed: ${total_usd}",
-                        f"rollup status: {rollup.get('rollup_status')}",
-                    ],
+                    claims=(
+                        [
+                            f"entity-scoped trusted USD economic total observed: ${total_usd}; "
+                            "records are directly bound to this entity and do not include "
+                            "member or descendant economics",
+                            f"rollup status: {rollup.get('rollup_status')}",
+                        ]
+                        if subject.kind == "entity"
+                        else [
+                            f"trusted USD total observed: ${total_usd}",
+                            f"rollup status: {rollup.get('rollup_status')}",
+                        ]
+                    ),
+                    domainSlotIds=_value_summary_domain_slot_ids(
+                        subject,
+                        entity_profile_verified=entity_profile_verified,
+                    ),
                 )
             )
-        else:
+        elif total_usd is None:
             unpriced_refs = [
                 ref
                 for record in records
@@ -1418,18 +2622,31 @@ class Economic360Provider:
                 for ref in [_evidence_from_record(record)]
                 if ref is not None
             ][:5]
-            claims.append(
-                ClaimEnvelope(
-                    id="summary.no_trusted_total",
-                    kind="economic_rollup",
-                    subject=subject,
-                    evidenceRefs=unpriced_refs,
-                    claims=[
-                        "no trusted USD total is available; unpriced amounts are "
-                        "never coerced to zero"
-                    ],
+            if unpriced_refs:
+                claims.append(
+                    ClaimEnvelope(
+                        id="summary.no_trusted_total",
+                        kind="economic_rollup",
+                        subject=subject,
+                        evidenceRefs=unpriced_refs,
+                        claims=(
+                            [
+                                "no trusted USD total is available for directly subject-scoped "
+                                "entity economics; unpriced amounts are never coerced to zero, "
+                                "and member/descendant economics are not included"
+                            ]
+                            if subject.kind == "entity"
+                            else [
+                                "no trusted USD total is available; unpriced amounts are "
+                                "never coerced to zero"
+                            ]
+                        ),
+                        domainSlotIds=_value_summary_domain_slot_ids(
+                            subject,
+                            entity_profile_verified=entity_profile_verified,
+                        ),
+                    )
                 )
-            )
 
         spend_usd, _ = safe_usd_total(
             _monetary_from_record(r) for r in records if r.get("_metric_name") == "campaign_spend"
@@ -1450,6 +2667,7 @@ class Economic360Provider:
                     subject=subject,
                     evidenceRefs=spend_refs or evidence[:5],
                     claims=[f"campaign spend (USD): {format(spend_usd, 'f')}"],
+                    domainSlotIds=_economic_domain_slot_ids(subject, ECONOMIC_FACTS_SLOT_ID),
                 )
             )
 
@@ -1475,8 +2693,106 @@ class Economic360Provider:
                         f"{format(ai_cost_usd, 'f')}; this is operating cost, "
                         "not a measured business outcome"
                     ],
+                    domainSlotIds=_economic_domain_slot_ids(subject, ECONOMIC_FACTS_SLOT_ID),
                 )
             )
+
+        claims.extend(
+            _commerce_fact_claims(
+                request.subject,
+                operation_evidence,
+            )
+        )
+
+        inventory = conversion_inventory or {}
+        inventory_refs = _inventory_evidence_refs(inventory.get("evidenceRefs"))
+        inventory_records = inventory.get("records")
+        if (
+            inventory.get("state") in {"available", "degraded"}
+            and isinstance(inventory_records, list)
+            and inventory_records
+            and inventory_refs
+            and inventory.get("joinBasis")
+        ):
+            inventory_count = len(inventory_records)
+            completeness = inventory.get("completeness") or "unknown"
+            join_basis = str(inventory["joinBasis"])
+            claims.append(
+                ClaimEnvelope(
+                    id=(
+                        "outcomes.conversion_inventory."
+                        + hashlib.sha256(
+                            f"{request.tenantId}:{subject.kind}:{subject.id}".encode("utf-8")
+                        ).hexdigest()[:32]
+                    ),
+                    kind="canonical_conversion_inventory",
+                    subject=subject,
+                    evidenceRefs=inventory_refs,
+                    claims=[
+                        f"{inventory_count} canonical conversion record(s) are observed for "
+                        f"this exact subject through {join_basis}; inventory completeness is "
+                        f"{completeness}. These are current canonical conversion rows, not a "
+                        "join to Outcome360 measured-outcome IDs; monetary fields remain in "
+                        "their source currency and are not aggregated."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=[
+                        VALUE_CONVERSION_INVENTORY_SLOT_ID,
+                        VALUE_EVIDENCE_TRACE_SLOT_ID,
+                    ],
+                )
+            )
+
+        attribution = attribution_credits or {}
+        attribution_records = attribution.get("records")
+        if isinstance(attribution_records, list):
+            for record in attribution_records:
+                if not isinstance(record, dict):
+                    continue
+                refs = _attribution_evidence_refs(record.get("evidenceRefs"))
+                if not refs:
+                    continue
+                weight = _inventory_amount(record.get("creditWeight"))
+                if weight is None:
+                    continue
+                conversion_id = _inventory_text(record.get("conversionId"))
+                credit_id = _inventory_text(record.get("creditId"))
+                run_id = _inventory_text(record.get("attributionRunId"))
+                if not conversion_id or not credit_id or not run_id:
+                    continue
+                model_version = _inventory_text(record.get("modelVersion"), limit=128)
+                model_type = _inventory_text(record.get("modelType"), limit=128)
+                model_label = (
+                    f"{model_type}@{model_version}"
+                    if model_type and model_version
+                    else model_version or model_type or "unreported model version"
+                )
+                confidence = _attribution_confidence(record.get("modelConfidence"))
+                claims.append(
+                    ClaimEnvelope(
+                        id=(
+                            "attribution.credit."
+                            + hashlib.sha256(
+                                f"{request.tenantId}:{conversion_id}:{credit_id}".encode("utf-8")
+                            ).hexdigest()[:32]
+                        ),
+                        kind="canonical_attribution_credit",
+                        subject=subject,
+                        evidenceRefs=refs,
+                        claims=[
+                            f"active canonical attribution run {run_id} ({model_label}) records "
+                            f"credit weight {weight} for conversion {conversion_id}; this is "
+                            "attribution-model output, not independently measured realized "
+                            "value or agent ROI"
+                        ],
+                        confidence=confidence,
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=[
+                            VALUE_ATTRIBUTION_CREDITS_SLOT_ID,
+                            VALUE_EVIDENCE_TRACE_SLOT_ID,
+                        ],
+                    )
+                )
 
         for warning in warnings:
             claims.append(
@@ -1487,12 +2803,413 @@ class Economic360Provider:
                     evidenceRefs=evidence[:5],
                     claims=[warning.message],
                     confidence=None,
+                    domainSlotIds=_economic_domain_slot_ids(subject, ECONOMIC_FACTS_SLOT_ID),
                 )
             )
 
         return claims
 
     # ── Canonical read helpers (defensive) ─────────────────────────────────
+
+    async def _safe_conversion_inventory(
+        self,
+        request: ProjectionRequest,
+    ) -> dict[str, Any]:
+        """Read exact canonical conversion rows or expose an explicit unknown."""
+        fallback = {
+            "tenantId": request.tenantId,
+            "subject": request.subject.model_dump(),
+            "canonicalAuthority": "canonical_conversions",
+            "canonicalAuthorityRefs": ["canonical_conversions"],
+            "state": "unknown",
+            "reason": "canonical_conversion_inventory_unavailable",
+            "joinBasis": None,
+            "completeness": "unknown",
+            "records": [],
+            "evidenceRefs": [],
+            "measurementOutcomeLinkage": {
+                "state": "unknown",
+                "reason": "outcome360_rows_do_not_expose_canonical_conversion_id",
+            },
+            "freshness": {
+                "state": "unknown",
+                "reason": "conversion_freshness_threshold_not_configured",
+            },
+        }
+        if request.subject.kind == "agent":
+            fallback["agentRoster"] = {
+                "identityState": "unknown",
+                "completeness": "unknown",
+                "freshness": {
+                    "state": "unknown",
+                    "reason": "agent_roster_completeness_and_freshness_not_read",
+                },
+            }
+        # Do not let an injected or future reader accidentally serve current
+        # canonical rows on a request that asks for historical state.
+        if request.asOf is not None or request.temporalMode in {"as_of", "compare", "relative"}:
+            return {
+                **fallback,
+                "reason": "canonical_conversion_history_not_bitemporal",
+            }
+        try:
+            result = await self._conversion_inventory.read(request)
+        except Exception:  # noqa: BLE001 - a source outage is not empty data
+            return {
+                **fallback,
+                "state": "missing",
+                "reason": "canonical_conversion_inventory_read_failed",
+            }
+        if not isinstance(result, dict):
+            return {
+                **fallback,
+                "state": "missing",
+                "reason": "canonical_conversion_inventory_result_invalid",
+            }
+        if result.get("tenantId") != request.tenantId or result.get("subject") != request.subject.model_dump():
+            return {
+                **fallback,
+                "reason": "canonical_conversion_inventory_subject_scope_mismatch",
+            }
+        allowed_states = {"available", "degraded", "empty", "missing", "unknown"}
+        state = result.get("state")
+        if state not in allowed_states or not isinstance(result.get("records"), list):
+            return {
+                **fallback,
+                "state": "missing",
+                "reason": "canonical_conversion_inventory_result_invalid",
+            }
+        normalized = {**fallback, **result}
+        refs = _inventory_evidence_refs(normalized.get("evidenceRefs"))
+        if state not in {"available", "degraded"}:
+            normalized["records"] = []
+            normalized["evidenceRefs"] = []
+            refs = []
+        elif not normalized["records"]:
+            normalized["evidenceRefs"] = []
+            refs = []
+        elif normalized.get("records") and not refs:
+            normalized.update(
+                state="degraded",
+                completeness="partial",
+                reason="canonical_conversion_inventory_evidence_missing",
+                records=[],
+                evidenceRefs=[],
+            )
+        else:
+            refs_by_id = {ref.id: ref for ref in refs}
+            evidenced_records = []
+            for record in normalized["records"]:
+                if not isinstance(record, dict):
+                    continue
+                ref = refs_by_id.get(record.get("conversionId"))
+                if ref is None:
+                    continue
+                safe_record = dict(record)
+                safe_record["evidenceRefs"] = [ref.model_dump(mode="json")]
+                evidenced_records.append(safe_record)
+            if len(evidenced_records) != len(normalized["records"]):
+                normalized.update(
+                    state="degraded",
+                    completeness="partial",
+                    reason="canonical_conversion_inventory_record_evidence_mismatch",
+                    records=evidenced_records,
+                )
+                retained_ids = {record.get("conversionId") for record in evidenced_records}
+                refs = [ref for ref in refs if ref.id in retained_ids]
+            normalized["records"] = evidenced_records
+            normalized["evidenceRefs"] = [ref.model_dump(mode="json") for ref in refs]
+        normalized["measurementOutcomeLinkage"] = fallback["measurementOutcomeLinkage"]
+        normalized["freshness"] = fallback["freshness"]
+        normalized["canonicalAuthority"] = "canonical_conversions"
+        normalized["canonicalAuthorityRefs"] = ["canonical_conversions"]
+        if request.subject.kind == "agent":
+            agent_roster = normalized.get("agentRoster")
+            identity_state = (
+                agent_roster.get("identityState")
+                if isinstance(agent_roster, dict)
+                and agent_roster.get("identityState")
+                in {"not_validated", "unresolved", "unknown", "validated"}
+                else "unknown"
+            )
+            normalized["agentRoster"] = {
+                "identityState": identity_state,
+                "completeness": "unknown",
+                "freshness": fallback["agentRoster"]["freshness"],
+            }
+        return normalized
+
+    async def _safe_attribution_credits(
+        self,
+        request: ProjectionRequest,
+        conversion_inventory: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Expose active attribution credits only through exact conversion IDs."""
+        fallback = {
+            "tenantId": request.tenantId,
+            "subject": request.subject.model_dump(),
+            "canonicalAuthorityRefs": ["attribution_runs", "attribution_credits"],
+            "state": "unknown",
+            "reason": "canonical_attribution_credit_inventory_unavailable",
+            "completeness": "unknown",
+            "records": [],
+            "runs": [],
+            "evidenceRefs": [],
+            "freshness": {
+                "state": "unknown",
+                "reason": "attribution_freshness_threshold_not_configured",
+            },
+            "timeScope": {
+                "mode": "current_active_attribution_run",
+                "historicalState": "unknown",
+            },
+            "limitations": [
+                "credit_weights_are_canonical_model_outputs_not_independently_measured_value",
+                "attributed_revenue_and_agent_roi_are_not_inferred_or_projected",
+            ],
+        }
+        if request.asOf is not None or request.temporalMode in {"as_of", "compare", "relative"}:
+            return {**fallback, "reason": "canonical_attribution_history_not_bitemporal"}
+        inventory_state = conversion_inventory.get("state")
+        if inventory_state == "empty" and conversion_inventory.get("completeness") == "complete":
+            return {
+                **fallback,
+                "state": "empty",
+                "reason": "no_exact_canonical_conversions_for_subject",
+                "completeness": "complete",
+                "conversionCount": 0,
+            }
+        if inventory_state not in {"available", "degraded"}:
+            return {
+                **fallback,
+                "reason": "canonical_conversion_inventory_not_available_for_attribution_join",
+                "conversionInventoryState": inventory_state or "unknown",
+            }
+        inventory_records = conversion_inventory.get("records")
+        if not isinstance(inventory_records, list):
+            return {**fallback, "reason": "canonical_conversion_inventory_result_invalid"}
+        conversion_refs = {
+            ref.id: ref
+            for ref in _inventory_evidence_refs(conversion_inventory.get("evidenceRefs"))
+        }
+        conversion_ids = list(
+            dict.fromkeys(
+                conversion_id
+                for raw in inventory_records
+                if isinstance(raw, dict)
+                for conversion_id in [_attribution_uuid(raw.get("conversionId"))]
+                if conversion_id and conversion_id in conversion_refs
+            )
+        )
+        if not conversion_ids:
+            return {**fallback, "reason": "canonical_conversion_inventory_evidence_missing"}
+        try:
+            result = await self._attribution_credits.read(request.tenantId, conversion_ids)
+        except Exception:  # noqa: BLE001 - canonical source outage is not empty data
+            return {
+                **fallback,
+                "state": "missing",
+                "reason": "canonical_attribution_credit_read_failed",
+            }
+        if not isinstance(result, dict):
+            return {
+                **fallback,
+                "state": "missing",
+                "reason": "canonical_attribution_credit_result_invalid",
+            }
+        result_ids = result.get("conversionIds")
+        if (
+            result.get("tenantId") != request.tenantId
+            or not isinstance(result_ids, list)
+            or result_ids != conversion_ids
+        ):
+            return {
+                **fallback,
+                "reason": "canonical_attribution_credit_subject_scope_mismatch",
+            }
+        allowed_states = {"available", "degraded", "empty", "missing", "unknown"}
+        if (
+            result.get("state") not in allowed_states
+            or not isinstance(result.get("records"), list)
+            or not isinstance(result.get("runs"), list)
+        ):
+            return {
+                **fallback,
+                "state": "missing",
+                "reason": "canonical_attribution_credit_result_invalid",
+            }
+
+        runs_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+        run_refs: dict[tuple[str, str], EvidenceRef] = {}
+        output_runs: list[dict[str, Any]] = []
+        invalid_rows = 0
+        for raw_run in result["runs"]:
+            if not isinstance(raw_run, dict) or raw_run.get("tenantId") != request.tenantId:
+                invalid_rows += 1
+                continue
+            conversion_id = _attribution_uuid(raw_run.get("conversionId"))
+            run_id = _attribution_uuid(raw_run.get("attributionRunId"))
+            if (
+                not conversion_id
+                or conversion_id not in conversion_refs
+                or not run_id
+                or raw_run.get("status") != "complete"
+            ):
+                invalid_rows += 1
+                continue
+            completed_at = _attribution_timestamp(raw_run.get("completedAt"))
+            run_ref = _attribution_run_ref(run_id, completed_at)
+            key = (conversion_id, run_id)
+            runs_by_key[key] = {
+                "tenantId": request.tenantId,
+                "conversionId": conversion_id,
+                "attributionRunId": run_id,
+                "modelType": _inventory_text(raw_run.get("modelType"), limit=128),
+                "modelVersion": _inventory_text(raw_run.get("modelVersion"), limit=128),
+                "status": _inventory_text(raw_run.get("status"), limit=64),
+                "completedAt": completed_at,
+                "dataWatermark": _attribution_timestamp(raw_run.get("dataWatermark")),
+                "modelConfidence": _attribution_confidence(raw_run.get("modelConfidence")),
+            }
+            run_refs[key] = run_ref
+            output_runs.append({**runs_by_key[key], "evidenceRef": run_ref.model_dump(mode="json")})
+
+        output_records: list[dict[str, Any]] = []
+        evidence_refs: list[EvidenceRef] = list(run_refs.values())
+        seen_credit_ids: set[str] = set()
+        for raw_record in result["records"]:
+            if not isinstance(raw_record, dict) or raw_record.get("tenantId") != request.tenantId:
+                invalid_rows += 1
+                continue
+            conversion_id = _attribution_uuid(raw_record.get("conversionId"))
+            credit_id = _attribution_uuid(raw_record.get("creditId"))
+            run_id = _attribution_uuid(raw_record.get("attributionRunId"))
+            key = (conversion_id or "", run_id or "")
+            weight = _inventory_amount(raw_record.get("creditWeight"))
+            weight_value = _to_decimal(weight)
+            if (
+                conversion_id not in conversion_refs
+                or credit_id is None
+                or run_id is None
+                or key not in runs_by_key
+                or credit_id in seen_credit_ids
+                or weight_value is None
+                or not weight_value.is_finite()
+                or weight_value < 0
+                or weight_value > 1
+            ):
+                invalid_rows += 1
+                continue
+            created_at = _attribution_timestamp(raw_record.get("createdAt"))
+            seen_credit_ids.add(credit_id)
+            credit_ref = _attribution_credit_ref(credit_id, created_at)
+            run_ref = run_refs[key]
+            conversion_ref = conversion_refs[conversion_id]
+            row_refs = [run_ref, credit_ref, conversion_ref]
+            evidence_refs.extend([credit_ref, conversion_ref])
+            run = runs_by_key[key]
+            credit_confidence = _attribution_confidence(raw_record.get("modelConfidence"))
+            output_records.append(
+                {
+                    "tenantId": request.tenantId,
+                    "conversionId": conversion_id,
+                    "attributionRunId": run_id,
+                    "creditId": credit_id,
+                    "touchpointId": _inventory_text(raw_record.get("touchpointId")),
+                    "campaignId": _inventory_text(raw_record.get("campaignId")),
+                    "channel": _inventory_text(raw_record.get("channel"), limit=128),
+                    "source": _inventory_text(raw_record.get("source"), limit=128),
+                    "sourceClass": _inventory_text(raw_record.get("sourceClass"), limit=128),
+                    "actorType": _inventory_text(raw_record.get("actorType"), limit=64),
+                    "journeyRole": _inventory_text(raw_record.get("journeyRole"), limit=128),
+                    "attributionEligible": (
+                        raw_record.get("attributionEligible")
+                        if isinstance(raw_record.get("attributionEligible"), bool)
+                        else None
+                    ),
+                    "creditWeight": format(weight_value, "f"),
+                    "evidenceConfidence": _attribution_confidence(
+                        raw_record.get("evidenceConfidence")
+                    ),
+                    "identityConfidence": _attribution_confidence(
+                        raw_record.get("identityConfidence")
+                    ),
+                    "modelConfidence": (
+                        credit_confidence
+                        if credit_confidence is not None
+                        else run.get("modelConfidence")
+                    ),
+                    "verificationLevel": _inventory_text(
+                        raw_record.get("verificationLevel"), limit=64
+                    ),
+                    "sourceClassifierVersion": _inventory_text(
+                        raw_record.get("sourceClassifierVersion"), limit=128
+                    ),
+                    "modelType": run.get("modelType"),
+                    "modelVersion": run.get("modelVersion"),
+                    "createdAt": created_at,
+                    "evidenceRefs": [ref.model_dump(mode="json") for ref in row_refs],
+                }
+            )
+        state = result["state"]
+        source_reason = _inventory_text(result.get("reason"), limit=256)
+        if invalid_rows:
+            state = "degraded"
+            source_reason = "canonical_attribution_credit_scope_or_record_invalid"
+        elif conversion_inventory.get("state") == "degraded" and state in {"available", "empty"}:
+            state = "degraded"
+            source_reason = "canonical_attribution_conversion_inventory_partial"
+        elif state == "available" and not output_records:
+            if len(output_runs) == len(conversion_ids):
+                state = "empty"
+                source_reason = "active_attribution_runs_have_no_credit_rows"
+            else:
+                state = "degraded"
+                source_reason = "canonical_attribution_run_coverage_partial"
+        elif state == "empty" and (
+            output_records or len(output_runs) != len(conversion_ids)
+        ):
+            state = "degraded"
+            source_reason = "canonical_attribution_credit_state_or_run_coverage_mismatch"
+        elif state in {"unknown", "missing"} and output_records:
+            state = "degraded"
+            source_reason = "canonical_attribution_credit_state_mismatch"
+
+        deduped_refs: list[EvidenceRef] = []
+        seen_refs: set[tuple[str, str, str]] = set()
+        for ref in evidence_refs:
+            key = (ref.id, ref.type, ref.source)
+            if key not in seen_refs:
+                deduped_refs.append(ref)
+                seen_refs.add(key)
+        completed_times = sorted(
+            run["completedAt"] for run in output_runs if run.get("completedAt")
+        )
+        freshness = {
+            "state": "unknown",
+            "reason": "attribution_freshness_threshold_not_configured",
+            "completedAtCoverage": round(len(completed_times) / len(conversion_ids), 4),
+            "oldestCompletedAt": completed_times[0] if completed_times else None,
+            "latestCompletedAt": completed_times[-1] if completed_times else None,
+        }
+        return {
+            **fallback,
+            "state": state,
+            "reason": source_reason,
+            "completeness": (
+                "complete" if state in {"available", "empty"}
+                else "partial" if state == "degraded"
+                else "unknown"
+            ),
+            "conversionCount": len(conversion_ids),
+            "recordCount": len(output_records),
+            "records": output_records,
+            "runs": output_runs,
+            "evidenceRefs": [ref.model_dump(mode="json") for ref in deduped_refs],
+            "freshness": freshness,
+            "unresolvedConversionIds": result.get("unresolvedConversionIds", []),
+            "limitations": list(result.get("limitations") or fallback["limitations"]),
+        }
 
     async def _safe_records(
         self,
@@ -1547,11 +3264,15 @@ def register_provider(registry: ProviderRegistry) -> None:
 
 
 __all__ = [
+    "AttributionCreditReader",
     "CampaignIdentityReader",
+    "ConversionInventoryReader",
     "Economic360Provider",
     "EconomicSourceReader",
     "OUTPUT_SECTIONS",
     "RepositoryCampaignIdentityReader",
+    "RepositoryAttributionCreditReader",
+    "RepositoryConversionInventoryReader",
     "RepositoryEconomicSourceReader",
     "SECTION_DEPENDENCIES",
     "register_provider",

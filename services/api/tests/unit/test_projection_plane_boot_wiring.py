@@ -41,6 +41,10 @@ EXPECTED_SOURCES: dict[str, str] = {
     "source360": "services/api/connectors/provider_runtime",
     "connection360": "services/api/connectors/provider_runtime",
     "support360": "services/api/journeys/support360",
+    "signals360": "services/api/intelligence/signals/signals360_provider",
+    "memory360": "services/api/intelligence/semantic_intelligence",
+    "commerce360": "services/api/value/commerce",
+    "workflow360": "services/api/intelligence/workflow/workflow360_provider",
 }
 
 
@@ -81,7 +85,7 @@ def test_every_product_surface_projection_binding_has_a_boot_registered_provider
     }
 
     assert len(PRODUCT_360_SURFACE_DEFINITIONS) == 18
-    assert catalog_projection_ids == set(REGISTERED_PROJECTION_IDS)
+    assert catalog_projection_ids <= set(REGISTERED_PROJECTION_IDS)
 
 
 def test_wiring_is_idempotent() -> None:

@@ -21,7 +21,7 @@ independent outcome/economic providers.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional, Protocol
 from urllib.parse import quote
@@ -56,11 +56,20 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
 # These are the Execution360 product catalog slots and the slots to which this
 # provider is bound. Keep in sync with the canonical JSON catalog, not inferred
 # from whichever dependency happens to be available.
-SLOT_ACTION_TRACE = "action_tool_resource_trace"
-SLOT_ACTOR_DELEGATION = "actor_and_delegation"
-SLOT_EVIDENCE = "evidence_and_lineage"
-SLOT_EXECUTION_STATE = "execution_identity_and_state"
-SLOT_TEMPORAL_EPISODE = "temporal_and_episode_context"
+SLOT_ACTOR_ATTRIBUTION = "actor_attribution"
+SLOT_AUTHORITY_CHECK = "authority_check"
+SLOT_AGENT_AUTHORITY_ENVELOPE = "authority_envelope"
+SLOT_EVIDENCE = "evidence_trace"
+SLOT_EXECUTION_STATE = "execution_summary"
+SLOT_AGENT_EXECUTION_HISTORY = "execution_history"
+SLOT_AGENT_TOOL_USAGE = "tool_usage"
+SLOT_TEMPORAL_EPISODE = "plan_steps"
+SLOT_LATENCY_COST = "latency_cost"
+SLOT_INPUTS_OUTPUTS = "inputs_outputs"
+SLOT_FAILURES = "failures"
+
+_SERVER_FAILURE_STATUSES = frozenset({"failed", "revoked"})
+_SOURCE_REPORTED_FAILURE_STATUSES = frozenset({"failed", "error", "denied", "revoked"})
 
 _MAX_ROWS = 500
 _SILVER_QUERY_LIMIT = 1000
@@ -201,6 +210,47 @@ class RepositoryExecution360Source:
                     rows = rows[:limit]
                 agent_ids = {subject.id}
                 owner_by_agent = {subject.id: config.get("owner_entity_id")}
+            elif subject.kind == "execution":
+                execution = await executions.find_by_id(subject.id)
+                if execution is None:
+                    return ExecutionRead(
+                        rows=[],
+                        available=True,
+                        scope_known=True,
+                        reason="tenant_execution_not_found",
+                    )
+                if (
+                    not isinstance(execution, dict)
+                    or execution.get("tenant_id") != tenant_id
+                    or _safe_text(execution.get("execution_id")) != subject.id
+                ):
+                    # A globally keyed row from another tenant is intentionally
+                    # indistinguishable from an unresolved subject here.
+                    return ExecutionRead(
+                        rows=[],
+                        available=True,
+                        scope_known=False,
+                        reason="execution_subject_scope_unresolved",
+                    )
+                source_agent_id = _safe_text(execution.get("agent_id"))
+                if source_agent_id is None:
+                    return ExecutionRead(
+                        rows=[],
+                        available=True,
+                        scope_known=False,
+                        reason="execution_agent_binding_unavailable",
+                    )
+                config = await configs.find_by_id(source_agent_id)
+                if not _tenant_agent_config(config, tenant_id, source_agent_id):
+                    return ExecutionRead(
+                        rows=[],
+                        available=True,
+                        scope_known=False,
+                        reason="execution_agent_configuration_not_tenant_bound",
+                    )
+                rows = [execution]
+                agent_ids = {source_agent_id}
+                owner_by_agent = {source_agent_id: config.get("owner_entity_id")}
             elif subject.kind == "entity":
                 owner_configs = await configs.find_many(
                     filters={"tenant_id": tenant_id, "owner_entity_id": subject.id},
@@ -245,13 +295,29 @@ class RepositoryExecution360Source:
                     if len(agent_rows) > remaining:
                         source_truncated = True
                         agent_rows = agent_rows[:remaining]
+                    matching_lifecycle = [
+                        row
+                        for row in agent_rows
+                        if isinstance(row, dict)
+                        and row.get("tenant_id") == tenant_id
+                        and row.get("agent_id") == agent_id
+                        and row.get("event_type") is None
+                        and _safe_text(row.get("triggered_by_event_id")) in episode_scope.event_ids
+                    ]
+                    matching_execution_ids = {
+                        execution_id
+                        for row in matching_lifecycle
+                        if (execution_id := _safe_text(row.get("execution_id"))) is not None
+                    }
+                    rows.extend(matching_lifecycle)
                     rows.extend(
                         row
                         for row in agent_rows
                         if isinstance(row, dict)
                         and row.get("tenant_id") == tenant_id
                         and row.get("agent_id") == agent_id
-                        and _safe_text(row.get("triggered_by_event_id")) in episode_scope.event_ids
+                        and row.get("event_type") == "task_decomposed"
+                        and _safe_text(row.get("execution_id")) in matching_execution_ids
                     )
             else:
                 return ExecutionRead(
@@ -296,20 +362,14 @@ class RepositoryExecution360Source:
         ]
         delegation_repo = DelegationRepository()
         for row in scoped:
-            ref = _safe_text(row.get("delegation_id"))
-            if not ref:
-                continue
             try:
-                delegation = await delegation_repo.find_by_id(ref)
+                row.update(
+                    await _resolve_server_delegation_reference(
+                        row, tenant_id=tenant_id, repository=delegation_repo
+                    )
+                )
             except Exception:  # noqa: BLE001 - unresolved authority stays absent
-                continue
-            if (
-                delegation
-                and delegation.get("tenant_id") == tenant_id
-                and delegation.get("delegation_id") == ref
-            ):
-                row["canonical_delegation_matched"] = True
-                row["canonical_delegation_id"] = ref
+                row["canonical_delegation_resolution_status"] = "source_unavailable"
         episode_context = None
         if subject.kind == "agent":
             canonical_agent_ids = {
@@ -346,6 +406,15 @@ class RepositoryExecution360Source:
     async def observed_facts(
         self, *, tenant_id: str, subject: ProjectionSubject, limit: int
     ) -> ExecutionRead:
+        if subject.kind == "execution":
+            # Source telemetry has run/task references but no canonical join
+            # from those references to this AETHER execution ID yet.
+            return ExecutionRead(
+                rows=[],
+                available=True,
+                scope_known=False,
+                reason="execution_source_telemetry_join_unavailable",
+            )
         if subject.kind == "episode":
             scope = await _episode_execution_scope(tenant_id, subject.id)
             if not scope.available or not scope.event_ids:
@@ -789,6 +858,71 @@ def _safe_text(value: Any, *, limit: int = 256) -> Optional[str]:
     return text
 
 
+async def _resolve_server_delegation_reference(
+    row: dict[str, Any], *, tenant_id: str, repository: Any
+) -> dict[str, Any]:
+    """Join a recorded decision to the exact tenant grant and canonical grantee.
+
+    The current mutable grant row cannot prove historical scope or revocation
+    state at execution time. This resolver establishes reference/party identity
+    only; the execution's policy log remains the source for its recorded
+    action-scoped decision.
+    """
+    if row.get("tenant_id") != tenant_id:
+        return {"canonical_delegation_resolution_status": "execution_scope_mismatch"}
+    recorded_ref = _safe_text(row.get("delegation_id"))
+    if recorded_ref is None:
+        return {"canonical_delegation_resolution_status": "not_recorded"}
+    policy = row.get("policy_log")
+    policy = policy if isinstance(policy, dict) else {}
+    decision = policy.get("delegation_check")
+    decision = decision if isinstance(decision, dict) else {}
+    if not isinstance(decision.get("allowed"), bool):
+        return {"canonical_delegation_resolution_status": "policy_decision_missing"}
+    policy_ref = _safe_text(decision.get("delegation_id"))
+    if policy_ref is None:
+        return {"canonical_delegation_resolution_status": "policy_reference_missing"}
+    if policy_ref != recorded_ref:
+        return {"canonical_delegation_resolution_status": "conflicted_policy_reference"}
+    canonical_agent_id = (
+        _safe_text(row.get("canonical_agent_entity_id"))
+        if row.get("canonical_agent_identity") is True
+        else None
+    )
+    if canonical_agent_id is None:
+        return {"canonical_delegation_resolution_status": "canonical_agent_unresolved"}
+
+    delegation = await repository.find_by_id(recorded_ref)
+    if not isinstance(delegation, dict):
+        return {"canonical_delegation_resolution_status": "grant_not_found"}
+    if (
+        delegation.get("tenant_id") != tenant_id
+        or _safe_text(delegation.get("delegation_id")) != recorded_ref
+    ):
+        return {"canonical_delegation_resolution_status": "grant_scope_mismatch"}
+    if (
+        _safe_text(delegation.get("grantor_entity_id")) is None
+        or not isinstance(delegation.get("scope"), dict)
+    ):
+        return {"canonical_delegation_resolution_status": "grant_record_incomplete"}
+    if _safe_text(delegation.get("grantee_entity_id")) != canonical_agent_id:
+        return {"canonical_delegation_resolution_status": "grant_party_mismatch"}
+    observed_at = next(
+        (
+            parsed.isoformat()
+            for value in (delegation.get("updated_at"), delegation.get("created_at"))
+            if (parsed := _parse_aware_instant(value)) is not None
+        ),
+        None,
+    )
+    return {
+        "canonical_delegation_matched": True,
+        "canonical_delegation_id": recorded_ref,
+        "canonical_delegation_resolution_status": "matched_current_grant_reference_and_grantee",
+        "canonical_delegation_evidence_observed_at": observed_at,
+    }
+
+
 def _safe_observed_fact(
     row: dict[str, Any], resolution: dict[str, Any]
 ) -> Optional[dict[str, Any]]:
@@ -968,6 +1102,24 @@ def _internal_record(row: dict[str, Any]) -> dict[str, Any]:
     policy = policy if isinstance(policy, dict) else {}
     decision = policy.get("delegation_check")
     decision = decision if isinstance(decision, dict) else {}
+    recorded_delegation_id = _safe_text(row.get("delegation_id"))
+    canonical_delegation_id = _safe_text(row.get("canonical_delegation_id"))
+    policy_delegation_id = _safe_text(decision.get("delegation_id"))
+    delegation_matched = (
+        row.get("canonical_delegation_matched") is True
+        and row.get("canonical_delegation_resolution_status")
+        == "matched_current_grant_reference_and_grantee"
+        and recorded_delegation_id is not None
+        and recorded_delegation_id == policy_delegation_id == canonical_delegation_id
+        and isinstance(decision.get("allowed"), bool)
+    )
+    resolution_status = (
+        _safe_text(row.get("canonical_delegation_resolution_status")) or "unresolved"
+        if recorded_delegation_id
+        else "not_recorded"
+    )
+    if resolution_status == "matched_current_grant_reference_and_grantee" and not delegation_matched:
+        resolution_status = "unverified_join_metadata"
     return {
         "executionId": _safe_text(row.get("execution_id")),
         "agentId": (
@@ -977,8 +1129,13 @@ def _internal_record(row: dict[str, Any]) -> dict[str, Any]:
         ),
         "initiatingPrincipalUserId": _safe_text(row.get("initiating_principal_user_id")),
         "delegationId": (
-            _safe_text(row.get("canonical_delegation_id"))
-            if row.get("canonical_delegation_matched") is True
+            canonical_delegation_id
+            if delegation_matched
+            else None
+        ),
+        "delegationEvidenceObservedAt": (
+            _safe_text(row.get("canonical_delegation_evidence_observed_at"))
+            if delegation_matched
             else None
         ),
         "canonicalActorResolved": row.get("canonical_agent_identity") is True,
@@ -993,13 +1150,7 @@ def _internal_record(row: dict[str, Any]) -> dict[str, Any]:
             decision.get("allowed") if isinstance(decision.get("allowed"), bool) else None
         ),
         "delegationDecisionReason": _safe_text(decision.get("reason")),
-        "delegationResolutionStatus": (
-            "matched"
-            if row.get("canonical_delegation_matched") is True
-            else "unresolved"
-            if row.get("delegation_id")
-            else "not_recorded"
-        ),
+        "delegationResolutionStatus": resolution_status,
         "outcomeEventId": _safe_text(row.get("outcome_event_id")),
         "outcomeEventPublished": (
             row.get("outcome_event_published")
@@ -1009,6 +1160,51 @@ def _internal_record(row: dict[str, Any]) -> dict[str, Any]:
         "externalExecutionReceipt": "unknown",
         "businessOutcome": "unknown",
         "source": _INTERNAL_SOURCE,
+    }
+
+
+def _task_decomposition_record(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Validate a persisted task-decomposition observation, without metadata.
+
+    ``AgentLifecycleMapper`` writes these to the execution repository with an
+    exact ``execution_id:decomposition`` record ID. They are not lifecycle
+    rows and are meaningful here only after joining to that execution ID.
+    """
+    if row.get("event_type") != "task_decomposed":
+        return None
+    execution_id = _safe_text(row.get("execution_id"))
+    record_id = _safe_text(row.get("record_id"))
+    root_task_id = _safe_text(row.get("root_task_id"))
+    occurred_at = _safe_text(row.get("occurred_at"))
+    subtask_values = row.get("subtask_ids")
+    if (
+        not execution_id
+        or record_id != f"{execution_id}:decomposition"
+        or not root_task_id
+        or _parse_aware_instant(occurred_at) is None
+        or not isinstance(subtask_values, list)
+    ):
+        return None
+    subtask_ids = [
+        text
+        for value in subtask_values[:_MAX_ROWS]
+        if (text := _safe_text(value)) is not None
+    ]
+    if len(subtask_ids) != len(set(subtask_ids)):
+        return None
+    return {
+        "recordId": record_id,
+        "executionId": execution_id,
+        "agentId": (
+            _safe_text(row.get("canonical_agent_entity_id"))
+            if row.get("canonical_agent_identity") is True
+            else None
+        ),
+        "ownerEntityId": _safe_text(row.get("canonical_owner_entity_id")),
+        "rootTaskId": root_task_id,
+        "subtaskIds": subtask_ids,
+        "subtaskIdsTruncated": len(subtask_values) > _MAX_ROWS,
+        "occurredAt": occurred_at,
     }
 
 
@@ -1063,6 +1259,32 @@ def _lifecycle_evidence(row: dict[str, Any]) -> Optional[EvidenceRef]:
     )
 
 
+def _task_decomposition_evidence(row: dict[str, Any]) -> Optional[EvidenceRef]:
+    return _evidence_ref(
+        evidence_id=row.get("recordId"),
+        source=_INTERNAL_SOURCE,
+        observed_at=row.get("occurredAt"),
+        store=_INTERNAL_SOURCE,
+    )
+
+
+def _internal_delegation_evidence(row: dict[str, Any]) -> Optional[EvidenceRef]:
+    evidence_id = _safe_text(row.get("delegationId"))
+    if (
+        not evidence_id
+        or row.get("delegationResolutionStatus")
+        != "matched_current_grant_reference_and_grantee"
+    ):
+        return None
+    return EvidenceRef(
+        id=evidence_id,
+        type="relationship",
+        source="delegations",
+        observedAt=_safe_text(row.get("delegationEvidenceObservedAt")),
+        uri=f"store://delegations/{quote(evidence_id, safe='')}",
+    )
+
+
 def _fact_evidence(row: dict[str, Any]) -> Optional[EvidenceRef]:
     return _evidence_ref(
         evidence_id=row.get("sourceEventId"),
@@ -1112,10 +1334,53 @@ class Execution360Provider:
             server = await self._safe_read("server_executions", tenant_id, request.subject, limit)
             observed = await self._safe_read("observed_facts", tenant_id, request.subject, limit)
 
+        # A source adapter (or injected reader) cannot certify a complete
+        # tenant read while returning out-of-scope rows. Keep those rows out of
+        # the frame and downgrade coverage so a foreign-only batch never
+        # becomes an apparently complete empty result.
+        if any(
+            not isinstance(row, dict) or row.get("tenant_id") != tenant_id
+            for row in server.rows
+        ):
+            server = replace(
+                server,
+                scope_known=False,
+                reason="server_execution_scope_mismatch",
+            )
+        if any(
+            not isinstance(row, dict)
+            or _safe_text(row.get("tenantId")) != tenant_id
+            for row in observed.rows
+        ):
+            observed = replace(
+                observed,
+                scope_known=False,
+                reason="observed_execution_scope_mismatch",
+            )
+
+        malformed_task_decomposition = any(
+            isinstance(row, dict)
+            and row.get("tenant_id") == tenant_id
+            and row.get("event_type") == "task_decomposed"
+            and _task_decomposition_record(row) is None
+            for row in server.rows
+        )
+        plan_decompositions = [
+            item
+            for row in server.rows
+            if isinstance(row, dict)
+            and row.get("tenant_id") == tenant_id
+            and row.get("agent_id")
+            and (item := _task_decomposition_record(row)) is not None
+        ]
         internal = [
             _internal_record(row)
             for row in server.rows
-            if isinstance(row, dict) and row.get("tenant_id") == tenant_id and row.get("agent_id")
+            if isinstance(row, dict)
+            and row.get("tenant_id") == tenant_id
+            and row.get("agent_id")
+            and row.get("event_type") is None
+            and _safe_text(row.get("execution_id"))
         ]
         external = [
             item
@@ -1151,9 +1416,32 @@ class Execution360Provider:
         internal = [
             row
             for row in internal
-            if row.get("agentId") in allowed_agent_ids
-            and row.get("canonicalActorResolved") is True
+            if (
+                (
+                    row.get("executionId") == request.subject.id
+                    and request.subject.kind == "execution"
+                )
+                or (
+                    row.get("agentId") in allowed_agent_ids
+                    and row.get("canonicalActorResolved") is True
+                )
+            )
             and (request.subject.kind != "entity" or row.get("ownerEntityId") == request.subject.id)
+        ]
+        plan_decompositions = [
+            row
+            for row in plan_decompositions
+            if (
+                (
+                    row.get("executionId") == request.subject.id
+                    and request.subject.kind == "execution"
+                )
+                or row.get("agentId") in allowed_agent_ids
+            )
+            and (
+                request.subject.kind != "entity"
+                or row.get("ownerEntityId") == request.subject.id
+            )
         ]
         episode_event_binding_mismatch = False
         for row in internal:
@@ -1176,15 +1464,44 @@ class Execution360Provider:
             ]
             external = [item for item in external if item.get("sourceEventId") in episode_event_ids]
             episode_event_binding_mismatch = server_event_ids != observed_event_ids
+        elif request.subject.kind == "execution":
+            internal = [row for row in internal if row.get("executionId") == request.subject.id]
+            # No source telemetry is attached unless a canonical execution/run
+            # crosswalk is available; this provider deliberately leaves it out.
+            external = []
         else:
             internal = []
             external = []
+            plan_decompositions = []
+
+        # A task observation must join to a lifecycle row already admitted by
+        # this request's tenant, subject, episode, and time-window filters.
+        # The shared execution ID alone is insufficient to bypass those gates.
+        admitted_execution_ids = {
+            row["executionId"] for row in internal if row.get("executionId")
+        }
+        plan_decompositions = [
+            row
+            for row in plan_decompositions
+            if row.get("executionId") in admitted_execution_ids
+        ]
+        if request.timeRange is not None and not temporal_unavailable:
+            lower = _parse_aware_instant(request.timeRange.from_)
+            upper = _parse_aware_instant(request.timeRange.to)
+            plan_decompositions = [
+                row
+                for row in plan_decompositions
+                if (instant := _parse_aware_instant(row.get("occurredAt"))) is not None
+                and (lower is None or instant >= lower)
+                and (upper is None or instant <= upper)
+            ]
 
         if temporal_unavailable:
             # Do not expose current mutable lifecycle/source rows as an answer
             # to an unsupported historical or comparison request.
             internal = []
             external = []
+            plan_decompositions = []
 
         reasons: list[str] = []
         if not server.available:
@@ -1203,13 +1520,17 @@ class Execution360Provider:
             reasons.append("temporal_anchor_not_reconstructable_from_current_sources")
         if window_undated:
             reasons.append("execution_window_omitted_rows_without_event_time")
+        if malformed_task_decomposition:
+            reasons.append("task_decomposition_record_invalid")
+        if any(row["subtaskIdsTruncated"] for row in plan_decompositions):
+            reasons.append("task_decomposition_subtask_list_truncated")
         if request.subject.kind == "episode" and episode_event_binding_mismatch:
             reasons.append("episode_execution_event_binding_conflict")
 
         state = _section_state(server, observed, internal, external, temporal_unavailable)
-        evidence = self._all_evidence(internal, external)
+        evidence = self._all_evidence(internal, external, plan_decompositions)
         claims = (
-            self._claims(request.subject, internal, external)
+            self._claims(request.subject, internal, external, plan_decompositions)
             if request.includeClaims is not False
             else []
         )
@@ -1217,6 +1538,7 @@ class Execution360Provider:
             request.subject,
             internal,
             external,
+            plan_decompositions,
             state,
             evidence,
             server,
@@ -1263,14 +1585,18 @@ class Execution360Provider:
 
     @staticmethod
     def _all_evidence(
-        internal: list[dict[str, Any]], external: list[dict[str, Any]]
+        internal: list[dict[str, Any]],
+        external: list[dict[str, Any]],
+        plan_decompositions: list[dict[str, Any]],
     ) -> list[EvidenceRef]:
         refs: list[EvidenceRef] = []
         seen: set[tuple[str, str]] = set()
         for builder, rows in (
             (_lifecycle_evidence, internal),
+            (_internal_delegation_evidence, internal),
             (_fact_evidence, external),
             (_delegation_evidence, external),
+            (_task_decomposition_evidence, plan_decompositions),
         ):
             for row in rows:
                 ref = builder(row)
@@ -1285,6 +1611,7 @@ class Execution360Provider:
         subject: ProjectionSubject,
         internal: list[dict[str, Any]],
         external: list[dict[str, Any]],
+        plan_decompositions: list[dict[str, Any]],
     ) -> list[ClaimEnvelope]:
         claims: list[ClaimEnvelope] = []
         for row in internal:
@@ -1301,9 +1628,28 @@ class Execution360Provider:
                         f"AETHER recorded agent execution lifecycle status '{row['status']}' for execution {row['executionId']}; this lifecycle record does not establish an external action effect."
                     ],
                     claimState=EpistemicStatus.OBSERVED,
-                    domainSlotIds=[SLOT_EXECUTION_STATE, SLOT_EVIDENCE],
+                    domainSlotIds=[
+                        SLOT_EXECUTION_STATE,
+                        SLOT_AGENT_EXECUTION_HISTORY,
+                        SLOT_EVIDENCE,
+                    ],
                 )
             )
+            elapsed_ms = _lifecycle_elapsed_ms(row)
+            if elapsed_ms is not None:
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"execution360:lifecycle-duration:{row['executionId']}",
+                        kind="server_recorded_lifecycle_elapsed_time",
+                        subject=subject,
+                        evidenceRefs=[evidence],
+                        claims=[
+                            f"AETHER's recorded lifecycle timestamps for execution {row['executionId']} span {elapsed_ms:g} milliseconds; this is server-recorded lifecycle elapsed time, not a provider or tool latency measurement."
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=[SLOT_LATENCY_COST, SLOT_EVIDENCE],
+                    )
+                )
             principal_user_id = row.get("initiatingPrincipalUserId")
             if isinstance(principal_user_id, str) and principal_user_id:
                 claims.append(
@@ -1316,7 +1662,7 @@ class Execution360Provider:
                             f"AETHER recorded authenticated tenant user {principal_user_id} as the initiating principal for execution {row['executionId']}; this does not make that principal the acting agent or establish a canonical human entity link."
                         ],
                         claimState=EpistemicStatus.OBSERVED,
-                        domainSlotIds=[SLOT_ACTOR_DELEGATION, SLOT_EVIDENCE],
+                        domainSlotIds=[SLOT_ACTOR_ATTRIBUTION, SLOT_EVIDENCE],
                     )
                 )
             if row.get("canonicalActorResolved") is True and row.get("agentId"):
@@ -1330,7 +1676,7 @@ class Execution360Provider:
                             f"AETHER's tenant-scoped agent configuration binds execution {row['executionId']} to canonical agent {row['agentId']}."
                         ],
                         claimState=EpistemicStatus.RESOLVED,
-                        domainSlotIds=[SLOT_ACTOR_DELEGATION],
+                        domainSlotIds=[SLOT_ACTOR_ATTRIBUTION],
                     )
                 )
             if isinstance(row.get("recordedDelegationDecision"), bool):
@@ -1347,7 +1693,71 @@ class Execution360Provider:
                             f"AETHER recorded a {decision} delegation-engine decision for {action} on {resource} in execution {row['executionId']}; the decision is action-scoped at request time and does not establish standing authority or prove execution."
                         ],
                         claimState=EpistemicStatus.OBSERVED,
-                        domainSlotIds=[SLOT_ACTOR_DELEGATION, SLOT_EVIDENCE],
+                        domainSlotIds=[
+                            SLOT_AUTHORITY_CHECK,
+                            SLOT_AGENT_AUTHORITY_ENVELOPE,
+                            SLOT_EVIDENCE,
+                        ],
+                    )
+                )
+            grant_evidence = _internal_delegation_evidence(row)
+            if grant_evidence is not None and isinstance(row.get("recordedDelegationDecision"), bool):
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"execution360:server-delegation-reference:{row['executionId']}",
+                        kind="canonically_joined_server_delegation_reference",
+                        subject=subject,
+                        evidenceRefs=[evidence, grant_evidence],
+                        claims=[
+                            f"The recorded delegation decision for execution {row['executionId']} references tenant grant {row['delegationId']}, whose current record names canonical agent {row['agentId']} as grantee; the current grant record does not establish its historical validity, scope, or standing authority at execution time."
+                        ],
+                        claimState=EpistemicStatus.RESOLVED,
+                        domainSlotIds=[SLOT_AUTHORITY_CHECK, SLOT_EVIDENCE],
+                    )
+                )
+            if any(
+                row.get(field)
+                for field in ("requestedAction", "requestedResource", "triggeredByEventId")
+            ):
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"execution360:request-metadata:{row['executionId']}",
+                        kind="server_recorded_execution_request_metadata",
+                        subject=subject,
+                        evidenceRefs=[evidence],
+                        claims=[
+                            f"AETHER recorded bounded request metadata for execution {row['executionId']}; the input payload is withheld and the record does not prove an external effect."
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=[SLOT_INPUTS_OUTPUTS, SLOT_EVIDENCE],
+                    )
+                )
+            if row.get("outcomeEventId"):
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"execution360:result-reference:{row['executionId']}",
+                        kind="server_recorded_result_event_reference",
+                        subject=subject,
+                        evidenceRefs=[evidence],
+                        claims=[
+                            f"AETHER recorded an outcome event reference for execution {row['executionId']}; the referenced event and an external action receipt are not joined here."
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=[SLOT_INPUTS_OUTPUTS, SLOT_EVIDENCE],
+                    )
+                )
+            if row.get("status") in _SERVER_FAILURE_STATUSES:
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"execution360:server-failure:{row['executionId']}",
+                        kind="server_recorded_execution_failure",
+                        subject=subject,
+                        evidenceRefs=[evidence],
+                        claims=[
+                            f"AETHER recorded lifecycle status {row['status']} for execution {row['executionId']}; error details and external effects are not inferred."
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=[SLOT_FAILURES, SLOT_EVIDENCE],
                     )
                 )
         for row in external:
@@ -1357,16 +1767,44 @@ class Execution360Provider:
             claims.append(
                 ClaimEnvelope(
                     id=f"execution360:observed:{row['sourceEventId']}",
-                    kind="source_reported_agent_execution_fact",
+                    kind="source_reported_agent_telemetry_fact",
                     subject=subject,
                     evidenceRefs=[evidence],
                     claims=[
-                        f"A tenant source reported execution activity in event {row['sourceEventId']}; the event is telemetry and is not a server-authoritative external execution receipt."
+                        f"A tenant source reported agent-related telemetry in event {row['sourceEventId']}; it has no exact join to an AETHER execution ID or independent external execution receipt."
                     ],
                     claimState=EpistemicStatus.OBSERVED,
-                    domainSlotIds=[SLOT_ACTION_TRACE, SLOT_EVIDENCE],
+                    domainSlotIds=[SLOT_EVIDENCE],
                 )
             )
+            if row.get("toolName"):
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"execution360:tool-observation:{row['sourceEventId']}",
+                        kind="source_reported_tool_invocation",
+                        subject=subject,
+                        evidenceRefs=[evidence],
+                        claims=[
+                            f"A tenant source reported a tool-related event {row['sourceEventId']}; it has no exact canonical join to an AETHER execution ID or independent tool receipt."
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=[SLOT_AGENT_TOOL_USAGE, SLOT_EVIDENCE],
+                    )
+                )
+            if row.get("reportedStatus") in _SOURCE_REPORTED_FAILURE_STATUSES:
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"execution360:reported-failure:{row['sourceEventId']}",
+                        kind="source_reported_agent_failure_telemetry",
+                        subject=subject,
+                        evidenceRefs=[evidence],
+                        claims=[
+                            f"A tenant source reported status {row['reportedStatus']} in event {row['sourceEventId']}; without an exact execution ID this telemetry is not assigned to an AETHER execution failure."
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=[SLOT_EVIDENCE],
+                    )
+                )
             if row.get("actorAgentId") and row.get("actorIdentityStatus") == "matched":
                 claims.append(
                     ClaimEnvelope(
@@ -1378,7 +1816,7 @@ class Execution360Provider:
                             f"The reported actor for event {row['sourceEventId']} resolves through tenant deployment identity bindings to canonical agent {row['actorAgentId']}."
                         ],
                         claimState=EpistemicStatus.RESOLVED,
-                        domainSlotIds=[SLOT_ACTOR_DELEGATION],
+                        domainSlotIds=[SLOT_ACTOR_ATTRIBUTION],
                     )
                 )
             delegation_evidence = _delegation_evidence(row)
@@ -1400,7 +1838,7 @@ class Execution360Provider:
                             f"The tenant-scoped canonical delegation record {row['delegationId']} identifies delegator {row['delegatorAgentId']} and delegatee {row['delegateeAgentId']} after both source identities resolved through explicit tenant bindings."
                         ],
                         claimState=EpistemicStatus.RESOLVED,
-                        domainSlotIds=[SLOT_ACTOR_DELEGATION, SLOT_EVIDENCE],
+                        domainSlotIds=[SLOT_ACTOR_ATTRIBUTION, SLOT_EVIDENCE],
                     )
                 )
             if (
@@ -1417,9 +1855,33 @@ class Execution360Provider:
                             f"The telemetry delegation reference for event {row['sourceEventId']} matched a tenant delegation record; authorization and external execution remain separately classified."
                         ],
                         claimState=EpistemicStatus.RESOLVED,
-                        domainSlotIds=[SLOT_ACTOR_DELEGATION],
+                        domainSlotIds=[SLOT_ACTOR_ATTRIBUTION],
                     )
                 )
+        lifecycle_evidence_by_id = {
+            row["executionId"]: ref
+            for row in internal
+            if row.get("executionId")
+            and (ref := _lifecycle_evidence(row)) is not None
+        }
+        for row in plan_decompositions:
+            task_evidence = _task_decomposition_evidence(row)
+            lifecycle_evidence = lifecycle_evidence_by_id.get(row["executionId"])
+            if task_evidence is None or lifecycle_evidence is None:
+                continue
+            claims.append(
+                ClaimEnvelope(
+                    id=f"execution360:task-decomposition:{row['recordId']}",
+                    kind="observed_execution_task_decomposition",
+                    subject=subject,
+                    evidenceRefs=[task_evidence, lifecycle_evidence],
+                    claims=[
+                        f"AETHER recorded a task-decomposition observation linked to execution {row['executionId']}; it identifies task references but does not establish step order, completion, or external effects."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=[SLOT_TEMPORAL_EPISODE, SLOT_EVIDENCE],
+                )
+            )
         return claims
 
     @staticmethod
@@ -1427,6 +1889,7 @@ class Execution360Provider:
         subject: ProjectionSubject,
         internal: list[dict[str, Any]],
         external: list[dict[str, Any]],
+        plan_decompositions: list[dict[str, Any]],
         state: str,
         evidence: list[EvidenceRef],
         server: ExecutionRead,
@@ -1467,6 +1930,19 @@ class Execution360Provider:
                 "externalExecutionReceipt": "not_provided",
             }
             for row in external
+        ] + [
+            {
+                "occurredAt": row.get("occurredAt"),
+                "source": _INTERNAL_SOURCE,
+                "recordId": row.get("recordId"),
+                "executionId": row.get("executionId"),
+                "eventName": "task_decomposed",
+                "rootTaskId": row.get("rootTaskId"),
+                "subtaskIds": row.get("subtaskIds"),
+                "occurrenceBoundary": "persisted_task_decomposition_observation",
+                "externalExecutionReceipt": "unknown",
+            }
+            for row in plan_decompositions
         ]
         timeline.sort(key=lambda item: str(item.get("occurredAt") or ""))
         interactions = [
@@ -1574,12 +2050,46 @@ class Execution360Provider:
             "state": "unknown",
             "reason": "tool_observations_do_not_carry_a_canonical_agent_execution_id",
             "sourceReadState": _read_state(observed),
-            "sourceReportedToolRelatedFactCount": len(tool_related_facts),
+            "sourceReportedToolRelatedFactCount": (
+                len(tool_related_facts)
+                if observed.available and observed.scope_known and not observed.truncated
+                else None
+            ),
+            "joinedExecutionToolCalls": [],
             "evidenceRefs": [
                 ref.model_dump(mode="json", by_alias=True, exclude_none=True)
                 for ref in tool_fact_evidence
             ],
         }
+        risk_event_linkage = {
+            "state": "unknown",
+            "reason": "agent_risk_records_do_not_carry_a_canonical_agent_execution_id",
+            "joinedExecutionRiskEvents": [],
+            "evidenceRefs": [],
+        }
+        latency_cost = _latency_cost_summary(
+            internal,
+            server,
+            temporal_unavailable=temporal_unavailable,
+        )
+        inputs_outputs = _inputs_outputs_summary(
+            internal,
+            server,
+            temporal_unavailable=temporal_unavailable,
+        )
+        failures = _failure_summary(
+            internal,
+            external,
+            server,
+            observed,
+            temporal_unavailable=temporal_unavailable,
+        )
+        plan_steps = _plan_steps_summary(
+            plan_decompositions,
+            internal,
+            server,
+            temporal_unavailable=temporal_unavailable,
+        )
         episode_context_content = {
             "state": episode_context.state,
             "episodes": list(episode_context.items),
@@ -1625,6 +2135,7 @@ class Execution360Provider:
                     "interactions": interactions,
                     "workerRunLinkage": worker_linkage,
                     "toolInvocationLinkage": tool_invocation_linkage,
+                    "riskEventLinkage": risk_event_linkage,
                 },
             ),
             ProjectionSection(
@@ -1667,6 +2178,9 @@ class Execution360Provider:
                         }
                         for row in external
                     ],
+                    "inputsOutputs": inputs_outputs,
+                    "failures": failures,
+                    "planSteps": plan_steps,
                     "workerRunLinkage": worker_linkage,
                 },
             ),
@@ -1680,6 +2194,11 @@ class Execution360Provider:
                     "serverRecordedExecutionCount": len(internal),
                     "sourceReportedFactCount": len(external),
                     "serverLifecycleStatusCounts": counts,
+                    "latencyCost": latency_cost,
+                    "failureState": failures["state"],
+                    "failureCount": failures["count"],
+                    "planStepState": plan_steps["state"],
+                    "observedTaskDecompositionCount": plan_steps["observedCount"],
                     "freshness": {
                         "state": "unknown",
                         "reason": "no_execution360_max_age_threshold_is_configured",
@@ -1718,6 +2237,321 @@ def _read_state(read: ExecutionRead) -> str:
     if read.truncated:
         return "degraded"
     return "available"
+
+
+def _lifecycle_elapsed_ms(row: dict[str, Any]) -> Optional[float]:
+    """Return duration from two valid, timezone-aware server lifecycle times."""
+    started_at = _parse_aware_instant(row.get("startedAt"))
+    ended_at = _parse_aware_instant(row.get("endedAt"))
+    if started_at is None or ended_at is None or ended_at < started_at:
+        return None
+    return round((ended_at - started_at).total_seconds() * 1000, 3)
+
+
+def _plan_steps_summary(
+    plan_decompositions: list[dict[str, Any]],
+    internal: list[dict[str, Any]],
+    server: ExecutionRead,
+    *,
+    temporal_unavailable: bool,
+) -> dict[str, Any]:
+    """Expose exact execution-linked task structure as partial plan evidence."""
+    lifecycle_evidence_by_id = {
+        row["executionId"]: ref
+        for row in internal
+        if row.get("executionId")
+        and (ref := _lifecycle_evidence(row)) is not None
+    }
+    records: list[dict[str, Any]] = []
+    for row in plan_decompositions:
+        task_evidence = _task_decomposition_evidence(row)
+        lifecycle_evidence = lifecycle_evidence_by_id.get(row["executionId"])
+        if task_evidence is None or lifecycle_evidence is None:
+            continue
+        records.append(
+            {
+                "executionId": row["executionId"],
+                "recordId": row["recordId"],
+                "rootTaskId": row["rootTaskId"],
+                "subtaskIds": row["subtaskIds"],
+                "subtaskIdsTruncated": row["subtaskIdsTruncated"],
+                "observedAt": row["occurredAt"],
+                "recordMeaning": "persisted_task_decomposition_observation",
+                "stepOrderKnown": False,
+                "completionKnown": False,
+                "evidenceRefs": [
+                    ref.model_dump(mode="json", by_alias=True, exclude_none=True)
+                    for ref in (task_evidence, lifecycle_evidence)
+                ],
+            }
+        )
+    if temporal_unavailable:
+        state = "unknown"
+        reason = "temporal_anchor_not_reconstructable_from_current_sources"
+    elif records:
+        state = "degraded"
+        reason = "task_decomposition_refs_do_not_establish_full_plan_or_step_order"
+    else:
+        state = "unknown"
+        reason = (
+            "no_exact_execution_linked_task_decomposition_observed"
+            if server.available and server.scope_known and not server.truncated
+            else server.reason or "execution_task_decomposition_source_coverage_incomplete"
+        )
+    return {
+        "state": state,
+        "readAuthority": _INTERNAL_SOURCE,
+        "records": records if not temporal_unavailable else [],
+        "observedCount": len(records) if not temporal_unavailable else None,
+        "fullPlanKnown": False,
+        "reason": reason,
+    }
+
+
+def _inputs_outputs_summary(
+    internal: list[dict[str, Any]],
+    server: ExecutionRead,
+    *,
+    temporal_unavailable: bool,
+) -> dict[str, Any]:
+    """Project request metadata and result references without raw bodies.
+
+    The execution repository stores arbitrary input, output, and error JSON.
+    Only its allowlisted request fields and outcome event *reference* may leave
+    this provider. A recorded event ID is not proof that an output was emitted
+    or that an external action succeeded.
+    """
+    records: list[dict[str, Any]] = []
+    for row in internal:
+        evidence = _lifecycle_evidence(row)
+        if evidence is None:
+            continue
+        requested = {
+            "action": row.get("requestedAction"),
+            "resourceRef": row.get("requestedResource"),
+            "triggerEventRef": row.get("triggeredByEventId"),
+        }
+        if not any(requested.values()) and not row.get("outcomeEventId"):
+            continue
+        records.append(
+            {
+                "executionId": row.get("executionId"),
+                "request": {
+                    "state": "available" if any(requested.values()) else "unknown",
+                    **requested,
+                    "payloadRead": False,
+                },
+                "result": {
+                    "state": "unknown",
+                    "lifecycleStatus": row.get("status"),
+                    "outcomeEventRef": row.get("outcomeEventId"),
+                    "eventPublicationState": (
+                        "published"
+                        if row.get("outcomeEventPublished") is True
+                        else "not_published"
+                        if row.get("outcomeEventPublished") is False
+                        else "unknown"
+                    ),
+                    "outputBodyRead": False,
+                    "externalEffect": "not_established",
+                },
+                "evidenceRefs": [
+                    evidence.model_dump(mode="json", by_alias=True, exclude_none=True)
+                ],
+            }
+        )
+
+    if temporal_unavailable:
+        state = "unknown"
+        reason = "temporal_anchor_not_reconstructable_from_current_sources"
+    elif records:
+        state = "degraded" if not server.available or not server.scope_known or server.truncated else "available"
+        reason = "server_execution_source_coverage_incomplete" if state == "degraded" else None
+    elif server.available and server.scope_known and not server.truncated:
+        state = "empty"
+        reason = None
+    else:
+        state = "unknown"
+        reason = server.reason or "server_execution_subject_binding_incomplete"
+    return {
+        "state": state,
+        "readAuthority": _INTERNAL_SOURCE,
+        "records": records if not temporal_unavailable else [],
+        "count": len(records) if state in {"available", "empty"} else None,
+        "reason": reason,
+    }
+
+
+def _failure_summary(
+    internal: list[dict[str, Any]],
+    external: list[dict[str, Any]],
+    server: ExecutionRead,
+    observed: ExecutionRead,
+    *,
+    temporal_unavailable: bool,
+) -> dict[str, Any]:
+    """Keep exact lifecycle failures separate from unlinked source telemetry."""
+    records: list[dict[str, Any]] = []
+    for row in internal:
+        if row.get("status") not in _SERVER_FAILURE_STATUSES:
+            continue
+        evidence = _lifecycle_evidence(row)
+        if evidence is None:
+            continue
+        records.append(
+            {
+                "source": _INTERNAL_SOURCE,
+                "executionId": row.get("executionId"),
+                "recordedStatus": row.get("status"),
+                "classification": "server_recorded_lifecycle_failure",
+                "externalEffect": "unknown",
+                "occurredAt": row.get("endedAt") or row.get("startedAt"),
+                "evidenceRefs": [
+                    evidence.model_dump(mode="json", by_alias=True, exclude_none=True)
+                ],
+            }
+        )
+    unlinked_source_reported: list[dict[str, Any]] = []
+    for row in external:
+        if row.get("reportedStatus") not in _SOURCE_REPORTED_FAILURE_STATUSES:
+            continue
+        evidence = _fact_evidence(row)
+        if evidence is None:
+            continue
+        unlinked_source_reported.append(
+            {
+                "source": _SILVER_SOURCE,
+                "sourceEventId": row.get("sourceEventId"),
+                "reportedStatus": row.get("reportedStatus"),
+                "classification": "source_reported_unlinked_failure_telemetry",
+                "externalEffect": "unknown",
+                "occurredAt": row.get("occurredAt"),
+                "evidenceRefs": [
+                    evidence.model_dump(mode="json", by_alias=True, exclude_none=True)
+                ],
+            }
+        )
+
+    complete = server.available and server.scope_known and not server.truncated
+    source_coverage_complete = observed.available and observed.scope_known and not observed.truncated
+    if temporal_unavailable:
+        state = "unknown"
+        reason = "temporal_anchor_not_reconstructable_from_current_sources"
+    elif records:
+        state = "available" if complete else "degraded"
+        reason = None if complete else "server_execution_failure_coverage_incomplete"
+    elif complete:
+        state = "empty"
+        reason = (
+            "source_reported_failure_unlinked_to_execution"
+            if unlinked_source_reported
+            else None
+        )
+    else:
+        state = "unknown"
+        reason = "server_execution_failure_coverage_incomplete"
+    return {
+        "state": state,
+        "readAuthorities": [_INTERNAL_SOURCE],
+        "contextAuthority": _SILVER_SOURCE,
+        "records": records if not temporal_unavailable else [],
+        "unlinkedSourceReportedFailures": (
+            unlinked_source_reported if not temporal_unavailable else []
+        ),
+        "count": len(records) if state in {"available", "empty"} else None,
+        "unlinkedSourceReportedCount": (
+            len(unlinked_source_reported)
+            if source_coverage_complete and not temporal_unavailable
+            else None
+        ),
+        "reason": reason,
+    }
+
+
+def _latency_cost_summary(
+    internal: list[dict[str, Any]],
+    server: ExecutionRead,
+    *,
+    temporal_unavailable: bool,
+) -> dict[str, Any]:
+    """Expose measured lifecycle elapsed time and leave unsupported cost unknown."""
+    samples: list[dict[str, Any]] = []
+    incomplete_count = 0
+    for row in internal:
+        elapsed_ms = _lifecycle_elapsed_ms(row)
+        evidence = _lifecycle_evidence(row)
+        if elapsed_ms is None or evidence is None:
+            incomplete_count += 1
+            continue
+        samples.append(
+            {
+                "executionId": row.get("executionId"),
+                "startedAt": row.get("startedAt"),
+                "endedAt": row.get("endedAt"),
+                "elapsedMs": elapsed_ms,
+                "measurement": "server_recorded_lifecycle_elapsed_time",
+                "evidenceRefs": [
+                    evidence.model_dump(mode="json", by_alias=True, exclude_none=True)
+                ],
+            }
+        )
+
+    if temporal_unavailable:
+        latency_state = "unknown"
+        reason = "temporal_anchor_not_reconstructable_from_current_sources"
+        samples = []
+    elif samples:
+        latency_state = (
+            "degraded"
+            if incomplete_count
+            or not server.available
+            or server.truncated
+            or not server.scope_known
+            else "available"
+        )
+        reason = (
+            "some_server_lifecycle_records_lack_valid_start_or_end_timestamps"
+            if incomplete_count
+            else "execution_source_coverage_incomplete"
+            if not server.available or server.truncated or not server.scope_known
+            else None
+        )
+    elif not internal and server.available and server.scope_known and not server.truncated:
+        latency_state = "unknown"
+        reason = "no_server_lifecycle_records_with_measurable_duration"
+    elif not internal and server.available and not server.scope_known:
+        latency_state = "unknown"
+        reason = server.reason or "execution_subject_binding_incomplete"
+    elif internal:
+        latency_state = "degraded"
+        reason = "some_server_lifecycle_records_lack_valid_start_or_end_timestamps"
+    else:
+        latency_state = "degraded"
+        reason = server.reason or "server_lifecycle_duration_read_incomplete"
+
+    durations = [item["elapsedMs"] for item in samples]
+    latency: dict[str, Any] = {
+        "state": latency_state,
+        "measurement": "server_recorded_lifecycle_elapsed_time",
+        "sampleCount": len(samples) if samples else None,
+        "samples": samples,
+        "reason": reason,
+    }
+    if durations:
+        latency.update(
+            {
+                "minimumMs": min(durations),
+                "averageMs": round(sum(durations) / len(durations), 3),
+                "maximumMs": max(durations),
+            }
+        )
+    return {
+        "latency": latency,
+        "cost": {
+            "state": "unknown",
+            "reason": "no_execution_cost_authority_is_joined_by_execution360",
+        },
+    }
 
 
 def _content_state(
