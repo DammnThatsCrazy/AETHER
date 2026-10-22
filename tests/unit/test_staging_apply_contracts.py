@@ -213,6 +213,40 @@ def test_staging_plan_trust_is_limited_to_reviewed_github_subjects() -> None:
     }
 
 
+def test_staging_delivery_trust_admits_the_staging_branch_build() -> None:
+    """The delivery build job presents ``ref:refs/heads/staging`` (it has no environment).
+
+    AetherStagingDeploy is managed outside Terraform; this manifest is the reviewed
+    copy of its trust policy. Dropping the branch subject makes every staging push
+    fail at "Configure AWS credentials" with AssumeRoleWithWebIdentity denied.
+    """
+    trust = json.loads(
+        (ROOT / "config/staging_application_delivery_trust_policy.json").read_text(encoding="utf-8")
+    )
+    assert len(trust["Statement"]) == 1
+    statement = trust["Statement"][0]
+    assert statement["Effect"] == "Allow"
+    assert statement["Action"] == "sts:AssumeRoleWithWebIdentity"
+    assert statement["Condition"]["StringEquals"] == {
+        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+    }
+    subjects = set(statement["Condition"]["StringLike"]["token.actions.githubusercontent.com:sub"])
+    assert subjects == {
+        "repo:DammnThatsCrazy/AETHER:ref:refs/heads/main",
+        "repo:DammnThatsCrazy/AETHER:ref:refs/heads/staging",
+        "repo:DammnThatsCrazy/AETHER:environment:staging",
+        "repo:DammnThatsCrazy/AETHER:environment:staging-terraform",
+    }
+    # Same subjects as the plan role, so one delivery run can use both.
+    plan = json.loads((ROOT / "config/staging_plan_trust_policy.json").read_text(encoding="utf-8"))
+    plan_subjects = set(
+        plan["Statement"][0]["Condition"]["StringLike"]["token.actions.githubusercontent.com:sub"]
+    )
+    assert subjects == plan_subjects
+    # No wildcard subject and no pull-request subject may ever assume the deploy role.
+    assert not any("*" in sub or sub.endswith(":pull_request") for sub in subjects)
+
+
 def test_staging_apply_rejects_free_plan_before_any_mutation() -> None:
     """The Free account Aurora restriction must fail before IAM or Terraform writes."""
     text = PROMOTE.read_text(encoding="utf-8")
