@@ -32,6 +32,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timezone
+from shared.temporal.instant import coerce_utc_lenient
 from decimal import Decimal
 from typing import Any, Optional, Protocol
 from urllib.parse import quote
@@ -593,16 +594,9 @@ def _inventory_bound(value: Any) -> tuple[Optional[datetime], bool]:
 
 def _inventory_occurred_at(row: dict[str, Any]) -> Optional[datetime]:
     raw = row.get("occurred_at")
-    if isinstance(raw, datetime):
-        return (raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)).astimezone(timezone.utc)
-    if isinstance(raw, str):
-        try:
-            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        except ValueError:
-            return None
-        return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).astimezone(
-            timezone.utc
-        )
+    if isinstance(raw, (datetime, str)):
+        parsed = coerce_utc_lenient(raw)
+        return parsed.astimezone(timezone.utc) if parsed else None
     return None
 
 
@@ -1517,11 +1511,8 @@ def _timestamp_range(
         raw = record.get(source_field)
         if not isinstance(raw, str) or not raw:
             continue
-        try:
-            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-        except ValueError:
+        parsed = coerce_utc_lenient(raw)
+        if parsed is None:
             continue
         observed.append((parsed.astimezone(timezone.utc), raw))
     observed.sort(key=lambda item: item[0])

@@ -59,6 +59,9 @@ class FakeGraph:
         self.queries.append(gremlin)
         if self.fail_drop and "drop()" in gremlin:
             raise RuntimeError("neptune drop timeout")
+        if gremlin.endswith(".count()"):
+            # Post-rollback read-back: a failed drop leaves the artifact present.
+            return [1 if self.fail_drop else 0]
         return []
 
 

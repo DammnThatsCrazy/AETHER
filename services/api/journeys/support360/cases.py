@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from graph.operational_intelligence.models import EvidenceRef
 from repositories.repos import get_pool
+from shared.temporal.instant import coerce_utc_lenient
 
 _LOCAL_ENVIRONMENTS = frozenset({"local", "dev", "test"})
 _MAX_EVENTS = 100
@@ -107,9 +108,7 @@ def _now() -> datetime:
 
 def _iso(value: Any) -> Optional[str]:
     if isinstance(value, datetime):
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc).isoformat()
+        return coerce_utc_lenient(value).astimezone(timezone.utc).isoformat()
     if isinstance(value, str):
         try:
             parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -783,9 +782,7 @@ def _safe_text(value: Any) -> Optional[str]:
 
 def _as_datetime(value: Any) -> Optional[datetime]:
     if isinstance(value, datetime):
-        if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc)
+        return coerce_utc_lenient(value).astimezone(timezone.utc)
     normalized = _iso(value)
     if normalized is None:
         return None
@@ -796,12 +793,7 @@ def _row_dict(row: Any) -> dict[str, Any]:
     result = dict(row)
     for key, value in result.items():
         if isinstance(value, datetime):
-            normalized = (
-                value.replace(tzinfo=timezone.utc)
-                if value.tzinfo is None or value.utcoffset() is None
-                else value.astimezone(timezone.utc)
-            )
-            result[key] = normalized.isoformat()
+            result[key] = coerce_utc_lenient(value).astimezone(timezone.utc).isoformat()
         elif key == "evidence_refs" and isinstance(value, str):
             try:
                 result[key] = json.loads(value)
