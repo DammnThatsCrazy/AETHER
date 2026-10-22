@@ -1001,6 +1001,9 @@ def create_app() -> FastAPI:
     app.include_router(events_router)
     app.include_router(user_agents_router)  # Profile 360: user/org-owned agents (always-on)
     app.include_router(sdk_router)          # SDK utilities: cross-device identity resolution
+    if settings.identity_continuity.journey_handoff_enabled:
+        from journeys.handoff.routes import router as journey_handoff_router
+        app.include_router(journey_handoff_router)  # SDK + tenant: /sdk/journey-handoff
     app.include_router(sdk_lifecycle_router)  # SDK lifecycle: heartbeat/identify/alias/reset/consent (SourceIdentityRegistry wired)
     # /v1/journeys is owned solely by the persisted measurement journey
     # authority (measurement_journeys_router, mounted below). The in-memory
