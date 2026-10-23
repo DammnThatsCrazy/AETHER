@@ -11,23 +11,38 @@ import {
   parseCampaignOverview,
   parseValueEvents,
   str,
-  windowRange,
   type CampaignValue,
   type Row,
   type ValueEvent,
+  type ValueWindow,
 } from './value-model';
 
 const STALE = 60_000;
 
-/** Upper bound the value-created read returns when no period is passed (backend `limit=100`). */
-export const VALUE_EVENT_READ_LIMIT = 100;
 const CAMPAIGN_LIMIT = 12;
 
-export function useValueEvents(tenant: string) {
-  return useQuery<ValueEvent[]>({
-    key: `value:${tenant}:value-created`,
-    fetcher: async () => parseValueEvents(await api.billing.valueCreated()),
+export interface ValueEventsRead {
+  readonly events: ValueEvent[];
+  /** The backend reports the period read hit its server cap, so the events are not the whole period. */
+  readonly truncated: boolean;
+}
+
+/**
+ * Value-created events for one window. `start`/`end` scope the read on the
+ * backend (GET /v1/billing/value-created), which reports `truncated` when its
+ * bounded read may have missed events in the period.
+ */
+export function useValueEvents(tenant: string, window: ValueWindow, enabled = true) {
+  const start = window.start.toISOString();
+  const end = window.end.toISOString();
+  return useQuery<ValueEventsRead>({
+    key: `value:${tenant}:value-created:${start}:${end}`,
+    fetcher: async () => {
+      const payload = await api.billing.valueCreated({ start, end });
+      return { events: parseValueEvents(payload), truncated: asRecord(payload)['truncated'] === true };
+    },
     staleTime: STALE,
+    enabled,
   });
 }
 
@@ -48,17 +63,17 @@ export interface CampaignValueRead {
 }
 
 /**
- * Imported campaigns plus each one's reconciled overview for the selected
+ * Imported campaigns plus each one's reconciled overview for the page
  * window. `time_start`/`time_end` scope spend and the observed population on
  * the backend; a campaign whose overview read fails keeps `overview: null`.
  */
-export function useCampaignValues(tenant: string, days: number, enabled = true) {
+export function useCampaignValues(tenant: string, window: ValueWindow, enabled = true) {
+  const range = { time_start: window.start.toISOString(), time_end: window.end.toISOString() };
   return useQuery<CampaignValueRead>({
-    key: `value:${tenant}:campaigns:${days}d`,
+    key: `value:${tenant}:campaigns:${range.time_start}:${range.time_end}`,
     fetcher: async () => {
       const list = await api.campaigns.list({ limit: CAMPAIGN_LIMIT });
       const rows = asList(list.campaigns);
-      const range = windowRange(days);
       const settled = await Promise.allSettled(
         rows.map(row => {
           const id = str(row['id'] ?? row['campaign_id']);

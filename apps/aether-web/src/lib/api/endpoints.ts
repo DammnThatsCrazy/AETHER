@@ -2027,8 +2027,9 @@ export const api = {
     invoicePreviews: () =>
       restClient.get('/v1/billing/invoice-previews', wrap(unknownSchema)).then(r => r.data),
 
-    valueCreated: () =>
-      restClient.get('/v1/billing/value-created', wrap(unknownSchema)).then(r => r.data),
+    /** `start`/`end` (ISO) scope the read to a period; the response then reports `truncated`. */
+    valueCreated: (params?: { start?: string; end?: string }) =>
+      restClient.get(`/v1/billing/value-created${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
 
 
   },

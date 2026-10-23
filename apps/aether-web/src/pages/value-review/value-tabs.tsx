@@ -9,20 +9,22 @@ import {
   SectionEmpty,
   SectionLoading,
   SectionUnavailable,
+  HeadlineTile,
   StackBar,
   ValueCard,
   seriesColor,
 } from './value-charts';
-import { VALUE_EVENT_READ_LIMIT, useCampaignValues, useOutcomeLedgerRead, useValueEvents } from './value-data';
+import { useCampaignValues, useOutcomeLedgerRead, useValueEvents } from './value-data';
 import {
   HOUR_BANDS,
   WEEKDAYS,
   asList,
   asRecord,
   compactMoney,
+  compareFigures,
+  headline,
   inOneCurrency,
   concentration,
-  dailySeries,
   entityValues,
   groupEvents,
   humanize,
@@ -32,13 +34,19 @@ import {
   str,
   treemap,
   weekdayHeat,
+  windowSeries,
   type CampaignValue,
+  type DayPoint,
+  type Delta,
+  type OneCurrencyRead,
   type Row,
   type ValueEvent,
+  type ValueWindow,
 } from './value-model';
 
 const GRID_2 = { gridTemplateColumns: 'repeat(auto-fit, minmax(min(340px, 100%), 1fr))' } as const;
 const KPI_GRID = { gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' } as const;
+const HEADLINE_GRID = { gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))' } as const;
 
 function shortDay(day: string): string {
   const [y, m, d] = day.split('-').map(Number);
@@ -50,11 +58,11 @@ function when(date: Date | null): string {
   return date ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'not recorded';
 }
 
-function EventCoverage({ events }: { readonly events: readonly ValueEvent[] }) {
+function EventCoverage({ events, truncated }: { readonly events: readonly ValueEvent[]; readonly truncated: boolean }) {
   return (
     <span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>
       {events.length} value event{events.length === 1 ? '' : 's'}
-      {events.length >= VALUE_EVENT_READ_LIMIT ? ` · the read returns at most ${VALUE_EVENT_READ_LIMIT}, so this is not the full history` : ''}
+      {truncated ? ' · partial read: the period hit the server limit, so this is not every event' : ''}
     </span>
   );
 }
@@ -81,23 +89,104 @@ function OpenList({ title, items }: { readonly title: string; readonly items: re
   );
 }
 
-export function OverviewTab({ tenant, review }: { readonly tenant: string; readonly review: Row }) {
+/** Comparison state for the Overview, already reduced to "usable" or "why not". */
+type PreviousState =
+  | { readonly kind: 'off' }
+  | { readonly kind: 'pending' }
+  | { readonly kind: 'blocked'; readonly reason: string }
+  | { readonly kind: 'ready'; readonly read: OneCurrencyRead; readonly series: DayPoint[] };
+
+function DeltaLine({ delta, days }: { readonly delta: Delta; readonly days: number }) {
+  if (delta.kind === 'unavailable') {
+    return <span className="text-[11px]" style={{ color: 'var(--ae-mute)' }} data-delta="none">No comparison: {delta.reason}</span>;
+  }
+  if (delta.kind === 'new') {
+    return <span className="text-[11px]" style={{ color: 'var(--ae-sage)' }} data-delta="new">New: none in the previous {days} days</span>;
+  }
+  const rounded = Math.round(delta.ratio * 100);
+  const tone = rounded > 0 ? 'var(--ae-sage)' : rounded < 0 ? 'var(--ae-ember)' : 'var(--ae-mute)';
+  const arrow = rounded > 0 ? '↑' : rounded < 0 ? '↓' : '';
+  return (
+    <span className="text-[11px]" style={{ color: tone }} data-delta="change">
+      {arrow}{Math.abs(rounded)}% vs previous {days} days
+    </span>
+  );
+}
+
+function ReviewStat({ label, value }: { readonly label: string; readonly value: string }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>{label}</span>
+      <span className="ae-mono text-[15px]">{value}</span>
+    </div>
+  );
+}
+
+export function OverviewTab({
+  tenant,
+  review,
+  period,
+  previousPeriod,
+  compare,
+}: {
+  readonly tenant: string;
+  readonly review: Row;
+  readonly period: ValueWindow;
+  readonly previousPeriod: ValueWindow;
+  readonly compare: boolean;
+}) {
   const timeCtx = useTimeContext();
-  const events = useValueEvents(tenant);
+  const days = period.days;
+  const current = useValueEvents(tenant, period);
+  const previous = useValueEvents(tenant, previousPeriod, compare);
   const [cell, setCell] = useState<{ day: number; band: number } | null>(null);
-  const cur = useMemo(() => inOneCurrency(events.data ?? []), [events.data]);
+  const cur = useMemo(() => inOneCurrency(current.data?.events ?? []), [current.data]);
   const rows = cur.events;
-  const series = useMemo(() => dailySeries(rows), [rows]);
+  const truncated = current.data?.truncated === true;
+  const series = useMemo(() => windowSeries(rows, period), [rows, period]);
   const heat = useMemo(() => weekdayHeat(rows), [rows]);
   const bySource = useMemo(() => groupEvents(rows, e => e.sourceType), [rows]);
   const byType = useMemo(() => groupEvents(rows, e => e.valueType), [rows]);
   const anyAmount = rows.some(e => e.amount !== null);
+  const head = useMemo(() => headline(cur), [cur]);
+  const prevRead = useMemo(() => (previous.data ? inOneCurrency(previous.data.events) : null), [previous.data]);
+  const prevSeries = useMemo(() => (prevRead ? windowSeries(prevRead.events, previousPeriod) : []), [prevRead, previousPeriod]);
 
-  const money = (key: string) => {
-    const v = num(review[key]);
-    return v === null ? 'not reported' : `$${formatCount(v, timeCtx)}`;
+  // Deltas only when both reads succeeded and neither was capped by the server.
+  const prev: PreviousState = !compare
+    ? { kind: 'off' }
+    : current.error
+      ? { kind: 'blocked', reason: 'this period is unavailable' }
+      : previous.error
+        ? { kind: 'blocked', reason: 'the previous period is unavailable' }
+        : !current.data || !previous.data || !prevRead
+          ? { kind: 'pending' }
+          : current.data.truncated
+            ? { kind: 'blocked', reason: 'this period is a partial read' }
+            : previous.data.truncated
+              ? { kind: 'blocked', reason: 'the previous period is a partial read' }
+              : { kind: 'ready', read: prevRead, series: prevSeries };
+  const prevHead = prev.kind === 'ready' ? headline(prev.read) : null;
+  // The currency rule holds across periods too: money is compared only within one currency.
+  const currencyClash = prev.kind === 'ready' && prev.read.currency !== null && cur.currency !== null && prev.read.currency !== cur.currency
+    ? `the previous period is in ${prev.read.currency}, this one in ${cur.currency}`
+    : null;
+
+  const deltaFor = (pick: (h: ReturnType<typeof headline>) => number | null, money: boolean) => {
+    if (prev.kind === 'off') return undefined;
+    if (prev.kind === 'pending') return <span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>Reading the previous {days} days</span>;
+    if (prev.kind === 'blocked') return <DeltaLine delta={{ kind: 'unavailable', reason: prev.reason }} days={days} />;
+    if (money && currencyClash) return <DeltaLine delta={{ kind: 'unavailable', reason: currencyClash }} days={days} />;
+    return <DeltaLine delta={compareFigures(pick(head), pick(prevHead!))} days={days} />;
   };
-  const count = (key: string) => {
+  const tileMoney = (v: number | null) => (current.error ? 'unavailable' : !current.data ? '…' : v === null ? 'no amounts' : compactMoney(v, cur.currency));
+  const tileCount = (v: number) => (current.error ? 'unavailable' : !current.data ? '…' : formatCount(v, timeCtx));
+
+  const reviewMoney = (key: string) => {
+    const v = num(review[key]);
+    return v === null ? 'not reported' : compactMoney(v);
+  };
+  const reviewCount = (key: string) => {
     const v = num(review[key]);
     return v === null ? 'not reported' : formatCount(v, timeCtx);
   };
@@ -116,44 +205,76 @@ export function OverviewTab({ tenant, review }: { readonly tenant: string; reado
         .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))
     : [];
 
+  const chartCompare = prev.kind === 'ready' && !(anyAmount && currencyClash)
+    ? prev.series.map(p => (anyAmount ? p.total : p.events))
+    : null;
+  const chartNote = prev.kind === 'off'
+    ? null
+    : prev.kind === 'pending'
+      ? 'reading the previous period'
+      : prev.kind === 'blocked'
+        ? `no previous period: ${prev.reason}`
+        : anyAmount && currencyClash
+          ? `no previous period: ${currencyClash}`
+          : null;
+
   return (
     <div className="flex flex-col gap-[18px]" data-testid="value-overview">
       <CurrencyNotice money={cur} />
-      <div className="grid gap-2.5" style={KPI_GRID} data-testid="value-kpis">
-        <MetricTile label="Value created" value={money('observed_value')} sub="from observed outcomes" tone="sage" />
-        <MetricTile label="Expected value" value={money('expected_value')} sub="from recommendations" />
-        <MetricTile label="Pending value" value={money('pending_value')} sub="awaiting an outcome" />
-        <MetricTile label="Outcome capture" value={capture === null ? 'not reported' : pct(capture)} sub="recommendations with an outcome" />
-        <MetricTile label="Recommendations acted upon" value={count('recommendations_acted_upon')} sub="decisions recorded" />
-        <MetricTile label="Outcomes observed" value={count('outcomes_observed')} sub="closed loops" />
-        <MetricTile label="Incomplete loops" value={count('incomplete_loops')} sub="no outcome yet" {...(num(review['incomplete_loops']) ? { tone: 'amber' as const } : {})} />
+      {truncated && (
+        <InlineNotice tone="amber">
+          Partial read: the value-created read for these {days} days hit its server limit, so the figures below cover only the events it returned.
+        </InlineNotice>
+      )}
+      <div className="grid gap-3" style={HEADLINE_GRID} data-testid="value-kpis">
+        <HeadlineTile testId="value-tile-value" label="Value created" rule="var(--ae-blue)" value={tileMoney(head.value)} sub={`last ${days} days`} delta={deltaFor(h => h.value, true)} />
+        <HeadlineTile testId="value-tile-revenue" label="Revenue retained or expanded" rule="var(--ae-solar)" value={tileMoney(head.revenue)} sub="retained and expansion revenue" delta={deltaFor(h => h.revenue, true)} />
+        <HeadlineTile testId="value-tile-events" label="Value events" rule="var(--ae-violet)" value={tileCount(head.events)} sub={`${head.priced} with an amount`} delta={deltaFor(h => h.events, false)} />
+        <HeadlineTile testId="value-tile-average" label="Average per event" rule="var(--ae-mute)" value={tileMoney(head.average)} sub="events with an amount" delta={deltaFor(h => h.average, true)} />
       </div>
 
-      <div className="grid gap-[18px]" style={GRID_2}>
-        <ValueCard title="Value over time" aside={events.data ? <EventCoverage events={rows} /> : null} testId="value-timeline">
-          {events.error ? (
-            <SectionUnavailable what="Value events are" detail={events.error} />
-          ) : !events.data ? (
-            <SectionLoading label="Loading value events" />
-          ) : series.length === 0 ? (
-            <SectionEmpty>No value events recorded yet. Value appears here as outcomes, playbooks and integration actions report it.</SectionEmpty>
-          ) : (
-            <AreaChart
-              values={series.map(p => (anyAmount ? p.total : p.events))}
-              labels={series.map(p => shortDay(p.day))}
-              format={v => (anyAmount ? compactMoney(v, cur.currency) : `${v} event${v === 1 ? '' : 's'}`)}
-              ariaLabel={anyAmount ? 'Value per day' : 'Value events per day'}
-            />
-          )}
-        </ValueCard>
+      <ValueCard
+        title="Value over time"
+        aside={
+          <span className="flex flex-wrap items-center gap-3 text-[11px]" style={{ color: 'var(--ae-mute)' }}>
+            {current.data ? <EventCoverage events={rows} truncated={truncated} /> : null}
+            {chartCompare && (
+              <span className="flex items-center gap-1.5" data-testid="value-previous-legend">
+                <span className="inline-block w-4 border-t-2 border-dashed" style={{ borderColor: 'var(--ae-mute)' }} />
+                previous {days} days
+              </span>
+            )}
+            {chartNote && <span data-testid="value-previous-note">{chartNote}</span>}
+          </span>
+        }
+        testId="value-timeline"
+      >
+        {current.error ? (
+          <SectionUnavailable what="Value events are" detail={current.error} />
+        ) : !current.data ? (
+          <SectionLoading label="Loading value events" />
+        ) : rows.length === 0 ? (
+          <SectionEmpty>No value events in the last {days} days. Value appears here as outcomes, playbooks and integration actions report it.</SectionEmpty>
+        ) : (
+          <AreaChart
+            values={series.map(p => (anyAmount ? p.total : p.events))}
+            labels={series.map(p => shortDay(p.day))}
+            format={v => (anyAmount ? compactMoney(v, cur.currency) : `${v} event${v === 1 ? '' : 's'}`)}
+            ariaLabel={anyAmount ? 'Value per day' : 'Value events per day'}
+            compare={chartCompare}
+            height={220}
+          />
+        )}
+      </ValueCard>
 
+      <div className="grid gap-[18px]" style={GRID_2}>
         <ValueCard title="When value arrives" aside={<span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>weekday and time of day, your local time</span>} testId="value-heatmap">
-          {events.error ? (
-            <SectionUnavailable what="Value events are" detail={events.error} />
-          ) : !events.data ? (
+          {current.error ? (
+            <SectionUnavailable what="Value events are" detail={current.error} />
+          ) : !current.data ? (
             <SectionLoading label="Loading value events" />
           ) : rows.every(e => !e.occurredAt) ? (
-            <SectionEmpty>No timed value events yet.</SectionEmpty>
+            <SectionEmpty>No timed value events in this window.</SectionEmpty>
           ) : (
             <>
               <Heatmap cells={heat} selected={cell} onSelect={setCell} metric={anyAmount ? 'total' : 'events'} />
@@ -179,40 +300,53 @@ export function OverviewTab({ tenant, review }: { readonly tenant: string; reado
             </>
           )}
         </ValueCard>
+
+        <div className="flex min-w-0 flex-col gap-[18px]">
+          <ValueCard title="Who produced it" testId="value-producers">
+            {current.error ? (
+              <SectionUnavailable what="Value events are" />
+            ) : !current.data ? (
+              <SectionLoading label="Loading value events" />
+            ) : bySource.length === 0 ? (
+              <SectionEmpty>No producers in this window.</SectionEmpty>
+            ) : (
+              <StackBar
+                segments={bySource.map(g => ({ key: g.key, label: humanize(g.key), value: anyAmount ? g.total : g.events, detail: `${g.events} event${g.events === 1 ? '' : 's'}` }))}
+                format={v => (anyAmount ? compactMoney(v, cur.currency) : String(v))}
+              />
+            )}
+          </ValueCard>
+          <ValueCard title="What kind of value" testId="value-types">
+            {current.error ? (
+              <SectionUnavailable what="Value events are" />
+            ) : !current.data ? (
+              <SectionLoading label="Loading value events" />
+            ) : byType.length === 0 ? (
+              <SectionEmpty>No value types in this window.</SectionEmpty>
+            ) : (
+              <StackBar
+                segments={byType.map(g => ({ key: g.key, label: humanize(g.key), value: anyAmount ? g.total : g.events, ...(g.unpriced ? { detail: `${g.unpriced} without amount` } : {}) }))}
+                format={v => (anyAmount ? compactMoney(v, cur.currency) : String(v))}
+              />
+            )}
+          </ValueCard>
+        </div>
       </div>
 
-      <div className="grid gap-[18px]" style={GRID_2}>
-        <ValueCard title="Who produced it" testId="value-producers">
-          {events.error ? (
-            <SectionUnavailable what="Value events are" />
-          ) : !events.data ? (
-            <SectionLoading label="Loading value events" />
-          ) : bySource.length === 0 ? (
-            <SectionEmpty>No producers yet.</SectionEmpty>
-          ) : (
-            <StackBar
-              segments={bySource.map(g => ({ key: g.key, label: humanize(g.key), value: anyAmount ? g.total : g.events, detail: `${g.events} event${g.events === 1 ? '' : 's'}` }))}
-              format={v => (anyAmount ? compactMoney(v, cur.currency) : String(v))}
-            />
-          )}
-        </ValueCard>
-        <ValueCard title="What kind of value" testId="value-types">
-          {events.error ? (
-            <SectionUnavailable what="Value events are" />
-          ) : !events.data ? (
-            <SectionLoading label="Loading value events" />
-          ) : byType.length === 0 ? (
-            <SectionEmpty>No value types reported yet.</SectionEmpty>
-          ) : (
-            <StackBar
-              segments={byType.map(g => ({ key: g.key, label: humanize(g.key), value: anyAmount ? g.total : g.events, ...(g.unpriced ? { detail: `${g.unpriced} without amount` } : {}) }))}
-              format={v => (anyAmount ? compactMoney(v, cur.currency) : String(v))}
-            />
-          )}
-        </ValueCard>
-      </div>
-
-      <ValueCard title="Before your next review" testId="value-next-steps">
+      <ValueCard
+        title="Before your next review"
+        aside={<span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>all time · from the value review, which takes no date range</span>}
+        testId="value-next-steps"
+      >
+        <div className="grid gap-3 border-b pb-3.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(120px, 100%), 1fr))', borderColor: 'var(--ae-edge)' }} data-testid="value-review-stats">
+          <ReviewStat label="Value from observed outcomes" value={reviewMoney('observed_value')} />
+          <ReviewStat label="Expected value" value={reviewMoney('expected_value')} />
+          <ReviewStat label="Pending value" value={reviewMoney('pending_value')} />
+          <ReviewStat label="Outcome capture" value={capture === null ? 'not reported' : pct(capture)} />
+          <ReviewStat label="Recommendations acted upon" value={reviewCount('recommendations_acted_upon')} />
+          <ReviewStat label="Outcomes observed" value={reviewCount('outcomes_observed')} />
+          <ReviewStat label="Incomplete loops" value={reviewCount('incomplete_loops')} />
+        </div>
         <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))' }}>
           <OpenList title="Recommended next steps" items={strings('recommended_next_steps')} />
           <OpenList title="Setup gaps" items={strings('setup_gaps')} />
@@ -228,11 +362,11 @@ export function OverviewTab({ tenant, review }: { readonly tenant: string; reado
 
 type SourceSort = 'value' | 'events' | 'confidence';
 
-export function SourcesTab({ tenant }: { readonly tenant: string }) {
-  const events = useValueEvents(tenant);
+export function SourcesTab({ tenant, period }: { readonly tenant: string; readonly period: ValueWindow }) {
+  const events = useValueEvents(tenant, period);
   const [sort, setSort] = useState<SourceSort>('value');
   const [open, setOpen] = useState<string | null>(null);
-  const cur = useMemo(() => inOneCurrency(events.data ?? []), [events.data]);
+  const cur = useMemo(() => inOneCurrency(events.data?.events ?? []), [events.data]);
   const rows = cur.events;
   const groups = useMemo(() => {
     const list = groupEvents(rows, e => e.sourceType);
@@ -262,10 +396,10 @@ export function SourcesTab({ tenant }: { readonly tenant: string }) {
       ) : !events.data ? (
         <SectionLoading label="Loading value sources" />
       ) : groups.length === 0 ? (
-        <SectionEmpty>No source has reported value yet. Outcomes, playbooks, recommendation families and integration actions each report value here once they record it.</SectionEmpty>
+        <SectionEmpty>No source reported value in the last {period.days} days. Outcomes, playbooks, recommendation families and integration actions each report value here once they record it.</SectionEmpty>
       ) : (
         <div className="flex flex-col">
-          <EventCoverage events={rows} />
+          <EventCoverage events={rows} truncated={events.data.truncated} />
           {groups.map((g, i) => {
             const isOpen = open === g.key;
             const members = rows.filter(e => e.sourceType === g.key);
@@ -320,6 +454,14 @@ export function SourcesTab({ tenant }: { readonly tenant: string }) {
 
 // ── Campaigns ─────────────────────────────────────────────────────────────────
 
+/** Up to two initials from a campaign name ("Spring Upgrade" → "SU"). */
+export function initials(name: string): string {
+  const words = name.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const letters = (words.length >= 2 ? [words[0]!, words[1]!] : words.slice(0, 1)).map(w => w.charAt(0));
+  const out = (words.length === 1 ? words[0]!.slice(0, 2) : letters.join('')).toUpperCase();
+  return out || '?';
+}
+
 function CampaignBubbles({
   items,
   selected,
@@ -351,7 +493,7 @@ function CampaignBubbles({
             const o = c.overview!;
             const x = ((o.spend ?? 0) / top) * 100;
             const y = ((o.gross ?? 0) / top) * 100;
-            const size = 14 + (maxNet > 0 ? Math.sqrt(Math.max(0, o.net ?? 0) / maxNet) * 30 : 0);
+            const size = 28 + (maxNet > 0 ? Math.sqrt(Math.max(0, o.net ?? 0) / maxNet) * 28 : 0);
             const above = (o.gross ?? 0) >= (o.spend ?? 0);
             const isSel = selected === c.id;
             return (
@@ -361,17 +503,22 @@ function CampaignBubbles({
                 onClick={() => onSelect(c.id)}
                 aria-label={`${c.name}: spend ${compactMoney(o.spend)}, attributed revenue ${compactMoney(o.gross)}`}
                 aria-pressed={isSel}
-                className="ae-focus absolute rounded-full"
+                className="ae-focus ae-mono absolute flex items-center justify-center rounded-full text-[10px] font-medium"
                 style={{
                   left: `calc(${x}% - ${size / 2}px)`,
                   bottom: `calc(${y}% - ${size / 2}px)`,
                   width: size,
                   height: size,
-                  background: above ? 'var(--ae-sage)' : 'var(--ae-amber)',
-                  opacity: isSel ? 0.95 : 0.6,
+                  background: above ? 'var(--ae-sage-tint)' : 'var(--ae-amber-tint)',
+                  border: `1.5px solid ${above ? 'var(--ae-sage)' : 'var(--ae-amber)'}`,
+                  color: above ? 'var(--ae-sage)' : 'var(--ae-amber)',
                   outline: isSel ? '2px solid var(--ae-ink)' : undefined,
+                  outlineOffset: isSel ? 2 : undefined,
+                  zIndex: isSel ? 1 : undefined,
                 }}
-              />
+              >
+                <span aria-hidden="true">{initials(c.name)}</span>
+              </button>
             );
           })}
         </div>
@@ -389,12 +536,15 @@ function CampaignBubbles({
   );
 }
 
-export function CampaignsTab({ tenant, days }: { readonly tenant: string; readonly days: number }) {
+export function CampaignsTab({ tenant, period }: { readonly tenant: string; readonly period: ValueWindow }) {
   const navigate = useNavigate();
-  const read = useCampaignValues(tenant, days);
+  const days = period.days;
+  const read = useCampaignValues(tenant, period);
   const [picked, setPicked] = useState<string | null>(null);
   const items = read.data?.items ?? [];
-  const selected = items.find(c => c.id === picked) ?? null;
+  // The first campaign is selected until the viewer picks another.
+  const selectedId = picked ?? items[0]?.id ?? null;
+  const selected = items.find(c => c.id === selectedId) ?? null;
   const failed = items.filter(c => !c.overview).length;
 
   if (read.error) return <ValueCard title="Spend against value"><SectionUnavailable what="Campaigns are" detail={read.error} /></ValueCard>;
@@ -414,7 +564,7 @@ export function CampaignsTab({ tenant, days }: { readonly tenant: string; readon
         title="Spend against value"
         aside={<span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>spend for the last {days} days · attributed revenue as reported by the campaign overview</span>}
       >
-        <CampaignBubbles items={items} selected={picked} onSelect={setPicked} />
+        <CampaignBubbles items={items} selected={selectedId} onSelect={setPicked} />
         {failed > 0 && <SectionUnavailable what={`${failed} campaign overview${failed === 1 ? ' is' : 's are'}`} />}
       </ValueCard>
 
@@ -453,12 +603,12 @@ export function CampaignsTab({ tenant, days }: { readonly tenant: string; readon
                 key={c.id || index}
                 type="button"
                 onClick={() => setPicked(c.id)}
-                aria-pressed={picked === c.id}
+                aria-pressed={selectedId === c.id}
                 className="ae-focus grid items-center gap-3 border-t px-1 py-[7px] text-left text-[13px] hover:bg-[var(--ae-glass-card)]"
                 style={{
                   gridTemplateColumns: 'minmax(160px,1.8fr) 90px 90px 90px 70px',
                   borderColor: 'var(--ae-edge)',
-                  background: picked === c.id ? 'var(--ae-blue-tint)' : undefined,
+                  background: selectedId === c.id ? 'var(--ae-blue-tint)' : undefined,
                 }}
               >
                 <span className="flex min-w-0 items-center gap-2.5">

@@ -296,10 +296,103 @@ export function treemap(items: ReadonlyArray<{ key: string; value: number }>): T
 export const WINDOWS = [7, 30, 90] as const;
 export type WindowDays = (typeof WINDOWS)[number];
 
-export function windowRange(days: number, now: Date = new Date()): { time_start: string; time_end: string } {
-  const end = new Date(now.getTime());
-  const start = new Date(now.getTime() - days * 86_400_000);
-  return { time_start: start.toISOString(), time_end: end.toISOString() };
+const DAY_MS = 86_400_000;
+
+/** A half-open period [start, end) of `days` days. */
+export interface ValueWindow {
+  readonly days: number;
+  readonly start: Date;
+  readonly end: Date;
+}
+
+/**
+ * The selected window ending at `anchor`, and the immediately preceding window
+ * of equal length (its end is the current window's start, so no event is in both).
+ */
+export function valueWindows(days: number, anchor: Date): { current: ValueWindow; previous: ValueWindow } {
+  const end = new Date(anchor.getTime());
+  const start = new Date(end.getTime() - days * DAY_MS);
+  return { current: { days, start, end }, previous: { days, start: new Date(start.getTime() - days * DAY_MS), end: start } };
+}
+
+/** "Sep 23 – Oct 23" (years added only when the window crosses one or is not this year). */
+export function rangeLabel(window: ValueWindow, now: Date = new Date()): string {
+  const sameYear = window.start.getFullYear() === window.end.getFullYear() && window.end.getFullYear() === now.getFullYear();
+  const opts: Intl.DateTimeFormatOptions = sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' };
+  return `${window.start.toLocaleDateString('en-US', opts)} – ${window.end.toLocaleDateString('en-US', opts)}`;
+}
+
+/**
+ * One bucket per day of the window, counted from its start, so two windows of
+ * equal length line up index by index. Events outside the window are ignored.
+ */
+export function windowSeries(events: readonly ValueEvent[], window: ValueWindow): DayPoint[] {
+  const out = Array.from({ length: window.days }, (_, i) => {
+    const day = new Date(window.start.getTime() + i * DAY_MS);
+    return { day: dayKey(day), total: 0, events: 0 };
+  });
+  const from = window.start.getTime();
+  for (const event of events) {
+    if (!event.occurredAt) continue;
+    const index = Math.floor((event.occurredAt.getTime() - from) / DAY_MS);
+    const bucket = out[index];
+    if (index < 0 || !bucket) continue;
+    bucket.events += 1;
+    bucket.total += event.amount ?? 0;
+  }
+  return out;
+}
+
+/** Value types that are revenue kept or grown, as opposed to costs and losses avoided. */
+export const REVENUE_VALUE_TYPES: ReadonlySet<string> = new Set(['retained_revenue', 'expansion_revenue']);
+
+export interface Headline {
+  /** Sum of priced events (one currency); null when no event carried an amount. */
+  readonly value: number | null;
+  /** Sum of priced retained/expansion revenue events; null when none carried an amount. */
+  readonly revenue: number | null;
+  readonly events: number;
+  readonly priced: number;
+  /** Value per priced event; null when no event carried an amount. */
+  readonly average: number | null;
+}
+
+/** Headline figures from one window's single-currency read. */
+export function headline(read: OneCurrencyRead): Headline {
+  let value = 0;
+  let revenue = 0;
+  let priced = 0;
+  let pricedRevenue = 0;
+  for (const e of read.events) {
+    if (e.amount === null) continue;
+    priced += 1;
+    value += e.amount;
+    if (REVENUE_VALUE_TYPES.has(e.valueType)) {
+      pricedRevenue += 1;
+      revenue += e.amount;
+    }
+  }
+  return {
+    value: priced ? value : null,
+    revenue: pricedRevenue ? revenue : null,
+    events: read.events.length,
+    priced,
+    average: priced ? value / priced : null,
+  };
+}
+
+export type Delta =
+  | { readonly kind: 'change'; readonly ratio: number }
+  | { readonly kind: 'new' }
+  | { readonly kind: 'unavailable'; readonly reason: string };
+
+/** Relative change from the previous figure; never divides by zero or compares a missing figure. */
+export function compareFigures(current: number | null, previous: number | null): Delta {
+  if (current === null && previous === null) return { kind: 'unavailable', reason: 'no amounts in either period' };
+  if (current === null) return { kind: 'unavailable', reason: 'no amounts this period' };
+  if (previous === null) return { kind: 'unavailable', reason: 'no amounts in the previous period' };
+  if (previous === 0) return current === 0 ? { kind: 'change', ratio: 0 } : { kind: 'new' };
+  return { kind: 'change', ratio: (current - previous) / Math.abs(previous) };
 }
 
 export interface CampaignValue {
