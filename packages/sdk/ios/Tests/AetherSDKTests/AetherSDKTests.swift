@@ -391,59 +391,114 @@ final class AetherSDKTests: XCTestCase {
     }
 
     // MARK: - Manifest Signature Verification (§2.9)
+    //
+    // Run against the vectors shared with the backend, web and Android suites
+    // (docs/reference/sdks/manifest-signing.md).
 
-    private func makeManifest(signature: String) -> SDKManifest {
-        SDKManifest(
-            manifest_version: "2026.07.12-1",
-            min_sdk_version: "8.0.0",
-            schema_version: "0.1.0-alpha.0",
-            rollout_percentage: 100,
-            features: ["heatmaps": true, "funnels": false],
-            published_at: "2026-07-12T00:00:00Z",
-            signature: signature
+    private func manifestVectors() throws -> [String: Any] {
+        var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        while directory.path != "/" {
+            let candidate = directory.appendingPathComponent("tests/fixtures/sdk/manifest-signing-vectors.json")
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                return try XCTUnwrap(
+                    JSONSerialization.jsonObject(with: Data(contentsOf: candidate)) as? [String: Any]
+                )
+            }
+            directory = directory.deletingLastPathComponent()
+        }
+        throw NSError(
+            domain: "AetherSDKTests",
+            code: 2,
+            userInfo: [NSLocalizedDescriptionKey: "Manifest signing vectors not found"]
         )
     }
 
-    private func sign(_ manifest: SDKManifest, key: String) -> String {
-        let canonical = AetherHealthAgent.canonicalManifestString(manifest)
-        let mac = HMAC<SHA256>.authenticationCode(
-            for: Data(canonical.utf8),
-            using: SymmetricKey(data: Data(key.utf8))
+    private func parseJSON(_ text: String) throws -> Any {
+        try JSONSerialization.jsonObject(with: Data(text.utf8), options: [.fragmentsAllowed])
+    }
+
+    private func manifestVector(_ name: String) throws -> [String: Any] {
+        let manifests = try XCTUnwrap(try manifestVectors()["manifests"] as? [[String: Any]])
+        let entry = try XCTUnwrap(manifests.first { $0["name"] as? String == name })
+        return try XCTUnwrap(try parseJSON(try XCTUnwrap(entry["manifest_json"] as? String)) as? [String: Any])
+    }
+
+    func testCanonicalJSONMatchesTheSharedVectors() throws {
+        let cases = try XCTUnwrap(try manifestVectors()["canonical"] as? [[String: Any]])
+        XCTAssertFalse(cases.isEmpty)
+        for c in cases {
+            let name = c["name"] as? String ?? "?"
+            let input = try parseJSON(try XCTUnwrap(c["input_json"] as? String))
+            XCTAssertEqual(try ManifestSignature.canonicalJSON(input), c["canonical"] as? String, name)
+        }
+    }
+
+    func testInputsThatCannotBeSignedAreRejected() throws {
+        let cases = try XCTUnwrap(try manifestVectors()["rejected_inputs"] as? [[String: Any]])
+        for c in cases {
+            let name = c["name"] as? String ?? "?"
+            let input = try parseJSON(try XCTUnwrap(c["input_json"] as? String))
+            XCTAssertThrowsError(try ManifestSignature.canonicalJSON(input), name)
+        }
+    }
+
+    func testManifestVerificationMatchesTheSharedVectors() throws {
+        let vectors = try manifestVectors()
+        let publicKey = try XCTUnwrap(vectors["public_key_spki_b64url"] as? String)
+        let cases = try XCTUnwrap(vectors["manifests"] as? [[String: Any]])
+        XCTAssertFalse(cases.isEmpty)
+        for c in cases {
+            let name = c["name"] as? String ?? "?"
+            let manifest = try XCTUnwrap(try parseJSON(try XCTUnwrap(c["manifest_json"] as? String)) as? [String: Any])
+            XCTAssertEqual(
+                ManifestSignature.verify(manifest, publicKey: publicKey),
+                c["valid"] as? Bool,
+                "\(name) — \(c["why"] as? String ?? "")"
+            )
+        }
+    }
+
+    func testManifestIsRejectedUnderADifferentOrMalformedPublicKey() throws {
+        let vectors = try manifestVectors()
+        let other = try XCTUnwrap(vectors["other_public_key_spki_b64url"] as? String)
+        let valid = try manifestVector("valid_full_manifest")
+        XCTAssertFalse(ManifestSignature.verify(valid, publicKey: other))
+        XCTAssertFalse(ManifestSignature.verify(valid, publicKey: ""))
+        XCTAssertFalse(ManifestSignature.verify(valid, publicKey: "not-a-key"))
+        XCTAssertFalse(ManifestSignature.verify(valid, publicKey: "AAAA"))
+    }
+
+    private func envelope(_ manifest: [String: Any]) throws -> Data {
+        try JSONSerialization.data(withJSONObject: ["data": manifest, "status": "success"])
+    }
+
+    func testIntakeUnwrapsTheEnvelopeAndAppliesASignedManifest() throws {
+        let publicKey = try XCTUnwrap(try manifestVectors()["public_key_spki_b64url"] as? String)
+        let manifest = try XCTUnwrap(
+            ManifestIntake.accept(try envelope(try manifestVector("valid_full_manifest")), publicKey: publicKey)
         )
-        return mac.map { String(format: "%02x", $0) }.joined()
+        XCTAssertEqual(manifest.manifest_version, "42")
+        XCTAssertEqual(manifest.rollout_percentage, 100)
+        XCTAssertEqual(manifest.features, ["analytics": true, "web3": false, "session_replay": true])
     }
 
-    func testManifestSignatureAcceptsValidSignature() {
-        let agent = AetherHealthAgent(endpoint: "https://api.test", apiKey: "k")
-        let key = "sdk-config-secret"
-        let unsigned = makeManifest(signature: "")
-        let signed = makeManifest(signature: sign(unsigned, key: key))
-        XCTAssertTrue(agent.verifyManifestSignature(signed, key: key))
+    func testIntakeRejectsTamperedDowngradedAndUnsignedManifests() throws {
+        let publicKey = try XCTUnwrap(try manifestVectors()["public_key_spki_b64url"] as? String)
+        for name in ["tampered_endpoint", "tampered_rollout", "downgraded_alg", "missing_signature", "signed_by_other_key"] {
+            XCTAssertNil(ManifestIntake.accept(try envelope(try manifestVector(name)), publicKey: publicKey), name)
+        }
     }
 
-    func testManifestSignatureRejectsTamperedSignature() {
-        let agent = AetherHealthAgent(endpoint: "https://api.test", apiKey: "k")
-        let key = "sdk-config-secret"
-        // Signature computed with a different key must be rejected.
-        let unsigned = makeManifest(signature: "")
-        let wrong = makeManifest(signature: sign(unsigned, key: "attacker-key"))
-        XCTAssertFalse(agent.verifyManifestSignature(wrong, key: key))
+    func testIntakeAppliesManifestsUnverifiedWhenNoPublicKeyIsConfigured() throws {
+        let tampered = try envelope(try manifestVector("tampered_endpoint"))
+        XCTAssertNotNil(ManifestIntake.accept(tampered, publicKey: nil))
+        XCTAssertNotNil(ManifestIntake.accept(tampered, publicKey: ""))
     }
 
-    func testManifestSignatureRejectsUnsignedManifest() {
-        let agent = AetherHealthAgent(endpoint: "https://api.test", apiKey: "k")
-        XCTAssertFalse(agent.verifyManifestSignature(makeManifest(signature: ""), key: "k"))
-    }
-
-    func testCanonicalManifestStringIsDeterministicAndFeatureOrderIndependent() {
-        let a = SDKManifest(manifest_version: "1", min_sdk_version: "8.0.0", schema_version: "0.1.0-alpha.0",
-                            rollout_percentage: 50, features: ["a": true, "b": false],
-                            published_at: "2026-07-12T00:00:00Z", signature: "x")
-        let b = SDKManifest(manifest_version: "1", min_sdk_version: "8.0.0", schema_version: "0.1.0-alpha.0",
-                            rollout_percentage: 50, features: ["b": false, "a": true],
-                            published_at: "2026-07-12T00:00:00Z", signature: "y")
-        XCTAssertEqual(AetherHealthAgent.canonicalManifestString(a),
-                       AetherHealthAgent.canonicalManifestString(b))
+    func testIntakeIgnoresAResponseWithNoManifest() throws {
+        let publicKey = try XCTUnwrap(try manifestVectors()["public_key_spki_b64url"] as? String)
+        XCTAssertNil(ManifestIntake.accept(Data(#"{"data":{"manifest":null},"status":"success"}"#.utf8), publicKey: publicKey))
+        XCTAssertNil(ManifestIntake.accept(Data("not json".utf8), publicKey: publicKey))
     }
 
     // MARK: - observe() + BatchHealth (§2.6 / §2.8)

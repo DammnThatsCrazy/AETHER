@@ -9,6 +9,7 @@
 // when the manifest version changes, notifying registered callbacks.
 // =============================================================================
 
+import { verifyManifestSignature } from './manifest-signature';
 import type { EventQueue } from '../core/event-queue';
 
 const SDK_VERSION = '0.1.0-alpha.0'; // synchronized by scripts/bump-sdk-version.sh and scripts/validate_sdk_release_alignment.py
@@ -39,8 +40,14 @@ export interface SDKHealthAgentConfig {
   configVersion?: string;
   /** Rollout cohort label */
   rolloutCohort?: string;
-  /** Secret for HMAC signing (must match SDK_CONFIG_SECRET on backend) */
-  signingSecret?: string;
+  /**
+   * Base64url SPKI P-256 public key used to verify signed SDK manifests (print it
+   * with `python scripts/sdk_manifest_public_key.py`). When set, a manifest that
+   * is unsigned, malformed or fails verification is rejected and the last
+   * known-good configuration is kept (fail closed). When unset, manifests are
+   * applied without verification.
+   */
+  manifestPublicKey?: string;
   /** Extra HTTP headers (e.g. gateway/proxy headers) merged into every request. */
   customHeaders?: Record<string, string>;
   /**
@@ -80,6 +87,10 @@ export interface SDKManifest {
   flags: Record<string, unknown>;
   published_at: string;
   signature: string;
+  /** Signature algorithm identifier (signed); must be "ecdsa-p256-sha256". */
+  signature_alg?: string;
+  source?: string;
+  publisher_id?: string;
   /** Manifest fetch status for diagnostics */
   status?: 'healthy' | 'forbidden' | 'expired' | 'signature_invalid' | 'unavailable';
 }
@@ -174,7 +185,7 @@ export class SDKHealthAgent {
       manifestRefreshMs: DEFAULT_MANIFEST_REFRESH_MS,
       configVersion: '0',
       rolloutCohort: 'default',
-      signingSecret: '',
+      manifestPublicKey: '',
       customHeaders: {},
       getDynamicState: () => ({ authValid: true, consentValid: true, walletConnected: false }),
       ...config,
@@ -344,9 +355,13 @@ export class SDKHealthAgent {
 
       if (!manifest) return null;
 
-      // Verify HMAC signature if a signing secret is configured
-      if (this.config.signingSecret && manifest.signature) {
-        const valid = await this.verifyManifestSignature(manifest);
+      // Verify the ES256 signature when a public key is configured. Fail closed:
+      // an unsigned, malformed or unverifiable manifest is never applied.
+      if (this.config.manifestPublicKey) {
+        const valid = await verifyManifestSignature(
+          manifest as unknown as Record<string, unknown>,
+          this.config.manifestPublicKey,
+        );
         if (!valid) {
           this.setManifestStatus('signature_invalid');
           console.warn('[Aether SDK] Manifest signature verification failed — ignoring update');
@@ -406,43 +421,6 @@ export class SDKHealthAgent {
     // In production: hash of the active event schema definition.
     // Here we use a stable string derived from the SDK version.
     return `schema-${SDK_VERSION}`;
-  }
-
-  // ── Signature Verification ─────────────────────────────────────────────
-
-  private async verifyManifestSignature(manifest: SDKManifest): Promise<boolean> {
-    if (typeof crypto === 'undefined' || !crypto.subtle) return true; // skip in unsupported envs
-
-    try {
-      const { signature, ...rest } = manifest;
-      const canonical = JSON.stringify(rest, Object.keys(rest).sort());
-
-      const key = await crypto.subtle.importKey(
-        'raw',
-        new TextEncoder().encode(this.config.signingSecret),
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['verify'],
-      );
-
-      const sigBytes = this.hexToBytes(signature);
-      return await crypto.subtle.verify(
-        'HMAC',
-        key,
-        sigBytes as unknown as ArrayBuffer,
-        new TextEncoder().encode(canonical),
-      );
-    } catch {
-      return false;
-    }
-  }
-
-  private hexToBytes(hex: string): Uint8Array {
-    const bytes = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < hex.length; i += 2) {
-      bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-    }
-    return bytes;
   }
 
   private sleep(ms: number): Promise<void> {

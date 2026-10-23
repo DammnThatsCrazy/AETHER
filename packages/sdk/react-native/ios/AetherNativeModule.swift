@@ -29,6 +29,9 @@ class AetherNativeModule: RCTEventEmitter {
         }
 
         aetherConfig.debug = config["debug"] as? Bool ?? false
+        // Base64url P-256 public key; the native health agent then verifies the
+        // manifests it fetches (fail-closed). Absent => applied unverified.
+        aetherConfig.manifestPublicKey = config["manifestPublicKey"] as? String
         aetherConfig.endpoint = resolveEndpoint
         aetherConfig.onJourneyResumed = { [weak self] anonymousId, userId in
             DispatchQueue.main.async {
@@ -161,6 +164,24 @@ class AetherNativeModule: RCTEventEmitter {
             "userId": Aether.shared.getUserId() as Any,
             "traits": [:] as [String: Any]
         ])
+    }
+
+    /// Verify a remote-config manifest (JSON text, `signature` included) against a
+    /// base64url P-256 public key with the shared ES256 verifier. Hermes has no
+    /// WebCrypto, so the JS manifest path delegates here. Resolves false on any
+    /// error (fail closed).
+    @objc
+    func verifyManifest(
+        _ manifestJson: String,
+        publicKey: String,
+        resolver resolve: RCTPromiseResolveBlock,
+        rejecter reject: RCTPromiseRejectBlock
+    ) {
+        guard let manifest = (try? JSONSerialization.jsonObject(with: Data(manifestJson.utf8))) as? [String: Any] else {
+            resolve(false)
+            return
+        }
+        resolve(ManifestSignature.verify(manifest, publicKey: publicKey))
     }
 
     @objc

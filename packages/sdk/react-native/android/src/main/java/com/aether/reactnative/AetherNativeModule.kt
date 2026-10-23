@@ -3,10 +3,12 @@ package com.aether.reactnative
 import com.aether.sdk.Aether
 import com.aether.sdk.AetherConfig
 import com.aether.sdk.IdentityData
+import com.aether.sdk.ManifestSignature
 import com.aether.sdk.ModuleConfig
 import com.aether.sdk.PrivacyConfig
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import org.json.JSONObject
 
 class AetherNativeModule(private val reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -42,6 +44,9 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
                 gdprMode = privacy?.getBoolean("gdprMode") ?: false,
                 anonymizeIP = privacy?.getBoolean("anonymizeIP") ?: true
             ),
+            // Base64url P-256 public key; the native health agent then verifies the
+            // manifests it fetches (fail-closed). Absent => applied unverified.
+            manifestPublicKey = if (config.hasKey("manifestPublicKey")) config.getString("manifestPublicKey") else null,
             onJourneyResumed = { anonymousId, userId ->
                 reactContext.runOnUiQueueThread {
                     sendEvent("AetherJourneyResumed", Arguments.createMap().apply {
@@ -109,6 +114,22 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
         promise.resolve(null)
     }
 
+
+    /**
+     * Verify a remote-config manifest (JSON text, `signature` included) against a
+     * base64url P-256 public key with the shared ES256 verifier. Hermes has no
+     * WebCrypto, so the JS manifest path delegates here. Resolves false on any
+     * error (fail closed).
+     */
+    @ReactMethod
+    fun verifyManifest(manifestJson: String, publicKey: String, promise: Promise) {
+        val verified = try {
+            ManifestSignature.verify(JSONObject(manifestJson), publicKey)
+        } catch (_: Exception) {
+            false
+        }
+        promise.resolve(verified)
+    }
 
     @ReactMethod
     fun startJourney(nameOrType: String, properties: ReadableMap) {
