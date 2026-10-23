@@ -35,6 +35,7 @@ import random
 import secrets
 import threading
 import time
+import uuid
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Optional
 from urllib.parse import quote
@@ -191,6 +192,11 @@ async def update_atomically(
     falls back to a per-key lock, which only serializes writers inside one
     process.
     """
+    native = getattr(type(store), "_atomic_update_native", None)
+    if native is not None:
+        return await native(
+            store, key, mutate, ttl_seconds=ttl_seconds, max_attempts=max_attempts,
+        )
     if not _supports_conditional_writes(store):
         locks = store.__dict__.setdefault("_atomic_update_locks", {})
         lock = locks.setdefault(key, asyncio.Lock())
@@ -293,7 +299,9 @@ class InMemoryStore(DurableStore):
     async def get_versioned(self, key: str) -> tuple[Optional[dict], Any]:
         with self._lock:
             self._expire_check(key)
-            return self._data.get(key), self._versions.get(key, 0)
+            # A private copy: mutating the result must not change stored state
+            # behind an outstanding token.
+            return copy.deepcopy(self._data.get(key)), self._versions.get(key, 0)
 
     async def set_if_unchanged(
         self, key: str, value: dict, token: Any, ttl_seconds: int = 0,
@@ -306,6 +314,10 @@ class InMemoryStore(DurableStore):
             self._versions[key] = token + 1
             if ttl_seconds > 0:
                 self._expiry[key] = time.time() + ttl_seconds
+            else:
+                # Like Redis SET and DynamoDB PutItem, a write without a TTL
+                # replaces any expiry the previous value carried.
+                self._expiry.pop(key, None)
             return True
 
     async def delete(self, key: str) -> bool:
@@ -377,6 +389,8 @@ class InMemoryStore(DurableStore):
         if key in self._expiry and time.time() > self._expiry[key]:
             self._data.pop(key, None)
             self._expiry.pop(key, None)
+            # Expiry is a change: tokens issued for the expired value are stale.
+            self._versions[key] = self._versions.get(key, 0) + 1
 
     def _expire_all(self) -> None:
         now = time.time()
@@ -384,6 +398,7 @@ class InMemoryStore(DurableStore):
         for k in expired:
             self._data.pop(k, None)
             self._expiry.pop(k, None)
+            self._versions[k] = self._versions.get(k, 0) + 1
 
 
 # =========================================================================
@@ -451,11 +466,56 @@ class RedisStore(DurableStore):
             await r.set(self._prefix + key, json.dumps(value))
 
     async def get_versioned(self, key: str) -> tuple[Optional[dict], Any]:
+        """Read a record with a payload-identity token.
+
+        Redis keeps no revision beside a value, so this token is the serialized
+        payload. A rewrite of the *same* JSON between this read and
+        :meth:`set_if_unchanged` (for example a TTL refresh) is not detected, but
+        it cannot lose data because the value is identical. Use
+        :meth:`atomic_update` for read-modify-write: it holds ``WATCH`` from the
+        read through the write and has no such window.
+        """
         r = await self._get_redis()
         if r is None:
             return await self._fallback_store().get_versioned(key)
         raw = await r.get(self._prefix + key)
         return (json.loads(raw) if raw else None), raw
+
+    async def _atomic_update_native(
+        self, key: str, mutate: Callable[[Optional[dict]], dict], *,
+        ttl_seconds: int = 0, max_attempts: int = 16,
+    ) -> dict:
+        r = await self._get_redis()
+        if r is None:
+            return await update_atomically(
+                self._fallback_store(), key, mutate,
+                ttl_seconds=ttl_seconds, max_attempts=max_attempts,
+            )
+        from redis.exceptions import WatchError
+
+        redis_key = self._prefix + key
+        for attempt in range(max_attempts):
+            async with r.pipeline(transaction=True) as pipe:
+                try:
+                    # WATCH before the read: any write to the key until EXEC,
+                    # including a same-value rewrite, aborts the transaction.
+                    await pipe.watch(redis_key)
+                    raw = await pipe.get(redis_key)
+                    current = json.loads(raw) if raw else None
+                    updated = mutate(copy.deepcopy(current) if current is not None else None)
+                    pipe.multi()
+                    if ttl_seconds > 0:
+                        pipe.setex(redis_key, ttl_seconds, json.dumps(updated))
+                    else:
+                        pipe.set(redis_key, json.dumps(updated))
+                    await pipe.execute()
+                    return updated
+                except WatchError:
+                    pass
+            await asyncio.sleep(random.uniform(0, min(0.2, 0.005 * (2 ** attempt))))
+        raise StoreConflictError(
+            f"could not update '{key}' after {max_attempts} conflicting attempts"
+        )
 
     async def set_if_unchanged(
         self, key: str, value: dict, token: Any, ttl_seconds: int = 0,
@@ -707,7 +767,9 @@ class DynamoDBStore(DurableStore):
         return json.loads(raw) if raw else None
 
     async def set(self, key: str, value: dict, ttl_seconds: int = 0) -> None:
-        item = {"cache_key": self._key(key), "val": json.dumps(value)}
+        # Every write stamps a fresh revision so conditional writers can tell a
+        # rewrite of identical content (for example a TTL refresh) from no change.
+        item = {"cache_key": self._key(key), "val": json.dumps(value), "rev": uuid.uuid4().hex}
         if ttl_seconds > 0:
             item["ttl"] = int(time.time()) + ttl_seconds
         await self._run(lambda: self._get_table().put_item(Item=item))
@@ -723,8 +785,14 @@ class DynamoDBStore(DurableStore):
             return None, None
         raw = item.get("val")
         # An expired or empty row still exists until DynamoDB's TTL sweep, so the
-        # token must name its exact content for the conditional write to replace it.
-        token = ("raw", raw)
+        # token must name the exact row for the conditional write to replace it.
+        revision = item.get("rev")
+        if revision is not None:
+            token: Any = ("rev", revision)
+        else:
+            # A row written before revisions existed: match its content and TTL.
+            ttl_value = item.get("ttl")
+            token = ("legacy", raw, int(ttl_value) if ttl_value is not None else None)
         if self._expired(item) or not raw:
             return None, token
         return json.loads(raw), token
@@ -734,19 +802,35 @@ class DynamoDBStore(DurableStore):
     ) -> bool:
         from botocore.exceptions import ClientError
 
-        item = {"cache_key": self._key(key), "val": json.dumps(value)}
+        item = {"cache_key": self._key(key), "val": json.dumps(value), "rev": uuid.uuid4().hex}
         if ttl_seconds > 0:
             item["ttl"] = int(time.time()) + ttl_seconds
         kwargs: dict[str, Any] = {}
         if token is None:
             kwargs["ConditionExpression"] = "attribute_not_exists(cache_key)"
-        elif token[1] is None:
-            kwargs["ConditionExpression"] = "attribute_exists(cache_key) AND attribute_not_exists(#val)"
-            kwargs["ExpressionAttributeNames"] = {"#val": "val"}
-        else:
-            kwargs["ConditionExpression"] = "#val = :old"
-            kwargs["ExpressionAttributeNames"] = {"#val": "val"}
+        elif token[0] == "rev":
+            kwargs["ConditionExpression"] = "#rev = :old"
+            kwargs["ExpressionAttributeNames"] = {"#rev": "rev"}
             kwargs["ExpressionAttributeValues"] = {":old": token[1]}
+        else:
+            _, raw, ttl_value = token
+            names = {"#rev": "rev", "#val": "val", "#ttl": "ttl"}
+            values: dict[str, Any] = {}
+            parts = ["attribute_not_exists(#rev)"]
+            if raw is None:
+                parts.append("attribute_not_exists(#val)")
+            else:
+                parts.append("#val = :oldval")
+                values[":oldval"] = raw
+            if ttl_value is None:
+                parts.append("attribute_not_exists(#ttl)")
+            else:
+                parts.append("#ttl = :oldttl")
+                values[":oldttl"] = ttl_value
+            kwargs["ConditionExpression"] = " AND ".join(parts)
+            kwargs["ExpressionAttributeNames"] = names
+            if values:
+                kwargs["ExpressionAttributeValues"] = values
         try:
             await self._run(lambda: self._get_table().put_item(Item=item, **kwargs))
         except ClientError as exc:
