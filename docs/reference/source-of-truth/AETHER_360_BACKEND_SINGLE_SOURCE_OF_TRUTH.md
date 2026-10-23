@@ -9,7 +9,7 @@ This document replaces the prior broad 360 architecture blueprint as the impleme
 
 ## Repository implementation status (2026-10-23)
 
-This specification remains the acceptance contract for the complete 18-surface backend buildout. The repository currently has partial provider paths for eleven required slots, with the remaining limits recorded explicitly:
+This specification remains the acceptance contract for the complete 18-surface backend buildout. The repository currently has partial provider paths for thirteen required slots, with the remaining limits recorded explicitly:
 
 - **Episode360 `timeline`:** resolves only observation IDs explicitly recorded by an episode through tenant-scoped semantic Silver rows. Untyped source namespaces, complete activity/session coverage, policy, and freshness remain unresolved.
 - **Campaign360 `signal_sources`:** joins exact campaign touchpoint event references to tenant-scoped canonical events. Broader observation and source-fact authorities, complete event coverage, and freshness remain unresolved.
@@ -22,8 +22,12 @@ This specification remains the acceptance contract for the complete 18-surface b
 - **Communications360 `policy_state`:** evaluates current server consent only for exact tenant, recipient-entity, and purpose pairs backed by communication identity and evidence. Historical write-time outcomes are kept separate and current consent is not evaluated for as-of frames; non-consent policy, durable current-decision evidence, complete recipient coverage, and freshness remain unknown.
 - **Risk360 `propagation_paths`:** exposes bounded current tenant-scoped FOLLOWS paths only after analytics-consent, endpoint, graph-edge, relationship-evidence, and observed-time checks. The result is observed path context, not causal risk propagation; historical path reads, full coverage, and freshness remain unknown. `social_contagion` remains unbound because no causal detector/evidence authority is connected.
 - **Value360 `reconciliation`:** exposes separate subject-scoped economic records and exact order-linked commerce facts, with settlement-to-payment references resolved only by explicit provider payment ID and the same commerce order. It accepts only native USD identity normalization, does not match economic records to commerce without exact shared identifiers, and does not compute reconciled totals or assert amount equality or settlement finality.
+- **Profile360 `syndicates`:** enumerates bounded exact tenant/entity membership candidates, requires an explicitly opted-in Syndicates population, and verifies each positive membership against the exact current `MEMBER_OF:<entity>:<population>` graph-ledger aggregate. Positive claims cite the live edge-add mutation ID. Roster completeness, historical replay, and membership freshness remain unknown.
+- **Commerce360 `availability_price`:** exposes exact tenant product/offer catalog lifecycle revisions with provenance as partial context. Inventory availability, current offer price, and freshness remain unknown; historical order prices are not joined to current offers or inventory.
 
 Episode360 `agent_handoffs` remains unknown because episode records and observations do not reference a canonical execution or handoff ID; event labels and agent metadata do not establish that join. The product registry records partial slots and this unjoined authority gap. None of these changes marks its surface complete or reduces the remaining requirements in this specification.
+
+Location360 `timezone` remains unknown with `canonical_timezone_authority_not_joined`: location facts, geocoding labels, and source-clock timezone metadata do not provide an exact tenant-scoped geographic timezone mapping. No timezone is inferred from coordinates or place names.
 
 ## 0. Decision
 

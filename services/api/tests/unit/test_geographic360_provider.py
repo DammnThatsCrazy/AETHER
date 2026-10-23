@@ -339,6 +339,9 @@ async def test_entity_projection_is_a_valid_typed_result():
     ):
         assert required_slots[slot_id]["state"] == "unknown"
         assert required_slots[slot_id]["content"] is None
+    assert required_slots["timezone"]["reasonCode"] == (
+        "canonical_timezone_authority_not_joined"
+    )
     assert all(
         slot["policy"]["state"] == "not_evaluated_by_projection_provider"
         for slot in required_slots.values()
@@ -424,6 +427,41 @@ async def test_required_slots_preserve_source_evidence_and_temporal_provenance()
     assert normalization_claim.domainSlotIds == ["normalization"]
     assert "Portland" not in str(normalization)
     assert "coarse_cell" not in str(normalization)
+
+
+@pytest.mark.asyncio
+async def test_timezone_is_not_inferred_from_exact_coordinates_or_place_labels():
+    # A precise location fact is still not a timezone mapping. The provider
+    # must not convert coordinates or a recognizable city label into an IANA
+    # zone without an exact canonical/source-reported timezone authority.
+    row = _fact(
+        "loc-new-york-precise",
+        precision_class="precise",
+        country_code="US",
+        region_name="New York",
+        region_code="NY",
+        city="New York City",
+        coordinate_present=True,
+        observed_at=T_RECENT,
+        provider="canonical_location_facts",
+        source_observation_id="observation-location-22",
+        source_evidence_refs=("evidence:location-22",),
+    )
+    posture = _posture(facts=(row,))
+    provider = Geographic360Provider(reader=_FakeGeoReader({
+        ("entity", "ent-portland"): _view("entity", "ent-portland", posture),
+    }))
+    request = _request()
+
+    result = await provider.project(request, await _context(request))
+
+    slot = _sections(result)["state"].content["requiredSlots"]["timezone"]
+    assert slot["state"] == "unknown"
+    assert slot["reasonCode"] == "canonical_timezone_authority_not_joined"
+    assert slot["content"] is None
+    assert slot["evidenceRefs"] == []
+    assert not any("timezone" in claim.domainSlotIds for claim in result.claims)
+    assert "America/New_York" not in str(result.model_dump(mode="json"))
 
 
 @pytest.mark.asyncio
@@ -542,7 +580,11 @@ async def test_activity_density_is_exact_entity_temporal_only_and_evidence_backe
     assert "Portland" not in str(slot)
     assert "8628h3cell" not in str(slot)
     assert "latitude" not in str(slot)
-    assert _sections(result)["state"].content["requiredSlots"]["timezone"]["state"] == "unknown"
+    timezone_slot = _sections(result)["state"].content["requiredSlots"]["timezone"]
+    assert timezone_slot["state"] == "unknown"
+    assert timezone_slot["reasonCode"] == "canonical_timezone_authority_not_joined"
+    assert timezone_slot["content"] is None
+    assert timezone_slot["evidenceRefs"] == []
     claim = next(claim for claim in result.claims if claim.id == "activity.temporal_density")
     assert claim.domainSlotIds == ["activity_density"]
     assert claim.evidenceRefs[0].source == "gold_temporal_heatmap"

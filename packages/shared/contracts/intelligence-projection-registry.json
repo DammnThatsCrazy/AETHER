@@ -118,6 +118,7 @@
       "canonicalAuthorities": [
         "agent_access",
         "agent_executions",
+        "cohort_membership",
         "communication_facts",
         "entity_registry",
         "episode_facts",
@@ -126,6 +127,7 @@
         "identity",
         "journeys",
         "observations",
+        "population_definitions",
         "temporal"
       ],
       "hardDependencies": [
@@ -154,7 +156,8 @@
         "evidence",
         "interactions",
         "findings",
-        "agent_delegations"
+        "agent_delegations",
+        "syndicates"
       ],
       "supportedTemporalModes": [
         "window",
@@ -4474,13 +4477,25 @@
         {
           "id": "syndicates",
           "requirement": "required",
-          "description": "Typed syndicate or cohort relationships.",
+          "description": "Exact current tenant entity membership in an explicitly opted-in Syndicates population, verified by the live graph ledger edge.",
           "canonicalAuthorityRefs": [
-            "graph",
-            "relationship_facts"
+            "cohort_membership",
+            "evidence",
+            "population_definitions"
           ],
-          "projectionBindings": [],
-          "unboundReason": "profile_syndicate_membership_authority_not_joined"
+          "projectionBindings": [
+            {
+              "projectionId": "profile360",
+              "role": "primary",
+              "sectionIds": [
+                "syndicates"
+              ],
+              "subjectKinds": [
+                "entity"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Exact current MEMBER_OF edges for explicitly opted-in tenant populations are evidence-backed; unbounded roster completeness, historical replay, and a membership freshness policy remain unavailable."
         },
         {
           "id": "relationships",
@@ -4804,6 +4819,7 @@
           "agent_access",
           "agent_executions",
           "ai_execution_facts",
+          "cohort_membership",
           "communication_facts",
           "economic_facts",
           "entity_registry",
@@ -4814,6 +4830,7 @@
           "journeys",
           "model_governance",
           "observations",
+          "population_definitions",
           "outcome_facts",
           "relationship_facts",
           "risk_outputs",
@@ -10045,12 +10062,25 @@
         {
           "id": "availability_price",
           "requirement": "required",
-          "description": "Required commerce360 slot: availability price.",
+          "description": "Exact tenant product or offer catalog lifecycle evidence, with inventory availability, current offer price, and freshness represented independently.",
           "canonicalAuthorityRefs": [
-            "commerce"
+            "commerce_product_offer_graph",
+            "source_provenance"
           ],
-          "projectionBindings": [],
-          "unboundReason": "commerce_availability_price_authority_not_connected"
+          "projectionBindings": [
+            {
+              "projectionId": "commerce360",
+              "role": "primary",
+              "sectionIds": [
+                "availability_price"
+              ],
+              "subjectKinds": [
+                "product",
+                "offer"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Exact tenant product and offer catalog revisions provide lifecycle and provenance evidence only; inventory availability, current offer price, and freshness remain unknown because their authorities and joins are not connected."
         },
         {
           "id": "campaign_links",

@@ -108,7 +108,11 @@ LOCATION_REQUIRED_SLOT_IDS: tuple[str, ...] = (
 )
 
 _UNSUPPORTED_SLOT_REASONS = {
-    "timezone": "canonical_timezone_authority_unavailable",
+    # LocationFact, geocoding, and context-capsule authorities do not persist
+    # a tenant-scoped timezone mapping. The temporal kernel validates zones,
+    # but validation alone is not a location-to-zone authority. Keep the
+    # required product slot explicitly unbound until such a join exists.
+    "timezone": "canonical_timezone_authority_not_joined",
     "activity_density": "canonical_location_activity_aggregation_unavailable",
     "journeys": "exact_location_journey_join_unavailable",
     "campaigns": "exact_location_campaign_join_unavailable",

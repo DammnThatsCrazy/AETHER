@@ -697,6 +697,18 @@ ID and shared order reference. Non-consent policy, causal social contagion,
 cross-source economic matching, reconciled totals, historical replay, complete
 coverage, and freshness remain unproved. None of these paths completes its
 surface or changes technical provider readiness.
+
+The next provider slice adds Profile360 `syndicates` and Commerce360
+`availability_price` partial paths. Profile360 verifies bounded exact-entity
+membership candidates against tenant-owned population records explicitly
+opted in to Syndicates, then checks the exact current `MEMBER_OF` graph-ledger
+aggregate; a positive claim uses its live mutation ID. Historical and bounded
+membership reads remain unknown, and roster completeness and freshness remain
+unavailable. Commerce360 exposes lifecycle and provenance for exact product or
+offer catalog revisions only; inventory availability, current offer price, and
+freshness remain unknown. Location360 `timezone` remains unknown because no
+exact tenant-scoped geographic timezone mapping is connected, and the provider
+does not infer a zone from coordinates, place labels, or source-clock metadata.
 Exploration surfaces compose over the engine through projection-backed surface adapters
 
 (`services/api/journeys/exploration/adapters/projection.py`).

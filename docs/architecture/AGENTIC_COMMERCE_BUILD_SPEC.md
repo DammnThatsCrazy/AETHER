@@ -58,8 +58,10 @@ The 360 build adds a separate, read-only Commerce360 product/offer path over
 immutable tenant-scoped catalog revisions. Exact product and offer references
 carry source evidence; conversion line items do not create or infer catalog
 records. This projection does not add checkout, payment, price/availability,
-or execution authority to the agentic commerce control plane; those Commerce360
-slots stay unknown until their own canonical authorities are available.
+or execution authority to the agentic commerce control plane. The
+`availability_price` slot now exposes exact catalog lifecycle revisions and
+provenance as partial context; inventory availability, current offer price,
+and freshness remain unknown until their canonical authorities and joins exist.
 
 ---
 

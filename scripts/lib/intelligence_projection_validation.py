@@ -252,6 +252,7 @@ _OUTPUT_SECTIONS = frozenset(
         "policy_boundary",
         "agent_spawned_agents",
         "agent_delegations",
+        "syndicates",
         "signal_summary",
         "source_inventory",
         "classification",

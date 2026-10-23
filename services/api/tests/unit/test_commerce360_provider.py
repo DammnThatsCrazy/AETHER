@@ -554,6 +554,16 @@ async def test_catalog_summary_preserves_retired_lifecycle_and_validity_dates() 
     assert section.content["product"]["lifecycleState"] == "retired"
     assert section.content["product"]["validTo"] == "2026-10-15T00:00:00+00:00"
     assert section.content["asOf"] == request.asOf
+    availability_price = next(
+        section for section in result.sections if section.id == "availability_price"
+    )
+    assert availability_price.state == "degraded"
+    lifecycle_record = availability_price.content["catalogLifecycleRecords"][0]
+    assert lifecycle_record["lifecycleState"] == "retired"
+    assert lifecycle_record["validTo"] == "2026-10-15T00:00:00+00:00"
+    assert availability_price.content["availability"]["state"] == "unknown"
+    assert availability_price.content["price"]["state"] == "unknown"
+    assert availability_price.content["freshness"]["state"] == "unknown"
     assert "retired" in result.claims[-1].claims[0]
 
 
@@ -592,11 +602,74 @@ async def test_catalog_offer_product_mismatch_and_as_of_mismatch_fail_closed() -
         sections = {section.id: section for section in projected.sections}
         assert sections["product_offer_summary"].state == "unknown"
         assert sections["catalog_links"].state == "unknown"
+        assert sections["availability_price"].state == "unknown"
         assert not any(
             claim.domainSlotIds
-            and set(claim.domainSlotIds) & {"product_offer_summary", "catalog_links"}
+            and set(claim.domainSlotIds)
+            & {"product_offer_summary", "catalog_links", "availability_price"}
             for claim in projected.claims
         )
+
+
+@pytest.mark.asyncio
+async def test_availability_price_is_partial_only_for_exact_tenant_catalog_evidence() -> None:
+    repository = CommerceProductOfferCatalogRepository()
+    repository._local_products.clear()
+    repository._local_offers.clear()
+    await repository.record_product(_product_record())
+    await repository.record_offer(_offer_record())
+    catalog = RepositoryCommerceProductOfferCatalogEvidenceSource(repository)
+
+    for subject_kind, subject_id, join_basis in (
+        ("product", "prod-1", "tenant_scoped_canonical_product_id"),
+        ("offer", "offer-1", "tenant_scoped_canonical_offer_product_id"),
+    ):
+        request = _request(subject_kind=subject_kind, subject_id=subject_id)
+        result = await Commerce360Provider(FakeCommerceSource(), catalog).project(
+            request,
+            _context(request),
+        )
+        section = next(section for section in result.sections if section.id == "availability_price")
+
+        assert section.state == "degraded"
+        assert section.content["joinBasis"] == join_basis
+        assert section.content["catalogLifecycleRecords"]
+        assert section.content["availability"] == {
+            "state": "unknown",
+            "reasonCode": "commerce_inventory_authority_not_connected",
+        }
+        assert section.content["price"] == {
+            "state": "unknown",
+            "reasonCode": "commerce_offer_price_authority_not_connected",
+        }
+        assert section.content["freshness"]["state"] == "unknown"
+        assert section.content["freshness"]["catalogRecordTimestampFieldsIncluded"] is True
+        assert (
+            "commerce_availability_price_authority_not_connected" in section.content["reasonCodes"]
+        )
+        assert not any(
+            field in section.content
+            for field in ("unitPrice", "quantityAvailable", "stockQuantity", "sellable")
+        )
+        lifecycle_claims = [
+            claim for claim in result.claims if "availability_price" in (claim.domainSlotIds or [])
+        ]
+        assert lifecycle_claims
+        assert all(claim.evidenceRefs for claim in lifecycle_claims)
+
+    missing_request = _request(subject_kind="product", subject_id="prod-1", tenant_id="tenant-b")
+    missing_result = await Commerce360Provider(FakeCommerceSource(), catalog).project(
+        missing_request,
+        _context(missing_request),
+    )
+    missing_section = next(
+        section for section in missing_result.sections if section.id == "availability_price"
+    )
+    assert missing_section.state == "unknown"
+    assert missing_section.content["catalogLifecycleRecords"] == []
+    assert not any(
+        "availability_price" in (claim.domainSlotIds or []) for claim in missing_result.claims
+    )
 
 
 @pytest.mark.asyncio
@@ -625,5 +698,10 @@ async def test_catalog_truncation_degrades_completeness_and_caps_exposed_records
     sections = {section.id: section for section in result.sections}
     assert sections["product_offer_summary"].state == "degraded"
     assert sections["catalog_links"].state == "degraded"
+    assert sections["availability_price"].state == "degraded"
+    assert (
+        "commerce_catalog_offer_list_truncated"
+        in sections["availability_price"].content["reasonCodes"]
+    )
     assert sections["product_offer_summary"].content["sourceCompleteness"] == "partial"
     assert len(sections["product_offer_summary"].content["offers"]) == 500

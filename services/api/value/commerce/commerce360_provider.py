@@ -4,9 +4,10 @@ Commerce360 is a read-only projection, not a catalog, checkout, payment, or
 risk authority. The current canonical join supports payment/order facts linked
 to an exact campaign activity, profile activity, or journey step reference.
 Product and offer records are read from the durable tenant-scoped catalog
-authority. Exposure, intent, cart/checkout, availability/price, and risk slots
-stay explicitly unknown until their canonical authorities and exact subject
-joins exist.
+authority. Exact product/offer catalog records contribute lifecycle evidence to
+the availability/price slot, but do not establish inventory availability or
+offer price. Exposure, intent, cart/checkout, and risk slots stay explicitly
+unknown until their canonical authorities and exact subject joins exist.
 """
 
 from __future__ import annotations
@@ -88,6 +89,9 @@ _CATALOG_JOIN_BASIS_BY_SUBJECT_KIND: dict[str, str] = {
     "product": "tenant_scoped_canonical_product_id",
     "offer": "tenant_scoped_canonical_offer_product_id",
 }
+_AVAILABILITY_UNKNOWN = "commerce_inventory_authority_not_connected"
+_OFFER_PRICE_UNKNOWN = "commerce_offer_price_authority_not_connected"
+_AVAILABILITY_PRICE_PARTIAL = "commerce_availability_price_authority_not_connected"
 
 
 class CommerceOperationEvidenceSource(Protocol):
@@ -394,6 +398,32 @@ def _catalog_record_output(
         "tenantId": record.tenant_id,
         "title": record.title,
         "description": record.description,
+        "lifecycleState": record.lifecycle_state,
+        "validFrom": record.valid_from.isoformat() if record.valid_from else None,
+        "validTo": record.valid_to.isoformat() if record.valid_to else None,
+        "observedAt": record.observed_at.isoformat(),
+        "sourceProvider": record.source_provider,
+        "sourceRecordId": record.source_record_id,
+        "sourceRevisionId": record.source_revision_id,
+        "evidenceRefs": [ref.model_dump(mode="json") for ref in record.evidence_refs],
+    }
+    if isinstance(record, CommerceProductRecord):
+        output["productId"] = record.product_id
+    else:
+        output["offerId"] = record.offer_id
+        output["productId"] = record.product_id
+    return output
+
+
+def _availability_catalog_record_output(
+    record: CommerceProductRecord | CommerceOfferRecord,
+    *,
+    record_type: str,
+) -> dict[str, Any]:
+    """Render source lifecycle evidence without implying sellable inventory."""
+    output: dict[str, Any] = {
+        "recordType": record_type,
+        "tenantId": record.tenant_id,
         "lifecycleState": record.lifecycle_state,
         "validFrom": record.valid_from.isoformat() if record.valid_from else None,
         "validTo": record.valid_to.isoformat() if record.valid_to else None,
@@ -742,15 +772,36 @@ class Commerce360Provider:
         subject_kind: str,
     ) -> dict[str, str]:
         if subject_kind not in _CATALOG_JOIN_BASIS_BY_SUBJECT_KIND:
-            return {"product_offer_summary": "unknown", "catalog_links": "unknown"}
+            return {
+                "product_offer_summary": "unknown",
+                "catalog_links": "unknown",
+                "availability_price": "unknown",
+            }
         state = catalog.get("sourceState", "unknown")
+        product = catalog.get("product")
+        offers = catalog.get("offers", [])
+        has_exact_catalog_evidence = product is not None or bool(offers)
+        availability_price_state = (
+            "degraded"
+            if state in {"available", "degraded"} and has_exact_catalog_evidence
+            else "unknown"
+        )
         if state != "available":
-            return {"product_offer_summary": state, "catalog_links": state}
-        if catalog.get("product") is None:
-            return {"product_offer_summary": "unknown", "catalog_links": "unknown"}
+            return {
+                "product_offer_summary": state,
+                "catalog_links": state,
+                "availability_price": availability_price_state,
+            }
+        if product is None:
+            return {
+                "product_offer_summary": "unknown",
+                "catalog_links": "unknown",
+                "availability_price": availability_price_state,
+            }
         return {
             "product_offer_summary": "available",
-            "catalog_links": "available" if catalog.get("offers") else "empty",
+            "catalog_links": "available" if offers else "empty",
+            "availability_price": availability_price_state,
         }
 
     def _validate_source_result(
@@ -1111,6 +1162,65 @@ class Commerce360Provider:
                     )
                 )
                 continue
+            elif section_id == "availability_price":
+                authorities = catalog.get(
+                    "authorityRefs",
+                    ["commerce_product_offer_graph", "source_provenance"],
+                )
+                product = catalog.get("product")
+                offers = catalog.get("offers", [])
+                catalog_records = []
+                if product is not None:
+                    catalog_records.append(
+                        _availability_catalog_record_output(
+                            product,
+                            record_type="product_catalog_lifecycle",
+                        )
+                    )
+                catalog_records.extend(
+                    _availability_catalog_record_output(
+                        offer,
+                        record_type="offer_catalog_lifecycle",
+                    )
+                    for offer in offers
+                )
+                if state == "unknown":
+                    reason_codes.append(
+                        catalog.get("reason") or _UNKNOWN_SLOT_REASONS["availability_price"]
+                    )
+                elif state == "degraded":
+                    catalog_reason = _safe_text(catalog.get("reason"), limit=96)
+                    if catalog_reason:
+                        reason_codes.append(catalog_reason)
+                    reason_codes.append(_AVAILABILITY_PRICE_PARTIAL)
+                content = _slot_content(
+                    state=state,
+                    request=request,
+                    reason_codes=reason_codes,
+                    as_of=as_of,
+                    joinBasis=catalog.get("join_basis"),
+                    catalogLifecycleRecords=catalog_records,
+                    availability={"state": "unknown", "reasonCode": _AVAILABILITY_UNKNOWN},
+                    price={"state": "unknown", "reasonCode": _OFFER_PRICE_UNKNOWN},
+                    sourceCompleteness=catalog.get("sourceCompleteness", "unknown"),
+                    freshness={
+                        "state": "unknown",
+                        "reasonCode": _SOURCE_FRESHNESS_UNKNOWN,
+                        "catalogRecordTimestampFieldsIncluded": bool(catalog_records),
+                    },
+                    policy=policy,
+                )
+                sections.append(
+                    ProjectionSection(
+                        id=section_id,
+                        state=state,
+                        title=section_id.replace("_", " ").title(),
+                        content=content,
+                        warnings=reason_codes or None,
+                        canonicalAuthorityRefs=authorities,
+                    )
+                )
+                continue
             elif section_id == "purchase":
                 authorities = ["commerce", "payments", "source_provenance"]
                 if not facts and state == "empty":
@@ -1350,6 +1460,41 @@ class Commerce360Provider:
                         claims=[relation_claim],
                         claimState=EpistemicStatus.OBSERVED,
                         domainSlotIds=["catalog_links"],
+                    )
+                )
+
+        if states.get("availability_price") == "degraded":
+            lifecycle_records: list[CommerceProductRecord | CommerceOfferRecord] = []
+            if product is not None:
+                lifecycle_records.append(product)
+            lifecycle_records.extend(offers)
+            for record in lifecycle_records:
+                refs = _parse_evidence_refs(
+                    [ref.model_dump(mode="json") for ref in record.evidence_refs]
+                )
+                if not refs:
+                    continue
+                if isinstance(record, CommerceProductRecord):
+                    record_type = "product"
+                    record_id = record.product_id
+                else:
+                    record_type = "offer"
+                    record_id = record.offer_id
+                claims.append(
+                    ClaimEnvelope(
+                        id=_stable_id(
+                            "commerce.availability_price.catalog_lifecycle",
+                            f"{record.tenant_id}:{record_type}:{record_id}:{record.source_revision_id}",
+                        ),
+                        kind="commerce_catalog_lifecycle_observation",
+                        subject=request.subject,
+                        evidenceRefs=refs,
+                        claims=[
+                            f"tenant catalog {record_type} {record_id} records lifecycle state "
+                            f"{record.lifecycle_state} in source revision {record.source_revision_id}"
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=["availability_price"],
                     )
                 )
 

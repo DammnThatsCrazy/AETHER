@@ -34,6 +34,8 @@ from identity.profile.profile360_provider import (
     ProfileRead,
     RepositoryProfile360Source,
     SessionIdentityRead,
+    SyndicateMembership,
+    SyndicateMembershipRead,
 )
 
 
@@ -86,6 +88,7 @@ class _FakeProfileSource:
         history: Optional[HistoryRead] = None,
         binding: Optional[IdentityBindingRead] = None,
         communications: Optional[CommunicationRead] = None,
+        syndicates: Optional[SyndicateMembershipRead] = None,
         fail: bool = False,
     ) -> None:
         self.identity = identity or ProfileRead(
@@ -143,6 +146,9 @@ class _FakeProfileSource:
         self.communications = communications or CommunicationRead(
             rows=[], available=True, scope_known=True
         )
+        self.syndicates = syndicates or SyndicateMembershipRead(
+            rows=[], available=True, scope_known=True
+        )
         self.fail = fail
         self.calls: list[tuple] = []
 
@@ -185,6 +191,12 @@ class _FakeProfileSource:
         if self.fail:
             raise RuntimeError("communication database detail must not escape")
         return self.communications
+
+    async def syndicate_memberships(self, tenant_id, subject, *, limit):
+        self.calls.append(("syndicates", tenant_id, subject.kind, subject.id, limit))
+        if self.fail:
+            raise RuntimeError("syndicate authority detail must not escape")
+        return self.syndicates
 
 
 def _request(
@@ -1591,3 +1603,552 @@ async def test_agent_delegations_keeps_unbound_profile_subject_unknown_without_l
     )
     assert result.claims == []
     assert source.actor_identity_calls == []
+
+
+def _syndicate_ledger_row(
+    *,
+    population_id: str = "population-syndicate-1",
+    tenant_id: str = TENANT,
+    mutation_id: str = "mutation-membership-1",
+    offset: int = 1,
+    kind: str = "edge",
+    membership_state: str = "active",
+):
+    payload = {
+        "kind": kind,
+        "edge_type": "MEMBER_OF",
+        "from_vertex_id": USER_ID,
+        "to_vertex_id": population_id,
+    }
+    if kind == "edge":
+        payload["properties"] = {
+            "tenant_id": tenant_id,
+            "membership_state": membership_state,
+            "evidence_refs": [],
+            "valid_from": "2026-05-21T12:00:00Z",
+        }
+    return {
+        "tenant_id": tenant_id,
+        "aggregate_type": "edge",
+        "aggregate_id": f"MEMBER_OF:{USER_ID}:{population_id}",
+        "operation": "edge_revoked" if kind == "edge_revocation" else "edge_created",
+        "recorded_at": "2026-05-21T12:00:00Z",
+        "ledger_offset": offset,
+        "mutation_id": mutation_id,
+        "payload": payload,
+    }
+
+
+def _syndicate_group(population_id: str = "population-syndicate-1"):
+    return {
+        "id": population_id,
+        "tenant_id": TENANT,
+        "population_type": "community",
+        "metadata": {
+            "syndicates_group": True,
+            "syndicates_identity_merge_policy": "union",
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_repository_syndicate_read_uses_exact_bounded_live_edge_and_ledger_evidence(
+    monkeypatch,
+):
+    from identity.population import registry as population_registry
+    from repositories import graph_mutation_ledger
+
+    class MembershipRepo:
+        async def find_many(self, *, filters, limit):
+            assert filters == {"tenant_id": TENANT, "entity_id": USER_ID}
+            assert limit == 101
+            return [
+                {
+                    "tenant_id": TENANT,
+                    "entity_id": USER_ID,
+                    "population_id": "population-syndicate-1",
+                    "membership_state": "active",
+                    # The provider must not synthesize evidence from this row.
+                    "evidence_refs": [],
+                }
+            ]
+
+    class PopulationRepo:
+        async def find_by_id(self, population_id):
+            assert population_id == "population-syndicate-1"
+            return _syndicate_group(population_id)
+
+    class LedgerRepo:
+        async def list_records(self, tenant_id, *, aggregate_id, limit):
+            assert tenant_id == TENANT
+            assert aggregate_id == f"MEMBER_OF:{USER_ID}:population-syndicate-1"
+            assert limit == 1_001
+            return [_syndicate_ledger_row()]
+
+    monkeypatch.setattr(population_registry, "membership_repo", MembershipRepo())
+    monkeypatch.setattr(population_registry, "population_repo", PopulationRepo())
+    monkeypatch.setattr(
+        graph_mutation_ledger, "GraphMutationLedgerRepository", LedgerRepo
+    )
+
+    read = await RepositoryProfile360Source().syndicate_memberships(
+        TENANT,
+        ProjectionSubject(kind="entity", id=USER_ID),
+        limit=100,
+    )
+
+    assert read.available is True
+    assert read.scope_known is True
+    assert read.truncated is False
+    assert read.reason is None
+    assert len(read.rows) == 1
+    membership = read.rows[0]
+    assert membership.population_id == "population-syndicate-1"
+    assert membership.population_type == "community"
+    assert membership.evidence_ref.id == "mutation-membership-1"
+    assert membership.evidence_ref.source == "graph_mutation_ledger"
+
+
+@pytest.mark.asyncio
+async def test_repository_syndicate_read_fails_closed_on_candidate_tenant_mismatch(
+    monkeypatch,
+):
+    from identity.population import registry as population_registry
+
+    class MembershipRepo:
+        async def find_many(self, *, filters, limit):
+            assert filters == {"tenant_id": TENANT, "entity_id": USER_ID}
+            return [
+                {
+                    "tenant_id": "another-tenant",
+                    "entity_id": USER_ID,
+                    "population_id": "population-syndicate-1",
+                    "membership_state": "active",
+                }
+            ]
+
+    monkeypatch.setattr(population_registry, "membership_repo", MembershipRepo())
+
+    read = await RepositoryProfile360Source().syndicate_memberships(
+        TENANT,
+        ProjectionSubject(kind="entity", id=USER_ID),
+        limit=100,
+    )
+
+    assert read.rows == []
+    assert read.scope_known is False
+    assert read.reason == "profile_syndicate_membership_scope_mismatch"
+
+
+@pytest.mark.asyncio
+async def test_repository_syndicate_read_ignores_inactive_materialized_membership(
+    monkeypatch,
+):
+    from identity.population import registry as population_registry
+
+    class MembershipRepo:
+        async def find_many(self, *, filters, limit):
+            return [
+                {
+                    "tenant_id": TENANT,
+                    "entity_id": USER_ID,
+                    "population_id": "population-syndicate-1",
+                    "membership_state": "left",
+                }
+            ]
+
+    class PopulationRepo:
+        async def find_by_id(self, population_id):
+            raise AssertionError("inactive membership must not trigger group lookup")
+
+    monkeypatch.setattr(population_registry, "membership_repo", MembershipRepo())
+    monkeypatch.setattr(population_registry, "population_repo", PopulationRepo())
+
+    read = await RepositoryProfile360Source().syndicate_memberships(
+        TENANT,
+        ProjectionSubject(kind="entity", id=USER_ID),
+        limit=100,
+    )
+
+    assert read.available is True
+    assert read.scope_known is True
+    assert read.rows == []
+
+
+@pytest.mark.asyncio
+async def test_repository_syndicate_read_does_not_surface_revoked_live_edge(
+    monkeypatch,
+):
+    from identity.population import registry as population_registry
+    from repositories import graph_mutation_ledger
+
+    class MembershipRepo:
+        async def find_many(self, *, filters, limit):
+            return [
+                {
+                    "tenant_id": TENANT,
+                    "entity_id": USER_ID,
+                    "population_id": "population-syndicate-1",
+                    "membership_state": "active",
+                }
+            ]
+
+    class PopulationRepo:
+        async def find_by_id(self, population_id):
+            return _syndicate_group(population_id)
+
+    class LedgerRepo:
+        async def list_records(self, tenant_id, *, aggregate_id, limit):
+            return [
+                _syndicate_ledger_row(offset=1),
+                _syndicate_ledger_row(
+                    offset=2,
+                    mutation_id="mutation-membership-revoked",
+                    kind="edge_revocation",
+                ),
+            ]
+
+    monkeypatch.setattr(population_registry, "membership_repo", MembershipRepo())
+    monkeypatch.setattr(population_registry, "population_repo", PopulationRepo())
+    monkeypatch.setattr(
+        graph_mutation_ledger, "GraphMutationLedgerRepository", LedgerRepo
+    )
+
+    read = await RepositoryProfile360Source().syndicate_memberships(
+        TENANT,
+        ProjectionSubject(kind="entity", id=USER_ID),
+        limit=100,
+    )
+
+    assert read.rows == []
+    assert read.scope_known is True
+    assert "profile_syndicate_candidate_edge_not_live" in (read.reason or "")
+
+
+@pytest.mark.asyncio
+async def test_repository_syndicate_read_rejects_missing_population_type(monkeypatch):
+    from identity.population import registry as population_registry
+
+    class MembershipRepo:
+        async def find_many(self, *, filters, limit):
+            return [
+                {
+                    "tenant_id": TENANT,
+                    "entity_id": USER_ID,
+                    "population_id": "population-syndicate-1",
+                    "membership_state": "active",
+                }
+            ]
+
+    class PopulationRepo:
+        async def find_by_id(self, population_id):
+            return {
+                **_syndicate_group(population_id),
+                "population_type": None,
+            }
+
+    monkeypatch.setattr(population_registry, "membership_repo", MembershipRepo())
+    monkeypatch.setattr(population_registry, "population_repo", PopulationRepo())
+
+    read = await RepositoryProfile360Source().syndicate_memberships(
+        TENANT,
+        ProjectionSubject(kind="entity", id=USER_ID),
+        limit=100,
+    )
+
+    assert read.rows == []
+    assert read.scope_known is True
+    assert read.reason == "profile_syndicate_population_type_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_repository_syndicate_read_requires_tenant_owned_population(monkeypatch):
+    from identity.population import registry as population_registry
+
+    class MembershipRepo:
+        async def find_many(self, *, filters, limit):
+            return [
+                {
+                    "tenant_id": TENANT,
+                    "entity_id": USER_ID,
+                    "population_id": "population-syndicate-1",
+                    "membership_state": "active",
+                }
+            ]
+
+    class PopulationRepo:
+        async def find_by_id(self, population_id):
+            return {
+                **_syndicate_group(population_id),
+                "tenant_id": "another-tenant",
+            }
+
+    monkeypatch.setattr(population_registry, "membership_repo", MembershipRepo())
+    monkeypatch.setattr(population_registry, "population_repo", PopulationRepo())
+
+    read = await RepositoryProfile360Source().syndicate_memberships(
+        TENANT,
+        ProjectionSubject(kind="entity", id=USER_ID),
+        limit=100,
+    )
+
+    assert read.rows == []
+    assert read.scope_known is False
+    assert read.reason == "profile_syndicate_population_scope_unverified"
+
+
+@pytest.mark.asyncio
+async def test_repository_syndicate_read_requires_explicit_syndicates_opt_in(monkeypatch):
+    from identity.population import registry as population_registry
+
+    class MembershipRepo:
+        async def find_many(self, *, filters, limit):
+            return [
+                {
+                    "tenant_id": TENANT,
+                    "entity_id": USER_ID,
+                    "population_id": "population-syndicate-1",
+                    "membership_state": "active",
+                }
+            ]
+
+    class PopulationRepo:
+        async def find_by_id(self, population_id):
+            group = _syndicate_group(population_id)
+            group["metadata"] = {}
+            return group
+
+    monkeypatch.setattr(population_registry, "membership_repo", MembershipRepo())
+    monkeypatch.setattr(population_registry, "population_repo", PopulationRepo())
+
+    read = await RepositoryProfile360Source().syndicate_memberships(
+        TENANT,
+        ProjectionSubject(kind="entity", id=USER_ID),
+        limit=100,
+    )
+
+    assert read.rows == []
+    assert read.scope_known is True
+    assert read.reason is None
+
+
+@pytest.mark.asyncio
+async def test_repository_syndicate_read_rejects_inactive_state_on_live_edge(monkeypatch):
+    from identity.population import registry as population_registry
+    from repositories import graph_mutation_ledger
+
+    class MembershipRepo:
+        async def find_many(self, *, filters, limit):
+            return [
+                {
+                    "tenant_id": TENANT,
+                    "entity_id": USER_ID,
+                    "population_id": "population-syndicate-1",
+                    "membership_state": "active",
+                }
+            ]
+
+    class PopulationRepo:
+        async def find_by_id(self, population_id):
+            return _syndicate_group(population_id)
+
+    class LedgerRepo:
+        async def list_records(self, tenant_id, *, aggregate_id, limit):
+            # The edge is technically live in topology, but its canonical
+            # membership state is inactive and must not yield a positive fact.
+            return [_syndicate_ledger_row(membership_state="left")]
+
+    monkeypatch.setattr(population_registry, "membership_repo", MembershipRepo())
+    monkeypatch.setattr(population_registry, "population_repo", PopulationRepo())
+    monkeypatch.setattr(
+        graph_mutation_ledger, "GraphMutationLedgerRepository", LedgerRepo
+    )
+
+    read = await RepositoryProfile360Source().syndicate_memberships(
+        TENANT,
+        ProjectionSubject(kind="entity", id=USER_ID),
+        limit=100,
+    )
+
+    assert read.rows == []
+    assert read.scope_known is True
+    assert "profile_syndicate_edge_membership_inactive" in (read.reason or "")
+
+
+@pytest.mark.asyncio
+async def test_profile_syndicates_exposes_verified_partial_membership_with_evidence():
+    source = _FakeProfileSource(
+        syndicates=SyndicateMembershipRead(
+            rows=[
+                SyndicateMembership(
+                    tenant_id=TENANT,
+                    entity_id=USER_ID,
+                    population_id="population-syndicate-1",
+                    population_type="community",
+                    joined_at="2026-05-21T12:00:00Z",
+                    evidence_ref=EvidenceRef(
+                        id="mutation-membership-1",
+                        type="relationship",
+                        source="graph_mutation_ledger",
+                        observedAt="2026-05-21T12:00:00Z",
+                    ),
+                )
+            ],
+            available=True,
+            scope_known=True,
+        )
+    )
+
+    result = await _project(
+        Profile360Provider(source), _request(include_sections=["syndicates"])
+    )
+
+    section = _section(result, "syndicates")
+    assert section.state == "degraded"
+    assert section.content["memberships"][0]["membershipState"] == "active"
+    assert section.content["memberships"][0]["evidenceRef"]["id"] == (
+        "mutation-membership-1"
+    )
+    assert section.content["coverage"] == "unknown"
+    assert section.content["complete"] is False
+    assert section.content["freshness"]["state"] == "unknown"
+    assert section.canonicalAuthorityRefs == [
+        "cohort_membership",
+        "evidence",
+        "population_definitions",
+    ]
+    assert len(result.claims) == 1
+    assert result.claims[0].evidenceRefs[0].id == "mutation-membership-1"
+    assert result.claims[0].domainSlotIds == ["syndicates"]
+    assert any(call[0] == "syndicates" for call in source.calls)
+
+
+@pytest.mark.asyncio
+async def test_profile_syndicates_frame_policy_deny_suppresses_content_and_evidence(
+    monkeypatch,
+):
+    import shared.intelligence_projections.composition as composition
+
+    source = _FakeProfileSource(
+        syndicates=SyndicateMembershipRead(
+            rows=[
+                SyndicateMembership(
+                    tenant_id=TENANT,
+                    entity_id=USER_ID,
+                    population_id="population-syndicate-1",
+                    population_type="community",
+                    joined_at="2026-05-21T12:00:00Z",
+                    evidence_ref=EvidenceRef(
+                        id="mutation-membership-1",
+                        type="relationship",
+                        source="graph_mutation_ledger",
+                        observedAt="2026-05-21T12:00:00Z",
+                    ),
+                )
+            ],
+            available=True,
+            scope_known=True,
+        )
+    )
+    projection = await _project(
+        Profile360Provider(source), _request(include_sections=["syndicates"])
+    )
+    monkeypatch.setattr(
+        composition,
+        "_surface_definition",
+        lambda _surface_id: {
+            "contractStatus": "source_aligned",
+            "subjectKinds": ["entity"],
+            "domainSlots": [
+                {
+                    "id": "syndicates",
+                    "requirement": "required",
+                    "canonicalAuthorityRefs": [
+                        "cohort_membership",
+                        "evidence",
+                        "population_definitions",
+                    ],
+                    "projectionBindings": [
+                        {
+                            "projectionId": "profile360",
+                            "role": "primary",
+                            "sectionIds": ["syndicates"],
+                            "subjectKinds": ["entity"],
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+
+    frame = compose_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="profile360",
+            tenantId=TENANT,
+            subject=ProjectionSubject(kind="entity", id=USER_ID),
+            requestedSlotIds=["syndicates"],
+            includeEvidence=True,
+        ),
+        [projection],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot={
+            "syndicates": Experience360PolicyDisposition(
+                state="denied", reasonCodes=["profile_syndicates_access_denied"]
+            )
+        },
+    )
+
+    slot = frame.slots[0]
+    assert slot.state == "suppressed"
+    assert slot.content is None
+    assert slot.provenance == []
+    assert slot.evidenceRefs == []
+    assert slot.claims == []
+
+
+@pytest.mark.asyncio
+async def test_profile_syndicates_is_not_read_when_section_is_not_requested():
+    source = _FakeProfileSource()
+
+    await _project(Profile360Provider(source), _request(include_sections=["summary"]))
+
+    assert not any(call[0] == "syndicates" for call in source.calls)
+
+
+@pytest.mark.asyncio
+async def test_profile_syndicates_keeps_current_materialization_unknown_for_temporal_reads():
+    source = _FakeProfileSource(
+        syndicates=SyndicateMembershipRead(
+            rows=[
+                SyndicateMembership(
+                    tenant_id=TENANT,
+                    entity_id=USER_ID,
+                    population_id="population-syndicate-1",
+                    population_type="community",
+                    joined_at="2026-05-21T12:00:00Z",
+                    evidence_ref=EvidenceRef(
+                        id="mutation-membership-1",
+                        type="relationship",
+                        source="graph_mutation_ledger",
+                    ),
+                )
+            ],
+            available=True,
+            scope_known=True,
+        )
+    )
+    as_of_request = _request(include_sections=["syndicates"]).model_copy(
+        update={"temporalMode": "as_of", "asOf": AS_OF}
+    )
+    bounded_request = _request(
+        include_sections=["syndicates"],
+        mode="window",
+        time_range=TimeRangeFilter(**{"from": WINDOW_START, "to": WINDOW_END}),
+    )
+
+    as_of_result = await _project(Profile360Provider(source), as_of_request)
+    bounded_result = await _project(Profile360Provider(source), bounded_request)
+
+    assert _section(as_of_result, "syndicates").state == "unknown"
+    assert _section(bounded_result, "syndicates").state == "unknown"
+    assert not any(call[0] == "syndicates" for call in source.calls)

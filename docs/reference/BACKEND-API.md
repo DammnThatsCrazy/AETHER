@@ -2031,6 +2031,17 @@ provider payment ID and the same commerce order. Cross-source economic matching,
 non-USD commerce normalization, reconciled totals, amount equality, and
 settlement finality remain unavailable.
 
+Profile360 `syndicates` verifies bounded exact tenant/entity membership
+candidates against tenant-owned populations explicitly opted in to Syndicates,
+then checks the exact current `MEMBER_OF` graph-ledger aggregate. Positive
+claims cite the live edge-add mutation ID. Historical or bounded reads return
+unknown; roster completeness and freshness remain unknown. Commerce360
+`availability_price` exposes lifecycle and provenance for exact product/offer
+catalog revisions only. Inventory availability, current offer price, and
+freshness remain unknown. Location360 `timezone` remains unknown because no
+exact tenant-scoped geographic timezone mapping is connected; coordinates,
+place labels, and source-clock timezone values are not used to infer one.
+
 ### Support case lifecycle evidence ingress
 
 `POST /v1/support/cases/ingest` accepts one allow-listed lifecycle event under

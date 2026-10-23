@@ -45,8 +45,9 @@ from journeys.communication360.contracts import CommunicationMessage
 
 PROJECTION_ID = "profile360"
 
-# Exact generated-registry outputSections order for profile360.
+# Canonical registry section order for provider result sorting.
 OUTPUT_SECTIONS: tuple[str, ...] = (
+    "agent_delegations",
     "evidence",
     "findings",
     "interactions",
@@ -54,8 +55,8 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
     "sessions",
     "state",
     "summary",
+    "syndicates",
     "timeline",
-    "agent_delegations",
 )
 
 # These are the exact Profile 360 product slots from SSOT §11.4. Generic
@@ -66,12 +67,16 @@ SLOT_KNOWN_UNKNOWN_RESOLUTION = "known_unknown_resolution"
 SLOT_EVIDENCE_LIMITATIONS = "evidence_trace"
 SLOT_AGENT_DELEGATIONS = "agent_delegations"
 AGENT_DELEGATION_AUTHORITIES = ("agent_access", "agent_executions", "identity")
+SLOT_SYNDICATES = "syndicates"
+SYNDICATE_AUTHORITIES = ("cohort_membership", "evidence", "population_definitions")
 
 DEFAULT_EVENT_LIMIT = 200
 MAX_EVENT_LIMIT = 500
 MAX_JOURNEY_LIMIT = 100
 MAX_SESSION_IDENTITY_LIMIT = 100
 MAX_COMMUNICATION_LIMIT = 100
+MAX_SYNDICATE_MEMBERSHIPS = 100
+MAX_SYNDICATE_LEDGER_ROWS = 1_000
 
 
 @dataclass(frozen=True)
@@ -132,6 +137,29 @@ class CommunicationRead:
     """Exact tenant/profile recipient messages with an explicit source boundary."""
 
     rows: list[CommunicationMessage]
+    available: bool
+    scope_known: bool
+    truncated: bool = False
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class SyndicateMembership:
+    """Exact current membership in an explicitly opted-in Syndicates group."""
+
+    tenant_id: str
+    entity_id: str
+    population_id: str
+    population_type: str
+    joined_at: Optional[str]
+    evidence_ref: EvidenceRef
+
+
+@dataclass(frozen=True)
+class SyndicateMembershipRead:
+    """Bounded read of current, tenant-owned Syndicates memberships."""
+
+    rows: list[SyndicateMembership]
     available: bool
     scope_known: bool
     truncated: bool = False
@@ -242,6 +270,14 @@ class Profile360Source(Protocol):
         limit: int,
         start: Optional[str],
     ) -> CommunicationRead: ...
+
+    async def syndicate_memberships(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        *,
+        limit: int,
+    ) -> SyndicateMembershipRead: ...
 
     async def subject_history(
         self,
@@ -487,6 +523,256 @@ class RepositoryProfile360Source:
             available=True,
             scope_known=True,
             truncated=len(rows) > limit,
+        )
+
+    async def syndicate_memberships(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        *,
+        limit: int,
+    ) -> SyndicateMembershipRead:
+        """Verify exact current candidates against bounded edge-ledger slices.
+
+        The membership materialization only enumerates candidate population IDs.
+        A positive fact requires replaying the exact tenant-owned
+        ``MEMBER_OF:<entity>:<population>`` ledger aggregate and finding that
+        directed edge live. The population registry supplies the exact target's
+        type and explicit Syndicates opt-in. No labels, similarity, generic
+        cluster edges, or membership-row evidence IDs establish a fact.
+        """
+        if subject.kind != "entity" or not tenant_id or not subject.id:
+            return SyndicateMembershipRead(
+                [],
+                available=True,
+                scope_known=False,
+                reason="profile_syndicate_subject_kind_unsupported",
+            )
+
+        bounded_limit = min(max(limit, 1), MAX_SYNDICATE_MEMBERSHIPS)
+        try:
+            from identity.population.models import PopulationType
+            from identity.population.registry import membership_repo, population_repo
+            from repositories.graph_mutation_ledger import GraphMutationLedgerRepository
+            from replay.projections.syndicates_restatement_capability import (
+                is_syndicates_group,
+            )
+            from shared.graph.graph import EdgeType
+
+            membership_rows = await membership_repo.find_many(
+                filters={"tenant_id": tenant_id, "entity_id": subject.id},
+                limit=bounded_limit + 1,
+            )
+            if (
+                not isinstance(membership_rows, list)
+                or any(
+                    not isinstance(row, dict)
+                    or row.get("tenant_id") != tenant_id
+                    or str(row.get("entity_id") or "") != subject.id
+                    for row in membership_rows
+                )
+            ):
+                return SyndicateMembershipRead(
+                    [],
+                    available=True,
+                    scope_known=False,
+                    reason="profile_syndicate_membership_scope_mismatch",
+                )
+
+            candidate_truncated = len(membership_rows) > bounded_limit
+            memberships: list[SyndicateMembership] = []
+            reasons: list[str] = []
+            truncated = candidate_truncated
+            seen_population_ids: set[str] = set()
+            known_population_types = {item.value for item in PopulationType}
+            ledger = GraphMutationLedgerRepository()
+            for membership_row in membership_rows[:bounded_limit]:
+                membership_state = (
+                    membership_row.get("membership_state")
+                    or membership_row.get("status")
+                    or "active"
+                )
+                if membership_state in {"left", "expired"}:
+                    continue
+                if membership_state != "active":
+                    reasons.append("profile_syndicate_membership_state_unrecognized")
+                    continue
+                population_id = membership_row.get("population_id")
+                if not isinstance(population_id, str) or not population_id.strip():
+                    return SyndicateMembershipRead(
+                        [],
+                        available=True,
+                        scope_known=False,
+                        truncated=truncated,
+                        reason="profile_syndicate_population_id_invalid",
+                    )
+                if population_id in seen_population_ids:
+                    continue
+                seen_population_ids.add(population_id)
+
+                population = await population_repo.find_by_id(population_id)
+                if (
+                    not isinstance(population, dict)
+                    or population.get("tenant_id") != tenant_id
+                    or str(population.get("id") or "") != population_id
+                ):
+                    return SyndicateMembershipRead(
+                        [],
+                        available=True,
+                        scope_known=False,
+                        truncated=truncated,
+                        reason="profile_syndicate_population_scope_unverified",
+                    )
+                population_type = population.get("population_type")
+                if population_type not in known_population_types:
+                    reasons.append("profile_syndicate_population_type_unavailable")
+                    continue
+                if not is_syndicates_group(population):
+                    continue
+
+                aggregate_id = f"{EdgeType.MEMBER_OF}:{subject.id}:{population_id}"
+                ledger_rows = await ledger.list_records(
+                    tenant_id,
+                    aggregate_id=aggregate_id,
+                    limit=MAX_SYNDICATE_LEDGER_ROWS + 1,
+                )
+                if not isinstance(ledger_rows, list):
+                    return SyndicateMembershipRead(
+                        [],
+                        available=False,
+                        scope_known=False,
+                        truncated=truncated,
+                        reason="profile_syndicate_ledger_invalid_response",
+                    )
+                if len(ledger_rows) > MAX_SYNDICATE_LEDGER_ROWS:
+                    truncated = True
+                    reasons.append("profile_syndicate_edge_ledger_scan_truncated")
+                    continue
+
+                valid_ledger_rows: list[dict[str, Any]] = []
+                for ledger_row in ledger_rows:
+                    payload = ledger_row.get("payload") if isinstance(ledger_row, dict) else None
+                    if (
+                        not isinstance(ledger_row, dict)
+                        or ledger_row.get("tenant_id") != tenant_id
+                        or ledger_row.get("aggregate_type") != "edge"
+                        or ledger_row.get("aggregate_id") != aggregate_id
+                        or not isinstance(payload, dict)
+                        or payload.get("kind") not in {"edge", "edge_revocation"}
+                        or payload.get("edge_type") != EdgeType.MEMBER_OF
+                        or payload.get("from_vertex_id") != subject.id
+                        or payload.get("to_vertex_id") != population_id
+                    ):
+                        return SyndicateMembershipRead(
+                            [],
+                            available=True,
+                            scope_known=False,
+                            truncated=truncated,
+                            reason="profile_syndicate_ledger_scope_mismatch",
+                        )
+                    if payload.get("kind") == "edge":
+                        properties = payload.get("properties")
+                        if not isinstance(properties, dict) or properties.get("tenant_id") != tenant_id:
+                            return SyndicateMembershipRead(
+                                [],
+                                available=True,
+                                scope_known=False,
+                                truncated=truncated,
+                                reason="profile_syndicate_ledger_edge_tenant_mismatch",
+                            )
+                    valid_ledger_rows.append(ledger_row)
+
+                history = GraphHistoryReplay._history_from_rows(
+                    subject.id, None, valid_ledger_rows
+                )
+                edge_key = (EdgeType.MEMBER_OF, subject.id, population_id)
+                if edge_key not in set(history.live_edges):
+                    reasons.append("profile_syndicate_candidate_edge_not_live")
+                    continue
+
+                live_adds = [
+                    event
+                    for event in history.events
+                    if event.kind == "edge_added"
+                    and (event.edge_type, event.from_vertex_id, event.to_vertex_id)
+                    == edge_key
+                ]
+                if not live_adds:
+                    reasons.append("profile_syndicate_live_edge_evidence_unavailable")
+                    continue
+                latest_add = max(live_adds, key=lambda event: event.ledger_offset)
+                if not latest_add.mutation_id.strip():
+                    reasons.append("profile_syndicate_live_edge_evidence_unavailable")
+                    continue
+                latest_row = next(
+                    (
+                        ledger_row
+                        for ledger_row in valid_ledger_rows
+                        if ledger_row.get("mutation_id") == latest_add.mutation_id
+                        and int(ledger_row.get("ledger_offset") or 0)
+                        == latest_add.ledger_offset
+                    ),
+                    None,
+                )
+                latest_payload = (
+                    latest_row.get("payload") if isinstance(latest_row, dict) else None
+                )
+                if not isinstance(latest_payload, dict):
+                    reasons.append("profile_syndicate_live_edge_evidence_unavailable")
+                    continue
+                latest_properties = latest_payload.get("properties")
+                if (
+                    isinstance(latest_properties, dict)
+                    and latest_properties.get("membership_state")
+                    not in (None, "", "active")
+                ):
+                    reasons.append("profile_syndicate_edge_membership_inactive")
+                    continue
+
+                evidence_ref = EvidenceRef(
+                    id=latest_add.mutation_id,
+                    type="relationship",
+                    source="graph_mutation_ledger",
+                    observedAt=latest_add.recorded_at or None,
+                )
+                if not evidence_ref.id.strip():
+                    return SyndicateMembershipRead(
+                        [],
+                        available=True,
+                        scope_known=True,
+                        truncated=truncated,
+                        reason="profile_syndicate_live_edge_evidence_unavailable",
+                    )
+                seen_population_ids.add(population_id)
+                joined_at = (
+                    latest_properties.get("valid_from")
+                    if isinstance(latest_properties, dict)
+                    else None
+                ) or evidence_ref.observedAt
+                memberships.append(
+                    SyndicateMembership(
+                        tenant_id=tenant_id,
+                        entity_id=subject.id,
+                        population_id=population_id,
+                        population_type=str(population_type),
+                        joined_at=joined_at if isinstance(joined_at, str) else None,
+                        evidence_ref=evidence_ref,
+                    )
+                )
+        except Exception:  # noqa: BLE001 - fail closed at the membership boundary
+            return SyndicateMembershipRead(
+                [],
+                available=False,
+                scope_known=False,
+                reason="profile_syndicate_membership_authority_unavailable",
+            )
+
+        return SyndicateMembershipRead(
+            memberships,
+            available=True,
+            scope_known=True,
+            truncated=truncated,
+            reason="|".join(sorted(set(reasons))) or None,
         )
 
     async def identity_binding(
@@ -947,6 +1233,7 @@ class Profile360Provider:
         needs_journeys = "journeys" in requested_sections
         needs_sessions = "sessions" in requested_sections
         needs_agent_delegations = SLOT_AGENT_DELEGATIONS in requested_sections
+        needs_syndicates = SLOT_SYNDICATES in requested_sections
         needs_identity = bool(
             {"summary", "state", "evidence", "journeys", "sessions", "interactions"}
             & requested_sections
@@ -962,6 +1249,7 @@ class Profile360Provider:
                 SLOT_AGENT_DELEGATIONS,
             }
             & requested_sections
+            or (needs_syndicates and request.subject.kind == "entity")
             or ("timeline" in requested_sections and request.subject.kind == "entity")
         )
         needs_events = bool({"timeline", "evidence"} & requested_sections)
@@ -1094,6 +1382,24 @@ class Profile360Provider:
                     "claims": [*result.claims, *agent_delegation_claims],
                 }
             )
+        if needs_syndicates:
+            syndicates_section, syndicates_claims = await self._syndicates(
+                request, temporal, canonical_entity
+            )
+            base_claims = (
+                result.claims
+                if requested_sections != {SLOT_SYNDICATES}
+                else []
+            )
+            result = result.model_copy(
+                update={
+                    "sections": sorted(
+                        [*result.sections, syndicates_section],
+                        key=lambda section: OUTPUT_SECTIONS.index(section.id),
+                    ),
+                    "claims": [*base_claims, *syndicates_claims],
+                }
+            )
         if needs_journeys:
             journey_section, journey_claims = await self._journey_participation(
                 request, temporal, identity, canonical_entity
@@ -1142,6 +1448,208 @@ class Profile360Provider:
                 }
             )
         return _filter_projection_result(result, request)
+
+    async def _syndicates(
+        self,
+        request: ProjectionRequest,
+        temporal: _TemporalRequest,
+        canonical_entity: CanonicalEntityRead,
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        """Project only explicit, current, tenant-owned Syndicates membership.
+
+        This intentionally uses the Population 360 Syndicates opt-in contract;
+        labels, profile resemblance, generic populations, and Cluster360 groups
+        do not establish Syndicates membership. The membership materialization
+        enumerates candidates only; each positive row is checked against its
+        exact current graph-ledger aggregate. The reader has no historical
+        replay, roster completeness watermark, or freshness SLA.
+        """
+
+        def unknown(
+            reason: str, *, state: str = "unknown"
+        ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+            return (
+                ProjectionSection(
+                    id=SLOT_SYNDICATES,
+                    state=state,  # type: ignore[arg-type]
+                    title="Syndicate and cohort memberships",
+                    content={
+                        "state": state,
+                        "memberships": [],
+                        "observedMembershipCount": None,
+                        "coverage": "unknown",
+                        "complete": False,
+                        "temporalInterpretation": "current_membership_candidates_verified_against_graph_ledger",
+                        "freshness": {
+                            "state": "unknown",
+                            "observedAt": None,
+                            "reason": "Profile360 has no membership freshness threshold.",
+                        },
+                        "reasonCode": reason,
+                        "limitations": [
+                            "historical membership replay is unavailable",
+                            "membership roster completeness is unknown",
+                            "only explicitly opted-in Syndicates groups are eligible",
+                        ],
+                    },
+                    canonicalAuthorityRefs=(
+                        list(SYNDICATE_AUTHORITIES) if state == "degraded" else None
+                    ),
+                ),
+                [],
+            )
+
+        if request.subject.kind != "entity":
+            return unknown("profile_syndicate_subject_kind_unsupported")
+        if temporal.error is not None:
+            return unknown("profile_syndicate_temporal_request_unavailable", state="degraded")
+        if temporal.as_of is not None or temporal.start is not None or temporal.end is not None:
+            return unknown("profile_syndicate_historical_replay_unavailable")
+        entity = (
+            canonical_entity.record
+            if canonical_entity.available and canonical_entity.scope_known
+            else None
+        )
+        if (
+            entity is None
+            or entity.get("tenant_id") != request.tenantId
+            or str(entity.get("entity_id") or "") != request.subject.id
+        ):
+            return unknown("profile_syndicate_exact_entity_unavailable")
+
+        try:
+            read = await self._source.syndicate_memberships(
+                request.tenantId,
+                request.subject,
+                limit=MAX_SYNDICATE_MEMBERSHIPS,
+            )
+        except Exception:  # noqa: BLE001 - fail closed at the membership boundary
+            return unknown(
+                "profile_syndicate_membership_authority_unavailable", state="degraded"
+            )
+        if not isinstance(read, SyndicateMembershipRead) or not isinstance(
+            read.rows, list
+        ):
+            return unknown(
+                "profile_syndicate_membership_source_invalid_response", state="degraded"
+            )
+        if not read.available:
+            return unknown(
+                "profile_syndicate_membership_authority_unavailable", state="degraded"
+            )
+        if not read.scope_known:
+            return unknown(
+                read.reason or "profile_syndicate_membership_scope_unverified"
+            )
+        if len(read.rows) > MAX_SYNDICATE_MEMBERSHIPS:
+            return unknown(
+                "profile_syndicate_membership_source_limit_exceeded", state="degraded"
+            )
+
+        memberships: list[dict[str, Any]] = []
+        evidence_refs: list[EvidenceRef] = []
+        seen: set[str] = set()
+        for row in read.rows:
+            if (
+                not isinstance(row, SyndicateMembership)
+                or row.tenant_id != request.tenantId
+                or row.entity_id != request.subject.id
+                or not row.population_id
+                or row.population_type not in {
+                    "segment",
+                    "cohort",
+                    "cluster",
+                    "community",
+                    "batch",
+                    "archetype",
+                    "anomaly",
+                    "lookalike",
+                    "risk",
+                    "lifecycle",
+                }
+                or not isinstance(row.evidence_ref, EvidenceRef)
+                or row.evidence_ref.type != "relationship"
+                or row.evidence_ref.source != "graph_mutation_ledger"
+                or not row.evidence_ref.id.strip()
+            ):
+                return unknown("profile_syndicate_membership_scope_or_evidence_invalid")
+            if row.population_id in seen:
+                continue
+            seen.add(row.population_id)
+            memberships.append(
+                {
+                    "populationId": row.population_id,
+                    "populationType": row.population_type,
+                    "membershipState": "active",
+                    "joinedAt": row.joined_at,
+                    "evidenceRef": row.evidence_ref.model_dump(mode="json"),
+                }
+            )
+            evidence_refs.append(row.evidence_ref)
+
+        if read.truncated:
+            state = "degraded"
+            reason = "profile_syndicate_membership_scan_truncated"
+        elif read.reason:
+            state = "degraded"
+            reason = read.reason
+        elif memberships:
+            state = "degraded"
+            reason = "profile_syndicate_membership_completeness_unknown"
+        else:
+            state = "unknown"
+            reason = "profile_syndicate_membership_not_observed_completeness_unknown"
+
+        section = ProjectionSection(
+            id=SLOT_SYNDICATES,
+            state=state,  # type: ignore[arg-type]
+            title="Syndicate and cohort memberships",
+            content={
+                "state": state,
+                "memberships": memberships,
+                "observedMembershipCount": len(memberships),
+                "coverage": "unknown",
+                "complete": False,
+                "temporalInterpretation": "current_membership_candidates_verified_against_graph_ledger",
+                "freshness": {
+                    "state": "unknown",
+                    "observedAt": None,
+                    "reason": "Profile360 has no membership freshness threshold.",
+                },
+                "readAuthority": "population_memberships+population_definitions+graph_mutation_ledger",
+                "reasonCode": reason,
+                "limitations": [
+                    "membership rows enumerate candidate population IDs; exact active membership is verified from the tenant-scoped MEMBER_OF ledger aggregate",
+                    "membership roster completeness is unknown",
+                    "historical membership replay is unavailable",
+                    "Profile360 membership freshness policy is unavailable",
+                ],
+            },
+            warnings=(
+                ["membership read was bounded"] if read.truncated else None
+            ),
+            canonicalAuthorityRefs=list(SYNDICATE_AUTHORITIES),
+        )
+        claims = [
+            ClaimEnvelope(
+                id=f"profile360.syndicate_membership.{row.population_id}",
+                kind="profile_syndicate_membership",
+                subject=request.subject,
+                evidenceRefs=[row.evidence_ref],
+                claims=[
+                    "The exact tenant entity has an observed active MEMBER_OF edge to an explicitly opted-in Syndicates group."
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=[SLOT_SYNDICATES],
+            )
+            for row in read.rows
+            if isinstance(row, SyndicateMembership)
+            and row.tenant_id == request.tenantId
+            and row.entity_id == request.subject.id
+            and row.population_id in seen
+            and row.evidence_ref in evidence_refs
+        ]
+        return section, claims
 
     async def _agent_delegations(
         self,

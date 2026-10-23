@@ -11,7 +11,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:d7cf0aa3b03f0c060b96a7af46a717361a09ae6f3af2f11fcb247db5f2d00ed1"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:59bd6f6c6450a41ef845fc5117d15d9fed8d4239e0bf4e4199d36f50aca6b290"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:540f85292689337edc329c9b72b7c4f99487226a5e31aab6526c878e7ea36eeb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -203,6 +203,17 @@ unknown. Value360 preserves separate economic and commerce observations and
 resolves only explicit settlement-to-payment references within the same order;
 it does not match economic rows across sources or calculate reconciled totals.
 All three are partial slot paths and do not complete their product surfaces.
+
+A further slice adds partial Profile360 `syndicates` and Commerce360
+`availability_price` paths. Profile360 verifies exact current
+`MEMBER_OF:<entity>:<population>` ledger edges only for explicitly opted-in,
+tenant-owned Syndicates populations and cites the live mutation ID. Historical
+membership, roster completeness, and freshness remain unknown. Commerce360
+exposes product/offer catalog lifecycle evidence only; inventory availability,
+current offer price, and freshness remain unknown. Location360 `timezone`
+remains unknown because no exact tenant-scoped geographic timezone mapping is
+connected; coordinates and place names are not used to infer it. None of these
+changes completes a product surface or adds agent execution authority.
 
 ## Bucket 1 — Correctly observation-only
 

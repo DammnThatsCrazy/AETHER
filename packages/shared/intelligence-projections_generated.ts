@@ -1136,12 +1136,12 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/blueprints/profile360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['agent', 'entity', 'episode', 'journey'],
-    canonicalAuthorities: ['agent_access', 'agent_executions', 'communication_facts', 'entity_registry', 'episode_facts', 'evidence', 'graph', 'identity', 'journeys', 'observations', 'temporal'],
+    canonicalAuthorities: ['agent_access', 'agent_executions', 'cohort_membership', 'communication_facts', 'entity_registry', 'episode_facts', 'evidence', 'graph', 'identity', 'journeys', 'observations', 'population_definitions', 'temporal'],
     hardDependencies: ['contract_spine', 'evidence_provenance', 'identity_resolution', 'temporal_kernel'],
     projectionDependencies: [],
     optionalProjectionDependencies: ['risk360'],
     inputRefs: ['EntityRef', 'EvidenceRef', 'GraphSnapshotRef', 'PageRequest', 'TimeRangeFilter'],
-    outputSections: ['agent_delegations', 'evidence', 'findings', 'interactions', 'journeys', 'sessions', 'state', 'summary', 'timeline'],
+    outputSections: ['agent_delegations', 'evidence', 'findings', 'interactions', 'journeys', 'sessions', 'state', 'summary', 'syndicates', 'timeline'],
     supportedTemporalModes: ['as_of', 'relative', 'window'],
     surfaceIds: ['profile360'],
     capabilityKeys: ['profile360.explore', 'profile360.read'],
@@ -2683,12 +2683,19 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
     displayName: 'Commerce 360',
     domainSlots: [
       {
-        canonicalAuthorityRefs: ['commerce'],
-        description: 'Required commerce360 slot: availability price.',
+        canonicalAuthorityRefs: ['commerce_product_offer_graph', 'source_provenance'],
+        description: 'Exact tenant product or offer catalog lifecycle evidence, with inventory availability, current offer price, and freshness represented independently.',
         id: 'availability_price',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'commerce_availability_price_authority_not_connected'
+        partialImplementationReason: 'Exact tenant product and offer catalog revisions provide lifecycle and provenance evidence only; inventory availability, current offer price, and freshness remain unknown because their authorities and joins are not connected.',
+        projectionBindings: [
+          {
+            projectionId: 'commerce360',
+            role: 'primary',
+            subjectKinds: ['offer', 'product'],
+            sectionIds: ['availability_price']
+          }
+        ],
+        requirement: 'required'
       },
       {
         id: 'campaign_links',
@@ -4667,12 +4674,19 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        canonicalAuthorityRefs: ['graph', 'relationship_facts'],
-        description: 'Typed syndicate or cohort relationships.',
+        canonicalAuthorityRefs: ['cohort_membership', 'evidence', 'population_definitions'],
+        description: 'Exact current tenant entity membership in an explicitly opted-in Syndicates population, verified by the live graph ledger edge.',
         id: 'syndicates',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'profile_syndicate_membership_authority_not_joined'
+        partialImplementationReason: 'Exact current MEMBER_OF edges for explicitly opted-in tenant populations are evidence-backed; unbounded roster completeness, historical replay, and a membership freshness policy remain unavailable.',
+        projectionBindings: [
+          {
+            projectionId: 'profile360',
+            role: 'primary',
+            subjectKinds: ['entity'],
+            sectionIds: ['syndicates']
+          }
+        ],
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['economic_facts', 'outcome_facts'],
@@ -4751,7 +4765,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       }
     ],
     sourceOfTruth: {
-      canonicalAuthorities: ['agent_access', 'agent_executions', 'ai_execution_facts', 'communication_facts', 'economic_facts', 'entity_registry', 'evidence', 'geo_observations', 'graph', 'identity', 'journeys', 'model_governance', 'observations', 'outcome_facts', 'relationship_facts', 'risk_outputs', 'temporal'],
+      canonicalAuthorities: ['agent_access', 'agent_executions', 'ai_execution_facts', 'cohort_membership', 'communication_facts', 'economic_facts', 'entity_registry', 'evidence', 'geo_observations', 'graph', 'identity', 'journeys', 'model_governance', 'observations', 'outcome_facts', 'population_definitions', 'relationship_facts', 'risk_outputs', 'temporal'],
       ownsCanonicalTruth: false,
       prohibitedOwnership: ['economic_facts', 'execution_facts', 'graph', 'identity', 'observations', 'risk_outputs', 'source_provenance']
     },
