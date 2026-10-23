@@ -8,7 +8,7 @@ import { NotificationsSection } from './notifications-section';
 import { NotificationPreferencesSection } from './notification-preferences-section';
 import { WebhooksSection } from './webhooks-section';
 import { DataExchangeGate } from './data-exchange-section';
-import { BillingHub, MembersHub, PersonalHub, SecurityHub, WorkspaceHub } from './settings-hubs';
+import { ApiLimitsBlock, BillingHub, InvitationsHub, MembersHub, PersonalHub, SecurityHub, SessionsHub, WorkspaceHub } from './settings-hubs';
 
 type SettingsSection =
   | 'api-keys'
@@ -57,10 +57,10 @@ export function resolveSettingsSection(pathname: string): SettingsSection {
 // ── Design grouping (Aether Settings handoff) ───────────────────────────────
 
 /** Design sections without a /settings/* route; reached as /settings?section=<hub>. */
-export type SettingsHub = 'workspace' | 'members' | 'billing' | 'security' | 'personal';
+export type SettingsHub = 'workspace' | 'members' | 'invitations' | 'billing' | 'security' | 'personal' | 'sessions';
 export type SettingsGroupId = 'workspace' | 'connections' | 'members' | 'billing' | 'security' | 'personal';
 
-const HUBS: readonly SettingsHub[] = ['workspace', 'members', 'billing', 'security', 'personal'];
+const HUBS: readonly SettingsHub[] = ['workspace', 'members', 'invitations', 'billing', 'security', 'personal', 'sessions'];
 
 export type SettingsTab =
   | { readonly kind: 'section'; readonly label: string; readonly section: SettingsSection }
@@ -107,7 +107,11 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
     icon: 'users-round',
     title: 'Members & Access',
     sub: 'Who can sign in to this workspace, and what they can reach.',
-    tabs: [{ kind: 'hub', label: 'Members', hub: 'members' }],
+    // The design's Roles and Permissions tabs are omitted: there is no read for them.
+    tabs: [
+      { kind: 'hub', label: 'People', hub: 'members' },
+      { kind: 'hub', label: 'Invitations', hub: 'invitations' },
+    ],
   },
   {
     id: 'billing',
@@ -135,6 +139,7 @@ export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
       { kind: 'hub', label: 'Profile', hub: 'personal' },
       { kind: 'section', label: 'Notifications', section: 'notification-preferences' },
       { kind: 'section', label: 'Channels', section: 'notifications' },
+      { kind: 'hub', label: 'Sessions', hub: 'sessions' },
     ],
   },
 ];
@@ -255,9 +260,11 @@ export function SettingsPage() {
 
           {hub === 'workspace' && <WorkspaceHub />}
           {hub === 'members' && <MembersHub />}
+          {hub === 'invitations' && <InvitationsHub />}
           {hub === 'billing' && <BillingHub />}
           {hub === 'security' && <SecurityHub />}
           {hub === 'personal' && <PersonalHub />}
+          {hub === 'sessions' && <SessionsHub />}
 
           {section && (
             <Panel className="min-w-0 px-[clamp(14px,2.4vw,22px)] py-4" style={{ borderRadius: 24 }}>
@@ -272,6 +279,7 @@ export function SettingsPage() {
               </div>
             </Panel>
           )}
+          {section === 'api-keys' && <ApiLimitsBlock />}
         </div>
       </div>
     </div>

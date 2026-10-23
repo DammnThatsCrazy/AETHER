@@ -138,6 +138,12 @@ vi.mock('@aether-app/features/account', () => ({
     error: providerState.account === 'error' ? new Error('billing offline') : null,
   }),
   useMeProfile: () => ({ data: undefined, isLoading: false, error: null }),
+  // /settings (API keys) also shows the API Limits block from the usage read.
+  useUsage: () => ({
+    data: undefined,
+    isLoading: false,
+    error: providerState.settings === 'error' ? 'settings backend offline' : null,
+  }),
   useCreateCheckout: () => ({ mutate: vi.fn(), isLoading: false }),
   useBillingPortal: () => ({ mutate: vi.fn(), isLoading: false }),
   useEnterpriseContact: () => ({ mutate: vi.fn(), isLoading: false }),
