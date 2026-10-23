@@ -4498,11 +4498,18 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             },
             {
                 "canonicalAuthorityRefs": ("economic_facts", "outcome_facts"),
-                "description": "Value facts and attributed outcomes linked to the profile.",
+                "description": "Direct tenant-scoped economic facts for the exact canonical entity or Agent subject; measured outcomes and attribution remain unresolved.",
                 "id": "value_summary",
-                "projectionBindings": [],
-                "requirement": "required",
-                "unboundReason": "profile_value_attribution_join_not_available"
+                "partialImplementationReason": "Economic360 reads exact tenant-scoped economic facts for canonical entity and Agent subjects; Outcome360 does not yet support exact entity/profile subjects for attributed outcomes, and Profile-specific freshness remains unknown.",
+                "projectionBindings": [
+                    {
+                        "projectionId": "economic360",
+                        "role": "primary",
+                        "subjectKinds": ("agent", "entity"),
+                        "sectionIds": ("evidence", "summary")
+                    }
+                ],
+                "requirement": "required"
             }
         ],
         "freshnessPolicy": {

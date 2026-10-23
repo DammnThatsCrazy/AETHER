@@ -597,6 +597,10 @@ Journey360 explicit role markers, and Location360 source/evidence lineage.
 Profile360's required `risk_summary` slot now binds to Risk360 assessments and
 evidence for exact tenant-scoped entity and Agent subjects; it remains degraded
 while a Profile-specific freshness threshold is unknown.
+Profile360's required `value_summary` slot now binds to Economic360's exact
+tenant-scoped entity and Agent summary/evidence; Outcome360 attribution to
+entity/profile subjects and Profile-specific freshness remain unresolved, so it
+also remains degraded.
 Additional partial paths include Identity360 device/session identifier-type
 metadata, Execution360 exact execution-linked RiskSignals, Social360
 propagation-eligible observed paths, and Episode360 exact episode-linked

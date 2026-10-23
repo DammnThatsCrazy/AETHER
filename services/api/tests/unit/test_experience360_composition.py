@@ -1974,3 +1974,106 @@ async def test_profile_risk_summary_routes_exact_entity_to_risk360_after_policy(
         "summary",
     }
     assert "slot_partial_implementation" in slot.reasonCodes
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("subject_kind", ["entity", "agent"])
+async def test_profile_value_summary_routes_exact_subject_to_economic360_after_policy(
+    subject_kind: str,
+):
+    events: list[tuple[str, str, str]] = []
+    subject_id = f"profile-value-{subject_kind}-1"
+    subject = ProjectionSubject(kind=subject_kind, id=subject_id)
+    value_evidence = EvidenceRef(
+        id=f"economic-record-{subject_kind}-1",
+        type="transaction",
+        source="canonical_conversions",
+        observedAt="2026-10-18T12:00:00Z",
+    )
+
+    class AllowPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            events.append(("policy", request.surfaceId, request.subject.id))
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-18T12:01:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "value_summary": Experience360PolicyDisposition(state="allowed")
+                },
+            )
+
+    class Runtime:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str, tuple[str, ...]]] = []
+
+        async def execute_projection(self, projection_request, **_kwargs):
+            section_ids = tuple(sorted(projection_request.includeSections or []))
+            self.calls.append(
+                (
+                    projection_request.projectionId,
+                    projection_request.subject.id,
+                    section_ids,
+                )
+            )
+            events.append(
+                ("projection", projection_request.projectionId, projection_request.subject.id)
+            )
+            assert projection_request.tenantId == TENANT
+            assert projection_request.subject == subject
+            claim = ClaimEnvelope(
+                id=f"economic360.summary.{subject_id}",
+                kind="economic_rollup",
+                subject=subject,
+                evidenceRefs=[value_evidence],
+                claims=["A tenant-scoped economic fact records this exact subject."],
+                domainSlotIds=["value_summary"],
+            )
+            return ProjectionResult(
+                projectionId="economic360",
+                tenantId=projection_request.tenantId,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[
+                    ProjectionSection(
+                        id=section_id,
+                        state="available",
+                        content={"subjectId": subject_id, "evidenceRefs": [value_evidence]},
+                        canonicalAuthorityRefs=["economic_facts", "evidence"],
+                    )
+                    for section_id in section_ids
+                ],
+                claims=[claim],
+                dependencyState=[],
+                generatedAt="2026-10-18T12:00:30Z",
+                degradedReasons=[],
+            )
+
+    runtime = Runtime()
+    request = Experience360FrameRequest(
+        surfaceId="profile360",
+        tenantId=TENANT,
+        subject=subject,
+        requestedSlotIds=["value_summary"],
+        includeEvidence=True,
+    )
+    frame = await build_experience360_frame(
+        request,
+        policy_evaluator=AllowPolicy(),
+        projection_runtime=runtime,
+        generated_at="2026-10-18T12:01:00Z",
+    )
+
+    assert events[0] == ("policy", "profile360", subject_id)
+    assert runtime.calls == [("economic360", subject_id, ("evidence", "summary"))]
+    assert events[1] == ("projection", "economic360", subject_id)
+    slot = frame.slots[0]
+    assert slot.state == "degraded"
+    assert slot.content is not None
+    assert [claim.id for claim in slot.claims] == [f"economic360.summary.{subject_id}"]
+    assert slot.evidenceRefs == [value_evidence]
+    assert {item.sectionId for item in slot.provenance if item.sourceKind == "section"} == {
+        "evidence",
+        "summary",
+    }
+    assert "slot_partial_implementation" in slot.reasonCodes

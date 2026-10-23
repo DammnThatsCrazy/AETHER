@@ -1913,6 +1913,11 @@ only for exact tenant, subject-kind, and subject-ID matches on entity and Agent
 subjects. Its Profile-specific freshness threshold remains unknown, so the slot
 stays degraded while the other required Profile slots remain independently
 evaluated.
+Profile360's required `value_summary` slot reuses Economic360 summary and
+evidence only for exact tenant, subject-kind, and subject-ID matches on
+canonical entity and Agent subjects. Outcome360 does not yet support exact
+entity/profile subjects for attributed outcomes, and Profile-specific freshness
+remains unknown, so the slot stays degraded.
 Campaign360's `anomalies` slot includes exact campaign-scoped targeting-leakage
 findings with their targeting-observation and eligibility-snapshot evidence;
 general risk and source anomalies remain unresolved. Journey360's `stages` slot
