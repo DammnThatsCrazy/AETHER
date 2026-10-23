@@ -49,11 +49,13 @@ data class AetherConfig(
     val modules: ModuleConfig = ModuleConfig(),
     val privacy: PrivacyConfig = PrivacyConfig(),
     /**
-     * Optional HMAC-SHA256 secret to verify the remote SDK manifest signature
-     * before applying it (Truth Kernel §2.9). When set, unsigned/invalid
-     * manifests are rejected and the last-known-good config is kept.
+     * Optional base64url SPKI P-256 public key to verify the remote SDK manifest
+     * signature before applying it (Truth Kernel §2.9; print it with
+     * `python scripts/sdk_manifest_public_key.py`). When set, unsigned/invalid
+     * manifests are rejected and the last-known-good config is kept. When unset,
+     * manifests are applied without verification.
      */
-    val manifestVerificationKey: String? = null,
+    val manifestPublicKey: String? = null,
     val autoResumeJourney: Boolean = true,
     val onJourneyResumed: ((resolvedAnonymousId: String, resolvedUserId: String?) -> Unit)? = null,
     // Native identity -> subject-hints convergence (WS-C / Invariant #4).
@@ -803,7 +805,7 @@ object Aether : DefaultLifecycleObserver {
             platform = "android",
             appVersion = try { application.packageManager.getPackageInfo(application.packageName, 0).versionName ?: "" } catch (_: Exception) { "" },
             prefs = prefs,
-            manifestVerificationKey = config.manifestVerificationKey
+            manifestPublicKey = config.manifestPublicKey
         )
         hAgent.getDynamicState = {
             Triple(

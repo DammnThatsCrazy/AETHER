@@ -24,8 +24,11 @@ source_files:
   - services/api/main.py
   - services/api/config/settings.py
   - packages/shared/managed-integrations.ts
+reviewed_source_commits:
+  - commit: "482948261"
+    reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
 source_hashes:
-  "config/route_registry.yaml": "sha256:a054be7a567dfb02fccda1cac9ccf3ac95c558f0c29642037a0fbea06302ba9a"
+  "config/route_registry.yaml": "sha256:d9d19d04790f57f4d1c162745207ef429740465d27e31786022929c08739b00e"
   "packages/shared/managed-integrations.ts": "sha256:1277aae12c27f222f7358c793d71bfa0a8e34c07354de88bb48dff5126a55b25"
   "scripts/validate_sdk_control_plane_seam.py": "sha256:321dbeec981f9542054e4be9c70f804414b027befeeb11d5eef4342f6c25f3af"
   "services/api/alembic/versions/20260906_rcp_admission.py": "sha256:ac836b9f4fc08cb325444f9447689efc05031157e0b52d7dc2402d04b7514a1e"

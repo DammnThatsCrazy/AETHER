@@ -819,6 +819,86 @@ class BaseRepository(ABC):
         logger.info(f"TENANT UPSERT {self.table_name} id={record_id}")
         return data
 
+    async def insert_if_absent(self, record_id: str, data: dict, tenant_id: str) -> bool:
+        """Create a tenant-owned row only if ``record_id`` does not exist yet.
+
+        Returns ``False`` (writing nothing) when any row already holds the id,
+        whoever owns it, so a caller that lost a create race re-reads instead of
+        replacing the winner. JSONB-mode tables only.
+        """
+        if not tenant_id or data.get("tenant_id") != tenant_id:
+            raise ValueError("tenant-scoped insert requires matching tenant data")
+        if not self._jsonb_mode:
+            raise NotImplementedError("insert_if_absent supports JSONB-mode tables only")
+        now = utc_now().isoformat()
+        data["id"] = record_id
+        data["created_at"] = data.get("created_at") or now
+        data["updated_at"] = now
+
+        pool = await self._ensure_pool()
+        if pool is None:
+            if record_id in self._store:
+                return False
+            self._store[record_id] = data
+            logger.info(f"INSERT IF ABSENT {self.table_name} id={record_id} (in-memory)")
+            return True
+
+        await self._ensure_table()
+        status = await pool.execute(
+            f"INSERT INTO {self.table_name} (id, data, tenant_id, created_at, updated_at) "
+            f"VALUES ($1, $2::jsonb, $3, NOW(), NOW()) ON CONFLICT (id) DO NOTHING",
+            record_id, json.dumps(data, default=str), tenant_id,
+        )
+        inserted = not _no_rows(status)
+        logger.info(f"INSERT IF ABSENT {self.table_name} id={record_id} inserted={inserted}")
+        return inserted
+
+    async def replace_if_matches(
+        self, record_id: str, data: dict, tenant_id: str, expected: dict[str, Any]
+    ) -> bool:
+        """Atomically replace a tenant-owned row only if it still matches ``expected``.
+
+        ``expected`` is a subset of the stored record (for example
+        ``{"revision": 3}``); the replace is skipped, and ``False`` returned, when
+        the row is missing, owned by another tenant, or no longer contains every
+        expected key/value. Two writers that read the same row therefore cannot
+        both win: the loser sees ``False`` and re-reads. Unlike
+        ``insert_tenant_scoped`` this never rewrites the stored ``created_at``
+        (the caller's ``data`` carries it), only ``updated_at``.
+
+        JSONB-mode tables only; the match is a single ``data @> expected``
+        predicate inside the UPDATE, so it is atomic in PostgreSQL. The
+        in-memory adapter has no await between the check and the write.
+        """
+        if not tenant_id or data.get("tenant_id") != tenant_id:
+            raise ValueError("tenant-scoped replace requires matching tenant data")
+        if not self._jsonb_mode:
+            raise NotImplementedError("replace_if_matches supports JSONB-mode tables only")
+        data["id"] = record_id
+        data["updated_at"] = utc_now().isoformat()
+
+        pool = await self._ensure_pool()
+        if pool is None:
+            existing = self._store.get(record_id)
+            if existing is None or existing.get("tenant_id") != tenant_id:
+                return False
+            if any(existing.get(key) != value for key, value in expected.items()):
+                return False
+            self._store[record_id] = data
+            logger.info(f"CONDITIONAL REPLACE {self.table_name} id={record_id} (in-memory)")
+            return True
+
+        await self._ensure_table()
+        status = await pool.execute(
+            f"UPDATE {self.table_name} SET data = $1::jsonb, updated_at = NOW() "
+            f"WHERE id = $2 AND tenant_id = $3 AND data @> $4::jsonb",
+            json.dumps(data, default=str), record_id, tenant_id,
+            json.dumps(expected, default=str),
+        )
+        replaced = not _no_rows(status)
+        logger.info(f"CONDITIONAL REPLACE {self.table_name} id={record_id} replaced={replaced}")
+        return replaced
+
     async def update(self, record_id: str, data: dict) -> dict:
         """Merge ``data`` into ``record_id``; only the owning tenant's row changes.
 

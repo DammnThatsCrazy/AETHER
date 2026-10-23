@@ -175,6 +175,13 @@ export interface AdvancedConfig {
     retry?: RetryConfig;
     /** Custom HTTP headers for API requests */
     customHeaders?: Record<string, string>;
+    /**
+     * Base64url SPKI P-256 public key for verifying signed remote-config manifests
+     * (`python scripts/sdk_manifest_public_key.py`). When set, unsigned or invalid
+     * manifests are rejected and the last known-good config is kept. When unset,
+     * manifests are applied without verification.
+     */
+    manifestPublicKey?: string;
 }
 export interface RetryConfig {
     maxRetries?: number;

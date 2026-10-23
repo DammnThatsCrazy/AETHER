@@ -4,16 +4,25 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from config.settings import settings
 from shared.common.common import BadRequestError, NotFoundError
 from shared.logger.logger import get_logger, metrics
 
-from .service import issue_handoff, list_handoffs, redeem_handoff
+from .service import issue_handoff, list_handoffs, peek_handoff_source, redeem_handoff
 
 logger = get_logger("aether.service.journey_handoff")
 router = APIRouter(prefix="/sdk/journey-handoff", tags=["SDK Journey Handoff"])
+
+
+def _strip_required(value: str) -> str:
+    """Identifiers are trimmed before the length check, so a blank value is a
+    422 from request validation rather than a service-level ValueError (500)."""
+    value = value.strip()
+    if not value:
+        raise ValueError("must not be blank")
+    return value
 
 
 class IssueRequest(BaseModel):
@@ -25,6 +34,8 @@ class IssueRequest(BaseModel):
     ttl_seconds: int = Field(default=600, ge=30, le=900)
     tenant_app_key: Optional[str] = None
 
+    _strip_ids = field_validator("journey_id", "session_id", "anonymous_id")(_strip_required)
+
 
 class RedeemRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -33,6 +44,8 @@ class RedeemRequest(BaseModel):
     anonymous_id: str = Field(..., min_length=1, max_length=256)
     platform: Optional[str] = Field(default=None, max_length=32)
     tenant_app_key: Optional[str] = None
+
+    _strip_ids = field_validator("session_id", "anonymous_id")(_strip_required)
 
 
 def _require_enabled() -> None:
@@ -69,7 +82,7 @@ def _scope(request: Request, requested_app: Optional[str]) -> tuple[str, str]:
 async def issue(body: IssueRequest, request: Request) -> dict:
     _require_enabled()
     tenant_id, namespace = _scope(request, body.tenant_app_key)
-    await _require_link_consent(tenant_id, body.anonymous_id.strip())
+    await _require_link_consent(tenant_id, body.anonymous_id)
     issued = await issue_handoff(
         tenant_id=tenant_id, app_namespace=namespace, journey_id=body.journey_id,
         session_id=body.session_id, anonymous_id=body.anonymous_id,
@@ -83,7 +96,22 @@ async def issue(body: IssueRequest, request: Request) -> dict:
 async def redeem(body: RedeemRequest, request: Request) -> dict:
     _require_enabled()
     tenant_id, namespace = _scope(request, body.tenant_app_key)
-    await _require_link_consent(tenant_id, body.anonymous_id.strip())
+    await _require_link_consent(tenant_id, body.anonymous_id)
+    # The source subject's consent can lapse between issuance and redemption, and
+    # redemption creates an explicit cross-session link carrying its identifiers,
+    # so re-evaluate it now (the contract requires consent at both ends). A
+    # revoked source answers exactly like an unknown token.
+    source_anonymous_id = await peek_handoff_source(
+        tenant_id=tenant_id, app_namespace=namespace, token=body.token,
+    )
+    if source_anonymous_id is not None:
+        try:
+            await _require_link_consent(tenant_id, source_anonymous_id)
+        except BadRequestError:
+            metrics.increment(
+                "journey_handoff_rejected_total", labels={"reason": "source_consent"}
+            )
+            raise NotFoundError("handoff token")
     link, reason = await redeem_handoff(
         tenant_id=tenant_id, app_namespace=namespace, token=body.token,
         session_id=body.session_id, anonymous_id=body.anonymous_id,

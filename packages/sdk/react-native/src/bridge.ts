@@ -75,6 +75,15 @@ export interface AetherRNConfig {
     gdprMode?: boolean;
     anonymizeIP?: boolean;
   };
+  /**
+   * Base64url SPKI P-256 public key for verifying signed remote-config manifests
+   * (`python scripts/sdk_manifest_public_key.py`). Forwarded to the native SDKs,
+   * which verify the manifest they fetch, and used by the JS manifest path via
+   * {@link Aether.verifyManifest}. When set, an unsigned or invalid manifest is
+   * rejected and the last known-good config is kept (fail closed). When unset,
+   * manifests are applied without verification.
+   */
+  manifestPublicKey?: string;
   autoResumeJourney?: boolean;
   onJourneyResumed?: (identity: ResolvedIdentity) => void;
 }
@@ -119,6 +128,22 @@ const Aether = {
     }
     activeConfig = config;
     AetherNative.initialize(config);
+  },
+
+  /**
+   * Verify a remote-config manifest (the parsed object, `signature` included)
+   * against `publicKey` using the native ES256 verifier shared with the iOS and
+   * Android SDKs (docs/reference/sdks/manifest-signing.md). Hermes has no
+   * WebCrypto, so verification is delegated to native code. Fails closed: a
+   * missing native module/method, a bad key or any error resolves `false`.
+   */
+  async verifyManifest(manifest: unknown, publicKey: string): Promise<boolean> {
+    try {
+      if (!AetherNative?.verifyManifest) return false;
+      return (await AetherNative.verifyManifest(JSON.stringify(manifest), publicKey)) === true;
+    } catch {
+      return false;
+    }
   },
 
   track(event: string, properties?: Record<string, unknown>): void {
@@ -460,8 +485,9 @@ const Aether = {
     observe: true,
     // Per-batch ingestion health via the AetherBatchResult native event (§2.8).
     batchHealth: true,
-    // Manifest signature verification is enforced in the native iOS/Android
-    // layers this bridge delegates to (§2.9).
+    // Manifest signature verification (§2.9): ES256, performed by the native
+    // iOS/Android SDKs. manifestPublicKey is forwarded to them at init, and the
+    // JS manifest path calls verifyManifest(). Fail-closed when a key is set.
     manifestSignatureVerification: true,
   },
 
