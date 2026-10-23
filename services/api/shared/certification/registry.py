@@ -290,6 +290,50 @@ def _resolve_stablecoin_chain() -> list[AdapterCertificationDescriptor]:
     return descriptors
 
 
+def _resolve_prediction_markets() -> list[AdapterCertificationDescriptor]:
+    """Prediction-market ingestion is caller-submitted payload normalization plus
+    an immutable observation store. There is no live venue polling, so it is
+    credential-waiting only in the sense of being code-complete and flag-gated;
+    live fetch and venue validation are explicitly unsupported."""
+    specs = {
+        "polymarket": ("normalize_polymarket_market", "Polymarket Gamma market payloads"),
+        "kalshi": ("normalize_kalshi_market", "Kalshi market payloads"),
+    }
+    descriptors: list[AdapterCertificationDescriptor] = []
+    for token, (func, _doc) in specs.items():
+        normalizer = _import("value.prediction_markets.normalizers", func)
+        repo = _import(
+            "value.prediction_markets.repository", "PredictionMarketObservationRepository"
+        )
+        if normalizer is not None and repo is not None:
+            state = ReadinessDimensions.derive(
+                code_complete=True, infra_defined=True, credential_required=False
+            ).state
+            adapter_name = func
+        else:  # pragma: no cover
+            state = CredentialReadiness.SCAFFOLDED
+            adapter_name = f"{func}(unresolved)"
+        descriptors.append(
+            AdapterCertificationDescriptor(
+                provider=token,
+                domain="prediction_market",
+                adapter=adapter_name,
+                adapter_version="0.1.0",
+                supported_operations=[
+                    "market_payload_normalization",
+                    "observation_persistence",
+                    "as_of_read",
+                ],
+                unsupported_operations=["live_market_polling", "order_execution"],
+                pagination_model="none",
+                streaming_model="none",
+                implementation_state=state,
+                first_release=True,
+            )
+        )
+    return descriptors
+
+
 def _resolve_communications() -> list[AdapterCertificationDescriptor]:
     """Communications provider descriptors — one per registered comms connector
     (any connector whose manifest declares ``comms.*`` data outputs), resolved
@@ -327,6 +371,7 @@ _RESOLVERS = (
     _resolve_interop,
     _resolve_derivatives,
     _resolve_stablecoin_chain,
+    _resolve_prediction_markets,
     _resolve_communications,
 )
 
