@@ -80,12 +80,8 @@ function journeyFacts(j: ProfileJourney): string {
 
 /** Card value as the frame shows it: "$418", "$24K"; cents only when present. */
 export function shortUSD(v: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    notation: Math.abs(v) >= 10_000 ? 'compact' : 'standard',
-    maximumFractionDigits: Math.abs(v) >= 10_000 || Number.isInteger(v) ? 0 : 2,
-  }).format(v);
+  const whole = Math.abs(v) >= 10_000 || Number.isInteger(v);
+  return formatUSD(v, { compact: Math.abs(v) >= 10_000, maximumFractionDigits: whole ? 0 : 2, minimumFractionDigits: whole ? 0 : 2 });
 }
 
 function stepMark(step: JourneyStep): string | null {
