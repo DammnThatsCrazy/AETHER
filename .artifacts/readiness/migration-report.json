@@ -617,10 +617,11 @@
       "mapped_feature": "semantic-intelligence",
       "hypothesized_implementation_state": "IMPLEMENTED",
       "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement.",
+        "Legacy score suggested IMPLEMENTED; the migrated record measures VERIFIED because external activation was separated out of implementation."
       ],
-      "new_implementation_state": "IMPLEMENTED",
-      "new_productionization_percent": 25.0,
+      "new_implementation_state": "VERIFIED",
+      "new_productionization_percent": 100.0,
       "new_activation_state": "CREDENTIAL_WAITING",
       "new_environment_evidence": {
         "local": "VERIFIED",

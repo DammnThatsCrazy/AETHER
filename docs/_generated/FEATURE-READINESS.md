@@ -35,7 +35,7 @@ Each feature is measured across independent dimensions. Implementation completio
 | Scale Readiness | scale-readiness-v1 v1 | 80% | 50% | RUNTIME_INTEGRATED | ✅ | INFRASTRUCTURE_WAITING | LOW |
 | Client SDKs | sdks-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
 | Security & Compliance | security-compliance-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
-| Semantic Intelligence | semantic-intelligence-v1 v1 | 60% | 25% | CODE_COMPLETE | ✅ | CREDENTIAL_WAITING | LOW |
+| Semantic Intelligence | semantic-intelligence-v1 v1 | 100% | 100% | VERIFIED | ✅ | CREDENTIAL_WAITING | MODERATE |
 | Smart Contracts & Rewards | smart-contracts-rewards-v1 v1 | 100% | 100% | RELEASE_TURNKEY | ✅ | AUDIT_WAITING | MODERATE |
 | Stablecoin Intelligence | stablecoin-intelligence-v1 v1 | 80% | 50% | RUNTIME_INTEGRATED | ✅ | LIVE_DATA_WAITING | LOW |
 | Tenant Import Engine | tenant-import-engine-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
@@ -391,14 +391,14 @@ Each feature is measured across independent dimensions. Implementation completio
 ## Semantic Intelligence (`semantic-intelligence`)
 
 - **Scope:** semantic-intelligence-v1 v1 — founding-tenant-production
-- **Implementation:** IMPLEMENTED · 60% of in-scope repository controls (migration-derived)
-- **Productionization:** 25% of in-scope productionization controls (migration-derived)
-- **Repository ceiling:** CODE_COMPLETE (achieved: yes)
+- **Implementation:** VERIFIED · 100% of in-scope repository controls (migration-derived)
+- **Productionization:** 100% of in-scope productionization controls (migration-derived)
+- **Repository ceiling:** VERIFIED (achieved: yes)
 - **Activation:** CREDENTIAL_WAITING
-- **Remaining repository work:** complete runtime integration; complete repository-controlled verification
-- **Confidence:** LOW — gap: credentialed environment execution not yet performed
+- **Remaining repository work:** None
+- **Confidence:** MODERATE — gap: credentialed environment execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=NOT_ATTEMPTED, staging=BLOCKED_EXTERNAL, production=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
 
 ## Smart Contracts & Rewards (`smart-contracts-rewards`)
 

@@ -72,7 +72,9 @@ disabled provider that abstains — never a silent keyword fallback):
 - Sentiment requires `target_subject_ref`.
 - Campaign associations require canonical `camp_*` IDs.
 - Every observation carries tenant scope, evidence, model ID, model version, taxonomy version, schema version, status, confidence, stable hash, and idempotency key.
-- Kyber operations require operator scope.
+- Every tenant route acts as the authenticated tenant. An `x-tenant-id` header or the `local_tenant` default is honored only in local development; elsewhere a request with no authenticated tenant is refused (401), so a caller can never choose whose data a request reads or writes.
+- Reads need the `read` permission and writes the `write` permission, and a tenant, organization, membership or credential that is not in the `active` state is refused (403). These checks run in the handlers as well as in the route policy.
+- Kyber operations require operator scope: the canonical Kyber operator gate (workforce session or the configured operator grant), not a tenant role. A customer admin is refused (403) and an unauthenticated caller gets 401.
 - Unsupported or empty content is represented as an abstention, not as fake zero insight.
 
 ## APIs

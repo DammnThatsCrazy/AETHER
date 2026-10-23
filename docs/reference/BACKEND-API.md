@@ -3607,7 +3607,7 @@ server-controlled durable endpoint ids; tenant ownership is resolved from the
 
 ## Semantic-Sentiment Intelligence APIs
 
-The semantic-sentiment intelligence plane adds tenant-scoped APIs under `/v1/semantic` for observation creation, observation reads, entity state, entity sentiment, timelines, narrative listing, cascade status, and bounded reprocessing. Kyber operator APIs under `/v1/kyber/semantic` expose fleet health and review queues and require explicit operator scope.
+The semantic-sentiment intelligence plane adds tenant-scoped APIs under `/v1/semantic` for observation creation, observation reads, entity state, entity sentiment, timelines, narrative listing, cascade status, and bounded reprocessing. Kyber operator APIs under `/v1/kyber/semantic` expose fleet health and review queues and require explicit operator scope (the canonical Kyber operator gate, so a customer admin is refused). Tenant routes act as the authenticated tenant only: the `x-tenant-id` header is honored in local development alone, `read`/`write` permissions are checked, and a tenant that is not serving is refused.
 
 The APIs return real classified observations from the semantic-sentiment repository, include evidence/model/taxonomy metadata, enforce canonical `camp_*` campaign IDs, and preserve insufficient-data states instead of returning fake zero insights.
 
