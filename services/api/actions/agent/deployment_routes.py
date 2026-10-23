@@ -596,41 +596,25 @@ async def agent_spawn_lineage(
     """
     _require_registry_enabled()
     tenant = _tenant(request)
-    from actions.agent.lineage import (
-        MAX_NODES, SPAWN_EVENT, agent_refs_in_tree, build_lineage_tree,
-    )
+    from actions.agent.lineage import read_lineage_facts, source_is_truncated
 
     try:
         from dependencies.providers import get_cache
         from repositories.repos import AnalyticsRepository
 
-        analytics = AnalyticsRepository(get_cache())
-        spawn_rows = await analytics.query_silver(
-            "silver_agent_execution_facts",
-            {"tenant_id": tenant.tenant_id, "source_event_type": SPAWN_EVENT},
-            limit=1000,
-        )
-        shape = build_lineage_tree(
+        facts = await read_lineage_facts(
+            AnalyticsRepository(get_cache()),
             tenant_id=tenant.tenant_id,
             root_agent_ref=root_agent_ref,
-            spawn_rows=spawn_rows,
             max_depth=max_depth,
         )
-        activity: dict[str, list[dict]] = {}
-        for ref in agent_refs_in_tree(shape["tree"])[:MAX_NODES]:
-            activity[ref] = await analytics.query_silver(
-                "silver_agent_execution_facts",
-                {"tenant_id": tenant.tenant_id, "agent_id": ref},
-                limit=200,
-            )
-        shape = build_lineage_tree(
-            tenant_id=tenant.tenant_id,
-            root_agent_ref=root_agent_ref,
-            spawn_rows=spawn_rows,
-            activity_rows=activity,
-            max_depth=max_depth,
-        )
-        shape["source_status"] = "available" if shape["totals"]["agent_count"] > 1 else "empty"
+        shape = facts["shape"]
+        if source_is_truncated(shape):
+            # A capped read can drop an older root's edges or an agent's older
+            # activity, so an empty or small tree is not proof of absence.
+            shape["source_status"] = "incomplete"
+        else:
+            shape["source_status"] = "available" if shape["totals"]["agent_count"] > 1 else "empty"
     except Exception as exc:
         logger.warning(
             "agent spawn lineage unavailable",

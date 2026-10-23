@@ -18,7 +18,7 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
-  "services/api/repositories/repos.py": "sha256:d09d752ef63f4b6eb1c46fe1b1e3f8c00399f40d1a6e86fb15ebad9685459568"
+  "services/api/repositories/repos.py": "sha256:1784df01b61c04f087c80397c3eab3b7167aef930bf199b7a82da4bfdc18dbf4"
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
 ---
 
@@ -236,6 +236,15 @@ actor claims.
   unscoped. Adapters without it (the externalized Bronze adapter, which is bound
   to one tenant when it is built) keep `delete_by_entity`.
 
+- **Conditional writes (JSONB-mode tables):** `BaseRepository.insert_if_absent`
+  creates a tenant-owned row only when the id is free (`ON CONFLICT DO NOTHING`),
+  and `replace_if_matches` replaces one only while its stored JSON still
+  contains the caller's `expected` subset (for example `{"revision": 3}`), as a
+  single `data @> expected` predicate inside the `UPDATE`. Both return `False`
+  instead of writing when they lose, so a caller re-reads rather than
+  overwriting a concurrent writer. `replace_if_matches` never rewrites the
+  stored `created_at`. Explicit-column tables raise `NotImplementedError`.
+
 - **Row ownership on write:** `BaseRepository.insert` and `update` read the
   record's tenant from `tenant_id` or `tenantId` and only replace a row whose
   `COALESCE(tenant_id, '')` column equals it (the predicate is part of the
@@ -391,7 +400,9 @@ Database health is probed via `SELECT 1` in `ResourceRegistry.health_check()`. E
   tenant/app/journey bound, single-use state), owned by
   `repositories/journey_handoff_repo.py` with DDL parity tested.
 - `fleet_hypotheses` is a runtime-created `BaseRepository` table keyed
-  `{tenant}:fleet_hyp:{hash}`.
+  `{tenant}:fleet_hyp:{hash}`. Each record carries a `revision`; every write
+  after the first is a compare-and-set on it (the first is insert-if-absent), so
+  concurrent reviews and rebuilds cannot overwrite one another.
 
 These migrations are authored in the branch; this page does not claim they
 have been applied.

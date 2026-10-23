@@ -22,6 +22,8 @@ reviewed_source_commits:
     reason: "Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required."
   - commit: "609a3ad37"
     reason: "Reviewed the optional session_required guard on the SSO callback. This page now explains its CLI-only fail-closed behavior while preserving browser sign-in and first-admin bootstrap behavior."
+  - commit: "482948261"
+    reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:94f3ca18d86f2d5b9e56a319bc7d41db56d524c009458b50bfe226e59d2f9a53"
   ".github/workflows/staging-lifecycle.yml": "sha256:9a9a30a08991de719b73cb0da935e322837f0f9a124f7a566d48e5d5be25fd00"
@@ -29,7 +31,7 @@ source_hashes:
   "infra/aws/terraform/modules/ecs/main.tf": "sha256:fcfc016058554a533e9e328101cf4cd726a1e8e61f94cb7599717f12275792c1"
   "scripts/release/bootstrap_staging_admin_key.py": "sha256:096541627176be35c7699c30495602740fa0e44df25233c2d369258d1491f2e6"
   "scripts/release/check_staging_runtime_iam.py": "sha256:85aa09eb552d0d57d87a169c250d97bb2d9790b865530bcf3ab5b61760e97d60"
-  "services/api/repositories/repos.py": "sha256:d09d752ef63f4b6eb1c46fe1b1e3f8c00399f40d1a6e86fb15ebad9685459568"
+  "services/api/repositories/repos.py": "sha256:1784df01b61c04f087c80397c3eab3b7167aef930bf199b7a82da4bfdc18dbf4"
   "services/api/tenancy/auth/routes.py": "sha256:28646c94b30efa7f437fe477209cb7877202c0692caf8076689b7bc407bf7c76"
 ---
 
