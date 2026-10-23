@@ -6,7 +6,7 @@ export interface UsageData {
   period_end: string;
   events_used: number;
   events_quota: number;
-  rpm_peak: number;
+  rpm_peak: number | null;
   rpm_limit: number;
   overage_events: number;
   days_remaining: number;

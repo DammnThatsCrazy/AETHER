@@ -213,6 +213,12 @@ describe('SettingsPage', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('/billing');
   });
 
+  it('shows an unmeasured burst peak on Billing instead of crashing on rpm_peak null', () => {
+    s.usage = settled({ period_start: '2026-10-01T00:00:00Z', period_end: '2026-10-31T00:00:00Z', events_used: 400, events_quota: 1000, rpm_peak: null, rpm_limit: 600, overage_events: 0, days_remaining: 15 });
+    renderAt('/settings?section=billing');
+    expect(screen.getByText('not measured yet · limit 600')).toBeInTheDocument();
+  });
+
   it('keeps billing reads honest while loading', () => {
     s.me = loading();
     s.usage = failed();

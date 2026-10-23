@@ -621,7 +621,7 @@ export function BillingHub() {
                 </span>
               </span>
             </SettingsRow>
-            <SettingsRow label="Peak requests per minute"><Value mono>{u.rpm_peak.toLocaleString('en-US')} of {u.rpm_limit.toLocaleString('en-US')}</Value></SettingsRow>
+            <SettingsRow label="Peak requests per minute"><Value mono>{u.rpm_peak === null ? `not measured yet · limit ${u.rpm_limit.toLocaleString('en-US')}` : `${u.rpm_peak.toLocaleString('en-US')} of ${u.rpm_limit.toLocaleString('en-US')}`}</Value></SettingsRow>
           </>
         ) : (
           <EmptyRow>Usage has not been measured yet.</EmptyRow>
