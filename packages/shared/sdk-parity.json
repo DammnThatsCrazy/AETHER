@@ -157,8 +157,9 @@
           "status": "not_applicable"
         },
         "react-native": {
-          "status": "unsupported",
-          "note": "The React Native bridge neither exposes manifestPublicKey nor verifies the manifest signature in JS; fetchAndApplyManifest() applies a fetched manifest unverified. The native iOS/Android SDKs verify only when given manifestPublicKey, which the React Native module never sets."
+          "status": "delegated_native",
+          "evidence": "packages/sdk/react-native/src/bridge.ts#verifyManifest",
+          "note": "Config manifestPublicKey is forwarded to the native iOS/Android SDKs, which verify the manifests they fetch; the JS manifest path (fetchAndApplyManifest) verifies through the native AetherNative.verifyManifest because Hermes has no WebCrypto. Fails closed when the native method is missing."
         },
         "ios": {
           "status": "supported",

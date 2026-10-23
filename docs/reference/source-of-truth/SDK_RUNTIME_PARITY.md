@@ -36,14 +36,14 @@ captures via `track()` and is exempt from `observe()`.
 
 ## Manifest signature verification (§2.9)
 
-Web, iOS and Android verify a fetched remote SDK manifest before applying it.
-When a public key is configured (`advanced.manifestPublicKey` on web,
-`AetherConfig.manifestPublicKey` on iOS/Android), an unsigned, malformed or
+Web, iOS, Android and React Native (through the native verifier) verify a
+fetched remote SDK manifest before applying it. When a public key is configured
+(`advanced.manifestPublicKey` on web, `AetherConfig.manifestPublicKey` on
+iOS/Android, `manifestPublicKey` on React Native), an unsigned, malformed or
 invalid-signature manifest is **rejected** and the SDK keeps last-known-good
 config (fail closed). Verification is ES256 (ECDSA P-256 / SHA-256) over the
 canonical JSON of the manifest with `signature` excluded; the specification and
-shared test vectors are in `docs/reference/sdks/manifest-signing.md`. React
-Native does not verify manifests yet (recorded as `unsupported`).
+shared test vectors are in `docs/reference/sdks/manifest-signing.md`.
 
 ## Batch-response health metrics (§2.8)
 

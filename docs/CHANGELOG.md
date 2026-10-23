@@ -12,7 +12,7 @@ canonical_owner: release@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "CHANGELOG.md": "sha256:c3ee68d240735930de121b9ab602dc4a7195b1194d6a5361cd6a9319dba1a49e"
+  "CHANGELOG.md": "sha256:44a0ed0834e3b4d548272ca333c77ca7a11f5e0005e5b91d73842c5e037869ec"
 ---
 # Changelog
 
@@ -46,7 +46,7 @@ source_hashes:
 - SDK manifest signatures now work end to end. The backend signs each delivered manifest with ES256 (ECDSA P-256) over a canonical JSON form, derived from `SDK_CONFIG_SECRET` so clients only need a public key; web, iOS and Android verify it with `manifestPublicKey` (print it with `scripts/sdk_manifest_public_key.py`). Previously the backend signed one payload with a server secret while the web and native clients verified two different, incompatible payloads with a client-held HMAC key, so no client could verify a real manifest. Specification and shared test vectors: `docs/reference/sdks/manifest-signing.md`, `tests/fixtures/sdk/manifest-signing-vectors.json`.
 - The iOS and Android SDKs read the remote manifest from the top level of the response instead of the `data` envelope the backend returns, so they never applied one. They now unwrap the envelope.
 - The web SDK no longer skips manifest verification when WebCrypto is unavailable; with a public key configured it now fails closed.
-- React Native stopped advertising `manifestSignatureVerification` (now `false`); no verification path exists there yet, and `sdk-parity.json` records it as `unsupported`.
+- React Native advertised `manifestSignatureVerification: true` with no verification path. It now forwards `manifestPublicKey` to the native SDKs and verifies the JS manifest path through a new native `verifyManifest` method (Hermes has no WebCrypto), failing closed; `sdk-parity.json` gains an explicit `unsupported` status for recorded gaps.
 - `bump_version.py` now writes and checks the root `VERSION` file and rejects numeric prerelease identifiers with leading zeroes.
 - The React Native podspec pins `AetherSDK` to the current minor for 0.x versions instead of the major.
 - `Web3TransactionProjector` handles `wallet` and `transaction`, and the projector ownership registry now declares them, so `validate_projector_ownership.py` passes.

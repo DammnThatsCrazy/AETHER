@@ -10,6 +10,7 @@ RCT_EXTERN_METHOD(conversion:(NSString *)event value:(double)value properties:(N
 RCT_EXTERN_METHOD(hydrateIdentity:(NSDictionary *)data)
 RCT_EXTERN_METHOD(alias:(NSString *)previousId userId:(NSString *)userId resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(getIdentity:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(verifyManifest:(NSString *)manifestJson publicKey:(NSString *)publicKey resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(reset)
 RCT_EXTERN_METHOD(flush)
 RCT_EXTERN_METHOD(handleDeepLink:(NSString *)url)

@@ -15,7 +15,7 @@ enum ManifestCanonicalizationError: Error {
 }
 
 /// ES256 (ECDSA P-256 / SHA-256, raw r||s) verification of SDK manifests.
-enum ManifestSignature {
+public enum ManifestSignature {
     static let alg = "ecdsa-p256-sha256"
 
     private static let maxSafeInt: Int64 = 9_007_199_254_740_991
@@ -121,7 +121,7 @@ enum ManifestSignature {
 
     /// Verify a parsed manifest (the manifest JSON object, `signature` included)
     /// against the configured base64url SPKI P-256 public key. Fails closed.
-    static func verify(_ manifest: [String: Any], publicKey: String) -> Bool {
+    public static func verify(_ manifest: [String: Any], publicKey: String) -> Bool {
         guard let signature = manifest["signature"] as? String,
               signature.count == 86,
               let rawSignature = base64URLDecode(signature), rawSignature.count == 64,

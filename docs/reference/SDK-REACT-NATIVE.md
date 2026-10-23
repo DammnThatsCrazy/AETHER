@@ -11,8 +11,8 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 9
 toc_depth: 3
 source_hashes:
-  "packages/sdk/react-native/src/bridge.ts": "sha256:833326fa370170526902bafa1ad3f6c0c8c39dcbb5bf82d1eaaa9389eef7085a"
-  "packages/sdk/react-native/src/index.tsx": "sha256:8861ddc797def68d8580f489007f78a65d6f3dd882b4538fdbeb99ddecb54fbe"
+  "packages/sdk/react-native/src/bridge.ts": "sha256:5a926c354e845458f531c277778c4f5d9cb2b5272f139ea503d6d65511e9511e"
+  "packages/sdk/react-native/src/index.tsx": "sha256:f4d26aa7381b2af26066e5c995a6486e3a59f7529d0698305dbc0d61e8fbc91e"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
@@ -396,6 +396,8 @@ interface AetherRNConfig {
     gdprMode?: boolean;
     anonymizeIP?: boolean;
   };
+  manifestPublicKey?: string;  // base64url P-256 key; verifies signed remote-config manifests
+                               // (unsigned/invalid manifests rejected, last-known-good kept)
 }
 ```
 

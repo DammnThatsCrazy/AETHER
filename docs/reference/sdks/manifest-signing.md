@@ -103,6 +103,7 @@ distinguish a genuine manifest from a forged one.
 | web | `advanced.manifestPublicKey` | WebCrypto ECDSA (`crypto.subtle`); fails closed if unavailable |
 | Android | `AetherConfig.manifestPublicKey` | `java.security` `SHA256withECDSA` |
 | iOS | `AetherConfig.manifestPublicKey` | CryptoKit `P256.Signing` |
+| React Native | `manifestPublicKey` in `AetherRNConfig` | the native iOS/Android verifier (Hermes has no WebCrypto): forwarded to the native SDKs at init, and `Aether.verifyManifest()` is used by the JS manifest path; fails closed if the native method is missing |
 
 The backend response wraps the manifest in the standard `APIResponse` envelope
 (`{"data": {...}}`); clients verify the object inside `data`.
@@ -128,7 +129,7 @@ regenerate it only when this specification changes.
 
 ## Known gaps
 
-- **React Native** does not verify manifests yet. The bridge reports
-  `manifestSignatureVerification: false`, and the parity matrix records the cell
-  as `unsupported`.
 - The Python and server SDKs do not fetch manifests and are out of scope.
+- The React Native Android package does not yet declare the native `com.aether.sdk`
+  core as a dependency, so consumers must add it themselves (this predates manifest
+  signing and affects every native feature of the bridge).

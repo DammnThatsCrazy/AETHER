@@ -8,9 +8,11 @@
 //   - flags/features → RNFeatureFlags overrides (isEnabled/getValue reflect it)
 //   - rollout_percentage → a JS-side sampling rate for JS-emitted events
 //   - endpoints → per-name endpoint overrides
-// This JS apply does NOT verify the manifest `signature`; it trusts the
-// authenticated HTTPS response, consistent with the SDK's other config/heartbeat
-// calls. The bridge therefore reports manifestSignatureVerification: false.
+// Signature verification (docs/reference/sdks/manifest-signing.md): when the app
+// configures a manifestPublicKey, the caller passes a `verify` function (the
+// native ES256 verifier via Aether.verifyManifest) and an unsigned or invalid
+// manifest is NOT applied. Without a key the manifest is applied on the strength
+// of the authenticated HTTPS response, as for the SDK's other config calls.
 // =============================================================================
 
 import { RNFeatureFlags } from './FeatureFlags';
@@ -64,11 +66,19 @@ export function getSamplingRate(): number {
   return 1;
 }
 
+/** Decides whether a fetched manifest object is authentic. */
+export type ManifestVerifier = (manifest: unknown) => Promise<boolean>;
+
 /**
  * Fetch the manifest once and apply it. Fire-and-forget and non-fatal: a
- * failure leaves the SDK on its built-in defaults.
+ * failure leaves the SDK on its built-in defaults. When `verify` is given, a
+ * manifest it rejects (or that makes it throw) is not applied (fail closed).
  */
-export async function fetchAndApplyManifest(endpoint: string, apiKey: string): Promise<void> {
+export async function fetchAndApplyManifest(
+  endpoint: string,
+  apiKey: string,
+  verify?: ManifestVerifier,
+): Promise<void> {
   try {
     const res = await fetch(`${endpoint}/v1/config/sdk/manifest`, {
       headers: { Authorization: `Bearer ${apiKey}` },
@@ -76,7 +86,9 @@ export async function fetchAndApplyManifest(endpoint: string, apiKey: string): P
     if (res && res.ok && typeof res.json === 'function') {
       const body = (await res.json()) as { data?: SDKManifest } & SDKManifest;
       // The backend wraps the manifest in an APIResponse envelope (`data`).
-      applyManifest(body && typeof body === 'object' && 'data' in body ? body.data : body);
+      const manifest = body && typeof body === 'object' && 'data' in body ? body.data : body;
+      if (verify && !(await verify(manifest))) return;
+      applyManifest(manifest);
     }
   } catch {
     // Non-fatal — remote config is best-effort.

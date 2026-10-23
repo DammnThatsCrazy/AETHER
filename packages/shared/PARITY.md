@@ -26,7 +26,7 @@ file/symbol is missing. Keep both in sync when SDK behavior changes.
 | consent-gated enqueue (§2.6) | supported | partial | delegated | supported | supported | n/a |
 | batching → /v1/batch (§2.6) | supported | supported | delegated | supported | supported | n/a |
 | manifest fetch (§2.9) | supported | n/a | supported | supported | supported | n/a |
-| manifest signature verify (§2.9) | supported | n/a | unsupported | supported | supported | n/a |
+| manifest signature verify (§2.9) | supported | n/a | delegated | supported | supported | n/a |
 | batch health metrics (§2.8) | supported | supported | supported | supported | supported | supported (parse-only) |
 | retry / backoff (§2.6) | supported | supported | delegated | supported | supported | n/a |
 | offline queue (§2.6) | supported | partial | delegated | supported | supported | n/a |
@@ -43,10 +43,11 @@ file/symbol is missing. Keep both in sync when SDK behavior changes.
 - **react-native** — the JS bridge exposes `observe`, `queueDepth`, and
   `onBatchResult`, but consent gating, batching, retry, and offline persistence are enforced in the
   native iOS/Android modules the bridge delegates to. Manifest signature
-  verification is `unsupported` on React Native: the native SDKs verify only when
-  given a `manifestVerificationKey`, which the React Native module never sets,
-  and the JS `fetchAndApplyManifest()` path applies a fetched manifest without
-  checking its `signature`. The bridge reports `manifestSignatureVerification: false`.
+  verification is delegated too: `manifestPublicKey` is forwarded to the native
+  SDKs, which verify the manifests they fetch, and the JS manifest path
+  (`fetchAndApplyManifest`) calls `Aether.verifyManifest()`, which uses the same
+  native ES256 verifier because Hermes has no WebCrypto. It fails closed when the
+  native method is missing (an older native build).
 - **python** — an observation-envelope builder with no client-side emit
   pipeline; it can still parse the `/v1/batch` BatchResponse into a uniform
   `BatchHealth` via `parse_batch_health`.

@@ -132,9 +132,9 @@ describe('Aether RN bridge — semantic envelope wiring', () => {
 });
 
 describe('Aether RN bridge — capability matrix', () => {
-  it('advertises observe / batchHealth and does not claim manifestSignatureVerification', () => {
+  it('advertises observe / batchHealth / manifestSignatureVerification', () => {
     expect(Aether.capabilities.observe).toBe(true);
     expect(Aether.capabilities.batchHealth).toBe(true);
-    expect(Aether.capabilities.manifestSignatureVerification).toBe(false);
+    expect(Aether.capabilities.manifestSignatureVerification).toBe(true);
   });
 });
