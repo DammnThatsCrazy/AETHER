@@ -85,6 +85,7 @@ VALUE_RECONCILIATION_SLOT_ID = "reconciliation"
 ACCOUNT_VALUE_SLOT_ID = "value"
 _MAX_CONVERSION_INVENTORY_ROWS = 500
 _MAX_ATTRIBUTION_CONVERSIONS = 100
+_MAX_ATTRIBUTION_TOUCHPOINT_READS = 500
 
 
 def _economic_domain_slot_ids(subject: ProjectionSubject, primary_slot_id: str) -> list[str]:
@@ -328,6 +329,23 @@ def _attribution_credit_ref(credit_id: str, created_at: Optional[str]) -> Eviden
     )
 
 
+def _campaign_touchpoint_ref(
+    touchpoint_id: str,
+    received_at: Optional[str],
+) -> EvidenceRef:
+    """Reference the exact canonical tenant touchpoint row used for a credit join."""
+    return EvidenceRef(
+        id=touchpoint_id,
+        type="event",
+        source=(
+            "services/api/journeys/measurement/repositories/touchpoint_repo.py:"
+            "silver_campaign_touchpoint_facts"
+        ),
+        observedAt=received_at,
+        uri=f"store://silver_campaign_touchpoint_facts/{quote(touchpoint_id, safe='')}",
+    )
+
+
 class RepositoryAttributionCreditReader:
     """Read active attribution runs and credits for exact canonical conversions.
 
@@ -355,7 +373,11 @@ class RepositoryAttributionCreditReader:
         base: dict[str, Any] = {
             "tenantId": tenant_id,
             "conversionIds": scoped_ids,
-            "canonicalAuthorityRefs": ["attribution_runs", "attribution_credits"],
+            "canonicalAuthorityRefs": [
+                "attribution_runs",
+                "attribution_credits",
+                "campaign_touchpoints",
+            ],
             "state": "unknown",
             "reason": "canonical_active_attribution_run_unavailable",
             "completeness": "unknown",
@@ -370,6 +392,8 @@ class RepositoryAttributionCreditReader:
                 "credit_weights_are_canonical_model_outputs_not_independently_measured_value",
                 "attributed_revenue_and_agent_roi_are_not_inferred_or_projected",
                 "historical_attribution_state_is_not_bitemporal",
+                "touchpoint_joins_require_exact_tenant_scoped_credit_touchpoint_ids",
+                "touchpoint_rows_are_current_and_not_bitemporal",
             ],
         }
         if not scoped_ids:
@@ -382,14 +406,21 @@ class RepositoryAttributionCreditReader:
             from journeys.measurement.repositories.attribution_run_repo import (
                 AttributionRunRepository,
             )
+            from journeys.measurement.repositories.touchpoint_repo import TouchpointRepository
 
             repository = AttributionRunRepository()
+            touchpoint_repository = TouchpointRepository()
             runs: list[dict[str, Any]] = []
             records: list[dict[str, Any]] = []
             refs: list[EvidenceRef] = []
             missing_run_ids: list[str] = []
             invalid_rows = invalid_ids
             errors = 0
+            unresolved_touchpoints = 0
+            invalid_touchpoints = 0
+            touchpoint_errors = 0
+            touchpoint_reads = 0
+            touchpoint_truncated = False
 
             for conversion_id in scoped_ids:
                 try:
@@ -459,6 +490,105 @@ class RepositoryAttributionCreditReader:
                     created_at = _attribution_timestamp(credit.get("created_at"))
                     credit_ref = _attribution_credit_ref(credit_id, created_at)
                     refs.append(credit_ref)
+                    touchpoint_ref: Optional[EvidenceRef] = None
+                    raw_touchpoint_id = _inventory_text(credit.get("touchpoint_id"), limit=64)
+                    touchpoint_id = _attribution_uuid(raw_touchpoint_id)
+                    canonical_touchpoint: Optional[dict[str, Any]] = None
+                    touchpoint_join: dict[str, Any] = {
+                        "state": "unknown",
+                        "reason": "attribution_credit_touchpoint_id_unavailable",
+                    }
+                    if raw_touchpoint_id is not None and touchpoint_id is None:
+                        invalid_touchpoints += 1
+                        touchpoint_join = {
+                            "state": "degraded",
+                            "reason": "attribution_credit_touchpoint_id_invalid",
+                        }
+                    elif touchpoint_id is not None:
+                        # Normalize UUID text before the repository lookup so
+                        # uppercase and lowercase UUID spellings resolve to
+                        # the same canonical identifier.
+                        from uuid import UUID
+
+                        touchpoint_id = str(UUID(touchpoint_id))
+                        if touchpoint_reads >= _MAX_ATTRIBUTION_TOUCHPOINT_READS:
+                            touchpoint_truncated = True
+                            unresolved_touchpoints += 1
+                            touchpoint_join = {
+                                "state": "unknown",
+                                "reason": "canonical_touchpoint_read_limit_reached",
+                            }
+                        else:
+                            touchpoint_reads += 1
+                            try:
+                                touchpoint = await touchpoint_repository.get(
+                                    tenant_id, touchpoint_id
+                                )
+                            except Exception:  # noqa: BLE001 - keep credit evidence, degrade join
+                                touchpoint = None
+                                touchpoint_errors += 1
+                                touchpoint_join = {
+                                    "state": "missing",
+                                    "reason": "canonical_touchpoint_read_failed",
+                                }
+                            if touchpoint is None:
+                                if touchpoint_join.get("state") != "missing":
+                                    unresolved_touchpoints += 1
+                                    touchpoint_join = {
+                                        "state": "unknown",
+                                        "reason": "canonical_touchpoint_not_found",
+                                    }
+                            elif (
+                                not isinstance(touchpoint, dict)
+                                or touchpoint.get("tenant_id") != tenant_id
+                                or _attribution_uuid(touchpoint.get("touchpoint_id"))
+                                != touchpoint_id
+                            ):
+                                invalid_touchpoints += 1
+                                touchpoint_join = {
+                                    "state": "degraded",
+                                    "reason": "canonical_touchpoint_scope_or_identifier_mismatch",
+                                }
+                            else:
+                                credit_campaign_id = _inventory_text(
+                                    credit.get("campaign_id"), limit=128
+                                )
+                                touchpoint_campaign_id = _inventory_text(
+                                    touchpoint.get("campaign_id"), limit=128
+                                )
+                                if (
+                                    credit_campaign_id is not None
+                                    and touchpoint_campaign_id is not None
+                                    and credit_campaign_id != touchpoint_campaign_id
+                                ):
+                                    invalid_touchpoints += 1
+                                    touchpoint_join = {
+                                        "state": "conflict",
+                                        "reason": "attribution_credit_campaign_does_not_match_touchpoint",
+                                    }
+                                else:
+                                    touchpoint_observed_at = _attribution_timestamp(
+                                        touchpoint.get("received_at")
+                                    )
+                                    touchpoint_ref = _campaign_touchpoint_ref(
+                                        touchpoint_id, touchpoint_observed_at
+                                    )
+                                    refs.append(touchpoint_ref)
+                                    canonical_touchpoint = {
+                                        "tenantId": tenant_id,
+                                        "touchpointId": touchpoint_id,
+                                        "campaignId": touchpoint_campaign_id,
+                                        "occurredAt": _attribution_timestamp(
+                                            touchpoint.get("occurred_at")
+                                        ),
+                                        "evidenceRef": touchpoint_ref.model_dump(mode="json"),
+                                    }
+                                    touchpoint_join = {
+                                        "state": "resolved",
+                                        "joinBasis": "exact_tenant_scoped_credit_touchpoint_id",
+                                    }
+                    else:
+                        unresolved_touchpoints += 1
                     records.append(
                         {
                             "tenantId": tenant_id,
@@ -466,6 +596,8 @@ class RepositoryAttributionCreditReader:
                             "attributionRunId": run_id,
                             "creditId": credit_id,
                             "touchpointId": _inventory_text(credit.get("touchpoint_id")),
+                            "touchpointJoin": touchpoint_join,
+                            "canonicalTouchpoint": canonical_touchpoint,
                             "campaignId": _inventory_text(credit.get("campaign_id")),
                             "channel": _inventory_text(credit.get("channel"), limit=128),
                             "source": _inventory_text(credit.get("source"), limit=128),
@@ -497,6 +629,11 @@ class RepositoryAttributionCreditReader:
                             "evidenceRefs": [
                                 run_ref.model_dump(mode="json"),
                                 credit_ref.model_dump(mode="json"),
+                                *(
+                                    [touchpoint_ref.model_dump(mode="json")]
+                                    if touchpoint_ref is not None
+                                    else []
+                                ),
                             ],
                         }
                     )
@@ -510,7 +647,16 @@ class RepositoryAttributionCreditReader:
                 "oldestCompletedAt": ordered_times[0] if ordered_times else None,
                 "latestCompletedAt": ordered_times[-1] if ordered_times else None,
             }
-            incomplete = truncated or bool(missing_run_ids) or bool(invalid_rows) or bool(errors)
+            touchpoint_incomplete = bool(
+                unresolved_touchpoints or invalid_touchpoints or touchpoint_errors or touchpoint_truncated
+            )
+            incomplete = (
+                truncated
+                or bool(missing_run_ids)
+                or bool(invalid_rows)
+                or bool(errors)
+                or touchpoint_incomplete
+            )
             if errors and not runs:
                 state = "missing"
                 reason = "canonical_attribution_credit_read_failed"
@@ -532,6 +678,14 @@ class RepositoryAttributionCreditReader:
                 reason = "canonical_active_attribution_run_unavailable"
             if invalid_rows:
                 reason = "canonical_attribution_credit_scope_or_record_invalid"
+            elif invalid_touchpoints:
+                reason = "canonical_attribution_touchpoint_scope_or_record_invalid"
+            elif touchpoint_errors:
+                reason = "canonical_attribution_touchpoint_read_failed"
+            elif touchpoint_truncated:
+                reason = "canonical_attribution_touchpoint_read_truncated"
+            elif unresolved_touchpoints:
+                reason = "canonical_attribution_touchpoint_join_partial"
             elif truncated:
                 reason = "canonical_attribution_conversion_inventory_truncated"
             elif missing_run_ids and records:
@@ -552,6 +706,11 @@ class RepositoryAttributionCreditReader:
                 "unresolvedConversionIds": missing_run_ids,
                 "invalidRowCount": invalid_rows,
                 "readErrorCount": errors,
+                "touchpointReadCount": touchpoint_reads,
+                "unresolvedTouchpointCount": unresolved_touchpoints,
+                "invalidTouchpointCount": invalid_touchpoints,
+                "touchpointReadErrorCount": touchpoint_errors,
+                "touchpointReadTruncated": touchpoint_truncated,
             }
         except Exception:  # noqa: BLE001 - adapter failure is explicit missing data
             return {
@@ -650,6 +809,10 @@ def _attribution_evidence_refs(value: Any) -> list[EvidenceRef]:
         "canonical_conversions": "transaction",
         "attribution_runs": "model_output",
         "attribution_credits": "model_output",
+        (
+            "services/api/journeys/measurement/repositories/touchpoint_repo.py:"
+            "silver_campaign_touchpoint_facts"
+        ): "event",
     }
     refs: list[EvidenceRef] = []
     seen: set[tuple[str, str, str]] = set()
@@ -660,7 +823,13 @@ def _attribution_evidence_refs(value: Any) -> list[EvidenceRef]:
             continue
         if ref.type != allowed_sources.get(ref.source):
             continue
-        expected_uri = f"store://{ref.source}/{quote(ref.id, safe='')}"
+        expected_uri = (
+            f"store://silver_campaign_touchpoint_facts/{quote(ref.id, safe='')}"
+            if ref.source.startswith(
+                "services/api/journeys/measurement/repositories/touchpoint_repo.py:"
+            )
+            else f"store://{ref.source}/{quote(ref.id, safe='')}"
+        )
         if ref.uri != expected_uri:
             continue
         key = (ref.id, ref.type, ref.source)
@@ -3330,7 +3499,11 @@ class Economic360Provider:
         fallback = {
             "tenantId": request.tenantId,
             "subject": request.subject.model_dump(),
-            "canonicalAuthorityRefs": ["attribution_runs", "attribution_credits"],
+            "canonicalAuthorityRefs": [
+                "attribution_runs",
+                "attribution_credits",
+                "campaign_touchpoints",
+            ],
             "state": "unknown",
             "reason": "canonical_attribution_credit_inventory_unavailable",
             "completeness": "unknown",
@@ -3348,6 +3521,8 @@ class Economic360Provider:
             "limitations": [
                 "credit_weights_are_canonical_model_outputs_not_independently_measured_value",
                 "attributed_revenue_and_agent_roi_are_not_inferred_or_projected",
+                "touchpoint_joins_require_exact_tenant_scoped_credit_touchpoint_ids",
+                "touchpoint_rows_are_current_and_not_bitemporal",
             ],
         }
         if request.asOf is not None or request.temporalMode in {"as_of", "compare", "relative"}:
@@ -3459,6 +3634,8 @@ class Economic360Provider:
         output_records: list[dict[str, Any]] = []
         evidence_refs: list[EvidenceRef] = list(run_refs.values())
         seen_credit_ids: set[str] = set()
+        unresolved_touchpoints = 0
+        invalid_touchpoints = 0
         for raw_record in result["records"]:
             if not isinstance(raw_record, dict) or raw_record.get("tenantId") != request.tenantId:
                 invalid_rows += 1
@@ -3489,6 +3666,90 @@ class Economic360Provider:
             conversion_ref = conversion_refs[conversion_id]
             row_refs = [run_ref, credit_ref, conversion_ref]
             evidence_refs.extend([credit_ref, conversion_ref])
+            raw_touchpoint_id = _inventory_text(raw_record.get("touchpointId"), limit=64)
+            touchpoint_id = _attribution_uuid(raw_touchpoint_id)
+            raw_touchpoint = raw_record.get("canonicalTouchpoint")
+            touchpoint_join = raw_record.get("touchpointJoin")
+            canonical_touchpoint: Optional[dict[str, Any]] = None
+            touchpoint_ref: Optional[EvidenceRef] = None
+            touchpoint_reason = (
+                _inventory_text(touchpoint_join.get("reason"), limit=256)
+                if isinstance(touchpoint_join, dict)
+                else None
+            )
+            if raw_touchpoint_id is None:
+                unresolved_touchpoints += 1
+                touchpoint_state = "unknown"
+                touchpoint_reason = touchpoint_reason or "attribution_credit_touchpoint_id_unavailable"
+            elif touchpoint_id is None:
+                invalid_touchpoints += 1
+                touchpoint_state = "degraded"
+                touchpoint_reason = "attribution_credit_touchpoint_id_invalid"
+            elif not isinstance(raw_touchpoint, dict):
+                unresolved_touchpoints += 1
+                touchpoint_state = (
+                    _inventory_text(touchpoint_join.get("state"), limit=32)
+                    if isinstance(touchpoint_join, dict)
+                    else "unknown"
+                )
+                touchpoint_state = touchpoint_state if touchpoint_state in {
+                    "unknown", "missing", "degraded", "conflict"
+                } else "unknown"
+                touchpoint_reason = touchpoint_reason or "canonical_touchpoint_join_not_resolved"
+            else:
+                from uuid import UUID
+
+                touchpoint_id = str(UUID(touchpoint_id))
+                touchpoint_tenant = raw_touchpoint.get("tenantId")
+                joined_touchpoint_id = _attribution_uuid(raw_touchpoint.get("touchpointId"))
+                if joined_touchpoint_id is not None:
+                    joined_touchpoint_id = str(UUID(joined_touchpoint_id))
+                raw_touchpoint_ref = raw_touchpoint.get("evidenceRef")
+                try:
+                    parsed_touchpoint_ref = EvidenceRef.model_validate(raw_touchpoint_ref)
+                except Exception:  # noqa: BLE001 - malformed canonical evidence fails closed
+                    parsed_touchpoint_ref = None
+                touchpoint_campaign_id = _inventory_text(
+                    raw_touchpoint.get("campaignId"), limit=128
+                )
+                credit_campaign_id = _inventory_text(
+                    raw_record.get("campaignId"), limit=128
+                )
+                if (
+                    touchpoint_tenant != request.tenantId
+                    or joined_touchpoint_id != touchpoint_id
+                    or (
+                        credit_campaign_id is not None
+                        and touchpoint_campaign_id is not None
+                        and credit_campaign_id != touchpoint_campaign_id
+                    )
+                    or parsed_touchpoint_ref is None
+                    or parsed_touchpoint_ref.id != touchpoint_id
+                    or parsed_touchpoint_ref.type != "event"
+                    or parsed_touchpoint_ref.source
+                    != (
+                        "services/api/journeys/measurement/repositories/touchpoint_repo.py:"
+                        "silver_campaign_touchpoint_facts"
+                    )
+                ):
+                    invalid_touchpoints += 1
+                    touchpoint_state = "degraded"
+                    touchpoint_reason = "canonical_touchpoint_scope_or_evidence_mismatch"
+                else:
+                    touchpoint_ref = parsed_touchpoint_ref
+                    row_refs.append(touchpoint_ref)
+                    evidence_refs.append(touchpoint_ref)
+                    touchpoint_state = "resolved"
+                    touchpoint_reason = None
+                    canonical_touchpoint = {
+                        "tenantId": request.tenantId,
+                        "touchpointId": touchpoint_id,
+                        "campaignId": touchpoint_campaign_id,
+                        "occurredAt": _attribution_timestamp(
+                            raw_touchpoint.get("occurredAt")
+                        ),
+                        "evidenceRef": touchpoint_ref.model_dump(mode="json"),
+                    }
             run = runs_by_key[key]
             credit_confidence = _attribution_confidence(raw_record.get("modelConfidence"))
             output_records.append(
@@ -3497,7 +3758,17 @@ class Economic360Provider:
                     "conversionId": conversion_id,
                     "attributionRunId": run_id,
                     "creditId": credit_id,
-                    "touchpointId": _inventory_text(raw_record.get("touchpointId")),
+                    "touchpointId": touchpoint_id,
+                    "touchpointJoin": {
+                        "state": touchpoint_state,
+                        "joinBasis": (
+                            "exact_tenant_scoped_credit_touchpoint_id"
+                            if touchpoint_state == "resolved"
+                            else None
+                        ),
+                        "reason": touchpoint_reason,
+                    },
+                    "canonicalTouchpoint": canonical_touchpoint,
                     "campaignId": _inventory_text(raw_record.get("campaignId")),
                     "channel": _inventory_text(raw_record.get("channel"), limit=128),
                     "source": _inventory_text(raw_record.get("source"), limit=128),
@@ -3538,6 +3809,12 @@ class Economic360Provider:
         if invalid_rows:
             state = "degraded"
             source_reason = "canonical_attribution_credit_scope_or_record_invalid"
+        elif invalid_touchpoints:
+            state = "degraded"
+            source_reason = "canonical_attribution_touchpoint_scope_or_record_invalid"
+        elif unresolved_touchpoints:
+            state = "degraded"
+            source_reason = source_reason or "canonical_attribution_touchpoint_join_partial"
         elif conversion_inventory.get("state") == "degraded" and state in {"available", "empty"}:
             state = "degraded"
             source_reason = "canonical_attribution_conversion_inventory_partial"
@@ -3578,6 +3855,15 @@ class Economic360Provider:
             **fallback,
             "state": state,
             "reason": source_reason,
+            "touchpointReadCount": (
+                result.get("touchpointReadCount")
+                if isinstance(result.get("touchpointReadCount"), int)
+                and not isinstance(result.get("touchpointReadCount"), bool)
+                else None
+            ),
+            "unresolvedTouchpointCount": unresolved_touchpoints,
+            "invalidTouchpointCount": invalid_touchpoints,
+            "touchpointReadTruncated": result.get("touchpointReadTruncated") is True,
             "completeness": (
                 "complete" if state in {"available", "empty"}
                 else "partial" if state == "degraded"

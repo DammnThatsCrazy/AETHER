@@ -302,6 +302,18 @@ async def test_value_attribution_credit_uses_exact_conversion_and_active_run_evi
     conversion_id = "00000000-0000-4000-8000-000000000101"
     run_id = "00000000-0000-4000-8000-000000000102"
     credit_id = "00000000-0000-4000-8000-000000000103"
+    touchpoint_id = "00000000-0000-4000-8000-000000000104"
+    touchpoint_source = (
+        "services/api/journeys/measurement/repositories/touchpoint_repo.py:"
+        "silver_campaign_touchpoint_facts"
+    )
+    touchpoint_ref = EvidenceRef(
+        id=touchpoint_id,
+        type="event",
+        source=touchpoint_source,
+        observedAt="2026-10-19T10:00:00Z",
+        uri=f"store://silver_campaign_touchpoint_facts/{touchpoint_id}",
+    ).model_dump(mode="json")
     conversion_inventory = FakeConversionInventory(
         state="available",
         records=[{"conversionId": conversion_id}],
@@ -340,8 +352,19 @@ async def test_value_attribution_credit_uses_exact_conversion_and_active_run_evi
                     "conversionId": conversion_id,
                     "attributionRunId": run_id,
                     "creditId": credit_id,
-                    "touchpointId": "touchpoint-7",
+                    "touchpointId": touchpoint_id,
                     "campaignId": "campaign-3",
+                    "touchpointJoin": {
+                        "state": "resolved",
+                        "joinBasis": "exact_tenant_scoped_credit_touchpoint_id",
+                    },
+                    "canonicalTouchpoint": {
+                        "tenantId": "tenant-a",
+                        "touchpointId": touchpoint_id,
+                        "campaignId": "campaign-3",
+                        "occurredAt": "2026-10-19T10:00:00Z",
+                        "evidenceRef": touchpoint_ref,
+                    },
                     "channel": "web",
                     "source": "newsletter",
                     "sourceClass": "owned",
@@ -380,6 +403,8 @@ async def test_value_attribution_credit_uses_exact_conversion_and_active_run_evi
     assert attribution["freshness"]["state"] == "unknown"
     assert attribution["freshness"]["latestCompletedAt"] == "2026-10-19T10:02:00+00:00"
     assert attribution["records"][0]["creditWeight"] == "0.75"
+    assert attribution["records"][0]["touchpointJoin"]["state"] == "resolved"
+    assert attribution["records"][0]["canonicalTouchpoint"]["touchpointId"] == touchpoint_id
     assert "attributedGrossRevenue" not in attribution["records"][0]
 
     claim = next(claim for claim in result.claims if claim.kind == "canonical_attribution_credit")
@@ -389,6 +414,7 @@ async def test_value_attribution_credit_uses_exact_conversion_and_active_run_evi
         "attribution_runs",
         "attribution_credits",
         "canonical_conversions",
+        touchpoint_source,
     }
     assert "model-reported attribution confidence 0.910" in claim.claims[0]
     assert "calibration and applicability to realized value are not independently validated" in claim.claims[0]
@@ -555,11 +581,13 @@ async def test_value_attribution_credit_discards_cross_tenant_run_and_credit_row
 
 async def test_repository_attribution_reader_uses_tenant_and_exact_conversion(monkeypatch) -> None:
     from journeys.measurement.repositories import attribution_run_repo
+    from journeys.measurement.repositories import touchpoint_repo
 
     tenant_id = "tenant-a"
     conversion_id = "00000000-0000-4000-8000-000000000401"
     run_id = "00000000-0000-4000-8000-000000000402"
     credit_id = "00000000-0000-4000-8000-000000000403"
+    touchpoint_id = "00000000-0000-4000-8000-000000000404"
     observed: list[tuple[str, str]] = []
 
     class ExactRepository:
@@ -586,21 +614,192 @@ async def test_repository_attribution_reader_uses_tenant_and_exact_conversion(mo
                     "attribution_run_id": run_id,
                     "credit_id": credit_id,
                     "credit_weight": "1.0",
+                    "touchpoint_id": touchpoint_id,
+                    "campaign_id": "campaign-7",
                     "created_at": "2026-10-20T09:00:00Z",
                     "source_classifier_version": "source-v4",
                 }
             ]
 
+    class ExactTouchpointRepository:
+        async def get(self, requested_tenant: str, requested_touchpoint: str):
+            assert (requested_tenant, requested_touchpoint) == (tenant_id, touchpoint_id)
+            return {
+                "tenant_id": tenant_id,
+                "touchpoint_id": touchpoint_id,
+                "campaign_id": "campaign-7",
+                "occurred_at": "2026-10-20T08:55:00Z",
+                "received_at": "2026-10-20T08:55:01Z",
+            }
+
     monkeypatch.setattr(attribution_run_repo, "AttributionRunRepository", ExactRepository)
+    monkeypatch.setattr(touchpoint_repo, "TouchpointRepository", ExactTouchpointRepository)
     result = await RepositoryAttributionCreditReader().read(tenant_id, [conversion_id])
 
     assert observed == [(tenant_id, conversion_id)]
     assert result["state"] == "available"
-    assert result["canonicalAuthorityRefs"] == ["attribution_runs", "attribution_credits"]
+    assert result["canonicalAuthorityRefs"] == [
+        "attribution_runs",
+        "attribution_credits",
+        "campaign_touchpoints",
+    ]
     assert result["records"][0]["conversionId"] == conversion_id
     assert result["records"][0]["creditWeight"] == "1.0"
+    assert result["records"][0]["touchpointJoin"]["state"] == "resolved"
+    assert result["records"][0]["canonicalTouchpoint"]["campaignId"] == "campaign-7"
+    assert result["touchpointReadCount"] == 1
+    assert result["unresolvedTouchpointCount"] == 0
+    assert any(
+        ref["source"].endswith(":silver_campaign_touchpoint_facts")
+        for ref in result["records"][0]["evidenceRefs"]
+    )
     assert result["records"][0]["sourceClassifierVersion"] == "source-v4"
     assert result["freshness"]["state"] == "unknown"
+
+
+@pytest.mark.parametrize(
+    ("touchpoint_mode", "expected_reason"),
+    [
+        ("missing", "canonical_attribution_touchpoint_join_partial"),
+        ("read_error", "canonical_attribution_touchpoint_read_failed"),
+        ("foreign_tenant", "canonical_attribution_touchpoint_scope_or_record_invalid"),
+        ("campaign_conflict", "canonical_attribution_touchpoint_scope_or_record_invalid"),
+    ],
+)
+async def test_repository_attribution_reader_degrades_unresolved_touchpoint_joins(
+    monkeypatch,
+    touchpoint_mode: str,
+    expected_reason: str,
+) -> None:
+    from journeys.measurement.repositories import attribution_run_repo
+    from journeys.measurement.repositories import touchpoint_repo
+
+    tenant_id = "tenant-a"
+    conversion_id = "00000000-0000-4000-8000-000000000411"
+    run_id = "00000000-0000-4000-8000-000000000412"
+    credit_id = "00000000-0000-4000-8000-000000000413"
+    touchpoint_id = "00000000-0000-4000-8000-000000000414"
+
+    class ExactAttributionRepository:
+        async def get_active_run(self, requested_tenant: str, requested_conversion: str):
+            assert (requested_tenant, requested_conversion) == (tenant_id, conversion_id)
+            return {
+                "tenant_id": tenant_id,
+                "conversion_id": conversion_id,
+                "attribution_run_id": run_id,
+                "model_type": "first_touch",
+                "model_version": "v2",
+                "status": "complete",
+                "is_active": True,
+                "completed_at": "2026-10-20T09:00:00Z",
+            }
+
+        async def list_credits_for_run(self, requested_tenant: str, requested_run: str):
+            assert (requested_tenant, requested_run) == (tenant_id, run_id)
+            return [
+                {
+                    "tenant_id": tenant_id,
+                    "conversion_id": conversion_id,
+                    "attribution_run_id": run_id,
+                    "credit_id": credit_id,
+                    "credit_weight": "0.5",
+                    "touchpoint_id": touchpoint_id,
+                    "campaign_id": "campaign-7",
+                    "created_at": "2026-10-20T09:00:00Z",
+                }
+            ]
+
+    class TouchpointRepository:
+        async def get(self, requested_tenant: str, requested_touchpoint: str):
+            assert (requested_tenant, requested_touchpoint) == (tenant_id, touchpoint_id)
+            if touchpoint_mode == "missing":
+                return None
+            if touchpoint_mode == "read_error":
+                raise RuntimeError("touchpoint repository unavailable")
+            return {
+                "tenant_id": "tenant-b" if touchpoint_mode == "foreign_tenant" else tenant_id,
+                "touchpoint_id": touchpoint_id,
+                "campaign_id": (
+                    "campaign-other" if touchpoint_mode == "campaign_conflict" else "campaign-7"
+                ),
+                "occurred_at": "2026-10-20T08:55:00Z",
+                "received_at": "2026-10-20T08:55:01Z",
+            }
+
+    monkeypatch.setattr(attribution_run_repo, "AttributionRunRepository", ExactAttributionRepository)
+    monkeypatch.setattr(touchpoint_repo, "TouchpointRepository", TouchpointRepository)
+    result = await RepositoryAttributionCreditReader().read(tenant_id, [conversion_id])
+
+    assert result["state"] == "degraded"
+    assert result["reason"] == expected_reason
+    assert result["records"][0]["canonicalTouchpoint"] is None
+    assert result["records"][0]["touchpointJoin"]["state"] != "resolved"
+
+
+async def test_repository_attribution_reader_bounds_touchpoint_lookups(monkeypatch) -> None:
+    from journeys.measurement.repositories import attribution_run_repo
+    from journeys.measurement.repositories import touchpoint_repo
+    from value.economic import economic360_provider as provider_module
+
+    tenant_id = "tenant-a"
+    conversion_id = "00000000-0000-4000-8000-000000000421"
+    run_id = "00000000-0000-4000-8000-000000000422"
+    touchpoint_id = "00000000-0000-4000-8000-000000000423"
+    credit_ids = [
+        "00000000-0000-4000-8000-000000000424",
+        "00000000-0000-4000-8000-000000000425",
+    ]
+    touchpoint_calls: list[str] = []
+
+    class ExactAttributionRepository:
+        async def get_active_run(self, requested_tenant: str, requested_conversion: str):
+            return {
+                "tenant_id": tenant_id,
+                "conversion_id": conversion_id,
+                "attribution_run_id": run_id,
+                "model_type": "first_touch",
+                "model_version": "v2",
+                "status": "complete",
+                "is_active": True,
+                "completed_at": "2026-10-20T09:00:00Z",
+            }
+
+        async def list_credits_for_run(self, requested_tenant: str, requested_run: str):
+            return [
+                {
+                    "tenant_id": tenant_id,
+                    "conversion_id": conversion_id,
+                    "attribution_run_id": run_id,
+                    "credit_id": credit_id,
+                    "credit_weight": "0.5",
+                    "touchpoint_id": touchpoint_id,
+                    "campaign_id": "campaign-7",
+                    "created_at": "2026-10-20T09:00:00Z",
+                }
+                for credit_id in credit_ids
+            ]
+
+    class TouchpointRepository:
+        async def get(self, requested_tenant: str, requested_touchpoint: str):
+            touchpoint_calls.append(requested_touchpoint)
+            return {
+                "tenant_id": tenant_id,
+                "touchpoint_id": touchpoint_id,
+                "campaign_id": "campaign-7",
+                "occurred_at": "2026-10-20T08:55:00Z",
+                "received_at": "2026-10-20T08:55:01Z",
+            }
+
+    monkeypatch.setattr(provider_module, "_MAX_ATTRIBUTION_TOUCHPOINT_READS", 1)
+    monkeypatch.setattr(attribution_run_repo, "AttributionRunRepository", ExactAttributionRepository)
+    monkeypatch.setattr(touchpoint_repo, "TouchpointRepository", TouchpointRepository)
+    result = await RepositoryAttributionCreditReader().read(tenant_id, [conversion_id])
+
+    assert touchpoint_calls == [touchpoint_id]
+    assert result["touchpointReadCount"] == 1
+    assert result["touchpointReadTruncated"] is True
+    assert result["state"] == "degraded"
+    assert result["reason"] == "canonical_attribution_touchpoint_read_truncated"
 
 
 async def test_summary_surfaces_absorbed_metrics(healthy_source: FakeSource) -> None:

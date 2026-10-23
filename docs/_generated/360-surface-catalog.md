@@ -43,7 +43,7 @@ Declared binding counts are registry coverage, not proof that a slot or surface 
 | [Profile 360](#profile-360) | source_aligned | `profile`, `entity`, `agent`, `anonymous_subject`, `account_member`, `cluster` | 13 | 12/13 | 8 | 1 | 6 | `economic360`, `outcome360`, `profile360`, `geographic360`, `relationship360`, `risk360` | — |
 | [Risk 360](#risk-360) | source_aligned | `risk`, `entity`, `profile`, `agent`, `account`, `source`, `campaign`, `contagion_path`, `relationship`, `cluster` | 12 | 8/12 | 4 | 4 | 6 | `economic360`, `execution360`, `fraud360`, `relationship360`, `risk360`, `social360` | — |
 | [Signals 360](#signals-360) | source_aligned | `entity`, `signal`, `source`, `event`, `observation`, `stream` | 10 | 7/10 | 4 | 3 | 0 | `signals360` | — |
-| [Social 360](#social-360) | source_aligned | `entity`, `profile`, `relationship`, `community`, `syndicate`, `source`, `population` | 10 | 5/10 | 2 | 5 | 5 | `geographic360`, `population360`, `relationship360`, `social360`, `source360` | — |
+| [Social 360](#social-360) | source_aligned | `entity`, `profile`, `relationship`, `community`, `syndicate`, `source`, `population` | 10 | 6/10 | 3 | 4 | 5 | `geographic360`, `population360`, `relationship360`, `social360`, `source360` | — |
 | [Support 360](#support-360) | source_aligned | `support_case`, `callback`, `conversation`, `ticket`, `entity`, `agent`, `episode`, `source` | 10 | 4/10 | 3 | 6 | 6 | `agent360`, `episode360`, `outcome360`, `profile360`, `risk360`, `source360`, `support360` | — |
 | [Value 360](#value-360) | source_aligned | `value`, `profile`, `account`, `conversion`, `cluster`, `campaign`, `episode`, `journey`, `entity`, `agent`, `source` | 11 | 7/11 | 5 | 4 | 5 | `campaign360`, `economic360`, `outcome360`, `temporal360` | — |
 | [Workflow 360](#workflow-360) | source_aligned | `workflow`, `automation`, `trigger`, `run`, `workflow_run` | 11 | 6/11 | 3 | 5 | 0 | `workflow360` | — |
@@ -864,7 +864,7 @@ Governed view of social observations, source-backed relationships, evidence, and
 | `risk_edges` | required |  | `risk_outputs`, `graph` | — | — | Unbound: `social_risk_edge_derivation_not_connected` | Policy governed risk relationship edges. |
 | `social_contagion` | required |  | `risk_outputs`, `social_observations` | — | — | Unbound: `social_contagion_causal_evidence_authority_unavailable` | Causal contagion evidence with source trust and policy. |
 | `social_observations_and_sources` | optional |  | `social_observations`, `source_facts`, `identity`, `cohort_membership` | `social360` (primary): subjects `entity`, `relationship`, `source`, `population`; `summary`, `timeline`, `interactions`, `evidence` | — | — | Social observations and their source facts. |
-| `syndicates` | required |  | `cluster_membership`, `relationship_facts` | — | — | Unbound: `canonical_syndicate_membership_authority_not_joined` | Verified syndicate membership and topology. |
+| `syndicates` | required |  | `cohort_membership`, `evidence`, `graph`, `population_definitions` | `social360` (primary): subjects `entity`; `syndicates` | — | Partial: `membership_roster_completeness_historical_replay_and_freshness_remain_unknown` | Verified syndicate membership and topology. |
 | `trust_edges` | required |  | `relationship_facts` | — | — | Unbound: `social_trust_edge_derivation_not_connected` | Policy governed trust relationship edges. |
 
 ### Projection provider bindings
@@ -885,7 +885,7 @@ Governed view of social observations, source-backed relationships, evidence, and
 
 ### Authority and governance contract
 
-Canonical authorities: `cluster_membership`, `cohort_membership`, `evidence`, `geo_observations`, `graph`, `identity`, `influence_propagation`, `locations`, `population_definitions`, `relationship_facts`, `relationship_predicate_registry`, `risk_outputs`, `social_observations`, `source_coverage`, `source_facts`.
+Canonical authorities: `cohort_membership`, `evidence`, `geo_observations`, `graph`, `identity`, `influence_propagation`, `locations`, `population_definitions`, `relationship_facts`, `relationship_predicate_registry`, `risk_outputs`, `social_observations`, `source_coverage`, `source_facts`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -974,7 +974,7 @@ Governed view of economic facts, payment and commerce evidence, attribution, and
 
 | Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
 |---|---|---|---|---|---|---|---|
-| `attribution_credits` | required |  | `attribution_runs`, `attribution_credits`, `canonical_conversions`, `campaign_touchpoints` | `economic360` (primary): subjects `conversion`, `profile`, `entity`, `cluster`, `campaign`, `journey`, `account`, `agent`, `episode`, `source`; `evidence` | — | Authority: `credit_records_are_not_rejoined_to_canonical_campaign_touchpoint_rows`; Partial: `credit_records_are_not_rejoined_to_canonical_campaign_touchpoint_rows` | Credited value allocated by canonical attribution authority. |
+| `attribution_credits` | required |  | `attribution_runs`, `attribution_credits`, `canonical_conversions`, `campaign_touchpoints` | `economic360` (primary): subjects `conversion`, `profile`, `entity`, `cluster`, `campaign`, `journey`, `account`, `agent`, `episode`, `source`; `evidence` | — | Partial: `current_credit_read_is_unbounded_and_attribution_history_is_not_bitemporal` | Credited value allocated by canonical attribution authority. |
 | `campaign_and_attribution_context` | optional |  | `attribution_credits`, `campaign_facts` | `campaign360` (primary): subjects `campaign`, `episode`; `summary`, `evidence`, `outcomes` | — | — | Campaign facts and attribution credits associated with value. |
 | `confidence` | required |  | `attribution_runs`, `attribution_credits`, `canonical_conversions`, `model_governance` | `economic360` (primary): subjects `account`, `agent`, `campaign`, `cluster`, `conversion`, `entity`, `journey`, `profile`; `evidence` | — | Authority: `model_governance_calibration_and_validation_not_joined`; Partial: `Only exact conversion/run/credit-linked model-reported attribution confidence with model type and version is exposed; calibration and applicability to realized value remain unvalidated.` | Evidence-linked, model-reported attribution confidence only; not a calibrated estimate of realized value or ROI. |
 | `conversion_inventory` | required |  | `canonical_conversions` | `economic360` (primary): subjects `conversion`, `profile`, `entity`, `cluster`, `campaign`, `journey`, `account`, `agent`; `evidence` | — | Partial: `value_subject_wallet_cluster_and_historical_inventory_joins_not_available` | Canonical conversion ledger records linked to an exact subject reference; aggregate attribution and unsupported value or wallet-cluster joins remain unknown. |

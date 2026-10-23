@@ -2075,6 +2075,28 @@ freshness remain unknown. Location360 `timezone` remains unknown because no
 exact tenant-scoped geographic timezone mapping is connected; coordinates,
 place labels, and source-clock timezone values are not used to infer one.
 
+The current 2026-10-23 provider wave adds partial Identity360
+`identifier_inventory`, `namespace_map`, and `aliases` rows with record-level
+evidence. Namespace entries remain partial because the canonical provider
+registry is not joined. Social360's `syndicates` slot now binds explicitly
+opted-in membership to an exact tenant entity and current `MEMBER_OF` graph
+mutation ledger edge; roster completeness, historical membership, and freshness
+remain unknown. Value360's `attribution_credits` slot now rejoins each credit's
+conversion and touchpoint IDs to tenant-scoped canonical records and checks
+campaign consistency. Historical attribution remains unavailable, touchpoint
+lookups are capped, and the underlying credit query remains unbounded.
+
+Agent360 and Execution360 actor metadata now includes typed actor and
+represented-subject IDs, authority edge IDs, independent driver scores,
+confidence, and explanation. Agent-driven attribution requires an exact
+canonical server execution actor claim; authenticated initiators and
+source-reported actor telemetry alone do not establish the action driver.
+Agent360 also exposes a typed two-edge delegation observation only for one
+complete, continuous path with exact records and canonical party evidence.
+It does not infer transitive authority or an effective authorization decision.
+These provider joins add no new HTTP endpoints and do not complete their
+surfaces or the full 18-surface contract.
+
 ### Support case lifecycle evidence ingress
 
 `POST /v1/support/cases/ingest` accepts one allow-listed lifecycle event under

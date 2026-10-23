@@ -230,7 +230,12 @@ async def test_entity_identity_projects_scoped_evidence_without_sensitive_values
     ]
     assert result.state == "degraded"
     assert result.slot("identifier_inventory").state == "available"
-    assert result.slot("namespace_map").state == "available"
+    assert result.slot("namespace_map").state == "partial"
+    namespace_mapping = result.slot("namespace_map").content["mappings"][0]
+    assert namespace_mapping["sourceIdentityId"] == "source-row-1"
+    assert namespace_mapping["canonicalEntityId"] == "entity-1"
+    assert namespace_mapping["evidenceRef"]["id"] == "source-row-1"
+    assert namespace_mapping["evidenceRef"]["source"] == "identity_source_identities"
     assert result.slot("namespace_map").content["canonicalNamespaceRegistryJoin"]["state"] == "unknown"
     assert result.slot("match_evidence").state == "available"
     assert result.slot("match_evidence").content["semantics"] == (
@@ -259,6 +264,13 @@ async def test_entity_identity_projects_scoped_evidence_without_sensitive_values
             },
         }
     ]
+    inventory_item = result.slot("identifier_inventory").content["sourceIdentities"][0]
+    assert inventory_item["id"] == "source-row-1"
+    assert inventory_item["canonicalEntityId"] == "entity-1"
+    assert inventory_item["evidenceRef"]["id"] == "source-row-1"
+    alias_item = result.slot("aliases").content["items"][0]
+    assert alias_item["evidenceRef"]["id"] == "alias-1"
+    assert alias_item["evidenceRef"]["source"] == "identity_aliases"
     assert result.slot("wallets").state == "unknown"
     assert result.slot("policy_redactions").state == "degraded"
     assert result.slot("policy_redactions").content["projectionRedaction"]["state"] == "applied"
@@ -311,13 +323,67 @@ async def test_device_session_observations_require_exact_lineage_evidence() -> N
 
     devices_sessions = result.slot("devices_sessions")
     assert devices_sessions.state == "degraded"
-    assert devices_sessions.reason == "device_session_evidence_ref_missing"
+    assert devices_sessions.reason == "identity_source_identities_evidence_ref_missing"
     assert devices_sessions.content["inventoryState"] == "unknown"
     assert devices_sessions.content["sourceIdentityObservations"] == []
     assert devices_sessions.evidence_refs == ()
     rendered = json.dumps(_payload(result), sort_keys=True)
     assert "private-device-id" not in rendered
     assert "private-session-id" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_inventory_and_namespace_rows_require_record_level_provenance() -> None:
+    source = FakeIdentity360Source()
+    source.source_rows = [
+        {
+            "tenant_id": "tenant-a",
+            "source_kind": "connector",
+            "source_namespace": "crm:customers",
+            "canonical_entity_id": "entity-1",
+            "status": "resolved",
+            "external_id": "unproven-private-identifier",
+        }
+    ]
+
+    result = await Identity360Provider(source).read(
+        "tenant-a",
+        "entity",
+        "entity-1",
+        requested_slot_ids={"identifier_inventory", "namespace_map"},
+    )
+
+    inventory = result.slot("identifier_inventory")
+    namespaces = result.slot("namespace_map")
+    assert inventory.state == "degraded"
+    assert namespaces.state == "degraded"
+    assert inventory.content["sourceIdentities"] == []
+    assert namespaces.content["mappings"] == []
+    rendered = json.dumps(_payload(result), sort_keys=True)
+    assert "unproven-private-identifier" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_alias_records_require_their_own_evidence_reference() -> None:
+    source = FakeIdentity360Source()
+    source.aliases = [
+        {
+            "tenant_id": "tenant-a",
+            "canonical_entity_id": "entity-1",
+            "alias_type": "email_hash",
+            "alias_display_value_redacted": "j***@example.test",
+        }
+    ]
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"aliases"}
+    )
+
+    aliases = result.slot("aliases")
+    assert aliases.state == "degraded"
+    assert aliases.reason == "identity_aliases_evidence_ref_missing"
+    assert aliases.content["items"] == []
+    assert aliases.evidence_refs == ()
 
 
 @pytest.mark.asyncio
@@ -398,11 +464,15 @@ async def test_source_subject_uses_exact_tenant_scoped_record_and_sanitized_clai
     namespaces = result.slot("namespace_map")
     evidence = result.slot("evidence_trace")
     assert inventory.state == "available"
-    assert namespaces.state == "available"
+    assert namespaces.state == "partial"
     assert namespaces.content["canonicalNamespaceRegistryJoin"]["state"] == "unknown"
     assert "source_provider_registry_join_not_performed" in result.warnings
     assert inventory.content["sourceIdentities"][0]["identifierTypes"] == ["external_id"]
     assert inventory.content["claims"][0]["claimType"] == "email"
+    assert inventory.content["claims"][0]["evidenceRef"]["id"] == "claim-1"
+    assert inventory.content["sourceIdentities"][0]["id"] == "source-1"
+    assert inventory.content["sourceIdentities"][0]["canonicalEntityId"] is None
+    assert inventory.content["sourceIdentities"][0]["evidenceRef"]["id"] == "source-1"
     assert evidence.state == "available"
     assert result.slot("match_evidence").state == "unknown"
     assert result.slot("aliases").state == "unknown"
@@ -436,8 +506,44 @@ async def test_resolved_source_identity_joins_canonical_match_evidence() -> None
     assert result.slot("match_evidence").content["subjectResolution"]["state"] == "resolved"
     assert result.slot("aliases").state == "available"
     assert "aliases" in source.batch_reads
+    source_inventory_item = result.slot("identifier_inventory").content["sourceIdentities"][0]
+    assert source_inventory_item["id"] == "source-1"
+    assert source_inventory_item["canonicalEntityId"] == "entity-1"
+    assert source_inventory_item["evidenceRef"]["id"] == "source-1"
     rendered = json.dumps(_payload(result), sort_keys=True)
     assert "private-source-identifier" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_claim_records_without_record_evidence_degrade_inventory() -> None:
+    source = FakeIdentity360Source()
+    source.source = {
+        "id": "source-1",
+        "tenant_id": "tenant-a",
+        "source_kind": "sdk",
+        "source_namespace": "sdk:web",
+        "status": "unresolved",
+        "external_id": "private-source-identifier",
+    }
+    source.claims = [
+        {
+            "tenant_id": "tenant-a",
+            "source_identity_id": "source-1",
+            "claim_type": "email",
+            "raw_value": "private-claim-value",
+        }
+    ]
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "source", "source-1", requested_slot_ids={"identifier_inventory"}
+    )
+
+    inventory = result.slot("identifier_inventory")
+    assert inventory.state == "degraded"
+    assert inventory.content["claims"] == []
+    assert inventory.reason == "identity_claims_evidence_ref_missing"
+    rendered = json.dumps(_payload(result), sort_keys=True)
+    assert "private-claim-value" not in rendered
 
 
 @pytest.mark.asyncio

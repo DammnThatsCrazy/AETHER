@@ -589,7 +589,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/architecture/blueprints/economic360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['account', 'agent', 'campaign', 'cluster', 'conversion', 'entity', 'episode', 'journey', 'profile', 'source'],
-    canonicalAuthorities: ['ai_execution_facts', 'attribution_credits', 'attribution_runs', 'canonical_conversions', 'commerce', 'currency_value_normalization', 'economic_facts', 'evidence', 'graph', 'outcome_facts', 'payments'],
+    canonicalAuthorities: ['ai_execution_facts', 'attribution_credits', 'attribution_runs', 'campaign_touchpoints', 'canonical_conversions', 'commerce', 'currency_value_normalization', 'economic_facts', 'evidence', 'graph', 'outcome_facts', 'payments'],
     hardDependencies: ['measurement_outcome_contract', 'temporal_kernel'],
     projectionDependencies: ['outcome360', 'profile360', 'relationship360'],
     optionalProjectionDependencies: [],
@@ -1376,14 +1376,14 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/architecture/blueprints/social360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['agent', 'entity', 'population', 'relationship', 'source'],
-    canonicalAuthorities: ['agent_entities', 'cohort_membership', 'evidence', 'graph', 'identity', 'influence_propagation', 'relationship_facts', 'relationship_predicate_registry', 'social_observations', 'source_facts'],
+    canonicalAuthorities: ['agent_entities', 'cohort_membership', 'evidence', 'graph', 'identity', 'influence_propagation', 'population_definitions', 'relationship_facts', 'relationship_predicate_registry', 'social_observations', 'source_facts'],
     hardDependencies: ['relationship_fidelity', 'temporal_kernel', 'upr'],
     projectionDependencies: ['profile360', 'relationship360'],
     optionalProjectionDependencies: [],
     inputRefs: ['EntityRef', 'EvidenceRef', 'GraphSnapshotRef', 'PageRequest', 'RelationshipRef', 'TimeRangeFilter'],
-    outputSections: ['evidence', 'findings', 'interactions', 'paths', 'propagation', 'state', 'summary', 'timeline'],
+    outputSections: ['evidence', 'findings', 'interactions', 'paths', 'propagation', 'state', 'summary', 'syndicates', 'timeline'],
     supportedTemporalModes: ['as_of', 'relative', 'window'],
-    surfaceIds: ['profile360'],
+    surfaceIds: ['profile360', 'social360'],
     capabilityKeys: ['social360.explore', 'social360.read'],
     metricRefs: [],
     graphMutationPolicy: 'read_only',
@@ -1418,7 +1418,7 @@ export const intelligenceProjectionDefinitions: Record<
     },
     legacyBindings: {
       routes: ['/v1/profile'],
-      surfaceIds: ['profile360'],
+      surfaceIds: ['profile360', 'social360'],
       services: ['services/api/identity/profile'],
       migrationMode: 'adapter',
       migrationBlueprint: 'docs/architecture/blueprints/social360.md'
@@ -5494,12 +5494,19 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
-        canonicalAuthorityRefs: ['cluster_membership', 'relationship_facts'],
+        canonicalAuthorityRefs: ['cohort_membership', 'evidence', 'graph', 'population_definitions'],
         description: 'Verified syndicate membership and topology.',
         id: 'syndicates',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'canonical_syndicate_membership_authority_not_joined'
+        partialImplementationReason: 'membership_roster_completeness_historical_replay_and_freshness_remain_unknown',
+        projectionBindings: [
+          {
+            projectionId: 'social360',
+            role: 'primary',
+            subjectKinds: ['entity'],
+            sectionIds: ['syndicates']
+          }
+        ],
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['relationship_facts'],
@@ -5565,7 +5572,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       }
     ],
     sourceOfTruth: {
-      canonicalAuthorities: ['cluster_membership', 'cohort_membership', 'evidence', 'geo_observations', 'graph', 'identity', 'influence_propagation', 'locations', 'population_definitions', 'relationship_facts', 'relationship_predicate_registry', 'risk_outputs', 'social_observations', 'source_coverage', 'source_facts'],
+      canonicalAuthorities: ['cohort_membership', 'evidence', 'geo_observations', 'graph', 'identity', 'influence_propagation', 'locations', 'population_definitions', 'relationship_facts', 'relationship_predicate_registry', 'risk_outputs', 'social_observations', 'source_coverage', 'source_facts'],
       ownsCanonicalTruth: false,
       prohibitedOwnership: ['economic_facts', 'execution_facts', 'graph', 'identity', 'observations', 'risk_outputs', 'source_provenance']
     },
@@ -5881,11 +5888,10 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
     displayName: 'Value 360',
     domainSlots: [
       {
-        authorityGapReason: 'credit_records_are_not_rejoined_to_canonical_campaign_touchpoint_rows',
         canonicalAuthorityRefs: ['attribution_credits', 'attribution_runs', 'campaign_touchpoints', 'canonical_conversions'],
         description: 'Credited value allocated by canonical attribution authority.',
         id: 'attribution_credits',
-        partialImplementationReason: 'credit_records_are_not_rejoined_to_canonical_campaign_touchpoint_rows',
+        partialImplementationReason: 'current_credit_read_is_unbounded_and_attribution_history_is_not_bitemporal',
         projectionBindings: [
           {
             projectionId: 'economic360',
@@ -5894,8 +5900,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             sectionIds: ['evidence']
           }
         ],
-        requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['campaign_touchpoints']
+        requirement: 'required'
       },
       {
         id: 'campaign_and_attribution_context',

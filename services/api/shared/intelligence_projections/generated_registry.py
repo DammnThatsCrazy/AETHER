@@ -506,7 +506,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/architecture/blueprints/economic360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("account", "agent", "campaign", "cluster", "conversion", "entity", "episode", "journey", "profile", "source"),
-        "canonicalAuthorities": ("ai_execution_facts", "attribution_credits", "attribution_runs", "canonical_conversions", "commerce", "currency_value_normalization", "economic_facts", "evidence", "graph", "outcome_facts", "payments"),
+        "canonicalAuthorities": ("ai_execution_facts", "attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_conversions", "commerce", "currency_value_normalization", "economic_facts", "evidence", "graph", "outcome_facts", "payments"),
         "hardDependencies": ("measurement_outcome_contract", "temporal_kernel"),
         "projectionDependencies": ("outcome360", "profile360", "relationship360"),
         "optionalProjectionDependencies": [],
@@ -1293,14 +1293,14 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/architecture/blueprints/social360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("agent", "entity", "population", "relationship", "source"),
-        "canonicalAuthorities": ("agent_entities", "cohort_membership", "evidence", "graph", "identity", "influence_propagation", "relationship_facts", "relationship_predicate_registry", "social_observations", "source_facts"),
+        "canonicalAuthorities": ("agent_entities", "cohort_membership", "evidence", "graph", "identity", "influence_propagation", "population_definitions", "relationship_facts", "relationship_predicate_registry", "social_observations", "source_facts"),
         "hardDependencies": ("relationship_fidelity", "temporal_kernel", "upr"),
         "projectionDependencies": ("profile360", "relationship360"),
         "optionalProjectionDependencies": [],
         "inputRefs": ("EntityRef", "EvidenceRef", "GraphSnapshotRef", "PageRequest", "RelationshipRef", "TimeRangeFilter"),
-        "outputSections": ("evidence", "findings", "interactions", "paths", "propagation", "state", "summary", "timeline"),
+        "outputSections": ("evidence", "findings", "interactions", "paths", "propagation", "state", "summary", "syndicates", "timeline"),
         "supportedTemporalModes": ("as_of", "relative", "window"),
-        "surfaceIds": ("profile360",),
+        "surfaceIds": ("profile360", "social360"),
         "capabilityKeys": ("social360.explore", "social360.read"),
         "metricRefs": [],
         "graphMutationPolicy": "read_only",
@@ -1335,7 +1335,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         },
         "legacyBindings": {
             "routes": ("/v1/profile",),
-            "surfaceIds": ("profile360",),
+            "surfaceIds": ("profile360", "social360"),
             "services": ("services/api/identity/profile",),
             "migrationMode": "adapter",
             "migrationBlueprint": "docs/architecture/blueprints/social360.md"
@@ -1636,7 +1636,7 @@ PROJECTION_SURFACE_MAP: dict[str, tuple] = {
     "relationship360": ("graph", "profile360"),
     "risk360": ("comparison_workbench", "graph", "risk360"),
     "signals360": ("profile360",),
-    "social360": ("profile360",),
+    "social360": ("profile360", "social360"),
     "source360": ("campaign360",),
     "support360": ("support360",),
     "temporal360": ("temporal360",),
@@ -5374,12 +5374,19 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "canonicalAuthorityRefs": ("cluster_membership", "relationship_facts"),
+                "canonicalAuthorityRefs": ("cohort_membership", "evidence", "graph", "population_definitions"),
                 "description": "Verified syndicate membership and topology.",
                 "id": "syndicates",
-                "projectionBindings": [],
-                "requirement": "required",
-                "unboundReason": "canonical_syndicate_membership_authority_not_joined"
+                "partialImplementationReason": "membership_roster_completeness_historical_replay_and_freshness_remain_unknown",
+                "projectionBindings": [
+                    {
+                        "projectionId": "social360",
+                        "role": "primary",
+                        "subjectKinds": ("entity",),
+                        "sectionIds": ("syndicates",)
+                    }
+                ],
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("relationship_facts",),
@@ -5445,7 +5452,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("cluster_membership", "cohort_membership", "evidence", "geo_observations", "graph", "identity", "influence_propagation", "locations", "population_definitions", "relationship_facts", "relationship_predicate_registry", "risk_outputs", "social_observations", "source_coverage", "source_facts"),
+            "canonicalAuthorities": ("cohort_membership", "evidence", "geo_observations", "graph", "identity", "influence_propagation", "locations", "population_definitions", "relationship_facts", "relationship_predicate_registry", "risk_outputs", "social_observations", "source_coverage", "source_facts"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },
@@ -5761,11 +5768,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         "displayName": "Value 360",
         "domainSlots": [
             {
-                "authorityGapReason": "credit_records_are_not_rejoined_to_canonical_campaign_touchpoint_rows",
                 "canonicalAuthorityRefs": ("attribution_credits", "attribution_runs", "campaign_touchpoints", "canonical_conversions"),
                 "description": "Credited value allocated by canonical attribution authority.",
                 "id": "attribution_credits",
-                "partialImplementationReason": "credit_records_are_not_rejoined_to_canonical_campaign_touchpoint_rows",
+                "partialImplementationReason": "current_credit_read_is_unbounded_and_attribution_history_is_not_bitemporal",
                 "projectionBindings": [
                     {
                         "projectionId": "economic360",
@@ -5774,8 +5780,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "sectionIds": ("evidence",)
                     }
                 ],
-                "requirement": "required",
-                "unboundCanonicalAuthorityRefs": ("campaign_touchpoints",)
+                "requirement": "required"
             },
             {
                 "id": "campaign_and_attribution_context",

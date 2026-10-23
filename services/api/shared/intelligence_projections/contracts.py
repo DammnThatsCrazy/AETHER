@@ -342,6 +342,21 @@ class Experience360AuthorityDecision(ProjectionContract):
         return self
 
 
+class Experience360DriverScore(ProjectionContract):
+    """Independent evidence support for each possible action driver.
+
+    These values describe attribution evidence strength, not quality, risk, or
+    mutually exclusive probabilities. A request can have both a human
+    initiator and an agent executor, so the values are not normalized to sum
+    to one.
+    """
+
+    humanDriven: float = Field(default=0.0, ge=0.0, le=1.0)
+    agentDriven: float = Field(default=0.0, ge=0.0, le=1.0)
+    systemDriven: float = Field(default=0.0, ge=0.0, le=1.0)
+    unknown: float = Field(default=1.0, ge=0.0, le=1.0)
+
+
 class Experience360ActorAttribution(ProjectionContract):
     """Keep source assertions, canonical resolution, execution, and authority distinct.
 
@@ -353,6 +368,15 @@ class Experience360ActorAttribution(ProjectionContract):
     """
 
     tenantId: str
+    actorKind: Literal["human", "agent", "system", "unknown"] = "unknown"
+    actorSubjectId: Optional[str] = None
+    representedSubjectId: Optional[str] = None
+    agentId: Optional[str] = None
+    humanPrincipalId: Optional[str] = None
+    authorityEdgeIds: list[str] = Field(default_factory=list)
+    driverScore: Experience360DriverScore = Field(default_factory=Experience360DriverScore)
+    confidence: Literal["low", "medium", "high", "verified"] = "low"
+    explanation: str = "Actor or action-driver evidence is insufficient to resolve attribution."
     resolutionState: Literal["resolved", "ambiguous", "unresolved", "unknown", "not_applicable"] = (
         "unknown"
     )
@@ -370,6 +394,35 @@ class Experience360ActorAttribution(ProjectionContract):
     def canonical_actor_requires_resolved_state(self) -> "Experience360ActorAttribution":
         if not self.tenantId.strip():
             raise ValueError("actor attribution tenantId must not be empty")
+        for field_name in (
+            "actorSubjectId",
+            "representedSubjectId",
+            "agentId",
+            "humanPrincipalId",
+        ):
+            value = getattr(self, field_name)
+            if value is not None and not value.strip():
+                raise ValueError(f"{field_name} must be omitted or non-empty")
+        if len(self.authorityEdgeIds) != len(set(self.authorityEdgeIds)):
+            raise ValueError("authorityEdgeIds must not contain duplicates")
+        if any(not edge_id.strip() for edge_id in self.authorityEdgeIds):
+            raise ValueError("authorityEdgeIds must contain only non-empty ids")
+        if not self.explanation.strip():
+            raise ValueError("actor attribution explanation must not be empty")
+        if self.actorKind != "unknown" and not self.evidenceRefs:
+            raise ValueError("resolved actorKind requires evidenceRefs")
+        if self.actorKind == "agent" and (
+            self.resolutionState != "resolved"
+            or self.resolvedCanonicalActor is None
+            or self.resolvedCanonicalActor.kind != "agent"
+            or self.agentId != self.resolvedCanonicalActor.id
+            or self.actorSubjectId != self.resolvedCanonicalActor.id
+        ):
+            raise ValueError("agent actor attribution requires one evidence-backed canonical Agent")
+        if self.actorKind == "human" and not self.humanPrincipalId:
+            raise ValueError("human actor attribution requires an authenticated human principal")
+        if self.confidence == "verified" and not self.evidenceRefs:
+            raise ValueError("verified attribution requires evidenceRefs")
         if self.resolvedCanonicalActor is not None and self.resolutionState != "resolved":
             raise ValueError("resolvedCanonicalActor requires resolutionState='resolved'")
         if self.resolutionState == "resolved" and self.resolvedCanonicalActor is None:
@@ -707,6 +760,7 @@ __all__ = [
     "Experience360ActorParty",
     "Experience360AuthorityDecision",
     "Experience360Delegation",
+    "Experience360DriverScore",
     "Experience360Frame",
     "Experience360FrameRequest",
     "Experience360FrameSlot",

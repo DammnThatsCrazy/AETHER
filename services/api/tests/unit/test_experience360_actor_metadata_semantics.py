@@ -31,6 +31,7 @@ from shared.intelligence_projections.contracts import (  # noqa: E402
 )
 from shared.contracts_models.epistemic import EpistemicStatus  # noqa: E402
 from shared.intelligence_projections.frame_runtime import (  # noqa: E402
+    _agent360_observed_delegation_chain,
     _derive_agent_actor_metadata,
 )
 from shared.intelligence_projections.generated_registry import (  # noqa: E402
@@ -259,6 +260,349 @@ def test_agent360_duplicate_matching_decision_claims_fail_closed() -> None:
     assert metadata.authorityDecision.outcome == "unknown"
     assert metadata.authorityDecision.authorityRef is None
     assert metadata.authorityDecision.reasonCodes == ["no_action_scoped_decision_available"]
+
+
+def _delegation_path_fixture() -> tuple[dict[str, object], list[ClaimEnvelope]]:
+    delegation_ids = ["delegation-in", "delegation-out"]
+    party_ids = ["human-owner", AGENT_ID, "system-recipient"]
+    party_kinds = ["human", "agent", "system"]
+    records = [
+        {
+            "delegationId": delegation_id,
+            "evidenceRef": EvidenceRef(
+                id=delegation_id,
+                type="event",
+                source="delegations",
+                observedAt="2026-10-17T09:00:00Z",
+            ).model_dump(mode="json"),
+            "grantorEntityId": party_ids[index],
+            "granteeEntityId": party_ids[index + 1],
+            "scope": {"actions": [f"action-{index}"], "resources": [f"resource-{index}"]},
+            "startsAt": "2026-10-17T09:00:00Z",
+            "endsAt": None,
+            "revokedAt": None,
+            "recordState": (
+                "active_as_reported_by_repository" if index == 0 else "not_evaluated"
+            ),
+            "authorizationDecision": "unknown",
+        }
+        for index, delegation_id in enumerate(delegation_ids)
+    ]
+    claims: list[ClaimEnvelope] = []
+    path_refs: dict[tuple[str, str], EvidenceRef] = {}
+    for record in records:
+        record_id = record["delegationId"]
+        record_ref = EvidenceRef.model_validate(record["evidenceRef"])
+        path_refs[(record_ref.source, record_ref.id)] = record_ref
+        claims.append(
+            ClaimEnvelope(
+                id=f"delegation.{record_id}",
+                kind="agent_delegation_record",
+                subject=ProjectionSubject(kind="agent", id=AGENT_ID),
+                evidenceRefs=[record_ref],
+                claims=["A tenant-scoped delegation record is stored."],
+                claimState=EpistemicStatus.OBSERVED,
+            )
+        )
+        for side, entity_id in (
+            ("grantor", record["grantorEntityId"]),
+            ("grantee", record["granteeEntityId"]),
+        ):
+            identity_ref = EvidenceRef(
+                id=entity_id,
+                type="entity",
+                source="entities",
+                observedAt="2026-10-17T09:00:00Z",
+            )
+            path_refs[(identity_ref.source, identity_ref.id)] = identity_ref
+            claims.append(
+                ClaimEnvelope(
+                    id=f"delegation_party.{record_id}.{side}",
+                    kind="canonically_resolved_delegation_party",
+                    subject=ProjectionSubject(kind="agent", id=AGENT_ID),
+                    evidenceRefs=[record_ref, identity_ref],
+                    claims=["The delegation party resolves to a tenant-owned entity."],
+                    claimState=EpistemicStatus.RESOLVED,
+                    domainSlotIds=["owner_delegator", "delegation_chain", "actor_attribution"],
+                )
+            )
+
+    path = {
+        "kind": "observed_adjacent_delegation_records",
+        "delegationRecordIds": delegation_ids,
+        "partyEntityIds": party_ids,
+        "partyIdentities": [
+            {
+                "entityId": entity_id,
+                "state": "resolved",
+                "party": {"kind": party_kind, "id": entity_id},
+                "evidenceRefs": [],
+            }
+            for entity_id, party_kind in zip(party_ids, party_kinds)
+        ],
+        "evidenceRefs": [ref.model_dump(mode="json") for ref in path_refs.values()],
+    }
+    authority_content: dict[str, object] = {
+        "delegationRecords": records,
+        "delegationChain": {
+            "state": "partial",
+            "intermediateCanonicalAgentEntityId": AGENT_ID,
+            "observedAdjacentPaths": [path],
+            "boundedReadComplete": True,
+            "transitiveAuthority": "unknown",
+            "effectiveAuthorizationDecision": "unknown",
+        },
+    }
+    return authority_content, claims
+
+
+def test_agent360_exact_adjacent_delegation_path_becomes_typed_metadata() -> None:
+    authority_content, claims = _delegation_path_fixture()
+
+    chain, delegator, delegatee = _agent360_observed_delegation_chain(
+        tenant_id=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT_ID),
+        canonical_agent_id=AGENT_ID,
+        authority_content=authority_content,
+        claims=claims,
+    )
+
+    assert len(chain) == 2
+    assert chain[0].delegator.id == "human-owner"
+    assert chain[0].delegatee.id == AGENT_ID
+    assert chain[1].delegator.id == AGENT_ID
+    assert chain[1].delegatee.id == "system-recipient"
+    assert chain[0].scope == ["action:action-0", "resource:resource-0"]
+    assert chain[0].status == "granted"
+    assert chain[1].status == "unknown"
+    assert {ref.source for ref in chain[0].evidenceRefs} == {"delegations", "entities"}
+    assert delegator is not None and delegator.id == "human-owner"
+    assert delegatee is not None and delegatee.id == "system-recipient"
+
+
+def test_agent360_frame_runtime_attaches_exact_delegation_path_metadata() -> None:
+    authority_content, claims = _delegation_path_fixture()
+    identity_ref = EvidenceRef(
+        id=AGENT_ID,
+        type="entity",
+        source="entities",
+        observedAt="2026-10-17T09:00:00Z",
+    )
+    claims.append(
+        ClaimEnvelope(
+            id="agent360.canonical-agent-identity",
+            kind="canonically_resolved_agent_identity",
+            subject=ProjectionSubject(kind="agent", id=AGENT_ID),
+            evidenceRefs=[identity_ref],
+            claims=["The requested Agent resolves to a tenant-owned canonical Agent."],
+            claimState=EpistemicStatus.RESOLVED,
+            domainSlotIds=["identity", "actor_attribution"],
+        )
+    )
+    result = ProjectionResult(
+        projectionId="agent360",
+        tenantId=TENANT,
+        contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+        sections=[
+            ProjectionSection(
+                id="state",
+                state="available",
+                content={
+                    "dimensions": [
+                        {
+                            "id": "actor_attribution",
+                            "state": "available",
+                            "content": {"resolvedCanonicalActor": AGENT_ID},
+                        },
+                        {
+                            "id": "authority_and_delegation",
+                            "state": "partial",
+                            "content": authority_content,
+                        },
+                    ]
+                },
+            )
+        ],
+        claims=claims,
+        dependencyState=[],
+        generatedAt="2026-10-17T10:01:00Z",
+        asOf="2026-10-17T10:00:00Z",
+        degradedReasons=[],
+    )
+    request = Experience360FrameRequest(
+        surfaceId="agent360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT_ID),
+        requestedSlotIds=["delegation_chain", "actor_attribution"],
+    )
+
+    attribution = _derive_agent_actor_metadata(request, [result])["delegation_chain"]
+
+    assert [edge.id for edge in attribution.delegationChain] == [
+        "delegation-in",
+        "delegation-out",
+    ]
+    assert attribution.authorityEdgeIds == ["delegation-in", "delegation-out"]
+    assert attribution.actorKind == "agent"
+    assert attribution.driverScore.agentDriven == 0.0
+    assert attribution.driverScore.unknown == 1.0
+
+
+@pytest.mark.parametrize("failure", ["duplicate_path", "missing_party_evidence", "wrong_subject"])
+def test_agent360_delegation_path_ambiguity_or_provenance_fails_closed(failure: str) -> None:
+    authority_content, claims = _delegation_path_fixture()
+    chain_content = authority_content["delegationChain"]
+    path = chain_content["observedAdjacentPaths"][0]
+    if failure == "duplicate_path":
+        chain_content["observedAdjacentPaths"].append(path)
+    elif failure == "missing_party_evidence":
+        claims = [
+            claim
+            for claim in claims
+            if claim.id != "delegation_party.delegation-in.grantee"
+        ]
+    else:
+        claims = [
+            claim.model_copy(
+                update={"subject": ProjectionSubject(kind="agent", id="other-agent")}
+            )
+            if claim.id == "delegation.delegation-out"
+            else claim
+            for claim in claims
+        ]
+
+    chain, delegator, delegatee = _agent360_observed_delegation_chain(
+        tenant_id=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT_ID),
+        canonical_agent_id=AGENT_ID,
+        authority_content=authority_content,
+        claims=claims,
+    )
+
+    assert chain == []
+    assert delegator is None
+    assert delegatee is None
+
+
+def test_execution_driver_score_requires_canonical_server_execution_evidence() -> None:
+    execution_ref = EvidenceRef(
+        id="execution-actor-1",
+        type="event",
+        source="agent_executions",
+        observedAt="2026-10-17T10:00:00Z",
+    )
+    result = ProjectionResult(
+        projectionId="execution360",
+        tenantId=TENANT,
+        contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+        sections=[
+            ProjectionSection(
+                id="state",
+                state="available",
+                content={
+                    "sourceStates": {"serverRecordedLifecycle": "available"},
+                    "serverRecordedExecutions": [
+                        {
+                            "executionId": execution_ref.id,
+                            "agentId": AGENT_ID,
+                            "canonicalActorResolved": True,
+                        }
+                    ],
+                },
+            )
+        ],
+        claims=[
+            ClaimEnvelope(
+                id=f"execution360:server-actor:{execution_ref.id}",
+                kind="canonically_resolved_server_agent_actor",
+                subject=ProjectionSubject(kind="agent", id=AGENT_ID),
+                evidenceRefs=[execution_ref],
+                claims=["The canonical execution actor is resolved."],
+                claimState=EpistemicStatus.RESOLVED,
+                domainSlotIds=["actor_attribution"],
+            )
+        ],
+        dependencyState=[],
+        generatedAt="2026-10-17T10:01:00Z",
+        asOf="2026-10-17T10:00:00Z",
+        degradedReasons=[],
+    )
+    request = Experience360FrameRequest(
+        surfaceId="execution360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT_ID),
+        requestedSlotIds=["actor_attribution"],
+    )
+
+    attribution = _derive_agent_actor_metadata(request, [result])["actor_attribution"]
+
+    assert attribution.actorKind == "agent"
+    assert attribution.actorSubjectId == AGENT_ID
+    assert attribution.driverScore.agentDriven == 1.0
+    assert attribution.driverScore.unknown == 0.0
+    assert attribution.confidence == "high"
+
+
+def test_source_reported_agent_actor_does_not_establish_execution_driver() -> None:
+    source_ref = EvidenceRef(
+        id="source-event-actor-1",
+        type="event",
+        source="silver_semantic_observations",
+        observedAt="2026-10-17T10:00:00Z",
+    )
+    result = ProjectionResult(
+        projectionId="execution360",
+        tenantId=TENANT,
+        contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+        sections=[
+            ProjectionSection(
+                id="state",
+                state="available",
+                content={
+                    "sourceStates": {
+                        "serverRecordedLifecycle": "available",
+                        "sourceReportedTelemetry": "available",
+                    },
+                    "serverRecordedExecutions": [],
+                },
+            ),
+            ProjectionSection(
+                id="interactions",
+                state="available",
+                content={"interactions": [{"actorAgentId": AGENT_ID, "sourceEventId": source_ref.id}]},
+            ),
+        ],
+        claims=[
+            ClaimEnvelope(
+                id=f"execution360:actor:{source_ref.id}",
+                kind="canonically_resolved_execution_actor",
+                subject=ProjectionSubject(kind="agent", id=AGENT_ID),
+                evidenceRefs=[source_ref],
+                claims=["The source-reported actor resolves to a tenant-bound Agent."],
+                claimState=EpistemicStatus.RESOLVED,
+                domainSlotIds=["actor_attribution"],
+            )
+        ],
+        dependencyState=[],
+        generatedAt="2026-10-17T10:01:00Z",
+        asOf="2026-10-17T10:00:00Z",
+        degradedReasons=[],
+    )
+    request = Experience360FrameRequest(
+        surfaceId="execution360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="agent", id=AGENT_ID),
+        requestedSlotIds=["actor_attribution"],
+    )
+
+    attribution = _derive_agent_actor_metadata(request, [result])["actor_attribution"]
+
+    assert attribution.resolutionState == "resolved"
+    assert attribution.resolvedCanonicalActor is not None
+    assert attribution.resolvedCanonicalActor.id == AGENT_ID
+    assert attribution.actorKind == "unknown"
+    assert attribution.driverScore.agentDriven == 0.0
+    assert attribution.driverScore.unknown == 1.0
 
 
 def test_conflicting_agent360_action_decisions_remain_unknown() -> None:

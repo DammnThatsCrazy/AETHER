@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -35,6 +36,9 @@ from services.social360.provider import (  # noqa: E402
     SocialObservedPath,
     Social360Provider,
     RepositorySocialGraphPathReader,
+    RepositorySocialSyndicateMembershipReader,
+    SocialSyndicateMembership,
+    SocialSyndicateMembershipRead,
     _domain_slot_ids,
 )
 
@@ -102,6 +106,16 @@ class FakeSocialGraphPathReader:
 
     async def read_paths(self, tenant_id: str, start_entity_id: str):
         self.calls.append((tenant_id, start_entity_id))
+        return self.result
+
+
+class FakeSocialSyndicateMembershipReader:
+    def __init__(self, result: SocialSyndicateMembershipRead) -> None:
+        self.result = result
+        self.calls: list[tuple[str, str, int]] = []
+
+    async def read(self, tenant_id: str, entity_id: str, *, limit: int):
+        self.calls.append((tenant_id, entity_id, limit))
         return self.result
 
 
@@ -183,6 +197,24 @@ def _identity(
     }
 
 
+def _syndicate_membership(
+    *, tenant_id: str = TENANT, entity_id: str = "entity-a", population_id: str = "syndicate-a"
+):
+    return SocialSyndicateMembership(
+        tenant_id=tenant_id,
+        entity_id=entity_id,
+        population_id=population_id,
+        population_type="cluster",
+        joined_at="2026-10-18T09:00:00Z",
+        evidence_ref=EvidenceRef(
+            id=f"member-of-{population_id}",
+            type="relationship",
+            source="graph_mutation_ledger",
+            observedAt="2026-10-18T09:00:00Z",
+        ),
+    )
+
+
 @pytest.mark.asyncio
 async def test_entity_projection_is_tenant_scoped_and_emits_typed_fact_evidence():
     source = FakeSocialSource(
@@ -248,6 +280,185 @@ async def test_entity_projection_is_tenant_scoped_and_emits_typed_fact_evidence(
     assert identity_claim.evidenceRefs[0].id == "identity-fact-a"
     assert identity_claim.domainSlotIds == _domain_slot_ids("entity", "identity")
     assert source.calls[0] == ("identity", TENANT, 500)
+
+
+@pytest.mark.asyncio
+async def test_syndicates_slot_requires_exact_active_ledger_evidence_and_stays_partial():
+    membership = _syndicate_membership()
+    reader = FakeSocialSyndicateMembershipReader(
+        SocialSyndicateMembershipRead(
+            tenant_id=TENANT,
+            entity_id="entity-a",
+            rows=[membership],
+            available=True,
+            scope_known=True,
+        )
+    )
+    provider = Social360Provider(
+        source=FakeSocialSource({"identity": [_identity("identity-a", "entity-a", "social-a")]}),
+        consent_reader=_allow_consent,
+        syndicate_membership_reader=reader,
+    )
+
+    result = await provider.project(_request(include_sections=["syndicates"]), _context())
+
+    section = next(section for section in result.sections if section.id == "syndicates")
+    assert section.state == "degraded"
+    assert section.content["coverage"] == "unknown"
+    assert section.content["complete"] is False
+    assert section.content["memberships"] == [
+        {
+            "populationId": "syndicate-a",
+            "populationType": "cluster",
+            "membershipState": "active",
+            "joinedAt": "2026-10-18T09:00:00Z",
+            "evidenceRef": membership.evidence_ref.model_dump(mode="json"),
+        }
+    ]
+    assert section.content["freshness"]["state"] == "unknown"
+    assert section.canonicalAuthorityRefs == [
+        "cohort_membership",
+        "evidence",
+        "graph",
+        "population_definitions",
+    ]
+    claim = next(claim for claim in result.claims if "syndicates" in (claim.domainSlotIds or []))
+    assert claim.evidenceRefs == [membership.evidence_ref]
+    assert claim.claimState == "observed"
+    assert reader.calls == [(TENANT, "entity-a", 100)]
+
+
+@pytest.mark.asyncio
+async def test_repository_syndicate_reader_requires_canonical_entity_before_membership_read():
+    membership = _syndicate_membership()
+
+    class FakeProfileSyndicateSource:
+        def __init__(self, *, canonical_scope_known: bool = True) -> None:
+            self.canonical_scope_known = canonical_scope_known
+            self.canonical_calls = []
+            self.membership_calls = []
+
+        async def canonical_entity(self, tenant_id, subject):
+            self.canonical_calls.append((tenant_id, subject.kind, subject.id))
+            return SimpleNamespace(
+                record={"tenant_id": tenant_id, "entity_id": subject.id},
+                available=True,
+                scope_known=self.canonical_scope_known,
+                reason=None,
+            )
+
+        async def syndicate_memberships(self, tenant_id, subject, *, limit):
+            self.membership_calls.append((tenant_id, subject.kind, subject.id, limit))
+            return SimpleNamespace(
+                rows=[membership],
+                available=True,
+                scope_known=True,
+                truncated=False,
+                reason=None,
+            )
+
+    source = FakeProfileSyndicateSource()
+    reader = RepositorySocialSyndicateMembershipReader(source=source)
+    result = await reader.read(TENANT, "entity-a", limit=500)
+    assert result.available is True
+    assert result.scope_known is True
+    assert result.rows == [membership]
+    assert source.canonical_calls == [(TENANT, "entity", "entity-a")]
+    assert source.membership_calls == [(TENANT, "entity", "entity-a", 100)]
+
+    unresolved_source = FakeProfileSyndicateSource(canonical_scope_known=False)
+    unresolved = await RepositorySocialSyndicateMembershipReader(
+        source=unresolved_source
+    ).read(TENANT, "entity-a", limit=100)
+    assert unresolved.available is True
+    assert unresolved.scope_known is False
+    assert unresolved_source.membership_calls == []
+
+
+@pytest.mark.asyncio
+async def test_syndicates_slot_keeps_missing_membership_unknown_and_rejects_foreign_scope():
+    empty_reader = FakeSocialSyndicateMembershipReader(
+        SocialSyndicateMembershipRead(
+            tenant_id=TENANT,
+            entity_id="entity-a",
+            rows=[],
+            available=True,
+            scope_known=True,
+        )
+    )
+    empty_result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        syndicate_membership_reader=empty_reader,
+    ).project(_request(include_sections=["syndicates"]), _context())
+    empty_section = next(section for section in empty_result.sections if section.id == "syndicates")
+    assert empty_section.state == "unknown"
+    assert empty_section.content["memberships"] == []
+    assert empty_section.content["observedMembershipCount"] is None
+    assert empty_section.content["reasonCode"] == (
+        "social_syndicate_membership_not_observed_completeness_unknown"
+    )
+    assert not [claim for claim in empty_result.claims if "syndicates" in (claim.domainSlotIds or [])]
+
+    foreign_reader = FakeSocialSyndicateMembershipReader(
+        SocialSyndicateMembershipRead(
+            tenant_id="tenant-other",
+            entity_id="entity-a",
+            rows=[_syndicate_membership(tenant_id="tenant-other")],
+            available=True,
+            scope_known=True,
+        )
+    )
+    foreign_result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        syndicate_membership_reader=foreign_reader,
+    ).project(_request(include_sections=["syndicates"]), _context())
+    foreign_section = next(
+        section for section in foreign_result.sections if section.id == "syndicates"
+    )
+    assert foreign_section.state == "unknown"
+    assert foreign_section.content["memberships"] == []
+    assert foreign_section.content["reasonCode"] == "social_syndicate_membership_scope_mismatch"
+    assert foreign_result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_syndicates_slot_requires_consent_and_does_not_claim_historical_membership():
+    reader = FakeSocialSyndicateMembershipReader(
+        SocialSyndicateMembershipRead(
+            tenant_id=TENANT,
+            entity_id="entity-a",
+            rows=[_syndicate_membership()],
+            available=True,
+            scope_known=True,
+        )
+    )
+
+    async def denied_consent(tenant_id: str, subject_id: str, anonymous_id, purpose: str):
+        return False, "consent_receipt_missing"
+
+    denied = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=denied_consent,
+        syndicate_membership_reader=reader,
+    ).project(_request(include_sections=["syndicates"]), _context())
+    assert denied.sections[0].state == "suppressed"
+    assert reader.calls == []
+
+    historical = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        syndicate_membership_reader=reader,
+    ).project(
+        _request(include_sections=["syndicates"], temporal_mode="relative"),
+        _context(),
+    )
+    section = next(section for section in historical.sections if section.id == "syndicates")
+    assert section.state == "unknown"
+    assert section.content["reasonCode"] == "social_syndicate_historical_replay_unavailable"
+    assert section.content["memberships"] == []
+    assert reader.calls == []
 
 
 @pytest.mark.asyncio
@@ -480,7 +691,7 @@ async def test_unavailable_identity_source_is_degraded_and_does_not_join_partial
     assert all(
         section.state == "degraded"
         for section_id, section in sections.items()
-        if section_id not in {"paths", "propagation"}
+        if section_id not in {"paths", "propagation", "syndicates"}
     )
     assert sections["paths"].state == "unknown"
     assert sections["propagation"].state == "unknown"
@@ -708,7 +919,7 @@ async def test_population_truncation_empty_membership_and_historical_scope_are_e
     assert {
         section.state
         for section in empty.sections
-        if section.id not in {"paths", "propagation"}
+        if section.id not in {"paths", "propagation", "syndicates"}
     } == {"empty"}
     assert next(section for section in empty.sections if section.id == "paths").state == "unknown"
     assert next(section for section in empty.sections if section.id == "propagation").state == "unknown"

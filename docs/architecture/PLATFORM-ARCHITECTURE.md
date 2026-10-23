@@ -762,6 +762,28 @@ offer catalog revisions only; inventory availability, current offer price, and
 freshness remain unknown. Location360 `timezone` remains unknown because no
 exact tenant-scoped geographic timezone mapping is connected, and the provider
 does not infer a zone from coordinates, place labels, or source-clock metadata.
+
+The next 2026-10-23 provider wave adds partial Identity360 identifier,
+namespace, and alias rows with record-level evidence; provider-registry joins
+remain unknown. Social360's `syndicates` slot now binds opted-in Syndicates
+membership to an exact tenant entity and current `MEMBER_OF` graph-ledger edge,
+with a mutation evidence reference on each positive claim; roster completeness,
+historical membership, and freshness remain unknown. Value360's
+`attribution_credits` slot now rejoins credit conversion and touchpoint IDs to
+tenant-scoped canonical records and checks campaign consistency. Historical
+attribution remains unavailable, touchpoint lookups are capped, and the
+underlying credit query is still unbounded.
+
+Agent360 and Execution360 now carry typed actor kind, subject, authority-edge,
+confidence, explanation, and independent driver-score fields. An Agent driver
+score is populated only from an exact canonical server execution actor claim;
+an authenticated initiator or source-reported actor does not establish who
+drove an action. Agent360 converts one complete, continuous two-edge stored
+delegation path into typed edges only when both records and all party identities
+have exact evidence. This describes current observed records; it does not infer
+transitive authority or effective authorization. All these additions are
+partial slot paths and leave the 18-surface buildout incomplete.
+
 Exploration surfaces compose over the engine through projection-backed surface adapters
 
 (`services/api/journeys/exploration/adapters/projection.py`).

@@ -52,6 +52,7 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
     "propagation",
     "state",
     "summary",
+    "syndicates",
     "timeline",
 )
 _MAX_READ_ROWS = 500
@@ -66,6 +67,27 @@ _SOCIAL_PROPAGATION_AUTHORITIES = [
     "relationship_predicate_registry",
     "influence_propagation",
 ]
+_SOCIAL_SYNDICATE_AUTHORITIES = [
+    "cohort_membership",
+    "evidence",
+    "graph",
+    "population_definitions",
+]
+_MAX_SYNDICATE_MEMBERSHIPS = 100
+_SYNDICATE_POPULATION_TYPES = frozenset(
+    {
+        "segment",
+        "cohort",
+        "cluster",
+        "community",
+        "batch",
+        "archetype",
+        "anomaly",
+        "lookalike",
+        "risk",
+        "lifecycle",
+    }
+)
 _FACT_TABLES = (
     "identity",
     "connection",
@@ -238,6 +260,154 @@ class SocialGraphPathReader(Protocol):
     """Read observed canonical graph paths without deriving trust or influence."""
 
     async def read_paths(self, tenant_id: str, start_entity_id: str) -> SocialGraphPathRead: ...
+
+
+@dataclass(frozen=True)
+class SocialSyndicateMembership:
+    """Exact active membership in a population explicitly opted into Syndicates."""
+
+    tenant_id: str
+    entity_id: str
+    population_id: str
+    population_type: str
+    joined_at: Optional[str]
+    evidence_ref: EvidenceRef
+
+
+@dataclass(frozen=True)
+class SocialSyndicateMembershipRead:
+    """Bounded current membership read with an explicit scope state."""
+
+    tenant_id: str
+    entity_id: str
+    rows: list[SocialSyndicateMembership]
+    available: bool
+    scope_known: bool
+    truncated: bool = False
+    reason: Optional[str] = None
+
+
+class SocialSyndicateMembershipReader(Protocol):
+    """Read explicit syndicate memberships for one exact canonical entity."""
+
+    async def read(
+        self, tenant_id: str, entity_id: str, *, limit: int
+    ) -> SocialSyndicateMembershipRead: ...
+
+
+class RepositorySocialSyndicateMembershipReader:
+    """Reuse Profile360's exact population and graph-ledger membership authority."""
+
+    def __init__(self, *, source: Any = None) -> None:
+        self._source = source
+
+    async def read(
+        self, tenant_id: str, entity_id: str, *, limit: int
+    ) -> SocialSyndicateMembershipRead:
+        try:
+            if self._source is None:
+                from identity.profile.profile360_provider import RepositoryProfile360Source
+
+                self._source = RepositoryProfile360Source()
+
+            from shared.intelligence_projections.contracts import ProjectionSubject
+
+            subject = ProjectionSubject(kind="entity", id=entity_id)
+            canonical = await self._source.canonical_entity(tenant_id, subject)
+            if not canonical.available:
+                return SocialSyndicateMembershipRead(
+                    tenant_id,
+                    entity_id,
+                    [],
+                    available=False,
+                    scope_known=False,
+                    reason=canonical.reason or "social_syndicate_entity_authority_unavailable",
+                )
+            canonical_record = canonical.record
+            if (
+                not canonical.scope_known
+                or not isinstance(canonical_record, dict)
+                or canonical_record.get("tenant_id") != tenant_id
+                or str(canonical_record.get("entity_id") or "") != entity_id
+            ):
+                return SocialSyndicateMembershipRead(
+                    tenant_id,
+                    entity_id,
+                    [],
+                    available=True,
+                    scope_known=False,
+                    reason=canonical.reason or "social_syndicate_entity_scope_unverified",
+                )
+
+            result = await self._source.syndicate_memberships(
+                tenant_id,
+                subject,
+                limit=min(max(limit, 1), _MAX_SYNDICATE_MEMBERSHIPS),
+            )
+        except Exception:  # noqa: BLE001 - canonical membership reads fail closed
+            return SocialSyndicateMembershipRead(
+                tenant_id,
+                entity_id,
+                [],
+                available=False,
+                scope_known=False,
+                reason="social_syndicate_membership_authority_unavailable",
+            )
+
+        rows = getattr(result, "rows", None)
+        if not isinstance(rows, list):
+            return SocialSyndicateMembershipRead(
+                tenant_id,
+                entity_id,
+                [],
+                available=False,
+                scope_known=False,
+                reason="social_syndicate_membership_source_invalid_response",
+            )
+        memberships: list[SocialSyndicateMembership] = []
+        for row in rows:
+            evidence_ref = getattr(row, "evidence_ref", None)
+            population_id = getattr(row, "population_id", None)
+            population_type = getattr(row, "population_type", None)
+            joined_at = getattr(row, "joined_at", None)
+            row_tenant = getattr(row, "tenant_id", None)
+            row_entity = getattr(row, "entity_id", None)
+            if (
+                not isinstance(evidence_ref, EvidenceRef)
+                or not isinstance(population_id, str)
+                or not isinstance(population_type, str)
+                or (joined_at is not None and not isinstance(joined_at, str))
+                or row_tenant != tenant_id
+                or row_entity != entity_id
+            ):
+                return SocialSyndicateMembershipRead(
+                    tenant_id,
+                    entity_id,
+                    [],
+                    available=True,
+                    scope_known=False,
+                    truncated=bool(getattr(result, "truncated", False)),
+                    reason="social_syndicate_membership_scope_or_contract_invalid",
+                )
+            memberships.append(
+                SocialSyndicateMembership(
+                    tenant_id=tenant_id,
+                    entity_id=entity_id,
+                    population_id=population_id,
+                    population_type=population_type,
+                    joined_at=joined_at,
+                    evidence_ref=evidence_ref,
+                )
+            )
+        return SocialSyndicateMembershipRead(
+            tenant_id=tenant_id,
+            entity_id=entity_id,
+            rows=memberships,
+            available=getattr(result, "available", False) is True,
+            scope_known=getattr(result, "scope_known", False) is True,
+            truncated=getattr(result, "truncated", False) is True,
+            reason=getattr(result, "reason", None),
+        )
 
 
 class RepositorySocialGraphPathReader:
@@ -539,6 +709,7 @@ class Social360Provider(IntelligenceProjectionProvider):
         source_subject_scope_reader: Optional[SourceSubjectScopeReader] = None,
         agent_subject_scope_reader: Optional[AgentSubjectScopeReader] = None,
         social_graph_path_reader: Optional[SocialGraphPathReader] = None,
+        syndicate_membership_reader: Optional[SocialSyndicateMembershipReader] = None,
     ) -> None:
         self._source = source if source is not None else RepositorySocial360Source()
         self._consent_reader = consent_reader or evaluate_consent
@@ -561,6 +732,11 @@ class Social360Provider(IntelligenceProjectionProvider):
             social_graph_path_reader
             if social_graph_path_reader is not None
             else RepositorySocialGraphPathReader()
+        )
+        self._syndicate_memberships = (
+            syndicate_membership_reader
+            if syndicate_membership_reader is not None
+            else RepositorySocialSyndicateMembershipReader()
         )
 
     async def project(
@@ -784,6 +960,30 @@ class Social360Provider(IntelligenceProjectionProvider):
             )
             or (request.temporalMode or "window") in {"as_of", "relative"}
         )
+        syndicate_read: Optional[SocialSyndicateMembershipRead] = None
+        if "syndicates" in include:
+            if request.subject.kind != "entity":
+                syndicate_read = SocialSyndicateMembershipRead(
+                    request.tenantId,
+                    request.subject.id,
+                    [],
+                    available=True,
+                    scope_known=False,
+                    reason="social_syndicate_entity_subject_required",
+                )
+            elif temporal_filter_requested:
+                syndicate_read = SocialSyndicateMembershipRead(
+                    request.tenantId,
+                    request.subject.id,
+                    [],
+                    available=True,
+                    scope_known=False,
+                    reason="social_syndicate_historical_replay_unavailable",
+                )
+            else:
+                syndicate_read = await self._read_social_syndicates(
+                    request.tenantId, request.subject.id
+                )
         consent_by_endpoint = {
             endpoint: _consent_allowed(consent)
             for endpoint, consent in zip(endpoints, consent_results)
@@ -1270,11 +1470,18 @@ class Social360Provider(IntelligenceProjectionProvider):
         )
         if "propagation" in include:
             sections.append(propagation_section)
+        syndicates_section, syndicates_claims = self._syndicates_section_and_claims(
+            request.tenantId, request.subject, syndicate_read
+        )
+        if "syndicates" in include:
+            sections.append(syndicates_section)
 
         claims = self._claims(request.subject, rows_by_family, refs_by_family)
         claims.extend(path_claims)
         if "propagation" in include:
             claims.extend(propagation_claims)
+        if "syndicates" in include:
+            claims.extend(syndicates_claims)
         degraded_reasons = sorted(
             {
                 read.reason or f"{family}_source_unavailable"
@@ -1324,6 +1531,197 @@ class Social360Provider(IntelligenceProjectionProvider):
                 reason_codes=("canonical_social_path_scope_mismatch",),
             )
         return result
+
+    async def _read_social_syndicates(
+        self, tenant_id: str, entity_id: str
+    ) -> SocialSyndicateMembershipRead:
+        try:
+            result = await self._syndicate_memberships.read(
+                tenant_id, entity_id, limit=_MAX_SYNDICATE_MEMBERSHIPS
+            )
+        except Exception:  # noqa: BLE001 - canonical membership authority is fail-closed
+            return SocialSyndicateMembershipRead(
+                tenant_id,
+                entity_id,
+                [],
+                available=False,
+                scope_known=False,
+                reason="social_syndicate_membership_authority_unavailable",
+            )
+        if not isinstance(result, SocialSyndicateMembershipRead):
+            return SocialSyndicateMembershipRead(
+                tenant_id,
+                entity_id,
+                [],
+                available=False,
+                scope_known=False,
+                reason="social_syndicate_membership_source_invalid_response",
+            )
+        if result.tenant_id != tenant_id or result.entity_id != entity_id:
+            return SocialSyndicateMembershipRead(
+                tenant_id,
+                entity_id,
+                [],
+                available=True,
+                scope_known=False,
+                truncated=result.truncated,
+                reason="social_syndicate_membership_scope_mismatch",
+            )
+        if len(result.rows) > _MAX_SYNDICATE_MEMBERSHIPS:
+            return SocialSyndicateMembershipRead(
+                tenant_id=tenant_id,
+                entity_id=entity_id,
+                rows=result.rows[:_MAX_SYNDICATE_MEMBERSHIPS],
+                available=result.available,
+                scope_known=result.scope_known,
+                truncated=True,
+                reason=result.reason or "social_syndicate_membership_source_limit_exceeded",
+            )
+        return result
+
+    @staticmethod
+    def _syndicates_section_and_claims(
+        tenant_id: str,
+        subject: ProjectionSubject,
+        result: Optional[SocialSyndicateMembershipRead],
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        reason = "social_syndicate_membership_scope_unavailable"
+        available = False
+        scope_known = False
+        truncated = False
+        rows: list[SocialSyndicateMembership] = []
+        if result is not None:
+            available = result.available
+            scope_known = result.scope_known
+            truncated = result.truncated
+            reason = result.reason or reason
+            if (
+                result.tenant_id == tenant_id
+                and subject.kind == "entity"
+                and result.entity_id == subject.id
+                and isinstance(result.rows, list)
+            ):
+                rows = result.rows
+            else:
+                scope_known = False
+                reason = "social_syndicate_membership_scope_mismatch"
+
+        if subject.kind != "entity":
+            scope_known = False
+            reason = "social_syndicate_entity_subject_required"
+
+        memberships: list[dict[str, Any]] = []
+        evidence_refs: list[EvidenceRef] = []
+        claims: list[ClaimEnvelope] = []
+        seen_population_ids: set[str] = set()
+        for row in rows:
+            evidence_ref = row.evidence_ref if isinstance(row, SocialSyndicateMembership) else None
+            if (
+                not isinstance(row, SocialSyndicateMembership)
+                or row.tenant_id != tenant_id
+                or row.entity_id != subject.id
+                or not _text(row.population_id)
+                or row.population_type not in _SYNDICATE_POPULATION_TYPES
+                or not isinstance(evidence_ref, EvidenceRef)
+                or not _text(evidence_ref.id)
+                or evidence_ref.type != "relationship"
+                or evidence_ref.source != "graph_mutation_ledger"
+                or (row.joined_at is not None and not isinstance(row.joined_at, str))
+            ):
+                scope_known = False
+                memberships = []
+                evidence_refs = []
+                reason = "social_syndicate_membership_scope_or_evidence_invalid"
+                break
+            if row.population_id in seen_population_ids:
+                continue
+            seen_population_ids.add(row.population_id)
+            memberships.append(
+                {
+                    "populationId": row.population_id,
+                    "populationType": row.population_type,
+                    "membershipState": "active",
+                    "joinedAt": row.joined_at,
+                    "evidenceRef": evidence_ref.model_dump(mode="json"),
+                }
+            )
+            evidence_refs.append(evidence_ref)
+
+        if not available:
+            state = "degraded"
+            memberships = []
+            evidence_refs = []
+            claims = []
+        elif not scope_known:
+            state = "unknown"
+            memberships = []
+            evidence_refs = []
+            claims = []
+        elif truncated or (result is not None and result.reason) or memberships:
+            state = "degraded"
+        else:
+            state = "unknown"
+            reason = "social_syndicate_membership_not_observed_completeness_unknown"
+
+        if state == "degraded" and result is not None and result.reason:
+            reason = result.reason
+        for membership in memberships:
+            population_id = membership["populationId"]
+            evidence_ref = next(
+                (ref for ref in evidence_refs if ref.id == membership["evidenceRef"]["id"]),
+                None,
+            )
+            if evidence_ref is None:
+                continue
+            claims.append(
+                ClaimEnvelope(
+                    id=f"social360.syndicate_membership.{population_id}",
+                    kind="social_syndicate_membership_observation",
+                    subject=subject,
+                    evidenceRefs=[evidence_ref],
+                    claims=[
+                        "The exact tenant entity has an observed active MEMBER_OF edge to an explicitly opted-in Syndicates group."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["syndicates"],
+                )
+            )
+
+        content = {
+            "state": state,
+            "memberships": memberships,
+            "observedMembershipCount": len(memberships) if memberships else None,
+            "coverage": "unknown",
+            "complete": False,
+            "temporalInterpretation": "current_membership_candidates_verified_against_graph_ledger",
+            "freshness": {
+                "state": "unknown",
+                "observedAt": None,
+                "reason": "Social360 has no syndicate membership freshness threshold.",
+            },
+            "readAuthority": "cohort_membership+population_definitions+graph_mutation_ledger",
+            "reasonCode": reason,
+            "limitations": [
+                "only explicitly opted-in Syndicates groups with an exact current MEMBER_OF ledger edge are included",
+                "historical membership replay is unavailable",
+                "membership roster completeness is unknown",
+                "Social360 membership freshness policy is unavailable",
+            ],
+        }
+        if evidence_refs:
+            content["evidenceRefs"] = _dedupe_refs(evidence_refs)
+        warnings = [reason] if state in {"unknown", "degraded"} else None
+        return (
+            ProjectionSection(
+                id="syndicates",
+                state=state,  # type: ignore[arg-type]
+                title="Syndicate memberships",
+                content=content,
+                warnings=warnings,
+                canonicalAuthorityRefs=list(_SOCIAL_SYNDICATE_AUTHORITIES),
+            ),
+            claims,
+        )
 
     async def _authorize_social_paths(
         self,
@@ -1733,6 +2131,17 @@ class Social360Provider(IntelligenceProjectionProvider):
                     )
                 )
                 continue
+            if section_id == "syndicates":
+                sections.append(
+                    ProjectionSection(
+                        id="syndicates",
+                        state="unknown",
+                        title="Syndicate memberships",
+                        warnings=["empty_population_has_no_entity_membership_scope"],
+                        canonicalAuthorityRefs=list(_SOCIAL_SYNDICATE_AUTHORITIES),
+                    )
+                )
+                continue
             sections.append(
                 ProjectionSection(
                     id=section_id,
@@ -1773,6 +2182,8 @@ class Social360Provider(IntelligenceProjectionProvider):
                     if section_id == "paths"
                     else list(_SOCIAL_PROPAGATION_AUTHORITIES)
                     if section_id == "propagation"
+                    else list(_SOCIAL_SYNDICATE_AUTHORITIES)
+                    if section_id == "syndicates"
                     else None
                 ),
             )
@@ -1810,6 +2221,8 @@ class Social360Provider(IntelligenceProjectionProvider):
                     if section_id == "paths"
                     else list(_SOCIAL_PROPAGATION_AUTHORITIES)
                     if section_id == "propagation"
+                    else list(_SOCIAL_SYNDICATE_AUTHORITIES)
+                    if section_id == "syndicates"
                     else None
                 ),
             )
@@ -2428,5 +2841,9 @@ __all__ = [
     "Social360FactRead",
     "Social360Provider",
     "Social360Source",
+    "SocialSyndicateMembership",
+    "SocialSyndicateMembershipRead",
+    "SocialSyndicateMembershipReader",
+    "RepositorySocialSyndicateMembershipReader",
     "register_provider",
 ]

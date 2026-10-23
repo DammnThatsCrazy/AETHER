@@ -518,6 +518,9 @@ class Identity360Provider:
                     expected_source_id=subject_id,
                     source_field="source_identity_id",
                 )
+                claim_rows, claim_read = self._validated_provenance_rows(
+                    claim_read, claim_rows, "identity_claims"
+                )
 
         if entity_id is not None and subject_scope_known:
             if subject_kind != "source" and want_lineage:
@@ -532,6 +535,9 @@ class Identity360Provider:
                     tenant_id,
                     expected_entity_id=entity_id,
                     source_field="canonical_entity_id",
+                )
+                source_rows, source_rows_read = self._validated_provenance_rows(
+                    source_rows_read, source_rows, "identity_source_identities"
                 )
             if want_relationships:
                 edges_read = await self._safe_batch(
@@ -565,6 +571,9 @@ class Identity360Provider:
             source_field="canonical_entity_id",
             reason_on_mismatch="identity_alias_scope_mismatch",
         )
+        aliases, aliases_read = self._validated_provenance_rows(
+            aliases_read, aliases, "identity_aliases"
+        )
         edges, edges_read = self._validated_edge_rows(edges_read, tenant_id, entity_id)
         decision_rows, decisions_read = self._validated_rows(
             decisions_read,
@@ -587,14 +596,27 @@ class Identity360Provider:
         # are never copied into Identity360 output.
         if subject_kind == "source":
             source_items = [
-                _safe_source_identity(
-                    row,
-                    include_canonical_entity=bool(safe_entity and safe_subject),
-                )
+                {
+                    **_safe_source_identity(
+                        row,
+                        include_canonical_entity=bool(safe_entity and safe_subject),
+                    ),
+                    "evidenceRef": _required_row_ref(
+                        row, "identity_source_identities"
+                    ).model_dump(mode="json", exclude_none=True),
+                }
                 for row in source_rows
             ]
         else:
-            source_items = [_safe_source_identity(row) for row in source_rows]
+            source_items = [
+                {
+                    **_safe_source_identity(row),
+                    "evidenceRef": _required_row_ref(
+                        row, "identity_source_identities"
+                    ).model_dump(mode="json", exclude_none=True),
+                }
+                for row in source_rows
+            ]
         lineage_refs = [
             ref
             for ref in (_row_ref(row, "identity_source_identities") for row in source_rows)
@@ -606,13 +628,29 @@ class Identity360Provider:
             if (source_id := _safe_text(row.get("id")))
             if (ref := _row_ref(row, "identity_source_identities")) is not None
         }
-        claim_items = [_safe_claim(row) for row in claim_rows]
+        claim_items = [
+            {
+                **_safe_claim(row),
+                "evidenceRef": _required_row_ref(row, "identity_claims").model_dump(
+                    mode="json", exclude_none=True
+                ),
+            }
+            for row in claim_rows
+        ]
         claim_refs = [
             ref
             for ref in (_row_ref(row, "identity_claims") for row in claim_rows)
             if ref is not None
         ]
-        alias_items = [_safe_alias(row) for row in aliases]
+        alias_items = [
+            {
+                **_safe_alias(row),
+                "evidenceRef": _required_row_ref(row, "identity_aliases").model_dump(
+                    mode="json", exclude_none=True
+                ),
+            }
+            for row in aliases
+        ]
         alias_refs = [
             ref for ref in (_row_ref(row, "identity_aliases") for row in aliases) if ref is not None
         ]
@@ -759,11 +797,14 @@ class Identity360Provider:
                 "sourceIdentityId": item.get("id"),
                 "sourceKind": item.get("sourceKind"),
                 "sourceNamespace": item.get("sourceNamespace"),
+                "canonicalEntityId": item.get("canonicalEntityId"),
                 "status": item.get("status"),
+                "evidenceRef": item.get("evidenceRef"),
             }
             for item in source_items
             if item.get("sourceNamespace")
         ]
+        namespace_metadata_incomplete = len(namespace_items) < len(source_items)
         if subject_kind == "source":
             if source_row is None:
                 namespace_state: IdentitySlotState = (
@@ -774,22 +815,37 @@ class Identity360Provider:
                 namespace_state = "suppressed"
                 namespace_reason = "source_identity_suppressed"
             elif namespace_items:
-                namespace_state = "available"
-                namespace_reason = None
+                namespace_state = "partial"
+                namespace_reason = (
+                    "source_provider_registry_join_not_performed"
+                    if not namespace_metadata_incomplete
+                    else "source_namespace_metadata_incomplete_and_provider_registry_unjoined"
+                )
             else:
-                namespace_state = "empty"
+                namespace_state = "unknown"
                 namespace_reason = "source_namespace_not_recorded"
         else:
-            namespace_state = _batch_state(
-                source_rows_read,
-                known_subject=subject_scope_known,
-                any_rows=bool(namespace_items),
-                failures=warnings,
-            )
-            namespace_reason = source_rows_read.reason or (
-                "identity_subject_not_resolved" if not subject_scope_known else None
-            )
-            if source_items and not namespace_items and namespace_state == "empty":
+            if not subject_scope_known:
+                namespace_state = (
+                    "degraded" if not source_rows_read.available or warnings else "unknown"
+                )
+                namespace_reason = source_rows_read.reason or "identity_subject_not_resolved"
+            elif not source_rows_read.available:
+                namespace_state = "degraded"
+                namespace_reason = source_rows_read.reason or "source_identity_read_degraded"
+            elif source_rows_read.truncated:
+                namespace_state = "truncated"
+                namespace_reason = "source_identity_read_truncated"
+            elif not source_items:
+                namespace_state = "empty"
+                namespace_reason = None
+            elif namespace_metadata_incomplete:
+                namespace_state = "degraded"
+                namespace_reason = "source_namespace_metadata_incomplete"
+            elif namespace_items:
+                namespace_state = "partial"
+                namespace_reason = "source_provider_registry_join_not_performed"
+            else:
                 namespace_state = "degraded"
                 namespace_reason = "source_namespace_not_recorded"
 
@@ -1475,6 +1531,23 @@ class Identity360Provider:
         return rows, read
 
     @staticmethod
+    def _validated_provenance_rows(
+        read: IdentityBatchRead,
+        rows: list[dict[str, Any]],
+        source: str,
+    ) -> tuple[list[dict[str, Any]], IdentityBatchRead]:
+        """Reject scoped records that cannot carry an exact record-level ref."""
+        if not read.available:
+            return [], read
+        if any(_required_row_ref_or_none(row, source) is None for row in rows):
+            return [], IdentityBatchRead(
+                available=False,
+                truncated=read.truncated,
+                reason=f"{source}_evidence_ref_missing",
+            )
+        return rows, read
+
+    @staticmethod
     def _validated_edge_rows(
         read: IdentityBatchRead, tenant_id: str, entity_id: Optional[str]
     ) -> tuple[list[dict[str, Any]], IdentityBatchRead]:
@@ -1570,7 +1643,9 @@ def _safe_source_identity(
         "sourceNamespace": _safe_text(row.get("source_namespace")),
         "status": status,
         "canonicalEntityId": (
-            _safe_text(row.get("canonical_entity_id")) if include_canonical_entity else None
+            _safe_text(row.get("canonical_entity_id"))
+            if include_canonical_entity and status == "resolved"
+            else None
         ),
         "identifierTypes": sorted(field for field in _SOURCE_IDENTIFIER_FIELDS if row.get(field)),
         "firstSeenAt": _safe_text(row.get("first_seen_at")),
@@ -1701,6 +1776,20 @@ def _row_ref(row: dict[str, Any], source: str) -> Optional[EvidenceRef]:
             else row.get("confidence")
         ),
     )
+
+
+def _required_row_ref_or_none(row: dict[str, Any], source: str) -> Optional[EvidenceRef]:
+    """Build a row-level evidence pointer without falling back to its subject."""
+    if not _safe_text(row.get("id")):
+        return None
+    return _row_ref(row, source)
+
+
+def _required_row_ref(row: dict[str, Any], source: str) -> EvidenceRef:
+    ref = _required_row_ref_or_none(row, source)
+    if ref is None:
+        raise ValueError(f"{source} row passed without a validated evidence reference")
+    return ref
 
 
 def _batch_state(
