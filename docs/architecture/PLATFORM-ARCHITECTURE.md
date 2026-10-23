@@ -594,6 +594,9 @@ policy behavior, freshness, API reachability, or surface-level verification.
 Recent backend slices bind Account360 profiles through exact tenant membership
 and policy-scoped Profile360 reads, Campaign360 targeting-leakage findings,
 Journey360 explicit role markers, and Location360 source/evidence lineage.
+Profile360's required `risk_summary` slot now binds to Risk360 assessments and
+evidence for exact tenant-scoped entity and Agent subjects; it remains degraded
+while a Profile-specific freshness threshold is unknown.
 Additional partial paths include Identity360 device/session identifier-type
 metadata, Execution360 exact execution-linked RiskSignals, Social360
 propagation-eligible observed paths, and Episode360 exact episode-linked

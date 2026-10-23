@@ -4478,12 +4478,28 @@
         {
           "id": "risk_summary",
           "requirement": "required",
-          "description": "Evidence backed risk outputs linked to the profile.",
+          "description": "Tenant-exact Risk360 assessment and evidence for the same canonical entity or Agent subject; no profile identity is inferred.",
           "canonicalAuthorityRefs": [
+            "evidence",
             "risk_outputs"
           ],
-          "projectionBindings": [],
-          "unboundReason": "profile_risk_output_subject_join_not_available"
+          "projectionBindings": [
+            {
+              "projectionId": "risk360",
+              "role": "primary",
+              "sectionIds": [
+                "evidence",
+                "findings",
+                "state",
+                "summary"
+              ],
+              "subjectKinds": [
+                "agent",
+                "entity"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Risk assessment and evidence reads bind by exact tenant, subject kind, and subject ID; a Profile-specific freshness threshold remains unknown."
         },
         {
           "id": "location_temporal",

@@ -4459,12 +4459,19 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "canonicalAuthorityRefs": ("risk_outputs",),
-                "description": "Evidence backed risk outputs linked to the profile.",
+                "canonicalAuthorityRefs": ("evidence", "risk_outputs"),
+                "description": "Tenant-exact Risk360 assessment and evidence for the same canonical entity or Agent subject; no profile identity is inferred.",
                 "id": "risk_summary",
-                "projectionBindings": [],
-                "requirement": "required",
-                "unboundReason": "profile_risk_output_subject_join_not_available"
+                "partialImplementationReason": "Risk assessment and evidence reads bind by exact tenant, subject kind, and subject ID; a Profile-specific freshness threshold remains unknown.",
+                "projectionBindings": [
+                    {
+                        "projectionId": "risk360",
+                        "role": "primary",
+                        "subjectKinds": ("agent", "entity"),
+                        "sectionIds": ("evidence", "findings", "state", "summary")
+                    }
+                ],
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("identity",),

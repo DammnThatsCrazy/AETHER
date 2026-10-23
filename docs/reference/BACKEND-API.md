@@ -1908,6 +1908,11 @@ without claiming surface completion. Account360's `profiles` slot follows
 tenant-scoped `MEMBER_OF` edges to exact entity-registry members and requests
 each member's Profile360 frame under that member's own policy; incomplete
 membership coverage remains degraded, and denied profile slots are omitted.
+Profile360's required `risk_summary` slot reuses Risk360 assessment and evidence
+only for exact tenant, subject-kind, and subject-ID matches on entity and Agent
+subjects. Its Profile-specific freshness threshold remains unknown, so the slot
+stays degraded while the other required Profile slots remain independently
+evaluated.
 Campaign360's `anomalies` slot includes exact campaign-scoped targeting-leakage
 findings with their targeting-observation and eligibility-snapshot evidence;
 general risk and source anomalies remain unresolved. Journey360's `stages` slot
