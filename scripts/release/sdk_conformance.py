@@ -153,7 +153,9 @@ def build_matrix(root: Path | None = None) -> tuple[dict, list[str]]:
                         )
                     else:
                         failures.append(f"{cap_id}/{sdk}: {reason}")
-            elif status == "not_applicable":
+            elif status in ("not_applicable", "unsupported"):
+                # Neither asserts behavior, so neither needs evidence. "unsupported"
+                # records a known gap honestly instead of over-claiming.
                 derived["evidence_verified"] = None
             else:
                 failures.append(f"{cap_id}/{sdk}: unknown status {status!r}")

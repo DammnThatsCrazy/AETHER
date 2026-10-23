@@ -14,7 +14,7 @@ reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the iOS sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:991a765d1ae398cdabb9da8c5ee571e1b28aba196b2243872aee175871fd90ab"
+  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:c64114012efe12b67aaba53f73609413750bbf4c9186149c349d3c2b11dcf0c1"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
@@ -336,7 +336,7 @@ struct AetherConfig {
     var privacy: PrivacyConfig = PrivacyConfig()
     var batchSize: Int = 10                      // Events per batch
     var flushInterval: TimeInterval = 5.0        // Seconds between flushes
-    var manifestVerificationKey: String? = nil   // HMAC-SHA256 manifest signature key
+    var manifestPublicKey: String? = nil         // base64url P-256 key; verifies manifest signatures
     var autoResumeJourney: Bool = true           // Call /sdk/identity/resolve on init
     var onJourneyResumed:                        // Fires once when a prior session is matched
         ((_ resolvedAnonymousId: String,
@@ -440,8 +440,9 @@ The health agent starts automatically after `initialize()`. It:
 - Fetches the remote manifest from `/v1/config/sdk/manifest` every 5 minutes
 - Both are fire-and-forget; gated on analytics consent in GDPR mode (it starts
   when `analytics` is granted post-init)
-- When `manifestVerificationKey` is set, unsigned or invalid manifest
+- When `manifestPublicKey` is set, unsigned or invalid manifest
   signatures are rejected and the last-known-good config is kept
+  (see `docs/reference/sdks/manifest-signing.md`)
 - Applies the verified manifest natively: `rollout_percentage` gates event
   sampling and `features` merge into feature-flag resolution (previously the
   manifest was fetched and verified but never applied)

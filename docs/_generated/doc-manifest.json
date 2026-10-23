@@ -10316,6 +10316,22 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/reference/sdks/manifest-signing.md",
+      "title": "SDK Manifest Signing",
+      "slug": "sdks/manifest-signing",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "beta",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 3,
+      "canonical_owner": "sdk@aether"
+    },
+    {
       "path": "docs/reference/sdks/overview.md",
       "title": "Aether SDKs",
       "slug": "sdks/overview",

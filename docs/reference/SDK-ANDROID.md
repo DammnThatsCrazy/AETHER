@@ -14,7 +14,7 @@ reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the Android sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:c7a6eae4a0bfa818735859b25830f17367213e4b25c9e30448b6e3415da0bcba"
+  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:337a04f16d08fa0eae27f98b57081830f1b0b58bb0f458ea985051b3febc6440"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
@@ -342,7 +342,7 @@ data class AetherConfig(
     val flushIntervalMs: Long = 5000L,
     val modules: ModuleConfig = ModuleConfig(),
     val privacy: PrivacyConfig = PrivacyConfig(),
-    val manifestVerificationKey: String? = null, // HMAC-SHA256 secret; when set,
+    val manifestPublicKey: String? = null,   // base64url P-256 public key; when set,
                                              // unsigned/invalid remote manifests
                                              // are rejected (last-known-good kept)
     val autoResumeJourney: Boolean = true,   // Call /sdk/identity/resolve on init
