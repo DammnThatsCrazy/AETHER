@@ -7,6 +7,7 @@ import { JourneyDetailPage, JourneysPage } from '@aether-app/pages/journeys';
 import type { UserRow } from '@aether-app/features/users/use-users';
 import { parseProfileJourney } from '@aether-app/features/journeys/journey-model';
 import { FIXTURE_NOW, journeyPayload } from './journeys-fixture';
+import { SWIMLANE_LABEL_GUTTER } from '@aether-app/components/ae-journeys-ui';
 
 type Read = { data: unknown; isLoading: boolean; error: string | null; refetch: () => void };
 const settled = (data: unknown): Read => ({ data, isLoading: false, error: null, refetch: vi.fn() });
@@ -176,6 +177,28 @@ describe('Open journey', () => {
     expect(evidence.querySelector('[data-evidence-step]')).toHaveAttribute('data-evidence-step', 's3');
     await user.click(within(evidence).getByRole('button', { name: 'Raw' }));
     expect(within(evidence).getAllByText('step_id').length).toBe(5);
+  });
+
+  it('keeps the open journey within a phone viewport (no min-content grid tracks)', () => {
+    renderAt('/journeys/u-1');
+    // Below lg the overview is one minmax(0,1fr) column, so a long step label
+    // cannot push the page wider than the viewport (was 467px at 390px).
+    const grid = screen.getByTestId('journey-overview-grid');
+    expect(grid.className).toMatch(/(^|\s)grid-cols-1(\s|$)/);
+    for (const li of within(screen.getByTestId('journey-chain')).getAllByRole('listitem')) {
+      expect(li.style.gridTemplateColumns).toBe('14px minmax(0,1fr)');
+    }
+  });
+
+  it('keeps swimlane lane labels clear of the first node', () => {
+    renderAt('/journeys/u-1');
+    const lane = screen.getByTestId('swimlane-replay');
+    const plot = within(lane).getByTestId('swimlane-plot');
+    expect(plot.style.left).toBe(`${SWIMLANE_LABEL_GUTTER}px`);
+    // Every node is positioned inside the plot area, not over the label gutter.
+    const first = within(lane).getByRole('button', { name: /^Step 1:/ });
+    expect(plot.contains(first)).toBe(true);
+    for (const label of lane.querySelectorAll('[data-lane-label]')) expect(plot.contains(label)).toBe(false);
   });
 
   it('timeline steps expand and link to Agent 360, Campaign 360 and their episode', async () => {

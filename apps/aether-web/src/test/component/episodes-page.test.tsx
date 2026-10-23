@@ -155,6 +155,11 @@ describe('Open episode', () => {
     expect(screen.getByRole('button', { name: '4x' })).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('keeps the open episode within a phone viewport (single minmax(0,1fr) column below lg)', () => {
+    renderAt('/episodes/u-1/s1');
+    expect(screen.getByTestId('episode-overview-grid').className).toMatch(/(^|\s)grid-cols-1(\s|$)/);
+  });
+
   it('timeline selection moves the replay; sessions, participants and evidence render', async () => {
     const user = userEvent.setup();
     renderAt('/episodes/u-1/s1?tab=timeline');

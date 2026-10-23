@@ -153,6 +153,41 @@ export function networkGroup(kind: string | null, actorClass: string | null): Ne
 }
 
 /**
+ * Resolves "the other end" of one graph edge relative to `rootId`, for both
+ * edge contracts: profile-graph rows (`from_entity_id`/`to_entity_id`,
+ * `from_kind`/`to_kind`) and `/v1/entities/{id}/graph` rows
+ * (`source_entity_id`/`target_entity_id`, kinds only on the nodes). The kind
+ * falls back to the node list when the edge does not carry it.
+ */
+export function edgeCounterparty(
+  edge: unknown,
+  rootId: string,
+  nodeKinds?: ReadonlyMap<string, string | null>,
+): { readonly id: string | null; readonly kind: string | null } {
+  const e = asRecord(edge);
+  const from = str(e.from_entity_id) ?? str(e.source_entity_id);
+  const to = str(e.to_entity_id) ?? str(e.target_entity_id);
+  const fromKind = str(e.from_kind) ?? str(e.source_kind);
+  const toKind = str(e.to_kind) ?? str(e.target_kind);
+  const otherIsFrom = to === rootId && from !== rootId;
+  const id = otherIsFrom ? from : from === rootId ? to : (to ?? from);
+  const edgeKind = otherIsFrom ? fromKind : from === rootId ? toKind : (toKind ?? fromKind);
+  const kind = edgeKind ?? (id ? nodeKinds?.get(id) ?? null : null);
+  return { id: id === rootId ? null : id, kind };
+}
+
+/** entity id → kind, from the graph's node list. */
+export function graphNodeKinds(graph: unknown): Map<string, string | null> {
+  const kinds = new Map<string, string | null>();
+  for (const raw of asList(asRecord(graph).nodes)) {
+    const n = asRecord(raw);
+    const id = str(n.entity_id) ?? str(n.id);
+    if (id) kinds.set(id, str(n.kind) ?? str(n.type));
+  }
+  return kinds;
+}
+
+/**
  * Normalises the entity-graph response around `rootId`: the root is removed
  * from the neighbour list and every edge is expressed as a link to "the other"
  * entity. Nodes that only appear on an edge still get a (kind-only) node.
@@ -182,9 +217,8 @@ export function profileNetwork(graph: unknown, rootId: string): ProfileNetwork {
     // Profile-graph rows use from_/to_entity_id; /v1/entities/{id}/graph uses source_/target_entity_id.
     const from = str(e.from_entity_id) ?? str(e.source_entity_id);
     const to = str(e.to_entity_id) ?? str(e.target_entity_id);
-    const other = from === rootId ? to : to === rootId ? from : (to ?? from);
-    if (!other || other === rootId) return;
-    const otherKind = from === rootId ? str(e.to_kind) : str(e.from_kind);
+    const { id: other, kind: otherKind } = edgeCounterparty(e, rootId);
+    if (!other) return;
     if (!byId.has(other)) {
       byId.set(other, { id: other, label: other, kind: otherKind, actorClass: null, group: networkGroup(otherKind, null), trust: null });
     }

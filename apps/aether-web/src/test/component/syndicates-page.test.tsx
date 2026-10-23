@@ -166,6 +166,37 @@ describe('Syndicates', () => {
     expect(screen.getByTestId('where')).toHaveTextContent(/^\/syndicates$/);
   });
 
+  it('reports "now" from the group member count when the member read is partial', async () => {
+    s.group = (id: string) => Promise.resolve({ ...GROUPS[0], id, member_count: 8483 });
+    s.members = () => Promise.resolve({
+      population_id: 'g1',
+      members: [
+        { entity_id: 'u1', entity_type: 'user', basis: 'rule', confidence: 0.9, joined_at: iso(3) },
+        { entity_id: 'u2', entity_type: 'user', basis: 'rule', confidence: 0.7, joined_at: iso(10) },
+      ],
+    });
+    renderAt('/syndicates/g1');
+    const readout = await screen.findByTestId('members-readout');
+    // The header and the chart agree on the group's size, not the 2 members read.
+    expect(readout).toHaveTextContent('8,483 members now');
+    expect(readout).not.toHaveTextContent(/^2 members now/);
+    expect(screen.getByTestId('members-chart-scope')).toHaveTextContent('Chart shows joins among the first 2 members read, of 8,483.');
+    // The Joined tile and the movement card say their counts cover the members read.
+    expect(screen.getAllByText(/among first 2 read/)).toHaveLength(2);
+  });
+
+  it('does not label the chart as partial when every member was read', async () => {
+    s.members = () => Promise.resolve({
+      population_id: 'g1',
+      members: [
+        { entity_id: 'u1', joined_at: iso(3) }, { entity_id: 'u2', joined_at: iso(4) }, { entity_id: 'u3', joined_at: iso(5) },
+      ],
+    });
+    renderAt('/syndicates/g1');
+    expect(await screen.findByTestId('members-readout')).toHaveTextContent('3 members now');
+    expect(screen.queryByTestId('members-chart-scope')).not.toBeInTheDocument();
+  });
+
   it('keeps an unavailable member read distinct from an empty one', async () => {
     s.members = () => Promise.reject(new Error('members offline'));
     renderAt('/syndicates/g1');

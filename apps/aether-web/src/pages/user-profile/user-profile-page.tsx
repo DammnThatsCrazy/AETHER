@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
@@ -29,7 +29,6 @@ import {
   touchpointEvidenceSummary,
 } from '@aether-app/lib/traffic-source';
 import { OutcomeLedgerPanel } from '@aether-app/components/outcome-ledger-panel';
-import { ProfileExplorationPanel } from '@aether-app/features/profile360';
 import {
   attentionReasonLabel,
   contextualReadiness,
@@ -42,7 +41,7 @@ import {
   type Tone,
 } from '@aether-app/components/ae-ui';
 import {
-  NETWORK_GROUPS, ago, asList, asRecord, humanize, identifierGroups, initials, profileIdentity, profileNetwork, str, timelineEvents,
+  NETWORK_GROUPS, ago, asList, asRecord, edgeCounterparty, graphNodeKinds, humanize, identifierGroups, initials, profileIdentity, profileNetwork, str, timelineEvents,
   type ProfileIdentity,
 } from './profile-model';
 import { ProfileNetworkMap, neighbourHref } from './profile-network-map';
@@ -91,6 +90,21 @@ function fmtDuration(ms: number | undefined | null): string {
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
+/**
+ * A read that failed schema validation is a backend/contract mismatch, not
+ * something the operator can act on; show a plain sentence instead of the raw
+ * validator output ("Response validation failed: Required, Required").
+ */
+export function isValidationFailure(error: string | null | undefined): boolean {
+  return !!error && /^Response validation failed\b/i.test(error);
+}
+
+export function readUnavailableMessage(error: string): string {
+  return isValidationFailure(error)
+    ? 'This read is unavailable right now.'
+    : `This read is unavailable right now: ${error}`;
+}
+
 // ── Section wrapper ────────────────────────────────────────────────────────────
 // Glass section card (design: Profile 360 v2 cards). Loading, unavailable and
 // populated are distinct: an unavailable read is never rendered as empty.
@@ -112,7 +126,7 @@ function Section({ title, children, loading, error, action, testId }: {
       {loading
         ? <LoadingState lines={4} />
         : error
-          ? <InlineNotice tone="amber">This read is unavailable right now: {error}</InlineNotice>
+          ? <InlineNotice tone="amber">{readUnavailableMessage(error)}</InlineNotice>
           : children}
     </section>
   );
@@ -163,7 +177,7 @@ function CommunicationsTab({ userId }: { userId: string }) {
   }, [userId, humanOnly]);
 
   if (loading) return <LoadingState lines={6} />;
-  if (error) return <ErrorState title="Communications unavailable" message={error} />;
+  if (error) return <ErrorState title="Communications unavailable" message={isValidationFailure(error) ? 'Communications are unavailable right now.' : error} />;
 
   const s = state ?? {};
 
@@ -583,10 +597,6 @@ function OverviewTab({ userId, identity, onTab }: { userId: string; identity: Pr
             }
           </div>
         </Section>
-      </div>
-
-      <div className="ae-legacy">
-        <ProfileExplorationPanel entityId={userId} />
       </div>
     </div>
   );
@@ -1267,8 +1277,26 @@ function NetworkTab({ userId, rootLabel }: { userId: string; rootLabel: string }
   const { data: graphData, isLoading: gl, error: ge } = useUserGraph(userId);
 
   const g = asRecord(graphData);
-  const edges = asList(g.edges);
-  const nodes = asList(g.nodes);
+  const nodeKinds = useMemo(() => graphNodeKinds(graphData), [graphData]);
+  // Each edge is shown from the profile's side: the counterparty is whichever
+  // end is not this profile, for both the profile-graph (from_/to_) and the
+  // entity-graph (source_/target_) contracts.
+  const edges = useMemo(() => asList(g.edges).map((raw, index) => {
+    const e = asRecord(raw);
+    const cp = edgeCounterparty(e, userId, nodeKinds);
+    return {
+      ...e,
+      _key: str(e.edge_id) ?? str(e.id) ?? `${cp.id ?? '?'}-${index}`,
+      _counterparty: cp.id,
+      _counterpartyKind: cp.kind,
+      _relation: str(e.relation_type) ?? str(e.edge_type),
+    };
+  }), [g.edges, userId, nodeKinds]);
+  // The profile itself is the root of the graph, not one of its connections.
+  const nodes = asList(g.nodes).filter(raw => {
+    const n = asRecord(raw);
+    return (str(n.entity_id) ?? str(n.id)) !== userId;
+  });
   const network = useMemo(() => profileNetwork(graphData, userId), [graphData, userId]);
 
   type Row = Record<string, unknown>;
@@ -1297,14 +1325,14 @@ function NetworkTab({ userId, rootLabel }: { userId: string; rootLabel: string }
       {/* Relationship edges */}
       <Section title="Relationship edges (H2H / H2A / A2H / A2A)" loading={gl} error={ge}>
         <DataTable<Row>
-          keyExtractor={e => String(e.edge_id ?? `${String(e.from_entity_id)}-${String(e.to_entity_id)}`)}
+          keyExtractor={e => String(e._key)}
           data={edges as Row[]}
           emptyMessage="No relationships found"
           columns={[
             { key: 'class', header: 'Class', render: e => <Badge variant={interactionColor(fmt(e.interaction_class))} size="sm">{fmt(e.interaction_class)}</Badge> },
-            { key: 'type', header: 'Relation', render: e => <span className="text-text-primary">{fmt(e.relation_type)}</span> },
-            { key: 'to', header: 'Counterparty', render: e => <code className="text-xs text-text-secondary">{fmt(e.to_entity_id ?? e.from_entity_id)}</code> },
-            { key: 'toKind', header: 'Kind', render: e => <Badge variant="default" size="sm">{fmt(e.to_kind ?? e.from_kind)}</Badge> },
+            { key: 'type', header: 'Relation', render: e => <span className="text-text-primary">{e._relation ? humanize(String(e._relation)) : '—'}</span> },
+            { key: 'to', header: 'Counterparty', render: e => <code className="text-xs text-text-secondary" data-testid="edge-counterparty">{fmt(e._counterparty)}</code> },
+            { key: 'toKind', header: 'Kind', render: e => e._counterpartyKind ? <Badge variant="default" size="sm">{fmt(e._counterpartyKind)}</Badge> : <span className="text-text-muted">—</span> },
             { key: 'weight', header: 'Weight', render: e => fmtPct(e.weight) },
             { key: 'conf', header: 'Confidence', render: e => fmtPct(e.confidence) },
             { key: 'inferred', header: 'Source', render: e => <Badge variant={e.is_inferred ? 'warning' : 'success'} size="sm">{e.is_inferred ? 'Inferred' : 'Explicit'}</Badge> },
@@ -1315,7 +1343,7 @@ function NetworkTab({ userId, rootLabel }: { userId: string; rootLabel: string }
 
       {/* Graph nodes (nearby entities) */}
       {nodes.length > 0 && (
-        <Section title="Connected entities">
+        <Section title="Connected entities" testId="profile-connected-entities">
           <DataTable<Row>
             keyExtractor={n => String(n.entity_id ?? n.id ?? 'node')}
             data={nodes as Row[]}
@@ -2036,12 +2064,11 @@ const WINDOWS: ReadonlyArray<readonly [TimeWindow, string]> = [
   ['lifetime', 'Lifetime'],
 ];
 
-function TabButton({ value, label, active, onSelect, small = false }: {
+function TabButton({ value, label, active, onSelect }: {
   value: ProfileTab;
   label: string;
   active: boolean;
   onSelect: (t: ProfileTab) => void;
-  small?: boolean;
 }) {
   return (
     <button
@@ -2050,15 +2077,85 @@ function TabButton({ value, label, active, onSelect, small = false }: {
       aria-selected={active}
       data-tab={value}
       onClick={() => onSelect(value)}
-      className={`ae-focus whitespace-nowrap rounded-full transition-colors ${small ? 'px-2.5 py-1 text-[12px]' : 'px-3.5 py-1.5 text-[13px]'}`}
+      className="ae-focus whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13px] transition-colors"
       style={{
         background: active ? 'var(--ae-chip-on)' : 'transparent',
         color: active ? 'var(--ae-chip-on-ink)' : 'var(--ae-ink)',
-        ...(small ? { border: `1px solid ${active ? 'var(--ae-chip-on)' : 'var(--ae-edge)'}` } : {}),
       }}
     >
       {label}
     </button>
+  );
+}
+
+/**
+ * Compact "More" menu holding the secondary profile signals. Every entry keeps
+ * its `?tab=` value; when one of them is open the trigger shows its name.
+ */
+function MoreTabsMenu({ active, onSelect }: { active: ProfileTab; onSelect: (t: ProfileTab) => void }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const activeMore = MORE_TABS.find(([k]) => k === active);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (ev: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(ev.target as Node)) setOpen(false);
+    };
+    const onKey = (ev: KeyboardEvent) => { if (ev.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={activeMore ? `More profile signals (showing ${activeMore[1]})` : 'More profile signals'}
+        data-testid="profile-more-tabs"
+        onClick={() => setOpen(o => !o)}
+        className="ae-focus flex items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-[7px] text-[13px]"
+        style={{
+          background: activeMore ? 'var(--ae-chip-on)' : 'var(--ae-glass-card)',
+          color: activeMore ? 'var(--ae-chip-on-ink)' : 'var(--ae-ink)',
+          border: `1px solid ${activeMore ? 'var(--ae-chip-on)' : 'var(--ae-edge)'}`,
+        }}
+      >
+        {activeMore ? activeMore[1] : 'More'}
+        <svg aria-hidden="true" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M2 3.75 5 6.75l3-3" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          role="menu"
+          aria-label="More profile signals"
+          className="ae-rise absolute left-0 top-[calc(100%+6px)] z-20 flex w-[220px] flex-col gap-0.5 rounded-2xl p-1.5"
+          style={{ background: 'var(--ae-raised)', border: '1px solid var(--ae-edge)', boxShadow: 'var(--ae-lift)' }}
+        >
+          {MORE_TABS.map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="menuitemradio"
+              aria-checked={active === value}
+              data-tab={value}
+              onClick={() => { setOpen(false); onSelect(value); }}
+              className="ae-focus rounded-lg px-3 py-2 text-left text-[13px] hover:bg-[var(--ae-edge-soft)]"
+              style={active === value ? { background: 'var(--ae-edge-soft)', fontWeight: 500 } : undefined}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2088,7 +2185,7 @@ function ProfileHero({ userId, identity, summary, loading }: {
 
   return (
     <div
-      className="flex flex-wrap items-center justify-between gap-4 rounded-[22px] px-[22px] py-[18px]"
+      className="flex flex-wrap items-center gap-4 rounded-[22px] px-[22px] py-[18px]"
       style={{
         background: 'var(--ae-glass-card)',
         WebkitBackdropFilter: 'blur(20px) saturate(1.4)',
@@ -2098,7 +2195,7 @@ function ProfileHero({ userId, identity, summary, loading }: {
       }}
       data-testid="profile-hero"
     >
-      <div className="flex min-w-0 items-center gap-4">
+      <div className="flex min-w-0 flex-[1_1_320px] items-center gap-4">
         <span
           className="ae-mono flex h-[60px] w-[60px] flex-none items-center justify-center rounded-full text-[20px]"
           style={{ background: 'var(--ae-shell)', border: '2px solid var(--ae-blue)', boxShadow: '0 0 0 4px var(--ae-solar-wash)' }}
@@ -2146,7 +2243,7 @@ function ProfileHero({ userId, identity, summary, loading }: {
           )}
         </span>
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="ml-auto flex flex-none flex-wrap gap-2" data-testid="profile-hero-actions">
         <PrimaryButton onClick={() => void navigate(`/users/${encodeURIComponent(userId)}/journey`)} data-testid="profile-view-journey">
           View journey
         </PrimaryButton>
@@ -2211,7 +2308,7 @@ export function UserProfilePage() {
       <GlassPage>
         <Breadcrumb userId={userId} name={null} />
         <div className="ae-legacy">
-          <ErrorState title="Failed to load user profile" message={headerError} className="p-8" />
+          <ErrorState title="Failed to load user profile" message={isValidationFailure(headerError) ? 'The profile summary is unavailable right now.' : headerError} className="p-8" />
         </div>
       </GlassPage>
     );
@@ -2239,8 +2336,9 @@ export function UserProfilePage() {
         {/* Contextual integration readiness (WS-4) */}
         <ProfileIntegrationBanner />
 
-        {/* Tabs (v2: Overview · Timeline · Journeys · Agents · Network · Identity) */}
-        <div className="flex flex-col gap-2">
+        {/* Tabs (v2: Overview · Timeline · Journeys · Agents · Network · Identity),
+            with the remaining signals behind a compact More menu. */}
+        <div className="flex flex-wrap items-center gap-2">
           <div
             role="tablist"
             aria-label="Profile sections"
@@ -2251,12 +2349,7 @@ export function UserProfilePage() {
               <TabButton key={value} value={value} label={label} active={tab === value} onSelect={selectTab} />
             ))}
           </div>
-          <div role="tablist" aria-label="More profile signals" className="flex flex-wrap items-center gap-1.5">
-            <span className="ae-eyebrow mr-1">More signals</span>
-            {MORE_TABS.map(([value, label]) => (
-              <TabButton key={value} value={value} label={label} active={tab === value} onSelect={selectTab} small />
-            ))}
-          </div>
+          <MoreTabsMenu active={tab} onSelect={selectTab} />
         </div>
 
         <div role="tabpanel" aria-label={[...PRIMARY_TABS, ...MORE_TABS].find(([k]) => k === tab)?.[1]} className="ae-rise min-w-0" key={tab}>
