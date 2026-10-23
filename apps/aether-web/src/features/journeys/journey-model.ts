@@ -401,3 +401,45 @@ export function journeyStateTone(state: string | null): 'sage' | 'blue' | 'mute'
   if (state === 'interrupted' || state === 'abandoned') return 'amber';
   return 'mute';
 }
+
+// ── Journey list state (Journeys index cards) ───────────────────────────────
+
+/**
+ * How recently a still-open journey must have had a step to count as active.
+ * The compiler only reports `open` / `converted` / `empty`; "active" is this
+ * recency rule applied to an open journey, and the UI names the rule.
+ */
+export const ACTIVE_WINDOW_MS = 24 * 60 * 60_000;
+
+/**
+ * Card state for the Journeys index, derived only from the compiled journey:
+ * `converted` when the compiler recorded a conversion, `active` / `idle` for
+ * an open journey by last-step recency, `empty` when nothing is compiled.
+ * There is no interruption or abandonment signal, so none is derived.
+ */
+export type JourneyListState = 'active' | 'idle' | 'converted' | 'empty';
+
+export const JOURNEY_LIST_STATES: ReadonlyArray<{
+  readonly key: Exclude<JourneyListState, 'empty'>;
+  readonly label: string;
+  readonly tone: 'blue' | 'mute' | 'sage';
+  readonly color: string;
+}> = [
+  { key: 'active', label: 'Active', tone: 'blue', color: 'var(--ae-blue)' },
+  { key: 'idle', label: 'Open · idle', tone: 'mute', color: 'var(--ae-mute)' },
+  { key: 'converted', label: 'Converted', tone: 'sage', color: 'var(--ae-sage)' },
+];
+
+/** Time of the journey's last step (summary end, else the latest step). */
+export function lastActivity(j: ProfileJourney): number | null {
+  const ended = j.summary?.endedAt ? Date.parse(j.summary.endedAt) : NaN;
+  if (!Number.isNaN(ended)) return ended;
+  return span(j.steps).end;
+}
+
+export function journeyListState(j: ProfileJourney, now = Date.now()): JourneyListState {
+  if (j.steps.length === 0 || j.summary?.state === 'empty') return 'empty';
+  if (j.summary?.state === 'converted' || j.summary?.convertedAt) return 'converted';
+  const last = lastActivity(j);
+  return last !== null && now - last <= ACTIVE_WINDOW_MS ? 'active' : 'idle';
+}
