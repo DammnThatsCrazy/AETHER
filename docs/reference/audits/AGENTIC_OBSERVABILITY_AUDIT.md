@@ -11,7 +11,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:6bb2b789c38b2a45b06bfea7367c9051e2a492f9f688da80625f8635a7e95898"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:caf21a7595ec1e7d262e2e365be653dd49c1d661fcddf4e2b028b6fe2ccbf70b"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:540f85292689337edc329c9b72b7c4f99487226a5e31aab6526c878e7ea36eeb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -179,6 +179,17 @@ tenant-and-subject historical allow decisions with timestamped consent-policy
 evidence; this records the decision made at memory write time and does not
 evaluate current consent or policy. These joins are partial slot capabilities,
 not surface completion or authority to execute actions.
+
+A follow-up provider slice adds partial Signals360 `classification` evidence
+for one exact tenant SDK event after gateway acceptance and canonical event
+registry validation. It does not join tenant source attribution, semantic
+classification, policy, or freshness. Workflow360 `agent_steps` now reads only
+AgentExecution rows with the exact tenant and `workflow_run_id`, but the
+canonical AgentExecution writer does not populate that field, so production
+step records are not yet connected; workflow definition and complete step
+coverage remain unknown. Episode360 `agent_handoffs` remains unknown because
+episode records and observations do not reference a canonical execution or
+handoff ID. Event labels and agent metadata do not establish that relationship.
 
 ## Bucket 1 — Correctly observation-only
 

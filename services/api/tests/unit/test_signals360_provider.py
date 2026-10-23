@@ -330,7 +330,7 @@ async def test_signals360_projects_only_gateway_quality_for_exact_observation(
     assert quality.content["evidenceRefs"][0]["id"] == observation_id
     assert quality.content["evidenceRefs"][0]["source"] == "bronze_sdk_events"
     source_inventory = sections["source_inventory"]
-    assert source_inventory.state == "degraded"
+    assert source_inventory.state == "available"
     assert source_inventory.content["coverage"] == "one_exact_sdk_observation"
     source_item = source_inventory.content["sources"][0]
     assert source_item["observationId"] == observation_id
@@ -348,6 +348,106 @@ async def test_signals360_projects_only_gateway_quality_for_exact_observation(
     }
     assert all(claim.claimState == EpistemicStatus.OBSERVED for claim in result.claims)
     assert all(claim.evidenceRefs[0].id == observation_id for claim in result.claims)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("subject_kind", ["event", "observation"])
+async def test_signals360_projects_exact_gateway_accepted_event_classification(
+    subject_kind: str,
+) -> None:
+    event_id = "evt-signals-classification-1"
+    record = {
+        "tenant_id": TENANT_A,
+        "provider_record_id": event_id,
+        "source": "sdk",
+        "ingested_at": "2026-10-19T10:01:00Z",
+        "payload": {
+            "event_type": "track",
+            "private_property": "must not escape",
+            "observation_envelope": {
+                "tenancy": {"tenant_id": TENANT_A},
+                "observation": {
+                    "observation_id": event_id,
+                    "observation_type": "track",
+                    "family": "core",
+                    "schema_version": "observation-envelope/1.0.0",
+                    "ingested_at": "2026-10-19T10:00:00Z",
+                },
+                "quality": {"validation_state": "gateway:accepted"},
+            },
+        },
+    }
+    source = FakeSignalSource(
+        SignalSummaryRead((), available=False, complete=False),
+        ObservationQualityRead(record, available=True, complete=True),
+    )
+    request = ProjectionRequest(
+        projectionId=PROJECTION_ID,
+        tenantId=TENANT_A,
+        subject=ProjectionSubject(kind=subject_kind, id=event_id),
+        includeClaims=True,
+        includeSections=["classification"],
+    )
+
+    result = await Signals360Provider(source=source).project(request, _context())
+
+    classification = _sections(result)["classification"]
+    assert source.quality_calls == [(TENANT_A, event_id)]
+    assert classification.state == "available"
+    assert classification.canonicalAuthorityRefs == ["events", "observations"]
+    assert classification.content["coverage"] == "one_exact_tenant_scoped_sdk_event"
+    assert classification.content["classificationState"] == "canonical_event_type_and_family_available"
+    assert classification.content["eventType"] == "track"
+    assert classification.content["eventFamily"] == "core"
+    assert classification.content["classificationBasis"] == "gateway_accepted_canonical_event_registry"
+    assert classification.content["sourceClassificationState"] == "unknown"
+    assert classification.content["policyState"] == "not_evaluated_by_signals360_classification_read"
+    assert classification.content["freshnessState"] == "unknown"
+    assert "must not escape" not in str(classification.content)
+    assert [ref["source"] for ref in classification.content["evidenceRefs"]] == [
+        "bronze_sdk_events",
+        "ingestion.ingestion.generated_registry:CANONICAL_EVENT_TYPES/EVENT_FAMILY",
+    ]
+    claim = next(claim for claim in result.claims if claim.domainSlotIds == ["classification"])
+    assert claim.claimState == EpistemicStatus.OBSERVED
+    assert {ref.id for ref in claim.evidenceRefs} == {event_id, "track"}
+
+
+@pytest.mark.asyncio
+async def test_signals360_rejects_mismatched_canonical_event_family_classification() -> None:
+    event_id = "evt-signals-classification-mismatch"
+    record = {
+        "tenant_id": TENANT_A,
+        "provider_record_id": event_id,
+        "source": "sdk",
+        "payload": {
+            "event_type": "track",
+            "observation_envelope": {
+                "tenancy": {"tenant_id": TENANT_A},
+                "observation": {
+                    "observation_id": event_id,
+                    "observation_type": "track",
+                    "family": "commerce",
+                },
+                "quality": {"validation_state": "gateway:accepted"},
+            }
+        },
+    }
+    source = FakeSignalSource(
+        SignalSummaryRead((), available=False, complete=False),
+        ObservationQualityRead(record, available=True, complete=True),
+    )
+
+    result = await Signals360Provider(source=source).project(
+        _request(subject_kind="event", subject_id=event_id), _context()
+    )
+
+    classification = _sections(result)["classification"]
+    assert classification.state == "unknown"
+    assert classification.content["reasonCode"] == "canonical_event_family_mismatch"
+    assert "eventType" not in classification.content
+    assert classification.content.get("evidenceRefs") is None
+    assert not any(claim.domainSlotIds == ["classification"] for claim in result.claims)
 
 
 @pytest.mark.asyncio

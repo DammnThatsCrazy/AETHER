@@ -42,11 +42,11 @@ Declared binding counts are registry coverage, not proof that a slot or surface 
 | [Memory 360](#memory-360) | source_aligned | `entity`, `semantic_entity`, `memory`, `card`, `topic` | 10 | 8/10 | 2 | 2 | 0 | `memory360` | — |
 | [Profile 360](#profile-360) | source_aligned | `profile`, `entity`, `agent`, `anonymous_subject`, `account_member`, `cluster` | 13 | 11/13 | 7 | 2 | 6 | `economic360`, `outcome360`, `profile360`, `geographic360`, `relationship360`, `risk360` | — |
 | [Risk 360](#risk-360) | source_aligned | `risk`, `entity`, `profile`, `agent`, `account`, `source`, `campaign`, `contagion_path`, `relationship`, `cluster` | 12 | 6/12 | 2 | 6 | 6 | `economic360`, `execution360`, `fraud360`, `relationship360`, `risk360`, `social360` | — |
-| [Signals 360](#signals-360) | source_aligned | `entity`, `signal`, `source`, `event`, `observation`, `stream` | 10 | 6/10 | 3 | 4 | 0 | `signals360` | — |
+| [Signals 360](#signals-360) | source_aligned | `entity`, `signal`, `source`, `event`, `observation`, `stream` | 10 | 7/10 | 4 | 3 | 0 | `signals360` | — |
 | [Social 360](#social-360) | source_aligned | `entity`, `profile`, `relationship`, `community`, `syndicate`, `source`, `population` | 10 | 5/10 | 2 | 5 | 5 | `geographic360`, `population360`, `relationship360`, `social360`, `source360` | — |
 | [Support 360](#support-360) | source_aligned | `support_case`, `callback`, `conversation`, `ticket`, `entity`, `agent`, `episode`, `source` | 10 | 3/10 | 2 | 7 | 6 | `agent360`, `episode360`, `outcome360`, `profile360`, `risk360`, `source360`, `support360` | — |
 | [Value 360](#value-360) | source_aligned | `value`, `profile`, `account`, `conversion`, `cluster`, `campaign`, `episode`, `journey`, `entity`, `agent`, `source` | 11 | 6/11 | 4 | 5 | 5 | `campaign360`, `economic360`, `outcome360`, `temporal360` | — |
-| [Workflow 360](#workflow-360) | source_aligned | `workflow`, `automation`, `trigger`, `run`, `workflow_run` | 11 | 4/11 | 1 | 7 | 0 | `workflow360` | — |
+| [Workflow 360](#workflow-360) | source_aligned | `workflow`, `automation`, `trigger`, `run`, `workflow_run` | 11 | 5/11 | 2 | 6 | 0 | `workflow360` | — |
 
 ## Account 360
 
@@ -340,7 +340,7 @@ Governed time-bounded view of related events and journey activity, with entity c
 
 | Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
 |---|---|---|---|---|---|---|---|
-| `agent_handoffs` | required |  | `agent_executions` | — | — | Unbound: `episode_agent_handoff_authority_not_joined` | Required episode360 slot: agent handoffs. |
+| `agent_handoffs` | required |  | `agent_executions` | — | — | Unbound: `episode_records_and_observations_do_not_reference_canonical_agent_execution_or_handoff_id` | Required episode360 slot: agent handoffs. |
 | `attribution_links` | required |  | `attribution_credits` | — | — | Unbound: `episode_attribution_credit_authority_not_joined` | Required episode360 slot: attribution links. |
 | `communications` | required |  | `communication_facts` | `communication360` (supporting): subjects `episode`; `interactions` | — | Partial: `episode_communication_facts_are_exact_but_message_spine_join_and_completeness_are_unavailable` | Exact tenant episode_id-linked communication facts; message history and complete conversation membership remain unavailable. |
 | `conversion_events` | required |  | `outcome_facts` | — | — | Unbound: `episode_outcome_ids_are_not_conversion_records` | Required episode360 slot: conversion events. |
@@ -800,7 +800,7 @@ Governed view of risk, fraud, source, social, and outcome signals with evidence 
 | Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
 |---|---|---|---|---|---|---|---|
 | `campaign_links` | required |  | `campaign_facts`, `campaign_touchpoints` | — | — | Unbound: `canonical_signal_campaign_join_not_available` | Required signals360 slot: campaign links. |
-| `classification` | required |  | `events`, `observations` | — | — | Unbound: `canonical_event_signal_classifier_not_joined` | Required signals360 slot: classification. |
+| `classification` | required |  | `events`, `observations` | `signals360` (primary): subjects `event`, `observation`; `classification` | — | Partial: `Exact gateway-accepted SDK event type and family are registry-validated; source attribution, semantic signal classification, policy, and freshness remain unknown.` | Required signals360 slot: classification. |
 | `evidence_trace` | required |  | `behavioral_signals` | `signals360` (primary): subjects `entity`; `evidence_trace` | — | — | Evidence references for bounded derived signal records. |
 | `freshness` | required |  | `behavioral_signals` | `signals360` (primary): subjects `entity`; `freshness` | — | — | Source timestamps retained from bounded derived signal records; freshness threshold remains unknown. |
 | `linked_entities` | required |  | `behavioral_signals`, `identity` | `signals360` (primary): subjects `signal`, `event`, `observation`; `linked_entities` | — | Partial: `Exact links are emitted for signal, event, and matching observation IDs; entity, source, stream, absent-link, and incomplete reads remain unknown or degraded.` | Exact tenant signal, event, or observation bindings to active canonical identity subjects; observation IDs join only when recorded as the matching source_event_id. |
@@ -1035,7 +1035,7 @@ Governed operational view of agent executions, actions and tools, integration li
 |---|---|---|---|---|---|---|---|
 | `actions` | required |  | `actions`, `tools`, `resources` | — | — | Unbound: `canonical_workflow_action_authority_not_joined` | Required Workflow 360 slot: actions. |
 | `actors` | required |  | `ai_execution_facts`, `agent_entities`, `identity` | `workflow360` (primary): subjects `run`, `workflow_run`; `actors` | — | Partial: `ai_invocation_agent_actors_only_no_human_initiator_approver_or_authority` | Agent references on exact workflow-run AI invocations resolved to tenant canonical Agent identity; human and approval actors remain unknown. |
-| `agent_steps` | required |  | `agent_executions` | — | — | Unbound: `canonical_workflow_step_authority_not_joined` | Required Workflow 360 slot: agent steps. |
+| `agent_steps` | required |  | `agent_executions` | `workflow360` (primary): subjects `run`, `workflow_run`; `agent_steps` | — | Partial: `An exact tenant and workflow_run_id AgentExecution read exists, but the canonical AgentExecution writer does not persist workflow_run_id; workflow definition, complete step coverage, policy, and freshness remain unknown.` | Required Workflow 360 slot: agent steps. |
 | `approvals` | required |  | `agent_access` | — | — | Unbound: `canonical_workflow_approval_authority_not_available` | Required Workflow 360 slot: approvals. |
 | `evidence_trace` | required |  | `ai_execution_facts` | `workflow360` (primary): subjects `run`, `workflow_run`; `evidence_trace` | — | — | Lineage of exact workflow run linked AI invocation facts. |
 | `failures` | required |  | `ai_execution_facts` | `workflow360` (primary): subjects `run`, `workflow_run`; `failures` | — | — | Observed AI invocation failure status only; workflow failure state is unknown. |

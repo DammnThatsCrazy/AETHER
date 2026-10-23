@@ -1,10 +1,11 @@
-"""Signals360 composes exact Identity360 lineage for entity and agent sources."""
+"""Signals360 composes exact event source metadata through the frame runtime."""
 
 from __future__ import annotations
 
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -15,11 +16,9 @@ if str(BACKEND_ROOT) not in sys.path:
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
-from connectors.provider_runtime.source360_provider import Source360Provider  # noqa: E402
-from graph.operational_intelligence.models import EvidenceRef  # noqa: E402
-from identity.identity.identity360_provider import (  # noqa: E402
-    Identity360Result,
-    Identity360Slot,
+from intelligence.signals.signals360_provider import (  # noqa: E402
+    ObservationQualityRead,
+    Signals360Provider,
 )
 from shared.intelligence_projections.contracts import (  # noqa: E402
     Experience360FrameRequest,
@@ -31,61 +30,60 @@ from shared.intelligence_projections.contracts import (  # noqa: E402
 from shared.intelligence_projections.frame_runtime import (  # noqa: E402
     build_experience360_frame,
 )
+
 TENANT = "tenant-signals-source-lineage"
 
 
-class IdentityLineageReader:
-    def __init__(self) -> None:
-        self.calls: list[tuple[str, str, str]] = []
+class ExactObservationSource:
+    def __init__(self, row: dict[str, Any]) -> None:
+        self.row = row
+        self.calls: list[tuple[str, str]] = []
 
-    async def read(self, tenant_id: str, subject_kind: str, subject_id: str):
-        self.calls.append((tenant_id, subject_kind, subject_id))
-        evidence = EvidenceRef(
-            id=f"identity-source-{subject_id}",
-            type="entity",
-            source="identity_source_identities",
-            observedAt="2026-10-18T12:00:00Z",
-        )
-        return Identity360Result(
-            tenant_id=tenant_id,
-            subject_kind=subject_kind,
-            subject_id=subject_id,
-            state="available",
-            slots=(
-                Identity360Slot(
-                    id="source_identifier_lineage",
-                    state="available",
-                    content={
-                        "sourceIdentities": [
-                            {"id": evidence.id, "sourceNamespace": "crm.contacts"}
-                        ],
-                        "coverage": {
-                            "sourceIdentities": {
-                                "state": "available",
-                                "returned": 1,
-                                "truncated": False,
-                            }
-                        },
-                    },
-                    evidence_refs=(evidence,),
-                ),
-            ),
-            generated_at="2026-10-18T12:01:00Z",
-        )
+    async def observation_quality(self, *, tenant_id: str, observation_id: str):
+        self.calls.append((tenant_id, observation_id))
+        if tenant_id != TENANT or observation_id != self.row["provider_record_id"]:
+            return ObservationQualityRead(None, True, True, "exact_sdk_observation_not_found")
+        return ObservationQualityRead(self.row, True, True)
+
+
+def _bronze_row(observation_id: str) -> dict[str, Any]:
+    return {
+        "id": "bronze-record-source-lineage",
+        "tenant_id": TENANT,
+        "provider_record_id": observation_id,
+        "source": "sdk",
+        "ingested_at": "2026-10-18T12:00:00Z",
+        "payload": {
+            "event_type": "track",
+            "observation_envelope": {
+                "tenancy": {"tenant_id": TENANT},
+                "observation": {
+                    "observation_id": observation_id,
+                    "observation_type": "track",
+                    "family": "core",
+                    "schema_version": "observation-envelope/1.0.0",
+                    "ingested_at": "2026-10-18T12:00:00Z",
+                },
+                "source": {
+                    "source_type": "sdk",
+                    "source_relationship": "first_party_application",
+                    "ingress_path": "/v1/batch",
+                },
+                "provenance": {"adapter": "sdk", "adapter_version": "1.0.0"},
+                "quality": {"validation_state": "gateway:accepted"},
+            },
+        },
+    }
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("subject_kind", "subject_id"),
-    [("entity", "entity-signal-1"), ("agent", "agent-signal-1")],
-)
-async def test_signals360_routes_identity_lineage_without_claiming_provider_health(
-    subject_kind: str, subject_id: str
+@pytest.mark.parametrize("subject_kind", ["event", "observation"])
+async def test_signals360_composes_exact_source_inventory_with_evidence(
+    subject_kind: str,
 ) -> None:
-    identity_reader = IdentityLineageReader()
-    source_provider = Source360Provider(
-        source=object(), identity_lineage_reader=identity_reader
-    )
+    observation_id = "event-signals-source-lineage-1"
+    source = ExactObservationSource(_bronze_row(observation_id))
+    provider = Signals360Provider(source=source)
     projection_calls: list[tuple[str, str, tuple[str, ...]]] = []
 
     class AllowPolicy:
@@ -96,9 +94,7 @@ async def test_signals360_routes_identity_lineage_without_claiming_provider_heal
                 evaluatedAt="2026-10-18T12:02:00Z",
                 frameDisposition=Experience360PolicyDisposition(state="allowed"),
                 slotDispositions={
-                    "source_signals_and_coverage": Experience360PolicyDisposition(
-                        state="allowed"
-                    )
+                    "source_inventory": Experience360PolicyDisposition(state="allowed")
                 },
             )
 
@@ -106,11 +102,11 @@ async def test_signals360_routes_identity_lineage_without_claiming_provider_heal
         async def execute_projection(self, request, **kwargs):
             sections = tuple(request.includeSections or ())
             projection_calls.append((request.projectionId, request.subject.kind, sections))
-            assert request.projectionId == "source360"
-            return await source_provider.project(
+            assert request.projectionId == "signals360"
+            return await provider.project(
                 request,
                 ProjectionContext(
-                    projectionId="source360",
+                    projectionId="signals360",
                     tenantId=request.tenantId,
                     registryState="in_flight",
                     dependencyState=[],
@@ -121,8 +117,8 @@ async def test_signals360_routes_identity_lineage_without_claiming_provider_heal
     request = Experience360FrameRequest(
         surfaceId="signals360",
         tenantId=TENANT,
-        subject=ProjectionSubject(kind=subject_kind, id=subject_id),
-        requestedSlotIds=["source_signals_and_coverage"],
+        subject=ProjectionSubject(kind=subject_kind, id=observation_id),
+        requestedSlotIds=["source_inventory"],
         includeEvidence=True,
     )
     frame = await build_experience360_frame(
@@ -132,27 +128,17 @@ async def test_signals360_routes_identity_lineage_without_claiming_provider_heal
         generated_at="2026-10-18T12:03:00Z",
     )
 
-    assert projection_calls == [
-        (
-            "source360",
-            subject_kind,
-            ("coverage", "evidence", "health", "summary"),
-        )
-    ]
-    assert identity_reader.calls == [(TENANT, subject_kind, subject_id)]
+    assert projection_calls == [("signals360", subject_kind, ("source_inventory",))]
+    assert source.calls == [(TENANT, observation_id)]
     slot = frame.slots[0]
     assert slot.state == "degraded"
     assert slot.content is not None
-    assert {evidence.id for evidence in slot.evidenceRefs} == {
-        f"identity-source-{subject_id}"
-    }
-    assert {item.sectionId for item in slot.provenance} == {
-        "coverage",
-        "evidence",
-        "health",
-        "summary",
-    }
-    health_provenance = next(item for item in slot.provenance if item.sectionId == "health")
-    assert health_provenance.sourceState == "unknown"
-    assert "slot_contains_partial_evidence" in slot.reasonCodes
+    section_content = slot.content["sections"][0]["content"]
+    assert section_content["coverage"] == "one_exact_sdk_observation"
+    assert section_content["sources"][0]["sourceType"] == "sdk"
+    assert section_content["sources"][0]["sourceRelationship"] == "first_party_application"
+    assert {evidence.id for evidence in slot.evidenceRefs} == {observation_id}
+    assert {
+        item.sectionId for item in slot.provenance if item.sectionId is not None
+    } == {"source_inventory"}
     assert frame.degradation.missingDependencies is None

@@ -1233,7 +1233,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("entity", "event", "observation", "signal", "source", "stream"),
-        "canonicalAuthorities": ("behavioral_signals", "identity", "observations", "source_provenance"),
+        "canonicalAuthorities": ("behavioral_signals", "events", "identity", "observations", "source_provenance"),
         "hardDependencies": ("contract_spine",),
         "projectionDependencies": [],
         "optionalProjectionDependencies": [],
@@ -1533,7 +1533,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("automation", "run", "trigger", "workflow", "workflow_run"),
-        "canonicalAuthorities": ("agent_entities", "ai_execution_facts", "identity"),
+        "canonicalAuthorities": ("agent_entities", "agent_executions", "ai_execution_facts", "identity"),
         "hardDependencies": ("contract_spine",),
         "projectionDependencies": [],
         "optionalProjectionDependencies": [],
@@ -2954,7 +2954,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "id": "agent_handoffs",
                 "projectionBindings": [],
                 "requirement": "required",
-                "unboundReason": "episode_agent_handoff_authority_not_joined"
+                "unboundReason": "episode_records_and_observations_do_not_reference_canonical_agent_execution_or_handoff_id"
             },
             {
                 "canonicalAuthorityRefs": ("attribution_credits",),
@@ -4977,9 +4977,16 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "canonicalAuthorityRefs": ("events", "observations"),
                 "description": "Required signals360 slot: classification.",
                 "id": "classification",
-                "projectionBindings": [],
-                "requirement": "required",
-                "unboundReason": "canonical_event_signal_classifier_not_joined"
+                "partialImplementationReason": "Exact gateway-accepted SDK event type and family are registry-validated; source attribution, semantic signal classification, policy, and freshness remain unknown.",
+                "projectionBindings": [
+                    {
+                        "projectionId": "signals360",
+                        "role": "primary",
+                        "subjectKinds": ("event", "observation"),
+                        "sectionIds": ("classification",)
+                    }
+                ],
+                "requirement": "required"
             },
             {
                 "id": "evidence_trace",
@@ -6001,9 +6008,16 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "canonicalAuthorityRefs": ("agent_executions",),
                 "description": "Required Workflow 360 slot: agent steps.",
                 "id": "agent_steps",
-                "projectionBindings": [],
-                "requirement": "required",
-                "unboundReason": "canonical_workflow_step_authority_not_joined"
+                "partialImplementationReason": "An exact tenant and workflow_run_id AgentExecution read exists, but the canonical AgentExecution writer does not persist workflow_run_id; workflow definition, complete step coverage, policy, and freshness remain unknown.",
+                "projectionBindings": [
+                    {
+                        "projectionId": "workflow360",
+                        "role": "primary",
+                        "subjectKinds": ("run", "workflow_run"),
+                        "sectionIds": ("agent_steps",)
+                    }
+                ],
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("agent_access",),

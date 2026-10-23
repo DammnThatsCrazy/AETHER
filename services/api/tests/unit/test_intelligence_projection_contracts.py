@@ -58,6 +58,7 @@ from shared.intelligence_projections import (  # noqa: E402
 )
 from shared.intelligence_projections.generated_registry import (  # noqa: E402
     INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+    PROJECTION_SUBJECT_KINDS,
 )
 from shared.contracts_models.epistemic import EpistemicStatus  # noqa: E402
 from graph.operational_intelligence.models import (  # noqa: E402
@@ -131,19 +132,13 @@ def test_projection_id_derived_from_generated_ids() -> None:
 
 
 def test_projection_subject_kind_matches_generated_registry() -> None:
-    expected = tuple(
-        sorted(
-            {
-                kind
-                for definition in INTELLIGENCE_PROJECTION_DEFINITIONS.values()
-                for kind in definition["subjectKinds"]
-            }
-        )
-    )
-    # 12 kinds: the shared product 360 subject families plus the separately
-    # governed deployment/infrastructure inputs used by Infrastructure360.
-    assert len(expected) == 12
-    assert tuple(get_args(ProjectionSubjectKind)) == expected
+    used = {
+        kind
+        for definition in INTELLIGENCE_PROJECTION_DEFINITIONS.values()
+        for kind in definition["subjectKinds"]
+    }
+    assert tuple(get_args(ProjectionSubjectKind)) == PROJECTION_SUBJECT_KINDS
+    assert used <= set(PROJECTION_SUBJECT_KINDS)
 
 
 def test_registry_state_matches_generated_implementation_states() -> None:

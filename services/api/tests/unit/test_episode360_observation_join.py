@@ -47,6 +47,7 @@ def _observation(
     *,
     tenant_id: str = TENANT,
     status: str = "classified",
+    source_type: str = "agent_tool_observation",
     occurred_at: str = "2026-10-20T12:00:00+00:00",
 ) -> dict[str, str]:
     return {
@@ -54,7 +55,7 @@ def _observation(
         "observation_id": observation_id,
         "tenant_id": tenant_id,
         "status": status,
-        "source_type": "agent_tool_observation",
+        "source_type": source_type,
         "occurred_at": occurred_at,
         "processed_at": occurred_at,
         "content": "private event payload must not be projected",
@@ -173,6 +174,42 @@ async def test_episode_observation_join_uses_exact_tenant_ids_and_preserves_part
     serialized = json.dumps(result.model_dump(mode="json"))
     assert "private event payload" not in serialized
     assert "private-actor-id" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_episode_handoff_slot_does_not_infer_canonical_handoff_from_observation_metadata():
+    observation = _observation(
+        "obs-handoff-event",
+        source_type="agent_handoff",
+    )
+    observation.update(
+        {
+            "source_event_id": "canonical-source-event-1",
+            "agent_id": "agent-source-1",
+            "beneficiary_actor_id": "agent-target-1",
+            "event_type": "agent_handoff",
+            "task_id": "task-1",
+        }
+    )
+    result = await Episode360Provider(
+        episode_store=FakeEpisodeStore(_episode(["obs-handoff-event"])),
+        observation_source=FakeObservationSource([observation]),
+    ).project(_request(), _context())
+
+    interactions = _section(result, "interactions").content
+    handoffs = interactions["agentHandoffs"]
+    assert handoffs["state"] == "unknown"
+    assert handoffs["coverage"] == "unknown"
+    assert handoffs["reason"] == (
+        "episode_records_and_observations_do_not_reference_canonical_agent_execution_or_handoff_id"
+    )
+    assert handoffs["handoffs"] == []
+
+    required_slot = _section(result, "summary").content["requiredSlotCoverage"]["agent_handoffs"]
+    assert required_slot["state"] == "unknown"
+    assert required_slot["coverage"] == "unknown"
+    assert required_slot["reason"] == handoffs["reason"]
+    assert required_slot["evidenceRefs"] == []
 
 
 @pytest.mark.asyncio

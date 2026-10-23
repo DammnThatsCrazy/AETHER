@@ -198,10 +198,10 @@ class RepositorySignal360Source:
     ) -> ObservationQualityRead:
         """Read gateway quality metadata for one exact SDK observation.
 
-        SDK ingress stores the accepted event under its exact event id in the
-        tenant-scoped ``sdk_events`` Bronze domain. Envelope-B uses that same
-        id as ``observation_id``. No entity, alias, provider, or time-window
-        join is performed here.
+        SDK ingress stores the accepted event under its exact
+        ``provider_record_id`` in the tenant-scoped ``sdk_events`` Bronze
+        domain. Envelope-B uses that same id as ``observation_id``. No entity,
+        alias, provider, or time-window join is performed here.
         """
         if not _safe_identifier(tenant_id) or not _safe_identifier(observation_id):
             return ObservationQualityRead(None, False, False, "exact_observation_scope_required")
@@ -629,6 +629,29 @@ class Signals360Provider(IntelligenceProjectionProvider):
                         "sdk_observation_bronze_unavailable",
                     )
 
+        # Reuse the exact, bounded SDK Bronze read for canonical event
+        # classification. Translator output and free-form payload properties
+        # are not source-event classification authorities.
+        if (
+            "classification" in requested_sections
+            and request.subject.kind in {"event", "observation"}
+            and quality_read is None
+        ):
+            reader = getattr(self._source, "observation_quality", None)
+            if callable(reader):
+                try:
+                    quality_read = await reader(
+                        tenant_id=tenant_id,
+                        observation_id=request.subject.id,
+                    )
+                except Exception:  # noqa: BLE001 - diagnostics stay private
+                    quality_read = ObservationQualityRead(
+                        None,
+                        False,
+                        False,
+                        "sdk_observation_bronze_unavailable",
+                    )
+
         linked_read: Optional[LinkedEntitiesRead] = None
         if "linked_entities" in requested_sections:
             reader = getattr(self._source, "linked_entities", None)
@@ -746,6 +769,15 @@ class Signals360Provider(IntelligenceProjectionProvider):
                 sections.append(quality_section)
                 if quality_claim is not None:
                     claims.append(quality_claim)
+            elif slot_id == "classification":
+                classification_section, classification_claim = _classification_section(
+                    request.subject,
+                    tenant_id=tenant_id,
+                    read=quality_read,
+                )
+                sections.append(classification_section)
+                if classification_claim is not None:
+                    claims.append(classification_claim)
             elif slot_id == "linked_entities":
                 linked_section, linked_claims = _linked_entities_section(
                     request.subject,
@@ -808,6 +840,173 @@ def _unknown_section(slot_id: str) -> ProjectionSection:
         # intake authority, so do not advertise the blueprint owner as a live
         # source for the unknown result.
     )
+
+
+def _classification_section(
+    subject: ProjectionSubject,
+    *,
+    tenant_id: str,
+    read: Optional[ObservationQualityRead],
+) -> tuple[ProjectionSection, Optional[ClaimEnvelope]]:
+    """Project the canonical event type/family for one exact SDK observation.
+
+    This is deliberately narrower than source attribution or semantic signal
+    classification. The event registry and gateway prove only that the exact
+    tenant-owned SDK row names a registered event type and family.
+    """
+    reason: Optional[str] = None
+    row: Optional[dict[str, Any]] = None
+    if subject.kind not in {"event", "observation"}:
+        reason = "exact_sdk_event_or_observation_subject_required"
+    elif read is None:
+        reason = "exact_sdk_event_classification_read_unavailable"
+    elif not read.available or not read.complete:
+        reason = read.reason or "exact_sdk_event_classification_read_incomplete"
+    elif read.record is None:
+        reason = read.reason or "exact_sdk_event_classification_not_found"
+    elif (
+        read.record.get("tenant_id") != tenant_id
+        or read.record.get("provider_record_id") != subject.id
+        or read.record.get("source") != "sdk"
+    ):
+        reason = "sdk_event_classification_scope_mismatch"
+    else:
+        row = read.record
+
+    envelope: Optional[dict[str, Any]] = None
+    observation: Optional[dict[str, Any]] = None
+    if row is not None:
+        payload = row.get("payload")
+        envelope = payload.get("observation_envelope") if isinstance(payload, dict) else None
+        observation = envelope.get("observation") if isinstance(envelope, dict) else None
+        tenancy = envelope.get("tenancy") if isinstance(envelope, dict) else None
+        if (
+            not isinstance(observation, dict)
+            or observation.get("observation_id") != subject.id
+            or not isinstance(tenancy, dict)
+            or tenancy.get("tenant_id") != tenant_id
+        ):
+            reason = "canonical_observation_envelope_missing_or_mismatched"
+
+    validation_state = None
+    if envelope is not None:
+        quality = envelope.get("quality")
+        validation_state = (
+            _safe_token(quality.get("validation_state"))
+            if isinstance(quality, dict)
+            else None
+        )
+    if row is not None and validation_state != "gateway:accepted":
+        reason = reason or "observation_gateway_validation_state_not_stamped"
+
+    event_type: Optional[str] = None
+    event_family: Optional[str] = None
+    if row is not None and observation is not None:
+        from ingestion.ingestion.generated_registry import (
+            CANONICAL_EVENT_TYPES,
+            EVENT_FAMILY,
+        )
+
+        envelope_type = _safe_token(observation.get("observation_type"))
+        payload = row.get("payload")
+        stored_type = (
+            _safe_token(payload.get("event_type"))
+            if isinstance(payload, dict)
+            else None
+        )
+        registered_family = EVENT_FAMILY.get(envelope_type or "")
+        envelope_family = _safe_token(observation.get("family"))
+        if (
+            envelope_type is None
+            or envelope_type not in CANONICAL_EVENT_TYPES
+            or envelope_type != stored_type
+            or registered_family is None
+        ):
+            reason = reason or "canonical_event_type_not_registered_or_mismatched"
+        elif envelope_family is not None and envelope_family != registered_family:
+            reason = reason or "canonical_event_family_mismatch"
+        else:
+            event_type = envelope_type
+            event_family = registered_family
+
+    if reason is not None or event_type is None or event_family is None or row is None:
+        failure_reason = reason or "canonical_event_classification_unavailable"
+        return (
+            ProjectionSection(
+                id="classification",
+                state=(
+                    "degraded"
+                    if read is not None and (not read.available or not read.complete)
+                    else "unknown"
+                ),
+                title="Canonical event classification",
+                content={
+                    "tenantId": tenant_id,
+                    "subject": {"kind": subject.kind, "id": subject.id},
+                    "classificationState": "unknown",
+                    "reasonCode": failure_reason,
+                },
+                warnings=[failure_reason],
+                canonicalAuthorityRefs=["events", "observations"],
+            ),
+            None,
+        )
+
+    observed_at = _safe_timestamp(
+        observation.get("ingested_at") or row.get("ingested_at")
+    )
+    event_evidence = EvidenceRef(
+        id=subject.id,
+        type="event",
+        source="bronze_sdk_events",
+        observedAt=observed_at,
+    )
+    registry_evidence = EvidenceRef(
+        id=event_type,
+        type="annotation",
+        source="ingestion.ingestion.generated_registry:CANONICAL_EVENT_TYPES/EVENT_FAMILY",
+    )
+    section = ProjectionSection(
+        id="classification",
+        state="available",
+        title="Canonical event classification",
+        content={
+            "tenantId": tenant_id,
+            "subject": {"kind": subject.kind, "id": subject.id},
+            "coverage": "one_exact_tenant_scoped_sdk_event",
+            "classificationState": "canonical_event_type_and_family_available",
+            "eventType": event_type,
+            "eventFamily": event_family,
+            "classificationBasis": "gateway_accepted_canonical_event_registry",
+            "sourceClassificationState": "unknown",
+            "sourceClassificationReason": "tenant_source_classification_authority_not_joined",
+            "semanticSignalState": "unknown",
+            "policyState": "not_evaluated_by_signals360_classification_read",
+            "freshnessState": "unknown",
+            "evidenceRefs": [
+                event_evidence.model_dump(mode="json"),
+                registry_evidence.model_dump(mode="json"),
+            ],
+            "reasonCode": "event_type_family_only_source_classification_unjoined",
+        },
+        warnings=[
+            "canonical event type and family are available; source classification, semantic signal quality, policy, and freshness are not joined"
+        ],
+        canonicalAuthorityRefs=["events", "observations"],
+    )
+    claim = ClaimEnvelope(
+        id=f"signals360.canonical_event_classification.{subject.id}",
+        kind="canonical_event_type_family",
+        subject=subject,
+        evidenceRefs=[event_evidence, registry_evidence],
+        claims=[
+            "The exact tenant-scoped SDK event has a gateway-accepted event type and family that match the canonical event registry."
+        ],
+        confidence=1.0,
+        claimState=EpistemicStatus.OBSERVED,
+        domainSlotIds=["classification"],
+    )
+    return section, claim
 
 
 def _linked_entities_section(
@@ -1186,7 +1385,7 @@ def _source_inventory_section(
     }
     section = ProjectionSection(
         id="source_inventory",
-        state="degraded",
+        state="available",
         title="Exact observation source inventory",
         content={
             "tenantId": tenant_id,

@@ -71,6 +71,9 @@ _JOURNEY_CONVERSION_SOURCE = (
 )
 _EPISODE_RECORD_SOURCE = "shared.backend_interpretation.stores.EpisodeStore"
 _EPISODE_OBSERVATION_SOURCE = "semantic_intelligence.silver_semantic_observations"
+_EPISODE_AGENT_HANDOFF_GAP_REASON = (
+    "episode_records_and_observations_do_not_reference_canonical_agent_execution_or_handoff_id"
+)
 _JOURNEY_STEP_CAP = 200
 _JOURNEY_TOUCHPOINT_CAP = 200
 _JOURNEY_CONVERSION_CAP = 100
@@ -1465,9 +1468,7 @@ class Episode360Provider:
                         "communications": [],
                     },
                     "agentHandoffs": {
-                        **_unknown_episode_slot(
-                            "episode_record_contract_has_no_agent_handoff_references"
-                        ),
+                        **_unknown_episode_slot(_EPISODE_AGENT_HANDOFF_GAP_REASON),
                         "handoffs": [],
                     },
                     "policy": {
@@ -3087,7 +3088,7 @@ def _episode_required_slot_coverage(
         "agent_handoffs": {
             "state": "unknown",
             "coverage": "unknown",
-            "reason": "episode_record_contract_has_no_agent_handoff_references",
+            "reason": _EPISODE_AGENT_HANDOFF_GAP_REASON,
             "evidenceRefs": [],
         },
         "conversion_events": {

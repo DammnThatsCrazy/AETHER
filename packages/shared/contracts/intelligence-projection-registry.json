@@ -2389,6 +2389,7 @@
       ],
       "canonicalAuthorities": [
         "behavioral_signals",
+        "events",
         "identity",
         "observations",
         "source_provenance"
@@ -2700,6 +2701,7 @@
       "canonicalAuthorities": [
         "ai_execution_facts",
         "agent_entities",
+        "agent_executions",
         "identity"
       ],
       "hardDependencies": [
@@ -4056,7 +4058,7 @@
             "agent_executions"
           ],
           "projectionBindings": [],
-          "unboundReason": "episode_agent_handoff_authority_not_joined"
+          "unboundReason": "episode_records_and_observations_do_not_reference_canonical_agent_execution_or_handoff_id"
         },
         {
           "id": "conversion_events",
@@ -8134,8 +8136,20 @@
             "events",
             "observations"
           ],
-          "projectionBindings": [],
-          "unboundReason": "canonical_event_signal_classifier_not_joined"
+          "projectionBindings": [
+            {
+              "projectionId": "signals360",
+              "role": "primary",
+              "sectionIds": [
+                "classification"
+              ],
+              "subjectKinds": [
+                "event",
+                "observation"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Exact gateway-accepted SDK event type and family are registry-validated; source attribution, semantic signal classification, policy, and freshness remain unknown."
         },
         {
           "id": "quality",
@@ -9334,8 +9348,20 @@
           "canonicalAuthorityRefs": [
             "agent_executions"
           ],
-          "projectionBindings": [],
-          "unboundReason": "canonical_workflow_step_authority_not_joined"
+          "projectionBindings": [
+            {
+              "projectionId": "workflow360",
+              "role": "primary",
+              "sectionIds": [
+                "agent_steps"
+              ],
+              "subjectKinds": [
+                "run",
+                "workflow_run"
+              ]
+            }
+          ],
+          "partialImplementationReason": "An exact tenant and workflow_run_id AgentExecution read exists, but the canonical AgentExecution writer does not persist workflow_run_id; workflow definition, complete step coverage, policy, and freshness remain unknown."
         },
         {
           "id": "actions",

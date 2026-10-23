@@ -655,7 +655,7 @@ stage, normalization, device/session inventory, risk-signal
 production/freshness, propagation completeness, or the episode message-spine
 join is unavailable. They do not change the affected technical providers'
 `in_flight` status or establish complete product-surface conformance.
-The 2026-10-23 backend wave adds three more exact authority joins: Episode360
+The first 2026-10-23 backend wave adds three more exact authority joins: Episode360
 `timeline` resolves only observation IDs recorded on an episode against
 tenant-scoped semantic Silver rows; Campaign360 `signal_sources` joins exact
 touchpoint event IDs to tenant-scoped canonical events; and Memory360
@@ -665,6 +665,17 @@ policy/freshness remain unresolved; Campaign360 observation and source-fact
 dimensions, event coverage, and freshness remain unknown; Memory360 current
 consent and policy remain unevaluated. These are partial slot implementations,
 not completed 360 surfaces.
+
+A follow-up slice adds two more partial bindings. Signals360 `classification`
+validates the exact gateway-accepted SDK event type and family against the
+canonical registry; source attribution, semantic classification, policy, and
+freshness remain unknown. Workflow360 `agent_steps` reads only tenant-scoped
+AgentExecution rows carrying the exact workflow run ID, but the canonical
+writer does not yet persist that ID, so production step rows remain unjoined;
+workflow definition and complete step coverage remain unknown. Episode360
+`agent_handoffs` also remains unknown because episode records and observations
+do not reference a canonical execution or handoff ID. Event labels and agent
+metadata are not used to invent those links.
 Exploration surfaces compose over the engine through projection-backed surface adapters
 
 (`services/api/journeys/exploration/adapters/projection.py`).

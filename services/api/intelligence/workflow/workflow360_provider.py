@@ -46,8 +46,10 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
 )
 
 _MAX_INVOCATION_FACTS = 200
+_MAX_AGENT_EXECUTIONS = 200
 _RUN_SUBJECT_KINDS = frozenset({"run", "workflow_run"})
 _SOURCE = "ai_execution_facts"
+_AGENT_EXECUTION_SOURCE = "agent_executions"
 
 
 @dataclass(frozen=True)
@@ -71,12 +73,27 @@ class WorkflowAgentIdentityRead:
     reason: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class WorkflowAgentExecutionRead:
+    """Bounded read of canonical Agent executions explicitly linked to a run."""
+
+    rows: tuple[dict[str, Any], ...]
+    available: bool
+    complete: bool
+    scope_mismatch: bool = False
+    reason: Optional[str] = None
+
+
 class Workflow360Source(Protocol):
     """Tenant-scoped exact-ID read seam for workflow run evidence."""
 
     async def run_invocations(
         self, *, tenant_id: str, workflow_run_id: str, limit: int
     ) -> WorkflowRunInvocationRead: ...
+
+    async def run_agent_executions(
+        self, *, tenant_id: str, workflow_run_id: str, limit: int
+    ) -> WorkflowAgentExecutionRead: ...
 
     async def actor_identities(
         self, *, tenant_id: str, agent_ids: set[str], limit: int
@@ -123,6 +140,44 @@ class RepositoryWorkflow360Source:
             True,
             complete,
             None if complete else "ai_execution_fact_read_truncated",
+        )
+
+    async def run_agent_executions(
+        self, *, tenant_id: str, workflow_run_id: str, limit: int
+    ) -> WorkflowAgentExecutionRead:
+        """Read only canonical records carrying this exact workflow run ID.
+
+        The current AgentExecution writer does not populate ``workflow_run_id``.
+        This exact JSONB lookup therefore returns a partial/unknown slot until
+        that canonical write path is connected; it deliberately does not infer
+        a join from agent identity, event causation, or AI invocation metadata.
+        """
+        if not tenant_id or not workflow_run_id:
+            return WorkflowAgentExecutionRead(
+                (), False, False, reason="exact_tenant_workflow_run_scope_required"
+            )
+        try:
+            from repositories.repos import AgentExecutionRepository
+
+            bounded_limit = min(max(int(limit), 1), _MAX_AGENT_EXECUTIONS)
+            rows = await AgentExecutionRepository().find_many(
+                filters={"tenant_id": tenant_id, "workflow_run_id": workflow_run_id},
+                limit=bounded_limit + 1,
+            )
+        except Exception:  # noqa: BLE001 - source details must not escape the provider
+            return WorkflowAgentExecutionRead(
+                (), False, False, reason="canonical_agent_execution_repository_unavailable"
+            )
+
+        bounded_limit = min(max(int(limit), 1), _MAX_AGENT_EXECUTIONS)
+        complete = len(rows) <= bounded_limit
+        if not complete:
+            rows = rows[:bounded_limit]
+        return WorkflowAgentExecutionRead(
+            tuple(row for row in rows if isinstance(row, dict)),
+            True,
+            complete,
+            reason=None if complete else "canonical_agent_execution_read_truncated",
         )
 
     async def actor_identities(
@@ -249,6 +304,61 @@ class Workflow360Provider:
             identity_read=actor_identity_read,
         )
 
+        if subject.kind in _RUN_SUBJECT_KINDS:
+            try:
+                agent_execution_read = await self._source.run_agent_executions(
+                    tenant_id=tenant_id,
+                    workflow_run_id=subject.id,
+                    limit=_MAX_AGENT_EXECUTIONS,
+                )
+            except Exception:  # noqa: BLE001 - source diagnostics stay private
+                agent_execution_read = WorkflowAgentExecutionRead(
+                    (),
+                    False,
+                    False,
+                    reason="canonical_agent_execution_repository_unavailable",
+                )
+        else:
+            agent_execution_read = WorkflowAgentExecutionRead(
+                (),
+                False,
+                False,
+                reason="subject_kind_not_supported_by_workflow_run_evidence",
+            )
+        agent_execution_rows, agent_execution_scope_mismatch = (
+            _scoped_agent_execution_rows(
+                agent_execution_read.rows,
+                tenant_id=tenant_id,
+                workflow_run_id=(
+                    subject.id if subject.kind in _RUN_SUBJECT_KINDS else None
+                ),
+            )
+        )
+        agent_execution_read_complete = bool(
+            agent_execution_read.available
+            and agent_execution_read.complete
+            and not agent_execution_read.scope_mismatch
+            and not agent_execution_scope_mismatch
+        )
+        agent_execution_refs = [
+            ref
+            for row in agent_execution_rows
+            if (ref := _agent_execution_evidence(row)) is not None
+        ]
+        agent_steps_section, agent_step_claims = _agent_steps_section(
+            subject,
+            tenant_id=tenant_id,
+            rows=agent_execution_rows,
+            refs=agent_execution_refs,
+            available=agent_execution_read.available,
+            complete=agent_execution_read_complete,
+            reason=(
+                "unscoped_or_invalid_agent_execution_rows_dropped"
+                if agent_execution_scope_mismatch or agent_execution_read.scope_mismatch
+                else _safe_reason(agent_execution_read.reason)
+            ),
+        )
+
         if records and read_complete:
             run_state = "available"
             run_warnings = None
@@ -302,6 +412,7 @@ class Workflow360Provider:
             for record, evidence in zip(records, valid_refs)
         ]
         claims.extend(actor_claims)
+        claims.extend(agent_step_claims)
 
         sections: list[ProjectionSection] = [
             _unknown_section("workflow_summary"),
@@ -316,7 +427,7 @@ class Workflow360Provider:
             ),
             actor_section,
             _unknown_section("approvals"),
-            _unknown_section("agent_steps"),
+            agent_steps_section,
             _unknown_section("actions"),
             _failure_section(
                 subject,
@@ -333,8 +444,11 @@ class Workflow360Provider:
                 subject,
                 tenant_id=tenant_id,
                 refs=valid_refs,
+                agent_execution_refs=agent_execution_refs,
                 available=read_available,
                 complete=read_complete,
+                agent_execution_available=agent_execution_read.available,
+                agent_execution_complete=agent_execution_read_complete,
                 reason=read_reason,
             ),
         ]
@@ -589,6 +703,168 @@ def _dedupe_evidence_refs(refs: list[EvidenceRef]) -> list[EvidenceRef]:
     return result
 
 
+def _scoped_agent_execution_rows(
+    rows: tuple[dict[str, Any], ...] | list[dict[str, Any]],
+    *,
+    tenant_id: str,
+    workflow_run_id: Optional[str],
+) -> tuple[list[dict[str, Any]], bool]:
+    """Fail closed unless each canonical execution carries both exact scope keys."""
+    scoped: list[dict[str, Any]] = []
+    seen_execution_ids: set[str] = set()
+    scope_mismatch = False
+    for row in rows:
+        execution_id = (
+            _safe_identifier(row.get("execution_id"))
+            if isinstance(row, dict)
+            else None
+        )
+        if (
+            not isinstance(row, dict)
+            or row.get("tenant_id") != tenant_id
+            or workflow_run_id is None
+            or row.get("workflow_run_id") != workflow_run_id
+            or execution_id is None
+            or execution_id in seen_execution_ids
+        ):
+            scope_mismatch = True
+            continue
+        seen_execution_ids.add(execution_id)
+        scoped.append(row)
+    return scoped[:_MAX_AGENT_EXECUTIONS], scope_mismatch
+
+
+def _public_agent_execution(row: dict[str, Any]) -> dict[str, Any]:
+    """Project execution identifiers and status only, omitting payload and reasoning."""
+    return {
+        "executionId": _safe_identifier(row.get("execution_id")),
+        "agentId": _safe_identifier(row.get("agent_id")),
+        "status": _safe_token(
+            row.get("status"),
+            allowed={"running", "completed", "succeeded", "failed", "cancelled", "timeout"},
+        ),
+        "startedAt": _safe_timestamp(row.get("started_at")),
+        "endedAt": _safe_timestamp(row.get("ended_at")),
+        "triggeredByEventId": _safe_identifier(row.get("triggered_by_event_id")),
+        "delegationId": _safe_identifier(row.get("delegation_id")),
+        "sourceRecordKind": "canonical_agent_execution",
+    }
+
+
+def _agent_execution_evidence(row: dict[str, Any]) -> Optional[EvidenceRef]:
+    execution_id = _safe_identifier(row.get("execution_id"))
+    tenant_id = _safe_identifier(row.get("tenant_id"))
+    if execution_id is None or tenant_id is None:
+        return None
+    observed_at = _safe_timestamp(row.get("ended_at")) or _safe_timestamp(
+        row.get("started_at")
+    )
+    store_key = quote(f"{tenant_id}:{execution_id}", safe="")
+    return EvidenceRef(
+        id=execution_id,
+        type="event",
+        source=_AGENT_EXECUTION_SOURCE,
+        observedAt=observed_at,
+        uri=f"store://{_AGENT_EXECUTION_SOURCE}/{store_key}",
+    )
+
+
+def _agent_steps_section(
+    subject: Any,
+    *,
+    tenant_id: str,
+    rows: list[dict[str, Any]],
+    refs: list[EvidenceRef],
+    available: bool,
+    complete: bool,
+    reason: Optional[str],
+) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+    """Expose exact run-linked canonical Agent executions as partial step evidence."""
+    evidence_by_execution = {ref.id: ref for ref in refs}
+    records = [
+        _public_agent_execution(row)
+        for row in rows
+        if _safe_identifier(row.get("execution_id")) in evidence_by_execution
+    ]
+    records.sort(key=lambda row: (row.get("startedAt") or "", row["executionId"]))
+    ordered_refs = [evidence_by_execution[row["executionId"]] for row in records]
+    latest_observed_at = max(
+        (ref.observedAt for ref in ordered_refs if ref.observedAt is not None),
+        default=None,
+    )
+    claims = [
+        ClaimEnvelope(
+            id=f"workflow360.agent_step.{quote(record['executionId'], safe='')}",
+            kind="canonical_agent_execution_explicitly_linked_to_workflow_run",
+            subject=subject,
+            evidenceRefs=[evidence_by_execution[record["executionId"]]],
+            claims=[
+                "A tenant-scoped canonical Agent execution explicitly records the requested workflow_run_id; this does not establish that all workflow steps are represented or that the workflow run completed."
+            ],
+            claimState=EpistemicStatus.OBSERVED,
+            domainSlotIds=["agent_steps", "evidence_trace"],
+        )
+        for record in records
+    ]
+    has_records = bool(records)
+    source_reason = reason or (
+        "canonical_agent_execution_read_truncated" if not complete else None
+    )
+    if has_records:
+        reason_code = source_reason or (
+            "canonical_agent_execution_records_linked_but_step_coverage_partial"
+        )
+    else:
+        reason_code = source_reason or "agent_execution_workflow_run_link_not_available"
+    content = {
+        "tenantId": tenant_id,
+        "subject": {"kind": subject.kind, "id": subject.id},
+        "steps": records,
+        "stepCoverageState": (
+            "partial_exactly_linked_agent_execution_records_only"
+            if has_records
+            else "unknown"
+        ),
+        "workflowStepAuthorityState": "unknown",
+        "sourceReadCompleteForExactLinks": complete,
+        "policyState": "unknown",
+        "policyReasonCode": "workflow_agent_step_policy_context_not_joined",
+        "freshness": {
+            "state": "unknown",
+            "latestReturnedObservedAt": latest_observed_at,
+            "evidenceReadCompleteForExactLinks": complete,
+            "thresholdSeconds": None,
+            "freshnessAuthorityState": "unknown",
+            "reasonCode": "workflow_agent_step_freshness_threshold_not_configured",
+        },
+        "evidenceRefs": [ref.model_dump(mode="json") for ref in ordered_refs],
+        "reasonCode": reason_code,
+    }
+    if available:
+        content["returnedCanonicalAgentExecutionCount"] = len(records)
+    if has_records:
+        content["canonicalAgentExecutionCount"] = len(records)
+    # The exact linked records are available; the product slot is degraded by
+    # the registry's explicit full-step-coverage limitation.
+    state = "available" if has_records else "unknown"
+    warning = (
+        "Only canonical Agent execution records with an exact workflow_run_id are shown; the repository does not establish complete step coverage, policy state, or freshness."
+        if has_records
+        else "No canonical Agent execution record with this exact workflow_run_id is available; no step list is inferred from AI invocation telemetry."
+    )
+    return (
+        ProjectionSection(
+            id="agent_steps",
+            state=state,
+            title="Workflow agent step evidence",
+            content=content,
+            warnings=[warning],
+            canonicalAuthorityRefs=[_AGENT_EXECUTION_SOURCE] if available else None,
+        ),
+        claims,
+    )
+
+
 def _failure_section(
     subject: Any,
     *,
@@ -638,16 +914,22 @@ def _evidence_trace_section(
     *,
     tenant_id: str,
     refs: list[EvidenceRef],
+    agent_execution_refs: list[EvidenceRef],
     available: bool,
     complete: bool,
+    agent_execution_available: bool,
+    agent_execution_complete: bool,
     reason: Optional[str],
 ) -> ProjectionSection:
-    state = "degraded" if refs else "unknown"
-    reason_code = (
-        "only_ai_invocation_fact_lineage_is_connected"
-        if refs
-        else reason or "workflow_evidence_trace_not_available"
-    )
+    all_refs = _dedupe_evidence_refs(refs + agent_execution_refs)
+    state = "degraded" if all_refs else "unknown"
+    reason_code = "workflow_ai_invocation_and_agent_execution_lineage_partial"
+    if not all_refs:
+        reason_code = reason or "workflow_evidence_trace_not_available"
+    elif not agent_execution_refs:
+        reason_code = "only_ai_invocation_fact_lineage_is_connected"
+    elif not refs:
+        reason_code = "only_exact_agent_execution_lineage_is_connected"
     return ProjectionSection(
         id="evidence_trace",
         state=state,
@@ -656,16 +938,24 @@ def _evidence_trace_section(
             "tenantId": tenant_id,
             "subject": {"kind": subject.kind, "id": subject.id},
             "aiInvocationFactRefs": [ref.model_dump(mode="json") for ref in refs],
+            "agentExecutionRefs": [
+                ref.model_dump(mode="json") for ref in agent_execution_refs
+            ],
             "workflowEventLineageState": "unknown",
             "readCompleteForAiInvocationFeed": complete,
+            "readCompleteForExactAgentExecutionLinks": agent_execution_complete,
             "reasonCode": reason_code,
         },
         warnings=(
-            ["AI invocation facts are linked by exact workflow_run_id; workflow definition and event lineage remain unknown"]
-            if refs
+            ["AI invocation facts and/or canonical Agent executions are linked by exact workflow_run_id; workflow definition, full step coverage, and event lineage remain unknown"]
+            if all_refs
             else [reason or "workflow evidence lineage is unknown"]
         ),
-        canonicalAuthorityRefs=[_SOURCE] if available else None,
+        canonicalAuthorityRefs=(
+            ([_SOURCE] if available else [])
+            + ([_AGENT_EXECUTION_SOURCE] if agent_execution_available else [])
+            or None
+        ),
     )
 
 

@@ -20,6 +20,7 @@ from intelligence.workflow.workflow360_provider import (  # noqa: E402
     OUTPUT_SECTIONS,
     PROJECTION_ID,
     RepositoryWorkflow360Source,
+    WorkflowAgentExecutionRead,
     WorkflowAgentIdentityRead,
     Workflow360Provider,
     WorkflowRunInvocationRead,
@@ -42,17 +43,28 @@ class FakeWorkflowSource:
         self,
         read: WorkflowRunInvocationRead,
         identities: WorkflowAgentIdentityRead | None = None,
+        agent_executions: WorkflowAgentExecutionRead | None = None,
     ) -> None:
         self.read = read
         self.identities = identities or WorkflowAgentIdentityRead((), True, True)
+        self.agent_execution_read = agent_executions or WorkflowAgentExecutionRead(
+            (), True, True
+        )
         self.calls: list[tuple[str, str, int]] = []
         self.identity_calls: list[tuple[str, set[str], int]] = []
+        self.agent_execution_calls: list[tuple[str, str, int]] = []
 
     async def run_invocations(
         self, *, tenant_id: str, workflow_run_id: str, limit: int
     ) -> WorkflowRunInvocationRead:
         self.calls.append((tenant_id, workflow_run_id, limit))
         return self.read
+
+    async def run_agent_executions(
+        self, *, tenant_id: str, workflow_run_id: str, limit: int
+    ) -> WorkflowAgentExecutionRead:
+        self.agent_execution_calls.append((tenant_id, workflow_run_id, limit))
+        return self.agent_execution_read
 
     async def actor_identities(
         self, *, tenant_id: str, agent_ids: set[str], limit: int
@@ -86,6 +98,31 @@ def _row(
         "error_code": "private-provider-error",
         "agent_id": "unresolved-agent-claim",
         "outcome_id": "unverified-outcome-ref",
+    }
+
+
+def _agent_execution_row(
+    execution_id: str = "agent-execution-a",
+    *,
+    tenant_id: str = TENANT_A,
+    workflow_run_id: str = RUN_ID,
+) -> dict[str, Any]:
+    return {
+        "execution_id": execution_id,
+        "agent_id": "canonical-agent-a",
+        "tenant_id": tenant_id,
+        "workflow_run_id": workflow_run_id,
+        "status": "completed",
+        "started_at": "2026-10-18T10:00:00Z",
+        "ended_at": "2026-10-18T10:00:02Z",
+        "triggered_by_event_id": "event-a",
+        "delegation_id": "delegation-a",
+        # Private execution material must never enter the projected step.
+        "reasoning": "private reasoning",
+        "input_snapshot": {"secret": "private input"},
+        "output": {"secret": "private output"},
+        "error": {"secret": "private error"},
+        "policy_log": {"secret": "private policy detail"},
     }
 
 
@@ -306,6 +343,75 @@ async def test_workflow360_keeps_actor_claim_unknown_for_cross_tenant_identity()
 
 
 @pytest.mark.asyncio
+async def test_workflow360_projects_only_exact_tenant_run_linked_agent_executions() -> None:
+    valid = _agent_execution_row()
+    source = FakeWorkflowSource(
+        WorkflowRunInvocationRead((_row("invocation-a"),), True, True),
+        agent_executions=WorkflowAgentExecutionRead(
+            rows=(
+                valid,
+                _agent_execution_row("private-tenant-execution", tenant_id="tenant-b"),
+                _agent_execution_row("wrong-run-execution", workflow_run_id="other-run"),
+            ),
+            available=True,
+            complete=True,
+        ),
+    )
+
+    result = await Workflow360Provider(source=source).project(_request(), _context())
+
+    steps = _sections(result)["agent_steps"]
+    assert source.agent_execution_calls == [(TENANT_A, RUN_ID, 200)]
+    assert steps.state == "available"
+    assert steps.content["stepCoverageState"] == (
+        "partial_exactly_linked_agent_execution_records_only"
+    )
+    assert steps.content["sourceReadCompleteForExactLinks"] is False
+    assert steps.content["reasonCode"] == "unscoped_or_invalid_agent_execution_rows_dropped"
+    assert steps.content["steps"] == [
+        {
+            "executionId": "agent-execution-a",
+            "agentId": "canonical-agent-a",
+            "status": "completed",
+            "startedAt": "2026-10-18T10:00:00+00:00",
+            "endedAt": "2026-10-18T10:00:02+00:00",
+            "triggeredByEventId": "event-a",
+            "delegationId": "delegation-a",
+            "sourceRecordKind": "canonical_agent_execution",
+        }
+    ]
+    assert "private" not in str(steps.content)
+    assert steps.content["policyState"] == "unknown"
+    assert steps.content["freshness"]["state"] == "unknown"
+    evidence = steps.content["evidenceRefs"][0]
+    assert evidence["source"] == "agent_executions"
+    assert evidence["uri"] == (
+        "store://agent_executions/tenant-workflow-a%3Aagent-execution-a"
+    )
+    step_claims = [claim for claim in result.claims if "agent_steps" in claim.domainSlotIds]
+    assert len(step_claims) == 1
+    assert step_claims[0].evidenceRefs[0].id == "agent-execution-a"
+    assert "agent-execution-a" in str(_sections(result)["evidence_trace"].content)
+    assert "private-tenant-execution" not in str(result)
+
+
+@pytest.mark.asyncio
+async def test_workflow360_does_not_infer_agent_steps_from_ai_agent_identity_alone() -> None:
+    source = FakeWorkflowSource(
+        WorkflowRunInvocationRead((_row("invocation-a"),), True, True),
+        agent_executions=WorkflowAgentExecutionRead((), True, True),
+    )
+
+    result = await Workflow360Provider(source=source).project(_request(), _context())
+
+    steps = _sections(result)["agent_steps"]
+    assert steps.state == "unknown"
+    assert steps.content["steps"] == []
+    assert steps.content["reasonCode"] == "agent_execution_workflow_run_link_not_available"
+    assert not any("agent_steps" in claim.domainSlotIds for claim in result.claims)
+
+
+@pytest.mark.asyncio
 async def test_workflow360_does_not_call_no_invocations_an_empty_workflow_run() -> None:
     source = FakeWorkflowSource(WorkflowRunInvocationRead((), True, True))
 
@@ -454,3 +560,30 @@ async def test_repository_source_uses_tenant_and_exact_run_id(monkeypatch) -> No
     assert read.available is True
     assert read.complete is True
     assert read.rows == (_row("invocation-a"),)
+
+
+@pytest.mark.asyncio
+async def test_repository_source_reads_only_exact_run_linked_agent_executions(
+    monkeypatch,
+) -> None:
+    import repositories.repos as repos_module
+
+    calls: list[tuple[dict[str, Any], int]] = []
+
+    class AgentExecutions:
+        async def find_many(self, *, filters: dict[str, Any], limit: int) -> list[dict[str, Any]]:
+            calls.append((filters, limit))
+            return [_agent_execution_row()]
+
+    monkeypatch.setattr(repos_module, "AgentExecutionRepository", AgentExecutions)
+
+    read = await RepositoryWorkflow360Source().run_agent_executions(
+        tenant_id=TENANT_A,
+        workflow_run_id=RUN_ID,
+        limit=20,
+    )
+
+    assert calls == [({"tenant_id": TENANT_A, "workflow_run_id": RUN_ID}, 21)]
+    assert read.available is True
+    assert read.complete is True
+    assert read.rows == (_agent_execution_row(),)

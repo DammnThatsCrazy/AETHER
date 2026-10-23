@@ -1996,6 +1996,16 @@ observation and source-fact dimensions, event completeness, and freshness remain
 unknown; Memory360 does not evaluate current consent or policy. These provider
 changes add no HTTP routes and do not complete any surface.
 
+A follow-up slice adds partial Signals360 `classification` evidence for exact
+gateway-accepted SDK event types and registry families; source attribution,
+semantic classification, policy, and freshness remain unknown. Workflow360
+`agent_steps` reads only canonical AgentExecution rows carrying the exact tenant
+and workflow run ID, but no current AgentExecution writer stores that run ID, so
+production step rows are still unjoined. Episode360 `agent_handoffs` remains
+unknown because episode records and observations have no canonical execution or
+handoff reference. The frame route preserves these slot limitations and adds
+no new endpoint.
+
 ### Support case lifecycle evidence ingress
 
 `POST /v1/support/cases/ingest` accepts one allow-listed lifecycle event under

@@ -9,13 +9,15 @@ This document replaces the prior broad 360 architecture blueprint as the impleme
 
 ## Repository implementation status (2026-10-23)
 
-This specification remains the acceptance contract for the complete 18-surface backend buildout. The repository currently has additional partial provider paths for three required slots:
+This specification remains the acceptance contract for the complete 18-surface backend buildout. The repository currently has partial provider paths for five required slots, with the remaining limits recorded explicitly:
 
 - **Episode360 `timeline`:** resolves only observation IDs explicitly recorded by an episode through tenant-scoped semantic Silver rows. Untyped source namespaces, complete activity/session coverage, policy, and freshness remain unresolved.
 - **Campaign360 `signal_sources`:** joins exact campaign touchpoint event references to tenant-scoped canonical events. Broader observation and source-fact authorities, complete event coverage, and freshness remain unresolved.
 - **Memory360 `policy_state`:** exposes exact historical write-time allow decisions with timestamped consent-policy evidence. Current consent and policy evaluation remain unknown.
+- **Signals360 `classification`:** validates the exact tenant-scoped, gateway-accepted SDK event type and family against the canonical event registry. Source attribution, semantic classification, policy, and freshness remain unknown.
+- **Workflow360 `agent_steps`:** reads only tenant-scoped AgentExecution rows that carry the exact workflow run ID, and projects metadata with evidence. The canonical AgentExecution writer does not currently persist `workflow_run_id`, so production step rows are not yet connected; workflow definition, complete step coverage, policy, and freshness remain unknown.
 
-The product registry records these slots as partial. None of these changes marks its surface complete or reduces the remaining requirements in this specification.
+Episode360 `agent_handoffs` remains unknown because episode records and observations do not reference a canonical execution or handoff ID; event labels and agent metadata do not establish that join. The product registry records partial slots and this unjoined authority gap. None of these changes marks its surface complete or reduces the remaining requirements in this specification.
 
 ## 0. Decision
 
