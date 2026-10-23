@@ -31,15 +31,15 @@ Declared binding counts are registry coverage, not proof that a slot or surface 
 |---|---|---|---:|---:|---:|---:|---:|---|---|
 | [Account 360](#account-360) | source_aligned | `account`, `entity`, `workspace` | 11 | 9/11 | 3 | 2 | 4 | `communication360`, `economic360`, `profile360`, `relationship360` | `Account360Provider` (runtime_wired) |
 | [Agent 360](#agent-360) | source_aligned | `agent`, `entity` | 11 | 11/11 | 6 | 0 | 4 | `agent360`, `communication360`, `economic360`, `execution360`, `outcome360`, `relationship360`, `risk360` | — |
-| [Campaign 360](#campaign-360) | source_aligned | `campaign` | 11 | 9/11 | 2 | 2 | 0 | `campaign360`, `communication360`, `economic360`, `outcome360` | — |
+| [Campaign 360](#campaign-360) | source_aligned | `campaign` | 11 | 10/11 | 3 | 1 | 0 | `campaign360`, `communication360`, `economic360`, `outcome360` | — |
 | [Commerce 360](#commerce-360) | source_aligned | `entity`, `campaign`, `journey`, `commerce`, `product`, `offer`, `sku`, `checkout` | 11 | 6/11 | 2 | 5 | 0 | `commerce360` | — |
 | [Communications 360](#communications-360) | source_aligned | `message`, `thread`, `profile`, `campaign`, `episode`, `agent`, `journey`, `source` | 11 | 9/11 | 2 | 2 | 0 | `communication360` | — |
-| [Episode 360](#episode-360) | source_aligned | `episode`, `session`, `conversation`, `activity_window`, `entity`, `campaign` | 11 | 6/11 | 1 | 5 | 1 | `communication360`, `campaign360`, `episode360`, `profile360`, `relationship360` | — |
+| [Episode 360](#episode-360) | source_aligned | `episode`, `session`, `conversation`, `activity_window`, `entity`, `campaign` | 11 | 6/11 | 2 | 5 | 1 | `communication360`, `campaign360`, `episode360`, `profile360`, `relationship360` | — |
 | [Execution 360](#execution-360) | source_aligned | `agent`, `entity`, `episode`, `execution` | 11 | 11/11 | 5 | 0 | 0 | `execution360` | — |
 | [Identity 360](#identity-360) | source_aligned | `entity`, `agent`, `source` | 10 | 10/10 | 1 | 0 | 3 | `agent360`, `execution360`, `profile360`, `relationship360` | `Identity360Provider` (runtime_wired) |
 | [Journey 360](#journey-360) | source_aligned | `journey`, `profile`, `account`, `campaign`, `episode`, `entity` | 11 | 6/11 | 3 | 5 | 2 | `episode360`, `profile360` | — |
 | [Location 360](#location-360) | source_aligned | `location`, `place`, `geohash`, `timezone`, `region`, `entity`, `population`, `source` | 11 | 5/11 | 2 | 6 | 4 | `geographic360`, `population360`, `profile360` | — |
-| [Memory 360](#memory-360) | source_aligned | `entity`, `semantic_entity`, `memory`, `card`, `topic` | 10 | 7/10 | 1 | 3 | 0 | `memory360` | — |
+| [Memory 360](#memory-360) | source_aligned | `entity`, `semantic_entity`, `memory`, `card`, `topic` | 10 | 8/10 | 2 | 2 | 0 | `memory360` | — |
 | [Profile 360](#profile-360) | source_aligned | `profile`, `entity`, `agent`, `anonymous_subject`, `account_member`, `cluster` | 13 | 11/13 | 7 | 2 | 6 | `economic360`, `outcome360`, `profile360`, `geographic360`, `relationship360`, `risk360` | — |
 | [Risk 360](#risk-360) | source_aligned | `risk`, `entity`, `profile`, `agent`, `account`, `source`, `campaign`, `contagion_path`, `relationship`, `cluster` | 12 | 6/12 | 2 | 6 | 6 | `economic360`, `execution360`, `fraud360`, `relationship360`, `risk360`, `social360` | — |
 | [Signals 360](#signals-360) | source_aligned | `entity`, `signal`, `source`, `event`, `observation`, `stream` | 10 | 6/10 | 3 | 4 | 0 | `signals360` | — |
@@ -189,7 +189,7 @@ Governed view of canonical campaign identity, source classification, signals, to
 | `evidence_trace` | required |  | `attribution_credits`, `campaign_facts`, `campaign_touchpoints`, `journeys`, `touchpoints` | `campaign360` (primary): subjects `campaign`; `evidence` | — | — | Source evidence references supporting the campaign frame and its claims. |
 | `journeys` | required |  | `journeys` | `campaign360` (primary): subjects `campaign`; `evidence`, `state` | — | — | Current journey versions that explicitly reference this canonical campaign. |
 | `performance` | required |  | `commerce`, `economic_facts`, `outcome_facts`, `payments` | `economic360` (primary): subjects `campaign`; `summary`, `evidence`, `outcomes` | — | — | Observed economic and outcome performance facts for the campaign. |
-| `signal_sources` | required |  | `events`, `observations`, `source_facts` | — | — | Unbound: `No campaign-scoped signal-source authority is connected to this surface.` | Tenant-scoped signal and source observations associated with the campaign. |
+| `signal_sources` | required |  | `events`, `observations`, `source_facts` | `campaign360` (primary): subjects `campaign`; `state` | — | Authority: `Canonical observations and source facts are not joined to the exact touchpoint-linked campaign event rows.`; Partial: `Exact campaign touchpoint event references are joined to tenant-scoped canonical events; broader observation and source-fact authorities, complete event coverage, and a freshness SLA remain unresolved.` | Tenant-scoped signal and source observations associated with the campaign. |
 | `source_classification` | required |  | `campaign_touchpoints`, `source_facts`, `source_provenance` | `campaign360` (primary): subjects `campaign`; `state`, `evidence` | — | Authority: `Touchpoint classification revisions do not classify the campaign registry source or every asserting source.`; Partial: `Only classified tenant campaign touchpoints on the requested page are joined; campaign registry provenance remains unknown.` | Canonical classification of the source that asserted or synchronized campaign evidence. |
 | `touchpoints` | required |  | `campaign_touchpoints`, `communication_facts`, `touchpoints` | `campaign360` (primary): subjects `campaign`; `evidence`, `state`; `communication360` (supporting): subjects `campaign`; `timeline`, `interactions`, `evidence` | — | — | Campaign touchpoints with linked, policy-governed communication evidence. |
 
@@ -350,7 +350,7 @@ Governed time-bounded view of related events and journey activity, with entity c
 | `participants` | required |  | `episode_facts` | `episode360` (primary): subjects `episode`; `interactions`, `episode_context` | — | — | Primary user or agent subject reference only; full participant resolution is pending. |
 | `risk_flags` | required |  | `risk_outputs` | — | — | Unbound: `episode_risk_authority_not_joined` | Required episode360 slot: risk flags. |
 | `sessions` | required |  | `episode_facts` | `episode360` (primary): subjects `episode`; `episode_context` | — | — | Primary session reference only; session inventory is pending. |
-| `timeline` | required |  | `episode_facts`, `temporal` | `episode360` (primary): subjects `episode`; `timeline` | — | — | Episode observation IDs and bounded temporal context; observation rows remain unjoined. |
+| `timeline` | required |  | `episode_facts`, `temporal`, `silver_semantic_observations`, `evidence` | `episode360` (primary): subjects `episode`; `timeline` | — | Partial: `Only observation IDs explicitly recorded by episodes are resolved; source namespaces are untyped, broader activity and session completeness is unavailable, and freshness and policy remain unknown.` | Episode observation IDs joined to active tenant-scoped semantic Silver rows with bounded temporal context. |
 | `touchpoints` | required |  | `campaign_touchpoints` | — | — | Unbound: `episode_record_has_no_typed_touchpoint_references` | Required episode360 slot: touchpoints. |
 
 ### Projection provider bindings
@@ -371,7 +371,7 @@ Governed time-bounded view of related events and journey activity, with entity c
 
 ### Authority and governance contract
 
-Canonical authorities: `agent_executions`, `attribution_credits`, `campaign_facts`, `campaign_touchpoints`, `communication_facts`, `episode_facts`, `evidence`, `graph`, `identity`, `outcome_facts`, `relationship_facts`, `risk_outputs`, `temporal`.
+Canonical authorities: `agent_executions`, `attribution_credits`, `campaign_facts`, `campaign_touchpoints`, `communication_facts`, `episode_facts`, `evidence`, `graph`, `identity`, `outcome_facts`, `relationship_facts`, `risk_outputs`, `silver_semantic_observations`, `temporal`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -625,7 +625,7 @@ Governed temporal and evidentiary view of entity and agent history, episodes, an
 | `embeddings_meta` | required |  | `semantic_memory_graph` | — | — | Unbound: `canonical_embedding_metadata_authority_not_available` | Required memory360 slot: embeddings meta. |
 | `evidence_trace` | required |  | `semantic_memory_graph`, `evidence` | `memory360` (primary): subjects `entity`, `semantic_entity`; `evidence_trace` | — | — | Gold and active Silver semantic record lineage. |
 | `memories` | required |  | `semantic_memory_graph`, `semantic_memory_records`, `silver_semantic_observations`, `consent_policy_decisions` | `memory360` (primary): subjects `entity`, `semantic_entity`; `memories` | — | Partial: `Only explicit stored memories with exact source and historical consent-decision evidence are read; no automatic memory producer or configured freshness SLA is available.` | Required memory360 slot: memories. |
-| `policy_state` | required |  | `semantic_memory_graph` | — | — | Unbound: `semantic_memory_policy_state_authority_not_connected` | Required memory360 slot: policy state. |
+| `policy_state` | required |  | `semantic_memory_records`, `consent_policy_decisions`, `evidence` | `memory360` (primary): subjects `entity`, `semantic_entity`; `policy_state` | — | Partial: `Exact tenant and subject historical allow decisions are rendered with timestamped canonical consent-policy evidence. Current consent and policy are not evaluated, so present authorization remains unknown.` | Required memory360 slot: policy state. |
 | `semantic_summary` | required |  | `semantic_memory_graph` | `memory360` (primary): subjects `entity`, `semantic_entity`; `semantic_summary` | — | — | Current Gold semantic entity state with explicit scope and provenance. |
 | `source_links` | required |  | `semantic_memory_graph`, `source_provenance` | `memory360` (primary): subjects `entity`, `semantic_entity`; `source_links` | — | — | Exact tenant scoped semantic observation source event references. |
 | `topics` | required |  | `semantic_memory_graph` | `memory360` (primary): subjects `entity`, `semantic_entity`; `topics` | — | — | Derived reducer topic labels with inferred epistemic state. |

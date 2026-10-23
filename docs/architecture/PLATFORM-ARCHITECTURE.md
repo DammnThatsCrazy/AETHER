@@ -655,6 +655,16 @@ stage, normalization, device/session inventory, risk-signal
 production/freshness, propagation completeness, or the episode message-spine
 join is unavailable. They do not change the affected technical providers'
 `in_flight` status or establish complete product-surface conformance.
+The 2026-10-23 backend wave adds three more exact authority joins: Episode360
+`timeline` resolves only observation IDs recorded on an episode against
+tenant-scoped semantic Silver rows; Campaign360 `signal_sources` joins exact
+touchpoint event IDs to tenant-scoped canonical events; and Memory360
+`policy_state` exposes historical write-time allow decisions with timestamped
+consent-policy evidence. Episode activity/session completeness and observation
+policy/freshness remain unresolved; Campaign360 observation and source-fact
+dimensions, event coverage, and freshness remain unknown; Memory360 current
+consent and policy remain unevaluated. These are partial slot implementations,
+not completed 360 surfaces.
 Exploration surfaces compose over the engine through projection-backed surface adapters
 
 (`services/api/journeys/exploration/adapters/projection.py`).

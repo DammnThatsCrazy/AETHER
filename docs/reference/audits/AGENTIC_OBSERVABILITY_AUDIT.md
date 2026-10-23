@@ -11,7 +11,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:86508b55b336633a159d5d1607b66f6fe1f255d522a78bbb30e3e974a2bb4b85"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:6bb2b789c38b2a45b06bfea7367c9051e2a492f9f688da80625f8635a7e95898"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:540f85292689337edc329c9b72b7c4f99487226a5e31aab6526c878e7ea36eeb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -88,7 +88,7 @@ The historical gap matrices below retain their original audit date and should
 not be read as a current inventory without this addendum and the linked
 source-of-truth documents.
 
-## 360 provider addendum (2026-10-22)
+## 360 provider addendum (2026-10-23)
 
 The backend mounts `POST /v1/experience360/frames` and
 `GET /v1/experience360/catalog` for the exact 18-surface backend contract in
@@ -164,6 +164,21 @@ conformance. Unknown, missing, and degraded states are preserved. Complete
 episode-to-payment references, complete source evidence, policy and freshness
 behavior, and surface-level golden coverage remain follow-on work across the
 18 surfaces; none is claimed by the mounted route or catalog.
+
+The 2026-10-23 provider wave adds three bounded joins without closing their
+product surfaces. Episode360 `timeline` resolves only observation IDs persisted
+on the tenant's episode records to exact, active semantic Silver observation
+rows and preserves evidence; broader activity/session inventory, source
+namespace typing, policy disposition, and freshness remain unknown.
+Campaign360 `signal_sources` resolves only exact canonical event IDs referenced
+by campaign touchpoints. It returns limited event metadata with touchpoint and
+event evidence; it does not infer campaign membership from labels or event
+properties, and the observation/source-fact dimensions, complete event coverage,
+and freshness remain unknown. Memory360 `policy_state` renders exact
+tenant-and-subject historical allow decisions with timestamped consent-policy
+evidence; this records the decision made at memory write time and does not
+evaluate current consent or policy. These joins are partial slot capabilities,
+not surface completion or authority to execute actions.
 
 ## Bucket 1 — Correctly observation-only
 

@@ -7,6 +7,16 @@
 
 This document replaces the prior broad 360 architecture blueprint as the implementation authority for backend work. It defines the contracts, module layout, registry, services, migrations, risk/contagion subsystem, API handlers, tests, rollout order, and acceptance gates needed to build the entire 360 system inside the repo.
 
+## Repository implementation status (2026-10-23)
+
+This specification remains the acceptance contract for the complete 18-surface backend buildout. The repository currently has additional partial provider paths for three required slots:
+
+- **Episode360 `timeline`:** resolves only observation IDs explicitly recorded by an episode through tenant-scoped semantic Silver rows. Untyped source namespaces, complete activity/session coverage, policy, and freshness remain unresolved.
+- **Campaign360 `signal_sources`:** joins exact campaign touchpoint event references to tenant-scoped canonical events. Broader observation and source-fact authorities, complete event coverage, and freshness remain unresolved.
+- **Memory360 `policy_state`:** exposes exact historical write-time allow decisions with timestamped consent-policy evidence. Current consent and policy evaluation remain unknown.
+
+The product registry records these slots as partial. None of these changes marks its surface complete or reduces the remaining requirements in this specification.
+
 ## 0. Decision
 
 Build the 360 system as a backend read-model layer over canonical Aether graph, identity, signal, journey, communication, value, risk, and agentic systems.

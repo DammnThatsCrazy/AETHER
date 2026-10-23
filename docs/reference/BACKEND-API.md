@@ -1985,6 +1985,17 @@ facts carrying the exact episode ID; the complete message spine and conversation
 membership are not joined. These additions remain partial provider paths and do
 not complete their respective 360 surfaces.
 
+The 2026-10-23 provider wave adds Episode360 `timeline` resolution for exact
+episode-recorded observation IDs against tenant-scoped active semantic Silver
+rows, Campaign360 `signal_sources` joins from exact touchpoint references to
+tenant-scoped canonical event metadata, and Memory360 `policy_state` evidence
+for historical write-time allow decisions. The joins preserve evidence and
+unknown or partial states. Episode source-namespace typing, full activity and
+session coverage, and policy/freshness remain unresolved; Campaign360
+observation and source-fact dimensions, event completeness, and freshness remain
+unknown; Memory360 does not evaluate current consent or policy. These provider
+changes add no HTTP routes and do not complete any surface.
+
 ### Support case lifecycle evidence ingress
 
 `POST /v1/support/cases/ingest` accepts one allow-listed lifecycle event under

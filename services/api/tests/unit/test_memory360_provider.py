@@ -17,12 +17,14 @@ if str(BACKEND_ROOT) not in sys.path:
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
+from graph.operational_intelligence.models import EvidenceRef  # noqa: E402
 from intelligence.semantic_intelligence.memory360_provider import (  # noqa: E402
     Memory360Provider,
     RepositorySemanticMemoryReader,
     SemanticMemoryRead,
 )
 from intelligence.semantic_intelligence.memory_records import (  # noqa: E402
+    ResolvedMemoryRecord,
     SemanticMemoryRecord,
     SemanticMemoryRecordRepository,
 )
@@ -341,8 +343,9 @@ async def test_unjoined_consent_and_vector_hints_do_not_claim_memory_authority()
     Silver semantic observations carry source context, and the shared semantic
     envelope can carry a vector pointer. Neither record establishes a typed
     durable memory/card record or embedding metadata row. The projection must
-    keep card, embedding, and current policy slots unknown, and report the
-    memory authority as empty when its tenant/subject query finds no records.
+    keep card and embedding slots unknown, mark current policy unevaluated, and
+    report the memory authority as empty when its tenant/subject query finds no
+    records.
     """
     gold_repo = FakeFactRepository(
         [
@@ -375,11 +378,23 @@ async def test_unjoined_consent_and_vector_hints_do_not_claim_memory_authority()
     sections = _sections(result)
     assert sections["memories"].state == "empty"
     assert sections["memories"].content["evidenceRefs"] == []
-    for slot_id in ("cards", "embeddings_meta", "policy_state"):
+    for slot_id in ("cards", "embeddings_meta"):
         assert sections[slot_id].state == "unknown"
         assert sections[slot_id].content["state"] == "unknown"
         assert sections[slot_id].content["coverage"] == "unknown"
         assert sections[slot_id].content["evidenceRefs"] == []
+    policy_state = sections["policy_state"]
+    assert policy_state.state == "degraded"
+    assert policy_state.canonicalAuthorityRefs == [
+        "semantic_memory_records",
+        "consent_policy_decisions",
+        "evidence",
+    ]
+    assert policy_state.content["currentConsentState"] == "unknown"
+    assert policy_state.content["currentPolicyState"] == "not_evaluated"
+    assert policy_state.content["historicalDecisionCoverage"] == "complete"
+    assert policy_state.content["historicalDecisionCount"] == 0
+    assert policy_state.content["evidenceRefs"] == []
     assert sections["memories"].content["reason"] == (
         "no_canonical_semantic_memory_records_for_exact_subject"
     )
@@ -387,8 +402,8 @@ async def test_unjoined_consent_and_vector_hints_do_not_claim_memory_authority()
     assert sections["embeddings_meta"].content["reason"] == (
         "no_canonical_embedding_metadata_authority"
     )
-    assert sections["policy_state"].content["reason"] == (
-        "historical_consent_and_policy_evaluation_authority_not_joined"
+    assert policy_state.content["reason"] == (
+        "no_historical_memory_policy_decisions_current_policy_not_evaluated"
     )
     serialized = json.dumps(result.model_dump(mode="json"))
     for unjoined_hint in (
@@ -464,7 +479,43 @@ async def test_exact_memory_record_path_projects_only_policy_and_evidence_joined
         "cpd-memory-0001",
     }
     assert all(ref["observedAt"] for ref in item["evidenceRefs"])
-    assert sections["policy_state"].state == "unknown"
+    policy_state = sections["policy_state"]
+    assert policy_state.state == "degraded"
+    assert policy_state.content["coverage"] == "partial"
+    assert policy_state.content["reason"] == (
+        "historical_write_policy_decision_coverage_partial_current_policy_not_evaluated"
+    )
+    assert policy_state.content["evaluation"] == (
+        "historical_write_decisions_only_current_policy_not_evaluated"
+    )
+    assert policy_state.content["currentConsentState"] == "unknown"
+    assert policy_state.content["currentPolicyState"] == "not_evaluated"
+    assert policy_state.content["historicalDecisionCoverage"] == "partial"
+    assert policy_state.content["historicalDecisionCount"] == 1
+    assert policy_state.content["historicalDecisions"] == [
+        {
+            "memoryId": "mem-record-0001",
+            "policyDecisionId": "cpd-memory-0001",
+            "outcomeAtWrite": "allowed",
+            "decidedAt": "2026-10-19T11:59:00+00:00",
+            "evidenceRefs": [
+                {
+                    "id": "cpd-memory-0001",
+                    "type": "annotation",
+                    "source": "governance.consent_policy_decisions",
+                    "observedAt": "2026-10-19T11:59:00+00:00",
+                    "confidence": None,
+                    "uri": (
+                        "store://consent_policy_decisions/"
+                        "tenant-memory360:cpd-memory-0001"
+                    ),
+                }
+            ],
+        }
+    ]
+    assert policy_state.content["evidenceRefs"] == policy_state.content[
+        "historicalDecisions"
+    ][0]["evidenceRefs"]
     assert sections["cards"].state == "unknown"
     assert sections["embeddings_meta"].state == "unknown"
     assert policy_repo.calls == [
@@ -481,6 +532,43 @@ async def test_exact_memory_record_path_projects_only_policy_and_evidence_joined
         "semantic-observation-memory-1",
         "cpd-memory-0001",
     }
+
+
+async def test_memory360_policy_slot_rejects_cross_tenant_memory_evidence() -> None:
+    foreign_record = SemanticMemoryRecord.model_validate(
+        _memory_record(tenant_id="tenant-other")
+    )
+    foreign_decision = EvidenceRef(
+        id="cpd-memory-0001",
+        type="annotation",
+        source="governance.consent_policy_decisions",
+        observedAt="2026-10-19T11:59:00+00:00",
+        uri=(
+            "store://consent_policy_decisions/"
+            "tenant-other:cpd-memory-0001"
+        ),
+    )
+    read = SemanticMemoryRead(
+        memories=(
+            ResolvedMemoryRecord(
+                record=foreign_record,
+                evidence_refs=(foreign_decision,),
+                policy_outcome="historical_allow",
+            ),
+        ),
+        memories_state="available",
+        memories_complete=True,
+    )
+
+    result = await Memory360Provider(reader=FakeReader(read)).project(_request(), _context())
+
+    sections = _sections(result)
+    assert sections["memories"].state == "degraded"
+    assert sections["memories"].content["items"] == []
+    assert sections["policy_state"].content["historicalDecisions"] == []
+    assert sections["policy_state"].content["evidenceRefs"] == []
+    assert sections["policy_state"].content["historicalDecisionCoverage"] == "partial"
+    assert "tenant-other" not in json.dumps(sections["policy_state"].content)
 
 
 async def test_memory_record_creation_refuses_non_exact_or_denied_policy_decision() -> None:

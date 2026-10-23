@@ -1,12 +1,13 @@
 """episode360 intelligence-projection provider (WS-D item 2 surface).
 
 Projects durable :class:`~shared.backend_interpretation.primitives.EpisodeRecord`
-rows into the seven ``episode360`` registry output sections (``evidence``,
+rows into the ``episode360`` registry output sections (``evidence``,
 ``episode_context``, ``interactions``, ``outcomes``, ``state``, ``summary``,
 ``timeline``). A 360 is
 an intelligence projection over canonical truth — never a competing system of
-record — so the provider is ``read_only`` and every claim stays grounded in the
-episode's own :class:`EvidenceRef` lineage.
+record — so the provider is ``read_only``. Episode observation IDs are resolved
+only through exact tenant-scoped canonical Silver lookups, and those joins remain
+partial because the semantic table is not the complete activity inventory.
 
 Registry row ``episode360`` is ``in_flight`` (``implementationBlueprint:
 docs/blueprints/episode360.md``); this provider is the WS-D read surface that
@@ -69,12 +70,14 @@ _JOURNEY_CONVERSION_SOURCE = (
     "services/api/journeys/measurement/repositories/conversion_repo.py:canonical_conversions"
 )
 _EPISODE_RECORD_SOURCE = "shared.backend_interpretation.stores.EpisodeStore"
+_EPISODE_OBSERVATION_SOURCE = "semantic_intelligence.silver_semantic_observations"
 _JOURNEY_STEP_CAP = 200
 _JOURNEY_TOUCHPOINT_CAP = 200
 _JOURNEY_CONVERSION_CAP = 100
 _JOURNEY_TOUCHPOINT_READ_CONCURRENCY = 8
 _EPISODE_PAGE_DEFAULT = 50
 _EPISODE_SUBJECT_RELATIONSHIP_CAP = 100
+_EPISODE_OBSERVATION_CAP = 200
 _GRAPH_LEDGER_SOURCE = "graph_mutation_ledger"
 _JOURNEY_REQUIRED_SLOT_IDS = (
     "journey_summary",
@@ -147,6 +150,65 @@ class Episode360Read:
             or self.tenant_mismatch
             or self.read_failed
         )
+
+
+@dataclass(frozen=True)
+class EpisodeObservationRead:
+    """Exact tenant-bound reads for observation IDs recorded by episodes."""
+
+    requested_ids: tuple[str, ...] = ()
+    rows: tuple[dict[str, Any], ...] = ()
+    evidence_refs: tuple[EvidenceRef, ...] = ()
+    available: bool = True
+    truncated: bool = False
+    invalid_records: bool = False
+    tenant_mismatch: bool = False
+    inactive_records: bool = False
+    timestamps_missing: bool = False
+    missing_ids: tuple[str, ...] = ()
+    read_failed: bool = False
+
+    @property
+    def complete(self) -> bool:
+        return not (
+            not self.available
+            or self.truncated
+            or self.invalid_records
+            or self.tenant_mismatch
+            or self.inactive_records
+            or self.timestamps_missing
+            or self.missing_ids
+            or self.read_failed
+        )
+
+
+class EpisodeObservationSource(Protocol):
+    """Canonical exact-ID lookup for semantic Silver observation rows."""
+
+    async def find_by_ids(
+        self, tenant_id: str, observation_ids: list[str]
+    ) -> list[dict[str, Any]]: ...
+
+
+class RepositoryEpisodeObservationSource:
+    """Adapter over the canonical tenant-keyed semantic Silver authority."""
+
+    def __init__(self, *, repository: Any = None) -> None:
+        self._repository = repository
+
+    def _observation_repository(self) -> Any:
+        if self._repository is None:
+            from intelligence.semantic_intelligence.repositories.base_fact_repo import (
+                SemanticFactRepository,
+            )
+
+            self._repository = SemanticFactRepository("silver_semantic_observations")
+        return self._repository
+
+    async def find_by_ids(
+        self, tenant_id: str, observation_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        return await self._observation_repository().find_by_ids(tenant_id, observation_ids)
 
 
 @dataclass(frozen=True)
@@ -311,13 +373,16 @@ class Episode360Provider:
         touchpoint_source: Optional[JourneyTouchpointSource] = None,
         conversion_source: Optional[JourneyConversionSource] = None,
         subject_relationship_reader: Optional[EpisodeSubjectRelationshipReader] = None,
+        observation_source: Optional[EpisodeObservationSource] = None,
     ) -> None:
         """``episode_store`` may be injected (tests); defaults to the durable
-        :class:`EpisodeStore` (WS-D item 2)."""
+        :class:`EpisodeStore` (WS-D item 2). Observation rows default to the
+        tenant-keyed semantic Silver authority and may also be injected."""
         self._episode_store = episode_store
         self._journey_source = journey_source
         self._touchpoint_source = touchpoint_source
         self._conversion_source = conversion_source
+        self._observation_source = observation_source
         self._subject_relationship_reader = (
             subject_relationship_reader
             if subject_relationship_reader is not None
@@ -381,6 +446,114 @@ class Episode360Provider:
             invalid_records=page.invalid_records,
             tenant_mismatch=tenant_mismatch,
             next_cursor=page.next_cursor,
+        )
+
+    async def _load_episode_observations(
+        self, tenant_id: str, episodes: list[EpisodeRecord]
+    ) -> EpisodeObservationRead:
+        """Resolve only observation IDs explicitly recorded by these episodes.
+
+        The association is taken from the canonical EpisodeRecord and each fact
+        is read with the authenticated tenant plus its exact observation ID.
+        The semantic Silver table is one observation authority, so even a full
+        match remains partial coverage of the broader episode event inventory.
+        """
+        requested_ids = _journey_ordered_values(
+            [observation_id for episode in episodes for observation_id in episode.observation_ids]
+        )
+        truncated = len(requested_ids) > _EPISODE_OBSERVATION_CAP
+        bounded_ids = requested_ids[:_EPISODE_OBSERVATION_CAP]
+        if not bounded_ids:
+            return EpisodeObservationRead(
+                requested_ids=tuple(requested_ids),
+                available=True,
+                truncated=truncated,
+            )
+
+        source = self._observation_source or RepositoryEpisodeObservationSource()
+        try:
+            raw_rows = await source.find_by_ids(tenant_id, bounded_ids)
+        except Exception:  # noqa: BLE001 - source observation authority stays isolated
+            return EpisodeObservationRead(
+                requested_ids=tuple(requested_ids),
+                available=False,
+                truncated=truncated,
+                missing_ids=tuple(bounded_ids),
+                read_failed=True,
+            )
+        if not isinstance(raw_rows, list):
+            return EpisodeObservationRead(
+                requested_ids=tuple(requested_ids),
+                available=False,
+                truncated=truncated,
+                missing_ids=tuple(bounded_ids),
+                invalid_records=True,
+            )
+
+        requested_set = set(bounded_ids)
+        rows_by_id: dict[str, dict[str, Any]] = {}
+        seen_ids: set[str] = set()
+        invalid_ids: set[str] = set()
+        tenant_mismatch = False
+        inactive_records = False
+        timestamps_missing = False
+        for value in raw_rows:
+            row = _as_mapping(value)
+            if row is None:
+                invalid_ids.add("")
+                continue
+            record_id = _journey_text(row.get("record_id"))
+            observation_id = _journey_text(row.get("observation_id"))
+            if row.get("tenant_id") != tenant_id:
+                tenant_mismatch = True
+                if record_id in requested_set:
+                    invalid_ids.add(record_id)
+                continue
+            if (
+                record_id is None
+                or observation_id is None
+                or record_id != observation_id
+                or record_id not in requested_set
+            ):
+                invalid_ids.add(record_id or observation_id or "")
+                continue
+            if record_id in seen_ids:
+                invalid_ids.add(record_id)
+                rows_by_id.pop(record_id, None)
+                continue
+            seen_ids.add(record_id)
+            status = _journey_text(row.get("status"))
+            if status not in {"classified", "partial"}:
+                inactive_records = True
+                continue
+            rows_by_id[record_id] = row
+            if (
+                _journey_timestamp(row.get("processed_at"))
+                or _journey_timestamp(row.get("occurred_at"))
+            ) is None:
+                timestamps_missing = True
+
+        for invalid_id in invalid_ids:
+            if invalid_id in rows_by_id:
+                rows_by_id.pop(invalid_id, None)
+        missing_ids = [value for value in bounded_ids if value not in rows_by_id]
+        ordered_rows = [rows_by_id[value] for value in bounded_ids if value in rows_by_id]
+        evidence_refs = [
+            ref
+            for row in ordered_rows
+            if (ref := _episode_observation_ref(tenant_id, row)) is not None
+        ]
+        return EpisodeObservationRead(
+            requested_ids=tuple(requested_ids),
+            rows=tuple(ordered_rows),
+            evidence_refs=tuple(evidence_refs),
+            available=True,
+            truncated=truncated,
+            invalid_records=bool(invalid_ids),
+            tenant_mismatch=tenant_mismatch,
+            inactive_records=inactive_records,
+            timestamps_missing=timestamps_missing,
+            missing_ids=tuple(missing_ids),
         )
 
     async def _load_journey_touchpoints(
@@ -545,6 +718,7 @@ class Episode360Provider:
             return await self._project_journey(request, context)
         read = await self._load_episodes(request)
         episodes = list(read.episodes)
+        observation_read = await self._load_episode_observations(request.tenantId, episodes)
         warnings: list[str] = []
         if read.truncated:
             warnings.append("episode_page_truncated")
@@ -554,6 +728,20 @@ class Episode360Provider:
             warnings.append("episode_page_tenant_mismatch")
         if read.read_failed:
             warnings.append("episode_store_read_unavailable")
+        if observation_read.read_failed:
+            warnings.append("episode_observation_authority_unavailable")
+        if observation_read.truncated:
+            warnings.append("episode_observation_read_truncated")
+        if observation_read.invalid_records:
+            warnings.append("episode_observation_rows_invalid_or_ambiguous")
+        if observation_read.tenant_mismatch:
+            warnings.append("episode_observation_tenant_mismatch")
+        if observation_read.inactive_records:
+            warnings.append("episode_observation_non_active_rows_omitted")
+        if observation_read.timestamps_missing:
+            warnings.append("episode_observation_timestamps_missing_or_invalid")
+        if observation_read.missing_ids:
+            warnings.append("episode_observation_references_unresolved")
         if not read.available:
             availability = "missing"
         elif not read.complete:
@@ -606,6 +794,7 @@ class Episode360Provider:
             availability,
             warnings,
             subject_relationship_context=subject_relationship_context,
+            observation_read=observation_read,
         )
         section_by_id = {section.id: section for section in sections}
         sections = [section_by_id[section_id] for section_id in _EPISODE360_SECTIONS]
@@ -1007,11 +1196,15 @@ class Episode360Provider:
         warnings: Optional[list[str]] = None,
         *,
         subject_relationship_context: Optional[dict[str, Any]] = None,
+        observation_read: Optional[EpisodeObservationRead] = None,
     ) -> list[ProjectionSection]:
         complete = availability in {"available", "empty"}
+        observation_read = observation_read or EpisodeObservationRead(available=False)
         by_kind = _kind_counts(episodes)
         by_status = _status_distribution(episodes)
-        evidence = _collect_evidence(episodes)
+        episode_evidence = _collect_evidence(episodes)
+        evidence = _dedupe_evidence_refs(episode_evidence + list(observation_read.evidence_refs))
+        evidence_complete = complete and observation_read.complete
         interaction_count = sum(len(e.observation_ids) for e in episodes)
         outcome_count = sum(len(e.outcome_ids) for e in episodes)
         open_count = by_status.get("open", 0)
@@ -1022,19 +1215,53 @@ class Episode360Provider:
         )
         evidence_content: dict[str, Any] = {
             "evidence": [ref.model_dump() for ref in evidence],
-            "evidenceCount": len(evidence) if complete else None,
+            "evidenceCount": len(evidence) if evidence_complete else None,
             "observedEvidenceCount": len(evidence),
-            "coverage": "complete" if complete else availability,
+            "coverage": "complete_for_recorded_references" if evidence_complete else "partial",
             "evidenceTrace": {
-                "state": "available" if evidence else "unknown",
-                "coverage": "partial" if evidence else "unknown",
+                "state": (
+                    "available"
+                    if evidence and evidence_complete
+                    else "degraded"
+                    if evidence
+                    else "unknown"
+                ),
+                "coverage": "complete_for_recorded_references"
+                if evidence_complete
+                else "partial"
+                if evidence
+                else "unknown",
                 "evidenceRefs": [ref.model_dump() for ref in evidence],
                 "sourceProvenanceState": "partial" if episodes else "unknown",
                 "reason": (
-                    "episode_record_and_lineage_refs_available_source_event_provenance_unjoined"
+                    _episode_observation_read_reason(observation_read)
+                    if episodes and not observation_read.complete
+                    else "episode_and_exact_tenant_observation_refs_joined_broader_source_provenance_unresolved"
                     if episodes
                     else "episode_evidence_unavailable"
                 ),
+            },
+            "observationReferences": {
+                "state": _episode_observation_read_state(observation_read),
+                "coverage": "recorded_episode_ids_only",
+                "requestedCount": len(observation_read.requested_ids),
+                "resolvedCount": len(observation_read.rows),
+                "observations": [
+                    _episode_observation_view(request.tenantId, row)
+                    for row in observation_read.rows
+                ],
+                "evidenceRefs": [ref.model_dump() for ref in observation_read.evidence_refs],
+                "reason": _episode_observation_read_reason(observation_read),
+                "freshness": {
+                    "state": "unknown",
+                    "evaluation": "not_performed",
+                    "reason": "semantic_observation_source_watermark_not_available",
+                },
+                "policy": {
+                    "state": "unknown",
+                    "evaluation": "not_performed",
+                    "reason": "observation_policy_disposition_not_evaluated_by_episode_projection",
+                },
             },
             "episodeSubjects": [
                 {
@@ -1118,6 +1345,7 @@ class Episode360Provider:
                             episodes,
                             availability=availability,
                             evidence_refs=evidence,
+                            observation_read=observation_read,
                         )
                         if request.subject.kind == "episode"
                         else None
@@ -1135,7 +1363,14 @@ class Episode360Provider:
                     "provenance": {
                         "state": "partial" if episodes else "unknown",
                         "authority": _EPISODE_RECORD_SOURCE,
-                        "reason": "episode_source_event_and_lens_provenance_not_joined",
+                        "joinedAuthorities": [_EPISODE_RECORD_SOURCE, _EPISODE_OBSERVATION_SOURCE],
+                        "reason": (
+                            _episode_observation_read_reason(observation_read)
+                            if episodes and not observation_read.complete
+                            else "semantic_observation_refs_joined; broader_activity_and_lens_provenance_unresolved"
+                            if episodes
+                            else "episode_source_unavailable"
+                        ),
                     },
                     "coverage": "complete" if complete else availability,
                 },
@@ -1189,15 +1424,32 @@ class Episode360Provider:
                 content={
                     "interactionCount": interaction_count if complete else None,
                     "observedInteractionCount": interaction_count,
+                    "resolvedObservationCount": len(observation_read.rows),
                     "observationIds": _flatten(e.observation_ids for e in episodes),
                     "observationReferences": {
-                        "state": "degraded" if episodes and interaction_count else "empty"
-                        if complete
-                        else "unknown",
-                        "coverage": "partial" if interaction_count else "unknown",
+                        "state": _episode_observation_read_state(observation_read),
+                        "coverage": "recorded_episode_ids_only",
+                        "requestedCount": len(observation_read.requested_ids),
+                        "resolvedCount": len(observation_read.rows),
                         "observationIds": _flatten(e.observation_ids for e in episodes),
-                        "evidenceRefs": [ref.model_dump() for ref in evidence],
-                        "reason": "episode_record_has_observation_ids_but_observation_rows_not_joined",
+                        "observations": [
+                            _episode_observation_view(request.tenantId, row)
+                            for row in observation_read.rows
+                        ],
+                        "evidenceRefs": [
+                            ref.model_dump() for ref in observation_read.evidence_refs
+                        ],
+                        "reason": _episode_observation_read_reason(observation_read),
+                        "freshness": {
+                            "state": "unknown",
+                            "evaluation": "not_performed",
+                            "reason": "semantic_observation_source_watermark_not_available",
+                        },
+                        "policy": {
+                            "state": "unknown",
+                            "evaluation": "not_performed",
+                            "reason": "observation_policy_disposition_not_evaluated_by_episode_projection",
+                        },
                     },
                     "sessionContext": _episode_session_context(request, episodes),
                     "touchpointContext": {
@@ -1290,8 +1542,15 @@ class Episode360Provider:
                             "observationCount": len(e.observation_ids),
                             "outcomeCount": len(e.outcome_ids),
                             "observationIds": list(e.observation_ids),
+                            "observations": _episode_observation_views_for(
+                                request.tenantId, e, observation_read
+                            ),
                             "evidenceRefs": [
-                                ref.model_dump() for ref in _episode_evidence_refs(e)
+                                ref.model_dump()
+                                for ref in _dedupe_evidence_refs(
+                                    _episode_evidence_refs(e)
+                                    + _episode_observation_refs_for(e, observation_read)
+                                )
                             ],
                         }
                         for e in sorted(
@@ -1299,6 +1558,36 @@ class Episode360Provider:
                             key=lambda e: e.occurred_from or e.created_at or "",
                         )
                     ],
+                    "observationTimeline": sorted(
+                        [
+                            _episode_observation_view(request.tenantId, row)
+                            for row in observation_read.rows
+                        ],
+                        key=lambda row: (
+                            row.get("occurredAt") or "9999-12-31T23:59:59+00:00",
+                            row["observationId"],
+                        ),
+                    ),
+                    "observationCoverage": {
+                        "state": _episode_observation_read_state(observation_read),
+                        "coverage": "recorded_episode_ids_only",
+                        "requestedCount": len(observation_read.requested_ids),
+                        "resolvedCount": len(observation_read.rows),
+                        "evidenceRefs": [
+                            ref.model_dump() for ref in observation_read.evidence_refs
+                        ],
+                        "reason": _episode_observation_read_reason(observation_read),
+                        "freshness": {
+                            "state": "unknown",
+                            "evaluation": "not_performed",
+                            "reason": "semantic_observation_source_watermark_not_available",
+                        },
+                        "policy": {
+                            "state": "unknown",
+                            "evaluation": "not_performed",
+                            "reason": "observation_policy_disposition_not_evaluated_by_episode_projection",
+                        },
+                    },
                     "coverage": "partial" if episodes else availability,
                 },
                 warnings=warnings or None,
@@ -2513,6 +2802,103 @@ def _episode_record_ref(episode: EpisodeRecord) -> EvidenceRef:
     )
 
 
+def _episode_observation_ref(
+    tenant_id: str, row: dict[str, Any]
+) -> Optional[EvidenceRef]:
+    observation_id = _journey_text(row.get("observation_id"))
+    if observation_id is None or row.get("tenant_id") != tenant_id:
+        return None
+    return EvidenceRef(
+        id=observation_id,
+        type="event",
+        source=_EPISODE_OBSERVATION_SOURCE,
+        observedAt=(
+            _journey_timestamp(row.get("processed_at"))
+            or _journey_timestamp(row.get("occurred_at"))
+        ),
+        uri=(
+            "store://silver_semantic_observations/"
+            f"{quote(tenant_id, safe='')}:{quote(observation_id, safe='')}"
+        ),
+    )
+
+
+def _episode_observation_view(tenant_id: str, row: dict[str, Any]) -> dict[str, Any]:
+    evidence = _episode_observation_ref(tenant_id, row)
+    return {
+        "observationId": _journey_text(row.get("observation_id")),
+        "sourceType": _journey_text(row.get("source_type")),
+        "occurredAt": _journey_timestamp(row.get("occurred_at")),
+        "recordStatus": _journey_text(row.get("status")),
+        "evidenceRefs": [evidence.model_dump()] if evidence is not None else [],
+    }
+
+
+def _episode_observation_views_for(
+    tenant_id: str, episode: EpisodeRecord, read: EpisodeObservationRead
+) -> list[dict[str, Any]]:
+    rows_by_id = {
+        _journey_text(row.get("observation_id")): row
+        for row in read.rows
+        if _journey_text(row.get("observation_id")) is not None
+    }
+    return [
+        _episode_observation_view(tenant_id, rows_by_id[observation_id])
+        for observation_id in episode.observation_ids
+        if observation_id in rows_by_id
+    ]
+
+
+def _episode_observation_refs_for(
+    episode: EpisodeRecord, read: EpisodeObservationRead
+) -> list[EvidenceRef]:
+    wanted = set(episode.observation_ids)
+    return [
+        ref
+        for ref in read.evidence_refs
+        if ref.id in wanted and ref.source == _EPISODE_OBSERVATION_SOURCE
+    ]
+
+
+def _episode_observation_read_state(read: EpisodeObservationRead) -> str:
+    if not read.requested_ids:
+        return "empty"
+    if read.rows and read.complete:
+        return "available"
+    if read.rows:
+        return "degraded"
+    return "unknown"
+
+
+def _episode_observation_read_reason(read: EpisodeObservationRead) -> str:
+    if not read.requested_ids:
+        return "episode_record_contains_no_observation_references"
+    if read.read_failed or not read.available:
+        return "semantic_observation_authority_unavailable"
+    if read.tenant_mismatch:
+        return "semantic_observation_tenant_scope_mismatch"
+    if read.invalid_records:
+        return "semantic_observation_rows_invalid_or_ambiguous"
+    if read.inactive_records:
+        return "semantic_observation_non_active_rows_omitted"
+    if read.timestamps_missing:
+        return "semantic_observation_timestamps_missing_or_invalid"
+    if read.truncated:
+        return "episode_observation_reference_read_truncated"
+    if read.missing_ids:
+        return "episode_observation_ids_not_found_in_semantic_silver"
+    return "exact_tenant_observation_rows_resolved_recorded_episode_references_only"
+
+
+def _dedupe_evidence_refs(refs: list[EvidenceRef]) -> list[EvidenceRef]:
+    unique: dict[tuple[str, str, str], EvidenceRef] = {}
+    for ref in refs:
+        if not isinstance(ref, EvidenceRef) or not ref.id or not ref.source:
+            continue
+        unique.setdefault((ref.id, ref.type, ref.source), ref)
+    return list(unique.values())
+
+
 def _episode_evidence_refs(episode: EpisodeRecord) -> list[EvidenceRef]:
     unique: dict[tuple[str, str, str], EvidenceRef] = {}
     for ref in [_episode_record_ref(episode), *episode.evidence_refs]:
@@ -2613,6 +2999,7 @@ def _episode_required_slot_coverage(
     *,
     availability: str,
     evidence_refs: list[EvidenceRef],
+    observation_read: EpisodeObservationRead,
 ) -> dict[str, dict[str, Any]]:
     """Expose the SSOT slot status without promoting partial sources to complete."""
     evidence = [ref.model_dump() for ref in evidence_refs]
@@ -2661,8 +3048,13 @@ def _episode_required_slot_coverage(
         "timeline": {
             "state": "degraded",
             "coverage": "partial",
-            "reason": "episode_span_and_observation_ids_loaded_without_observation_rows",
-            "evidenceRefs": subject_evidence,
+            "reason": _episode_observation_read_reason(observation_read),
+            "evidenceRefs": [
+                ref.model_dump()
+                for ref in _dedupe_evidence_refs(
+                    [*evidence_refs, *_episode_observation_refs_for(episode, observation_read)]
+                )
+            ],
         },
         "participants": {
             "state": participant_state,
@@ -2719,8 +3111,15 @@ def _episode_required_slot_coverage(
         "evidence_trace": {
             "state": "degraded",
             "coverage": "partial",
-            "reason": "episode_record_and_lineage_refs_available_source_event_provenance_unjoined",
-            "evidenceRefs": subject_evidence,
+            "reason": (
+                _episode_observation_read_reason(observation_read)
+                if not observation_read.complete
+                else "episode_and_exact_tenant_observation_refs_joined_broader_provenance_unresolved"
+            ),
+            "evidenceRefs": [
+                ref.model_dump()
+                for ref in _dedupe_evidence_refs([*evidence_refs, *observation_read.evidence_refs])
+            ],
         },
     }
 
@@ -2751,11 +3150,14 @@ def _flatten(lists: Any) -> list[str]:
 
 __all__ = [
     "Episode360Provider",
+    "EpisodeObservationRead",
+    "EpisodeObservationSource",
     "EpisodeSubjectGraphRead",
     "EpisodeSubjectRelationshipReader",
     "Journey360Read",
     "Journey360Source",
     "RepositoryEpisodeSubjectRelationshipReader",
+    "RepositoryEpisodeObservationSource",
     "RepositoryJourney360Source",
     "register_provider",
 ]

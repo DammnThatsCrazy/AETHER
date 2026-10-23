@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 from typing import Any, Optional, Protocol
+from urllib.parse import quote
 from uuid import UUID
 
 from graph.operational_intelligence.models import EvidenceRef, PageInfo
@@ -129,6 +130,7 @@ MAX_ATTRIBUTION_CREDITS = 500
 DEFAULT_PAGE_LIMIT = 100
 MAX_ASSOCIATED_CONTEXT_ROWS = 100
 MAX_CAMPAIGN_ANOMALIES = 100
+MAX_CAMPAIGN_SIGNAL_EVENTS = 100
 
 _JOURNEY_SOURCE = (
     "services/api/journeys/measurement/repositories/journey_repo.py:journey_versions"
@@ -222,6 +224,10 @@ class Campaign360Source(Protocol):
     async def campaign_anomalies(
         self, tenant_id: str, campaign_id: str, *, limit: int
     ) -> CampaignAnomalyRead: ...
+
+    async def signal_events(
+        self, tenant_id: str, event_ids: list[str], *, limit: int
+    ) -> RowsRead: ...
 
 
 class RepositoryCampaign360Source:
@@ -400,6 +406,48 @@ class RepositoryCampaign360Source:
             available=True,
             complete=len(rows) < limit,
         )
+
+    async def signal_events(
+        self, tenant_id: str, event_ids: list[str], *, limit: int
+    ) -> RowsRead:
+        """Read exact source events linked from scoped campaign touchpoints.
+
+        This deliberately does not search by campaign name, source label, or
+        event properties. The source event ID comes from a tenant/campaign
+        scoped touchpoint row, and every event lookup is independently scoped
+        to the same tenant.
+        """
+        if not tenant_id:
+            return RowsRead([], available=False, reason="event_tenant_scope_missing")
+        safe_ids = [
+            event_id
+            for event_id in dict.fromkeys(event_ids)
+            if _safe_campaign_source_id(event_id)
+        ][: min(max(limit, 0), MAX_CAMPAIGN_SIGNAL_EVENTS)]
+        if not safe_ids:
+            return RowsRead([], available=True)
+        try:
+            from dependencies.providers import get_cache
+            from repositories.repos import AnalyticsRepository
+
+            analytics = AnalyticsRepository(get_cache())
+            rows: list[dict[str, Any]] = []
+            for event_id in safe_ids:
+                matches = await analytics.query_events(
+                    tenant_id,
+                    {"event_id": event_id},
+                    limit=2,
+                )
+                for row in matches:
+                    if (
+                        isinstance(row, dict)
+                        and row.get("tenant_id") == tenant_id
+                        and str(row.get("event_id") or "") == event_id
+                    ):
+                        rows.append(row)
+            return RowsRead(rows=rows, available=True)
+        except Exception:  # noqa: BLE001 - event authority failure is slot-local
+            return RowsRead([], available=False, reason="campaign_event_authority_unavailable")
 
 
 @dataclass(frozen=True)
@@ -643,6 +691,20 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         campaign_facts: Optional[dict[str, Any]] = None
         touchpoint_items: list[dict[str, Any]] = []
         source_classification_items: list[dict[str, Any]] = []
+        signal_touchpoint_evidence: dict[str, list[EvidenceRef]] = {}
+        signal_reference_issues: list[str] = []
+        signal_context: dict[str, Any] = {
+            "state": "unknown",
+            "subject": {"kind": subject.kind, "id": subject.id},
+            "events": [],
+            "dimensionStates": {
+                "events": "unknown",
+                "observations": "unknown",
+                "sourceFacts": "unknown",
+            },
+            "freshness": {"state": "unknown", "sourceTimestampsPreserved": True},
+            "reason": "campaign_signal_source_join_unavailable",
+        }
         credit_items: list[dict[str, Any]] = []
         campaign_anomaly_context: dict[str, Any] = {
             "state": "unknown",
@@ -858,6 +920,20 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                             slot_states=slot_states,
                             touchpoint_items=touchpoint_items,
                             source_classification_items=source_classification_items,
+                            signal_touchpoint_evidence=signal_touchpoint_evidence,
+                            signal_reference_issues=signal_reference_issues,
+                            evidence_by_key=evidence_by_key,
+                            claims=claims,
+                            degraded_reasons=degraded_reasons,
+                        )
+                        signal_context = await self._read_campaign_signal_context(
+                            request=request,
+                            context=context,
+                            campaign_id=campaign_id,
+                            temporal=temporal,
+                            touchpoint_evidence_by_event=signal_touchpoint_evidence,
+                            reference_issues=signal_reference_issues,
+                            slot_states=slot_states,
                             evidence_by_key=evidence_by_key,
                             claims=claims,
                             degraded_reasons=degraded_reasons,
@@ -1097,11 +1173,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             "slots": [slot_states[slot_id] for slot_id, _ in _SLOT_REQUIREMENTS],
             "domainContexts": {
                 SLOT_SOURCE_CLASSIFICATION: source_classification,
-                SLOT_SIGNAL_SOURCES: {
-                    "state": slot_states[SLOT_SIGNAL_SOURCES]["state"],
-                    "subject": {"kind": subject.kind, "id": subject.id},
-                    "reason": slot_states[SLOT_SIGNAL_SOURCES].get("reason"),
-                },
+                SLOT_SIGNAL_SOURCES: signal_context,
                 SLOT_JOURNEYS: journey_context,
                 SLOT_CONVERSIONS: {
                     "state": slot_states[SLOT_CONVERSIONS]["state"],
@@ -1173,7 +1245,7 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                     "domainSlotIds": [slot_id for slot_id, _ in _SLOT_REQUIREMENTS],
                     "limitations": [
                         "touchpoint source classifications do not classify campaign registry provenance",
-                        "signal_sources require source and signal authority composition",
+                        "signal_sources include exact touchpoint-linked events only; broader observations and source facts remain unknown",
                         "communication content remains governed by communication360",
                         "campaign-to-conversion joins are unresolved",
                         "cohort and syndicate membership requires canonical grouping authorities",
@@ -1562,6 +1634,271 @@ class Campaign360Provider(IntelligenceProjectionProvider):
             "reason": reason,
             "coverage": "targeting_leakage_findings_only",
             "findingsTruncated": truncated,
+        }
+
+    async def _read_campaign_signal_context(
+        self,
+        *,
+        request: ProjectionRequest,
+        context: ProjectionContext,
+        campaign_id: str,
+        temporal: _TemporalScope,
+        touchpoint_evidence_by_event: dict[str, list[EvidenceRef]],
+        reference_issues: list[str],
+        slot_states: dict[str, dict[str, Any]],
+        evidence_by_key: dict[tuple[str, str], EvidenceRef],
+        claims: list[ClaimEnvelope],
+        degraded_reasons: list[str],
+    ) -> dict[str, Any]:
+        """Join exact campaign touchpoint event references to canonical events.
+
+        This is intentionally a partial signal view. It does not infer signal
+        membership from a campaign label or event properties, and it does not
+        substitute event records for the separate observation/source-fact
+        authorities declared by the product contract.
+        """
+        base: dict[str, Any] = {
+            "state": "unknown",
+            "subject": {"kind": request.subject.kind, "id": request.subject.id},
+            "campaignId": campaign_id,
+            "events": [],
+            "dimensionStates": {
+                "events": "unknown",
+                "observations": "unknown",
+                "sourceFacts": "unknown",
+            },
+            "coverage": "exact_touchpoint_linked_events_only",
+            "freshness": {
+                "state": "unknown",
+                "sourceTimestampsPreserved": True,
+                "missingTimestamp": "unknown",
+                "maximumAgeConfigured": False,
+            },
+        }
+        if context.tenantId != request.tenantId:
+            reason = "projection_context_tenant_scope_mismatch"
+            slot_states[SLOT_SIGNAL_SOURCES].update(
+                state="unknown",
+                reason=reason,
+                sourceAuthorities=["events", "observations", "source_facts"],
+                dimensionStates=base["dimensionStates"],
+            )
+            return {**base, "reason": reason}
+        event_ids = list(touchpoint_evidence_by_event)
+        source_read = getattr(self._source, "signal_events", None)
+        if not event_ids or not callable(source_read):
+            reason = (
+                "campaign_touchpoint_event_references_unavailable"
+                if not event_ids
+                else "campaign_event_authority_binding_unavailable"
+            )
+            slot_states[SLOT_SIGNAL_SOURCES].update(
+                state="unknown",
+                reason=reason,
+                sourceAuthorities=["events", "observations", "source_facts"],
+                dimensionStates=base["dimensionStates"],
+            )
+            return {**base, "reason": reason}
+
+        read_limit = min(len(event_ids), MAX_CAMPAIGN_SIGNAL_EVENTS)
+        try:
+            result = await source_read(
+                request.tenantId,
+                event_ids[:read_limit],
+                limit=MAX_CAMPAIGN_SIGNAL_EVENTS,
+            )
+        except Exception:  # noqa: BLE001 - event source fails independently
+            result = RowsRead([], available=False, reason="campaign_event_authority_unavailable")
+        if not isinstance(result, RowsRead) or not result.available:
+            reason = "campaign_event_authority_unavailable"
+            slot_states[SLOT_SIGNAL_SOURCES].update(
+                state="degraded",
+                reason=reason,
+                sourceAuthorities=["events", "observations", "source_facts"],
+                dimensionStates={
+                    "events": "unavailable",
+                    "observations": "unknown",
+                    "sourceFacts": "unknown",
+                },
+            )
+            degraded_reasons.append(reason)
+            return {
+                **base,
+                "state": "degraded",
+                "dimensionStates": {
+                    "events": "unavailable",
+                    "observations": "unknown",
+                    "sourceFacts": "unknown",
+                },
+                "reason": reason,
+            }
+        if any(not isinstance(row, dict) for row in result.rows):
+            reason = "campaign_event_row_shape_invalid"
+            slot_states[SLOT_SIGNAL_SOURCES].update(
+                state="unknown",
+                reason=reason,
+                sourceAuthorities=["events", "observations", "source_facts"],
+                dimensionStates=base["dimensionStates"],
+            )
+            degraded_reasons.append(reason)
+            return {**base, "reason": reason}
+
+        requested_event_ids = set(event_ids[:read_limit])
+        if any(
+            row.get("tenant_id") != request.tenantId
+            or str(row.get("event_id") or "") not in requested_event_ids
+            for row in result.rows
+        ):
+            reason = "campaign_event_record_scope_mismatch"
+            slot_states[SLOT_SIGNAL_SOURCES].update(
+                state="unknown",
+                reason=reason,
+                sourceAuthorities=["events", "observations", "source_facts"],
+                dimensionStates=base["dimensionStates"],
+            )
+            degraded_reasons.append(reason)
+            return {**base, "reason": reason}
+
+        rows_by_id: dict[str, list[dict[str, Any]]] = {}
+        for row in result.rows:
+            rows_by_id.setdefault(str(row["event_id"]), []).append(row)
+        event_items: list[dict[str, Any]] = []
+        missing_timestamps = False
+        temporal_timestamp_unavailable = False
+        out_of_window = False
+        duplicate_events = False
+        for event_id in event_ids[:read_limit]:
+            event_rows = rows_by_id.get(event_id, [])
+            if not event_rows:
+                continue
+            if len(event_rows) != 1:
+                duplicate_events = True
+                continue
+            row = event_rows[0]
+            occurred_at = _string_or_none(row.get("occurred_at"))
+            if occurred_at is None:
+                missing_timestamps = True
+                if temporal.start is not None or temporal.end is not None:
+                    temporal_timestamp_unavailable = True
+                    continue
+            else:
+                try:
+                    occurred = _parse_instant(occurred_at)
+                except (TypeError, ValueError):
+                    missing_timestamps = True
+                    occurred = None
+                    if temporal.start is not None or temporal.end is not None:
+                        temporal_timestamp_unavailable = True
+                        continue
+                if occurred is not None and (
+                    (temporal.start is not None and occurred <= temporal.start)
+                    or (temporal.end is not None and occurred >= temporal.end)
+                ):
+                    out_of_window = True
+                    continue
+            source_event_ref = EvidenceRef(
+                id=event_id,
+                type="event",
+                source="services/api/repositories/repos.py:events",
+                observedAt=occurred_at or _string_or_none(row.get("created_at")),
+                uri=f"store://events/{quote(event_id, safe='')}",
+            )
+            _add_evidence(evidence_by_key, source_event_ref)
+            touchpoint_refs = touchpoint_evidence_by_event[event_id]
+            linked_touchpoint_refs = touchpoint_refs[:10]
+            claim_evidence = [source_event_ref, *linked_touchpoint_refs]
+            event_items.append(
+                {
+                    "eventId": event_id,
+                    "eventType": _string_or_none(row.get("event_type")),
+                    "eventFamily": _string_or_none(row.get("event_family")),
+                    "source": _string_or_none(row.get("source")),
+                    "occurredAt": occurred_at,
+                    "linkedTouchpointIds": [ref.id for ref in linked_touchpoint_refs],
+                    "evidenceRefs": [
+                        ref.model_dump(by_alias=True, exclude_none=True)
+                        for ref in claim_evidence
+                    ],
+                }
+            )
+            claims.append(
+                ClaimEnvelope(
+                    id=f"campaign360:{campaign_id}:signal-event:{event_id}",
+                    kind="campaign_linked_signal_event",
+                    subject=request.subject,
+                    evidenceRefs=claim_evidence,
+                    claims=[
+                        "A tenant-scoped campaign touchpoint names this exact canonical event."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=[SLOT_SIGNAL_SOURCES],
+                )
+            )
+
+        issues = list(reference_issues)
+        returned_ids = {item["eventId"] for item in event_items}
+        missing_events = requested_event_ids - returned_ids - set(rows_by_id)
+        if missing_events:
+            issues.append("campaign_touchpoint_event_record_unavailable")
+        if len(event_ids) > read_limit:
+            issues.append("campaign_signal_event_read_truncated")
+        if temporal_timestamp_unavailable:
+            issues.append("campaign_signal_event_timestamp_unavailable_for_temporal_scope")
+        if out_of_window:
+            issues.append("campaign_signal_event_outside_temporal_scope")
+        if duplicate_events:
+            issues.append("campaign_signal_event_identifier_ambiguous")
+        if any(len(refs) > 10 for refs in touchpoint_evidence_by_event.values()):
+            issues.append("campaign_signal_touchpoint_evidence_truncated")
+
+        if event_items:
+            state = "partial"
+            reason = "campaign_signal_events_only"
+        else:
+            state = "unknown"
+            reason = (
+                issues[0]
+                if issues
+                else "campaign_touchpoint_event_record_not_resolved"
+            )
+        dimension_states = {
+            "events": "available" if event_items else "unknown",
+            "observations": "unknown",
+            "sourceFacts": "unknown",
+        }
+        if issues and event_items:
+            reason = issues[0]
+        slot_states[SLOT_SIGNAL_SOURCES].update(
+            state=state,
+            reason=reason,
+            sourceAuthorities=["events", "observations", "source_facts"],
+            dimensionStates=dimension_states,
+            eventCount=len(event_items) if event_items else None,
+            coverage="exact_touchpoint_linked_events_only",
+            broaderAuthorityState="unknown",
+        )
+        if state == "partial":
+            degraded_reasons.append("campaign_signal_sources_partial")
+        elif issues:
+            degraded_reasons.extend(issues)
+        timestamps = [item["occurredAt"] for item in event_items if item["occurredAt"]]
+        return {
+            **base,
+            "state": state,
+            "events": event_items,
+            "dimensionStates": dimension_states,
+            "freshness": {
+                "state": "unknown",
+                "latestSourceTimestamp": max(timestamps) if timestamps else None,
+                "sourceTimestampsPreserved": True,
+                "missingTimestamp": "unknown" if missing_timestamps else None,
+                "maximumAgeConfigured": False,
+            },
+            "reason": reason,
+            "limitations": [
+                "Campaign-tagged observations and source-fact classification are not joined.",
+                *list(dict.fromkeys(issues)),
+            ],
         }
 
     async def _read_campaign_journey_context(
@@ -1980,6 +2317,8 @@ class Campaign360Provider(IntelligenceProjectionProvider):
         slot_states: dict[str, dict[str, Any]],
         touchpoint_items: list[dict[str, Any]],
         source_classification_items: list[dict[str, Any]],
+        signal_touchpoint_evidence: dict[str, list[EvidenceRef]],
+        signal_reference_issues: list[str],
         evidence_by_key: dict[tuple[str, str], EvidenceRef],
         claims: list[ClaimEnvelope],
         degraded_reasons: list[str],
@@ -2064,6 +2403,16 @@ class Campaign360Provider(IntelligenceProjectionProvider):
                 unreferenced_rows += 1
                 continue
             _add_evidence(evidence_by_key, evidence)
+            source_event_id = row.get("source_event_id")
+            if source_event_id is not None:
+                if _safe_campaign_source_id(source_event_id):
+                    signal_touchpoint_evidence.setdefault(source_event_id, []).append(
+                        evidence
+                    )
+                else:
+                    signal_reference_issues.append(
+                        "campaign_touchpoint_event_reference_invalid"
+                    )
             payload = {
                 out_key: _scalar(row.get(in_key))
                 for out_key, in_key in _TOUCHPOINT_FIELDS

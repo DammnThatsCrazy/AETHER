@@ -591,7 +591,8 @@
         "graph",
         "evidence",
         "temporal",
-        "campaign_touchpoints"
+        "campaign_touchpoints",
+        "silver_semantic_observations"
       ],
       "hardDependencies": [
         "contract_spine",
@@ -1617,6 +1618,7 @@
       "canonicalAuthorities": [
         "campaign_facts",
         "campaign_touchpoints",
+        "events",
         "targeting_leakage_findings",
         "source_provenance",
         "touchpoints",
@@ -1625,7 +1627,8 @@
         "attribution_credits",
         "population",
         "communication",
-        "economic"
+        "economic",
+        "evidence"
       ],
       "hardDependencies": [
         "contract_spine",
@@ -3952,10 +3955,12 @@
         {
           "id": "timeline",
           "requirement": "required",
-          "description": "Episode observation IDs and bounded temporal context; observation rows remain unjoined.",
+          "description": "Episode observation IDs joined to active tenant-scoped semantic Silver rows with bounded temporal context.",
           "canonicalAuthorityRefs": [
             "episode_facts",
-            "temporal"
+            "temporal",
+          "silver_semantic_observations",
+            "evidence"
           ],
           "projectionBindings": [
             {
@@ -3968,7 +3973,8 @@
                 "episode"
               ]
             }
-          ]
+          ],
+          "partialImplementationReason": "Only observation IDs explicitly recorded by episodes are resolved; source namespaces are untyped, broader activity and session completeness is unavailable, and freshness and policy remain unknown."
         },
         {
           "id": "participants",
@@ -4213,6 +4219,7 @@
           "outcome_facts",
           "relationship_facts",
           "risk_outputs",
+            "silver_semantic_observations",
           "temporal"
         ],
         "ownsCanonicalTruth": false,
@@ -7703,8 +7710,24 @@
             "observations",
             "source_facts"
           ],
-          "projectionBindings": [],
-          "unboundReason": "No campaign-scoped signal-source authority is connected to this surface."
+          "projectionBindings": [
+            {
+              "projectionId": "campaign360",
+              "role": "primary",
+              "sectionIds": [
+                "state"
+              ],
+              "subjectKinds": [
+                "campaign"
+              ]
+            }
+          ],
+          "unboundCanonicalAuthorityRefs": [
+            "observations",
+            "source_facts"
+          ],
+          "authorityGapReason": "Canonical observations and source facts are not joined to the exact touchpoint-linked campaign event rows.",
+          "partialImplementationReason": "Exact campaign touchpoint event references are joined to tenant-scoped canonical events; broader observation and source-fact authorities, complete event coverage, and a freshness SLA remain unresolved."
         },
         {
           "id": "touchpoints",
@@ -9671,10 +9694,24 @@
           "requirement": "required",
           "description": "Required memory360 slot: policy state.",
           "canonicalAuthorityRefs": [
-            "semantic_memory_graph"
+            "semantic_memory_records",
+            "consent_policy_decisions",
+            "evidence"
           ],
-          "projectionBindings": [],
-          "unboundReason": "semantic_memory_policy_state_authority_not_connected"
+          "projectionBindings": [
+            {
+              "projectionId": "memory360",
+              "role": "primary",
+              "sectionIds": [
+                "policy_state"
+              ],
+              "subjectKinds": [
+                "entity",
+                "semantic_entity"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Exact tenant and subject historical allow decisions are rendered with timestamped canonical consent-policy evidence. Current consent and policy are not evaluated, so present authorization remains unknown."
         },
         {
           "id": "evidence_trace",

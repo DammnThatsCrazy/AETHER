@@ -282,7 +282,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/blueprints/campaign360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['campaign', 'episode', 'population', 'source'],
-    canonicalAuthorities: ['attribution_credits', 'campaign_facts', 'campaign_touchpoints', 'communication', 'economic', 'journeys', 'outcomes', 'population', 'source_provenance', 'targeting_leakage_findings', 'touchpoints'],
+    canonicalAuthorities: ['attribution_credits', 'campaign_facts', 'campaign_touchpoints', 'communication', 'economic', 'events', 'evidence', 'journeys', 'outcomes', 'population', 'source_provenance', 'targeting_leakage_findings', 'touchpoints'],
     hardDependencies: ['attribution_architecture', 'contract_spine', 'measurement_outcome_contract'],
     projectionDependencies: ['communication360', 'economic360', 'episode360', 'outcome360', 'population360'],
     optionalProjectionDependencies: [],
@@ -649,7 +649,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/blueprints/episode360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['campaign', 'entity', 'episode', 'journey'],
-    canonicalAuthorities: ['campaign_touchpoints', 'canonical_conversions', 'episode_facts', 'events', 'evidence', 'graph', 'journeys', 'temporal'],
+    canonicalAuthorities: ['campaign_touchpoints', 'canonical_conversions', 'episode_facts', 'events', 'evidence', 'graph', 'journeys', 'silver_semantic_observations', 'temporal'],
     hardDependencies: ['contract_spine', 'journey_continuity', 'temporal_kernel'],
     projectionDependencies: ['profile360', 'relationship360'],
     optionalProjectionDependencies: [],
@@ -2554,12 +2554,21 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
+        authorityGapReason: 'Canonical observations and source facts are not joined to the exact touchpoint-linked campaign event rows.',
         canonicalAuthorityRefs: ['events', 'observations', 'source_facts'],
         description: 'Tenant-scoped signal and source observations associated with the campaign.',
         id: 'signal_sources',
-        projectionBindings: [],
+        partialImplementationReason: 'Exact campaign touchpoint event references are joined to tenant-scoped canonical events; broader observation and source-fact authorities, complete event coverage, and a freshness SLA remain unresolved.',
+        projectionBindings: [
+          {
+            projectionId: 'campaign360',
+            role: 'primary',
+            subjectKinds: ['campaign'],
+            sectionIds: ['state']
+          }
+        ],
         requirement: 'required',
-        unboundReason: 'No campaign-scoped signal-source authority is connected to this surface.'
+        unboundCanonicalAuthorityRefs: ['observations', 'source_facts']
       },
       {
         authorityGapReason: 'Touchpoint classification revisions do not classify the campaign registry source or every asserting source.',
@@ -3195,10 +3204,10 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
+        canonicalAuthorityRefs: ['episode_facts', 'evidence', 'silver_semantic_observations', 'temporal'],
+        description: 'Episode observation IDs joined to active tenant-scoped semantic Silver rows with bounded temporal context.',
         id: 'timeline',
-        requirement: 'required',
-        description: 'Episode observation IDs and bounded temporal context; observation rows remain unjoined.',
-        canonicalAuthorityRefs: ['episode_facts', 'temporal'],
+        partialImplementationReason: 'Only observation IDs explicitly recorded by episodes are resolved; source namespaces are untyped, broader activity and session completeness is unavailable, and freshness and policy remain unknown.',
         projectionBindings: [
           {
             projectionId: 'episode360',
@@ -3206,7 +3215,8 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             subjectKinds: ['episode'],
             sectionIds: ['timeline']
           }
-        ]
+        ],
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['campaign_touchpoints'],
@@ -3272,7 +3282,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       }
     ],
     sourceOfTruth: {
-      canonicalAuthorities: ['agent_executions', 'attribution_credits', 'campaign_facts', 'campaign_touchpoints', 'communication_facts', 'episode_facts', 'evidence', 'graph', 'identity', 'outcome_facts', 'relationship_facts', 'risk_outputs', 'temporal'],
+      canonicalAuthorities: ['agent_executions', 'attribution_credits', 'campaign_facts', 'campaign_touchpoints', 'communication_facts', 'episode_facts', 'evidence', 'graph', 'identity', 'outcome_facts', 'relationship_facts', 'risk_outputs', 'silver_semantic_observations', 'temporal'],
       ownsCanonicalTruth: false,
       prohibitedOwnership: ['economic_facts', 'execution_facts', 'graph', 'identity', 'observations', 'risk_outputs', 'source_provenance']
     },
@@ -4291,12 +4301,19 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        canonicalAuthorityRefs: ['semantic_memory_graph'],
+        canonicalAuthorityRefs: ['consent_policy_decisions', 'evidence', 'semantic_memory_records'],
         description: 'Required memory360 slot: policy state.',
         id: 'policy_state',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'semantic_memory_policy_state_authority_not_connected'
+        partialImplementationReason: 'Exact tenant and subject historical allow decisions are rendered with timestamped canonical consent-policy evidence. Current consent and policy are not evaluated, so present authorization remains unknown.',
+        projectionBindings: [
+          {
+            projectionId: 'memory360',
+            role: 'primary',
+            subjectKinds: ['entity', 'semantic_entity'],
+            sectionIds: ['policy_state']
+          }
+        ],
+        requirement: 'required'
       },
       {
         id: 'semantic_summary',

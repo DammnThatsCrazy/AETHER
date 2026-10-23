@@ -566,9 +566,37 @@ def _render_memory_slots(
     memory_state = read.memories_state
     memory_items: list[dict[str, Any]] = []
     memory_refs: list[EvidenceRef] = []
+    policy_decisions: list[dict[str, Any]] = []
+    policy_refs: list[EvidenceRef] = []
+    policy_join_incomplete = False
     for resolved in read.memories:
         record = resolved.record
         refs = list(resolved.evidence_refs)
+        decision_id = _text(getattr(record, "policy_decision_ref", None))
+        decision_ref = next(
+            (
+                ref
+                for ref in refs
+                if ref.source == "governance.consent_policy_decisions"
+                and ref.id == decision_id
+                and ref.uri
+                == (
+                    "store://consent_policy_decisions/"
+                    f"{quote(request.tenantId, safe='')}:{quote(decision_id or '', safe='')}"
+                )
+                and _timestamp(ref.observedAt) is not None
+            ),
+            None,
+        )
+        if (
+            getattr(record, "tenant_id", None) != request.tenantId
+            or getattr(record, "subject_ref", None) != request.subject.id
+            or not decision_id
+            or getattr(resolved, "policy_outcome", None) != "historical_allow"
+            or decision_ref is None
+        ):
+            policy_join_incomplete = True
+            continue
         memory_refs.extend(refs)
         memory_items.append(
             {
@@ -586,7 +614,20 @@ def _render_memory_slots(
                 "evidenceRefs": [ref.model_dump(mode="json") for ref in refs],
             }
         )
+        policy_refs.append(decision_ref)
+        policy_decisions.append(
+            {
+                "memoryId": record.memory_id,
+                "policyDecisionId": decision_id,
+                "outcomeAtWrite": "allowed",
+                "decidedAt": _timestamp(decision_ref.observedAt),
+                "evidenceRefs": [decision_ref.model_dump(mode="json")],
+            }
+        )
     memory_refs = _dedupe_refs(memory_refs)
+    policy_refs = _dedupe_refs(policy_refs)
+    if policy_join_incomplete and memory_state != "unknown":
+        memory_state = "degraded"
     latest_memory_created_at = max(
         (item["createdAt"] for item in memory_items if item["createdAt"]),
         default=None,
@@ -596,6 +637,9 @@ def _render_memory_slots(
         memory_items = []
         memory_refs = []
         latest_memory_created_at = None
+        policy_decisions = []
+        policy_refs = []
+        policy_join_incomplete = False
     memory_reason = (
         "exact_tenant_subject_memory_records_with_active_observation_and_policy_joins"
         if memory_state in {"available", "degraded"} and memory_items
@@ -721,13 +765,47 @@ def _render_memory_slots(
             ),
         ),
         "policy_state": (
-            "unknown",
+            "unknown"
+            if read.memories_state == "unknown" or unsupported_subject or temporal_request_unsupported
+            else "degraded",
             _slot_content(
-                state="unknown",
-                coverage="unknown",
-                reason="historical_consent_and_policy_evaluation_authority_not_joined",
-                evidence_refs=[],
-                evaluation="not_performed",
+                state=(
+                    "unknown"
+                    if read.memories_state == "unknown"
+                    or unsupported_subject
+                    or temporal_request_unsupported
+                    else "degraded"
+                ),
+                coverage=(
+                    "unknown"
+                    if read.memories_state == "unknown"
+                    or unsupported_subject
+                    or temporal_request_unsupported
+                    else "partial"
+                ),
+                reason=(
+                    "historical_write_policy_decision_coverage_partial_current_policy_not_evaluated"
+                    if policy_join_incomplete or read.memories_state == "degraded"
+                    else "historical_write_policy_decisions_only_current_policy_not_evaluated"
+                    if policy_decisions
+                    else "no_historical_memory_policy_decisions_current_policy_not_evaluated"
+                    if read.memories_state == "empty"
+                    else "historical_memory_policy_decisions_unavailable_current_policy_not_evaluated"
+                ),
+                evidence_refs=policy_refs,
+                evaluation="historical_write_decisions_only_current_policy_not_evaluated",
+                currentConsentState="unknown",
+                currentPolicyState="not_evaluated",
+                historicalDecisionCoverage=(
+                    "partial"
+                    if policy_join_incomplete or read.memories_state == "degraded"
+                    else "complete"
+                    if read.memories_state in {"available", "empty"}
+                    and read.memories_complete
+                    else "unknown"
+                ),
+                historicalDecisionCount=len(policy_decisions),
+                historicalDecisions=policy_decisions,
                 stateFreshness="unknown",
                 sourceStatusesObserved=len(read.observations),
                 nonActiveRowsOmitted=retracted_count,
@@ -776,6 +854,9 @@ def _render_memory_slots(
             content=content,
             warnings=list(read.warnings) or None,
             canonicalAuthorityRefs=(
+                ["semantic_memory_records", "consent_policy_decisions", "evidence"]
+                if slot_id == "policy_state"
+                else
                 ["semantic_memory_graph"]
                 if slot_id
                 in {

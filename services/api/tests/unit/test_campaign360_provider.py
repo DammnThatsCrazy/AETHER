@@ -53,6 +53,7 @@ class FakeCampaign360Source:
         touchpoints: RowsRead | None = None,
         attribution: AttributionRead | None = None,
         anomalies: CampaignAnomalyRead | None = None,
+        signals: RowsRead | None = None,
     ) -> None:
         self.campaign_result = campaign or CampaignRead(
             record={
@@ -114,10 +115,12 @@ class FakeCampaign360Source:
         self.anomaly_result = anomalies or CampaignAnomalyRead(
             rows=[], available=True, complete=True
         )
+        self.signal_result = signals or RowsRead(rows=[], available=True)
         self.campaign_calls: list[tuple[str, object]] = []
         self.touchpoint_calls: list[dict[str, object]] = []
         self.attribution_calls: list[dict[str, object]] = []
         self.anomaly_calls: list[dict[str, object]] = []
+        self.signal_calls: list[dict[str, object]] = []
 
     async def campaign(self, tenant_id: str, campaign_id: object) -> CampaignRead:
         self.campaign_calls.append((tenant_id, campaign_id))
@@ -170,6 +173,14 @@ class FakeCampaign360Source:
             {"tenant_id": tenant_id, "campaign_id": campaign_id, "limit": limit}
         )
         return self.anomaly_result
+
+    async def signal_events(
+        self, tenant_id: str, event_ids: list[str], *, limit: int
+    ) -> RowsRead:
+        self.signal_calls.append(
+            {"tenant_id": tenant_id, "event_ids": list(event_ids), "limit": limit}
+        )
+        return self.signal_result
 
 
 class ContextCampaign360Source(FakeCampaign360Source):
@@ -832,3 +843,194 @@ async def test_campaign_journey_context_degrades_on_authority_outage() -> None:
     assert context["dimensionStates"] == {"journeys": "unavailable", "episodes": "unknown"}
     assert "private" not in str(context)
     assert "journey_authority_unavailable" in result.degradedReasons
+
+
+@pytest.mark.asyncio
+async def test_campaign_signal_sources_join_exact_touchpoint_event_with_partial_coverage() -> None:
+    touchpoint = {
+        "touchpoint_id": "tp-linked-event",
+        "tenant_id": "tenant-a",
+        "campaign_id": CAMPAIGN_ID,
+        "occurred_at": "2026-10-05T10:00:00Z",
+        "source_event_id": "event-campaign-1",
+        "profile_id": "must-not-be-projected",
+    }
+    event = {
+        "event_id": "event-campaign-1",
+        "tenant_id": "tenant-a",
+        "event_type": "campaign_conversion",
+        "event_family": "conversion",
+        "source": "sdk",
+        "occurred_at": "2026-10-05T10:00:00Z",
+        "user_id": "must-not-be-projected",
+        "properties": {"private": "must-not-be-projected"},
+    }
+    source = FakeCampaign360Source(
+        touchpoints=RowsRead([touchpoint], available=True),
+        signals=RowsRead([event], available=True),
+    )
+
+    result = await Campaign360Provider(source).project(_request(), _context())
+
+    assert source.signal_calls == [
+        {
+            "tenant_id": "tenant-a",
+            "event_ids": ["event-campaign-1"],
+            "limit": 100,
+        }
+    ]
+    slot = _slot(result, "signal_sources")
+    assert slot["state"] == "partial"
+    assert slot["dimensionStates"] == {
+        "events": "available",
+        "observations": "unknown",
+        "sourceFacts": "unknown",
+    }
+    context = _section(result, "state").content["domainContexts"]["signal_sources"]
+    assert context["coverage"] == "exact_touchpoint_linked_events_only"
+    assert context["events"][0]["eventId"] == "event-campaign-1"
+    assert context["events"][0]["linkedTouchpointIds"] == ["tp-linked-event"]
+    assert "profile_id" not in str(context)
+    assert "must-not-be-projected" not in str(context)
+    assert context["freshness"]["state"] == "unknown"
+    assert context["freshness"]["sourceTimestampsPreserved"] is True
+    claim = next(
+        claim for claim in result.claims if claim.kind == "campaign_linked_signal_event"
+    )
+    assert claim.domainSlotIds == ["signal_sources"]
+    assert {(ref.source, ref.id) for ref in claim.evidenceRefs} == {
+        ("services/api/repositories/repos.py:events", "event-campaign-1"),
+        (
+            "services/api/journeys/measurement/repositories/touchpoint_repo.py:silver_campaign_touchpoint_facts",
+            "tp-linked-event",
+        ),
+    }
+
+
+@pytest.mark.asyncio
+async def test_campaign_signal_sources_fail_closed_on_foreign_event_row() -> None:
+    touchpoint = {
+        "touchpoint_id": "tp-linked-event",
+        "tenant_id": "tenant-a",
+        "campaign_id": CAMPAIGN_ID,
+        "occurred_at": "2026-10-05T10:00:00Z",
+        "source_event_id": "event-campaign-1",
+    }
+    foreign_event = {
+        "event_id": "event-campaign-1",
+        "tenant_id": "tenant-b",
+        "event_type": "foreign_event",
+        "occurred_at": "2026-10-05T10:00:00Z",
+    }
+    source = FakeCampaign360Source(
+        touchpoints=RowsRead([touchpoint], available=True),
+        signals=RowsRead([foreign_event], available=True),
+    )
+
+    result = await Campaign360Provider(source).project(_request(), _context())
+
+    assert _slot(result, "signal_sources")["state"] == "unknown"
+    context = _section(result, "state").content["domainContexts"]["signal_sources"]
+    assert context["reason"] == "campaign_event_record_scope_mismatch"
+    assert context["events"] == []
+    assert "foreign_event" not in str(result.model_dump())
+
+
+@pytest.mark.asyncio
+async def test_campaign_signal_source_with_missing_event_time_stays_unknown_in_window() -> None:
+    touchpoint = {
+        "touchpoint_id": "tp-linked-event",
+        "tenant_id": "tenant-a",
+        "campaign_id": CAMPAIGN_ID,
+        "occurred_at": "2026-10-05T10:00:00Z",
+        "source_event_id": "event-campaign-1",
+    }
+    event = {
+        "event_id": "event-campaign-1",
+        "tenant_id": "tenant-a",
+        "event_type": "campaign_conversion",
+    }
+    source = FakeCampaign360Source(
+        touchpoints=RowsRead([touchpoint], available=True),
+        signals=RowsRead([event], available=True),
+    )
+
+    result = await Campaign360Provider(source).project(
+        _request(
+            time_range={"from": "2026-10-01T00:00:00Z", "to": "2026-10-11T00:00:00Z"}
+        ),
+        _context(),
+    )
+
+    assert _slot(result, "signal_sources")["state"] == "unknown"
+    context = _section(result, "state").content["domainContexts"]["signal_sources"]
+    assert context["events"] == []
+    assert (
+        context["reason"]
+        == "campaign_signal_event_timestamp_unavailable_for_temporal_scope"
+    )
+
+
+@pytest.mark.asyncio
+async def test_campaign_signal_sources_do_not_read_when_projection_tenant_disagrees() -> None:
+    touchpoint = {
+        "touchpoint_id": "tp-linked-event",
+        "tenant_id": "tenant-a",
+        "campaign_id": CAMPAIGN_ID,
+        "occurred_at": "2026-10-05T10:00:00Z",
+        "source_event_id": "event-campaign-1",
+    }
+    source = FakeCampaign360Source(touchpoints=RowsRead([touchpoint], available=True))
+
+    result = await Campaign360Provider(source).project(
+        _request(tenant_id="tenant-a"), _context(tenant_id="tenant-b")
+    )
+
+    assert source.signal_calls == []
+    assert _slot(result, "signal_sources")["state"] == "unknown"
+    context = _section(result, "state").content["domainContexts"]["signal_sources"]
+    assert context["reason"] == "projection_context_tenant_scope_mismatch"
+
+
+@pytest.mark.asyncio
+async def test_repository_signal_event_reader_queries_exact_tenant_and_event_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dependencies import providers
+    from repositories import repos
+
+    calls: list[tuple[str, dict[str, str], int]] = []
+
+    class FakeAnalyticsRepository:
+        def __init__(self, cache: object) -> None:
+            assert cache == "shared-cache"
+
+        async def query_events(
+            self, tenant_id: str, filters: dict[str, str], *, limit: int
+        ) -> list[dict[str, object]]:
+            calls.append((tenant_id, filters, limit))
+            event_id = filters["event_id"]
+            row_tenant = "tenant-b" if event_id == "event-foreign" else tenant_id
+            return [
+                {
+                    "event_id": event_id,
+                    "tenant_id": row_tenant,
+                    "event_type": "conversion",
+                }
+            ]
+
+    monkeypatch.setattr(providers, "get_cache", lambda: "shared-cache")
+    monkeypatch.setattr(repos, "AnalyticsRepository", FakeAnalyticsRepository)
+
+    result = await RepositoryCampaign360Source().signal_events(
+        "tenant-a",
+        ["event-a", "event-foreign", "bad/id"],
+        limit=3,
+    )
+
+    assert calls == [
+        ("tenant-a", {"event_id": "event-a"}, 2),
+        ("tenant-a", {"event_id": "event-foreign"}, 2),
+    ]
+    assert result.available is True
+    assert [row["event_id"] for row in result.rows] == ["event-a"]
