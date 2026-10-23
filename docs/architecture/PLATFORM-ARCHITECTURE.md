@@ -41,7 +41,7 @@ reviewed_source_commits:
   - commit: "482948261"
     reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
 source_hashes:
-  "packages/shared/": "sha256:717a1f8eaa0b0790256a7efea35476d0646995175345b76212b76ebb6e95a767"
+  "packages/shared/": "sha256:a26bbaa0608773bc64a5e1ebb341fc0f5b51f5d42be342a16ee95ec654a3bba2"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/deployment_routes.py": "sha256:656cfa6ad330dc906667193afb23df0680a33fa0bf728ea08a51a5c14ddf3d2b"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"

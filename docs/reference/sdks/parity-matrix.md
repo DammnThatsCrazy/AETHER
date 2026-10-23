@@ -38,10 +38,10 @@ stable release; it is not a production-readiness claim.
   meant to be enforced by the native iOS/Android SDKs it wraps
   (`delegated_native`). On Android the React Native package does not declare the
   native `com.aether.sdk` core as a dependency, so consumers must add it
-  themselves. Native manifest signature verification exists, but the JS
-  `fetchAndApplyManifest()` path does not check the manifest `signature`
-  (`partial` in `sdk-parity.json`), so do not treat remote manifests as
-  fail-closed on React Native.
+  themselves. Manifest signature verification is delegated to native
+  too: set `manifestPublicKey` and the native SDKs verify the manifests they
+  fetch, while the JS manifest path verifies through `Aether.verifyManifest()`
+  (see `sdks/manifest-signing`).
 - The **server** SDK (`packages/sdk/server`) and the **Python** envelope builder
   (`packages/sdk/python`) are not columns here. By default the server SDK keeps a
   bounded in-process queue; setting `durable: true` or `spoolPath` selects the
