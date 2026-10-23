@@ -32,6 +32,14 @@ subject and labels the user profile as a related entity. Current links do not
 prove historical identity, so bounded or point-in-time requests return unknown
 for this context until the relationship authority supports valid-time replay.
 
+The required `communications` slot reads Communication 360 evidence and
+interactions only from tenant-scoped canonical communication facts whose typed
+`journey_id` or `journey_ids` contains the exact requested journey ID. A
+message endpoint, free-text mention, or association with another journey does
+not qualify. This closes the explicit fact-to-journey join, while message-spine
+coverage, completeness, freshness evaluation, and historical replay remain
+unestablished; the slot therefore stays partial.
+
 Provider evidence that is missing, ambiguous, stale, truncated, or unavailable
 remains explicit. In particular, an execution or journey status is not
 promoted into a measured business outcome.

@@ -358,6 +358,8 @@ class _FakeReader:
         poisoning_evidence_reason: str | None = None,
         raise_poisoning_evidence: bool = False,
         financial_flow_path: dict | None = None,
+        agent_policy_flags: list[dict] | None = None,
+        raise_agent_policy_flags: bool = False,
     ) -> None:
         self._assessment = assessment
         self._signals = list(signals or [])
@@ -376,6 +378,9 @@ class _FakeReader:
         self.poisoning_evidence_calls = 0
         self.poisoning_evidence_as_of: datetime | None = None
         self._financial_flow_path = financial_flow_path
+        self._agent_policy_flags = list(agent_policy_flags or [])
+        self._raise_agent_policy_flags = raise_agent_policy_flags
+        self.agent_policy_flag_calls: list[tuple[str, str]] = []
 
     async def latest_assessment(self, *, tenant_id: str, subject: object) -> dict | None:
         if self._raise_assessment:
@@ -390,6 +395,14 @@ class _FakeReader:
         if self._signals_by_subject is not None:
             return list(self._signals_by_subject.get((subject.kind, subject.id), []))
         return list(self._signals)
+
+    async def agent_policy_flag_observations(
+        self, *, tenant_id: str, agent_id: str
+    ) -> list[dict]:
+        self.agent_policy_flag_calls.append((tenant_id, agent_id))
+        if self._raise_agent_policy_flags:
+            raise RuntimeError("boom: secret-detail")
+        return list(self._agent_policy_flags)
 
     async def source_provenance_observations(
         self, *, tenant_id: str, source_id: str
@@ -727,6 +740,53 @@ async def test_repository_source_provenance_reports_bounded_partial_scan() -> No
 
 
 @pytest.mark.asyncio
+async def test_repository_agent_policy_flags_reads_exact_tenant_and_agent() -> None:
+    from repositories.agentic_observability_repos import AgentRiskSignalRepository
+
+    repository = AgentRiskSignalRepository()
+    await repository.insert(
+        "agent-risk-a-1",
+        {
+            "signal_id": "agent-risk-a-1",
+            "tenant_id": TENANT_A,
+            "agent_id": "agent-a",
+            "risk_level": "high",
+            "reason_codes": ["review"],
+            "policy_flags": ["rate_limit_review"],
+            "detected_at": "2026-10-20T12:00:00+00:00",
+        },
+    )
+    await repository.insert(
+        "agent-risk-other-agent",
+        {
+            "signal_id": "agent-risk-other-agent",
+            "tenant_id": TENANT_A,
+            "agent_id": "agent-b",
+            "policy_flags": ["must-not-leak"],
+        },
+    )
+    await repository.insert(
+        "agent-risk-other-tenant",
+        {
+            "signal_id": "agent-risk-other-tenant",
+            "tenant_id": TENANT_B,
+            "agent_id": "agent-a",
+            "policy_flags": ["must-not-leak"],
+        },
+    )
+
+    rows = await RepositoryRiskSourceReader().agent_policy_flag_observations(
+        tenant_id=TENANT_A,
+        agent_id="agent-a",
+    )
+
+    assert [row["signal_id"] for row in rows] == ["agent-risk-a-1"]
+    assert rows[0]["tenant_id"] == TENANT_A
+    assert rows[0]["agent_id"] == "agent-a"
+    assert "must-not-leak" not in str(rows)
+
+
+@pytest.mark.asyncio
 async def test_repository_financial_path_rejoins_one_exact_tenant_transfer_per_hop() -> None:
     from repositories.repos import (
         FlowTracePathRepository,
@@ -871,6 +931,131 @@ async def test_source_trust_projects_only_ingress_classification_and_marks_other
     assert source_claims[0].claimState == EpistemicStatus.OBSERVED
     assert source_claims[0].evidenceRefs[0].id == "source-event-1"
     assert source_claims[0].domainSlotIds == ["source_trust", "evidence_trace"]
+
+
+@pytest.mark.asyncio
+async def test_risk_policy_flags_are_partial_exact_agent_reports_with_evidence() -> None:
+    signal = {
+        "signal_id": "agent-risk-1",
+        "tenant_id": TENANT_A,
+        "agent_id": "agent-1",
+        "policy_flags": ["rate_limit_review", "human_review_required"],
+        "detected_at": "2026-10-20T12:00:00+00:00",
+        "policy_version": "must-not-be-trusted-from-observation",
+    }
+    reader = _FakeReader(agent_policy_flags=[signal])
+    request = _request(subject=ProjectionSubject(kind="agent", id="agent-1"))
+    result = await Risk360Provider(sources=reader).project(
+        request,
+        await _context(_available_registry()),
+    )
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    policy_flags = findings.content["policyFlags"]
+    assert policy_flags["state"] == "partial"
+    assert policy_flags["reason"] == "agent_observed_flags_lack_model_governance_policy_version"
+    assert policy_flags["semantics"] == "exact_agent_risk_signal_reports_only"
+    assert policy_flags["policyEvaluation"] == "not_attested"
+    assert policy_flags["policyVersion"] is None
+    assert policy_flags["observations"] == [
+        {
+            "signalId": "agent-risk-1",
+            "agentId": "agent-1",
+            "policyFlags": ["rate_limit_review", "human_review_required"],
+            "detectedAt": "2026-10-20T12:00:00+00:00",
+            "evidenceRefs": [
+                {
+                    "id": "agent-risk-1",
+                    "type": "event",
+                    "source": "obs_agent_risk_signals",
+                    "observedAt": "2026-10-20T12:00:00+00:00",
+                    "confidence": None,
+                    "uri": "store://obs_agent_risk_signals/agent-risk-1",
+                }
+            ],
+        }
+    ]
+    assert findings.content["requiredSlotCoverage"]["policy_flags"] == {
+        "state": "partial",
+        "reason": "agent_observed_flags_lack_model_governance_policy_version",
+    }
+
+    claim = next(claim for claim in result.claims if claim.kind == "agent_policy_flags_reported")
+    assert claim.claimState == EpistemicStatus.OBSERVED
+    assert claim.domainSlotIds == ["policy_flags", "evidence_trace"]
+    assert claim.evidenceRefs[0].id == "agent-risk-1"
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert any(
+        row["id"] == "agent-risk-1" and row["source"] == "obs_agent_risk_signals"
+        for row in evidence.content["evidence"]
+    )
+    assert reader.agent_policy_flag_calls == [(TENANT_A, "agent-1")]
+
+
+@pytest.mark.asyncio
+async def test_risk_policy_flags_suppress_unscoped_and_historical_reads() -> None:
+    rows = [
+        {
+            "signal_id": "cross-tenant",
+            "tenant_id": TENANT_B,
+            "agent_id": "agent-1",
+            "policy_flags": ["must-not-leak"],
+        }
+    ]
+    reader = _FakeReader(agent_policy_flags=rows)
+    entity_result = await Risk360Provider(sources=reader).project(
+        _request(),
+        await _context(_available_registry()),
+    )
+    entity_findings = next(
+        section for section in entity_result.sections if section.id == "findings"
+    )
+    assert entity_findings.content["policyFlags"]["state"] == "unknown"
+    assert entity_findings.content["policyFlags"]["reason"] == "exact_agent_subject_required"
+    assert reader.agent_policy_flag_calls == []
+
+    historical = _request(
+        subject=ProjectionSubject(kind="agent", id="agent-1"),
+        asOf="2026-10-19T00:00:00+00:00",
+        temporalMode="as_of",
+    )
+    historical_result = await Risk360Provider(sources=reader).project(
+        historical,
+        await _context(_available_registry()),
+    )
+    historical_findings = next(
+        section for section in historical_result.sections if section.id == "findings"
+    )
+    assert historical_findings.content["policyFlags"]["state"] == "unknown"
+    assert historical_findings.content["policyFlags"]["reason"] == (
+        "agent_policy_flag_bitemporal_history_unavailable"
+    )
+    assert historical_findings.content["policyFlags"]["observations"] == []
+    assert reader.agent_policy_flag_calls == []
+
+    agent_request = _request(subject=ProjectionSubject(kind="agent", id="agent-1"))
+    leaky_result = await Risk360Provider(sources=reader).project(
+        agent_request,
+        await _context(_available_registry()),
+    )
+    leaky_findings = next(section for section in leaky_result.sections if section.id == "findings")
+    assert leaky_findings.content["policyFlags"]["state"] == "degraded"
+    assert leaky_findings.content["policyFlags"]["reason"] == (
+        "agent_policy_flag_record_invalid_or_scope_incomplete"
+    )
+    assert leaky_findings.content["policyFlags"]["observations"] == []
+    assert "must-not-leak" not in leaky_result.model_dump_json()
+    assert reader.agent_policy_flag_calls == [(TENANT_A, "agent-1")]
+
+    failing_result = await Risk360Provider(
+        sources=_FakeReader(raise_agent_policy_flags=True)
+    ).project(agent_request, await _context(_available_registry()))
+    failing_findings = next(
+        section for section in failing_result.sections if section.id == "findings"
+    )
+    assert failing_findings.content["policyFlags"]["state"] == "degraded"
+    assert failing_findings.content["policyFlags"]["reason"] == "agent_policy_flag_read_incomplete"
+    assert "secret-detail" not in failing_result.model_dump_json()
 
 
 @pytest.mark.asyncio

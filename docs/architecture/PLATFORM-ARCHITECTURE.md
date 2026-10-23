@@ -19,6 +19,7 @@ source_files:
   - services/api/identity/account360_provider.py
   - services/api/intelligence/workflow/workflow360_provider.py
   - services/api/intelligence/fraud_networks/risk360_projection.py
+  - services/api/intelligence/risk360/provider.py
   - services/api/journeys/communication360/provider.py
   - services/api/repositories/repos.py
   - services/api/shared/intelligence_projections/frame_runtime.py
@@ -72,8 +73,9 @@ source_hashes:
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
+  "services/api/intelligence/risk360/provider.py": "sha256:cbeab3b7d18fca2a9f8f35ad40ebd620e9099b8e6285837ef069c20d6a6b40c5"
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:1e7dd60cc1a3ea528d9738885f04d7c6712e200622d11c3db518f91e43ceb2d3"
-  "services/api/journeys/communication360/provider.py": "sha256:d4c3668290eaa8c74480db29cbb265bc98cddf1c0ae436d816d058f762d3b266"
+  "services/api/journeys/communication360/provider.py": "sha256:c29df50c2d8b96af3dc3546476c15e563046ff6c02a8b656af1565b565296fa6"
   "services/api/main.py": "sha256:fa7455e5dd5a1e6b6b2ac25cc3ce6fc8a09d8bcf5b242b500feb0b797ab2d7b7"
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
@@ -656,9 +658,29 @@ authorization or delegation authority. The agentic fraud-network Risk360
 handoff also requires one consistent, valid timezone-aware identity-binding
 timestamp no later than the detector observation; otherwise it omits the
 assessment rather than retroactively attributing it.
+Execution360's required `latency_cost` slot now reads canonical AI invocation
+facts only for admitted executions with an exact action ID and canonical Agent
+match. It preserves invocation latency and evidence, groups selected costs by
+currency, and omits cost amounts without a known valid cost basis. This is
+invocation telemetry, not total execution, provider, or tool cost; reads are
+bounded, historical replay is unavailable, and other cost authorities and a
+freshness SLA remain unknown. Server lifecycle duration stays a separate
+measurement.
+Agent360's required `owner_delegator` slot now also joins the configured owner
+Entity to the resolved canonical Agent only through an exact tenant-scoped
+`OWNS` or `OWNS_AGENT` graph edge. The bounded edge scan reports truncation and
+scope uncertainty, and claims retain graph-edge, configuration, and identity
+evidence. A stored edge does not prove legal or effective ownership, historical
+validity, freshness, or action authorization.
 Risk360 reads versioned poisoning-detector records for exact tenant subjects
 with lifecycle and evidence references; it does not independently verify
 poisoning, detector coverage, source reputation, or freshness.
+Risk360's `policy_flags` slot now reads exact tenant-and-Agent records from
+`obs_agent_risk_signals` as reported observations with source evidence. The
+slot remains partial: policy evaluation is unattested, no policy version is
+present, and non-agent, historical, and complete-coverage behavior remains
+unknown. `anomaly_events` stays unbound because no exact subject-scoped anomaly
+event authority with evidence is available.
 Additional partial paths include Identity360 device/session identifier-type
 metadata, Execution360 exact execution-linked RiskSignals, Social360
 propagation-eligible observed paths, and Episode360 exact episode-linked
@@ -693,15 +715,23 @@ exact tenant-owned `MEMBER_OF` edges after account-slot and per-member policy
 checks; roster completeness, temporal reads, related-account aggregation, and
 freshness remain unknown. Communications360 reads exact-subject RiskSignals for
 resolved agents and sources and mapped recipient entities. Source and recipient
-reads require current analytics consent, while the agent path lacks an explicit
-current-consent gate; message-edge transfer, complete coverage, composite
-Risk360 output, and freshness remain unknown. Episode360 `agent_handoffs` also
-remains unknown because episode records and observations do not reference a
-canonical execution or handoff ID. Event labels and agent metadata are not used
-to invent those links.
+reads require current analytics consent. The agent path now also requires an
+exact canonical Agent identity and current analytics consent receipt before
+RiskSignals are read. A missing, ambiguous, malformed, receipt-less, or denied
+decision prevents the read; consent-authority failure marks the slot degraded.
+Message-edge transfer, complete coverage, composite Risk360 output, and
+freshness remain unknown. Journey360's required `communications` slot now
+joins only tenant-scoped canonical communication facts whose typed journey ID
+exactly matches the request. Message endpoints and free-text references do not
+qualify; message-spine coverage, completeness, freshness, and historical replay
+remain unknown. Episode360 `agent_handoffs` also remains unknown because
+episode records and observations do not reference a canonical execution or
+handoff ID. Event labels and agent metadata are not used to invent those links.
 The current agentic/support slice adds three partial paths: Agent360
-`owner_delegator` resolves the configured owner reference only through an exact
-tenant entity lookup, without asserting legal or effective ownership; Execution360
+`owner_delegator` resolves the configured owner reference through an exact
+tenant entity lookup and now requires an exact tenant graph `OWNS` or
+`OWNS_AGENT` edge to the canonical Agent before emitting a relationship claim;
+the stored edge does not assert legal or effective ownership. Execution360
 `approval_chain` joins x402 approval requests and decisions to lifecycle approval,
 action, and resource references, rejecting conflicts; Support360 `resolution`
 exposes resolved/closed lifecycle state only with a matching applied event and

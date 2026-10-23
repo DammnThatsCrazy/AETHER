@@ -209,6 +209,29 @@ class FakeConsentPolicyReader:
         return dict(self.result)
 
 
+class FakeAgentIdentityReader:
+    """Exact tenant-scoped canonical Agent resolver for risk integration tests."""
+
+    def __init__(self, canonical_agent_entity_id: str = "canonical-agent-1") -> None:
+        self.canonical_agent_entity_id = canonical_agent_entity_id
+        self.calls: list[tuple[str, str]] = []
+
+    async def resolve(self, tenant_id: str, source_agent_ref: str) -> AgentIdentityRead:
+        self.calls.append((tenant_id, source_agent_ref))
+        return AgentIdentityRead(
+            state="resolved",
+            canonical_agent_entity_id=self.canonical_agent_entity_id,
+            evidence=(
+                EvidenceRef(
+                    id="agent-identity-binding",
+                    type="entity",
+                    source="agent_deployment_identity_bindings",
+                    observedAt="2026-10-22T12:00:00Z",
+                ),
+            ),
+        )
+
+
 class FakeEntityIdentityReader:
     """Exact tenant/entity registry read used by entity communication tests."""
 
@@ -1480,7 +1503,7 @@ async def test_source_subject_without_canonical_facts_is_missing_not_zero() -> N
     ("subject_kind", "reference_key", "expected_slot_ids"),
     [
         ("episode", "episode_id", ["communications"]),
-        ("journey", "journey_id", []),
+        ("journey", "journey_id", ["communications"]),
         ("source", "source_id", []),
     ],
 )
@@ -1503,11 +1526,16 @@ async def test_non_message_subjects_use_exact_tenant_canonical_communication_fac
         f"{subject_kind}-act-3",
         payload={reference_key: subject_id, "act_type": "wrong-tenant"},
     )
+    free_text_reference = _fact(
+        TENANT_A,
+        f"{subject_kind}-act-4",
+        payload={"description": subject_id, "message_endpoint_id": subject_id},
+    )
 
     class TenantMisbehavingSource(FakeSource):
         async def facts(self, tenant_id, *, kind=None, since=None, limit=None):
             self.fact_read_count += 1
-            rows = [exact, wrong_reference, wrong_tenant]
+            rows = [exact, wrong_reference, wrong_tenant, free_text_reference]
             if limit is not None:
                 rows = rows[:limit]
             return rows
@@ -1546,6 +1574,10 @@ async def test_non_message_subjects_use_exact_tenant_canonical_communication_fac
     assert canonical_claims[0].domainSlotIds == expected_slot_ids
     assert canonical_claims[0].claimState is EpistemicStatus.OBSERVED
     assert [ref.id for ref in canonical_claims[0].evidenceRefs] == [f"{subject_kind}-act-1"]
+    if subject_kind == "journey":
+        assert canonical_claims[0].claims[-1] == (
+            f"canonical communication fact references journey {subject_id}"
+        )
     assert source.message_read_count == 0
 
 
@@ -2242,6 +2274,129 @@ async def test_communication360_reads_risk_flags_only_for_exact_source_subject()
         for ref in claim.evidenceRefs
     )
     assert leaking_reader.calls == [(TENANT_A, "source", "source-a", 101)]
+
+
+async def test_communication360_reads_agent_risk_only_under_current_canonical_identity_consent() -> None:
+    canonical_agent_id = "canonical-agent-1"
+    risk_row = {
+        "signal_id": "agent-risk-signal",
+        "tenant_id": TENANT_A,
+        "subject_kind": "agent",
+        "subject_id": canonical_agent_id,
+        "risk_dimension": "identity",
+        "claim_state": "inferred",
+        "confidence": 0.8,
+        "evidence_refs": [
+            {
+                "id": "agent-risk-evidence",
+                "type": "event",
+                "source": "risk360/agent_detector",
+                "observedAt": "2026-10-21T12:30:00Z",
+            }
+        ],
+        "source": "agent_authority_detector",
+        "observed_at": "2026-10-21T12:30:00Z",
+    }
+    identity_reader = FakeAgentIdentityReader(canonical_agent_id)
+    consent_reader = FakeConsentPolicyReader(
+        {"allowed": True, "reason_code": None, "receipt_id": "agent-analytics-receipt"}
+    )
+    risk_reader = FakeRiskSignalReader([risk_row])
+    provider = Communication360Provider(
+        sources=FakeSource(),
+        agent_identity_reader=identity_reader,
+        consent_policy_reader=consent_reader,
+        risk_signal_reader=risk_reader,
+    )
+    request, context = await _make_context(
+        ProviderRegistry(), subject=ProjectionSubject(kind="agent", id="agent-source-ref")
+    )
+
+    result = await provider.project(request, context)
+
+    coverage = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]
+    assert coverage["risk_flags"]["state"] == "available"
+    assert coverage["risk_flags"]["reason"] == "tenant_scoped_risk_signals_observed_for_exact_subject"
+    assert identity_reader.calls == [(TENANT_A, "agent-source-ref")]
+    assert consent_reader.calls == [(TENANT_A, canonical_agent_id, "analytics")]
+    assert risk_reader.calls == [(TENANT_A, "agent", canonical_agent_id, 101)]
+    risk_claims = [
+        claim for claim in result.claims if claim.kind == "communication_risk_signal_record"
+    ]
+    assert len(risk_claims) == 1
+    assert {ref.id for ref in risk_claims[0].evidenceRefs} >= {
+        "agent-identity-binding",
+        "agent-analytics-receipt",
+        "agent-risk-signal",
+        "agent-risk-evidence",
+    }
+
+
+@pytest.mark.parametrize(
+    ("policy_result", "expected_state"),
+    [
+        ({"allowed": False, "reason_code": "consent_subject_mismatch"}, "suppressed"),
+        ({}, "unknown"),
+        ({"allowed": None, "reason_code": "consent_ambiguous"}, "unknown"),
+        ({"allowed": True, "receipt_id": "agent-analytics-receipt", "ambiguous": True}, "unknown"),
+        ({"allowed": True}, "unknown"),
+    ],
+)
+async def test_communication360_fails_closed_before_agent_risk_read_without_verifiable_consent(
+    policy_result: dict, expected_state: str
+) -> None:
+    canonical_agent_id = "canonical-agent-1"
+    identity_reader = FakeAgentIdentityReader(canonical_agent_id)
+    consent_reader = FakeConsentPolicyReader(policy_result)
+    risk_reader = FakeRiskSignalReader()
+    provider = Communication360Provider(
+        sources=FakeSource(),
+        agent_identity_reader=identity_reader,
+        consent_policy_reader=consent_reader,
+        risk_signal_reader=risk_reader,
+    )
+    request, context = await _make_context(
+        ProviderRegistry(), subject=ProjectionSubject(kind="agent", id="agent-source-ref")
+    )
+
+    result = await provider.project(request, context)
+
+    coverage = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]
+    assert coverage["risk_flags"]["state"] == expected_state
+    assert coverage["risk_flags"]["reason"] == "agent_analytics_consent_not_established"
+    assert consent_reader.calls == [(TENANT_A, canonical_agent_id, "analytics")]
+    assert risk_reader.calls == []
+    assert not [claim for claim in result.claims if claim.kind == "communication_risk_signal_record"]
+
+
+async def test_communication360_degrades_agent_risk_on_consent_authority_error_before_read() -> None:
+    canonical_agent_id = "canonical-agent-1"
+    consent_reader = FakeConsentPolicyReader(raises=True)
+    risk_reader = FakeRiskSignalReader()
+    provider = Communication360Provider(
+        sources=FakeSource(),
+        agent_identity_reader=FakeAgentIdentityReader(canonical_agent_id),
+        consent_policy_reader=consent_reader,
+        risk_signal_reader=risk_reader,
+    )
+    request, context = await _make_context(
+        ProviderRegistry(), subject=ProjectionSubject(kind="agent", id="agent-source-ref")
+    )
+
+    result = await provider.project(request, context)
+
+    coverage = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]
+    assert coverage["risk_flags"]["state"] == "degraded"
+    assert coverage["risk_flags"]["reason"] == "agent_analytics_consent_authority_unavailable"
+    assert consent_reader.calls == [(TENANT_A, canonical_agent_id, "analytics")]
+    assert risk_reader.calls == []
+    assert not [claim for claim in result.claims if claim.kind == "communication_risk_signal_record"]
 
 
 async def test_communication360_joins_exact_recipient_risk_with_current_consent() -> None:

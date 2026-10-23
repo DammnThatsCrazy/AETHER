@@ -40,8 +40,10 @@ from shared.intelligence_projections import (  # noqa: E402
 from shared.intelligence_projections.contracts import (  # noqa: E402
     Experience360FrameRequest,
     Experience360PolicyDisposition,
+    Experience360PolicyEvaluation,
 )
 from shared.intelligence_projections.composition import compose_experience360_frame  # noqa: E402
+from shared.intelligence_projections.frame_runtime import build_experience360_frame  # noqa: E402
 
 
 TENANT = "tenant-a"
@@ -91,6 +93,7 @@ class FakeSource:
         self.calls = 0
         self.delegation_subjects: list[str] = []
         self.party_identity_subjects: list[set[str]] = []
+        self.owner_relationship_subjects: list[tuple[str, str]] = []
         self.capability_subjects: list[str] = []
 
     async def _rows(self, name: str, rows: list[dict]) -> list[dict]:
@@ -238,6 +241,13 @@ class FakeSource:
         return Agent360ReadBatch(
             rows=[row for row in rows if row["party_entity_id"] in party_entity_ids]
         )
+
+    async def owner_relationships(
+        self, tenant_id, owner_entity_id, canonical_agent_entity_id
+    ):
+        self.owner_relationship_subjects.append((owner_entity_id, canonical_agent_entity_id))
+        rows = await self._rows("owner_relationships", [])
+        return Agent360ReadBatch(rows=rows)
 
     async def activities(self, tenant_id, agent_id, limit):
         return await self._rows(
@@ -618,6 +628,184 @@ async def test_repository_agent360_delegation_parties_revalidates_tenant_scope()
             "identity_observed_at": None,
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_repository_agent_owner_relationship_reads_exact_tenant_graph_edges(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from shared.graph.graph import Edge, EdgeType
+
+    class Graph:
+        def __init__(self):
+            self.calls = []
+
+        async def get_edges_for_tenant(self, tenant_id, *, limit, edge_types):
+            self.calls.append((tenant_id, limit, edge_types))
+            return [
+                Edge(
+                    EdgeType.OWNS,
+                    "owner-1",
+                    "canonical-agent-a",
+                    {
+                        "tenant_id": tenant_id,
+                        "idempotency_key": "owner-edge-1",
+                        "recorded_at": "2026-10-02T00:00:00Z",
+                    },
+                ),
+                Edge(
+                    EdgeType.OWNS_AGENT,
+                    "owner-1",
+                    "another-agent",
+                    {"tenant_id": tenant_id, "idempotency_key": "other-agent-edge"},
+                ),
+                Edge(
+                    EdgeType.OWNS,
+                    "owner-1",
+                    "canonical-agent-a",
+                    {
+                        "tenant_id": "foreign-tenant",
+                        "idempotency_key": "foreign-owner-edge",
+                    },
+                ),
+            ], False
+
+    graph = Graph()
+    monkeypatch.setattr("dependencies.providers.get_graph", lambda: graph)
+    source = RepositoryAgent360Source.__new__(RepositoryAgent360Source)
+
+    result = await source.owner_relationships(
+        TENANT, "owner-1", "canonical-agent-a"
+    )
+
+    assert graph.calls == [(TENANT, 2000, [EdgeType.OWNS, EdgeType.OWNS_AGENT])]
+    assert result.scope_mismatch is True
+    assert result.truncated is False
+    assert result.rows == [
+        {
+            "tenant_id": TENANT,
+            "owner_entity_id": "owner-1",
+            "canonical_agent_entity_id": "canonical-agent-a",
+            "relationship_type": EdgeType.OWNS,
+            "valid_from": None,
+            "valid_to": None,
+            "evidence_ref": {
+                "id": "owner-edge-1",
+                "type": "relationship",
+                "source": "graph",
+                "observedAt": "2026-10-02T00:00:00Z",
+                "confidence": None,
+                "uri": "graph://edges/owner-edge-1",
+            },
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_agent360_owner_relationship_is_distinct_from_identity_and_authority():
+    class ExactOwnerRelationshipSource(FakeSource):
+        async def owner_relationships(
+            self, tenant_id, owner_entity_id, canonical_agent_entity_id
+        ):
+            await super().owner_relationships(
+                tenant_id, owner_entity_id, canonical_agent_entity_id
+            )
+            return Agent360ReadBatch(
+                rows=[
+                    {
+                        "tenant_id": tenant_id,
+                        "owner_entity_id": owner_entity_id,
+                        "canonical_agent_entity_id": canonical_agent_entity_id,
+                        "relationship_type": "OWNS",
+                        "valid_from": None,
+                        "valid_to": None,
+                        "evidence_ref": {
+                            "id": "owner-edge-1",
+                            "type": "relationship",
+                            "source": "graph",
+                            "observedAt": "2026-10-02T00:00:00Z",
+                        },
+                    }
+                ]
+            )
+
+    source = ExactOwnerRelationshipSource()
+    result = await Agent360Provider(source).project(_request(), _context())
+    actor = next(
+        item
+        for item in _sections(result)["state"].content["dimensions"]
+        if item["id"] == "actor_attribution"
+    )["content"]
+    relationship = actor["configuredOwnerRelationship"]
+
+    assert source.owner_relationship_subjects == [("owner-1", "canonical-agent-a")]
+    assert relationship["state"] == "observed"
+    assert relationship["relationshipState"] == "stored_edge_observed"
+    assert relationship["relationships"][0]["relationshipType"] == "OWNS"
+    assert relationship["relationships"][0]["evidenceRef"]["id"] == "owner-edge-1"
+    assert relationship["effectiveOwnership"] == "unknown"
+    assert relationship["effectiveAuthorization"] == "unknown"
+    assert relationship["freshness"] == {
+        "state": "not_assessed",
+        "slaSeconds": None,
+        "reason": "owner_relationship_freshness_sla_not_configured",
+    }
+    assert actor["configuredOwnerIdentity"]["relationshipState"] == "configured_reference_only"
+    assert actor["executionPrincipal"] == {"kind": "human", "id": "authenticated-user-1"}
+
+    claim = next(
+        claim for claim in result.claims if claim.kind == "observed_agent_owner_relationship"
+    )
+    assert claim.claimState == EpistemicStatus.OBSERVED
+    assert claim.domainSlotIds == ["owner_delegator", "actor_attribution"]
+    assert {ref.source for ref in claim.evidenceRefs} == {
+        "graph",
+        "agent_configs",
+        "entities",
+        "agent_deployment_identity_bindings",
+    }
+    assert "does not establish legal or effective ownership" in claim.claims[0]
+
+
+@pytest.mark.asyncio
+async def test_agent360_owner_relationship_slot_policy_denial_skips_projection_read():
+    class DenyOwnerSlotPolicy:
+        async def evaluate(self, request):
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-23T10:00:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "owner_delegator": Experience360PolicyDisposition(state="denied")
+                },
+            )
+
+    class ProjectionRuntime:
+        calls = []
+
+        async def execute_projection(self, request, **_kwargs):
+            self.calls.append(request.projectionId)
+            raise AssertionError("denied owner slot must not trigger a provider read")
+
+    runtime = ProjectionRuntime()
+    frame = await build_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="agent360",
+            tenantId=TENANT,
+            subject=ProjectionSubject(kind="agent", id=AGENT),
+            requestedSlotIds=["owner_delegator"],
+        ),
+        policy_evaluator=DenyOwnerSlotPolicy(),
+        projection_runtime=runtime,
+    )
+
+    owner_slot = next(slot for slot in frame.slots if slot.id == "owner_delegator")
+    assert runtime.calls == []
+    assert owner_slot.state == "suppressed"
+    assert owner_slot.content is None
+    assert owner_slot.claims == []
+    assert owner_slot.evidenceRefs == []
 
 
 @pytest.mark.asyncio

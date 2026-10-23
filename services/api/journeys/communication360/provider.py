@@ -819,6 +819,13 @@ def _canonical_communication_slot_ids(
         # message spine still has no episode join, so the product slot remains
         # partial and receives no claims from unscoped message inventory.
         supported.add("communications")
+    if subject_kind == "journey" and subject_id in _row_reference_values(
+        row, "journey_id", "journey_ids"
+    ):
+        # Journey attribution is limited to explicit typed IDs on the
+        # tenant-scoped canonical fact row. Message endpoints and free text do
+        # not establish a communication-to-journey join.
+        supported.add("communications")
 
     bound = _communication_slot_ids(
         subject_kind,
@@ -2038,7 +2045,65 @@ class Communication360Provider:
             and scope.participant_entity_id
         ):
             risk_subject = ProjectionSubject(kind="agent", id=scope.participant_entity_id)
-            authority_refs = scope.identity_evidence
+            agent_identity_refs = tuple(scope.identity_evidence)
+            try:
+                policy = await self._consent_policy.evaluate(
+                    tenant_id, scope.participant_entity_id, "analytics"
+                )
+            except Exception:  # noqa: BLE001 - consent authority is a fail-closed gate
+                return RiskFlagRead(
+                    "degraded",
+                    "agent_analytics_consent_authority_unavailable",
+                    authority_refs=agent_identity_refs,
+                    source_coverage_state="degraded",
+                )
+            allowed = (
+                policy.get("allowed")
+                if isinstance(policy, dict)
+                else getattr(policy, "allowed", None)
+            )
+            receipt_id = (
+                policy.get("receipt_id")
+                if isinstance(policy, dict)
+                else getattr(policy, "receipt_id", None)
+            )
+            policy_state = (
+                policy.get("state")
+                if isinstance(policy, dict)
+                else getattr(policy, "state", None)
+            )
+            ambiguous = (
+                policy.get("ambiguous") is True
+                if isinstance(policy, dict)
+                else getattr(policy, "ambiguous", None) is True
+            ) or (isinstance(policy_state, str) and policy_state.strip().lower() == "ambiguous")
+            # The canonical consent authority returns an affirmative receipt
+            # only when the exact tenant/subject/purpose check succeeds. Any
+            # denial, ambiguity, malformed result, or missing receipt blocks
+            # the RiskSignal read.
+            if (
+                ambiguous
+                or allowed is not True
+                or not isinstance(receipt_id, str)
+                or not receipt_id.strip()
+            ):
+                return RiskFlagRead(
+                    "suppressed" if allowed is False else "unknown",
+                    "agent_analytics_consent_not_established",
+                    authority_refs=agent_identity_refs,
+                )
+            authority_refs = _dedupe_refs(
+                [
+                    *agent_identity_refs,
+                    EvidenceRef(
+                        id=receipt_id,
+                        type="event",
+                        source="governance.consent.authority",
+                        observedAt=_utc_now_iso(),
+                        uri=f"store://consent_receipts/{quote(receipt_id, safe='')}",
+                    ),
+                ]
+            )
         elif (
             subject.kind == "entity"
             and scope.identity_resolution_state == "resolved"
@@ -3488,6 +3553,9 @@ class Communication360Provider:
             campaign_ids = _row_reference_values(row, "campaign_id", "campaign_ids")
             if request.subject.kind == "campaign" and request.subject.id in campaign_ids:
                 claim_text.append(f"canonical communication fact references campaign {request.subject.id}")
+            journey_ids = _row_reference_values(row, "journey_id", "journey_ids")
+            if request.subject.kind == "journey" and request.subject.id in journey_ids:
+                claim_text.append(f"canonical communication fact references journey {request.subject.id}")
             if fact_kind in {"conversation", "provider_thread"}:
                 claim_text.append(f"canonical {fact_kind} record {fact_id} observed")
             if fact_kind == "participant_binding":

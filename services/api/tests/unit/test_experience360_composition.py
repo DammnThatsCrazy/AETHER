@@ -578,6 +578,79 @@ async def test_frame_runtime_routes_journey_subject_to_episode360() -> None:
 
 
 @pytest.mark.asyncio
+async def test_frame_runtime_routes_journey_communications_to_communication360() -> None:
+    calls: list[tuple[str, str, tuple[str, ...]]] = []
+
+    class AllowPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-23T10:02:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "communications": Experience360PolicyDisposition(state="allowed")
+                },
+            )
+
+    class Runtime:
+        async def execute_projection(self, request, **_kwargs):
+            section_ids = tuple(request.includeSections or [])
+            calls.append((request.projectionId, request.subject.kind, section_ids))
+            return ProjectionResult(
+                projectionId=request.projectionId,
+                tenantId=request.tenantId,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[
+                    ProjectionSection(
+                        id=section_id,
+                        state="available",
+                        content={"evidenceRefs": [EVIDENCE]},
+                    )
+                    for section_id in section_ids
+                ],
+                claims=[
+                    ClaimEnvelope(
+                        id="communication360.journey-1.exact-fact",
+                        kind="canonical_communication_fact",
+                        subject=request.subject,
+                        evidenceRefs=[EVIDENCE],
+                        claims=["Canonical communication fact references this exact journey."],
+                        domainSlotIds=["communications"],
+                    )
+                ],
+                dependencyState=[],
+                generatedAt="2026-10-23T10:02:00Z",
+                degradedReasons=[],
+            )
+
+    request = Experience360FrameRequest(
+        surfaceId="journey360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="journey", id="journey-1"),
+        requestedSlotIds=["communications"],
+        includeEvidence=True,
+    )
+    frame = await build_experience360_frame(
+        request,
+        policy_evaluator=AllowPolicy(),
+        projection_runtime=Runtime(),
+        generated_at="2026-10-23T10:02:00Z",
+    )
+
+    assert calls == [("communication360", "journey", ("evidence", "interactions"))]
+    slot = frame.slots[0]
+    assert frame.subject == ProjectionSubject(kind="journey", id="journey-1")
+    assert slot.id == "communications"
+    assert slot.state == "degraded"
+    assert "slot_partial_implementation" in slot.reasonCodes
+    assert [claim.id for claim in slot.claims] == [
+        "communication360.journey-1.exact-fact"
+    ]
+    assert slot.evidenceRefs == [EVIDENCE]
+
+
+@pytest.mark.asyncio
 async def test_signals360_unjoined_risk_flags_do_not_query_risk360() -> None:
     projection_calls: list[tuple[str, str, tuple[str, ...]]] = []
 

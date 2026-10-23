@@ -1936,16 +1936,24 @@ type, and timestamp match exactly. Historical rows without the reciprocal link
 remain unresolved; Rights source identity, source trust, and a freshness SLA
 remain unknown.
 Agent360's required `owner_delegator` slot resolves a configured
-`owner_entity_id` only through the bounded tenant-scoped canonical entity lookup.
-The resulting claim proves a configured reference to a tenant-owned entity; it
-does not establish legal or effective ownership, historical validity, freshness,
-or action authorization.
+`owner_entity_id` through the bounded tenant-scoped canonical entity lookup and
+joins it to the resolved canonical Agent only when the tenant graph contains an
+exact `OWNS` or `OWNS_AGENT` edge. The 2,000-edge scan reports truncation and
+scope uncertainty. Claims cite graph-edge, configuration, and identity
+evidence; a stored edge does not establish legal or effective ownership,
+historical validity, freshness, or action authorization.
 Account360's required `communications` slot now consumes Communication360
 evidence, interactions, and timeline for exact tenant-owned entity subjects
 whose communication endpoints have matching tenant identity bindings. It does
 not expand through account/workspace aliases or membership edges. Slot policy
 can suppress content, claims, and evidence references; source freshness and
 historical consent coverage remain unknown.
+Journey360's required `communications` slot now consumes Communication360
+evidence and interactions only for tenant-scoped canonical facts whose typed
+`journey_id` or `journey_ids` contains the exact requested journey ID. Message
+endpoints and free-text mentions do not qualify. Message-spine coverage,
+completeness, freshness evaluation, and historical replay remain unknown, so
+the slot stays partial.
 Value360's `confidence` slot receives Economic360 attribution evidence only
 when both a model confidence score and model type/version lineage are present.
 The score is identified as model-reported, with calibration and application to
@@ -1963,11 +1971,26 @@ an exact tenant-scoped active `USER_ID` alias and active surviving identity
 subject, retaining both evidence references. Missing or ambiguous identity
 evidence stays unknown; this identity link does not establish action
 authorization or delegation authority.
+Execution360's required `latency_cost` slot now joins canonical AI invocation
+facts only when tenant, execution `action_id`, and canonical Agent match an
+admitted execution. Invocation latency and evidence are preserved; known
+selected costs are grouped by currency, and amounts with unknown or invalid
+cost basis are not exposed. The read is bounded and does not supply total
+execution, provider, or tool cost; temporal replay, other cost authorities, and
+a freshness threshold remain unavailable. Server lifecycle duration stays
+separate from invocation latency.
 Risk360's `poisoning_evidence` reads versioned tenant-scoped detector records
 for the exact subject, including lifecycle and evidence references. It exposes
 metadata only and does not independently verify source poisoning; detector
 coverage, population completeness, source identity, and freshness remain
 unknown.
+Risk360's required `policy_flags` slot reads exact tenant-and-Agent
+`obs_agent_risk_signals` records as reported observations with evidence. It
+does not present them as evaluated decisions: policy evaluation is unattested,
+the model-governance policy version is absent, and non-Agent, historical, and
+complete-coverage behavior remains unknown. `anomaly_events` stays unbound
+because no exact subject-scoped anomaly-event authority with evidence is
+available.
 Campaign360's `anomalies` slot includes exact campaign-scoped targeting-leakage
 findings with their targeting-observation and eligibility-snapshot evidence;
 general risk and source anomalies remain unresolved. Journey360's `stages` slot
@@ -2025,6 +2048,11 @@ canonical current-consent authority only for exact tenant, recipient-entity,
 and purpose pairs supported by communication identity and evidence; historical
 write-time outcomes remain separate, while non-consent policy, durable current
 decision evidence, complete recipient coverage, and freshness remain unknown.
+Communications360 `risk_flags` also requires an exact canonical Agent identity
+and a current analytics-consent receipt before reading that Agent's RiskSignals;
+missing, ambiguous, malformed, receipt-less, or denied decisions block the
+read, and consent-authority errors degrade the slot. Message-edge transfer,
+complete coverage, composite Risk360 output, and freshness remain unknown.
 Risk360 `propagation_paths` exposes bounded current FOLLOWS graph paths only
 after analytics consent, endpoint, tenant, relationship-evidence, and observed-
 time checks; the evidence records path context and does not establish risk

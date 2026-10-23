@@ -65,6 +65,7 @@ DEFAULT_READ_LIMIT = 100
 ACTIVE_DELEGATION_REPOSITORY_LIMIT = 200
 CAPABILITY_AUTHORIZATION_SCAN_LIMIT = 2000
 CAPABILITY_AUTHORIZATION_READ_LIMIT = CAPABILITY_AUTHORIZATION_SCAN_LIMIT + 1
+MAX_AGENT_OWNER_EDGE_SCAN = 2000
 
 REASON_CONFIG_UNAVAILABLE = "agent_config_source_unavailable"
 REASON_EXECUTION_UNAVAILABLE = "agent_execution_source_unavailable"
@@ -121,6 +122,10 @@ class Agent360Source(Protocol):
 
     async def delegation_party_identities(
         self, tenant_id: str, party_entity_ids: set[str]
+    ) -> Agent360ReadBatch: ...
+
+    async def owner_relationships(
+        self, tenant_id: str, owner_entity_id: str, canonical_agent_entity_id: str
     ) -> Agent360ReadBatch: ...
 
     async def activities(
@@ -256,6 +261,89 @@ class RepositoryAgent360Source:
                     "identity_evidence_id": entity_id,
                     "identity_evidence_source": "entities",
                     "identity_observed_at": _first(row, "updated_at", "created_at"),
+                }
+            )
+        return Agent360ReadBatch(
+            rows=rows,
+            truncated=truncated,
+            scope_mismatch=scope_mismatch,
+        )
+
+    async def owner_relationships(
+        self, tenant_id: str, owner_entity_id: str, canonical_agent_entity_id: str
+    ) -> Agent360ReadBatch:
+        """Read exact tenant ``OWNS`` edges for one resolved owner/Agent pair.
+
+        A graph edge is relationship evidence, not legal title, current
+        effective ownership, or action authorization. The tenant-wide scan is
+        bounded and reports truncation so absence cannot be mistaken for a
+        complete ownership inventory.
+        """
+        if not tenant_id or not owner_entity_id or not canonical_agent_entity_id:
+            return Agent360ReadBatch(rows=[], scope_known=False)
+
+        from dependencies.providers import get_graph
+        from shared.graph.graph import EdgeType, tenant_of
+
+        edge_types = [EdgeType.OWNS, EdgeType.OWNS_AGENT]
+        edges, truncated = await get_graph().get_edges_for_tenant(
+            tenant_id,
+            limit=MAX_AGENT_OWNER_EDGE_SCAN,
+            edge_types=edge_types,
+        )
+        if not isinstance(edges, list) or not isinstance(truncated, bool):
+            raise TypeError("tenant graph owner edge source returned an invalid contract")
+
+        rows: list[dict[str, Any]] = []
+        scope_mismatch = False
+        for edge in edges:
+            properties = getattr(edge, "properties", None)
+            edge_type = getattr(edge, "edge_type", None)
+            source_id = getattr(edge, "from_vertex_id", None)
+            target_id = getattr(edge, "to_vertex_id", None)
+            if (
+                not isinstance(properties, dict)
+                or edge_type not in edge_types
+                or not isinstance(source_id, str)
+                or not isinstance(target_id, str)
+            ):
+                scope_mismatch = True
+                continue
+            try:
+                edge_tenant_id = tenant_of(properties)
+            except Exception:  # noqa: BLE001 - malformed tenant tags fail closed
+                edge_tenant_id = None
+            if edge_tenant_id != tenant_id:
+                scope_mismatch = True
+                continue
+            if (source_id, target_id) != (owner_entity_id, canonical_agent_entity_id):
+                continue
+
+            edge_id = properties.get("idempotency_key")
+            if not isinstance(edge_id, str) or not edge_id.strip():
+                scope_mismatch = True
+                continue
+            observed_at = (
+                properties.get("recorded_at")
+                or properties.get("valid_from")
+                or getattr(edge, "created_at", None)
+            )
+            evidence = EvidenceRef(
+                id=edge_id,
+                type="relationship",
+                source="graph",
+                observedAt=(observed_at if isinstance(observed_at, str) and observed_at else None),
+                uri=f"graph://edges/{edge_id}",
+            )
+            rows.append(
+                {
+                    "tenant_id": tenant_id,
+                    "owner_entity_id": owner_entity_id,
+                    "canonical_agent_entity_id": canonical_agent_entity_id,
+                    "relationship_type": edge_type,
+                    "valid_from": properties.get("valid_from"),
+                    "valid_to": properties.get("valid_to"),
+                    "evidence_ref": evidence.model_dump(mode="json"),
                 }
             )
         return Agent360ReadBatch(
@@ -1344,6 +1432,55 @@ class Agent360Provider:
             )
             degraded_reasons.append(authority_unresolved_reason)
 
+        owner_relationship_loader = getattr(self._source, "owner_relationships", None)
+        if (
+            callable(owner_relationship_loader)
+            and configured_owner_identity_state == "resolved"
+            and configured_owner_entity_id is not None
+            and resolved_canonical_actor is not None
+        ):
+            owner_relationship_read = await self._safe_read(
+                "owner_relationships",
+                lambda: owner_relationship_loader(
+                    tenant_id,
+                    configured_owner_entity_id,
+                    resolved_canonical_actor,
+                ),
+                MAX_AGENT_OWNER_EDGE_SCAN,
+            )
+        else:
+            # A source reference or unresolved identity cannot authorize a
+            # relationship lookup against a guessed graph subject.
+            owner_relationship_read = _Read(rows=[], available=True, scope_known=False)
+        owner_relationship_rows, owner_relationship_mismatch = (
+            self._tenant_owner_relationship_rows(
+                owner_relationship_read,
+                tenant_id,
+                configured_owner_entity_id,
+                resolved_canonical_actor,
+            )
+        )
+        owner_relationship_read = replace(
+            owner_relationship_read,
+            scope_mismatch=(
+                owner_relationship_read.scope_mismatch or owner_relationship_mismatch
+            ),
+        )
+        data["owner_relationships"] = owner_relationship_read
+        scope_mismatch = scope_mismatch or owner_relationship_read.scope_mismatch
+        if not owner_relationship_read.available:
+            degraded_reasons.append("agent_owner_relationship_source_unavailable")
+        if owner_relationship_read.truncated:
+            degraded_reasons.append("agent_owner_relationship_read_truncated")
+        if not owner_relationship_read.scope_known:
+            degraded_reasons.append("agent_owner_relationship_scope_unknown")
+        if owner_relationship_read.scope_mismatch:
+            degraded_reasons.append("agent_owner_relationship_scope_mismatch")
+        owner_relationship_refs = [
+            EvidenceRef.model_validate(row["evidence_ref"])
+            for row in owner_relationship_rows
+        ]
+
         timeline_exec = _temporal_slice(
             execution_rows, request=request, time_keys=("started_at", "created_at")
         )
@@ -1457,6 +1594,7 @@ class Agent360Provider:
             communications=timeline_communications.rows,
             principal_identities=principal_identity_rows,
         )
+        evidence_refs = _dedupe_refs([*evidence_refs, *owner_relationship_refs])
         if historical_unavailable or invalid_window:
             claim_evidence_refs: list[EvidenceRef] = []
         elif request.timeRange is not None:
@@ -1575,6 +1713,74 @@ class Agent360Provider:
             ),
         }
 
+        owner_relationship_complete = (
+            owner_relationship_read.available
+            and owner_relationship_read.scope_known
+            and not owner_relationship_read.truncated
+            and not owner_relationship_read.scope_mismatch
+        )
+        owner_relationship_state = (
+            "unavailable"
+            if not owner_relationship_read.available
+            else "degraded"
+            if not owner_relationship_complete and owner_relationship_rows
+            else "unknown"
+            if not owner_relationship_complete or not owner_relationship_rows
+            else "observed"
+        )
+        owner_relationship_view = {
+            "state": owner_relationship_state,
+            "relationshipState": (
+                "stored_edge_observed" if owner_relationship_rows else "unknown"
+            ),
+            "ownerEntityId": configured_owner_entity_id,
+            "canonicalAgentEntityId": resolved_canonical_actor,
+            "relationships": [
+                {
+                    "relationshipType": row["relationship_type"],
+                    "validFrom": row.get("valid_from"),
+                    "validTo": row.get("valid_to"),
+                    "evidenceRef": row["evidence_ref"],
+                    "temporalValidity": (
+                        "valid_to_recorded_not_replayed"
+                        if row.get("valid_to") not in (None, "")
+                        else "not_assessed"
+                    ),
+                }
+                for row in owner_relationship_rows
+            ],
+            "count": (
+                len(owner_relationship_rows) if owner_relationship_complete else None
+            ),
+            "effectiveOwnership": "unknown",
+            "effectiveAuthorization": "unknown",
+            "temporalSemantics": (
+                "current_graph_edge_read; historical validity is not reconstructed"
+            ),
+            "freshness": {
+                "state": (
+                    "not_assessed"
+                    if any(ref.observedAt for ref in owner_relationship_refs)
+                    else "undated"
+                    if owner_relationship_rows
+                    else "not_assessed"
+                ),
+                "slaSeconds": None,
+                "reason": "owner_relationship_freshness_sla_not_configured",
+            },
+            "reason": (
+                None
+                if owner_relationship_rows and owner_relationship_complete
+                else "tenant graph owner-edge scan is incomplete"
+                if owner_relationship_read.truncated
+                or owner_relationship_read.scope_mismatch
+                or not owner_relationship_read.scope_known
+                else "no exact OWNS or OWNS_AGENT edge was observed for the resolved owner and Agent"
+                if owner_relationship_read.available
+                else "tenant graph owner-edge source is unavailable"
+            ),
+        }
+
         actor_attribution = {
             "state": actor_identity_state,
             "assertedSourceActor": agent_id,
@@ -1609,6 +1815,7 @@ class Agent360Provider:
                 "evidenceRefs": configured_owner_identity_view["evidenceRefs"],
                 "reason": configured_owner_identity_view["reason"],
             },
+            "configuredOwnerRelationship": owner_relationship_view,
             "resolvedCanonicalActor": resolved_canonical_actor,
             "executionPrincipal": execution_principals["executionPrincipal"],
             "executionPrincipalState": execution_principals["state"],
@@ -1624,6 +1831,7 @@ class Agent360Provider:
                 actor_identity_refs
                 + ([config_ref.model_dump(mode="json")] if config_ref else [])
                 + configured_owner_identity_view["evidenceRefs"]
+                + [ref.model_dump(mode="json") for ref in owner_relationship_refs]
                 + execution_principals["evidenceRefs"]
                 + execution_principal_identity["evidenceRefs"]
             ),
@@ -2198,6 +2406,9 @@ class Agent360Provider:
                     if request.timeRange is None
                     else None
                 ),
+                owner_relationship_rows=(
+                    owner_relationship_rows if request.timeRange is None else []
+                ),
                 agent_identity_rows=(
                     actor_identity_rows if resolved_canonical_actor is not None else []
                 ),
@@ -2374,6 +2585,7 @@ class Agent360Provider:
             "incoming_delegations": REASON_DELEGATION_UNAVAILABLE,
             "outgoing_delegations": REASON_DELEGATION_UNAVAILABLE,
             "active_delegations": REASON_DELEGATION_UNAVAILABLE,
+            "owner_relationships": "agent_owner_relationship_source_unavailable",
             "activities": REASON_ACTIVITY_UNAVAILABLE,
             "tools": REASON_TOOL_UNAVAILABLE,
             "capability_access_profile": "agent_capability_access_profile_unavailable",
@@ -2420,6 +2632,51 @@ class Agent360Provider:
                 mismatch = True
                 continue
             rows.append(row)
+        return rows, mismatch
+
+    @staticmethod
+    def _tenant_owner_relationship_rows(
+        read: _Read,
+        tenant_id: str,
+        owner_entity_id: Optional[str],
+        canonical_agent_entity_id: Optional[str],
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Admit only exact tenant graph ownership edges for the resolved pair."""
+        if not read.available or read.rows is None:
+            return [], read.scope_mismatch
+        if not owner_entity_id or not canonical_agent_entity_id:
+            return [], read.scope_mismatch
+        rows: list[dict[str, Any]] = []
+        mismatch = read.scope_mismatch
+        seen_edge_refs: set[tuple[str, str]] = set()
+        for row in read.rows:
+            if (
+                row.get("tenant_id") != tenant_id
+                or row.get("owner_entity_id") != owner_entity_id
+                or row.get("canonical_agent_entity_id") != canonical_agent_entity_id
+                or row.get("relationship_type") not in {"OWNS", "OWNS_AGENT"}
+            ):
+                mismatch = True
+                continue
+            try:
+                ref = EvidenceRef.model_validate(row.get("evidence_ref"))
+            except Exception:  # noqa: BLE001 - invalid graph evidence is not projected
+                mismatch = True
+                continue
+            if ref.source != "graph" or ref.type != "relationship" or not ref.id.strip():
+                mismatch = True
+                continue
+            ref_key = (ref.source, ref.id)
+            if ref_key in seen_edge_refs:
+                mismatch = True
+                continue
+            seen_edge_refs.add(ref_key)
+            rows.append(
+                {
+                    **row,
+                    "evidence_ref": ref.model_dump(mode="json"),
+                }
+            )
         return rows, mismatch
 
     @staticmethod
@@ -3743,6 +4000,7 @@ class Agent360Provider:
         config: Optional[dict[str, Any]],
         config_ref: Optional[EvidenceRef],
         configured_owner_identity: Optional[dict[str, Any]],
+        owner_relationship_rows: list[dict[str, Any]],
         agent_identity_rows: list[dict[str, Any]],
         execution_rows: list[dict[str, Any]],
         delegation_records: list[tuple[dict[str, Any], str, bool]],
@@ -3847,6 +4105,51 @@ class Agent360Provider:
                     evidenceRefs=owner_refs,
                     claims=[claim_text],
                     claimState=claim_state,
+                    domainSlotIds=["owner_delegator", "actor_attribution"],
+                )
+            )
+        for row in owner_relationship_rows:
+            try:
+                relationship_ref = EvidenceRef.model_validate(row["evidence_ref"])
+            except Exception:  # noqa: BLE001 - malformed graph refs cannot back a claim
+                continue
+            owner_refs = [relationship_ref]
+            if config_ref is not None:
+                owner_refs.append(config_ref)
+            if configured_owner_identity is not None:
+                configured_owner_refs = configured_owner_identity.get("evidenceRefs")
+                if isinstance(configured_owner_refs, list):
+                    for raw_ref in configured_owner_refs:
+                        try:
+                            owner_refs.append(EvidenceRef.model_validate(raw_ref))
+                        except Exception:  # noqa: BLE001 - malformed identity refs cannot back a claim
+                            continue
+            owner_refs.extend(
+                ref
+                for identity_row in agent_identity_rows
+                if _first(identity_row, "canonical_agent_entity_id")
+                == row.get("canonical_agent_entity_id")
+                and (
+                    ref := self._ref_one(
+                        identity_row,
+                        _first(identity_row, "identity_evidence_source") or "",
+                        ("identity_evidence_id",),
+                        ("identity_bound_at",),
+                    )
+                )
+                is not None
+            )
+            owner_refs = _dedupe_refs(owner_refs)
+            claims.append(
+                ClaimEnvelope(
+                    id=f"agent_owner_relationship.{relationship_ref.id}",
+                    kind="observed_agent_owner_relationship",
+                    subject=subject,
+                    evidenceRefs=owner_refs,
+                    claims=[
+                        f"The tenant-scoped graph stores {row['relationship_type']} from configured owner entity {row['owner_entity_id']} to resolved canonical Agent {row['canonical_agent_entity_id']}; this stored relationship does not establish legal or effective ownership, historical validity, freshness, or action authorization."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
                     domainSlotIds=["owner_delegator", "actor_attribution"],
                 )
             )

@@ -716,7 +716,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/blueprints/execution360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['agent', 'entity', 'episode', 'execution'],
-    canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'commerce', 'economic_facts', 'entity_registry', 'episode_facts', 'events', 'evidence', 'execution_facts', 'graph', 'identity', 'outcome_facts', 'resources', 'risk_signals', 'temporal_kernel', 'tools'],
+    canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'economic_facts', 'entity_registry', 'episode_facts', 'events', 'evidence', 'execution_facts', 'graph', 'identity', 'outcome_facts', 'resources', 'risk_signals', 'temporal_kernel', 'tools'],
     hardDependencies: ['agentic_runtime_access', 'temporal_kernel'],
     projectionDependencies: ['agent360', 'episode360', 'outcome360', 'temporal360'],
     optionalProjectionDependencies: [],
@@ -2272,11 +2272,11 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        canonicalAuthorityRefs: ['agent_access', 'identity'],
+        canonicalAuthorityRefs: ['agent_access', 'graph', 'identity'],
         description: 'Tenant-scoped owner and delegator records with canonical party identity only where resolved; no effective action authorization is inferred.',
         id: 'owner_delegator',
         implementationCrosswalk: ['authority_and_delegation'],
-        partialImplementationReason: 'configured_owner_entity_id_is_resolved_only_as_a_current_tenant_owned_entity_reference; legal_or_effective_ownership_historical_validity_and_freshness_remain_unknown',
+        partialImplementationReason: 'Configured owner reference is resolved to an exact tenant entity and joined only to an exact tenant graph OWNS or OWNS_AGENT edge targeting the resolved canonical Agent. Legal or effective ownership, action authorization, historical validity, graph completeness, and freshness remain unknown.',
         projectionBindings: [
           {
             projectionId: 'agent360',
@@ -3434,11 +3434,11 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        authorityGapReason: 'exact_subject_authority_join_not_implemented',
         canonicalAuthorityRefs: ['agent_executions', 'ai_execution_facts', 'economic_facts', 'execution_facts', 'outcome_facts'],
-        description: 'Required Execution 360 blueprint slot: latency cost.',
+        description: 'Server lifecycle duration and exact action-linked AI invocation latency and selected-cost evidence by currency.',
         id: 'latency_cost',
         implementationCrosswalk: ['economic_and_business_outcomes', 'execution_identity_and_state'],
+        partialImplementationReason: 'AI invocation facts are joined only when tenant, execution action_id, and canonical agent match; selected cost is exposed only with a valid known cost basis. This is not provider/tool execution cost or business value. Other cost authorities, historical replay, complete coverage, and a freshness SLA remain unknown.',
         projectionBindings: [
           {
             projectionId: 'execution360',
@@ -3447,8 +3447,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             sectionIds: ['state', 'summary']
           }
         ],
-        requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['ai_execution_facts']
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['agent_executions', 'episode_facts', 'events', 'execution_facts', 'temporal_kernel'],
@@ -3757,7 +3756,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
   journey360: {
     backendCapabilities: {
       required: ['experience360.evidence.provenance', 'experience360.frame.compose', 'experience360.freshness.evaluate', 'experience360.policy.evaluate', 'experience360.tenant_scope.enforce'],
-      projectionCapabilityKeys: ['episode360.explore', 'episode360.read', 'profile360.explore', 'profile360.read'],
+      projectionCapabilityKeys: ['communication360.explore', 'communication360.read', 'episode360.explore', 'episode360.read', 'profile360.explore', 'profile360.read'],
       providerCapabilityStatus: 'registry_requirements_not_route_attestation'
     },
     blueprintContract: {
@@ -3797,11 +3796,18 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       },
       {
         canonicalAuthorityRefs: ['communication_facts'],
-        description: 'Required journey360 slot: communications.',
+        description: 'Tenant-scoped canonical communication facts carrying this exact typed journey ID.',
         id: 'communications',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'journey_communications_authority_not_joined'
+        partialImplementationReason: 'Only tenant-scoped canonical communication facts carrying this exact typed journey ID are joined. Message-spine coverage, completeness, freshness, and historical replay remain unestablished.',
+        projectionBindings: [
+          {
+            projectionId: 'communication360',
+            role: 'primary',
+            subjectKinds: ['journey'],
+            sectionIds: ['evidence', 'interactions']
+          }
+        ],
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['canonical_conversions', 'journeys'],
@@ -3952,6 +3958,12 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       requirementStatus: 'contract_requirement_not_provider_attestation'
     },
     projectionBindings: [
+      {
+        projectionId: 'communication360',
+        role: 'primary',
+        bindingStatus: 'catalog_only',
+        providerImplementationState: 'implemented'
+      },
       {
         projectionId: 'episode360',
         role: 'primary',
@@ -4921,12 +4933,19 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        canonicalAuthorityRefs: ['model_governance', 'risk_outputs'],
-        description: 'Evaluated risk policy flags with policy version and evidence.',
+        canonicalAuthorityRefs: ['model_governance', 'risk_outputs', 'risk_signals'],
+        description: 'Exact agent risk-signal policy-flag observations with evidence; evaluated flags require versioned model-governance decisions.',
         id: 'policy_flags',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'evaluated_policy_flag_authority_not_connected'
+        partialImplementationReason: 'Only exact tenant-scoped current agent risk-signal records are exposed as reported observations. Policy evaluation, model/version, non-agent subjects, historical replay, and complete coverage remain unknown.',
+        projectionBindings: [
+          {
+            projectionId: 'risk360',
+            role: 'primary',
+            subjectKinds: ['agent'],
+            sectionIds: ['evidence', 'findings']
+          }
+        ],
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['consent_policy_decisions', 'evidence', 'graph', 'relationship_facts'],

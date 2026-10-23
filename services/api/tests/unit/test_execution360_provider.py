@@ -18,6 +18,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from actions.agent.execution360_provider import (  # noqa: E402
     ExecutionApprovalRead,
+    ExecutionCostRead,
     ExecutionEpisodeContextRead,
     ExecutionPrincipalIdentityRead,
     ExecutionRiskEventRead,
@@ -357,6 +358,7 @@ class FakeSource:
         observed: ExecutionRead | None = None,
         *,
         error: Exception | None = None,
+        cost_facts: ExecutionCostRead | None = None,
         risk_events: ExecutionRiskEventRead | None = None,
         approval_decisions: ExecutionApprovalRead | None = None,
     ) -> None:
@@ -373,6 +375,9 @@ class FakeSource:
             agent_ids=(AGENT,),
         )
         self.error = error
+        self.cost_fact_read = cost_facts or ExecutionCostRead(
+            rows=[], available=True, scope_known=True
+        )
         self.risk_event_read = risk_events or ExecutionRiskEventRead(
             rows=[], available=True, scope_known=True
         )
@@ -381,6 +386,7 @@ class FakeSource:
         )
         self.risk_event_calls: list[tuple[str, tuple[str, ...], int]] = []
         self.approval_decision_calls: list[tuple[str, tuple[str, ...], int]] = []
+        self.cost_fact_calls: list[tuple[str, tuple[tuple[str, str], ...], int]] = []
 
     async def server_executions(
         self, *, tenant_id: str, subject: ProjectionSubject, limit: int
@@ -411,6 +417,18 @@ class FakeSource:
             raise self.error
         self.approval_decision_calls.append((tenant_id, execution_ids, limit))
         return self.approval_decision_read
+
+    async def execution_cost_facts(
+        self,
+        *,
+        tenant_id: str,
+        executions: tuple[tuple[str, str], ...],
+        limit: int,
+    ) -> ExecutionCostRead:
+        if self.error:
+            raise self.error
+        self.cost_fact_calls.append((tenant_id, executions, limit))
+        return self.cost_fact_read
 
 
 async def test_provider_emits_registry_sections_evidence_and_catalog_bound_claims() -> None:
@@ -510,10 +528,13 @@ async def test_provider_emits_registry_sections_evidence_and_catalog_bound_claim
     assert latency_cost["latency"]["sampleCount"] == 1
     assert latency_cost["latency"]["samples"][0]["elapsedMs"] == 2000.0
     assert latency_cost["latency"]["samples"][0]["evidenceRefs"][0]["id"] == "exec-1"
-    assert latency_cost["cost"] == {
-        "state": "unknown",
-        "reason": "no_execution_cost_authority_is_joined_by_execution360",
-    }
+    assert latency_cost["cost"]["state"] == "unknown"
+    assert latency_cost["cost"]["reason"] == (
+        "no_ai_execution_invocation_linked_to_admitted_execution"
+    )
+    assert latency_cost["cost"]["byCurrency"] == []
+    assert latency_cost["cost"]["unknownCostInvocationCount"] is None
+    assert latency_cost["latency"]["aiInvocationTelemetry"]["state"] == "unknown"
 
     outcomes = next(section for section in result.sections if section.id == "outcomes")
     assert outcomes.state == "unknown"
@@ -523,6 +544,179 @@ async def test_provider_emits_registry_sections_evidence_and_catalog_bound_claim
     serialized = result.model_dump_json()
     assert "must-not-appear" not in serialized
     assert "workerRunLinkage" in serialized
+
+
+async def test_latency_cost_joins_exact_canonical_ai_invocation_facts() -> None:
+    source = FakeSource(
+        cost_facts=ExecutionCostRead(
+            rows=[
+                {
+                    "tenant_id": TENANT,
+                    "execution_id": "exec-1",
+                    "action_id": "exec-1",
+                    "agent_id": AGENT,
+                    "invocation_id": "invocation-1",
+                    "observed_at": "2026-10-16T10:00:01+00:00",
+                    "latency_ms": 340,
+                    "selected_cost": "0.125",
+                    "cost_basis": "billed",
+                    "currency": "usd",
+                }
+            ],
+            available=True,
+            scope_known=True,
+        )
+    )
+    request = _request()
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    summary = next(section for section in result.sections if section.id == "summary")
+    latency_cost = summary.content["latencyCost"]
+    assert source.cost_fact_calls == [(TENANT, (("exec-1", AGENT),), 50)]
+    assert latency_cost["cost"]["state"] == "available"
+    assert latency_cost["cost"]["linkage"] == (
+        "exact_tenant_execution_action_id_and_agent_id"
+    )
+    assert latency_cost["cost"]["knownCostInvocationCount"] == 1
+    assert latency_cost["cost"]["byCurrency"] == [
+        {
+            "currency": "USD",
+            "total": 0.125,
+            "factCount": 1,
+            "evidenceRefs": [
+                {
+                    "id": "invocation-1",
+                    "type": "event",
+                    "source": "ai_execution_facts",
+                    "observedAt": "2026-10-16T10:00:01+00:00",
+                    "uri": "store://ai_execution_facts/tenant-execution360%3Ainvocation-1",
+                }
+            ],
+        }
+    ]
+    invocation_latency = latency_cost["latency"]["aiInvocationTelemetry"]
+    assert invocation_latency["state"] == "available"
+    assert invocation_latency["samples"][0]["latencyMs"] == 340.0
+    assert invocation_latency["freshness"]["state"] == "unknown"
+    cost_claim = next(
+        claim
+        for claim in result.claims
+        if claim.kind == "source_reported_execution_invocation_cost_total"
+    )
+    assert cost_claim.claimState == EpistemicStatus.OBSERVED
+    assert cost_claim.domainSlotIds == ["latency_cost", "evidence_trace"]
+    assert cost_claim.evidenceRefs[0].source == "ai_execution_facts"
+    evidence_section = next(section for section in result.sections if section.id == "evidence")
+    assert any(
+        ref["source"] == "ai_execution_facts" and ref["id"] == "invocation-1"
+        for ref in evidence_section.content["evidence"]
+    )
+
+
+async def test_execution_cost_source_queries_exact_tenant_action_and_agent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    import config.settings
+
+    monkeypatch.setattr(
+        config.settings,
+        "settings",
+        SimpleNamespace(ai_economics=SimpleNamespace(execution_facts_enabled=True)),
+    )
+    observed_calls: list[tuple[str, dict[str, object]]] = []
+
+    async def list_exact_facts(tenant_id: str, **filters: object) -> list[dict[str, object]]:
+        observed_calls.append((tenant_id, filters))
+        return [
+            {
+                "tenant_id": tenant_id,
+                "action_id": filters["action_id"],
+                "agent_id": AGENT,
+                "invocation_id": "invocation-1",
+                "observed_at": "2026-10-16T10:00:01+00:00",
+                "latency_ms": 340,
+                "selected_cost": 0.125,
+                "cost_basis": "billed",
+                "currency": "USD",
+            }
+        ]
+
+    source = RepositoryExecution360Source(ai_execution_facts_reader=list_exact_facts)
+    read = await source.execution_cost_facts(
+        tenant_id=TENANT,
+        executions=(("exec-1", AGENT),),
+        limit=50,
+    )
+
+    assert observed_calls == [(TENANT, {"action_id": "exec-1", "limit": 201})]
+    assert read.available is True
+    assert read.scope_known is True
+    assert read.rows[0]["execution_id"] == "exec-1"
+    assert read.rows[0]["action_id"] == "exec-1"
+    assert read.rows[0]["agent_id"] == AGENT
+
+
+async def test_execution_cost_keeps_unknown_cost_unknown_and_drops_mismatched_fact() -> None:
+    source = FakeSource(
+        cost_facts=ExecutionCostRead(
+            rows=[
+                {
+                    "tenant_id": TENANT,
+                    "execution_id": "exec-1",
+                    "action_id": "exec-1",
+                    "agent_id": AGENT,
+                    "invocation_id": "unknown-cost-invocation",
+                    "observed_at": "2026-10-16T10:00:01+00:00",
+                    "latency_ms": None,
+                    # A malformed/corrupt source row may carry an amount while
+                    # declaring its basis unknown; do not expose it as a cost.
+                    "selected_cost": "9.99",
+                    "cost_basis": "unknown",
+                    "currency": "USD",
+                },
+                {
+                    "tenant_id": "foreign-tenant",
+                    "execution_id": "exec-1",
+                    "action_id": "exec-1",
+                    "agent_id": AGENT,
+                    "invocation_id": "foreign-invocation",
+                    "observed_at": "2026-10-16T10:00:01+00:00",
+                    "latency_ms": 12,
+                    "selected_cost": 1000,
+                    "cost_basis": "billed",
+                    "currency": "USD",
+                },
+            ],
+            available=True,
+            scope_known=True,
+        )
+    )
+    request = _request()
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    summary = next(section for section in result.sections if section.id == "summary")
+    cost = summary.content["latencyCost"]["cost"]
+    assert cost["state"] == "degraded"
+    assert cost["byCurrency"] == []
+    assert cost["knownCostInvocationCount"] == 0
+    assert cost["unknownCostInvocationCount"] == 1
+    assert [item["invocationId"] for item in cost["invocations"]] == [
+        "unknown-cost-invocation"
+    ]
+    assert cost["invocations"][0]["selectedCost"] is None
+
+
+async def test_latency_cost_read_is_skipped_when_bound_sections_are_not_requested() -> None:
+    request = _request(includeSections=["timeline"])
+    source = FakeSource()
+
+    await Execution360Provider(source).project(request, await _context(request))
+
+    assert source.cost_fact_calls == []
 
 
 async def test_exact_execution_subject_reads_only_tenant_execution_record() -> None:

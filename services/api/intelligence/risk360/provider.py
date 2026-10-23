@@ -114,6 +114,7 @@ SECTION_DEPENDENCIES: dict[str, str] = {
 
 _MAX_ASSESSMENT_SCAN = 50
 _MAX_SIGNAL_SCAN = 100
+_MAX_AGENT_POLICY_FLAG_SCAN = 100
 _MAX_SOURCE_PROVENANCE_SCAN = 100
 _MAX_POISONING_EVIDENCE_SCAN = 100
 _MAX_FINANCIAL_PATH_NODES = 21
@@ -293,6 +294,19 @@ class RiskSourceReader(Protocol):
         """Tenant-scoped RiskSignal records for ``subject`` (empty when none)."""
         ...
 
+    async def agent_policy_flag_observations(
+        self,
+        *,
+        tenant_id: str,
+        agent_id: str,
+    ) -> list[dict[str, Any]]:
+        """Exact tenant/agent observed policy-flag records, when available.
+
+        These are observation-plane reports, not model-governance evaluation
+        records. A consumer must preserve that limitation in slot coverage.
+        """
+        ...
+
     async def source_provenance_observations(
         self,
         *,
@@ -398,6 +412,30 @@ class RepositoryRiskSourceReader:
         ]
         if len(scoped) != len(rows) or len(rows) > _MAX_SIGNAL_SCAN:
             raise RiskSourceReadIncomplete("risk signal scope is incomplete")
+        return scoped
+
+    async def agent_policy_flag_observations(
+        self,
+        *,
+        tenant_id: str,
+        agent_id: str,
+    ) -> list[dict[str, Any]]:
+        """Read exact reported agent flags; never consult another tenant or alias."""
+        from repositories.agentic_observability_repos import AgentRiskSignalRepository
+
+        rows = await AgentRiskSignalRepository().find_many(
+            filters={"tenant_id": tenant_id, "agent_id": agent_id},
+            limit=_MAX_AGENT_POLICY_FLAG_SCAN + 1,
+        )
+        scoped = [
+            row
+            for row in rows
+            if isinstance(row, dict)
+            and str(row.get("tenant_id", "")) == tenant_id
+            and str(row.get("agent_id", "")) == agent_id
+        ]
+        if len(scoped) != len(rows) or len(rows) > _MAX_AGENT_POLICY_FLAG_SCAN:
+            raise RiskSourceReadIncomplete("agent policy flag scope is incomplete")
         return scoped
 
     async def source_provenance_observations(
@@ -761,6 +799,14 @@ class Risk360Provider:
                 tenant_id, request.subject
             )
 
+        agent_policy_flags, agent_policy_flags_degraded, agent_policy_flags_reason = (
+            await self._safe_agent_policy_flag_observations(
+                tenant_id=tenant_id,
+                request=request,
+                context=context,
+            )
+        )
+
         poisoning_as_of, poisoning_anchor_reason = self._poisoning_as_of(request, context)
         if context.tenantId != tenant_id:
             poisoning_evidence, poisoning_evidence_degraded = [], True
@@ -787,7 +833,11 @@ class Risk360Provider:
         )
 
         evidence = self._collect_evidence(
-            assessment, signals, source_provenance, poisoning_evidence
+            assessment,
+            signals,
+            source_provenance,
+            poisoning_evidence,
+            agent_policy_flags,
         )
         if financial_link is not None:
             evidence = _dedupe_evidence([*evidence, *financial_link["evidence_refs"]])
@@ -822,6 +872,9 @@ class Risk360Provider:
                 financial_link_degraded,
                 financial_link_reason,
                 social_propagation,
+                agent_policy_flags,
+                agent_policy_flags_degraded,
+                agent_policy_flags_reason,
             ),
             self._health_section(
                 request,
@@ -844,6 +897,7 @@ class Risk360Provider:
             source_provenance,
             poisoning_evidence,
             financial_link,
+            agent_policy_flags,
         )
         claims.extend(social_path_claims)
 
@@ -1070,6 +1124,9 @@ class Risk360Provider:
         financial_link_degraded: bool,
         financial_link_reason: Optional[str],
         social_propagation: dict[str, Any],
+        agent_policy_flags: list[dict[str, Any]],
+        agent_policy_flags_degraded: bool,
+        agent_policy_flags_reason: Optional[str],
     ) -> ProjectionSection:
         """findings — NO risk findings are asserted before materiality exists.
 
@@ -1109,6 +1166,34 @@ class Risk360Provider:
                     degraded=poisoning_evidence_degraded,
                     reason=poisoning_evidence_reason,
                 ),
+                "policyFlags": {
+                    "state": (
+                        "degraded"
+                        if agent_policy_flags_degraded
+                        else "partial"
+                        if agent_policy_flags
+                        else "unknown"
+                    ),
+                    "reason": agent_policy_flags_reason
+                    or (
+                        "agent_observed_flags_lack_model_governance_policy_version"
+                        if agent_policy_flags
+                        else "evaluated_policy_flag_authority_unavailable"
+                    ),
+                    "semantics": "exact_agent_risk_signal_reports_only",
+                    "policyEvaluation": "not_attested",
+                    "policyVersion": None,
+                    "observations": [
+                        {
+                            "signalId": row["signal_id"],
+                            "agentId": row["agent_id"],
+                            "policyFlags": list(row["policy_flags"]),
+                            "detectedAt": row["detected_at"],
+                            "evidenceRefs": [row["evidence_ref"].model_dump(mode="json")],
+                        }
+                        for row in agent_policy_flags
+                    ],
+                },
                 "propagationPaths": {
                     key: value
                     for key, value in social_propagation.items()
@@ -1130,6 +1215,9 @@ class Risk360Provider:
                     financial_link_degraded,
                     financial_link_reason,
                     social_propagation,
+                    agent_policy_flags,
+                    agent_policy_flags_degraded,
+                    agent_policy_flags_reason,
                 ),
             },
             warnings=warnings or None,
@@ -1239,6 +1327,9 @@ class Risk360Provider:
         financial_link_degraded: bool,
         financial_link_reason: Optional[str],
         social_propagation: dict[str, Any],
+        agent_policy_flags: list[dict[str, Any]],
+        agent_policy_flags_degraded: bool,
+        agent_policy_flags_reason: Optional[str],
     ) -> dict[str, dict[str, str]]:
         """Expose exact 360 slot coverage without converting absence into a claim."""
         agent_amplification = any(
@@ -1272,6 +1363,22 @@ class Risk360Provider:
             source_trust_coverage = {
                 "state": "unknown",
                 "reason": "source_trust_classification_not_recorded",
+            }
+
+        if agent_policy_flags_degraded:
+            policy_flags_coverage = {
+                "state": "degraded",
+                "reason": agent_policy_flags_reason or "agent_policy_flag_read_incomplete",
+            }
+        elif agent_policy_flags:
+            policy_flags_coverage = {
+                "state": "partial",
+                "reason": "agent_observed_flags_lack_model_governance_policy_version",
+            }
+        else:
+            policy_flags_coverage = {
+                "state": "unknown",
+                "reason": agent_policy_flags_reason or "evaluated_policy_flag_authority_unavailable",
             }
 
         open_poisoning = any(
@@ -1325,7 +1432,6 @@ class Risk360Provider:
         }
         unsupported_reasons = {
             "anomaly_events": "canonical_anomaly_event_authority_unavailable",
-            "policy_flags": "evaluated_policy_flag_authority_unavailable",
             "financial_contagion": "financial_contagion_attribution_authority_unavailable",
             "social_contagion": "social_contagion_causal_evidence_authority_unavailable",
             "interventions": "risk_intervention_authority_unavailable",
@@ -1333,6 +1439,7 @@ class Risk360Provider:
         }
         for slot_id, reason in unsupported_reasons.items():
             supported[slot_id] = {"state": "unknown", "reason": reason}
+        supported["policy_flags"] = policy_flags_coverage
         propagation_state = social_propagation.get("state")
         propagation_reason = social_propagation.get("reason")
         if propagation_state in {"partial", "degraded", "unknown"}:
@@ -1593,6 +1700,7 @@ class Risk360Provider:
         source_provenance: list[dict[str, Any]],
         poisoning_evidence: list[RiskPoisoningEvidence],
         financial_link: Optional[dict[str, Any]],
+        agent_policy_flags: list[dict[str, Any]],
     ) -> list[ClaimEnvelope]:
         """Evidence-grounded claims (requiresEvidence: never an empty envelope)."""
         claims: list[ClaimEnvelope] = []
@@ -1683,6 +1791,24 @@ class Risk360Provider:
                     confidence=signal.confidence,
                     claimState=signal.claim_state,
                     domainSlotIds=domain_slot_ids,
+                )
+            )
+
+        for row in agent_policy_flags:
+            claims.append(
+                ClaimEnvelope(
+                    id=f"risk360.agent-policy-flags.{row['signal_id']}",
+                    kind="agent_policy_flags_reported",
+                    subject=subject,
+                    evidenceRefs=[row["evidence_ref"]],
+                    claims=[
+                        f"Exact agent risk signal {row['signal_id']!r} reports policy flags "
+                        f"{', '.join(row['policy_flags'])!r}; policy evaluation and model-"
+                        "governance version are not attested by this record."
+                    ],
+                    confidence=None,
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["policy_flags", "evidence_trace"],
                 )
             )
 
@@ -2419,6 +2545,107 @@ class Risk360Provider:
             )
         return observations, degraded
 
+    async def _safe_agent_policy_flag_observations(
+        self,
+        *,
+        tenant_id: str,
+        request: ProjectionRequest,
+        context: ProjectionContext,
+    ) -> tuple[list[dict[str, Any]], bool, Optional[str]]:
+        """Read exact reported agent flags without upgrading them to policy evaluation.
+
+        The observation repository has tenant and agent ids plus a signal id,
+        but no model-governance policy/version reference. It can therefore back
+        a partial ``policy_flags`` slot for an exact agent subject only.
+        Historical reads are suppressed because the legacy observation table
+        has no bitemporal completeness contract.
+        """
+        subject = request.subject
+        if context.tenantId != tenant_id:
+            return [], True, "agent_policy_flag_tenant_context_mismatch"
+        if subject.kind != "agent":
+            return [], False, "exact_agent_subject_required"
+        if (
+            request.asOf is not None
+            or context.asOf is not None
+            or request.timeRange is not None
+            or request.temporalMode in {"window", "as_of", "compare", "relative"}
+        ):
+            return [], False, "agent_policy_flag_bitemporal_history_unavailable"
+
+        reader = getattr(self._sources, "agent_policy_flag_observations", None)
+        if not callable(reader):
+            return [], False, "agent_policy_flag_authority_unavailable"
+        try:
+            raw_rows = await reader(tenant_id=tenant_id, agent_id=subject.id)
+        except Exception:  # noqa: BLE001 - provider boundary degrades safely
+            return [], True, "agent_policy_flag_read_incomplete"
+        if not isinstance(raw_rows, list) or len(raw_rows) > _MAX_AGENT_POLICY_FLAG_SCAN:
+            return [], True, "agent_policy_flag_scan_limit_exceeded"
+
+        observations: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        degraded = False
+        for raw in raw_rows:
+            if not isinstance(raw, dict):
+                degraded = True
+                continue
+            if (
+                str(raw.get("tenant_id", "")) != tenant_id
+                or str(raw.get("agent_id", "")) != subject.id
+            ):
+                degraded = True
+                continue
+
+            signal_id = raw.get("signal_id")
+            flags = raw.get("policy_flags")
+            if not isinstance(signal_id, str) or not signal_id.strip() or signal_id in seen_ids:
+                degraded = True
+                continue
+            seen_ids.add(signal_id)
+            if not isinstance(flags, list):
+                degraded = True
+                continue
+            safe_flags: list[str] = []
+            for flag in flags[:20]:
+                if not isinstance(flag, str) or not flag.strip() or len(flag) > 128:
+                    degraded = True
+                    continue
+                if flag not in safe_flags:
+                    safe_flags.append(flag)
+            if len(flags) > 20:
+                degraded = True
+            if not safe_flags:
+                continue
+
+            detected_at = raw.get("detected_at")
+            if detected_at is not None and (
+                not isinstance(detected_at, str) or _aware_datetime(detected_at) is None
+            ):
+                detected_at = None
+                degraded = True
+            evidence_ref = EvidenceRef(
+                id=signal_id,
+                type="event",
+                source="obs_agent_risk_signals",
+                observedAt=detected_at,
+                uri=f"store://obs_agent_risk_signals/{signal_id}",
+            )
+            observations.append(
+                {
+                    "tenant_id": tenant_id,
+                    "agent_id": subject.id,
+                    "signal_id": signal_id,
+                    "policy_flags": safe_flags,
+                    "detected_at": detected_at,
+                    "evidence_ref": evidence_ref,
+                }
+            )
+        observations.sort(key=lambda row: (row["detected_at"] or "", row["signal_id"]))
+        return observations, degraded, (
+            "agent_policy_flag_record_invalid_or_scope_incomplete" if degraded else None
+        )
+
     @staticmethod
     def _poisoning_as_of(
         request: ProjectionRequest,
@@ -2606,6 +2833,7 @@ class Risk360Provider:
         signals: list[RiskSignal],
         source_provenance: list[dict[str, Any]],
         poisoning_evidence: list[RiskPoisoningEvidence],
+        agent_policy_flags: list[dict[str, Any]],
     ) -> list[EvidenceRef]:
         """Every canonical EvidenceRef grounding this projection, deduped."""
         refs: list[EvidenceRef] = []
@@ -2621,6 +2849,10 @@ class Risk360Provider:
             refs.extend(record.evidence_refs)
             for event in record.lifecycle_events:
                 refs.extend(event.evidence_refs)
+        for row in agent_policy_flags:
+            evidence_ref = row.get("evidence_ref")
+            if isinstance(evidence_ref, EvidenceRef):
+                refs.append(evidence_ref)
         return _dedupe_evidence(refs)
 
 

@@ -844,6 +844,7 @@
         "agent_access",
         "agent_entities",
         "agent_executions",
+        "ai_execution_facts",
         "commerce",
         "economic_facts",
         "entity_registry",
@@ -2851,9 +2852,10 @@
           "id": "owner_delegator",
           "requirement": "required",
           "description": "Tenant-scoped owner and delegator records with canonical party identity only where resolved; no effective action authorization is inferred.",
-          "partialImplementationReason": "configured_owner_entity_id_is_resolved_only_as_a_current_tenant_owned_entity_reference; legal_or_effective_ownership_historical_validity_and_freshness_remain_unknown",
+        "partialImplementationReason": "Configured owner reference is resolved to an exact tenant entity and joined only to an exact tenant graph OWNS or OWNS_AGENT edge targeting the resolved canonical Agent. Legal or effective ownership, action authorization, historical validity, graph completeness, and freshness remain unknown.",
           "canonicalAuthorityRefs": [
             "agent_access",
+          "graph",
             "identity"
           ],
           "projectionBindings": [
@@ -3684,7 +3686,7 @@
         {
           "id": "latency_cost",
           "requirement": "required",
-          "description": "Required Execution 360 blueprint slot: latency cost.",
+          "description": "Server lifecycle duration and exact action-linked AI invocation latency and selected-cost evidence by currency.",
           "canonicalAuthorityRefs": [
             "agent_executions",
             "ai_execution_facts",
@@ -3712,10 +3714,7 @@
             "economic_and_business_outcomes",
             "execution_identity_and_state"
           ],
-          "unboundCanonicalAuthorityRefs": [
-            "ai_execution_facts"
-          ],
-          "authorityGapReason": "exact_subject_authority_join_not_implemented"
+          "partialImplementationReason": "AI invocation facts are joined only when tenant, execution action_id, and canonical agent match; selected cost is exposed only with a valid known cost basis. This is not provider/tool execution cost or business value. Other cost authorities, historical replay, complete coverage, and a freshness SLA remain unknown."
         },
         {
           "id": "failures",
@@ -5461,12 +5460,24 @@
         {
           "id": "communications",
           "requirement": "required",
-          "description": "Required journey360 slot: communications.",
+          "description": "Tenant-scoped canonical communication facts carrying this exact typed journey ID.",
           "canonicalAuthorityRefs": [
             "communication_facts"
           ],
-          "projectionBindings": [],
-          "unboundReason": "journey_communications_authority_not_joined"
+          "projectionBindings": [
+            {
+              "projectionId": "communication360",
+              "role": "primary",
+              "sectionIds": [
+                "evidence",
+                "interactions"
+              ],
+              "subjectKinds": [
+                "journey"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Only tenant-scoped canonical communication facts carrying this exact typed journey ID are joined. Message-spine coverage, completeness, freshness, and historical replay remain unestablished."
         },
         {
           "id": "dropoffs",
@@ -5606,6 +5617,12 @@
           "role": "primary",
           "bindingStatus": "catalog_only",
           "providerImplementationState": "in_flight"
+        },
+        {
+          "projectionId": "communication360",
+          "role": "primary",
+          "bindingStatus": "catalog_only",
+          "providerImplementationState": "implemented"
         }
       ],
       "sourceOfTruth": {
@@ -5661,6 +5678,8 @@
         "projectionCapabilityKeys": [
           "episode360.explore",
           "episode360.read",
+          "communication360.explore",
+          "communication360.read",
           "profile360.explore",
           "profile360.read"
         ],
@@ -6160,13 +6179,26 @@
         {
           "id": "policy_flags",
           "requirement": "required",
-          "description": "Evaluated risk policy flags with policy version and evidence.",
+          "description": "Exact agent risk-signal policy-flag observations with evidence; evaluated flags require versioned model-governance decisions.",
+          "partialImplementationReason": "Only exact tenant-scoped current agent risk-signal records are exposed as reported observations. Policy evaluation, model/version, non-agent subjects, historical replay, and complete coverage remain unknown.",
           "canonicalAuthorityRefs": [
+            "model_governance",
             "risk_outputs",
-            "model_governance"
+            "risk_signals"
           ],
-          "projectionBindings": [],
-          "unboundReason": "evaluated_policy_flag_authority_not_connected"
+          "projectionBindings": [
+            {
+              "projectionId": "risk360",
+              "role": "primary",
+              "sectionIds": [
+                "evidence",
+                "findings"
+              ],
+              "subjectKinds": [
+                "agent"
+              ]
+            }
+          ]
         },
         {
           "id": "poisoning_evidence",

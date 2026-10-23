@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from typing import Any, Literal, Optional, Protocol
 from urllib.parse import quote
 
@@ -79,6 +80,9 @@ _MAX_ROWS = 500
 _MAX_TOOL_EDGE_SCAN = 10_000
 _MAX_EXECUTION_RISK_SIGNAL_SCAN = 1000
 _MAX_EXECUTION_APPROVAL_DECISION_SCAN = 5000
+_MAX_EXECUTION_COST_SUBJECT_SCAN = 100
+_MAX_EXECUTION_COST_FACT_SCAN = 1000
+_MAX_EXECUTION_COST_FACTS_PER_SUBJECT = 200
 _MAX_PRINCIPAL_IDENTITY_ALIAS_SCAN = 50
 _SILVER_QUERY_LIMIT = 1000
 _MAX_EPISODE_AGENT_SCAN = 200
@@ -145,6 +149,25 @@ class ExecutionRiskEventRead:
     scope_known: bool
     truncated: bool = False
     reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class ExecutionCostRead:
+    """Exact action-linked canonical AI invocation facts for executions."""
+
+    rows: list[dict[str, Any]]
+    available: bool
+    scope_known: bool
+    truncated: bool = False
+    reason: Optional[str] = None
+
+    @property
+    def state(self) -> Literal["available", "degraded", "unavailable"]:
+        if not self.available:
+            return "unavailable"
+        if self.truncated or not self.scope_known:
+            return "degraded"
+        return "available"
 
 
 @dataclass(frozen=True)
@@ -256,6 +279,15 @@ class Execution360Source(Protocol):
     ) -> ExecutionApprovalRead:
         """Read x402 decisions by exact tenant and execution IDs."""
 
+    async def execution_cost_facts(
+        self,
+        *,
+        tenant_id: str,
+        executions: tuple[tuple[str, str], ...],
+        limit: int,
+    ) -> ExecutionCostRead:
+        """Read AI facts linked by exact tenant, execution action ID, and agent ID."""
+
 
 class RepositoryExecution360Source:
     """Defensive adapter over existing agent repositories and Silver facts."""
@@ -267,11 +299,156 @@ class RepositoryExecution360Source:
         graph_client: Any = None,
         commerce_store: Any = None,
         principal_identity_repository: Any = None,
+        ai_execution_facts_reader: Any = None,
     ) -> None:
         self._episode_store = episode_store
         self._graph_client = graph_client
         self._commerce_store = commerce_store
         self._principal_identity_repository = principal_identity_repository
+        self._ai_execution_facts_reader = ai_execution_facts_reader
+
+    async def execution_cost_facts(
+        self,
+        *,
+        tenant_id: str,
+        executions: tuple[tuple[str, str], ...],
+        limit: int,
+    ) -> ExecutionCostRead:
+        """Join only AI facts whose explicit action_id names an admitted execution."""
+        if not tenant_id:
+            return ExecutionCostRead(
+                [], False, False, reason="exact_tenant_execution_scope_required"
+            )
+        requested: dict[str, str] = {}
+        conflict_ids: set[str] = set()
+        for execution_id, agent_id in executions:
+            execution_id = _safe_text(execution_id) or ""
+            agent_id = _safe_text(agent_id) or ""
+            if not execution_id or not agent_id:
+                continue
+            existing = requested.get(execution_id)
+            if existing is not None and existing != agent_id:
+                conflict_ids.add(execution_id)
+            else:
+                requested[execution_id] = agent_id
+        for execution_id in conflict_ids:
+            requested.pop(execution_id, None)
+        if not requested:
+            return ExecutionCostRead(
+                [],
+                True,
+                not conflict_ids,
+                reason=(
+                    "execution_cost_subject_agent_conflict"
+                    if conflict_ids
+                    else "no_exact_execution_cost_subjects"
+                ),
+            )
+
+        try:
+            from config.settings import settings
+
+            if not settings.ai_economics.execution_facts_enabled:
+                return ExecutionCostRead(
+                    [], False, False, reason="ai_execution_facts_disabled"
+                )
+            reader = self._ai_execution_facts_reader
+            if reader is None:
+                from value.economic.ai_aggregation import list_facts
+
+                reader = list_facts
+        except Exception:  # noqa: BLE001 - optional canonical source stays unknown
+            return ExecutionCostRead(
+                [], False, False, reason="ai_execution_fact_repository_unavailable"
+            )
+
+        max_subjects = min(
+            _MAX_EXECUTION_COST_SUBJECT_SCAN,
+            max(1, int(limit)),
+        )
+        subject_ids = sorted(requested)
+        queried_ids = subject_ids[:max_subjects]
+        truncated = len(queried_ids) < len(subject_ids)
+        scope_known = not conflict_ids
+        result: list[dict[str, Any]] = []
+        try:
+            for execution_id in queried_ids:
+                remaining = _MAX_EXECUTION_COST_FACT_SCAN - len(result)
+                if remaining <= 0:
+                    truncated = True
+                    break
+                fact_limit = min(_MAX_EXECUTION_COST_FACTS_PER_SUBJECT, remaining)
+                facts = await reader(
+                    tenant_id,
+                    action_id=execution_id,
+                    limit=fact_limit + 1,
+                )
+                if not isinstance(facts, list):
+                    return ExecutionCostRead(
+                        result,
+                        False,
+                        False,
+                        truncated=True,
+                        reason="ai_execution_fact_read_invalid",
+                    )
+                if len(facts) > fact_limit:
+                    truncated = True
+                    facts = facts[:fact_limit]
+                expected_agent_id = requested[execution_id]
+                for fact in facts:
+                    if (
+                        not isinstance(fact, dict)
+                        or fact.get("tenant_id") != tenant_id
+                        or fact.get("action_id") != execution_id
+                        or fact.get("agent_id") != expected_agent_id
+                    ):
+                        scope_known = False
+                        continue
+                    invocation_id = _safe_text(fact.get("invocation_id"))
+                    if invocation_id is None:
+                        scope_known = False
+                        continue
+                    result.append(
+                        {
+                            "tenant_id": tenant_id,
+                            "execution_id": execution_id,
+                            "action_id": fact.get("action_id"),
+                            "agent_id": expected_agent_id,
+                            "invocation_id": invocation_id,
+                            "observed_at": _safe_text(fact.get("observed_at")),
+                            "latency_ms": fact.get("latency_ms"),
+                            "selected_cost": fact.get("selected_cost"),
+                            "cost_basis": _safe_text(fact.get("cost_basis")),
+                            "currency": _safe_text(fact.get("currency")),
+                        }
+                    )
+                    if len(result) >= _MAX_EXECUTION_COST_FACT_SCAN:
+                        truncated = True
+                        break
+                if len(result) >= _MAX_EXECUTION_COST_FACT_SCAN:
+                    break
+        except Exception:  # noqa: BLE001 - source internals must not escape the frame
+            return ExecutionCostRead(
+                result,
+                False,
+                False,
+                truncated=truncated,
+                reason="ai_execution_fact_read_unavailable",
+            )
+
+        return ExecutionCostRead(
+            result,
+            True,
+            scope_known and not truncated,
+            truncated=truncated,
+            reason=(
+                "ai_execution_fact_read_truncated"
+                if truncated
+                else "ai_execution_fact_execution_or_agent_link_mismatch"
+                if not scope_known
+                else None
+            ),
+        )
 
     async def server_executions(
         self, *, tenant_id: str, subject: ProjectionSubject, limit: int
@@ -2353,18 +2530,90 @@ class Execution360Provider:
         admitted_execution_ids = {
             row["executionId"] for row in internal if row.get("executionId")
         }
-        tool_calls = _project_tool_call_read(
-            server.tool_calls,
-            admitted_execution_ids=admitted_execution_ids,
-            time_range=request.timeRange,
-            temporal_unavailable=temporal_unavailable,
-        )
         execution_inventory_complete = (
             server.available
             and server.scope_known
             and not server.truncated
             and not episode_event_binding_mismatch
             and not temporal_unavailable
+        )
+        cost_subjects_by_execution: dict[str, set[str]] = {}
+        internal_by_execution = {
+            row["executionId"]: row
+            for row in internal
+            if row.get("executionId")
+        }
+        for raw in server.rows:
+            if (
+                not isinstance(raw, dict)
+                or raw.get("tenant_id") != tenant_id
+                or raw.get("event_type") is not None
+            ):
+                continue
+            execution_id = _safe_text(raw.get("execution_id"))
+            source_agent_id = _safe_text(raw.get("agent_id"))
+            lifecycle = internal_by_execution.get(execution_id or "")
+            if (
+                execution_id not in admitted_execution_ids
+                or source_agent_id is None
+                or lifecycle is None
+                or lifecycle.get("canonicalActorResolved") is not True
+                or _safe_text(raw.get("canonical_agent_entity_id"))
+                != lifecycle.get("agentId")
+            ):
+                continue
+            cost_subjects_by_execution.setdefault(execution_id, set()).add(source_agent_id)
+        execution_cost_subjects = tuple(
+            sorted(
+                (execution_id, next(iter(agent_ids)))
+                for execution_id, agent_ids in cost_subjects_by_execution.items()
+                if len(agent_ids) == 1
+            )
+        )
+        execution_cost_subjects_complete = (
+            {execution_id for execution_id, _ in execution_cost_subjects}
+            == admitted_execution_ids
+        )
+        if temporal_unavailable:
+            execution_cost_read = ExecutionCostRead(
+                [],
+                True,
+                False,
+                reason="temporal_anchor_not_reconstructable_from_current_sources",
+            )
+        elif not admitted_execution_ids:
+            execution_cost_read = ExecutionCostRead(
+                [],
+                True,
+                execution_inventory_complete,
+                reason="no_admitted_execution_ids_in_subject_scope",
+            )
+        elif not execution_cost_subjects_complete:
+            execution_cost_read = ExecutionCostRead(
+                [],
+                True,
+                False,
+                reason="exact_execution_agent_binding_unavailable",
+            )
+        elif request.includeSections is not None and not (
+            {"state", "summary"} & set(request.includeSections)
+        ):
+            execution_cost_read = ExecutionCostRead(
+                [],
+                False,
+                False,
+                reason="latency_cost_sections_not_requested",
+            )
+        else:
+            execution_cost_read = await self._safe_execution_cost_read(
+                tenant_id, execution_cost_subjects, limit
+            )
+
+        tool_calls = _project_tool_call_read(
+            server.tool_calls,
+            admitted_execution_ids=admitted_execution_ids,
+            time_range=request.timeRange,
+            temporal_unavailable=temporal_unavailable,
         )
         if admitted_execution_ids and not temporal_unavailable:
             risk_event_read = await self._safe_execution_risk_read(
@@ -2456,9 +2705,24 @@ class Execution360Provider:
         if request.subject.kind == "episode" and episode_event_binding_mismatch:
             reasons.append("episode_execution_event_binding_conflict")
 
+        latency_cost = _latency_cost_summary(
+            internal,
+            server,
+            execution_cost_read,
+            execution_inventory_complete=(
+                execution_inventory_complete and execution_cost_subjects_complete
+            ),
+            temporal_unavailable=temporal_unavailable,
+        )
         state = _section_state(server, observed, internal, external, temporal_unavailable)
         evidence = self._all_evidence(
-            internal, external, plan_decompositions, tool_calls, risk_events, approval_chain
+            internal,
+            external,
+            plan_decompositions,
+            tool_calls,
+            risk_events,
+            approval_chain,
+            latency_cost,
         )
         claims = (
             self._claims(
@@ -2469,6 +2733,7 @@ class Execution360Provider:
                 tool_calls,
                 risk_events,
                 approval_chain,
+                latency_cost,
             )
             if request.includeClaims is not False
             else []
@@ -2486,6 +2751,7 @@ class Execution360Provider:
             tool_calls,
             risk_events,
             approval_chain,
+            latency_cost,
         )
 
         return ProjectionResult(
@@ -2577,6 +2843,86 @@ class Execution360Provider:
                 reason="execution_approval_decision_source_unavailable",
             )
 
+    async def _safe_execution_cost_read(
+        self,
+        tenant_id: str,
+        executions: tuple[tuple[str, str], ...],
+        limit: int,
+    ) -> ExecutionCostRead:
+        try:
+            reader = getattr(self._sources, "execution_cost_facts")
+            result = await reader(
+                tenant_id=tenant_id,
+                executions=executions,
+                limit=limit,
+            )
+            if not isinstance(result, ExecutionCostRead):
+                return ExecutionCostRead(
+                    [],
+                    False,
+                    False,
+                    reason="execution_cost_source_returned_invalid_contract",
+                )
+        except Exception:  # noqa: BLE001 - fail-isolate optional canonical source
+            return ExecutionCostRead(
+                [],
+                False,
+                False,
+                reason="execution_cost_source_unavailable",
+            )
+
+        allowed_subjects = set(executions)
+        rows: list[dict[str, Any]] = []
+        invalid_row_seen = False
+        seen_invocations: dict[tuple[str, str], dict[str, Any]] = {}
+        for row in result.rows:
+            if not isinstance(row, dict):
+                invalid_row_seen = True
+                continue
+            key = (
+                _safe_text(row.get("execution_id")) or "",
+                _safe_text(row.get("agent_id")) or "",
+            )
+            invocation_id = _safe_text(row.get("invocation_id"))
+            if (
+                row.get("tenant_id") != tenant_id
+                or key not in allowed_subjects
+                or row.get("action_id") != key[0]
+                or invocation_id is None
+            ):
+                invalid_row_seen = True
+                continue
+            dedupe_key = (key[0], invocation_id)
+            existing = seen_invocations.get(dedupe_key)
+            if existing is not None:
+                if existing != row:
+                    invalid_row_seen = True
+                    rows = [
+                        candidate
+                        for candidate in rows
+                        if not (
+                            candidate.get("execution_id") == key[0]
+                            and candidate.get("invocation_id") == invocation_id
+                        )
+                    ]
+                    seen_invocations.pop(dedupe_key, None)
+                continue
+            seen_invocations[dedupe_key] = row
+            rows.append(row)
+
+        return ExecutionCostRead(
+            rows,
+            result.available,
+            result.scope_known and not invalid_row_seen,
+            truncated=result.truncated,
+            reason=(
+                result.reason
+                or "execution_cost_row_scope_or_invocation_conflict"
+                if invalid_row_seen
+                else result.reason
+            ),
+        )
+
     @staticmethod
     def _all_evidence(
         internal: list[dict[str, Any]],
@@ -2585,6 +2931,7 @@ class Execution360Provider:
         tool_calls: ExecutionToolCallRead,
         risk_events: ExecutionRiskEventContext,
         approval_chain: ExecutionApprovalContext,
+        latency_cost: dict[str, Any],
     ) -> list[EvidenceRef]:
         refs: list[EvidenceRef] = []
         seen: set[tuple[str, str]] = set()
@@ -2634,6 +2981,16 @@ class Execution360Provider:
                 continue
             seen.add((ref.id, ref.source))
             refs.append(ref)
+        for invocation in latency_cost.get("cost", {}).get("invocations", []):
+            for raw_ref in invocation.get("evidenceRefs", []):
+                try:
+                    ref = EvidenceRef.model_validate(raw_ref)
+                except Exception:  # noqa: BLE001 - malformed AI fact evidence is omitted
+                    continue
+                if (ref.id, ref.source) in seen:
+                    continue
+                seen.add((ref.id, ref.source))
+                refs.append(ref)
         return refs
 
     @staticmethod
@@ -2645,6 +3002,7 @@ class Execution360Provider:
         tool_calls: ExecutionToolCallRead,
         risk_events: ExecutionRiskEventContext,
         approval_chain: ExecutionApprovalContext,
+        latency_cost: dict[str, Any],
     ) -> list[ClaimEnvelope]:
         claims: list[ClaimEnvelope] = []
         for row in internal:
@@ -3002,6 +3360,33 @@ class Execution360Provider:
                     domainSlotIds=[SLOT_APPROVAL_CHAIN, SLOT_EVIDENCE],
                 )
             )
+        cost = latency_cost.get("cost", {})
+        for currency_total in cost.get("byCurrency", []):
+            evidence_refs: list[EvidenceRef] = []
+            for raw_ref in currency_total.get("evidenceRefs", []):
+                try:
+                    evidence_refs.append(EvidenceRef.model_validate(raw_ref))
+                except Exception:  # noqa: BLE001 - malformed AI fact evidence is omitted
+                    evidence_refs = []
+                    break
+            if not evidence_refs:
+                continue
+            currency = currency_total["currency"]
+            amount = currency_total["total"]
+            claim_currency_id = quote(str(currency), safe="")
+            claims.append(
+                ClaimEnvelope(
+                    id=f"execution360:ai-invocation-cost:{claim_currency_id}",
+                    kind="source_reported_execution_invocation_cost_total",
+                    subject=subject,
+                    evidenceRefs=evidence_refs,
+                    claims=[
+                        f"Canonical tenant AI invocation facts explicitly linked to admitted execution action IDs report selected invocation cost totaling {amount:g} {currency} across {currency_total['factCount']} fact(s); this is model invocation cost, not business value, and other currencies are reported separately."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=[SLOT_LATENCY_COST, SLOT_EVIDENCE],
+                )
+            )
         for signal in risk_events.signals:
             claims.append(
                 ClaimEnvelope(
@@ -3037,6 +3422,7 @@ class Execution360Provider:
         tool_calls: ExecutionToolCallRead,
         risk_events: ExecutionRiskEventContext,
         approval_chain: ExecutionApprovalContext,
+        latency_cost: dict[str, Any],
     ) -> list[ProjectionSection]:
         episode_context = server.episode_context or ExecutionEpisodeContextRead(
             "degraded" if not server.available else "unknown",
@@ -3299,11 +3685,6 @@ class Execution360Provider:
             },
             "truncated": risk_events.truncated,
         }
-        latency_cost = _latency_cost_summary(
-            internal,
-            server,
-            temporal_unavailable=temporal_unavailable,
-        )
         inputs_outputs = _inputs_outputs_summary(
             internal,
             server,
@@ -3354,6 +3735,9 @@ class Execution360Provider:
                     "sourceLineage": [
                         _INTERNAL_SOURCE if internal else None,
                         _SILVER_SOURCE if external else None,
+                        "ai_execution_facts"
+                        if latency_cost.get("cost", {}).get("invocations")
+                        else None,
                     ],
                 },
             ),
@@ -3414,6 +3798,7 @@ class Execution360Provider:
                     "inputsOutputs": inputs_outputs,
                     "failures": failures,
                     "planSteps": plan_steps,
+                    "latencyCost": latency_cost,
                     "workerRunLinkage": worker_linkage,
                 },
             ),
@@ -4103,10 +4488,12 @@ def _failure_summary(
 def _latency_cost_summary(
     internal: list[dict[str, Any]],
     server: ExecutionRead,
+    cost_read: ExecutionCostRead,
     *,
+    execution_inventory_complete: bool,
     temporal_unavailable: bool,
 ) -> dict[str, Any]:
-    """Expose measured lifecycle elapsed time and leave unsupported cost unknown."""
+    """Expose lifecycle latency and exact action-linked AI invocation economics."""
     samples: list[dict[str, Any]] = []
     incomplete_count = 0
     for row in internal:
@@ -4177,12 +4564,235 @@ def _latency_cost_summary(
                 "maximumMs": max(durations),
             }
         )
+
+    invocation_records: list[dict[str, Any]] = []
+    cost_totals: dict[str, Decimal] = {}
+    cost_evidence_by_currency: dict[str, list[dict[str, Any]]] = {}
+    invocation_latency_samples: list[tuple[float, dict[str, Any]]] = []
+    unknown_cost_count = 0
+    invalid_fact_count = 0
+    for row in cost_read.rows:
+        execution_id = _safe_text(row.get("execution_id"))
+        invocation_id = _safe_text(row.get("invocation_id"))
+        action_id = _safe_text(row.get("action_id"))
+        observed_at = _safe_text(row.get("observed_at"))
+        if (
+            execution_id is None
+            or invocation_id is None
+            or action_id != execution_id
+            or execution_id not in {item.get("executionId") for item in internal}
+        ):
+            invalid_fact_count += 1
+            continue
+        tenant_fact_id = _safe_text(row.get("tenant_id")) or ""
+        evidence = EvidenceRef(
+            id=invocation_id,
+            type="event",
+            source="ai_execution_facts",
+            observedAt=observed_at,
+            uri=f"store://ai_execution_facts/{quote(f'{tenant_fact_id}:{invocation_id}', safe='')}",
+        )
+        selected_raw = row.get("selected_cost")
+        selected_cost: Optional[Decimal] = None
+        if selected_raw is not None and not isinstance(selected_raw, bool):
+            try:
+                candidate_cost = Decimal(str(selected_raw))
+                if candidate_cost.is_finite() and candidate_cost >= 0:
+                    selected_cost = candidate_cost
+            except (InvalidOperation, ValueError, TypeError):
+                selected_cost = None
+        cost_basis = _safe_text(row.get("cost_basis"), limit=32)
+        if cost_basis not in {"billed", "provider_reported", "calculated", "estimated", "unknown"}:
+            cost_basis = None
+            invalid_fact_count += 1
+        currency = _safe_text(row.get("currency"), limit=16)
+        if currency is not None:
+            currency = currency.upper()
+        if (
+            selected_cost is None
+            or cost_basis in {None, "unknown"}
+            or currency is None
+        ):
+            unknown_cost_count += 1
+            known_selected_cost = None
+        else:
+            known_selected_cost = selected_cost
+            cost_totals[currency] = cost_totals.get(currency, Decimal("0")) + selected_cost
+            cost_evidence_by_currency.setdefault(currency, []).append(
+                evidence.model_dump(mode="json", by_alias=True, exclude_none=True)
+            )
+
+        latency_raw = row.get("latency_ms")
+        invocation_latency_ms: Optional[float] = None
+        if latency_raw is not None and not isinstance(latency_raw, bool):
+            try:
+                candidate_latency = Decimal(str(latency_raw))
+                if candidate_latency.is_finite() and candidate_latency >= 0:
+                    invocation_latency_ms = float(candidate_latency)
+            except (InvalidOperation, ValueError, TypeError, OverflowError):
+                invocation_latency_ms = None
+        if latency_raw is not None and invocation_latency_ms is None:
+            invalid_fact_count += 1
+
+        record = {
+            "executionId": execution_id,
+            "invocationId": invocation_id,
+            "observedAt": observed_at,
+            "latencyMs": invocation_latency_ms,
+            "costBasis": cost_basis,
+            "currency": currency,
+            "selectedCost": (
+                float(known_selected_cost) if known_selected_cost is not None else None
+            ),
+            "evidenceRefs": [
+                evidence.model_dump(mode="json", by_alias=True, exclude_none=True)
+            ],
+        }
+        invocation_records.append(record)
+        if invocation_latency_ms is not None:
+            invocation_latency_samples.append(
+                (invocation_latency_ms, record["evidenceRefs"][0])
+            )
+
+    source_complete = (
+        cost_read.available
+        and cost_read.scope_known
+        and not cost_read.truncated
+        and execution_inventory_complete
+    )
+    if temporal_unavailable:
+        cost_state = "unknown"
+        cost_reason = "temporal_anchor_not_reconstructable_from_current_sources"
+        invocation_records = []
+        cost_totals = {}
+        cost_evidence_by_currency = {}
+        invocation_latency_samples = []
+    elif not cost_read.available:
+        cost_state = "unavailable"
+        cost_reason = cost_read.reason or "ai_execution_fact_read_unavailable"
+    elif not internal:
+        cost_state = "unknown"
+        cost_reason = "execution_subject_not_admitted_from_server_lifecycle"
+    elif not invocation_records:
+        cost_state = "degraded" if not source_complete else "unknown"
+        cost_reason = (
+            cost_read.reason or "ai_execution_fact_read_or_execution_inventory_incomplete"
+            if not source_complete
+            else "no_ai_execution_invocation_linked_to_admitted_execution"
+        )
+    elif not cost_totals:
+        cost_state = "degraded" if not source_complete or invalid_fact_count else "unknown"
+        cost_reason = (
+            cost_read.reason or "linked_ai_execution_cost_coverage_incomplete"
+            if not source_complete or invalid_fact_count
+            else "linked_ai_execution_facts_have_unknown_or_invalid_cost"
+        )
+    elif not source_complete or unknown_cost_count or invalid_fact_count:
+        cost_state = "degraded"
+        cost_reason = (
+            cost_read.reason
+            or "linked_ai_execution_cost_coverage_incomplete"
+            if not source_complete
+            else "some_linked_ai_execution_facts_have_unknown_or_invalid_cost"
+        )
+    else:
+        cost_state = "available"
+        cost_reason = None
+
+    latest_observed = max(
+        (
+            instant
+            for row in cost_read.rows
+            if (instant := _parse_aware_instant(row.get("observed_at"))) is not None
+        ),
+        default=None,
+    )
+    cost = {
+        "state": cost_state,
+        "readAuthority": "ai_execution_facts",
+        "linkage": "exact_tenant_execution_action_id_and_agent_id",
+        "completeness": "explicit_action_id_invocation_facts_only",
+        "invocationCount": len(invocation_records) if invocation_records else None,
+        "knownCostInvocationCount": sum(
+            len(refs) for refs in cost_evidence_by_currency.values()
+        ),
+        "unknownCostInvocationCount": (
+            unknown_cost_count if invocation_records else None
+        ),
+        "byCurrency": [
+            {
+                "currency": currency,
+                "total": float(total),
+                "factCount": len(cost_evidence_by_currency[currency]),
+                "evidenceRefs": cost_evidence_by_currency[currency],
+            }
+            for currency, total in sorted(cost_totals.items())
+        ],
+        "invocations": invocation_records,
+        "coverage": {
+            "state": "complete_for_exact_execution_action_links"
+            if source_complete
+            else "partial_or_unknown",
+            "executionInventoryComplete": execution_inventory_complete,
+            "sourceScopeKnown": cost_read.scope_known,
+            "truncated": cost_read.truncated,
+            "invalidFactCount": invalid_fact_count,
+        },
+        "freshness": {
+            "state": "unknown",
+            "latestObservedAt": (
+                latest_observed.isoformat() if latest_observed is not None else None
+            ),
+            "reason": "no_execution_ai_fact_freshness_threshold_is_configured",
+        },
+        "reason": cost_reason,
+    }
+
+    if temporal_unavailable:
+        invocation_latency_state = "unknown"
+        invocation_latency_reason = "temporal_anchor_not_reconstructable_from_current_sources"
+    elif not cost_read.available:
+        invocation_latency_state = "unavailable"
+        invocation_latency_reason = cost_read.reason or "ai_execution_fact_read_unavailable"
+    elif not invocation_latency_samples:
+        invocation_latency_state = "unknown"
+        invocation_latency_reason = (
+            "no_linked_ai_invocation_latency_measurements"
+            if source_complete
+            else cost_read.reason or "ai_execution_fact_coverage_incomplete"
+        )
+    elif not source_complete or len(invocation_latency_samples) < len(invocation_records):
+        invocation_latency_state = "degraded"
+        invocation_latency_reason = cost_read.reason or "ai_execution_fact_coverage_incomplete"
+    else:
+        invocation_latency_state = "available"
+        invocation_latency_reason = None
+    invocation_durations = [value for value, _ in invocation_latency_samples]
+    latency["aiInvocationTelemetry"] = {
+        "state": invocation_latency_state,
+        "measurement": "source_reported_ai_invocation_latency",
+        "sampleCount": len(invocation_durations) if invocation_durations else None,
+        "samples": [
+            {
+                "latencyMs": value,
+                "evidenceRefs": [evidence_ref],
+            }
+            for value, evidence_ref in invocation_latency_samples
+        ],
+        "reason": invocation_latency_reason,
+        "freshness": cost["freshness"],
+    }
+    if invocation_durations:
+        latency["aiInvocationTelemetry"].update(
+            {
+                "minimumMs": min(invocation_durations),
+                "averageMs": round(sum(invocation_durations) / len(invocation_durations), 3),
+                "maximumMs": max(invocation_durations),
+            }
+        )
     return {
         "latency": latency,
-        "cost": {
-            "state": "unknown",
-            "reason": "no_execution_cost_authority_is_joined_by_execution360",
-        },
+        "cost": cost,
     }
 
 

@@ -11,7 +11,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:d6eedbc542f4d11de166c32c30b3ccf3c549d04748c86b97713499c5ed97b36d"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:b1e5116b2ba35adfbb124e5653de9838b32c1485ff9147b88b85961c9d840748"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:540f85292689337edc329c9b72b7c4f99487226a5e31aab6526c878e7ea36eeb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -130,13 +130,17 @@ the score and model type/version are present. It remains model-reported and
 uncalibrated for realized value or ROI, with model-governance calibration
 evidence unbound.
 
-Execution360 now derives server-recorded lifecycle elapsed time from valid,
+Execution360 derives server-recorded lifecycle elapsed time from valid,
 timezone-aware start and end timestamps and carries the lifecycle evidence
-into `latency_cost`. This is not provider/tool latency or cost. It still lacks
-a general server-owned external effect receipt, canonical plan-step evidence,
-complete input/output capture, and detailed failures. Its approval-chain join
-covers current x402 decisions only; other approval authorities and historical
-run links remain unknown.
+into `latency_cost`. A new bounded join also admits canonical AI invocation
+facts only when tenant, action ID, and canonical agent ID match an admitted
+execution, preserving invocation evidence and reporting cost by currency only
+for known selected costs with a known cost basis. This remains invocation
+telemetry, not tool latency or business value; unknown or estimated source
+semantics stay explicit. It still lacks a general server-owned external effect
+receipt, canonical plan-step evidence, complete input/output capture, and
+detailed failures. Its approval-chain join covers current x402 decisions only;
+other approval authorities and historical run links remain unknown.
 Execution360 actor attribution now records the authenticated initiating user
 separately from the acting agent. A principal resolves to a canonical Human
 only through an exact tenant-scoped active `USER_ID` alias and active surviving
@@ -202,12 +206,23 @@ Risk360 frames from exact tenant-owned `MEMBER_OF` edges after account-slot and
 per-member policy checks, but roster completeness, temporal reads, related
 account aggregation, and freshness remain unknown. Communications360 reads
 exact-subject RiskSignals for mapped recipients and resolved sources under
-current analytics consent; the resolved-agent risk path lacks an explicit
-current-consent gate. Composite Risk360 output, message-edge transfer, complete
-identity coverage, and freshness remain unknown. Episode360 `agent_handoffs`
-remains unknown because episode records and observations do not reference a
-canonical execution or handoff ID. Event labels and agent metadata do not
-establish that relationship.
+current analytics consent; the resolved-agent path now also requires an exact
+canonical identity and current analytics-consent receipt before reading
+RiskSignals. Composite Risk360 output, message-edge transfer, complete identity
+coverage, and freshness remain unknown. Journey360's required `communications`
+slot now joins only tenant-scoped canonical facts with an exact typed journey
+ID; message endpoints and free-text references do not qualify, while message-
+spine coverage, completeness, freshness, and historical replay remain unknown.
+Risk360's required `policy_flags` slot also exposes exact tenant-and-Agent
+`obs_agent_risk_signals` as reported observations with evidence. It states that
+policy evaluation is unattested and the model-governance version is absent;
+non-Agent and historical requests remain unknown. No safe `anomaly_events` join
+is available because tenant-wide Gold anomaly alerts lack exact subject, event,
+and evidence lineage, while RiskSignals are assessment inputs rather than
+findings.
+Episode360 `agent_handoffs` remains unknown because episode records and
+observations do not reference a canonical execution or handoff ID. Event labels
+and agent metadata do not establish that relationship.
 
 The next provider slice adds bounded Communications360 `policy_state`, Risk360
 `propagation_paths`, and Value360 `reconciliation` evidence. Communications360
@@ -306,11 +321,13 @@ trust remain unresolved without a Rights `source_id`; freshness remains
 unassessed because no source SLA is configured. Historical compatibility rows
 without an explicit canonical link therefore remain degraded.
 
-Agent360's required `owner_delegator` slot also resolves the configured
-`owner_entity_id` only through an exact tenant-scoped entity lookup. This proves
-that a stored configuration reference resolves to a tenant-owned entity; it does
-not establish legal or effective ownership, historical validity, freshness, or
-action authorization.
+Agent360's required `owner_delegator` slot resolves the configured
+`owner_entity_id` through an exact tenant-scoped entity lookup and joins it to
+the resolved canonical Agent only when a bounded tenant graph read observes an
+exact `OWNS` or `OWNS_AGENT` edge. Claims cite the graph edge, configuration,
+and Agent identity evidence. A stored edge does not establish legal or effective
+ownership, historical validity, freshness, or action authorization; truncation
+and scope uncertainty remain explicit.
 
 Execution360 joins AETHER-owned execution rows to typed x402 approval requests
 and decisions by exact tenant, admitted execution ID, lifecycle approval ID,
