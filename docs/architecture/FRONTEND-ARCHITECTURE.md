@@ -45,7 +45,7 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:8510b00275386ab53f4f7dcc1786894e40d6156e8922ba6b5de6dfb814a8ab44"
+  "apps/aether-web/src/": "sha256:b012087699bdb81ca0a48b46931119f9fc2c4bdc0186f3fdc97e52669d549dd5"
   "apps/kyber-web/src/": "sha256:df447130af2090e329c0620134a1b1dee8caf8597ac360b30f6862e74f3e6781"
   "packages/ui/core/src/": "sha256:01c95e007bc50d0b7378c5cb5274fd5e5d60b51f9575e5c28bf8549ab9cefde1"
 ---
@@ -429,7 +429,8 @@ design elements without a backing read are omitted or empty-stated.
   their own `GlassPage` (frameless routes).
 - **Campaigns** (`/campaigns`, `/campaign-intelligence`) shows campaign cards,
   platform KPIs, and Active / Paused / Ended / All / Review / Attribution /
-  Exploration views (`?view=`). **Campaign 360** (`/campaigns/:id`) keeps its
+  Exploration views (`?view=`); review items carry Confirm and Ignore actions
+  (`POST /v1/mapping-review/{id}/resolve|ignore`). **Campaign 360** (`/campaigns/:id`) keeps its
   `?tab=` sections and adds KPI-driven breakdowns from attribution
   `dimension_rollups` and a Sources tab. **Geography** (`/geo`) draws geo
   summary children on a dot map (lat/lon when present, else ISO2 or country
@@ -437,8 +438,12 @@ design elements without a backing read are omitted or empty-stated.
   anomaly lenses. These routes are frameless.
 - **Value** (`/value-review`) has Overview, Sources, Campaigns, Customers and
   Outcomes tabs over value-created events, the outcome ledger and campaign
-  overviews; only Campaigns has a 7/30/90-day window because only that read
-  accepts one. Agents value is empty-stated until value is attributed to agents.
+  overviews. A page-wide window of the last 7/30/90 local calendar days,
+  today included (`?window=`), bounds the value-created read (`start`/`end`)
+  and the campaign overviews, and the daily chart buckets by calendar day.
+  Compare previous (`?compare=1`) reads the prior window of equal length for
+  the four headline tiles; the money baseline is drawn only when the previous
+  period has priced events. Agents value is empty-stated until value is attributed to agents.
   Amounts are summed only within one currency (the one most events use);
   events in other currencies are counted, not added, and the page says so.
   Campaign and outcome-ledger reads that hit their limit are labelled partial.
@@ -455,23 +460,29 @@ design elements without a backing read are omitted or empty-stated.
 - **Settings** groups the existing `/settings/*` sections into the design's
   Workspace, Connections & Data, Members & Access, Billing & Usage, Security &
   Governance and Personal groups; groups without their own route open at
-  `/settings?section=<group>` and show read-only data or link to the existing
-  pages, marking unbuilt controls as not available yet.
+  `/settings?section=<group>` and show data or link to the existing pages,
+  marking unbuilt controls as not available yet. Members & Access has People
+  and Invitations tabs (role change, remove, invite, revoke; a new invite
+  token is shown once); Workspace edits the name and timezone; Security lists
+  sessions with sign-out; Billing & Usage shows API limits, and a peak
+  requests-per-minute the backend has not measured yet reads as not measured.
 
 The design pages added after those (all frameless, each with distinct loading,
 empty and unavailable states) are built only on reads that already exist:
 
 - **Signals** (`/signals`, `?tab=inbox|types|rules|history|digest`) is the
-  notification inbox on a timeline; Acknowledge archives the inbox row. Alert
-  rules are read-only (the backend can only create them) and the digest shows
+  notification inbox on a timeline; Acknowledge archives the inbox row.
+  "+ New rule" creates an alert rule; existing rules are read-only (the backend
+  has no update or delete) and the digest shows
   the stored notification preference. Watchlist and snooze are not built.
 - **Risk** (`/risk`, `?view=overview|register&severity=`) combines agent
   capability risk findings, investigation cases (status transitions persist;
   cases carry no severity, so they show as not rated) and the Data Quality
   overview. No posture score is computed.
 - **Syndicates** (`/syndicates[/:syndicateId]`) lists rule-defined population
-  groups (opened in place) and discovered graph clusters (opened in Cluster
-  360), with an overlap view computed from member reads.
+  groups (opened in place, created with "+ New syndicate") and discovered
+  graph clusters (opened in Cluster 360), with an overlap view computed from
+  member reads that keeps the search and tabs.
 - **Relationships** (`/relationships[/:entityId]`) centres on a chosen entity
   and draws graph traverse results (1–3 hops), relationship types, formation
   history and a path explorer (graph path read, up to 6 hops).

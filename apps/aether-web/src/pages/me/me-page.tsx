@@ -330,14 +330,21 @@ export function MePage() {
             onDowngrade={() => void navigate('/billing')}
           />
 
-          <UsageBar
-            label="Burst rate limit"
-            used={usage.rpm_peak}
-            total={usage.rpm_limit}
-            unit="req/min"
-            showRemaining={false}
-            showUpgradeCta={false}
-          />
+          {usage.rpm_peak === null ? (
+            <div className="flex items-center justify-between text-xs font-mono">
+              <span className="text-text-muted">Burst rate limit</span>
+              <span className="text-text-secondary">peak not measured yet · {usage.rpm_limit.toLocaleString('en-US')} req/min</span>
+            </div>
+          ) : (
+            <UsageBar
+              label="Burst rate limit"
+              used={usage.rpm_peak}
+              total={usage.rpm_limit}
+              unit="req/min"
+              showRemaining={false}
+              showUpgradeCta={false}
+            />
+          )}
 
           <div className="flex items-center justify-between text-xs font-mono">
             <span className="text-text-muted">Billing period</span>

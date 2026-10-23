@@ -1851,7 +1851,7 @@ export const api = {
         period_end: string;
         events_used: number;
         events_quota: number;
-        rpm_peak: number;
+        rpm_peak: number | null;
         rpm_limit: number;
         overage_events: number;
         days_remaining: number;
@@ -2027,8 +2027,9 @@ export const api = {
     invoicePreviews: () =>
       restClient.get('/v1/billing/invoice-previews', wrap(unknownSchema)).then(r => r.data),
 
-    valueCreated: () =>
-      restClient.get('/v1/billing/value-created', wrap(unknownSchema)).then(r => r.data),
+    /** `start`/`end` (ISO) scope the read to a period; the response then reports `truncated`. */
+    valueCreated: (params?: { start?: string; end?: string }) =>
+      restClient.get(`/v1/billing/value-created${buildQS({ ...params })}`, wrap(unknownSchema)).then(r => r.data),
 
 
   },

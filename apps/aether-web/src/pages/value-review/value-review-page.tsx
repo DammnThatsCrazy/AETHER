@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { EmptyState, LoadingState } from '@aether/ui';
-import { ChoiceChip } from '@aether-app/components/ae-ui';
+import { SegmentedTabs } from '@aether-app/components/ae-campaigns-geo-ui';
 import { api } from '@aether-app/lib/api/endpoints';
-import { WINDOWS, asRecord, str, type Row, type WindowDays } from './value-model';
+import { WINDOWS, asRecord, rangeLabel, str, valueWindows, type Row, type WindowDays } from './value-model';
 import { LoopAndDecisionsSection } from './value-loop-section';
 import { AgentsValueTab, CampaignsTab, CustomersTab, OutcomesTab, OverviewTab, SourcesTab } from './value-tabs';
 
@@ -17,6 +17,19 @@ const TABS = [
 ] as const;
 type TabKey = (typeof TABS)[number]['key'];
 
+/** Tabs whose reads take no date range: they say "all time" instead of following the window. */
+const ALL_TIME_TABS: ReadonlySet<TabKey> = new Set(['customers', 'outcomes']);
+
+/** Per-tab copy for the shared review states, so the title and tabs stay put. */
+const EMPTY_COPY: Record<TabKey, string> = {
+  overview: 'Value review will appear after outcomes are observed.',
+  sources: 'Sources appear here once outcomes, playbooks or integration actions report value.',
+  campaigns: 'Campaign spend against value appears here once value is observed for this workspace.',
+  agents: 'Agent-completed value appears here once value is observed for this workspace.',
+  customers: 'Customers appear here when an outcome with a value is recorded against them.',
+  outcomes: 'The loop from recommendation to outcome appears here once outcomes are observed.',
+};
+
 function isTab(value: string | null): value is TabKey {
   return TABS.some(t => t.key === value);
 }
@@ -25,11 +38,35 @@ function isWindow(value: number): value is WindowDays {
   return (WINDOWS as readonly number[]).includes(value);
 }
 
+function CompareToggle({ on, onChange }: { readonly on: boolean; readonly onChange: (next: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={() => onChange(!on)}
+      data-testid="value-compare"
+      className="ae-focus inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[13px] transition-colors"
+      style={{
+        borderColor: on ? 'var(--ae-blue)' : 'var(--ae-edge)',
+        background: on ? 'var(--ae-blue-tint)' : 'transparent',
+        color: on ? 'var(--ae-blue-ink)' : 'var(--ae-ink)',
+      }}
+    >
+      <span className="relative inline-block h-4 w-7 flex-none rounded-full transition-colors" style={{ background: on ? 'var(--ae-blue)' : 'var(--ae-edge)' }} aria-hidden="true">
+        <span className="absolute top-0.5 h-3 w-3 rounded-full transition-all" style={{ left: on ? 14 : 2, background: 'var(--ae-raised)' }} />
+      </span>
+      Compare previous
+    </button>
+  );
+}
+
 /**
  * Value (Claude Design handoff: Aether Value). Tenant value review, value
  * events, the outcome ledger and campaign overviews — each tab is a real read
- * and says plainly when the backend has nothing for it. The 7/30/90-day window
- * is offered only where the backend honours a time range (campaign overviews).
+ * and says plainly when the backend has nothing for it. One page-wide
+ * 7/30/90-day window scopes every read that accepts a period (value events,
+ * campaign overviews); the outcome-ledger tabs say "all time".
  */
 export function ValueReviewPage() {
   const [params, setParams] = useSearchParams();
@@ -37,6 +74,10 @@ export function ValueReviewPage() {
   const tab: TabKey = isTab(rawTab) ? rawTab : 'overview';
   const rawWindow = Number(params.get('window'));
   const days: WindowDays = isWindow(rawWindow) ? rawWindow : 30;
+  const compare = params.get('compare') === '1';
+  // One anchor per visit, so the current and previous windows (and their cache keys) stay put.
+  const [anchor] = useState(() => new Date());
+  const windows = useMemo(() => valueWindows(days, anchor), [days, anchor]);
 
   const [data, setData] = useState<Row | null>(null);
   const [loading, setLoading] = useState(true);
@@ -59,55 +100,34 @@ export function ValueReviewPage() {
     };
   }, []);
 
-  const update = (next: Record<string, string>) => {
+  const update = (next: Record<string, string | null>) => {
     const merged = new URLSearchParams(params);
-    for (const [k, v] of Object.entries(next)) merged.set(k, v);
+    for (const [k, v] of Object.entries(next)) {
+      if (v === null) merged.delete(k);
+      else merged.set(k, v);
+    }
     setParams(merged, { replace: true });
   };
 
-  if (loading) return <div className="p-6"><LoadingState lines={6} /></div>;
-  if (error) return <div className="p-6"><EmptyState title="Unable to load Value Review" description={error} /></div>;
-  if (!data || Object.keys(data).length === 0) {
-    return <div className="p-6"><EmptyState title="No value evidence yet" description="Value review will appear after outcomes are observed." /></div>;
-  }
+  const review = data && Object.keys(data).length > 0 ? data : null;
+  const tenant = str(review?.['tenant_id']) ?? 'tenant';
+  // Compare previous feeds the Overview's tiles and chart; other tabs do not show deltas.
+  const comparing = compare && tab === 'overview';
+  const allTime = ALL_TIME_TABS.has(tab);
 
-  const tenant = str(data['tenant_id']) ?? 'tenant';
-
-  return (
-    <div className="flex min-w-0 flex-col gap-[18px]" data-testid="aether-value">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex max-w-[640px] flex-col gap-1">
-          <h1 className="text-[32px] font-medium leading-tight tracking-[-0.64px]">Value</h1>
-          <span className="text-[14px]" style={{ color: 'var(--ae-mute)' }}>
-            Value created, what produced it, and what is still open before your next review. Influence is observed, not proven causal.
-          </span>
-        </div>
-        {tab === 'campaigns' && (
-          <div className="flex flex-col items-end gap-1">
-            <div className="flex gap-1" role="group" aria-label="Campaign spend window">
-              {WINDOWS.map(w => (
-                <ChoiceChip key={w} size="sm" selected={days === w} onClick={() => update({ window: String(w) })} data-testid={`value-window-${w}`}>
-                  {w} days
-                </ChoiceChip>
-              ))}
-            </div>
-            <span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>window for campaign spend</span>
-          </div>
-        )}
-      </div>
-
-      <div className="ae-scroll-none -mx-1 flex gap-1.5 overflow-x-auto px-1" role="group" aria-label="Value views">
-        {TABS.map(t => (
-          <ChoiceChip key={t.key} selected={tab === t.key} onClick={() => update({ tab: t.key })} data-testid={`value-tab-${t.key}`}>
-            {t.label}
-          </ChoiceChip>
-        ))}
-      </div>
-
-      <div className="ae-rise" key={tab}>
-        {tab === 'overview' && <OverviewTab tenant={tenant} review={data} />}
-        {tab === 'sources' && <SourcesTab tenant={tenant} />}
-        {tab === 'campaigns' && <CampaignsTab tenant={tenant} days={days} />}
+  let body: ReactNode;
+  if (loading) {
+    body = <LoadingState lines={6} />;
+  } else if (error) {
+    body = <EmptyState title="Unable to load Value Review" description={error} />;
+  } else if (!review) {
+    body = <EmptyState title="No value evidence yet" description={EMPTY_COPY[tab]} />;
+  } else {
+    body = (
+      <>
+        {tab === 'overview' && <OverviewTab tenant={tenant} review={review} period={windows.current} previousPeriod={windows.previous} compare={comparing} />}
+        {tab === 'sources' && <SourcesTab tenant={tenant} period={windows.current} />}
+        {tab === 'campaigns' && <CampaignsTab tenant={tenant} period={windows.current} />}
         {tab === 'agents' && <AgentsValueTab />}
         {tab === 'customers' && <CustomersTab tenant={tenant} />}
         {tab === 'outcomes' && (
@@ -116,6 +136,53 @@ export function ValueReviewPage() {
             <LoopAndDecisionsSection />
           </div>
         )}
+      </>
+    );
+  }
+
+  return (
+    <div className="flex min-w-0 flex-col gap-[18px]" data-testid="aether-value">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex max-w-[560px] flex-col gap-1">
+          <h1 className="text-[32px] font-medium leading-tight tracking-[-0.64px]">Value</h1>
+          <span className="text-[14px]" style={{ color: 'var(--ae-mute)' }}>
+            Value created, what produced it, and what is still open before your next review. Influence is observed, not proven causal.
+          </span>
+        </div>
+        <div className="flex min-w-0 flex-col items-start gap-1.5 sm:items-end">
+          <div className="flex flex-wrap items-center gap-2">
+            {tab === 'overview' && <CompareToggle on={compare} onChange={next => update({ compare: next ? '1' : null })} />}
+            <SegmentedTabs
+              label="Value window"
+              value={String(days)}
+              onChange={v => update({ window: v })}
+              options={WINDOWS.map(w => ({ value: String(w), label: `${w} days`, testId: `value-window-${w}` }))}
+            />
+          </div>
+          <span className="ae-mono text-[11px]" style={{ color: 'var(--ae-mute)' }} data-testid="value-range">
+            {rangeLabel(windows.current)}
+            {comparing ? ` · vs ${rangeLabel(windows.previous)}` : ''}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <SegmentedTabs
+          label="Value views"
+          value={tab}
+          onChange={key => update({ tab: key })}
+          options={TABS.map(t => ({ value: t.key, label: t.label, testId: `value-tab-${t.key}` }))}
+          className="self-start"
+        />
+        {allTime && (
+          <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }} data-testid="value-scope-all-time">
+            All time. The outcome ledger takes no date range, so the {days}-day window does not apply to this view.
+          </span>
+        )}
+      </div>
+
+      <div className="ae-rise min-w-0" key={tab}>
+        {body}
       </div>
     </div>
   );
