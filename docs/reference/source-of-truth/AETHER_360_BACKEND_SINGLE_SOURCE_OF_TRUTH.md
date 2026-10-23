@@ -9,13 +9,16 @@ This document replaces the prior broad 360 architecture blueprint as the impleme
 
 ## Repository implementation status (2026-10-23)
 
-This specification remains the acceptance contract for the complete 18-surface backend buildout. The repository currently has partial provider paths for five required slots, with the remaining limits recorded explicitly:
+This specification remains the acceptance contract for the complete 18-surface backend buildout. The repository currently has partial provider paths for eight required slots, with the remaining limits recorded explicitly:
 
 - **Episode360 `timeline`:** resolves only observation IDs explicitly recorded by an episode through tenant-scoped semantic Silver rows. Untyped source namespaces, complete activity/session coverage, policy, and freshness remain unresolved.
 - **Campaign360 `signal_sources`:** joins exact campaign touchpoint event references to tenant-scoped canonical events. Broader observation and source-fact authorities, complete event coverage, and freshness remain unresolved.
 - **Memory360 `policy_state`:** exposes exact historical write-time allow decisions with timestamped consent-policy evidence. Current consent and policy evaluation remain unknown.
 - **Signals360 `classification`:** validates the exact tenant-scoped, gateway-accepted SDK event type and family against the canonical event registry. Source attribution, semantic classification, policy, and freshness remain unknown.
 - **Workflow360 `agent_steps`:** reads only tenant-scoped AgentExecution rows that carry the exact workflow run ID, and projects metadata with evidence. The canonical AgentExecution writer does not currently persist `workflow_run_id`, so production step rows are not yet connected; workflow definition, complete step coverage, policy, and freshness remain unknown.
+- **Agent360 `owner_delegator`:** resolves a configured `owner_entity_id` only through the bounded, exact tenant-scoped entity lookup and preserves configuration plus entity evidence. The configuration reference does not establish legal or effective ownership, historical validity, freshness, or action authorization.
+- **Execution360 `approval_chain`:** joins exact tenant-scoped x402 approval requests and decisions to admitted execution IDs and lifecycle approval references, rejecting recorded action/resource conflicts. Other approval authorities, effective authorization, historical replay, and a freshness threshold remain unknown.
+- **Support360 `resolution`:** exposes resolved or closed lifecycle state only when the applied case event timestamp matches the canonical case state and exact provider-event and connection evidence are present. Business outcome facts, history completeness, and freshness remain unresolved.
 
 Episode360 `agent_handoffs` remains unknown because episode records and observations do not reference a canonical execution or handoff ID; event labels and agent metadata do not establish that join. The product registry records partial slots and this unjoined authority gap. None of these changes marks its surface complete or reduces the remaining requirements in this specification.
 

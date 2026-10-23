@@ -149,21 +149,23 @@ class ExecutionRiskEventRead:
 
 @dataclass(frozen=True)
 class ExecutionApprovalRead:
-    """Exact tenant-scoped commerce approval decisions for admitted runs."""
+    """Exact tenant-scoped commerce approval records for admitted runs."""
 
     rows: list[dict[str, Any]]
     available: bool
     scope_known: bool
     truncated: bool = False
     reason: Optional[str] = None
+    approval_requests: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
 class ExecutionApprovalContext:
-    """Evidence-backed x402 approval decisions linked to admitted executions."""
+    """Evidence-backed x402 approval requests and decisions for executions."""
 
     state: Literal["partial", "empty", "unknown", "degraded", "unavailable"]
     decisions: tuple[dict[str, Any], ...] = ()
+    approval_requests: tuple[dict[str, Any], ...] = ()
     evidence_refs: tuple[EvidenceRef, ...] = ()
     reason: Optional[str] = None
     source_read_state: Literal["available", "unavailable", "not_read"] = "not_read"
@@ -969,12 +971,37 @@ class RepositoryExecution360Source:
             decisions = await store.list_approval_decisions_for_executions(
                 tenant_id, admitted_ids, scan_limit + 1
             )
+            approval_scan_limit = min(
+                max(max(1, limit), len(admitted_ids) * 4),
+                _MAX_EXECUTION_APPROVAL_DECISION_SCAN,
+            )
+            approval_requests: list[Any] = []
+            approval_truncated = False
+            for execution_id in admitted_ids:
+                remaining = approval_scan_limit - len(approval_requests)
+                if remaining <= 0:
+                    approval_truncated = True
+                    break
+                request_limit = min(remaining + 1, 500)
+                requests = await store.list_approvals_for_execution(
+                    tenant_id, execution_id, request_limit
+                )
+                if not isinstance(requests, list):
+                    return ExecutionApprovalRead(
+                        rows=[],
+                        available=False,
+                        scope_known=False,
+                        reason="execution_approval_request_read_invalid",
+                    )
+                if len(requests) > remaining or len(requests) >= request_limit == 500:
+                    approval_truncated = True
+                approval_requests.extend(requests[:remaining])
         except Exception:  # noqa: BLE001 - optional canonical source failure is isolated
             return ExecutionApprovalRead(
                 rows=[],
                 available=False,
                 scope_known=False,
-                reason="execution_approval_decision_source_unavailable",
+                reason="execution_approval_authority_source_unavailable",
             )
         if not isinstance(decisions, list):
             return ExecutionApprovalRead(
@@ -1000,18 +1027,37 @@ class RepositoryExecution360Source:
             if row.get("tenant_id") == tenant_id
             and row.get("execution_id") in admitted_ids
         ]
+        approval_rows = [
+            approval.model_dump(mode="json")
+            for approval in approval_requests
+            if hasattr(approval, "model_dump")
+        ]
+        approval_mismatch = len(approval_rows) != len(approval_requests) or any(
+            row.get("tenant_id") != tenant_id
+            or row.get("execution_id") not in admitted_ids
+            for row in approval_rows
+        )
+        approval_rows = [
+            row
+            for row in approval_rows
+            if row.get("tenant_id") == tenant_id
+            and row.get("execution_id") in admitted_ids
+        ]
         return ExecutionApprovalRead(
             rows=rows,
             available=True,
-            scope_known=not mismatch,
-            truncated=truncated,
+            scope_known=not mismatch and not approval_mismatch,
+            truncated=truncated or approval_truncated,
             reason=(
                 "execution_approval_decision_scope_mismatch"
                 if mismatch
+                else "execution_approval_request_scope_mismatch"
+                if approval_mismatch
                 else "execution_approval_decision_read_truncated"
-                if truncated
+                if truncated or approval_truncated
                 else None
             ),
+            approval_requests=tuple(approval_rows),
         )
 
 
@@ -2934,6 +2980,24 @@ class Execution360Provider:
                     domainSlotIds=[SLOT_APPROVAL_CHAIN, SLOT_EVIDENCE],
                 )
             )
+        for approval in approval_chain.approval_requests:
+            try:
+                evidence = EvidenceRef.model_validate(approval.get("evidenceRef"))
+            except Exception:  # noqa: BLE001 - invalid canonical evidence is omitted
+                continue
+            claims.append(
+                ClaimEnvelope(
+                    id=f"execution360:approval-request:{approval['approvalId']}",
+                    kind="canonically_linked_commerce_approval_request",
+                    subject=subject,
+                    evidenceRefs=[evidence],
+                    claims=[
+                        f"The tenant-scoped x402 commerce authority recorded approval request {approval['approvalId']} for action {approval['action']} on resource {approval['resourceId']} linked to exact execution {approval['executionId']}; this is request metadata and does not establish authorization or an external effect."
+                    ],
+                    claimState=EpistemicStatus.RESOLVED,
+                    domainSlotIds=[SLOT_APPROVAL_CHAIN, SLOT_EVIDENCE],
+                )
+            )
         for signal in risk_events.signals:
             claims.append(
                 ClaimEnvelope(
@@ -3160,9 +3224,23 @@ class Execution360Provider:
             "state": approval_chain.state,
             "reason": approval_chain.reason,
             "sourceReadState": approval_chain.source_read_state,
-            "completeness": "x402_commerce_decisions_only",
+            "completeness": "x402_commerce_approval_requests_and_decisions_only",
             "scopeKnown": approval_chain.scope_known,
             "truncated": approval_chain.truncated,
+            "effectiveAuthorization": {
+                "state": "unknown",
+                "reason": "commerce_approval_evidence_does_not_evaluate_effective_agent_action_authority",
+            },
+            "freshness": {
+                "state": "unknown",
+                "latestObservedAt": _latest_approval_observed_at(approval_chain),
+                "reason": "no_execution_approval_freshness_threshold_is_configured",
+            },
+            "otherApprovalAuthorityCoverage": {
+                "state": "unknown",
+                "reason": "non_commerce_approval_authorities_are_not_joined",
+            },
+            "joinedExecutionApprovalRequests": list(approval_chain.approval_requests),
             "joinedExecutionApprovals": list(approval_chain.decisions),
             "evidenceRefs": [
                 ref.model_dump(mode="json", by_alias=True, exclude_none=True)
@@ -3520,7 +3598,7 @@ def _execution_approval_context(
     execution_inventory_complete: bool,
     temporal_unavailable: bool,
 ) -> ExecutionApprovalContext:
-    """Validate commerce decisions against exact persisted run references."""
+    """Validate commerce approvals and decisions against exact run references."""
     if temporal_unavailable:
         return ExecutionApprovalContext(
             state="unknown",
@@ -3543,7 +3621,7 @@ def _execution_approval_context(
             scope_known=False,
         )
 
-    approval_refs: dict[str, tuple[str, str]] = {}
+    approval_refs: dict[str, tuple[str, str, Optional[str], Optional[str]]] = {}
     invalid_reference = False
     for row in internal:
         execution_id = _safe_text(row.get("executionId"))
@@ -3556,7 +3634,12 @@ def _execution_approval_context(
         if not approval_id or not decision_id or execution_id in approval_refs:
             invalid_reference = True
             continue
-        approval_refs[execution_id] = (approval_id, decision_id)
+        approval_refs[execution_id] = (
+            approval_id,
+            decision_id,
+            _safe_text(row.get("requestedAction")),
+            _safe_text(row.get("requestedResource")),
+        )
 
     decisions: list[dict[str, Any]] = []
     evidence_refs: list[EvidenceRef] = []
@@ -3621,23 +3704,124 @@ def _execution_approval_context(
             }
         )
 
+    approval_requests: list[dict[str, Any]] = []
+    seen_approval_ids: set[str] = set()
+    matched_approval_ids: set[str] = set()
+    conflicted_approval_decision_ids: set[str] = set()
+    invalid_approval_request = False
+    for raw in read.approval_requests:
+        if not isinstance(raw, dict):
+            invalid_approval_request = True
+            continue
+        execution_id = _safe_text(raw.get("execution_id"))
+        approval_id = _safe_text(raw.get("approval_id"))
+        action = _safe_text(raw.get("execution_action"))
+        resource_id = _safe_text(raw.get("resource_id"))
+        created_at = _safe_text(raw.get("created_at"))
+        expected_ref = approval_refs.get(execution_id or "")
+        if (
+            raw.get("tenant_id") != tenant_id
+            or execution_id not in execution_ids
+            or not approval_id
+            or not action
+            or not resource_id
+            or _parse_aware_instant(created_at) is None
+            or approval_id in seen_approval_ids
+            or expected_ref is None
+            or expected_ref[0] != approval_id
+        ):
+            invalid_approval_request = True
+            continue
+        expected_action, expected_resource = expected_ref[2], expected_ref[3]
+        if (
+            (expected_action is not None and expected_action != action)
+            or (expected_resource is not None and expected_resource != resource_id)
+        ):
+            # Exact approval-to-execution linkage is insufficient when the
+            # persisted approval request conflicts with fields recorded on the
+            # AETHER lifecycle row. Keep both claims out of the joined slot;
+            # otherwise the decision could sound like approval of another
+            # action or resource.
+            invalid_approval_request = True
+            if expected_ref is not None and expected_ref[0] == approval_id:
+                conflicted_approval_decision_ids.add(expected_ref[1])
+            continue
+        evidence_ref = _evidence_ref(
+            evidence_id=approval_id,
+            source="commerce_approvals",
+            observed_at=created_at,
+            store="commerce_approvals",
+        )
+        if evidence_ref is None:
+            invalid_approval_request = True
+            continue
+        seen_approval_ids.add(approval_id)
+        matched_approval_ids.add(approval_id)
+        evidence_refs.append(evidence_ref)
+        approval_requests.append(
+            {
+                "executionId": execution_id,
+                "approvalId": approval_id,
+                "action": action,
+                "resourceId": resource_id,
+                "createdAt": created_at,
+                "lifecycleRequestMatch": (
+                    "matched"
+                    if expected_action is not None and expected_resource is not None
+                    else "unknown"
+                ),
+                "evidenceRef": evidence_ref.model_dump(
+                    mode="json", by_alias=True, exclude_none=True
+                ),
+            }
+        )
+
+    if conflicted_approval_decision_ids:
+        decisions = [
+            row
+            for row in decisions
+            if row["decisionId"] not in conflicted_approval_decision_ids
+        ]
+        evidence_refs = [
+            ref
+            for ref in evidence_refs
+            if not (
+                ref.source == "commerce_approval_decisions"
+                and ref.id in conflicted_approval_decision_ids
+            )
+        ]
+        referenced_decisions_found.difference_update(conflicted_approval_decision_ids)
+
     unresolved_refs = {
         decision_id
-        for _, decision_id in approval_refs.values()
+        for _, decision_id, _, _ in approval_refs.values()
         if decision_id not in referenced_decisions_found
     }
+    unresolved_approval_requests = {
+        approval_id
+        for approval_id, _, _, _ in approval_refs.values()
+        if approval_id not in matched_approval_ids
+    }
     truncated = read.truncated
-    scope_known = read.scope_known and not invalid_reference and not invalid_record
+    scope_known = (
+        read.scope_known
+        and not invalid_reference
+        and not invalid_record
+        and not invalid_approval_request
+    )
     complete_read = (
         scope_known
         and not truncated
         and execution_inventory_complete
         and not unresolved_refs
+        and not unresolved_approval_requests
     )
     if (
         invalid_reference
         or invalid_record
+        or invalid_approval_request
         or unresolved_refs
+        or unresolved_approval_requests
         or truncated
         or not read.scope_known
         or not execution_inventory_complete
@@ -3649,7 +3833,9 @@ def _execution_approval_context(
         )
     elif decisions:
         state = "partial"
-        reason = "commerce_approval_decisions_only_other_approval_authorities_not_joined"
+        reason = (
+            "commerce_approval_requests_and_decisions_only_other_approval_authorities_not_joined"
+        )
     else:
         # No commerce decision is linked to these runs. The provider has no
         # complete inventory of non-commerce approval authorities.
@@ -3659,12 +3845,26 @@ def _execution_approval_context(
     return ExecutionApprovalContext(
         state=state,
         decisions=tuple(decisions),
+        approval_requests=tuple(approval_requests),
         evidence_refs=tuple(evidence_refs),
         reason=reason,
         source_read_state="available",
         scope_known=complete_read,
         truncated=truncated,
     )
+
+
+def _latest_approval_observed_at(approval_chain: ExecutionApprovalContext) -> Optional[str]:
+    """Return the latest stored approval timestamp without assigning freshness."""
+    timestamps = [row.get("decidedAt") for row in approval_chain.decisions] + [
+        row.get("createdAt") for row in approval_chain.approval_requests
+    ]
+    instants = [
+        parsed
+        for value in timestamps
+        if (parsed := _parse_aware_instant(value)) is not None
+    ]
+    return max(instants).isoformat() if instants else None
 
 
 def _lifecycle_elapsed_ms(row: dict[str, Any]) -> Optional[float]:

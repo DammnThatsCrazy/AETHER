@@ -223,7 +223,7 @@ class RepositoryAgent360Source:
     async def delegation_party_identities(
         self, tenant_id: str, party_entity_ids: set[str]
     ) -> Agent360ReadBatch:
-        """Resolve delegation party references only through tenant-owned entities."""
+        """Resolve owner/delegation party IDs through tenant-owned entity rows."""
         if not tenant_id:
             return Agent360ReadBatch(rows=[], scope_known=False)
         requested = {
@@ -1170,6 +1170,11 @@ class Agent360Provider:
 
         config = config_rows[0] if len(config_rows) == 1 else None
         config_conflict = len(config_rows) > 1
+        config_ref = (
+            self._ref_one(config, "agent_configs", ("agent_id",), ("created_at",))
+            if config
+            else None
+        )
         if config_conflict:
             degraded_reasons.append("agent_config_identity_conflict")
         if actor_identity_conflict:
@@ -1274,6 +1279,12 @@ class Agent360Provider:
             for field in ("grantor_entity_id", "grantee_entity_id")
             if (entity_id := _first(row, field)) is not None
         }
+        # A configured owner is a stored config reference, not proof of an
+        # owner relationship. Resolve it only through the same exact,
+        # tenant-scoped canonical entity authority used for delegation parties.
+        configured_owner_entity_id = _first(config, "owner_entity_id") if config else None
+        if configured_owner_entity_id is not None:
+            delegation_party_entity_ids.add(configured_owner_entity_id)
         if delegation_party_entity_ids:
             party_identity_read = await self._safe_read(
                 "delegation_parties",
@@ -1308,6 +1319,30 @@ class Agent360Provider:
             entity_id = _first(row, "party_entity_id")
             if entity_id is not None:
                 party_identity_rows_by_id.setdefault(entity_id, []).append(row)
+
+        configured_owner_identity_view = self._delegation_party_identity_view(
+            configured_owner_entity_id,
+            read=party_identity_read,
+            identity_rows_by_id=party_identity_rows_by_id,
+            delegation_evidence_ref=config_ref,
+        )
+        configured_owner_identity_state = configured_owner_identity_view["state"]
+        if configured_owner_entity_id is None:
+            configured_owner_identity_view = {
+                **configured_owner_identity_view,
+                "reason": (
+                    "no unique tenant-scoped agent configuration supplied owner_entity_id"
+                    if config is None and (config_conflict or not data["config"].available)
+                    else "agent configuration has no owner_entity_id reference"
+                ),
+            }
+        if configured_owner_identity_state != "resolved":
+            authority_unresolved_reason = (
+                "agent_owner_identity_conflicted"
+                if configured_owner_identity_state == "conflicted"
+                else "agent_owner_identity_unresolved"
+            )
+            degraded_reasons.append(authority_unresolved_reason)
 
         timeline_exec = _temporal_slice(
             execution_rows, request=request, time_keys=("started_at", "created_at")
@@ -1509,11 +1544,6 @@ class Agent360Provider:
         }
 
         source_states = {name: self._read_state(read) for name, read in data.items()}
-        config_ref = (
-            self._ref_one(config, "agent_configs", ("agent_id",), ("created_at",))
-            if config
-            else None
-        )
         identity_state = (
             "conflicted"
             if config_conflict or actor_identity_conflict
@@ -1548,11 +1578,37 @@ class Agent360Provider:
         actor_attribution = {
             "state": actor_identity_state,
             "assertedSourceActor": agent_id,
-            "configuredOwnerEntityId": (
-                str(config.get("owner_entity_id"))
-                if config is not None and config.get("owner_entity_id")
-                else None
-            ),
+            "configuredOwnerEntityId": configured_owner_entity_id,
+            "configuredOwnerIdentity": {
+                "state": configured_owner_identity_state,
+                "canonicalParty": configured_owner_identity_view.get("party"),
+                "relationshipState": (
+                    "configured_reference_only"
+                    if configured_owner_entity_id is not None
+                    else "unknown"
+                ),
+                "effectiveOwnership": "unknown",
+                "effectiveAuthorization": "unknown",
+                "temporalSemantics": (
+                    "current_agent_configuration_and_tenant_entity_state; "
+                    "not_reconstructed_for_requested_event_time"
+                ),
+                "freshness": {
+                    "state": (
+                        "undated"
+                        if configured_owner_identity_state == "resolved"
+                        and not any(
+                            ref.get("source") == "entities" and ref.get("observedAt")
+                            for ref in configured_owner_identity_view["evidenceRefs"]
+                        )
+                        else "not_assessed"
+                    ),
+                    "slaSeconds": None,
+                    "reason": "owner_entity_freshness_sla_not_configured",
+                },
+                "evidenceRefs": configured_owner_identity_view["evidenceRefs"],
+                "reason": configured_owner_identity_view["reason"],
+            },
             "resolvedCanonicalActor": resolved_canonical_actor,
             "executionPrincipal": execution_principals["executionPrincipal"],
             "executionPrincipalState": execution_principals["state"],
@@ -1567,6 +1623,7 @@ class Agent360Provider:
             "evidenceRefs": _dedupe_json_refs(
                 actor_identity_refs
                 + ([config_ref.model_dump(mode="json")] if config_ref else [])
+                + configured_owner_identity_view["evidenceRefs"]
                 + execution_principals["evidenceRefs"]
                 + execution_principal_identity["evidenceRefs"]
             ),
@@ -1643,6 +1700,7 @@ class Agent360Provider:
             has_rows=bool(
                 delegation_items
                 or action_scoped_decisions
+                or configured_owner_identity_state == "resolved"
                 or (
                     capability_profile_complete
                     and capability_profile_rows
@@ -1650,6 +1708,11 @@ class Agent360Provider:
                 )
             ),
         )
+        if configured_owner_identity_state != "resolved" and authority_state in {
+            "available",
+            "empty",
+        }:
+            authority_state = "degraded"
         if active_delegation_conflicts:
             authority_state = "degraded"
             degraded_reasons.append("agent_delegation_active_record_conflict")
@@ -1688,6 +1751,7 @@ class Agent360Provider:
         )
         authority_content = {
             "state": authority_state,
+            "configuredOwnerIdentity": actor_attribution["configuredOwnerIdentity"],
             "delegationRecords": delegation_items,
             "delegationReadConflicts": list(active_delegation_conflicts.values()),
             "actionScopedDecisions": action_scoped_decisions,
@@ -1727,6 +1791,7 @@ class Agent360Provider:
                     )
                 )
             ]
+            + configured_owner_identity_view["evidenceRefs"]
             + [
                 ref.model_dump(mode="json")
                 for row in party_identity_rows
@@ -2117,6 +2182,11 @@ class Agent360Provider:
                 ],
                 config=config if request.timeRange is None else None,
                 config_ref=config_ref if request.timeRange is None else None,
+                configured_owner_identity=(
+                    actor_attribution["configuredOwnerIdentity"]
+                    if request.timeRange is None
+                    else None
+                ),
                 agent_identity_rows=(
                     actor_identity_rows if resolved_canonical_actor is not None else []
                 ),
@@ -3464,6 +3534,7 @@ class Agent360Provider:
         principal_identity_by_user_id: dict[str, dict[str, Any]],
         config: Optional[dict[str, Any]],
         config_ref: Optional[EvidenceRef],
+        configured_owner_identity: Optional[dict[str, Any]],
         agent_identity_rows: list[dict[str, Any]],
         execution_rows: list[dict[str, Any]],
         delegation_records: list[tuple[dict[str, Any], str, bool]],
@@ -3518,6 +3589,57 @@ class Agent360Provider:
                     evidenceRefs=[config_ref],
                     claims=["A tenant-scoped agent configuration record is present."],
                     claimState=EpistemicStatus.OBSERVED,
+                )
+            )
+        if config is not None and config_ref is not None and configured_owner_identity is not None:
+            owner_entity_id = _first(config, "owner_entity_id")
+            identity_state = configured_owner_identity.get("state")
+            owner_refs: list[EvidenceRef] = [config_ref]
+            raw_owner_refs = configured_owner_identity.get("evidenceRefs")
+            if isinstance(raw_owner_refs, list):
+                for raw_ref in raw_owner_refs:
+                    try:
+                        owner_refs.append(EvidenceRef.model_validate(raw_ref))
+                    except Exception:  # noqa: BLE001 - malformed identity evidence is omitted
+                        continue
+            owner_refs = _dedupe_refs(owner_refs)
+            resolved_party = configured_owner_identity.get("canonicalParty")
+            owner_kind = (
+                resolved_party.get("kind")
+                if isinstance(resolved_party, dict)
+                else "canonical"
+            )
+            if identity_state == "resolved" and isinstance(resolved_party, dict):
+                claim_text = (
+                    f"The tenant-scoped agent configuration stores owner reference "
+                    f"{owner_entity_id}, which resolves by exact tenant entity ID to "
+                    f"canonical {owner_kind} entity {resolved_party.get('id')}; the "
+                    "configuration reference does not independently establish legal "
+                    "ownership, historical validity, or effective action authorization."
+                )
+                claim_state = EpistemicStatus.RESOLVED
+                claim_kind = "configured_agent_owner_identity"
+            else:
+                claim_text = (
+                    f"The tenant-scoped agent configuration owner reference "
+                    f"{owner_entity_id or 'is absent'} was not resolved to one tenant-owned "
+                    f"canonical entity: {configured_owner_identity.get('reason') or 'identity is unknown'}."
+                )
+                claim_state = (
+                    EpistemicStatus.DISPUTED
+                    if identity_state == "conflicted"
+                    else EpistemicStatus.UNKNOWN
+                )
+                claim_kind = "agent_owner_identity_resolution"
+            claims.append(
+                ClaimEnvelope(
+                    id=f"agent_owner_identity.{request.subject.id}",
+                    kind=claim_kind,
+                    subject=subject,
+                    evidenceRefs=owner_refs,
+                    claims=[claim_text],
+                    claimState=claim_state,
+                    domainSlotIds=["owner_delegator", "actor_attribution"],
                 )
             )
         for row in execution_rows:

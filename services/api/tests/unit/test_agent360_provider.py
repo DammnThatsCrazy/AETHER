@@ -90,6 +90,7 @@ class FakeSource:
         self.capability_grants = capability_grants
         self.calls = 0
         self.delegation_subjects: list[str] = []
+        self.party_identity_subjects: list[set[str]] = []
         self.capability_subjects: list[str] = []
 
     async def _rows(self, name: str, rows: list[dict]) -> list[dict]:
@@ -212,6 +213,7 @@ class FakeSource:
         )
 
     async def delegation_party_identities(self, tenant_id, party_entity_ids):
+        self.party_identity_subjects.append(set(party_entity_ids))
         rows = await self._rows(
             "delegation_party_identities",
             [
@@ -692,6 +694,41 @@ async def test_agent360_projects_scoped_evidence_without_inventing_authority_or_
     actor = sections["state"].content["dimensions"][1]["content"]
     assert actor["assertedSourceActor"] == AGENT
     assert actor["configuredOwnerEntityId"] == "owner-1"
+    assert actor["configuredOwnerIdentity"] == {
+        "state": "resolved",
+        "canonicalParty": {"kind": "human", "id": "owner-1"},
+        "relationshipState": "configured_reference_only",
+        "effectiveOwnership": "unknown",
+        "effectiveAuthorization": "unknown",
+        "temporalSemantics": (
+            "current_agent_configuration_and_tenant_entity_state; "
+            "not_reconstructed_for_requested_event_time"
+        ),
+        "freshness": {
+            "state": "not_assessed",
+            "slaSeconds": None,
+            "reason": "owner_entity_freshness_sla_not_configured",
+        },
+        "evidenceRefs": [
+            {
+                "id": AGENT,
+                "type": "entity",
+                "source": "agent_configs",
+                "observedAt": "2026-10-01T00:00:00Z",
+                "confidence": None,
+                "uri": None,
+            },
+            {
+                "id": "owner-1",
+                "type": "entity",
+                "source": "entities",
+                "observedAt": "2026-09-01T00:00:00Z",
+                "confidence": None,
+                "uri": None,
+            },
+        ],
+        "reason": None,
+    }
     assert actor["resolvedCanonicalActor"] == "canonical-agent-a"
     assert actor["executionPrincipal"] == {
         "kind": "human",
@@ -719,6 +756,7 @@ async def test_agent360_projects_scoped_evidence_without_inventing_authority_or_
 
     authority = sections["state"].content["dimensions"][2]["content"]
     assert authority["state"] == "available"
+    assert authority["configuredOwnerIdentity"] == actor["configuredOwnerIdentity"]
     assert authority["effectiveAuthorizationDecision"] == "unknown"
     access_profile = authority["capabilityAccessProfile"]
     assert access_profile["state"] == "available"
@@ -816,6 +854,7 @@ async def test_agent360_projects_scoped_evidence_without_inventing_authority_or_
         "id": "canonical-agent-a",
     }
     assert {ref["source"] for ref in authority["evidenceRefs"]} == {
+        "agent_configs",
         "delegations",
         "entities",
     }
@@ -824,6 +863,13 @@ async def test_agent360_projects_scoped_evidence_without_inventing_authority_or_
         for claim in result.claims
         if claim.kind == "canonically_resolved_delegation_party"
     ]
+    owner_claim = next(
+        claim for claim in result.claims if claim.kind == "configured_agent_owner_identity"
+    )
+    assert owner_claim.claimState == EpistemicStatus.RESOLVED
+    assert owner_claim.domainSlotIds == ["owner_delegator", "actor_attribution"]
+    assert {ref.source for ref in owner_claim.evidenceRefs} == {"agent_configs", "entities"}
+    assert "does not independently establish legal ownership" in owner_claim.claims[0]
     assert len(party_claims) == 2
     assert all(claim.claimState == EpistemicStatus.RESOLVED for claim in party_claims)
     assert all(
@@ -838,6 +884,7 @@ async def test_agent360_projects_scoped_evidence_without_inventing_authority_or_
         for claim in result.claims
     )
     assert source.delegation_subjects == ["canonical-agent-a"] * 3
+    assert source.party_identity_subjects == [{"owner-1", "canonical-agent-a"}]
 
     assert sections["timeline"].content["causalRelationsDeclared"] is False
     timeline_messages = [
@@ -882,6 +929,90 @@ async def test_agent360_projects_scoped_evidence_without_inventing_authority_or_
             claim.claims[0] for claim in result.claims if claim.kind == "agent_delegation_record"
         ).lower()
     )
+
+
+@pytest.mark.asyncio
+async def test_agent360_resolves_configured_owner_without_delegation_records():
+    class OwnerOnlySource(FakeSource):
+        async def incoming_delegations(self, tenant_id, canonical_agent_entity_id, limit):
+            self.delegation_subjects.append(canonical_agent_entity_id)
+            return []
+
+        async def outgoing_delegations(self, tenant_id, canonical_agent_entity_id, limit):
+            self.delegation_subjects.append(canonical_agent_entity_id)
+            return []
+
+        async def active_incoming_delegations(self, tenant_id, canonical_agent_entity_id):
+            self.delegation_subjects.append(canonical_agent_entity_id)
+            return Agent360ReadBatch(rows=[])
+
+    source = OwnerOnlySource()
+    result = await Agent360Provider(source).project(_request(), _context())
+    actor = _sections(result)["state"].content["dimensions"][1]["content"]
+    owner_claim = next(
+        claim for claim in result.claims if claim.kind == "configured_agent_owner_identity"
+    )
+
+    assert source.party_identity_subjects == [{"owner-1"}]
+    assert actor["configuredOwnerIdentity"]["state"] == "resolved"
+    assert actor["configuredOwnerIdentity"]["canonicalParty"] == {
+        "kind": "human",
+        "id": "owner-1",
+    }
+    assert owner_claim.claimState == EpistemicStatus.RESOLVED
+    assert {ref.source for ref in owner_claim.evidenceRefs} == {"agent_configs", "entities"}
+
+
+@pytest.mark.asyncio
+async def test_agent360_does_not_resolve_configured_owner_from_foreign_entity_row():
+    class ForeignOwnerSource(FakeSource):
+        async def incoming_delegations(self, tenant_id, canonical_agent_entity_id, limit):
+            return []
+
+        async def outgoing_delegations(self, tenant_id, canonical_agent_entity_id, limit):
+            return []
+
+        async def active_incoming_delegations(self, tenant_id, canonical_agent_entity_id):
+            return Agent360ReadBatch(rows=[])
+
+        async def delegation_party_identities(self, tenant_id, party_entity_ids):
+            self.party_identity_subjects.append(set(party_entity_ids))
+            return Agent360ReadBatch(
+                rows=[
+                    {
+                        "tenant_id": "foreign-tenant",
+                        "party_entity_id": "owner-1",
+                        "party_entity_type": "human",
+                        "identity_evidence_id": "owner-1",
+                        "identity_evidence_source": "entities",
+                        "identity_observed_at": "2026-09-01T00:00:00Z",
+                    }
+                ],
+                scope_mismatch=True,
+            )
+
+    source = ForeignOwnerSource()
+    result = await Agent360Provider(source).project(_request(), _context())
+    sections = _sections(result)
+    actor = sections["state"].content["dimensions"][1]["content"]
+    authority = sections["state"].content["dimensions"][2]
+    owner_identity = actor["configuredOwnerIdentity"]
+    owner_claim = next(
+        claim for claim in result.claims if claim.kind == "agent_owner_identity_resolution"
+    )
+
+    assert source.party_identity_subjects == [{"owner-1"}]
+    assert owner_identity["state"] == "unknown"
+    assert owner_identity["canonicalParty"] is None
+    assert {ref["source"] for ref in owner_identity["evidenceRefs"]} == {"agent_configs"}
+    assert owner_identity["effectiveOwnership"] == "unknown"
+    assert owner_identity["effectiveAuthorization"] == "unknown"
+    assert authority["state"] == "degraded"
+    assert owner_claim.claimState == EpistemicStatus.UNKNOWN
+    assert {ref.source for ref in owner_claim.evidenceRefs} == {"agent_configs"}
+    assert "agent_delegation_party_identity_scope_mismatch" in result.degradedReasons
+    assert "agent_owner_identity_unresolved" in result.degradedReasons
+    assert "foreign-tenant" not in str(result.model_dump(mode="json"))
 
 
 @pytest.mark.asyncio
@@ -1193,6 +1324,16 @@ async def test_agent360_window_evidence_trace_claims_only_admitted_observations(
         time_range={"from": "2026-10-03T00:00:00Z", "to": "2026-10-03T23:59:59Z"}
     )
     result = await Agent360Provider(FakeSource()).project(request, _context())
+    actor = _sections(result)["state"].content["dimensions"][1]["content"]
+    assert actor["configuredOwnerIdentity"]["temporalSemantics"].startswith(
+        "current_agent_configuration_and_tenant_entity_state"
+    )
+    assert not any(
+        claim.domainSlotIds
+        and "owner_delegator" in claim.domainSlotIds
+        and claim.kind == "configured_agent_owner_identity"
+        for claim in result.claims
+    )
 
     trace_claim = next(
         claim for claim in result.claims if claim.kind == "agent360_validated_evidence_trace"

@@ -87,6 +87,7 @@ _REASON_SLA_AUTHORITY_MISSING = "canonical_support_sla_authority_unavailable"
 _REASON_AGENT_ASSIGNMENT_MISSING = "canonical_support_case_agent_assignment_unavailable"
 _REASON_RISK_COMPOSITION_MISSING = "support_risk_projection_composition_unavailable"
 _REASON_RESOLUTION_AUTHORITY_MISSING = "canonical_support_resolution_authority_unavailable"
+_REASON_SUPPORT_BUSINESS_OUTCOME_MISSING = "support_business_outcome_authority_unavailable"
 _REASON_CONTENT_PERMISSION_UNVERIFIED = "support_communication_content_permission_unverified"
 _REQUIRED_SUPPORT_SLOT_IDS: tuple[str, ...] = (
     "case_summary",
@@ -1036,6 +1037,9 @@ class Support360Provider(IntelligenceProjectionProvider):
             "count": len(evidence_refs),
             "evidenceRefs": evidence_refs,
         }
+        resolution_slot = _case_resolution_slot(record, events)
+        if resolution_slot is not None:
+            slots["resolution"] = resolution_slot
         state_content = {
             "supportCommunications": {
                 "state": "unknown",
@@ -1082,7 +1086,11 @@ class Support360Provider(IntelligenceProjectionProvider):
                     "The tenant-owned provider connection reported this canonical support case lifecycle state."
                 ],
                 claimState=EpistemicStatus.OBSERVED,
-                domainSlotIds=["case_summary", "evidence_trace"],
+                domainSlotIds=(
+                    ["case_summary", "resolution", "evidence_trace"]
+                    if resolution_slot is not None
+                    else ["case_summary", "evidence_trace"]
+                ),
             )
         ]
         sections = [
@@ -1265,6 +1273,107 @@ def _dedupe_evidence_refs(refs: list[EvidenceRef]) -> list[EvidenceRef]:
             continue
         unique[(reference.source, reference.id)] = reference
     return list(unique.values())
+
+
+def _case_resolution_slot(
+    record: dict[str, Any], events: list[dict[str, Any]]
+) -> Optional[dict[str, Any]]:
+    """Expose only an exact, evidence-backed resolved/closed case lifecycle state."""
+    lifecycle_state = _safe_reference(_text(record.get("lifecycle_state")))
+    if lifecycle_state not in {"resolved", "closed"}:
+        return None
+
+    event_type = "support_case_resolved" if lifecycle_state == "resolved" else "support_case_closed"
+    timestamp_field = "resolved_at" if lifecycle_state == "resolved" else "closed_at"
+    resolution_at = _utc_timestamp(record.get(timestamp_field))
+    connection_id = _safe_reference(_text(record.get("source_connection_id")))
+    provider_identity = _safe_reference(_text(record.get("source_provider_identity")))
+    if resolution_at is None or connection_id is None or provider_identity is None:
+        return None
+
+    expected_connection_uri = (
+        f"store://provider_connections/{quote(connection_id, safe='')}"
+    )
+    exact_evidence: list[EvidenceRef] = []
+    for event in events:
+        source_event_id = _safe_reference(_text(event.get("source_event_id")))
+        event_at = _utc_timestamp(event.get("source_occurred_at"))
+        if (
+            source_event_id is None
+            or event.get("lifecycle_applied") is not True
+            or _safe_reference(_text(event.get("event_type"))) != event_type
+            or event_at != resolution_at
+        ):
+            continue
+
+        raw_refs = event.get("evidence_refs")
+        if isinstance(raw_refs, str):
+            try:
+                raw_refs = json.loads(raw_refs)
+            except json.JSONDecodeError:
+                continue
+        if not isinstance(raw_refs, (list, tuple)):
+            continue
+
+        event_ref: Optional[EvidenceRef] = None
+        connection_ref: Optional[EvidenceRef] = None
+        for raw_ref in raw_refs:
+            try:
+                reference = (
+                    raw_ref
+                    if isinstance(raw_ref, EvidenceRef)
+                    else EvidenceRef.model_validate(raw_ref)
+                )
+            except (TypeError, ValueError):
+                continue
+            if (
+                reference.id == source_event_id
+                and reference.type == "event"
+                and reference.source == provider_identity
+                and reference.uri
+                == (
+                    "provider-event://"
+                    f"{quote(connection_id, safe='')}/{quote(source_event_id, safe='')}"
+                )
+                and _utc_timestamp(reference.observedAt) == event_at
+            ):
+                event_ref = reference
+            elif (
+                reference.id == connection_id
+                and reference.type == "entity"
+                and reference.source == "provider_connections"
+                and reference.uri == expected_connection_uri
+            ):
+                connection_ref = reference
+        if event_ref is not None and connection_ref is not None:
+            exact_evidence.extend((event_ref, connection_ref))
+
+    evidence_refs = _dedupe_evidence_refs(exact_evidence)
+    if not evidence_refs:
+        return None
+    return {
+        "state": "degraded",
+        "resolutionState": lifecycle_state,
+        "claimState": "observed",
+        "sourceOccurredAt": resolution_at.isoformat(),
+        "evidenceRefs": evidence_refs,
+        "reasonCode": _REASON_SUPPORT_BUSINESS_OUTCOME_MISSING,
+    }
+
+
+def _utc_timestamp(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed.astimezone(timezone.utc)
 
 
 def _subject_authorities(subject_kind: str) -> tuple[str, ...]:

@@ -676,6 +676,16 @@ workflow definition and complete step coverage remain unknown. Episode360
 `agent_handoffs` also remains unknown because episode records and observations
 do not reference a canonical execution or handoff ID. Event labels and agent
 metadata are not used to invent those links.
+The current agentic/support slice adds three partial paths: Agent360
+`owner_delegator` resolves the configured owner reference only through an exact
+tenant entity lookup, without asserting legal or effective ownership; Execution360
+`approval_chain` joins x402 approval requests and decisions to lifecycle approval,
+action, and resource references, rejecting conflicts; Support360 `resolution`
+exposes resolved/closed lifecycle state only with a matching applied event and
+provider evidence. Effective agent authorization, other approval authorities,
+business outcome facts, historical validity, and freshness remain unknown, so
+these paths do not complete their surfaces or change their providers' `in_flight`
+status.
 Exploration surfaces compose over the engine through projection-backed surface adapters
 
 (`services/api/journeys/exploration/adapters/projection.py`).

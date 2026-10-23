@@ -29,6 +29,8 @@ from journeys.support360.provider import (  # noqa: E402
     _REASON_CALLBACK_AUTHORITY_MISSING,
     _REASON_JOURNEY_JOIN_MISSING,
     _REASON_PARTIAL_ENTITY_JOIN,
+    _REASON_RESOLUTION_AUTHORITY_MISSING,
+    _REASON_SUPPORT_BUSINESS_OUTCOME_MISSING,
     _REASON_SOURCE_UNAVAILABLE,
     _REASON_UNSUPPORTED_SUBJECT,
     _REASON_TICKET_CASE_JOIN_MISSING,
@@ -36,9 +38,11 @@ from journeys.support360.provider import (  # noqa: E402
 )
 from graph.operational_intelligence.models import EvidenceRef  # noqa: E402
 from journeys.support360.cases import (  # noqa: E402
+    SupportCaseAuthorityRead,
     SupportCaseEventInput,
     SupportCaseEventType,
     SupportCaseRepository,
+    reset_local_support_case_store,
 )
 from shared.intelligence_projections import (  # noqa: E402
     INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
@@ -419,6 +423,142 @@ async def test_canonical_support_case_subject_reads_exact_case_summary_with_evid
     }
     assert "source-case-private-42" not in repr(result.model_dump())
     assert source.calls == []
+
+
+@pytest.mark.asyncio
+async def test_support_case_resolution_joins_exact_applied_lifecycle_event_evidence() -> None:
+    from datetime import datetime, timezone
+
+    reset_local_support_case_store()
+    repository = SupportCaseRepository()
+    created_at = datetime(2026, 10, 17, 11, tzinfo=timezone.utc)
+    resolved_at = datetime(2026, 10, 17, 12, tzinfo=timezone.utc)
+    record = await repository.ingest_event(
+        tenant_id=TENANT_A,
+        connection_id="support-connection-resolution",
+        provider_identity="support-desk",
+        connection_verified_at="2026-10-17T10:00:00Z",
+        event=SupportCaseEventInput(
+            source_case_id="source-case-resolution",
+            source_event_id="support-case-created-resolution",
+            event_type=SupportCaseEventType.CREATED,
+            occurred_at=created_at,
+        ),
+        observed_at=created_at,
+    )
+    record = await repository.ingest_event(
+        tenant_id=TENANT_A,
+        connection_id="support-connection-resolution",
+        provider_identity="support-desk",
+        connection_verified_at="2026-10-17T10:00:00Z",
+        event=SupportCaseEventInput(
+            source_case_id="source-case-resolution",
+            source_event_id="support-case-resolved-resolution",
+            event_type=SupportCaseEventType.RESOLVED,
+            occurred_at=resolved_at,
+        ),
+        observed_at=resolved_at,
+    )
+    request = _request("support_case", record["case_id"])
+
+    result = await Support360Provider(
+        FakeSource(SupportFactsRead(rows=[], available=True)),
+        case_repository=repository,
+    ).project(request, _context(request))
+
+    sections = _sections(result)
+    resolution = sections["state"].content["requiredSlots"]["resolution"]
+    assert resolution["state"] == "degraded"
+    assert resolution["resolutionState"] == "resolved"
+    assert resolution["claimState"] == "observed"
+    assert resolution["sourceOccurredAt"] == "2026-10-17T12:00:00+00:00"
+    assert resolution["reasonCode"] == _REASON_SUPPORT_BUSINESS_OUTCOME_MISSING
+    assert {(reference.source, reference.id) for reference in resolution["evidenceRefs"]} == {
+        ("support-desk", "support-case-resolved-resolution"),
+        ("provider_connections", "support-connection-resolution"),
+    }
+    assert result.claims[0].domainSlotIds == ["case_summary", "resolution", "evidence_trace"]
+    assert sections["outcomes"].state == "unknown"
+    assert sections["outcomes"].warnings == [_REASON_RESOLUTION_AUTHORITY_MISSING]
+    reset_local_support_case_store()
+
+
+@pytest.mark.asyncio
+async def test_support_case_resolution_does_not_infer_from_event_label_without_exact_evidence() -> None:
+    from datetime import datetime, timezone
+
+    reset_local_support_case_store()
+    canonical_repository = SupportCaseRepository()
+    observed_at = datetime(2026, 10, 17, 12, tzinfo=timezone.utc)
+    record = await canonical_repository.ingest_event(
+        tenant_id=TENANT_A,
+        connection_id="support-connection-unlinked-resolution",
+        provider_identity="support-desk",
+        connection_verified_at="2026-10-17T10:00:00Z",
+        event=SupportCaseEventInput(
+            source_case_id="source-case-unlinked-resolution",
+            source_event_id="support-case-created-unlinked-resolution",
+            event_type=SupportCaseEventType.CREATED,
+            occurred_at=observed_at,
+        ),
+        observed_at=observed_at,
+    )
+    await canonical_repository.ingest_event(
+        tenant_id=TENANT_A,
+        connection_id="support-connection-unlinked-resolution",
+        provider_identity="support-desk",
+        connection_verified_at="2026-10-17T10:00:00Z",
+        event=SupportCaseEventInput(
+            source_case_id="source-case-unlinked-resolution",
+            source_event_id="support-case-resolved-unlinked-resolution",
+            event_type=SupportCaseEventType.RESOLVED,
+            occurred_at=observed_at,
+        ),
+        observed_at=observed_at,
+    )
+
+    class MissingEventEvidenceRepository:
+        async def get_case(self, tenant_id: str, case_id: str, *, limit: int):
+            read = await canonical_repository.get_case(tenant_id, case_id, limit=limit)
+            events = [dict(event) for event in read.events]
+            for event in events:
+                if event.get("event_type") == SupportCaseEventType.RESOLVED.value:
+                    event["evidence_refs"] = [
+                        {
+                            "id": "different-source-event",
+                            "type": "event",
+                            "source": "support-desk",
+                            "observedAt": observed_at.isoformat(),
+                            "uri": "provider-event://support-connection-unlinked-resolution/different-source-event",
+                        },
+                        {
+                            "id": "support-connection-unlinked-resolution",
+                            "type": "entity",
+                            "source": "provider_connections",
+                            "uri": "store://provider_connections/support-connection-unlinked-resolution",
+                        },
+                    ]
+            return SupportCaseAuthorityRead(
+                read.record,
+                events,
+                read.available,
+                read.complete,
+                expired=read.expired,
+                reason=read.reason,
+            )
+
+    request = _request("support_case", record["case_id"])
+    result = await Support360Provider(
+        FakeSource(SupportFactsRead(rows=[], available=True)),
+        case_repository=MissingEventEvidenceRepository(),
+    ).project(request, _context(request))
+
+    resolution = _sections(result)["state"].content["requiredSlots"]["resolution"]
+    assert resolution["state"] == "unknown"
+    assert resolution["reasonCode"] == _REASON_RESOLUTION_AUTHORITY_MISSING
+    assert "evidenceRefs" not in resolution
+    assert "resolution" not in result.claims[0].domainSlotIds
+    reset_local_support_case_store()
 
 
 class _ResolvedAgentIdentity:

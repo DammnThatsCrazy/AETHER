@@ -1935,6 +1935,11 @@ Bronze only when tenant, agent, source-row ID, event ID, schema version, event
 type, and timestamp match exactly. Historical rows without the reciprocal link
 remain unresolved; Rights source identity, source trust, and a freshness SLA
 remain unknown.
+Agent360's required `owner_delegator` slot resolves a configured
+`owner_entity_id` only through the bounded tenant-scoped canonical entity lookup.
+The resulting claim proves a configured reference to a tenant-owned entity; it
+does not establish legal or effective ownership, historical validity, freshness,
+or action authorization.
 Account360's required `communications` slot now consumes Communication360
 evidence, interactions, and timeline for exact tenant-owned entity subjects
 whose communication endpoints have matching tenant identity bindings. It does
@@ -1946,9 +1951,12 @@ when both a model confidence score and model type/version lineage are present.
 The score is identified as model-reported, with calibration and application to
 realized value or ROI unvalidated; model-governance calibration evidence remains
 unbound.
-Execution360's `approval_chain` joins immutable x402 approval decisions to
-admitted execution IDs and the approval's latest decision reference. It covers
-x402 commerce decisions only; other approval authorities and historical run
+Execution360's `approval_chain` joins x402 approval requests and decisions to
+admitted execution IDs and exact lifecycle approval references. Stored action or
+resource conflicts degrade the slot and suppress the affected request and linked
+decision evidence. The join covers x402 commerce only; effective authorization,
+other approval authorities, historical linkage, and freshness thresholds remain
+unknown.
 Execution360 also records the authenticated initiating principal separately
 from the acting agent. It resolves a principal to a canonical Human only through
 an exact tenant-scoped active `USER_ID` alias and active surviving identity
@@ -2019,6 +2027,11 @@ it does not assert that the support system's account, customer, or resolution
 semantics have been independently verified. Missing verified connection is
 403; missing case or invalid lifecycle transition is 409. Support360 reads the
 resulting tenant-scoped case and event evidence as a partial provider path.
+For canonical support-case subjects, Support360 exposes `resolutionState` as
+observed only when the applied resolved/closed event's occurrence time matches
+the authoritative case timestamp and both exact provider-event and connection
+evidence are present. The slot remains degraded because business outcome facts,
+complete case history, and a freshness threshold are unavailable.
 
 The caller must send one of `support_case_created`, `support_case_updated`,
 `support_case_escalated`, `support_case_resolved`, `support_case_reopened`, or

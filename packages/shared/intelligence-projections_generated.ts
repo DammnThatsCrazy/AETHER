@@ -2276,7 +2276,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         description: 'Tenant-scoped owner and delegator records with canonical party identity only where resolved; no effective action authorization is inferred.',
         id: 'owner_delegator',
         implementationCrosswalk: ['authority_and_delegation'],
-        partialImplementationReason: 'delegation_reads_are_bounded_and_party_identity_or_current_authority_can_remain_unknown',
+        partialImplementationReason: 'configured_owner_entity_id_is_resolved_only_as_a_current_tenant_owned_entity_reference; legal_or_effective_ownership_historical_validity_and_freshness_remain_unknown',
         projectionBindings: [
           {
             projectionId: 'agent360',
@@ -3325,10 +3325,10 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       },
       {
         canonicalAuthorityRefs: ['agent_access', 'agent_entities', 'commerce', 'identity'],
-        description: 'Exact tenant-scoped x402 commerce approval decisions linked to admitted agent execution records.',
+        description: 'Exact tenant-scoped x402 commerce approval requests and decisions linked to admitted agent execution records and lifecycle action/resource references where recorded.',
         id: 'approval_chain',
         implementationCrosswalk: ['actor_and_delegation'],
-        partialImplementationReason: 'Execution360 joins immutable x402 commerce approval decisions to exact admitted run IDs and latest approval decision references. Other approval authorities, historical run linkage, and full authority-decision coverage remain unknown.',
+        partialImplementationReason: 'Execution360 joins exact tenant, admitted execution, approval request, decision, and lifecycle references; stored action/resource conflicts are rejected. Other approval authorities, effective authorization, historical run linkage, full authority-decision coverage, and a freshness threshold remain unknown.',
         projectionBindings: [
           {
             projectionId: 'execution360',
@@ -5652,12 +5652,19 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         unboundReason: 'canonical_support_case_participants_unavailable'
       },
       {
-        canonicalAuthorityRefs: ['outcome_facts'],
-        description: 'Recorded support outcome and resolution state.',
+        canonicalAuthorityRefs: ['support_case_events', 'support_cases'],
+        description: 'Recorded support outcome and resolution state; lifecycle resolution alone does not prove the business outcome.',
         id: 'resolution',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'canonical_support_resolution_authority_unavailable'
+        partialImplementationReason: 'exact_applied_case_lifecycle_event_and_provider_connection_evidence_support_resolved_or_closed_state; canonical_business_outcome_facts_remain_unavailable',
+        projectionBindings: [
+          {
+            projectionId: 'support360',
+            role: 'primary',
+            subjectKinds: ['support_case'],
+            sectionIds: ['outcomes', 'state']
+          }
+        ],
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['risk_outputs'],

@@ -936,9 +936,23 @@ async def test_tool_telemetry_remains_unlinked_from_server_execution_without_exa
         "state": "unknown",
         "reason": "no_linked_commerce_approval_non_commerce_authority_coverage_unknown",
         "sourceReadState": "available",
-        "completeness": "x402_commerce_decisions_only",
+        "completeness": "x402_commerce_approval_requests_and_decisions_only",
         "scopeKnown": True,
         "truncated": False,
+        "effectiveAuthorization": {
+            "state": "unknown",
+            "reason": "commerce_approval_evidence_does_not_evaluate_effective_agent_action_authority",
+        },
+        "freshness": {
+            "state": "unknown",
+            "latestObservedAt": None,
+            "reason": "no_execution_approval_freshness_threshold_is_configured",
+        },
+        "otherApprovalAuthorityCoverage": {
+            "state": "unknown",
+            "reason": "non_commerce_approval_authorities_are_not_joined",
+        },
+        "joinedExecutionApprovalRequests": [],
         "joinedExecutionApprovals": [],
         "evidenceRefs": [],
     }
@@ -983,6 +997,16 @@ async def test_commerce_approval_decision_joins_exact_tenant_execution_and_lifec
             ],
             available=True,
             scope_known=True,
+            approval_requests=(
+                {
+                    "tenant_id": TENANT,
+                    "execution_id": "exec-1",
+                    "approval_id": "approval-1",
+                    "execution_action": "transfer",
+                    "resource_id": "account:4",
+                    "created_at": "2026-10-16T09:58:00+00:00",
+                },
+            ),
         ),
     )
 
@@ -993,6 +1017,20 @@ async def test_commerce_approval_decision_joins_exact_tenant_execution_and_lifec
     assert linkage["state"] == "partial"
     assert linkage["sourceReadState"] == "available"
     assert linkage["scopeKnown"] is True
+    request_record = linkage["joinedExecutionApprovalRequests"][0]
+    assert request_record["executionId"] == "exec-1"
+    assert request_record["approvalId"] == "approval-1"
+    assert request_record["action"] == "transfer"
+    assert request_record["resourceId"] == "account:4"
+    assert request_record["lifecycleRequestMatch"] == "matched"
+    assert request_record["evidenceRef"]["source"] == "commerce_approvals"
+    assert linkage["effectiveAuthorization"]["state"] == "unknown"
+    assert linkage["freshness"] == {
+        "state": "unknown",
+        "latestObservedAt": "2026-10-16T09:59:00+00:00",
+        "reason": "no_execution_approval_freshness_threshold_is_configured",
+    }
+    assert linkage["otherApprovalAuthorityCoverage"]["state"] == "unknown"
     assert linkage["joinedExecutionApprovals"][0]["executionId"] == "exec-1"
     assert linkage["joinedExecutionApprovals"][0]["decisionId"] == "decision-1"
     assert linkage["joinedExecutionApprovals"][0]["authorizedExecutionDecision"] is True
@@ -1001,6 +1039,195 @@ async def test_commerce_approval_decision_joins_exact_tenant_execution_and_lifec
         claim for claim in result.claims if claim.kind == "canonically_linked_commerce_approval_decision"
     )
     assert claim.domainSlotIds == ["approval_chain", "evidence_trace"]
+    request_claim = next(
+        claim
+        for claim in result.claims
+        if claim.kind == "canonically_linked_commerce_approval_request"
+    )
+    assert request_claim.evidenceRefs[0].source == "commerce_approvals"
+    assert request_claim.domainSlotIds == ["approval_chain", "evidence_trace"]
+
+
+@pytest.mark.parametrize(
+    "approval_request",
+    [
+        {
+            "tenant_id": TENANT,
+            "execution_id": "exec-1",
+            "approval_id": "approval-1",
+            "execution_action": "transfer",
+            "resource_id": "account:other",
+            "created_at": "2026-10-16T09:58:00+00:00",
+        },
+        {
+            "tenant_id": "tenant-other",
+            "execution_id": "exec-1",
+            "approval_id": "approval-1",
+            "execution_action": "transfer",
+            "resource_id": "account:4",
+            "created_at": "2026-10-16T09:58:00+00:00",
+        },
+        {
+            "tenant_id": TENANT,
+            "execution_id": "exec-1",
+            "approval_id": "approval-other",
+            "execution_action": "transfer",
+            "resource_id": "account:4",
+            "created_at": "2026-10-16T09:58:00+00:00",
+        },
+        {
+            "tenant_id": TENANT,
+            "execution_id": "exec-other",
+            "approval_id": "approval-1",
+            "execution_action": "transfer",
+            "resource_id": "account:4",
+            "created_at": "2026-10-16T09:58:00+00:00",
+        },
+    ],
+    ids=[
+        "lifecycle_resource_conflict",
+        "foreign_tenant_request",
+        "approval_id_conflict",
+        "execution_id_conflict",
+    ],
+)
+async def test_execution_approval_request_conflict_is_degraded_and_not_joined(
+    approval_request: dict[str, str],
+) -> None:
+    server = _server_row()
+    server.update({"approval_id": "approval-1", "approval_decision_id": "decision-1"})
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[server],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        approval_decisions=ExecutionApprovalRead(
+            rows=[
+                {
+                    "tenant_id": TENANT,
+                    "execution_id": "exec-1",
+                    "approval_id": "approval-1",
+                    "decision_id": "decision-1",
+                    "action": "approve",
+                    "decided_by": "human-1",
+                    "decided_at": "2026-10-16T09:59:00+00:00",
+                    "is_override": False,
+                }
+            ],
+            available=True,
+            scope_known=True,
+            approval_requests=(approval_request,),
+        ),
+    )
+
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["approvalChainLinkage"]
+    assert linkage["state"] == "degraded"
+    assert linkage["scopeKnown"] is False
+    assert linkage["joinedExecutionApprovalRequests"] == []
+    assert not [
+        claim
+        for claim in result.claims
+        if claim.kind == "canonically_linked_commerce_approval_request"
+    ]
+    if approval_request["resource_id"] == "account:other":
+        assert linkage["joinedExecutionApprovals"] == []
+        assert not [
+            claim
+            for claim in result.claims
+            if claim.kind == "canonically_linked_commerce_approval_decision"
+        ]
+
+
+async def test_repository_approval_request_read_is_bounded_and_exactly_scoped() -> None:
+    from types import SimpleNamespace
+
+    approval = {
+        "tenant_id": TENANT,
+        "execution_id": "exec-1",
+        "approval_id": "approval-1",
+        "execution_action": "transfer",
+        "resource_id": "account:4",
+        "created_at": "2026-10-16T09:58:00+00:00",
+    }
+
+    class Commerce:
+        async def list_approval_decisions_for_executions(
+            self, tenant_id: str, execution_ids: list[str], limit: int
+        ) -> list[object]:
+            assert tenant_id == TENANT
+            assert execution_ids == ["exec-1"]
+            assert 0 < limit <= 5000
+            return []
+
+        async def list_approvals_for_execution(
+            self, tenant_id: str, execution_id: str, limit: int
+        ) -> list[object]:
+            assert tenant_id == TENANT
+            assert execution_id == "exec-1"
+            assert 0 < limit <= 500
+            return [SimpleNamespace(model_dump=lambda **_: approval)]
+
+    read = await RepositoryExecution360Source(commerce_store=Commerce()).execution_approval_decisions(
+        tenant_id=TENANT,
+        execution_ids=("exec-1",),
+        limit=10,
+    )
+
+    assert read.available is True
+    assert read.scope_known is True
+    assert read.truncated is False
+    assert read.approval_requests == (approval,)
+
+
+async def test_repository_approval_request_sentinel_marks_bounded_read_truncated() -> None:
+    from types import SimpleNamespace
+
+    approvals = [
+        {
+            "tenant_id": TENANT,
+            "execution_id": "exec-1",
+            "approval_id": f"approval-{index}",
+            "execution_action": "transfer",
+            "resource_id": "account:4",
+            "created_at": "2026-10-16T09:58:00+00:00",
+        }
+        for index in range(5)
+    ]
+
+    class Commerce:
+        async def list_approval_decisions_for_executions(
+            self, tenant_id: str, execution_ids: list[str], limit: int
+        ) -> list[object]:
+            assert tenant_id == TENANT
+            assert execution_ids == ["exec-1"]
+            return []
+
+        async def list_approvals_for_execution(
+            self, tenant_id: str, execution_id: str, limit: int
+        ) -> list[object]:
+            assert tenant_id == TENANT
+            assert execution_id == "exec-1"
+            assert limit == 5
+            return [SimpleNamespace(model_dump=lambda row=row, **_: row) for row in approvals]
+
+    read = await RepositoryExecution360Source(commerce_store=Commerce()).execution_approval_decisions(
+        tenant_id=TENANT,
+        execution_ids=("exec-1",),
+        limit=1,
+    )
+
+    assert read.available is True
+    assert read.scope_known is True
+    assert read.truncated is True
+    assert len(read.approval_requests) == 4
+    assert read.reason == "execution_approval_decision_read_truncated"
 
 
 async def test_execution_approval_scope_or_lifecycle_reference_conflict_is_degraded() -> None:

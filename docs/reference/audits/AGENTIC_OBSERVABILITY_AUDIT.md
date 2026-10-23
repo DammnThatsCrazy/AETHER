@@ -11,7 +11,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:caf21a7595ec1e7d262e2e365be653dd49c1d661fcddf4e2b028b6fe2ccbf70b"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:52a8f83bc397310667f42cb1d4d9cf4dc553682a506beabb6ba8168efa44df31"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:540f85292689337edc329c9b72b7c4f99487226a5e31aab6526c878e7ea36eeb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -266,10 +266,19 @@ trust remain unresolved without a Rights `source_id`; freshness remains
 unassessed because no source SLA is configured. Historical compatibility rows
 without an explicit canonical link therefore remain degraded.
 
-Execution360 now joins AETHER-owned execution rows to typed x402 approval
-decisions by exact tenant and execution ID. This captures the latest decision
-pointer and retained decision history for supported x402-bound runs. Other
-approval systems and older runs remain outside this join. Risk360 can read
+Agent360's required `owner_delegator` slot also resolves the configured
+`owner_entity_id` only through an exact tenant-scoped entity lookup. This proves
+that a stored configuration reference resolves to a tenant-owned entity; it does
+not establish legal or effective ownership, historical validity, freshness, or
+action authorization.
+
+Execution360 joins AETHER-owned execution rows to typed x402 approval requests
+and decisions by exact tenant, admitted execution ID, lifecycle approval ID,
+and stored action/resource references where available. An action or resource
+conflict suppresses the linked request and decision evidence. The view retains
+the latest decision pointer and supported decision history, but covers x402
+commerce only; effective authorization, other approval systems, historical run
+replay, and a freshness threshold remain unknown. Risk360 can read
 typed, tenant-scoped poisoning evidence with lifecycle and restatement history,
 but no production detector currently writes those records. These additions
 close evidence-path pieces; they do not complete Agent360, Execution360,
