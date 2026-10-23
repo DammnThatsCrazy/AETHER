@@ -6,11 +6,11 @@ A release profile is only as ready as its weakest **required** capability. The d
 
 | Profile | Disposition | Required | Impl | Prod | Activation | Env evidence | Deps | Ownership |
 |---|---|--:|--:|--:|--:|--:|--:|--:|
-| Local development | BLOCKED_BY_CODE | 32 | 75% | n/a | 50% | 100% | 100% | 100% |
-| Staging | BLOCKED_BY_CODE | 24 | 91.7% | 91.7% | 62.5% | 0% | 100% | 100% |
+| Local development | BLOCKED_BY_CODE | 32 | 78.1% | n/a | 50% | 100% | 100% | 100% |
+| Staging | BLOCKED_BY_CODE | 24 | 95.8% | 95.8% | 62.5% | 0% | 100% | 100% |
 | Pilot | READY_TO_ACTIVATE | 3 | 100% | 100% | 33.3% | 0% | 100% | 100% |
-| Production | BLOCKED_BY_CODE | 23 | 43.5% | 91.3% | 65.2% | 0% | 100% | 100% |
-| Production (at scale) | BLOCKED_BY_CODE | 22 | 40.9% | 90.9% | 68.2% | 0% | 100% | 100% |
+| Production | BLOCKED_BY_CODE | 23 | 43.5% | 95.7% | 65.2% | 0% | 100% | 100% |
+| Production (at scale) | BLOCKED_BY_CODE | 22 | 40.9% | 95.5% | 68.2% | 0% | 100% | 100% |
 
 ## Local development (`local`) — BLOCKED_BY_CODE
 
@@ -39,7 +39,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - `profile-360`: TECHNICALLY_RELEASE_ELIGIBLE
 - `provider-certification-plane`: TECHNICALLY_RELEASE_ELIGIBLE
 - `push-notification-delivery`: TECHNICALLY_RELEASE_ELIGIBLE
-- `scale-readiness`: BLOCKED_BY_CODE
+- `scale-readiness`: TECHNICALLY_RELEASE_ELIGIBLE
 - `sdks`: TECHNICALLY_RELEASE_ELIGIBLE
 - `security-compliance`: TECHNICALLY_RELEASE_ELIGIBLE
 - `semantic-intelligence`: BLOCKED_BY_CODE
@@ -63,9 +63,6 @@ A release profile is only as ready as its weakest **required** capability. The d
 - payment-rail-observability: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - payment-rail-observability: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - payment-rail-observability: open repository work: complete repository-controlled verification + hardening
-- scale-readiness: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
-- scale-readiness: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
-- scale-readiness: open repository work: complete repository-controlled verification + hardening
 - semantic-intelligence: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
 - semantic-intelligence: implementation state IMPLEMENTED is below the VERIFIED floor
 - semantic-intelligence: open repository work: complete runtime integration; complete repository-controlled verification
@@ -94,7 +91,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - `profile-360`: READY_TO_VALIDATE
 - `provider-certification-plane`: READY_TO_ACTIVATE
 - `push-notification-delivery`: READY_TO_ACTIVATE
-- `scale-readiness`: BLOCKED_BY_CODE
+- `scale-readiness`: READY_TO_ACTIVATE
 - `sdks`: READY_TO_VALIDATE
 - `security-compliance`: READY_TO_VALIDATE
 - `semantic-intelligence`: BLOCKED_BY_CODE
@@ -116,9 +113,6 @@ A release profile is only as ready as its weakest **required** capability. The d
 - payment-rail-observability: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - payment-rail-observability: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - payment-rail-observability: open repository work: complete repository-controlled verification + hardening
-- scale-readiness: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
-- scale-readiness: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
-- scale-readiness: open repository work: complete repository-controlled verification + hardening
 - semantic-intelligence: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
 - semantic-intelligence: implementation state IMPLEMENTED is below the VERIFIED floor
 - semantic-intelligence: open repository work: complete runtime integration; complete repository-controlled verification
@@ -178,9 +172,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - payment-rail-observability: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - payment-rail-observability: implementation state RUNTIME_INTEGRATED is below the TURNKEY floor
 - payment-rail-observability: open repository work: complete repository-controlled verification + hardening
-- scale-readiness: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
-- scale-readiness: implementation state RUNTIME_INTEGRATED is below the TURNKEY floor
-- scale-readiness: open repository work: complete repository-controlled verification + hardening
+- scale-readiness: implementation state VERIFIED is below the TURNKEY floor
 - sdks: implementation state VERIFIED is below the TURNKEY floor
 - security-compliance: implementation state VERIFIED is below the TURNKEY floor
 - semantic-intelligence: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
@@ -246,9 +238,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - kyber-operator-console: implementation state VERIFIED is below the TURNKEY floor
 - measurement-attribution: implementation state VERIFIED is below the TURNKEY floor
 - measurement-integrity: implementation state VERIFIED is below the TURNKEY floor
-- scale-readiness: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
-- scale-readiness: implementation state RUNTIME_INTEGRATED is below the TURNKEY floor
-- scale-readiness: open repository work: complete repository-controlled verification + hardening
+- scale-readiness: implementation state VERIFIED is below the TURNKEY floor
 - sdks: implementation state VERIFIED is below the TURNKEY floor
 - security-compliance: implementation state VERIFIED is below the TURNKEY floor
 - semantic-intelligence: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
@@ -302,9 +292,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - kyber-operator-console: implementation state VERIFIED is below the TURNKEY floor
 - measurement-attribution: implementation state VERIFIED is below the TURNKEY floor
 - measurement-integrity: implementation state VERIFIED is below the TURNKEY floor
-- scale-readiness: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
-- scale-readiness: implementation state RUNTIME_INTEGRATED is below the TURNKEY floor
-- scale-readiness: open repository work: complete repository-controlled verification + hardening
+- scale-readiness: implementation state VERIFIED is below the TURNKEY floor
 - sdks: implementation state VERIFIED is below the TURNKEY floor
 - security-compliance: implementation state VERIFIED is below the TURNKEY floor
 - semantic-intelligence: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))

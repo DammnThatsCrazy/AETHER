@@ -19,6 +19,8 @@ Versions before `1.0.0` are private alpha, beta, or release-candidate milestones
 - Legacy-tag and blueprint-adaptation notes in `docs/operations/releases/tag-policy.md` and `docs/reference/source-of-truth/repo-truth.md`.
 - Reconciled Control Plane seam: a site install is observed as a managed integration and admitted through the §16 lifecycle, so an install the loader could not bring up reconciles as drift instead of as nothing to reconcile.
 
+- Scale-readiness verification: concurrency proofs on the real SDK ingestion handler (`services/api/tests/scale`) show tenant isolation, exactly-once acceptance of duplicate and overlapping batches, claim release so retries are accepted after a bus failure, and the declared claim-store-outage degradation. `scale-readiness` moves to `VERIFIED` (activation stays `INFRASTRUCTURE_WAITING`: staging is not provisioned and no staging load baseline is recorded).
+
 ### Changed
 
 - Loader URL and API origin are canonicalized (`https://cdn.aether.network/v1.js`, `https://api.aether.io`) and enforced by a domain gate. The two origins remain deliberately separate.
