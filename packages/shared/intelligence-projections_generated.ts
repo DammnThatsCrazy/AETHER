@@ -461,7 +461,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationState: 'implemented',
     implementationBlueprint: 'docs/architecture/blueprints/communication360.md',
     ownsCanonicalTruth: false,
-    subjectKinds: ['agent', 'campaign', 'episode', 'journey', 'source'],
+    subjectKinds: ['agent', 'campaign', 'entity', 'episode', 'journey', 'source'],
     canonicalAuthorities: ['campaign_touchpoints', 'communication_facts', 'entities', 'evidence', 'journeys', 'outcomes', 'risk_signals'],
     hardDependencies: ['contract_spine', 'temporal_kernel'],
     projectionDependencies: ['episode360', 'outcome360', 'profile360', 'relationship360'],
@@ -1833,7 +1833,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
   account360: {
     backendCapabilities: {
       required: ['experience360.evidence.provenance', 'experience360.frame.compose', 'experience360.freshness.evaluate', 'experience360.policy.evaluate', 'experience360.tenant_scope.enforce'],
-      projectionCapabilityKeys: ['economic360.explore', 'economic360.read', 'profile360.explore', 'profile360.read', 'relationship360.explore', 'relationship360.read'],
+      projectionCapabilityKeys: ['communication360.explore', 'communication360.read', 'economic360.explore', 'economic360.read', 'profile360.explore', 'profile360.read', 'relationship360.explore', 'relationship360.read'],
       providerCapabilityStatus: 'registry_requirements_not_route_attestation'
     },
     blueprintContract: {
@@ -1905,11 +1905,18 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       },
       {
         canonicalAuthorityRefs: ['communication_facts'],
-        description: 'Account linked communication threads with participant policy.',
+        description: 'Account communications linked to exact tenant-owned entity participants under governing frame policy, without member fanout.',
         id: 'communications',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'account_communication_subject_binding_not_available'
+        partialImplementationReason: 'Only exact tenant-owned entity subjects are joined; account/workspace aliases and member fanout are unavailable. Communication360 preserves source timestamps but does not evaluate freshness; policy and historical consent remain frame-runtime responsibilities.',
+        projectionBindings: [
+          {
+            projectionId: 'communication360',
+            role: 'primary',
+            subjectKinds: ['entity'],
+            sectionIds: ['evidence', 'interactions', 'timeline']
+          }
+        ],
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['commerce'],
@@ -2044,6 +2051,12 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       requirementStatus: 'contract_requirement_not_provider_attestation'
     },
     projectionBindings: [
+      {
+        projectionId: 'communication360',
+        role: 'primary',
+        bindingStatus: 'catalog_only',
+        providerImplementationState: 'implemented'
+      },
       {
         projectionId: 'economic360',
         role: 'primary',
@@ -5819,12 +5832,21 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
-        canonicalAuthorityRefs: ['economic_facts', 'model_governance'],
-        description: 'Confidence of the value/attribution estimate with model lineage.',
+        authorityGapReason: 'model_governance_calibration_and_validation_not_joined',
+        canonicalAuthorityRefs: ['attribution_credits', 'attribution_runs', 'canonical_conversions', 'model_governance'],
+        description: 'Evidence-linked, model-reported attribution confidence only; not a calibrated estimate of realized value or ROI.',
         id: 'confidence',
-        projectionBindings: [],
+        partialImplementationReason: 'Only exact conversion/run/credit-linked model-reported attribution confidence with model type and version is exposed; calibration and applicability to realized value remain unvalidated.',
+        projectionBindings: [
+          {
+            projectionId: 'economic360',
+            role: 'primary',
+            subjectKinds: ['account', 'agent', 'campaign', 'cluster', 'conversion', 'entity', 'journey', 'profile'],
+            sectionIds: ['evidence']
+          }
+        ],
         requirement: 'required',
-        unboundReason: 'value_confidence_authority_not_connected'
+        unboundCanonicalAuthorityRefs: ['model_governance']
       },
       {
         canonicalAuthorityRefs: ['canonical_conversions'],

@@ -90,6 +90,105 @@ def test_explicitly_unbound_required_slot_remains_unknown_with_gap_reason() -> N
     assert missing == set()
 
 
+def test_value360_confidence_is_partial_and_marks_model_governance_unbound() -> None:
+    confidence = next(
+        slot
+        for slot in PRODUCT_360_SURFACE_DEFINITIONS["value360"]["domainSlots"]
+        if slot["id"] == "confidence"
+    )
+
+    assert set(confidence["canonicalAuthorityRefs"]) == {
+        "attribution_runs",
+        "attribution_credits",
+        "canonical_conversions",
+        "model_governance",
+    }
+    assert set(confidence["unboundCanonicalAuthorityRefs"]) == {"model_governance"}
+    assert confidence["authorityGapReason"] == (
+        "model_governance_calibration_and_validation_not_joined"
+    )
+    assert confidence["partialImplementationReason"]
+    assert len(confidence["projectionBindings"]) == 1
+    binding = confidence["projectionBindings"][0]
+    assert binding["projectionId"] == "economic360"
+    assert binding["role"] == "primary"
+    assert binding["sectionIds"] == ("evidence",)
+    assert set(binding["subjectKinds"]) == {
+        "account",
+        "agent",
+        "campaign",
+        "cluster",
+        "conversion",
+        "entity",
+        "journey",
+        "profile",
+    }
+
+
+def test_account360_communications_binding_is_exact_entity_and_partial() -> None:
+    communications = next(
+        slot
+        for slot in PRODUCT_360_SURFACE_DEFINITIONS["account360"]["domainSlots"]
+        if slot["id"] == "communications"
+    )
+
+    assert communications["canonicalAuthorityRefs"] == ("communication_facts",)
+    assert len(communications["projectionBindings"]) == 1
+    binding = communications["projectionBindings"][0]
+    assert binding["projectionId"] == "communication360"
+    assert binding["role"] == "primary"
+    assert binding["sectionIds"] == ("evidence", "interactions", "timeline")
+    assert binding["subjectKinds"] == ("entity",)
+    reason = communications["partialImplementationReason"]
+    assert "account/workspace aliases" in reason
+    assert "member fanout" in reason
+    assert "does not evaluate freshness" in reason
+    assert "frame-runtime responsibilities" in reason
+
+
+@pytest.mark.asyncio
+async def test_account360_communications_policy_denial_prevents_projection_read() -> None:
+    class DenyCommunicationsPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-23T10:00:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "communications": Experience360PolicyDisposition(state="denied")
+                },
+            )
+
+    class Runtime:
+        calls: list[str] = []
+
+        async def execute_projection(self, request, **_kwargs):
+            self.calls.append(request.projectionId)
+            raise AssertionError("denied Account communications must not be read")
+
+    runtime = Runtime()
+    frame = await build_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="account360",
+            tenantId=TENANT,
+            subject=ProjectionSubject(kind="entity", id="account-policy-1"),
+            requestedSlotIds=["communications"],
+            includeEvidence=True,
+        ),
+        policy_evaluator=DenyCommunicationsPolicy(),
+        projection_runtime=runtime,
+    )
+
+    slot = next(slot for slot in frame.slots if slot.id == "communications")
+    assert runtime.calls == []
+    assert slot.state == "suppressed"
+    assert slot.content is None
+    assert slot.claims == []
+    assert slot.evidenceRefs == []
+    assert "policy_denied" in slot.reasonCodes
+
+
 def test_required_source_aligned_slot_needs_an_exact_evidence_backed_claim() -> None:
     definition = {
         "id": "identity_spine",

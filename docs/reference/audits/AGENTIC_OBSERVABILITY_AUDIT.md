@@ -6,15 +6,16 @@ visibility: I
 audience: [dev-senior, architect]
 status: experimental
 since_version: 0.1.0
-source_files: [services/api/value/x402/, services/api/actions/agent/, services/api/actions/agentic_observability/, services/api/actions/agent_marketplace/, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/alembic/versions/20261022_execution_approval_decisions.py, services/api/alembic/versions/20261022_risk_poisoning_evidence.py, services/api/value/commerce/order_payment_reconciliation.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/identity/profile/agent.py, services/api/intelligence/risk360/, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/shared/store.py, services/api/workers/runtime/specs.py, packages/sdk/server/src/agent-telemetry.ts, packages/shared/events.ts, packages/shared/contracts/event-registry.json, packages/shared/agentic-observability.ts]
+source_files: [services/api/value/x402/, services/api/actions/agent/, services/api/actions/agentic_observability/, services/api/actions/agent_marketplace/, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/alembic/versions/20261022_execution_approval_decisions.py, services/api/alembic/versions/20261022_risk_poisoning_evidence.py, services/api/value/commerce/order_payment_reconciliation.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/value/economic/economic360_provider.py, services/api/journeys/communication360/provider.py, services/api/intelligence/fraud_networks/risk360_projection.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/identity/profile/agent.py, services/api/intelligence/risk360/, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/shared/store.py, services/api/workers/runtime/specs.py, packages/sdk/server/src/agent-telemetry.ts, packages/shared/events.ts, packages/shared/contracts/event-registry.json, packages/shared/contracts/intelligence-projection-registry.json, packages/shared/agentic-observability.ts]
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:86508b55b336633a159d5d1607b66f6fe1f255d522a78bbb30e3e974a2bb4b85"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:540f85292689337edc329c9b72b7c4f99487226a5e31aab6526c878e7ea36eeb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
-  "services/api/actions/agentic_observability/": "sha256:c5f968aeebb691afef24de255a4525c009ab1a6f6e7643de847ef8f1da406b60"
+  "services/api/actions/agentic_observability/": "sha256:0153a7ccb49d8950fd38207044f932213db7ce191df455e6951b6483d5bf8e00"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
@@ -27,7 +28,11 @@ source_hashes:
   "services/api/ingestion/silver/projectors/silver_graph_projector.py": "sha256:3c9fde55d39ff7aa80350bc67c165b6420775c4175faaad8c15d750ab2a61c93"
   "services/api/shared/store.py": "sha256:f35311e40b7ab2c4a8ea90b0e26dd3bd2e4aefc855a0bd7b5efae1a9a6af9f94"
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:1bfb4e715fa255bd9c12956c71f4c2e48c49c65d84c7f6d2c0ca1e1bf9960ebe"
+  "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
+  "services/api/intelligence/risk360/": "sha256:595590d43ef5d1be824ad90e31c30018c023a431667a8165aaa4b008959220dc"
+  "services/api/journeys/communication360/provider.py": "sha256:103203807abc92ff1c262e358335e9697873c24706ab42d81a512af3c0cf1efc"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
+  "services/api/value/economic/economic360_provider.py": "sha256:feefe5903f7faa2fee321e31f11c2e89d344353ad9b0f585325ebd0d349cc57f"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
   "services/api/value/x402/": "sha256:49f3660ba1468f6481b067fcd46ad230199aee60d7e7316ba57b7c69c368c4a9"
   "services/api/workers/runtime/specs.py": "sha256:b86659249b2f805b3ba81631c57e71ca57be089de07278fedccbe25b576df64b"
@@ -109,20 +114,39 @@ Risk360 evidence with exact slot attribution and does not compute a local risk
 score. Its `spawned_agents` slot reads only outgoing `SPAWNED_SUBAGENT` graph
 ledger evidence through Relationship360. No observed edge is unknown rather
 than empty, and any observed edge remains degraded because the ledger has no
-completeness watermark. Communications and economic/value context remain
-partial joins.
+completeness watermark. Account360's `communications` slot can now consume
+Communication360 evidence only for an exact tenant-owned entity subject with
+matching endpoint identity bindings; account/workspace aliases, membership
+fanout, source freshness, and historical consent coverage remain unresolved.
+Value360's `confidence` slot now carries Economic360 model confidence only when
+the score and model type/version are present. It remains model-reported and
+uncalibrated for realized value or ROI, with model-governance calibration
+evidence unbound.
 
 Execution360 now derives server-recorded lifecycle elapsed time from valid,
 timezone-aware start and end timestamps and carries the lifecycle evidence
 into `latency_cost`. This is not provider/tool latency or cost. It still lacks
 a general server-owned external effect receipt, canonical plan-step evidence,
-approval-chain evidence, complete input/output capture, and detailed failures.
+complete input/output capture, and detailed failures. Its approval-chain join
+covers current x402 decisions only; other approval authorities and historical
+run links remain unknown.
+Execution360 actor attribution now records the authenticated initiating user
+separately from the acting agent. A principal resolves to a canonical Human
+only through an exact tenant-scoped active `USER_ID` alias and active surviving
+identity subject, with both identity evidence references. Missing, conflicting,
+or unavailable identity reads remain unknown, and the link does not establish
+action authorization or delegation authority.
 Its `risk_events` slot now joins canonical RiskSignals only to exact execution
 IDs admitted by tenant server lifecycle records. Signal evidence is recorded
 risk context, not proof that the execution caused the signal or a complete risk
 assessment; producer coverage and freshness thresholds remain unknown. The
 agentic risk-signal compute/store producer described in Bucket 4 is still
-missing. Its `tool_calls` slot also joins `CALLED_TOOL`
+missing. Agentic fraud-network detections are separately persisted to Risk360
+only after a unique tenant-owned Agent binding is resolved and its valid,
+timezone-aware binding timestamp is no later than the detector observation;
+missing, conflicting, malformed, or future timestamps cause omission. This
+prevents retrospective attribution but does not establish execution causality
+or contagion. Its `tool_calls` slot also joins `CALLED_TOOL`
 lifecycle edges only to exact tenant execution records with a canonical agent
 binding, validates the tenant-owned Tool vertex, and requires timestamp and
 edge-idempotency evidence. An observed edge proves only that AETHER recorded a

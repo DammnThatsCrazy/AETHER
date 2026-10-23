@@ -1935,10 +1935,26 @@ Bronze only when tenant, agent, source-row ID, event ID, schema version, event
 type, and timestamp match exactly. Historical rows without the reciprocal link
 remain unresolved; Rights source identity, source trust, and a freshness SLA
 remain unknown.
+Account360's required `communications` slot now consumes Communication360
+evidence, interactions, and timeline for exact tenant-owned entity subjects
+whose communication endpoints have matching tenant identity bindings. It does
+not expand through account/workspace aliases or membership edges. Slot policy
+can suppress content, claims, and evidence references; source freshness and
+historical consent coverage remain unknown.
+Value360's `confidence` slot receives Economic360 attribution evidence only
+when both a model confidence score and model type/version lineage are present.
+The score is identified as model-reported, with calibration and application to
+realized value or ROI unvalidated; model-governance calibration evidence remains
+unbound.
 Execution360's `approval_chain` joins immutable x402 approval decisions to
 admitted execution IDs and the approval's latest decision reference. It covers
 x402 commerce decisions only; other approval authorities and historical run
-links remain unknown.
+Execution360 also records the authenticated initiating principal separately
+from the acting agent. It resolves a principal to a canonical Human only through
+an exact tenant-scoped active `USER_ID` alias and active surviving identity
+subject, retaining both evidence references. Missing or ambiguous identity
+evidence stays unknown; this identity link does not establish action
+authorization or delegation authority.
 Risk360's `poisoning_evidence` reads versioned tenant-scoped detector records
 for the exact subject, including lifecycle and evidence references. It exposes
 metadata only and does not independently verify source poisoning; detector

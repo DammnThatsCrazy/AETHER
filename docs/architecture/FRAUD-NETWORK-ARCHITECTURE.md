@@ -106,6 +106,10 @@ both network and identity-binding evidence. Unresolved, ambiguous, truncated,
 or cross-tenant agent mappings are omitted. The handoff adds risk observability;
 it does not establish delegation authority, causal contagion, or verified
 execution, and a Risk360 write failure does not fail the fraud-network build.
+The identity binding must also have one consistent, valid timezone-aware
+`identity_bound_at` no later than the detector observation time. Missing,
+malformed, conflicting, or future binding times are omitted so a current
+identity binding cannot retroactively attribute an earlier detector result.
 
 ---
 

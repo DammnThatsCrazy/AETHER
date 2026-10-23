@@ -70,7 +70,10 @@ tenant-owned identity bindings before persisting assessments under canonical
 Agent entities. It retains detector and binding evidence, leaves inferred
 signals classified as inferred, and omits ambiguous, truncated, unresolved, or
 cross-tenant mappings. It does not turn a delegation match into authority or
-proof of execution.
+proof of execution. The tenant-owned identity binding must have one consistent,
+valid timezone-aware `identity_bound_at` at or before the detector observation
+time; missing, malformed, conflicting, or future binding times are omitted to
+prevent retroactive attribution.
 
 ---
 

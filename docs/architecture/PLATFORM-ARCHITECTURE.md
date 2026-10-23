@@ -14,6 +14,10 @@ source_files:
   - services/api/ingestion/ingestion/replay_routes.py
   - services/api/shared/events/events.py
   - packages/shared/
+  - services/api/actions/agent/execution360_provider.py
+  - services/api/intelligence/fraud_networks/risk360_projection.py
+  - services/api/journeys/communication360/provider.py
+  - services/api/value/economic/economic360_provider.py
   - services/api/actions/agent/deployment_routes.py
   - services/api/actions/agent_marketplace/catalog.py
   - services/api/actions/agent_marketplace/authority.py
@@ -46,6 +50,7 @@ source_hashes:
   "packages/shared/": "sha256:a69d74bf8dde954a6512c7f00ee9efb2bcbde6662e8d7bdd23a9c5e696033f5c"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
+  "services/api/actions/agent/execution360_provider.py": "sha256:bca794ec4a2011f58ef0f452e37c32f0e16152fbe772ed1bc44a07c06e284f7d"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
@@ -58,10 +63,13 @@ source_hashes:
   "services/api/ingestion/ingestion/replay.py": "sha256:65f898480787b71d14c8f687351844fdf5585cd67664ff5c32699328594b24ce"
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
+  "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
+  "services/api/journeys/communication360/provider.py": "sha256:103203807abc92ff1c262e358335e9697873c24706ab42d81a512af3c0cf1efc"
   "services/api/main.py": "sha256:fa7455e5dd5a1e6b6b2ac25cc3ce6fc8a09d8bcf5b242b500feb0b797ab2d7b7"
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
   "services/api/workers/runtime/specs.py": "sha256:b86659249b2f805b3ba81631c57e71ca57be089de07278fedccbe25b576df64b"
+  "services/api/value/economic/economic360_provider.py": "sha256:feefe5903f7faa2fee321e31f11c2e89d344353ad9b0f585325ebd0d349cc57f"
 ---
 # Aether vNext — Architecture Guide
 
@@ -611,11 +619,31 @@ provider marks recorded location observations explicitly; profile alias
 resolution, continuous trajectory, cross-surface completeness, historical
 point-in-time reconstruction, and Profile-specific freshness remain unknown,
 so the slot stays degraded.
+Account360's required `communications` slot now reads Communication360
+evidence, interactions, and timeline only for an exact tenant-owned entity
+subject with matching endpoint identity-binding evidence. It does not fan out
+through account/workspace aliases or membership edges. Slot policy can suppress
+the content, claims, and evidence references; source freshness and historical
+consent coverage remain unknown, so the join is partial.
+Value360's `confidence` slot now exposes Economic360 attribution evidence only
+when a model confidence score and model type/version lineage are present. The
+claim labels confidence as model-reported and states that calibration and
+application to realized value or ROI are unvalidated; model-governance
+calibration evidence remains unbound.
 Agent360 now joins agentic compatibility evidence to canonical Bronze by exact
 tenant, agent, source-row, event, schema, and timestamp references; Rights
 source identity, source trust, freshness, and unlinked historical rows remain
 unknown. Execution360 joins current x402 approval-decision evidence to admitted
 run IDs, while non-commerce authorities and historical links remain unknown.
+Execution360 actor attribution now records the authenticated initiating
+principal separately from the acting agent and links its `USER_ID` only through
+an exact tenant-scoped active alias and active surviving canonical Human
+subject, with both identity evidence references. An unresolved or ambiguous
+read stays unknown; identity attribution does not establish action
+authorization or delegation authority. The agentic fraud-network Risk360
+handoff also requires one consistent, valid timezone-aware identity-binding
+timestamp no later than the detector observation; otherwise it omits the
+assessment rather than retroactively attributing it.
 Risk360 reads versioned poisoning-detector records for exact tenant subjects
 with lifecycle and evidence references; it does not independently verify
 poisoning, detector coverage, source reputation, or freshness.

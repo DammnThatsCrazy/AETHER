@@ -702,6 +702,7 @@
       "subjectKinds": [
         "agent",
         "campaign",
+        "entity",
         "episode",
         "journey",
         "source"
@@ -6823,13 +6824,37 @@
         {
           "id": "confidence",
           "requirement": "required",
-          "description": "Confidence of the value/attribution estimate with model lineage.",
+          "description": "Evidence-linked, model-reported attribution confidence only; not a calibrated estimate of realized value or ROI.",
           "canonicalAuthorityRefs": [
-            "model_governance",
-            "economic_facts"
+            "attribution_runs",
+            "attribution_credits",
+            "canonical_conversions",
+            "model_governance"
           ],
-          "projectionBindings": [],
-          "unboundReason": "value_confidence_authority_not_connected"
+          "projectionBindings": [
+            {
+              "projectionId": "economic360",
+              "role": "primary",
+              "sectionIds": [
+                "evidence"
+              ],
+              "subjectKinds": [
+                "account",
+                "agent",
+                "campaign",
+                "cluster",
+                "conversion",
+                "entity",
+                "journey",
+                "profile"
+              ]
+            }
+          ],
+          "unboundCanonicalAuthorityRefs": [
+            "model_governance"
+          ],
+          "authorityGapReason": "model_governance_calibration_and_validation_not_joined",
+          "partialImplementationReason": "Only exact conversion/run/credit-linked model-reported attribution confidence with model type and version is exposed; calibration and applicability to realized value remain unvalidated."
         },
         {
           "id": "evidence_trace",
@@ -8404,12 +8429,25 @@
         {
           "id": "communications",
           "requirement": "required",
-          "description": "Account linked communication threads with participant policy.",
+          "description": "Account communications linked to exact tenant-owned entity participants under governing frame policy, without member fanout.",
           "canonicalAuthorityRefs": [
             "communication_facts"
           ],
-          "projectionBindings": [],
-          "unboundReason": "account_communication_subject_binding_not_available"
+          "projectionBindings": [
+            {
+              "projectionId": "communication360",
+              "role": "primary",
+              "sectionIds": [
+                "evidence",
+                "interactions",
+                "timeline"
+              ],
+              "subjectKinds": [
+                "entity"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Only exact tenant-owned entity subjects are joined; account/workspace aliases and member fanout are unavailable. Communication360 preserves source timestamps but does not evaluate freshness; policy and historical consent remain frame-runtime responsibilities."
         },
         {
           "id": "value",
@@ -8574,6 +8612,12 @@
       ],
       "projectionBindings": [
         {
+          "projectionId": "communication360",
+          "role": "primary",
+          "bindingStatus": "catalog_only",
+          "providerImplementationState": "implemented"
+        },
+        {
           "projectionId": "economic360",
           "role": "primary",
           "bindingStatus": "catalog_only",
@@ -8669,6 +8713,8 @@
           "experience360.evidence.provenance"
         ],
         "projectionCapabilityKeys": [
+          "communication360.explore",
+          "communication360.read",
           "economic360.explore",
           "economic360.read",
           "profile360.explore",

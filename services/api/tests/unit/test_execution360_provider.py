@@ -19,6 +19,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 from actions.agent.execution360_provider import (  # noqa: E402
     ExecutionApprovalRead,
     ExecutionEpisodeContextRead,
+    ExecutionPrincipalIdentityRead,
     ExecutionRiskEventRead,
     ExecutionToolCallRead,
     OUTPUT_SECTIONS,
@@ -26,6 +27,7 @@ from actions.agent.execution360_provider import (  # noqa: E402
     ExecutionRead,
     RepositoryExecution360Source,
     _read_agent_episode_context,
+    _read_execution_principal_identities,
     _resolve_server_delegation_reference,
     register_provider,
 )
@@ -1814,6 +1816,271 @@ async def test_authenticated_execution_principal_is_carried_into_frame_metadata(
     assert actor.executionPrincipal.kind == "human"
     assert actor.executionPrincipal.id == "human-principal-1"
     assert any(ref.source == "agent_executions" for ref in actor.evidenceRefs)
+
+
+async def test_execution_principal_resolves_only_through_active_tenant_human_identity() -> None:
+    from identity.identity.hashing import hash_value
+
+    principal_id = "human-principal-1"
+    canonical_human_id = "human-entity-1"
+    expected_hash = hash_value(principal_id, scope=f"user:{TENANT}")
+
+    class IdentityRepository:
+        async def find_aliases_by_signal(self, tenant_id, alias_type, alias_value_hash, *, limit):
+            assert tenant_id == TENANT
+            assert alias_value_hash == expected_hash
+            assert limit == 51
+            return [
+                {
+                    "id": "user-alias-1",
+                    "tenant_id": TENANT,
+                    "alias_type": "user_id",
+                    "alias_value_hash": expected_hash,
+                    "canonical_entity_id": "pre-merge-human-1",
+                    "confidence_tier": "deterministic",
+                    "last_seen_at": "2026-10-16T09:00:00+00:00",
+                }
+            ]
+
+        async def resolve_surviving_canonical_entity_id(
+            self, tenant_id, canonical_entity_id
+        ):
+            assert tenant_id == TENANT
+            assert canonical_entity_id == "pre-merge-human-1"
+            return canonical_human_id
+
+        async def get_subject_by_canonical_entity_id(self, tenant_id, canonical_entity_id):
+            assert tenant_id == TENANT
+            assert canonical_entity_id == canonical_human_id
+            return {
+                "id": "human-subject-1",
+                "tenant_id": TENANT,
+                "canonical_entity_id": canonical_human_id,
+                "entity_type": "human",
+                "status": "active",
+                "last_seen_at": "2026-10-16T09:01:00+00:00",
+            }
+
+    read = await _read_execution_principal_identities(
+        TENANT,
+        {principal_id},
+        repository=IdentityRepository(),
+    )
+    assert read.available is True
+    assert read.scope_known is True
+    assert read.truncated is False
+    assert read.rows[0]["canonical_human_entity_id"] == canonical_human_id
+    assert {ref["source"] for ref in read.rows[0]["identity_evidence_refs"]} == {
+        "identity_aliases",
+        "identity_subjects",
+    }
+
+    server = ExecutionRead(
+        rows=[{**_server_row(), "initiating_principal_user_id": principal_id}],
+        available=True,
+        scope_known=True,
+        agent_ids=(AGENT,),
+        principal_identity_read=read,
+    )
+    source = FakeSource(
+        server=server,
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    claim = next(
+        claim
+        for claim in result.claims
+        if claim.kind == "canonically_resolved_execution_principal_identity"
+    )
+    assert claim.claimState == EpistemicStatus.RESOLVED
+    assert claim.domainSlotIds == ["actor_attribution", "evidence_trace"]
+    assert {ref.source for ref in claim.evidenceRefs} == {
+        "agent_executions",
+        "identity_aliases",
+        "identity_subjects",
+    }
+    state = next(section for section in result.sections if section.id == "state")
+    record = state.content["serverRecordedExecutions"][0]
+    assert record["canonicalInitiatingPrincipalHumanEntityId"] == canonical_human_id
+    assert record["initiatingPrincipalIdentityState"] == "resolved"
+
+
+@pytest.mark.parametrize("case", ["foreign_alias", "wrong_alias_hash", "inactive_subject", "non_human_subject"])
+async def test_principal_identity_reader_rejects_scope_and_subject_mismatches(case: str) -> None:
+    from identity.identity.hashing import hash_value
+
+    principal_id = "human-principal-1"
+    alias_hash = hash_value(principal_id, scope=f"user:{TENANT}")
+
+    class IdentityRepository:
+        async def find_aliases_by_signal(self, tenant_id, alias_type, alias_value_hash, *, limit):
+            alias_tenant = "foreign-tenant" if case == "foreign_alias" else TENANT
+            stored_hash = "different-hash" if case == "wrong_alias_hash" else alias_hash
+            return [
+                {
+                    "id": "user-alias-1",
+                    "tenant_id": alias_tenant,
+                    "alias_type": "user_id",
+                    "alias_value_hash": stored_hash,
+                    "canonical_entity_id": "human-entity-1",
+                    "confidence_tier": "deterministic",
+                }
+            ]
+
+        async def resolve_surviving_canonical_entity_id(self, tenant_id, canonical_entity_id):
+            return canonical_entity_id
+
+        async def get_subject_by_canonical_entity_id(self, tenant_id, canonical_entity_id):
+            return {
+                "id": "human-subject-1",
+                "tenant_id": TENANT,
+                "canonical_entity_id": canonical_entity_id,
+                "entity_type": "agent" if case == "non_human_subject" else "human",
+                "status": "inactive" if case == "inactive_subject" else "active",
+            }
+
+    read = await _read_execution_principal_identities(
+        TENANT,
+        {principal_id},
+        repository=IdentityRepository(),
+    )
+
+    assert read.available is True
+    assert read.scope_known is False
+    assert read.rows == []
+    assert read.reason == "principal_identity_scope_or_subject_mismatch"
+
+
+@pytest.mark.parametrize(
+    ("identity_read", "expected_state", "expected_reason"),
+    [
+        (
+            ExecutionPrincipalIdentityRead(rows=[], available=True, scope_known=True),
+            "unresolved",
+            None,
+        ),
+        (
+            ExecutionPrincipalIdentityRead(
+                rows=[
+                    {
+                        "tenant_id": "foreign-tenant",
+                        "principal_user_id": "human-principal-1",
+                        "canonical_human_entity_id": "foreign-human",
+                        "identity_evidence_refs": [
+                            EvidenceRef(
+                                id="foreign-alias",
+                                type="entity",
+                                source="identity_aliases",
+                            ).model_dump(mode="json"),
+                            EvidenceRef(
+                                id="foreign-subject",
+                                type="entity",
+                                source="identity_subjects",
+                            ).model_dump(mode="json"),
+                        ],
+                    }
+                ],
+                available=True,
+                scope_known=True,
+            ),
+            "unknown",
+            "principal_identity_scope_or_evidence_mismatch",
+        ),
+        (
+            ExecutionPrincipalIdentityRead(
+                rows=[], available=False, scope_known=False, reason="identity_store_unavailable"
+            ),
+            "unknown",
+            "identity_store_unavailable",
+        ),
+    ],
+)
+async def test_execution_principal_identity_absence_mismatch_or_outage_fails_closed(
+    identity_read: ExecutionPrincipalIdentityRead,
+    expected_state: str,
+    expected_reason: str | None,
+) -> None:
+    principal_id = "human-principal-1"
+    server = ExecutionRead(
+        rows=[{**_server_row(), "initiating_principal_user_id": principal_id}],
+        available=True,
+        scope_known=True,
+        agent_ids=(AGENT,),
+        principal_identity_read=identity_read,
+    )
+    request = _request()
+    result = await Execution360Provider(
+        FakeSource(
+            server=server,
+            observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        )
+    ).project(request, await _context(request))
+
+    state = next(section for section in result.sections if section.id == "state")
+    record = state.content["serverRecordedExecutions"][0]
+    assert record["initiatingPrincipalIdentityState"] == expected_state
+    assert record["canonicalInitiatingPrincipalHumanEntityId"] is None
+    assert not any(
+        claim.kind == "canonically_resolved_execution_principal_identity"
+        for claim in result.claims
+    )
+    if expected_reason:
+        assert expected_reason in result.degradedReasons
+
+
+async def test_execution_principal_identity_ambiguity_does_not_select_a_human() -> None:
+    def _identity_row(alias_id: str, canonical_human_id: str) -> dict:
+        return {
+            "tenant_id": TENANT,
+            "principal_user_id": "human-principal-1",
+            "canonical_human_entity_id": canonical_human_id,
+            "identity_evidence_refs": [
+                EvidenceRef(
+                    id=alias_id,
+                    type="entity",
+                    source="identity_aliases",
+                ).model_dump(mode="json"),
+                EvidenceRef(
+                    id=f"subject-{canonical_human_id}",
+                    type="entity",
+                    source="identity_subjects",
+                ).model_dump(mode="json"),
+            ],
+        }
+
+    server = ExecutionRead(
+        rows=[{**_server_row(), "initiating_principal_user_id": "human-principal-1"}],
+        available=True,
+        scope_known=True,
+        agent_ids=(AGENT,),
+        principal_identity_read=ExecutionPrincipalIdentityRead(
+            rows=[
+                _identity_row("alias-human-1", "human-entity-1"),
+                _identity_row("alias-human-2", "human-entity-2"),
+            ],
+            available=True,
+            scope_known=True,
+        ),
+    )
+    request = _request()
+    result = await Execution360Provider(
+        FakeSource(
+            server=server,
+            observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        )
+    ).project(request, await _context(request))
+
+    state = next(section for section in result.sections if section.id == "state")
+    record = state.content["serverRecordedExecutions"][0]
+    assert record["initiatingPrincipalIdentityState"] == "ambiguous"
+    assert record["canonicalInitiatingPrincipalHumanEntityId"] is None
+    assert "principal_identity_ambiguous" in result.degradedReasons
+    assert not any(
+        claim.kind == "canonically_resolved_execution_principal_identity"
+        for claim in result.claims
+    )
 
 
 async def test_principal_stays_unknown_when_any_complete_execution_lacks_attribution() -> None:

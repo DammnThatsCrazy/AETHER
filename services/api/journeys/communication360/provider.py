@@ -3,10 +3,13 @@
 ``communication360`` is an intelligence projection over canonical Aether
 communication truth — never a competing system of record (ADR-010). This
 provider projects the *communication + information-flow* domain for a subject
-of kind ``campaign`` / ``episode`` / ``source`` from the Phase-2/3 canonical
-surface: the shipped message spine (``services/api/journeys/comms`` silver path, read
-through :class:`SilverCommsSource`) and the Phase-3 canonical-authority fact
-store (``services/api/journeys/communication360`` :class:`CanonicalFactSource`).
+of kind ``campaign`` / ``episode`` / ``source`` / ``entity`` from the Phase-2/3
+canonical surface: the shipped message spine (``services/api/journeys/comms``
+silver path, read through :class:`SilverCommsSource`) and the Phase-3
+canonical-authority fact store (``services/api/journeys/communication360``
+:class:`CanonicalFactSource`). Entity scope requires an exact tenant-owned
+entity-registry match and a matching endpoint identity-binding record; it does
+not expand through organization membership.
 
 The provider is a read-only, fail-isolated, tenant-scoped projection:
 
@@ -72,6 +75,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional, Protocol, Union
+from urllib.parse import quote
 from uuid import UUID
 
 # Lightweight plane imports — always importable.
@@ -113,7 +117,7 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
 
 # Subject kinds communication360 serves (registry subjectKinds).
 _SCOPED_SUBJECT_KINDS: frozenset[str] = frozenset(
-    {"agent", "campaign", "episode", "journey", "source"}
+    {"agent", "campaign", "entity", "episode", "journey", "source"}
 )
 
 # Typed degraded-reason codes surfaced on ``result.degradedReasons`` (short
@@ -139,6 +143,27 @@ _SCOPE_NOTES: dict[str, str] = {
         "messages have no canonical source join; exact source reference communication facts remain readable"
     ),
 }
+
+_ENTITY_BINDING_EVIDENCE_URIS = {
+    "agent_deployment_identity_bindings": "store://agent_identity_bindings/",
+    "comms_provider_identities": "store://comms_provider_identities/",
+}
+_ENTITY_REFERENCE_KEYS = frozenset(
+    {
+        "entity_id",
+        "entity_ids",
+        "actor_id",
+        "actor_entity_id",
+        "participant_id",
+        "participant_ids",
+        "participant_entity_id",
+        "participant_entity_ids",
+        "sender_entity_id",
+        "sender_entity_ids",
+        "recipient_entity_id",
+        "recipient_entity_ids",
+    }
+)
 
 # Canonical fact ``kind`` discriminators each state dimension / section reads.
 _KINDS_INFORMATION = frozenset({"information", "information_transformation"})
@@ -240,6 +265,64 @@ class AgentIdentityReader(Protocol):
     async def resolve(self, tenant_id: str, source_agent_ref: str) -> AgentIdentityRead:
         """Resolve only through a tenant-owned canonical Agent identity authority."""
         ...
+
+
+@dataclass(frozen=True)
+class EntityIdentityRead:
+    """Tenant-scoped result for resolving an exact canonical entity id."""
+
+    state: str
+    canonical_entity_id: Optional[str] = None
+    evidence: tuple[EvidenceRef, ...] = ()
+    reason: Optional[str] = None
+
+
+class EntityIdentityReader(Protocol):
+    async def resolve(self, tenant_id: str, canonical_entity_id: str) -> EntityIdentityRead:
+        """Resolve only an exact entity id owned by the requesting tenant."""
+        ...
+
+
+class RepositoryEntityIdentityReader:
+    """Exact entity-registry lookup used before entity-scoped communication reads."""
+
+    async def resolve(self, tenant_id: str, canonical_entity_id: str) -> EntityIdentityRead:
+        if not tenant_id or not canonical_entity_id:
+            return EntityIdentityRead(state="unknown", reason="entity_identity_scope_invalid")
+        try:
+            from repositories.repos import EntityRepository
+
+            rows = await EntityRepository().find_many(
+                filters={"tenant_id": tenant_id, "entity_id": canonical_entity_id},
+                limit=2,
+            )
+        except Exception:  # noqa: BLE001 - identity outage remains unknown
+            return EntityIdentityRead(state="unknown", reason="entity_identity_authority_unavailable")
+        if not isinstance(rows, list):
+            return EntityIdentityRead(state="unknown", reason="entity_identity_authority_invalid_response")
+        if len(rows) > 1:
+            return EntityIdentityRead(state="ambiguous", reason="entity_identity_multiple_matches")
+        if not rows:
+            return EntityIdentityRead(state="unresolved", reason="entity_identity_binding_not_found")
+        row = rows[0]
+        if (
+            not isinstance(row, dict)
+            or row.get("tenant_id") != tenant_id
+            or row.get("entity_id") != canonical_entity_id
+        ):
+            return EntityIdentityRead(state="ambiguous", reason="entity_identity_scope_mismatch")
+        observed_at = row.get("updated_at") or row.get("created_at")
+        evidence = EvidenceRef(
+            id=canonical_entity_id,
+            type="entity",
+            source="entity_registry",
+            observedAt=observed_at if isinstance(observed_at, str) and observed_at else None,
+        )
+        return EntityIdentityRead(
+            state="resolved",
+            canonical_entity_id=canonical_entity_id,
+            evidence=(evidence,),
+        )
 
 
 class CurrentJourneyReader(Protocol):
@@ -370,6 +453,13 @@ def _resolve_scope(request: ProjectionRequest) -> _Scope:
             participant_entity_id=request.subject.id,
             participant_identity_ids=(request.subject.id,),
         )
+    if kind == "entity":
+        return _Scope(
+            kind=kind,
+            id=request.subject.id,
+            participant_entity_id=request.subject.id,
+            participant_identity_ids=(request.subject.id,),
+        )
     if kind in {"episode", "journey", "source"}:
         return _Scope(
             kind=kind,
@@ -436,12 +526,15 @@ def _row_matches_scope(
         return False
     reference_keys = {
         "agent": {"agent_id", "actor_id", "actor_entity_id", "agent_entity_id", "entity_id"},
+        "entity": set(_ENTITY_REFERENCE_KEYS),
         "campaign": {"campaign_id", "campaign_ids"},
         "episode": {"episode_id", "episode_ids"},
         "journey": {"journey_id", "journey_ids"},
         "source": {"source_id", "source_namespace", "provider_id"},
     }.get(scope.kind, set())
-    reference_ids = scope.participant_identity_ids if scope.kind == "agent" else (scope.id,)
+    reference_ids = (
+        scope.participant_identity_ids if scope.kind in {"agent", "entity"} else (scope.id,)
+    )
     for reference_id in reference_ids:
         if any(str(row.get(key) or "") == reference_id for key in reference_keys):
             return True
@@ -469,6 +562,34 @@ def _payload_has_exact_reference(value: Any, keys: set[str], reference: str) -> 
     return False
 
 
+def _has_exact_entity_binding(
+    *,
+    side: str,
+    entity_id: Optional[str],
+    binding_id: Optional[str],
+    evidence_ref: Optional[EvidenceRef],
+    expected_entity_id: str,
+) -> bool:
+    """Require a typed canonical binding record for one exact message endpoint."""
+    if (
+        entity_id != expected_entity_id
+        or not isinstance(binding_id, str)
+        or not binding_id.strip()
+        or evidence_ref is None
+        or evidence_ref.id != binding_id
+        or evidence_ref.type != "entity"
+    ):
+        return False
+    expected_source = {
+        "sender": "agent_deployment_identity_bindings",
+        "recipient": "comms_provider_identities",
+    }.get(side)
+    source_uri = _ENTITY_BINDING_EVIDENCE_URIS.get(expected_source or "")
+    if source_uri is None or evidence_ref.source != expected_source:
+        return False
+    return evidence_ref.uri == f"{source_uri}{quote(binding_id, safe='')}"
+
+
 def _message_matches_scope(message: CommunicationMessage, scope: _Scope) -> bool:
     if scope.kind == "campaign":
         return str(message.campaign_id or "") == scope.id
@@ -476,6 +597,20 @@ def _message_matches_scope(message: CommunicationMessage, scope: _Scope) -> bool
         return bool(
             set(scope.participant_identity_ids)
             & {message.sender_entity_id, message.recipient_entity_id}
+        )
+    if scope.kind == "entity":
+        return _has_exact_entity_binding(
+            side="sender",
+            entity_id=message.sender_entity_id,
+            binding_id=message.sender_identity_binding_id,
+            evidence_ref=message.sender_identity_evidence_ref,
+            expected_entity_id=scope.id,
+        ) or _has_exact_entity_binding(
+            side="recipient",
+            entity_id=message.recipient_entity_id,
+            binding_id=message.recipient_identity_binding_id,
+            evidence_ref=message.recipient_identity_evidence_ref,
+            expected_entity_id=scope.id,
         )
     return False
 
@@ -563,6 +698,10 @@ def _canonical_communication_slot_ids(
 
     if subject_kind == "campaign" and _row_reference_values(row, "campaign_id", "campaign_ids"):
         supported.add("campaign_links")
+    if subject_kind == "entity" and _payload_has_exact_reference(
+        {"row": row, "payload": payload}, set(_ENTITY_REFERENCE_KEYS), subject_id
+    ):
+        supported.add("communications")
     if subject_kind == "episode" and subject_id in _row_reference_values(
         row, "episode_id", "episode_ids"
     ):
@@ -1129,6 +1268,7 @@ class Communication360Provider:
         sources: Optional[Union[CommunicationSource, dict[str, CommunicationSource]]] = None,
         *,
         agent_identity_reader: Optional[AgentIdentityReader] = None,
+        entity_identity_reader: Optional[EntityIdentityReader] = None,
         journey_reader: Optional[CurrentJourneyReader] = None,
         risk_signal_reader: Optional[RiskSignalReader] = None,
     ) -> None:
@@ -1156,6 +1296,11 @@ class Communication360Provider:
             agent_identity_reader
             if agent_identity_reader is not None
             else RepositoryAgentIdentityReader()
+        )
+        self._entity_identity = (
+            entity_identity_reader
+            if entity_identity_reader is not None
+            else RepositoryEntityIdentityReader()
         )
         self._journeys = journey_reader or RepositoryCurrentJourneyReader()
         self._risk_signals = risk_signal_reader or RepositoryRiskSignalReader()
@@ -1208,10 +1353,48 @@ class Communication360Provider:
                     canonical_fact_bindable=False,
                     note=identity.reason or "agent_identity_unresolved",
                 )
+        elif request.subject.kind == "entity":
+            try:
+                identity = await self._entity_identity.resolve(tenant_id, request.subject.id)
+            except Exception:  # noqa: BLE001 - fail closed on identity errors
+                identity = EntityIdentityRead(
+                    state="unknown", reason="entity_identity_authority_unavailable"
+                )
+            identity_evidence = tuple(
+                ref
+                for ref in identity.evidence
+                if ref.id == request.subject.id
+                and ref.type == "entity"
+                and ref.source == "entity_registry"
+            )
+            if (
+                identity.state == "resolved"
+                and identity.canonical_entity_id == request.subject.id
+                and identity_evidence
+            ):
+                scope = replace(
+                    scope,
+                    participant_entity_id=request.subject.id,
+                    participant_identity_ids=(request.subject.id,),
+                    identity_resolution_state="resolved",
+                    identity_evidence=identity_evidence,
+                )
+            else:
+                scope = replace(
+                    scope,
+                    participant_entity_id=None,
+                    participant_identity_ids=(),
+                    identity_resolution_state=identity.state,
+                    identity_evidence=identity_evidence,
+                    bindable=False,
+                    canonical_fact_bindable=False,
+                    note=identity.reason or "entity_identity_unresolved",
+                )
 
         # Read the canonical fact store once (scope-matched below by family).
         identity_readable = (
-            request.subject.kind != "agent" or scope.identity_resolution_state == "resolved"
+            request.subject.kind not in {"agent", "entity"}
+            or scope.identity_resolution_state == "resolved"
         )
         canonical_up, canonical_rows, canonical_truncated = (
             await self._read_canonical_rows(tenant_id, scope, limit=read_limit)
@@ -1313,8 +1496,11 @@ class Communication360Provider:
         )
         claims.extend(self._journey_link_claims(request, journey_links))
         claims.extend(self._risk_flag_claims(request, risk_flags))
-        if request.subject.kind == "agent" and scope.identity_resolution_state != "resolved":
-            degraded_reasons.append(scope.note or "agent_identity_unresolved")
+        if (
+            request.subject.kind in {"agent", "entity"}
+            and scope.identity_resolution_state != "resolved"
+        ):
+            degraded_reasons.append(scope.note or f"{request.subject.kind}_identity_unresolved")
 
         return ProjectionResult(
             projectionId=self.projection_id,
@@ -2458,6 +2644,11 @@ class Communication360Provider:
             if request.subject.kind == "campaign" and message.campaign_id == request.subject.id:
                 message_slots.add("campaign_links")
                 claim_text.append(f"message {message.message_id} is linked to this campaign")
+            if request.subject.kind == "entity":
+                message_slots.add("communications")
+                claim_text.append(
+                    f"message {message.message_id} has an exact identity-bound endpoint for this entity"
+                )
             is_agent_author = bool(
                 request.subject.kind == "agent"
                 and scope.identity_resolution_state == "resolved"
@@ -2534,7 +2725,7 @@ class Communication360Provider:
                     id=f"canonical_fact.{fact_id}",
                     kind="communication_fact_observation",
                     subject=subject,
-                    evidenceRefs=[evidence],
+                    evidenceRefs=_dedupe_refs([*scope.identity_evidence, evidence]),
                     claims=claim_text,
                     confidence=1.0,
                     claimState=EpistemicStatus.OBSERVED,

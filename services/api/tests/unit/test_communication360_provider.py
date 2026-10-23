@@ -45,6 +45,7 @@ from journeys.communication360.contracts import (  # noqa: E402
 )
 from journeys.communication360.provider import (  # noqa: E402
     AgentIdentityRead,
+    EntityIdentityRead,
     OUTPUT_SECTIONS,
     REASON_CANONICAL_SOURCE_UNAVAILABLE,
     REASON_SILVER_SOURCE_UNAVAILABLE,
@@ -56,9 +57,14 @@ from journeys.communication360.reader import to_message  # noqa: E402
 from journeys.comms.contracts import CommunicationState, MessageCategory  # noqa: E402
 from graph.operational_intelligence.models import EvidenceRef  # noqa: E402
 from shared.contracts_models.epistemic import EpistemicStatus  # noqa: E402
+from shared.intelligence_projections.composition import (  # noqa: E402
+    compose_experience360_frame,
+)
 from shared.intelligence_projections import (  # noqa: E402
     ContractVersionIncompatible,
     DuplicateProjection,
+    Experience360FrameRequest,
+    Experience360PolicyDisposition,
     INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
     ProjectionContext,
     ProjectionNotFound,
@@ -186,6 +192,32 @@ class FakeRiskSignalReader:
         return list(self.rows)
 
 
+class FakeEntityIdentityReader:
+    """Exact tenant/entity registry read used by entity communication tests."""
+
+    def __init__(self, *, state: str = "resolved", canonical_entity_id: str = "org-1") -> None:
+        self.state = state
+        self.canonical_entity_id = canonical_entity_id
+        self.calls: list[tuple[str, str]] = []
+
+    async def resolve(self, tenant_id: str, canonical_entity_id: str) -> EntityIdentityRead:
+        self.calls.append((tenant_id, canonical_entity_id))
+        if self.state != "resolved":
+            return EntityIdentityRead(state=self.state, reason="entity_identity_binding_not_found")
+        return EntityIdentityRead(
+            state="resolved",
+            canonical_entity_id=self.canonical_entity_id,
+            evidence=(
+                EvidenceRef(
+                    id=self.canonical_entity_id,
+                    type="entity",
+                    source="entity_registry",
+                    observedAt="2026-10-22T12:00:00Z",
+                ),
+            ),
+        )
+
+
 def _msg(
     tenant: str,
     mid: str,
@@ -224,6 +256,40 @@ def _msg(
                 uri=f"store://test/{mid}",
             )
         ],
+    )
+
+
+def _entity_bound_message(
+    tenant: str,
+    message_id: str,
+    entity_id: str,
+    *,
+    side: str,
+    binding_id: str | None = None,
+    source: str | None = None,
+) -> CommunicationMessage:
+    """Create one message endpoint with an explicit identity binding record."""
+    binding_id = binding_id or f"binding-{message_id}"
+    source = source or {
+        "sender": "agent_deployment_identity_bindings",
+        "recipient": "comms_provider_identities",
+    }[side]
+    evidence_uri = {
+        "agent_deployment_identity_bindings": "store://agent_identity_bindings/",
+        "comms_provider_identities": "store://comms_provider_identities/",
+    }[source]
+    evidence = EvidenceRef(
+        id=binding_id,
+        type="entity",
+        source=source,
+        uri=f"{evidence_uri}{binding_id}",
+    )
+    endpoint = f"{side}_entity_id"
+    return _msg(tenant, message_id, **{endpoint: entity_id}).model_copy(
+        update={
+            f"{side}_identity_binding_id": binding_id,
+            f"{side}_identity_evidence_ref": evidence,
+        }
     )
 
 
@@ -771,6 +837,226 @@ async def test_tenant_a_never_surfaces_tenant_b_communication() -> None:
     serialized = result.model_dump_json()
     assert "tenant-b" not in serialized
     assert "b1" not in serialized and "b2" not in serialized
+
+
+async def test_entity_scope_joins_only_exact_tenant_entity_bound_communications() -> None:
+    entity_id = "org-1"
+    messages = [
+        _entity_bound_message(TENANT_A, "m-sender", entity_id, side="sender"),
+        _entity_bound_message(TENANT_A, "m-recipient", entity_id, side="recipient"),
+        # Exact ID without its canonical identity binding is not enough.
+        _msg(TENANT_A, "m-unbound", sender_entity_id=entity_id),
+        # Binding evidence must name the same exact binding ID.
+        _entity_bound_message(
+            TENANT_A, "m-mismatched-binding", entity_id, side="recipient"
+        ).model_copy(
+            update={
+                "recipient_identity_evidence_ref": EvidenceRef(
+                    id="different-binding",
+                    type="entity",
+                    source="comms_provider_identities",
+                    uri="store://comms_provider_identities/different-binding",
+                )
+            }
+        ),
+        _entity_bound_message(
+            TENANT_A,
+            "m-wrong-binding-authority",
+            entity_id,
+            side="recipient",
+            source="agent_deployment_identity_bindings",
+        ),
+        # Same-tenant cross-entity traffic and member traffic are not fanned in.
+        _entity_bound_message(TENANT_A, "m-other-org", "org-2", side="sender"),
+        _entity_bound_message(TENANT_A, "m-member", "member-1", side="sender"),
+        # A foreign tenant cannot bind the same canonical entity id into this frame.
+        _entity_bound_message(TENANT_B, "m-foreign-tenant", entity_id, side="sender"),
+    ]
+    facts = [
+        _fact(TENANT_A, "fact-actor", actor_id=entity_id),
+        _fact(
+            TENANT_A,
+            "fact-participant",
+            actor_id=None,
+            payload={"participant_entity_id": entity_id},
+        ),
+        _fact(TENANT_A, "fact-other-org", actor_id="org-2"),
+        _fact(
+            TENANT_A,
+            "fact-member",
+            actor_id=None,
+            payload={"participant_entity_id": "member-1"},
+        ),
+        _fact(TENANT_B, "fact-foreign-tenant", actor_id=entity_id),
+    ]
+
+    class UnscopedSource(FakeSource):
+        """Return hostile cross-tenant rows to test provider-side filtering."""
+
+        async def messages(
+            self,
+            tenant_id,
+            *,
+            campaign_id=None,
+            participant_entity_id=None,
+            since=None,
+            limit=None,
+        ):
+            self.message_read_count += 1
+            self.last_participant_entity_id = participant_entity_id
+            return self._messages[:limit] if limit is not None else list(self._messages)
+
+        async def facts(self, tenant_id, *, kind=None, since=None, limit=None):
+            self.fact_read_count += 1
+            return self._facts[:limit] if limit is not None else list(self._facts)
+
+    source = UnscopedSource(messages=messages, facts=facts)
+    identity_reader = FakeEntityIdentityReader(canonical_entity_id=entity_id)
+    provider = Communication360Provider(
+        sources=source,
+        entity_identity_reader=identity_reader,
+    )
+    request, context = await _make_context(
+        ProviderRegistry(),
+        tenant=TENANT_A,
+        subject=ProjectionSubject(kind="entity", id=entity_id),
+    )
+
+    result = await provider.project(request, context)
+
+    assert identity_reader.calls == [(TENANT_A, entity_id)]
+    assert source.last_participant_entity_id == entity_id
+    assert all(claim.claimState is EpistemicStatus.OBSERVED for claim in result.claims)
+    summary = next(section for section in result.sections if section.id == "summary")
+    assert summary.content["counts"]["messages_total"] == 2
+    timeline = next(section for section in result.sections if section.id == "timeline")
+    assert {entry["messageId"] for entry in timeline.content["entries"]} == {
+        "m-sender",
+        "m-recipient",
+    }
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    assert interactions.content["count"] == 2
+    serialized = result.model_dump_json()
+    for excluded in (
+        "m-unbound",
+        "m-mismatched-binding",
+        "m-wrong-binding-authority",
+        "m-other-org",
+        "m-member",
+        "m-foreign-tenant",
+        "fact-other-org",
+        "fact-member",
+        "fact-foreign-tenant",
+        "tenant-b",
+    ):
+        assert excluded not in serialized
+    state = next(section for section in result.sections if section.id == "state")
+    policy_evaluation = state.content["sourcePolicyContext"]["policyEvaluation"]
+    assert policy_evaluation["state"] == "unknown"
+    assert policy_evaluation["authority"] == "experience360_frame_policy_runtime"
+    assert state.content["sourcePolicyContext"]["freshness"]["state"] == "unknown"
+
+    allowed = Experience360PolicyDisposition(state="allowed")
+    account_request = Experience360FrameRequest(
+        surfaceId="account360",
+        tenantId=TENANT_A,
+        subject=ProjectionSubject(kind="entity", id=entity_id),
+        requestedSlotIds=["communications"],
+        includeEvidence=True,
+    )
+    frame = compose_experience360_frame(
+        account_request,
+        [result],
+        frame_policy=allowed,
+        policy_by_slot={"communications": allowed},
+    )
+    account_communications = next(
+        slot for slot in frame.slots if slot.id == "communications"
+    )
+    assert {claim.id for claim in account_communications.claims} == {
+        "timeline.m-sender",
+        "timeline.m-recipient",
+        "canonical_fact.fact-actor",
+        "canonical_fact.fact-participant",
+    }
+    assert account_communications.state == "degraded"
+    assert "slot_contains_partial_evidence" in account_communications.reasonCodes
+    assert account_communications.freshness.state == "unknown"
+
+    redacted = Experience360PolicyDisposition(
+        state="redacted",
+        redactedFieldPaths=["/sections/0/content/subject"],
+        reasonCodes=["account_communications_policy_redacted"],
+    )
+    redacted_frame = compose_experience360_frame(
+        account_request,
+        [result],
+        frame_policy=allowed,
+        policy_by_slot={"communications": redacted},
+    )
+    redacted_communications = next(
+        slot for slot in redacted_frame.slots if slot.id == "communications"
+    )
+    assert redacted_communications.state == "suppressed"
+    assert redacted_communications.content is None
+    assert redacted_communications.evidenceRefs == []
+    assert redacted_communications.claims == []
+    assert redacted_communications.policyDisposition.state == "redacted"
+    assert redacted_communications.policyDisposition.redactedFieldPaths == [
+        "/sections/0/content/subject"
+    ]
+
+
+async def test_entity_scope_does_not_match_untyped_text_that_mentions_entity_id() -> None:
+    entity_id = "org-1"
+    source = FakeSource(
+        facts=[
+            _fact(
+                TENANT_A,
+                "fact-text-only",
+                actor_id=None,
+                payload={"description": f"This message mentions {entity_id} as a participant."},
+            )
+        ]
+    )
+    provider = Communication360Provider(
+        sources=source,
+        entity_identity_reader=FakeEntityIdentityReader(canonical_entity_id=entity_id),
+    )
+    request, context = await _make_context(
+        ProviderRegistry(),
+        tenant=TENANT_A,
+        subject=ProjectionSubject(kind="entity", id=entity_id),
+    )
+
+    result = await provider.project(request, context)
+
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    assert interactions.content["count"] == 0
+    assert "fact-text-only" not in result.model_dump_json()
+
+
+async def test_entity_scope_fails_closed_without_canonical_entity_identity_evidence() -> None:
+    source = FakeSource(
+        messages=[
+            _entity_bound_message(TENANT_A, "m-org", "org-1", side="recipient")
+        ],
+        facts=[_fact(TENANT_A, "fact-org", actor_id="org-1")],
+    )
+    identity_reader = FakeEntityIdentityReader(state="unresolved", canonical_entity_id="org-1")
+    provider = Communication360Provider(sources=source, entity_identity_reader=identity_reader)
+    request, context = await _make_context(
+        ProviderRegistry(),
+        tenant=TENANT_A,
+        subject=ProjectionSubject(kind="entity", id="org-1"),
+    )
+
+    result = await provider.project(request, context)
+
+    assert source.message_read_count == 0
+    assert source.fact_read_count == 0
+    assert result.claims == []
+    assert "entity_identity_binding_not_found" in result.degradedReasons
 
 
 # ---------------------------------------------------------------------------

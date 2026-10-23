@@ -79,6 +79,7 @@ VALUE_SUMMARY_SLOT_ID = "value_summary"
 VALUE_CONVERSION_INVENTORY_SLOT_ID = "conversion_inventory"
 VALUE_ATTRIBUTION_CREDITS_SLOT_ID = "attribution_credits"
 VALUE_REVENUE_EVENTS_SLOT_ID = "revenue_events"
+VALUE_CONFIDENCE_SLOT_ID = "confidence"
 VALUE_EVIDENCE_TRACE_SLOT_ID = "evidence_trace"
 ACCOUNT_VALUE_SLOT_ID = "value"
 _MAX_CONVERSION_INVENTORY_ROWS = 500
@@ -2759,6 +2760,19 @@ class Economic360Provider:
                     else model_version or model_type or "unreported model version"
                 )
                 confidence = _attribution_confidence(record.get("modelConfidence"))
+                model_lineage_reported = bool(model_type and model_version)
+                confidence_note = (
+                    f"; model-reported attribution confidence {confidence:.3f} "
+                    "(calibration and applicability to realized value are not independently validated)"
+                    if confidence is not None and model_lineage_reported
+                    else ""
+                )
+                domain_slot_ids = [
+                    VALUE_ATTRIBUTION_CREDITS_SLOT_ID,
+                    VALUE_EVIDENCE_TRACE_SLOT_ID,
+                ]
+                if confidence is not None and model_lineage_reported:
+                    domain_slot_ids.append(VALUE_CONFIDENCE_SLOT_ID)
                 claims.append(
                     ClaimEnvelope(
                         id=(
@@ -2772,16 +2786,14 @@ class Economic360Provider:
                         evidenceRefs=refs,
                         claims=[
                             f"active canonical attribution run {run_id} ({model_label}) records "
-                            f"credit weight {weight} for conversion {conversion_id}; this is "
+                            f"credit weight {weight} for conversion {conversion_id}"
+                            f"{confidence_note}; this is "
                             "attribution-model output, not independently measured realized "
                             "value or agent ROI"
                         ],
                         confidence=confidence,
                         claimState=EpistemicStatus.OBSERVED,
-                        domainSlotIds=[
-                            VALUE_ATTRIBUTION_CREDITS_SLOT_ID,
-                            VALUE_EVIDENCE_TRACE_SLOT_ID,
-                        ],
+                        domainSlotIds=domain_slot_ids,
                     )
                 )
 

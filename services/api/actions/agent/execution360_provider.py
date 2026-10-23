@@ -79,6 +79,7 @@ _MAX_ROWS = 500
 _MAX_TOOL_EDGE_SCAN = 10_000
 _MAX_EXECUTION_RISK_SIGNAL_SCAN = 1000
 _MAX_EXECUTION_APPROVAL_DECISION_SCAN = 5000
+_MAX_PRINCIPAL_IDENTITY_ALIAS_SCAN = 50
 _SILVER_QUERY_LIMIT = 1000
 _MAX_EPISODE_AGENT_SCAN = 200
 _SILVER_SOURCE = "silver_agent_execution_facts"
@@ -200,9 +201,23 @@ class ExecutionRead:
     # Agent requests may carry an additional bounded episode read. Other
     # subjects leave this unset because their product slots use Episode360.
     episode_context: Optional[ExecutionEpisodeContextRead] = None
+    # Authenticated principals are canonical Humans only when the tenant USER_ID
+    # alias and active surviving subject both resolve without ambiguity.
+    principal_identity_read: Optional["ExecutionPrincipalIdentityRead"] = None
     # Lifecycle graph calls are attached only after exact execution, tenant,
     # and canonical actor joins. Their completeness is still source-unknown.
     tool_calls: Optional[ExecutionToolCallRead] = None
+
+
+@dataclass(frozen=True)
+class ExecutionPrincipalIdentityRead:
+    """Bounded exact tenant USER_ID alias to active Human subject read."""
+
+    rows: list[dict[str, Any]]
+    available: bool
+    scope_known: bool
+    truncated: bool = False
+    reason: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -249,10 +264,12 @@ class RepositoryExecution360Source:
         episode_store: Any = None,
         graph_client: Any = None,
         commerce_store: Any = None,
+        principal_identity_repository: Any = None,
     ) -> None:
         self._episode_store = episode_store
         self._graph_client = graph_client
         self._commerce_store = commerce_store
+        self._principal_identity_repository = principal_identity_repository
 
     async def server_executions(
         self, *, tenant_id: str, subject: ProjectionSubject, limit: int
@@ -470,6 +487,16 @@ class RepositoryExecution360Source:
                 identity_rows=list(identity_map.values()),
                 execution_rows=scoped,
             )
+        principal_ids = {
+            principal_id
+            for row in scoped
+            if (principal_id := _safe_text(row.get("initiating_principal_user_id"))) is not None
+        }
+        principal_identity_read = await _read_execution_principal_identities(
+            tenant_id,
+            principal_ids,
+            repository=self._principal_identity_repository,
+        )
         tool_calls = await self._read_execution_tool_calls(tenant_id, scoped)
         return ExecutionRead(
             rows=scoped[:limit],
@@ -488,6 +515,7 @@ class RepositoryExecution360Source:
                 )
             ),
             episode_context=episode_context,
+            principal_identity_read=principal_identity_read,
             tool_calls=tool_calls,
         )
 
@@ -995,6 +1023,222 @@ def _tenant_agent_config(row: Any, tenant_id: str, agent_id: Any) -> bool:
         and agent_id
         and row.get("agent_id") == agent_id
     )
+
+
+async def _read_execution_principal_identities(
+    tenant_id: str,
+    principal_user_ids: set[str],
+    *,
+    repository: Any = None,
+) -> ExecutionPrincipalIdentityRead:
+    """Resolve authenticated user references through active tenant USER_ID aliases."""
+    requested = sorted(
+        {value.strip() for value in principal_user_ids if isinstance(value, str) and value.strip()}
+    )
+    if not requested:
+        return ExecutionPrincipalIdentityRead(rows=[], available=True, scope_known=True)
+    if not tenant_id:
+        return ExecutionPrincipalIdentityRead(
+            rows=[], available=True, scope_known=False, reason="principal_identity_tenant_missing"
+        )
+    if len(requested) > _MAX_ROWS:
+        requested = requested[:_MAX_ROWS]
+        requested_truncated = True
+    else:
+        requested_truncated = False
+
+    try:
+        if repository is None:
+            from identity.identity.repository import IdentityResolutionRepository
+
+            repository = IdentityResolutionRepository()
+        from identity.identity.hashing import hash_value
+        from identity.identity.models import IdentitySignalType
+
+        rows: list[dict[str, Any]] = []
+        truncated = requested_truncated
+        scope_known = True
+        for principal_user_id in requested:
+            alias_hash = hash_value(principal_user_id, scope=f"user:{tenant_id}")
+            aliases = await repository.find_aliases_by_signal(
+                tenant_id,
+                IdentitySignalType.USER_ID,
+                alias_hash,
+                limit=_MAX_PRINCIPAL_IDENTITY_ALIAS_SCAN + 1,
+            )
+            if not isinstance(aliases, list):
+                scope_known = False
+                continue
+            if len(aliases) > _MAX_PRINCIPAL_IDENTITY_ALIAS_SCAN:
+                truncated = True
+            surviving_ids: set[str] = set()
+            for alias in aliases[:_MAX_PRINCIPAL_IDENTITY_ALIAS_SCAN]:
+                if (
+                    not isinstance(alias, dict)
+                    or alias.get("tenant_id") != tenant_id
+                    or alias.get("alias_type") != IdentitySignalType.USER_ID.value
+                    or alias.get("alias_value_hash") != alias_hash
+                    or alias.get("revoked_at")
+                    or alias.get("confidence_tier") != "deterministic"
+                    or not isinstance(alias.get("canonical_entity_id"), str)
+                ):
+                    scope_known = False
+                    continue
+                original_entity_id = alias["canonical_entity_id"]
+                canonical_entity_id = await repository.resolve_surviving_canonical_entity_id(
+                    tenant_id, original_entity_id
+                )
+                subject = await repository.get_subject_by_canonical_entity_id(
+                    tenant_id, canonical_entity_id
+                )
+                if (
+                    not isinstance(subject, dict)
+                    or subject.get("tenant_id") != tenant_id
+                    or subject.get("canonical_entity_id") != canonical_entity_id
+                    or subject.get("entity_type") != "human"
+                    or subject.get("status") != "active"
+                ):
+                    scope_known = False
+                    continue
+                alias_id = _safe_text(alias.get("id"))
+                subject_id = _safe_text(subject.get("id"))
+                if alias_id is None or subject_id is None:
+                    scope_known = False
+                    continue
+                surviving_ids.add(canonical_entity_id)
+                rows.append(
+                    {
+                        "tenant_id": tenant_id,
+                        "principal_user_id": principal_user_id,
+                        "canonical_human_entity_id": canonical_entity_id,
+                        "identity_evidence_refs": [
+                            EvidenceRef(
+                                id=alias_id,
+                                type="entity",
+                                source="identity_aliases",
+                                observedAt=_safe_text(
+                                    alias.get("last_seen_at") or alias.get("updated_at")
+                                ),
+                            ).model_dump(mode="json", by_alias=True, exclude_none=True),
+                            EvidenceRef(
+                                id=subject_id,
+                                type="entity",
+                                source="identity_subjects",
+                                observedAt=_safe_text(
+                                    subject.get("last_seen_at") or subject.get("updated_at")
+                                ),
+                            ).model_dump(mode="json", by_alias=True, exclude_none=True),
+                        ],
+                    }
+                )
+            if len(surviving_ids) > 1:
+                scope_known = False
+        return ExecutionPrincipalIdentityRead(
+            rows=rows,
+            available=True,
+            scope_known=scope_known,
+            truncated=truncated,
+            reason=(
+                "principal_identity_scope_or_subject_mismatch"
+                if not scope_known
+                else "principal_identity_read_truncated"
+                if truncated
+                else None
+            ),
+        )
+    except Exception:  # noqa: BLE001 - identity outage remains unknown
+        return ExecutionPrincipalIdentityRead(
+            rows=[],
+            available=False,
+            scope_known=False,
+            reason="principal_identity_authority_unavailable",
+        )
+
+
+def _execution_principal_identity_bindings(
+    read: Optional[ExecutionPrincipalIdentityRead],
+    *,
+    tenant_id: str,
+    principal_user_ids: set[str],
+) -> tuple[dict[str, dict[str, Any]], str, Optional[str]]:
+    """Accept only a complete, typed, exact tenant principal identity read."""
+    if read is None:
+        return {}, "unknown", "principal_identity_authority_not_read"
+    if not read.available:
+        return {}, "unknown", read.reason or "principal_identity_authority_unavailable"
+    if not read.scope_known or read.truncated:
+        return {}, "unknown", read.reason or "principal_identity_read_incomplete"
+
+    grouped: dict[str, dict[str, Any]] = {}
+    mismatch = False
+    for row in read.rows:
+        if not isinstance(row, dict):
+            mismatch = True
+            continue
+        principal_id = _safe_text(row.get("principal_user_id"))
+        canonical_id = _safe_text(row.get("canonical_human_entity_id"))
+        raw_refs = row.get("identity_evidence_refs")
+        refs: list[EvidenceRef] = []
+        sources: set[str] = set()
+        if isinstance(raw_refs, list):
+            for raw_ref in raw_refs:
+                try:
+                    ref = EvidenceRef.model_validate(raw_ref)
+                except Exception:  # noqa: BLE001 - malformed provenance fails closed
+                    mismatch = True
+                    continue
+                if ref.type != "entity" or ref.source not in {
+                    "identity_aliases",
+                    "identity_subjects",
+                }:
+                    mismatch = True
+                    continue
+                sources.add(ref.source)
+                refs.append(ref)
+        if (
+            row.get("tenant_id") != tenant_id
+            or principal_id not in principal_user_ids
+            or canonical_id is None
+            or len(sources) != 2
+            or sources != {"identity_aliases", "identity_subjects"}
+            or len(refs) != len(raw_refs or [])
+        ):
+            mismatch = True
+            continue
+        entry = grouped.setdefault(
+            principal_id,
+            {"canonical_human_entity_ids": set(), "evidence_refs": []},
+        )
+        entry["canonical_human_entity_ids"].add(canonical_id)
+        entry["evidence_refs"].extend(refs)
+    if mismatch:
+        return {}, "unknown", "principal_identity_scope_or_evidence_mismatch"
+
+    bindings: dict[str, dict[str, Any]] = {}
+    for principal_id in principal_user_ids:
+        entry = grouped.get(principal_id, {"canonical_human_entity_ids": set(), "evidence_refs": []})
+        canonical_ids = entry["canonical_human_entity_ids"]
+        deduped_refs = {
+            (ref.source, ref.id): ref for ref in entry["evidence_refs"]
+        }
+        if len(canonical_ids) == 1:
+            state = "resolved"
+            canonical_id = next(iter(canonical_ids))
+            evidence_refs = list(deduped_refs.values())
+        elif len(canonical_ids) > 1:
+            state = "ambiguous"
+            canonical_id = None
+            evidence_refs = []
+        else:
+            state = "unresolved"
+            canonical_id = None
+            evidence_refs = []
+        bindings[principal_id] = {
+            "state": state,
+            "canonical_human_entity_id": canonical_id,
+            "evidence_refs": evidence_refs,
+        }
+    return bindings, "available", None
 
 
 async def _episode_execution_scope(tenant_id: str, episode_id: str) -> EpisodeExecutionScope:
@@ -1902,6 +2146,39 @@ class Execution360Provider:
             and row.get("event_type") is None
             and _safe_text(row.get("execution_id"))
         ]
+        principal_user_ids = {
+            principal_id
+            for row in internal
+            if (principal_id := _safe_text(row.get("initiatingPrincipalUserId"))) is not None
+        }
+        principal_bindings, principal_identity_read_state, principal_identity_reason = (
+            _execution_principal_identity_bindings(
+                server.principal_identity_read,
+                tenant_id=tenant_id,
+                principal_user_ids=principal_user_ids,
+            )
+        )
+        for row in internal:
+            principal_id = _safe_text(row.get("initiatingPrincipalUserId"))
+            binding = principal_bindings.get(principal_id) if principal_id else None
+            row["initiatingPrincipalIdentityState"] = (
+                binding["state"]
+                if binding
+                else "not_recorded"
+                if principal_id is None
+                else "unknown"
+            )
+            row["canonicalInitiatingPrincipalHumanEntityId"] = (
+                binding.get("canonical_human_entity_id") if binding else None
+            )
+            row["initiatingPrincipalIdentityEvidenceRefs"] = (
+                [
+                    ref.model_dump(mode="json", by_alias=True, exclude_none=True)
+                    for ref in binding.get("evidence_refs", [])
+                ]
+                if binding
+                else []
+            )
         external = [
             item
             for row in observed.rows
@@ -2108,6 +2385,12 @@ class Execution360Provider:
             reasons.append("execution_subject_binding_incomplete")
         if server.truncated or observed.truncated:
             reasons.append("execution_source_truncated")
+        if principal_user_ids and principal_identity_read_state != "available":
+            reasons.append(principal_identity_reason or "principal_identity_read_incomplete")
+        if any(
+            row.get("initiatingPrincipalIdentityState") == "ambiguous" for row in internal
+        ):
+            reasons.append("principal_identity_ambiguous")
         if temporal_unavailable:
             reasons.append("temporal_anchor_not_reconstructable_from_current_sources")
         if window_undated:
@@ -2277,6 +2560,19 @@ class Execution360Provider:
                 continue
             seen.add((ref.id, ref.source))
             refs.append(ref)
+        for row in internal:
+            raw_refs = row.get("initiatingPrincipalIdentityEvidenceRefs")
+            if not isinstance(raw_refs, list):
+                continue
+            for raw_ref in raw_refs:
+                try:
+                    ref = EvidenceRef.model_validate(raw_ref)
+                except Exception:  # noqa: BLE001 - malformed identity evidence is omitted
+                    continue
+                if (ref.id, ref.source) in seen:
+                    continue
+                seen.add((ref.id, ref.source))
+                refs.append(ref)
         for signal in risk_events.signals:
             for ref in signal.evidence_refs:
                 if (ref.id, ref.source) in seen:
@@ -2346,12 +2642,45 @@ class Execution360Provider:
                         subject=subject,
                         evidenceRefs=[evidence],
                         claims=[
-                            f"AETHER recorded authenticated tenant user {principal_user_id} as the initiating principal for execution {row['executionId']}; this does not make that principal the acting agent or establish a canonical human entity link."
+                            f"AETHER recorded authenticated tenant user reference {principal_user_id} as the initiating principal for execution {row['executionId']}; the reference alone does not make that principal the acting agent or establish canonical human identity."
                         ],
                         claimState=EpistemicStatus.OBSERVED,
                         domainSlotIds=[SLOT_ACTOR_ATTRIBUTION, SLOT_EVIDENCE],
                     )
                 )
+                canonical_human_id = _safe_text(
+                    row.get("canonicalInitiatingPrincipalHumanEntityId")
+                )
+                if (
+                    canonical_human_id
+                    and row.get("initiatingPrincipalIdentityState") == "resolved"
+                ):
+                    identity_refs: list[EvidenceRef] = []
+                    raw_identity_refs = row.get("initiatingPrincipalIdentityEvidenceRefs")
+                    if isinstance(raw_identity_refs, list):
+                        for raw_ref in raw_identity_refs:
+                            try:
+                                identity_refs.append(EvidenceRef.model_validate(raw_ref))
+                            except Exception:  # noqa: BLE001 - malformed identity evidence fails closed
+                                identity_refs = []
+                                break
+                    if {ref.source for ref in identity_refs} == {
+                        "identity_aliases",
+                        "identity_subjects",
+                    }:
+                        claims.append(
+                            ClaimEnvelope(
+                                id=f"execution360:principal-identity:{row['executionId']}",
+                                kind="canonically_resolved_execution_principal_identity",
+                                subject=subject,
+                                evidenceRefs=[evidence, *identity_refs],
+                                claims=[
+                                    f"The authenticated principal reference recorded for execution {row['executionId']} resolves through an active tenant USER_ID alias and active surviving identity subject to canonical Human {canonical_human_id}; this identity link does not establish action authorization or delegation authority."
+                                ],
+                                claimState=EpistemicStatus.RESOLVED,
+                                domainSlotIds=[SLOT_ACTOR_ATTRIBUTION, SLOT_EVIDENCE],
+                            )
+                        )
             if row.get("canonicalActorResolved") is True and row.get("agentId"):
                 claims.append(
                     ClaimEnvelope(

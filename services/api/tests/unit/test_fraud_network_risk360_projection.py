@@ -151,6 +151,80 @@ async def test_agentic_delegation_detection_persists_and_reads_through_risk360()
     ]
 
 
+@pytest.mark.parametrize(
+    "identity_bound_at",
+    [
+        None,
+        "not-a-timestamp",
+        "2026-10-18T12:30:01+00:00",
+    ],
+    ids=["missing", "invalid", "after-detector-observation"],
+)
+@pytest.mark.asyncio
+async def test_agentic_risk_attribution_requires_identity_binding_at_or_before_detection(
+    identity_bound_at: str | None,
+) -> None:
+    reset_in_memory_stores()
+    tenant_id = "tenant-agentic-risk-temporal"
+    source_agent_ref = "source-agent-temporal"
+    observed_at = "2026-10-18T12:30:00+00:00"
+    detector_results = [
+        (
+            "agentic_delegation_abuse",
+            [source_agent_ref],
+            {"agent_id": source_agent_ref, "target_count": 5},
+        )
+    ]
+    evidence = build_evidence_refs(
+        detector_results,
+        network_id="network-agent-risk-temporal",
+        tenant_id=tenant_id,
+        observed_at=observed_at,
+    )
+
+    identity_row = {
+        "tenant_id": tenant_id,
+        "agent_id": source_agent_ref,
+        "canonical_agent_entity_id": "canonical-agent-temporal",
+        "identity_evidence_id": "binding-temporal",
+        "identity_evidence_source": "agent_deployment_identity_bindings",
+        "identity_bound_at": identity_bound_at,
+    }
+
+    class AgentIdentityReader:
+        async def actor_identity(self, requested_tenant: str, requested_agent: str):
+            assert (requested_tenant, requested_agent) == (tenant_id, source_agent_ref)
+
+            class Batch:
+                rows = [identity_row]
+                truncated = False
+                scope_mismatch = False
+
+            return Batch()
+
+    persisted = await persist_agentic_delegation_assessments(
+        tenant_id=tenant_id,
+        detector_results=detector_results,
+        evidence_refs=evidence,
+        observed_at=observed_at,
+        agent_identity_reader=AgentIdentityReader(),
+    )
+
+    assert persisted == 0
+    assert (
+        await RiskAssessmentRepository().list_by_subject(
+            tenant_id, "agent", "canonical-agent-temporal"
+        )
+        == []
+    )
+    assert (
+        await RiskSignalRepository().list_by_subject(
+            tenant_id, "agent", "canonical-agent-temporal"
+        )
+        == []
+    )
+
+
 @pytest.mark.asyncio
 async def test_unresolved_agent_reference_does_not_create_risk_subject() -> None:
     reset_in_memory_stores()

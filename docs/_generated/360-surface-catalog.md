@@ -29,7 +29,7 @@ Declared binding counts are registry coverage, not proof that a slot or surface 
 
 | Product surface | Contract status | Subject kinds | Required slots | Declared required bindings | Explicit partial required slots | Unbound required slots | Optional slots | Projection providers | Direct surface providers |
 |---|---|---|---:|---:|---:|---:|---:|---|---|
-| [Account 360](#account-360) | source_aligned | `account`, `entity`, `workspace` | 11 | 8/11 | 2 | 3 | 4 | `economic360`, `profile360`, `relationship360` | `Account360Provider` (runtime_wired) |
+| [Account 360](#account-360) | source_aligned | `account`, `entity`, `workspace` | 11 | 9/11 | 3 | 2 | 4 | `communication360`, `economic360`, `profile360`, `relationship360` | `Account360Provider` (runtime_wired) |
 | [Agent 360](#agent-360) | source_aligned | `agent`, `entity` | 11 | 11/11 | 6 | 0 | 4 | `agent360`, `communication360`, `economic360`, `execution360`, `outcome360`, `relationship360`, `risk360` | — |
 | [Campaign 360](#campaign-360) | source_aligned | `campaign` | 11 | 9/11 | 2 | 2 | 0 | `campaign360`, `communication360`, `economic360`, `outcome360` | — |
 | [Commerce 360](#commerce-360) | source_aligned | `entity`, `campaign`, `journey`, `commerce`, `product`, `offer`, `sku`, `checkout` | 11 | 6/11 | 2 | 5 | 0 | `commerce360` | — |
@@ -45,7 +45,7 @@ Declared binding counts are registry coverage, not proof that a slot or surface 
 | [Signals 360](#signals-360) | source_aligned | `entity`, `signal`, `source`, `event`, `observation`, `stream` | 10 | 6/10 | 3 | 4 | 0 | `signals360` | — |
 | [Social 360](#social-360) | source_aligned | `entity`, `profile`, `relationship`, `community`, `syndicate`, `source`, `population` | 10 | 5/10 | 2 | 5 | 5 | `geographic360`, `population360`, `relationship360`, `social360`, `source360` | — |
 | [Support 360](#support-360) | source_aligned | `support_case`, `callback`, `conversation`, `ticket`, `entity`, `agent`, `episode`, `source` | 10 | 3/10 | 2 | 7 | 6 | `agent360`, `episode360`, `outcome360`, `profile360`, `risk360`, `source360`, `support360` | — |
-| [Value 360](#value-360) | source_aligned | `value`, `profile`, `account`, `conversion`, `cluster`, `campaign`, `episode`, `journey`, `entity`, `agent`, `source` | 11 | 5/11 | 3 | 6 | 5 | `campaign360`, `economic360`, `outcome360`, `temporal360` | — |
+| [Value 360](#value-360) | source_aligned | `value`, `profile`, `account`, `conversion`, `cluster`, `campaign`, `episode`, `journey`, `entity`, `agent`, `source` | 11 | 6/11 | 4 | 5 | 5 | `campaign360`, `economic360`, `outcome360`, `temporal360` | — |
 | [Workflow 360](#workflow-360) | source_aligned | `workflow`, `automation`, `trigger`, `run`, `workflow_run` | 11 | 4/11 | 1 | 7 | 0 | `workflow360` | — |
 
 ## Account 360
@@ -64,7 +64,7 @@ Governed account-level view composed from canonical entity, relationship, econom
 | `account_relationships` | optional |  | `relationship_facts`, `graph` | `relationship360` (primary): subjects `entity`; `summary`, `interactions`, `evidence` | — | — | Relationships associated with the account. |
 | `account_summary` | required |  | `entities`, `entity_registry` | — | `Account360Provider` (runtime_wired) | — | Exact tenant organization or account identity; lifecycle coverage remains unknown. |
 | `agents` | required |  | `entity_registry`, `graph` | — | `Account360Provider` (runtime_wired) | — | Observed canonical agent members of the account; authority and delegation are evaluated in their owning subsystems. |
-| `communications` | required |  | `communication_facts` | — | — | Unbound: `account_communication_subject_binding_not_available` | Account linked communication threads with participant policy. |
+| `communications` | required |  | `communication_facts` | `communication360` (primary): subjects `entity`; `evidence`, `interactions`, `timeline` | — | Partial: `Only exact tenant-owned entity subjects are joined; account/workspace aliases and member fanout are unavailable. Communication360 preserves source timestamps but does not evaluate freshness; policy and historical consent remain frame-runtime responsibilities.` | Account communications linked to exact tenant-owned entity participants under governing frame policy, without member fanout. |
 | `contracts` | required |  | `commerce` | — | — | Unbound: `canonical_account_contract_authority_not_available` | Canonical account contract and obligation records. |
 | `economic_context` | optional |  | `economic_facts`, `ai_execution_facts` | `economic360` (primary): subjects `entity`; `summary`, `evidence`, `outcomes` | — | — | Economic facts associated with the account. |
 | `evidence_and_limitations` | optional |  | `evidence` | `profile360` (primary): subjects `entity`; `evidence`, `findings` | — | — | Evidence and coverage for account context. |
@@ -80,6 +80,7 @@ Governed account-level view composed from canonical entity, relationship, econom
 
 | Projection | Binding | Provider implementation metadata | Capability keys |
 |---|---|---|---|
+| `communication360` | `catalog_only` (primary) | `implemented` | `communication360.read`, `communication360.explore` |
 | `economic360` | `catalog_only` (primary) | `implemented` | `economic360.read`, `economic360.explore` |
 | `profile360` | `catalog_only` (primary) | `in_flight` | `profile360.read`, `profile360.explore` |
 | `relationship360` | `catalog_only` (primary) | `in_flight` | `relationship360.read`, `relationship360.explore` |
@@ -974,7 +975,7 @@ Governed view of economic facts, payment and commerce evidence, attribution, and
 |---|---|---|---|---|---|---|---|
 | `attribution_credits` | required |  | `attribution_runs`, `attribution_credits`, `canonical_conversions`, `campaign_touchpoints` | `economic360` (primary): subjects `conversion`, `profile`, `entity`, `cluster`, `campaign`, `journey`, `account`, `agent`, `episode`, `source`; `evidence` | — | Authority: `credit_records_are_not_rejoined_to_canonical_campaign_touchpoint_rows`; Partial: `credit_records_are_not_rejoined_to_canonical_campaign_touchpoint_rows` | Credited value allocated by canonical attribution authority. |
 | `campaign_and_attribution_context` | optional |  | `attribution_credits`, `campaign_facts` | `campaign360` (primary): subjects `campaign`, `episode`; `summary`, `evidence`, `outcomes` | — | — | Campaign facts and attribution credits associated with value. |
-| `confidence` | required |  | `model_governance`, `economic_facts` | — | — | Unbound: `value_confidence_authority_not_connected` | Confidence of the value/attribution estimate with model lineage. |
+| `confidence` | required |  | `attribution_runs`, `attribution_credits`, `canonical_conversions`, `model_governance` | `economic360` (primary): subjects `account`, `agent`, `campaign`, `cluster`, `conversion`, `entity`, `journey`, `profile`; `evidence` | — | Authority: `model_governance_calibration_and_validation_not_joined`; Partial: `Only exact conversion/run/credit-linked model-reported attribution confidence with model type and version is exposed; calibration and applicability to realized value remain unvalidated.` | Evidence-linked, model-reported attribution confidence only; not a calibrated estimate of realized value or ROI. |
 | `conversion_inventory` | required |  | `canonical_conversions` | `economic360` (primary): subjects `conversion`, `profile`, `entity`, `cluster`, `campaign`, `journey`, `account`, `agent`; `evidence` | — | Partial: `value_subject_wallet_cluster_and_historical_inventory_joins_not_available` | Canonical conversion ledger records linked to an exact subject reference; aggregate attribution and unsupported value or wallet-cluster joins remain unknown. |
 | `economic_facts_and_state` | optional |  | `economic_facts`, `currency_value_normalization`, `ai_execution_facts` | `economic360` (primary): subjects `campaign`, `episode`, `journey`; `summary`, `state`, `evidence` | — | — | Economic facts and value state with currency normalization provenance. |
 | `evidence_trace` | required |  | `economic_facts`, `payments`, `commerce`, `canonical_conversions` | `economic360` (primary): subjects `agent`, `campaign`, `entity`, `episode`, `journey`, `source`, `conversion`, `profile`, `account`, `cluster`; `summary`, `evidence` | — | — | Canonical economic, payment, commerce, and conversion evidence references for exact supported subjects. |

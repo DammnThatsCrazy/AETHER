@@ -383,14 +383,79 @@ async def test_value_attribution_credit_uses_exact_conversion_and_active_run_evi
     assert "attributedGrossRevenue" not in attribution["records"][0]
 
     claim = next(claim for claim in result.claims if claim.kind == "canonical_attribution_credit")
-    assert claim.domainSlotIds == ["attribution_credits", "evidence_trace"]
+    assert claim.domainSlotIds == ["attribution_credits", "evidence_trace", "confidence"]
+    assert claim.confidence == 0.91
     assert {ref.source for ref in claim.evidenceRefs} == {
         "attribution_runs",
         "attribution_credits",
         "canonical_conversions",
     }
+    assert "model-reported attribution confidence 0.910" in claim.claims[0]
+    assert "calibration and applicability to realized value are not independently validated" in claim.claims[0]
     assert "attribution-model output" in claim.claims[0]
     assert "not independently measured realized value or agent ROI" in claim.claims[0]
+
+
+@pytest.mark.parametrize(
+    ("model_confidence", "model_version", "confidence_slot_bound"),
+    [(0.84, "v2", True), (None, "v2", False), (0.84, None, False)],
+)
+def test_value_confidence_slot_requires_score_and_complete_model_lineage(
+    model_confidence: float | None,
+    model_version: str | None,
+    confidence_slot_bound: bool,
+) -> None:
+    conversion_id = "00000000-0000-4000-8000-000000000301"
+    run_id = "00000000-0000-4000-8000-000000000302"
+    credit_id = "00000000-0000-4000-8000-000000000303"
+    refs = [
+        EvidenceRef(
+            id=conversion_id,
+            type="transaction",
+            source="canonical_conversions",
+            uri=f"store://canonical_conversions/{conversion_id}",
+        ),
+        EvidenceRef(
+            id=run_id,
+            type="model_output",
+            source="attribution_runs",
+            uri=f"store://attribution_runs/{run_id}",
+        ),
+        EvidenceRef(
+            id=credit_id,
+            type="model_output",
+            source="attribution_credits",
+            uri=f"store://attribution_credits/{credit_id}",
+        ),
+    ]
+    provider = Economic360Provider(sources=FakeSource([]))
+
+    claims = provider._build_claims(
+        _request(),
+        [],
+        {},
+        [],
+        [],
+        attribution_credits={
+            "records": [
+                {
+                    "evidenceRefs": [ref.model_dump(mode="json") for ref in refs],
+                    "creditWeight": "0.5",
+                    "conversionId": conversion_id,
+                    "creditId": credit_id,
+                    "attributionRunId": run_id,
+                    "modelConfidence": model_confidence,
+                    "modelType": "last_touch",
+                    "modelVersion": model_version,
+                }
+            ]
+        },
+    )
+
+    attribution_claim = next(
+        claim for claim in claims if claim.kind == "canonical_attribution_credit"
+    )
+    assert ("confidence" in attribution_claim.domainSlotIds) is confidence_slot_bound
 
 
 async def test_value_attribution_credit_does_not_turn_missing_active_run_into_empty() -> None:
