@@ -2115,6 +2115,16 @@ stays null because lifetime completeness, outcome attribution, and freshness
 are unproved; missing net values degrade coverage and absent rows do not mean
 zero.
 
+The same 2026-10-23 projection wave binds Social360 `influence_paths` to a
+bounded `influence` section. It joins tenant-scoped directed FOLLOWS paths to
+persisted per-hop RelationshipFidelity measurements only when all vector
+evidence IDs match the exact graph edge's relationship-fact evidence; path
+completeness, freshness, actual influence, trust, and causal contagion remain
+unknown. Workflow360 `triggers` resolves allowlisted event metadata only for
+exact tenant events referenced by run-linked AgentExecutions. That stored
+reference does not prove event causation or complete trigger coverage. The
+changes add no HTTP routes and leave both projections partial.
+
 ### Support case lifecycle evidence ingress
 
 `POST /v1/support/cases/ingest` accepts one allow-listed lifecycle event under

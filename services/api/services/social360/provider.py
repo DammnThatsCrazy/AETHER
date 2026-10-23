@@ -47,6 +47,7 @@ PROJECTION_ID = "social360"
 OUTPUT_SECTIONS: tuple[str, ...] = (
     "evidence",
     "findings",
+    "influence",
     "interactions",
     "paths",
     "propagation",
@@ -60,12 +61,31 @@ _SOCIAL_PATH_DEPTH = 3
 _SOCIAL_PATH_NODE_LIMIT = 100
 _SOCIAL_PATH_EDGE_LIMIT = 500
 _SOCIAL_PATH_RESULT_LIMIT = 50
+_MAX_SOCIAL_INFLUENCE_FIDELITY_READS = _SOCIAL_PATH_RESULT_LIMIT * _SOCIAL_PATH_DEPTH
+_SOCIAL_INFLUENCE_DIMENSIONS = (
+    "interaction_frequency",
+    "interaction_depth",
+    "persistence",
+    "reciprocity",
+    "incentive_exposure",
+    "incentive_independence_support",
+    "coordination_indicator_strength",
+    "outcome_support",
+)
 _SOCIAL_PATH_AUTHORITIES = ["graph", "relationship_facts"]
 _SOCIAL_PROPAGATION_AUTHORITIES = [
     "graph",
     "relationship_facts",
     "relationship_predicate_registry",
     "influence_propagation",
+]
+_SOCIAL_INFLUENCE_AUTHORITIES = [
+    "computation",
+    "graph",
+    "influence_propagation",
+    "relationship_facts",
+    "relationship_fidelity",
+    "relationship_predicate_registry",
 ]
 _SOCIAL_SYNDICATE_AUTHORITIES = [
     "cohort_membership",
@@ -260,6 +280,132 @@ class SocialGraphPathReader(Protocol):
     """Read observed canonical graph paths without deriving trust or influence."""
 
     async def read_paths(self, tenant_id: str, start_entity_id: str) -> SocialGraphPathRead: ...
+
+
+@dataclass(frozen=True)
+class SocialRelationshipFidelityRead:
+    """One exact tenant/pair read from the persisted M7 fidelity authority."""
+
+    tenant_id: str
+    relationship_ref: str
+    state: Literal["available", "unknown", "degraded", "conflicted"]
+    vector: Optional[dict[str, Any]] = None
+    vector_evidence_refs: tuple[EvidenceRef, ...] = ()
+    run_evidence_ref: Optional[EvidenceRef] = None
+    computed_at: Optional[str] = None
+    reason: Optional[str] = None
+
+
+class SocialRelationshipFidelityReader(Protocol):
+    """Read a persisted fidelity vector for one exact directed relationship."""
+
+    async def read(
+        self, tenant_id: str, source_entity_id: str, target_entity_id: str
+    ) -> SocialRelationshipFidelityRead: ...
+
+
+class RepositorySocialRelationshipFidelityReader:
+    """Adapter over the tenant-keyed Computation Substrate fidelity reader."""
+
+    async def read(
+        self, tenant_id: str, source_entity_id: str, target_entity_id: str
+    ) -> SocialRelationshipFidelityRead:
+        relationship_ref = f"{source_entity_id}::{target_entity_id}"
+        try:
+            from identity.relationship_intelligence.reads import read_latest_fidelity
+            from shared.relationship_fidelity.vector import FidelityVector
+
+            result = await read_latest_fidelity(tenant_id, relationship_ref)
+        except Exception:  # noqa: BLE001 - canonical computation reads fail closed
+            return SocialRelationshipFidelityRead(
+                tenant_id,
+                relationship_ref,
+                "degraded",
+                reason="relationship_fidelity_authority_unavailable",
+            )
+        if result is None:
+            return SocialRelationshipFidelityRead(
+                tenant_id,
+                relationship_ref,
+                "unknown",
+                reason="relationship_fidelity_not_persisted",
+            )
+        if (
+            not isinstance(result, dict)
+            or result.get("kind") != "fidelity_vector_surface"
+            or result.get("relationship_ref") != relationship_ref
+            or result.get("status") != "completed"
+            or not isinstance(result.get("run_id"), str)
+            or not result.get("run_id")
+        ):
+            return SocialRelationshipFidelityRead(
+                tenant_id,
+                relationship_ref,
+                "conflicted",
+                reason="relationship_fidelity_run_scope_or_contract_invalid",
+            )
+
+        try:
+            vector = FidelityVector.model_validate(result.get("vector"))
+        except Exception:  # noqa: BLE001 - persisted vectors are untrusted input
+            return SocialRelationshipFidelityRead(
+                tenant_id,
+                relationship_ref,
+                "degraded",
+                reason="relationship_fidelity_vector_invalid",
+            )
+        if vector.relationship_ref != relationship_ref:
+            return SocialRelationshipFidelityRead(
+                tenant_id,
+                relationship_ref,
+                "conflicted",
+                reason="relationship_fidelity_vector_scope_mismatch",
+            )
+        computed_at = _text(vector.computed_at)
+        if (
+            vector.status != "current"
+            or vector.observation_count < 1
+            or not vector.evidence_refs
+            or _parse_graph_time(computed_at) is None
+        ):
+            return SocialRelationshipFidelityRead(
+                tenant_id,
+                relationship_ref,
+                "unknown",
+                reason="relationship_fidelity_measurement_or_evidence_unavailable",
+            )
+        refs = tuple(
+            EvidenceRef(
+                id=evidence_id,
+                type="event",
+                source="relationship_fidelity",
+            )
+            for evidence_id in vector.evidence_refs
+            if _text(evidence_id)
+        )
+        if len(refs) != len(vector.evidence_refs):
+            return SocialRelationshipFidelityRead(
+                tenant_id,
+                relationship_ref,
+                "degraded",
+                reason="relationship_fidelity_evidence_reference_invalid",
+            )
+        run_ref = EvidenceRef(
+            id=result["run_id"],
+            type="model_output",
+            source="computation_substrate",
+            observedAt=computed_at,
+            uri=f"computation://relationship-fidelity/{result['run_id']}",
+        )
+        return SocialRelationshipFidelityRead(
+            tenant_id,
+            relationship_ref,
+            "available",
+            vector=vector.model_dump(mode="json"),
+            vector_evidence_refs=refs,
+            run_evidence_ref=run_ref,
+            computed_at=computed_at,
+        )
 
 
 @dataclass(frozen=True)
@@ -709,6 +855,7 @@ class Social360Provider(IntelligenceProjectionProvider):
         source_subject_scope_reader: Optional[SourceSubjectScopeReader] = None,
         agent_subject_scope_reader: Optional[AgentSubjectScopeReader] = None,
         social_graph_path_reader: Optional[SocialGraphPathReader] = None,
+        relationship_fidelity_reader: Optional[SocialRelationshipFidelityReader] = None,
         syndicate_membership_reader: Optional[SocialSyndicateMembershipReader] = None,
     ) -> None:
         self._source = source if source is not None else RepositorySocial360Source()
@@ -732,6 +879,11 @@ class Social360Provider(IntelligenceProjectionProvider):
             social_graph_path_reader
             if social_graph_path_reader is not None
             else RepositorySocialGraphPathReader()
+        )
+        self._relationship_fidelity = (
+            relationship_fidelity_reader
+            if relationship_fidelity_reader is not None
+            else RepositorySocialRelationshipFidelityReader()
         )
         self._syndicate_memberships = (
             syndicate_membership_reader
@@ -951,6 +1103,12 @@ class Social360Provider(IntelligenceProjectionProvider):
             available=False,
             reason_codes=("social_propagation_subject_scope_unavailable",),
         )
+        influence_read = SocialGraphPathRead(
+            request.tenantId,
+            request.subject.id,
+            available=False,
+            reason_codes=("social_influence_subject_scope_unavailable",),
+        )
         temporal_filter_requested = (
             request.asOf is not None
             or context.asOf is not None
@@ -1053,6 +1211,57 @@ class Social360Provider(IntelligenceProjectionProvider):
                     request.subject.id,
                     available=False,
                     reason_codes=("social_propagation_entity_or_relationship_subject_required",),
+                )
+
+        if "influence" in include:
+            if temporal_filter_requested:
+                influence_read = SocialGraphPathRead(
+                    request.tenantId,
+                    endpoints[0] if request.subject.kind == "relationship" else request.subject.id,
+                    available=False,
+                    reason_codes=("social_influence_path_temporal_scope_unsupported",),
+                )
+            elif request.subject.kind == "entity" and "paths" in include:
+                influence_read = path_read
+            elif request.subject.kind == "entity" and "propagation" in include:
+                influence_read = propagation_read
+            elif request.subject.kind == "relationship" and "propagation" in include:
+                influence_read = propagation_read
+            elif request.subject.kind in {"entity", "relationship"}:
+                influence_start = endpoints[0]
+                influence_read = await self._read_social_paths(
+                    request.tenantId, influence_start
+                )
+                influence_read = await self._authorize_social_paths(
+                    influence_read,
+                    request.tenantId,
+                    influence_start,
+                    already_checked=consent_by_endpoint,
+                )
+                if request.subject.kind == "relationship":
+                    target_entity_id = endpoints[1]
+                    pair_paths = tuple(
+                        path
+                        for path in influence_read.paths
+                        if path.entity_ids[-1] == target_entity_id
+                    )
+                    pair_reasons = influence_read.reason_codes
+                    if not pair_paths and not pair_reasons:
+                        pair_reasons = ("no_bounded_observed_influence_paths_for_pair",)
+                    influence_read = SocialGraphPathRead(
+                        request.tenantId,
+                        influence_start,
+                        paths=pair_paths,
+                        available=influence_read.available,
+                        truncated=influence_read.truncated,
+                        reason_codes=pair_reasons,
+                    )
+            else:
+                influence_read = SocialGraphPathRead(
+                    request.tenantId,
+                    request.subject.id,
+                    available=False,
+                    reason_codes=("social_influence_entity_or_relationship_subject_required",),
                 )
 
         reads: dict[str, Social360FactRead] = {}
@@ -1470,6 +1679,14 @@ class Social360Provider(IntelligenceProjectionProvider):
         )
         if "propagation" in include:
             sections.append(propagation_section)
+        influence_section, influence_claims = await self._influence_section_and_claims(
+            request.subject,
+            request.tenantId,
+            influence_read,
+            as_of=now,
+        )
+        if "influence" in include:
+            sections.append(influence_section)
         syndicates_section, syndicates_claims = self._syndicates_section_and_claims(
             request.tenantId, request.subject, syndicate_read
         )
@@ -1480,6 +1697,8 @@ class Social360Provider(IntelligenceProjectionProvider):
         claims.extend(path_claims)
         if "propagation" in include:
             claims.extend(propagation_claims)
+        if "influence" in include:
+            claims.extend(influence_claims)
         if "syndicates" in include:
             claims.extend(syndicates_claims)
         degraded_reasons = sorted(
@@ -2020,6 +2239,358 @@ class Social360Provider(IntelligenceProjectionProvider):
             claims,
         )
 
+    async def _read_social_relationship_fidelity(
+        self, tenant_id: str, source_entity_id: str, target_entity_id: str
+    ) -> SocialRelationshipFidelityRead:
+        relationship_ref = f"{source_entity_id}::{target_entity_id}"
+        try:
+            result = await self._relationship_fidelity.read(
+                tenant_id, source_entity_id, target_entity_id
+            )
+        except Exception:  # noqa: BLE001 - canonical fidelity authority is fail-closed
+            return SocialRelationshipFidelityRead(
+                tenant_id,
+                relationship_ref,
+                "degraded",
+                reason="relationship_fidelity_authority_unavailable",
+            )
+        if not isinstance(result, SocialRelationshipFidelityRead):
+            return SocialRelationshipFidelityRead(
+                tenant_id,
+                relationship_ref,
+                "degraded",
+                reason="invalid_relationship_fidelity_source_contract",
+            )
+        if result.tenant_id != tenant_id or result.relationship_ref != relationship_ref:
+            return SocialRelationshipFidelityRead(
+                tenant_id,
+                relationship_ref,
+                "conflicted",
+                reason="relationship_fidelity_scope_mismatch",
+            )
+        return result
+
+    async def _influence_section_and_claims(
+        self,
+        subject: ProjectionSubject,
+        tenant_id: str,
+        result: SocialGraphPathRead,
+        *,
+        as_of: str,
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        """Expose exact graph paths with any source-matched M7 measurements.
+
+        An observed path is only an influence-analysis basis. A component value
+        is included only when an exact directed tenant relationship has a
+        persisted M7 vector whose every evidence id is present on that path
+        edge. Connectivity never creates trust or a contagion conclusion.
+        """
+        from shared.relationship_spine.influence_propagation import (
+            decompose_influence_propagation,
+        )
+
+        reasons = set(result.reason_codes)
+        path_items: list[dict[str, Any]] = []
+        claims: list[ClaimEnvelope] = []
+        fidelity_cache: dict[tuple[str, str], SocialRelationshipFidelityRead] = {}
+        fidelity_read_count = 0
+        saw_invalid_path = False
+
+        for path in result.paths:
+            if not _valid_social_propagation_path(
+                path, tenant_id, result.start_entity_id, as_of=as_of
+            ):
+                saw_invalid_path = True
+                continue
+
+            fidelity_by_hop: dict[int, dict[str, float]] = {}
+            fidelity_evidence_refs: list[EvidenceRef] = []
+            hop_measurements: list[dict[str, Any]] = []
+            for hop_index, edge_refs in enumerate(path.edge_evidence_refs):
+                source_entity_id = path.entity_ids[hop_index]
+                target_entity_id = path.entity_ids[hop_index + 1]
+                cache_key = (source_entity_id, target_entity_id)
+                fidelity_read = fidelity_cache.get(cache_key)
+                if fidelity_read is None:
+                    if fidelity_read_count >= _MAX_SOCIAL_INFLUENCE_FIDELITY_READS:
+                        fidelity_read = SocialRelationshipFidelityRead(
+                            tenant_id,
+                            f"{source_entity_id}::{target_entity_id}",
+                            "degraded",
+                            reason="social_influence_fidelity_read_limit_reached",
+                        )
+                    else:
+                        fidelity_read = await self._read_social_relationship_fidelity(
+                            tenant_id, source_entity_id, target_entity_id
+                        )
+                        fidelity_read_count += 1
+                    fidelity_cache[cache_key] = fidelity_read
+
+                reason_code = fidelity_read.reason
+                accepted_refs: list[EvidenceRef] = []
+                dimensions: dict[str, float] = {}
+                path_fact_ids = {
+                    ref.id
+                    for ref in edge_refs
+                    if isinstance(ref, EvidenceRef)
+                    and ref.source == "relationship_facts"
+                    and _text(ref.id)
+                }
+                vector_refs = list(fidelity_read.vector_evidence_refs)
+                refs_contract_valid = all(
+                    isinstance(ref, EvidenceRef)
+                    and ref.source == "relationship_fidelity"
+                    and ref.type == "event"
+                    and _text(ref.id)
+                    for ref in vector_refs
+                )
+                vector_evidence_ids = (
+                    {ref.id for ref in vector_refs}
+                    if refs_contract_valid
+                    else set()
+                )
+                computed_at = _parse_graph_time(fidelity_read.computed_at)
+                graph_observed_at = _parse_graph_time(path.edge_observed_at[hop_index])
+                expected_relationship_ref = f"{source_entity_id}::{target_entity_id}"
+                if fidelity_read.state != "available" or not isinstance(
+                    fidelity_read.vector, dict
+                ):
+                    pass
+                elif (
+                    fidelity_read.vector.get("relationship_ref") != expected_relationship_ref
+                    or fidelity_read.vector.get("status") != "current"
+                    or not refs_contract_valid
+                    or not isinstance(fidelity_read.run_evidence_ref, EvidenceRef)
+                    or fidelity_read.run_evidence_ref.source != "computation_substrate"
+                    or fidelity_read.run_evidence_ref.type != "model_output"
+                    or not _text(fidelity_read.run_evidence_ref.id)
+                    or fidelity_read.run_evidence_ref.observedAt != fidelity_read.computed_at
+                ):
+                    reason_code = "relationship_fidelity_evidence_contract_invalid"
+                elif (
+                    not path_fact_ids
+                    or not vector_evidence_ids
+                    or not vector_evidence_ids.issubset(path_fact_ids)
+                ):
+                    reason_code = "relationship_fidelity_evidence_not_bound_to_path_edge"
+                elif (
+                    computed_at is None
+                    or computed_at > (_parse_graph_time(as_of) or datetime.max.replace(tzinfo=timezone.utc))
+                    or (graph_observed_at is not None and computed_at < graph_observed_at)
+                ):
+                    reason_code = "relationship_fidelity_time_scope_invalid"
+                else:
+                    invalid_dimension = False
+                    for dimension in _SOCIAL_INFLUENCE_DIMENSIONS:
+                        value = fidelity_read.vector.get(dimension)
+                        if value is None:
+                            continue
+                        if (
+                            isinstance(value, bool)
+                            or not isinstance(value, (int, float))
+                            or not 0.0 <= float(value) <= 1.0
+                        ):
+                            invalid_dimension = True
+                            break
+                        dimensions[dimension] = float(value)
+                    if invalid_dimension:
+                        dimensions = {}
+                        reason_code = "relationship_fidelity_dimension_invalid"
+                    elif dimensions:
+                        fidelity_by_hop[hop_index] = dimensions
+                        accepted_refs = [
+                            ref for ref in vector_refs if ref.id in path_fact_ids
+                        ]
+                        accepted_refs.append(fidelity_read.run_evidence_ref)
+                        accepted_refs = _dedupe_refs(accepted_refs)
+                        fidelity_evidence_refs.extend(accepted_refs)
+                        reason_code = None
+                    else:
+                        reason_code = "relationship_fidelity_influence_dimensions_unavailable"
+
+                hop_measurements.append(
+                    {
+                        "hopIndex": hop_index,
+                        "sourceEntityId": source_entity_id,
+                        "targetEntityId": target_entity_id,
+                        "state": "available" if hop_index in fidelity_by_hop else "unknown",
+                        "computedAt": (
+                            fidelity_read.computed_at
+                            if hop_index in fidelity_by_hop
+                            else None
+                        ),
+                        "dimensionIds": sorted(fidelity_by_hop.get(hop_index, {})),
+                        "reasonCode": reason_code,
+                        "evidenceRefs": accepted_refs,
+                    }
+                )
+                if hop_index not in fidelity_by_hop:
+                    reasons.add(reason_code or "relationship_fidelity_measurement_unavailable")
+
+            decomposition = decompose_influence_propagation(
+                list(path.graph_edges),
+                source_ref=path.entity_ids[0],
+                target_ref=path.entity_ids[-1],
+                as_of=as_of,
+                fidelity_by_hop=fidelity_by_hop,
+            )
+            edge_times = list(path.edge_observed_at)
+            parsed_times = [_parse_graph_time(value) for value in edge_times]
+            if any(value is None for value in parsed_times):
+                time_order_state = "unknown"
+                reasons.add("social_influence_source_observation_time_missing")
+            elif parsed_times == sorted(parsed_times):
+                time_order_state = "ordered"
+            else:
+                time_order_state = "conflicted"
+                reasons.add("social_influence_source_observation_order_conflicted")
+
+            components = [
+                {
+                    "componentId": component.component_id,
+                    "state": component.state,
+                    "value": component.value,
+                    "reasonCode": component.reason_code or None,
+                    "reason": component.reason or None,
+                    "formula": component.formula,
+                    "measuredHopCount": component.measured_hops,
+                    "materialHopCount": component.material_hops,
+                    "perHopValues": [
+                        {"hopIndex": index, "value": value}
+                        for index, value in component.per_hop_values
+                    ],
+                    "limitations": component.limitations,
+                }
+                for component in decomposition.all_components
+            ]
+            evidence_refs = _dedupe_refs(
+                [
+                    *[ref for refs in path.edge_evidence_refs for ref in refs],
+                    *fidelity_evidence_refs,
+                ]
+            )
+            measured_hop_count = len(fidelity_by_hop)
+            path_items.append(
+                {
+                    "entityPath": list(path.entity_ids),
+                    "edgePredicate": "FOLLOWS",
+                    "edgeEvidenceRefs": [
+                        _dedupe_refs(list(refs)) for refs in path.edge_evidence_refs
+                    ],
+                    "sourceObservedAtByEdge": edge_times,
+                    "timeOrderState": time_order_state,
+                    "influenceAuthority": {
+                        "algorithm": decomposition.algorithm,
+                        "version": decomposition.version,
+                        "decision": decomposition.decision,
+                        "certifiedForInfluenceAnalysis": decomposition.propagation_certified,
+                        "reasonCodes": list(decomposition.reason_codes),
+                        "epistemicCeiling": decomposition.min_epistemic_ceiling,
+                        "staleness": decomposition.staleness_status,
+                    },
+                    "fidelityCoverage": {
+                        "state": (
+                            "complete"
+                            if measured_hop_count == len(path.entity_ids) - 1
+                            else "partial"
+                            if measured_hop_count
+                            else "unavailable"
+                        ),
+                        "measuredHopCount": measured_hop_count,
+                        "materialHopCount": len(path.entity_ids) - 1,
+                        "completeness": "unknown",
+                        "freshness": "unknown",
+                        "evidenceJoin": "all_vector_evidence_refs_must_match_exact_path_edge",
+                    },
+                    "hopMeasurements": hop_measurements,
+                    "components": components,
+                    "componentValuesIncluded": bool(decomposition.available_component_ids),
+                    "actualInfluenceEstablished": False,
+                    "causalContagionEstablished": False,
+                    "evidenceRefs": evidence_refs,
+                }
+            )
+            if decomposition.propagation_certified:
+                digest_basis = "\x1f".join(
+                    [*path.entity_ids, *(ref.id for ref in evidence_refs)]
+                )
+                digest = hashlib.sha256(digest_basis.encode("utf-8")).hexdigest()[:24]
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"social360.influence_path.{digest}",
+                        kind="social_influence_path_analysis",
+                        subject=subject,
+                        evidenceRefs=evidence_refs,
+                        claims=[
+                            "The tenant-scoped graph records this directed FOLLOWS path as a "
+                            f"bounded basis for governed influence analysis; exact M7 "
+                            f"relationship-fidelity measurements cover {measured_hop_count} "
+                            f"of {len(path.entity_ids) - 1} path hops. Unmeasured components "
+                            "remain unknown, and the path does not establish actual influence "
+                            "or causal contagion."
+                        ],
+                        claimState=(
+                            EpistemicStatus.DERIVED
+                            if decomposition.available_component_ids
+                            else EpistemicStatus.OBSERVED
+                        ),
+                        domainSlotIds=["influence_paths"],
+                    )
+                )
+
+        if saw_invalid_path:
+            reasons.add("canonical_social_influence_path_validation_failed")
+        if path_items:
+            # Path enumeration is bounded and M7 has no Social360 freshness SLA.
+            reasons.add("social_influence_path_completeness_or_freshness_unknown")
+            state = "degraded"
+            content: Optional[dict[str, Any]] = {
+                "influencePaths": {
+                    "state": state,
+                    "paths": path_items,
+                    "coverage": "bounded_evidence_backed_influence_analysis_paths",
+                    "completeness": "unknown",
+                    "freshness": "unknown",
+                    "influenceSemantics": {
+                        "directionSource": "directed_canonical_follows_edges",
+                        "componentMeasurementsSource": "exact_tenant_relationship_fidelity_vectors",
+                        "unmeasuredComponents": "unknown",
+                        "actualInfluenceEstablished": False,
+                        "trustInferred": False,
+                        "causalContagionEstablished": False,
+                    },
+                    "evidenceRefs": _dedupe_refs(
+                        [ref for item in path_items for ref in item["evidenceRefs"]]
+                    ),
+                }
+            }
+        else:
+            content = None
+            unsupported_scope = any(
+                code in reasons
+                for code in {
+                    "social_influence_subject_scope_unavailable",
+                    "social_influence_entity_or_relationship_subject_required",
+                    "social_influence_path_temporal_scope_unsupported",
+                }
+            )
+            unavailable = not result.available and not unsupported_scope
+            if not reasons:
+                reasons.add("no_bounded_observed_influence_paths")
+            state = "degraded" if unavailable or result.truncated or saw_invalid_path else "unknown"
+
+        return (
+            ProjectionSection(
+                id="influence",
+                state=state,
+                title="Evidence-backed influence analysis paths",
+                content=content,
+                warnings=sorted(reasons) or None,
+                canonicalAuthorityRefs=list(_SOCIAL_INFLUENCE_AUTHORITIES),
+            ),
+            claims,
+        )
+
     async def _read(self, family: str, tenant_id: str) -> Social360FactRead:
         try:
             result = await self._source.read(family, tenant_id, limit=_MAX_READ_ROWS)
@@ -2128,6 +2699,17 @@ class Social360Provider(IntelligenceProjectionProvider):
                         title="Observed propagation-eligible social paths",
                         warnings=["empty_population_has_no_path_scope"],
                         canonicalAuthorityRefs=list(_SOCIAL_PROPAGATION_AUTHORITIES),
+                    )
+                )
+                continue
+            if section_id == "influence":
+                sections.append(
+                    ProjectionSection(
+                        id="influence",
+                        state="unknown",
+                        title="Evidence-backed influence analysis paths",
+                        warnings=["empty_population_has_no_influence_path_scope"],
+                        canonicalAuthorityRefs=list(_SOCIAL_INFLUENCE_AUTHORITIES),
                     )
                 )
                 continue
@@ -2838,9 +3420,12 @@ __all__ = [
     "AgentSubjectScopeReader",
     "RepositorySocial360Source",
     "RepositoryAgentSubjectScopeReader",
+    "RepositorySocialRelationshipFidelityReader",
     "Social360FactRead",
     "Social360Provider",
     "Social360Source",
+    "SocialRelationshipFidelityRead",
+    "SocialRelationshipFidelityReader",
     "SocialSyndicateMembership",
     "SocialSyndicateMembershipRead",
     "SocialSyndicateMembershipReader",

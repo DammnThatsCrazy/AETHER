@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Optional, Protocol
+from typing import Any, Literal, Optional, Protocol
 from urllib.parse import quote
 
 from graph.operational_intelligence.models import EvidenceRef
@@ -47,10 +47,12 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
 
 _MAX_INVOCATION_FACTS = 200
 _MAX_AGENT_EXECUTIONS = 200
+_MAX_TRIGGER_EVENTS = 200
 _RUN_SUBJECT_KINDS = frozenset({"run", "workflow_run"})
 _APPROVAL_DECISION_ACTIONS = frozenset({"approve", "reject", "escalate", "revoke"})
 _SOURCE = "ai_execution_facts"
 _AGENT_EXECUTION_SOURCE = "agent_executions"
+_EVENT_SOURCE = "services/api/repositories/repos.py:events"
 
 
 @dataclass(frozen=True)
@@ -86,6 +88,18 @@ class WorkflowAgentExecutionRead:
 
 
 @dataclass(frozen=True)
+class WorkflowTriggerRead:
+    """Bounded canonical event reads for explicit execution trigger references."""
+
+    rows: tuple[dict[str, Any], ...]
+    available: bool
+    complete: bool
+    scope_mismatch: bool = False
+    reason: Optional[str] = None
+    source_read_state: Literal["available", "unavailable", "not_read"] = "not_read"
+
+
+@dataclass(frozen=True)
 class WorkflowPrincipalIdentityRead:
     """Tenant USER_ID alias resolutions for execution principals/approvers."""
 
@@ -117,6 +131,15 @@ class Workflow360Source(Protocol):
     async def run_agent_executions(
         self, *, tenant_id: str, workflow_run_id: str, limit: int
     ) -> WorkflowAgentExecutionRead: ...
+
+    async def run_trigger_events(
+        self,
+        *,
+        tenant_id: str,
+        workflow_run_id: str,
+        execution_rows: tuple[dict[str, Any], ...],
+        limit: int,
+    ) -> WorkflowTriggerRead: ...
 
     async def actor_identities(
         self, *, tenant_id: str, agent_ids: set[str], limit: int
@@ -215,6 +238,142 @@ class RepositoryWorkflow360Source:
             True,
             complete,
             reason=None if complete else "canonical_agent_execution_read_truncated",
+        )
+
+    async def run_trigger_events(
+        self,
+        *,
+        tenant_id: str,
+        workflow_run_id: str,
+        execution_rows: tuple[dict[str, Any], ...],
+        limit: int,
+    ) -> WorkflowTriggerRead:
+        """Resolve only explicit trigger event IDs from exact run-linked executions.
+
+        The persisted ``triggered_by_event_id`` field is caller-reported input.
+        Resolving it to a tenant analytics event proves that the execution row
+        references an event, not that the event caused or initiated the workflow.
+        """
+        if not tenant_id or not workflow_run_id:
+            return WorkflowTriggerRead(
+                (),
+                False,
+                False,
+                reason="exact_tenant_workflow_run_scope_required",
+                source_read_state="not_read",
+            )
+
+        execution_ids_by_event: dict[str, set[str]] = {}
+        complete = True
+        scope_mismatch = False
+        for row in execution_rows:
+            if (
+                not isinstance(row, dict)
+                or row.get("tenant_id") != tenant_id
+                or row.get("workflow_run_id") != workflow_run_id
+            ):
+                scope_mismatch = True
+                complete = False
+                continue
+            execution_id = _safe_identifier(row.get("execution_id"))
+            raw_event_id = row.get("triggered_by_event_id")
+            event_id = _safe_identifier(raw_event_id)
+            if execution_id is None:
+                complete = False
+                continue
+            if raw_event_id is None or raw_event_id == "":
+                complete = False
+                continue
+            if event_id is None:
+                complete = False
+                continue
+            execution_ids_by_event.setdefault(event_id, set()).add(execution_id)
+
+        bounded_limit = min(max(int(limit), 1), _MAX_TRIGGER_EVENTS)
+        event_ids = sorted(execution_ids_by_event)
+        queried_event_ids = event_ids[:bounded_limit]
+        if len(queried_event_ids) < len(event_ids):
+            complete = False
+        if not queried_event_ids:
+            return WorkflowTriggerRead(
+                (),
+                True,
+                False,
+                scope_mismatch=scope_mismatch,
+                reason=(
+                    "workflow_execution_trigger_reference_scope_mismatch"
+                    if scope_mismatch
+                    else "workflow_execution_trigger_reference_not_recorded"
+                ),
+                source_read_state="available",
+            )
+
+        try:
+            from dependencies.providers import get_cache
+            from repositories.repos import AnalyticsRepository
+
+            analytics = AnalyticsRepository(get_cache())
+            resolved: list[dict[str, Any]] = []
+            for event_id in queried_event_ids:
+                matches = await analytics.query_events(
+                    tenant_id,
+                    {"event_id": event_id},
+                    limit=2,
+                )
+                if not isinstance(matches, list):
+                    return WorkflowTriggerRead(
+                        (),
+                        False,
+                        False,
+                        reason="workflow_trigger_event_read_invalid",
+                        source_read_state="unavailable",
+                    )
+                exact = [
+                    row
+                    for row in matches
+                    if isinstance(row, dict)
+                    and row.get("tenant_id") == tenant_id
+                    and row.get("event_id") == event_id
+                ]
+                if len(exact) != len(matches):
+                    scope_mismatch = True
+                    complete = False
+                if len(exact) != 1:
+                    complete = False
+                    continue
+                row = exact[0]
+                resolved.append(
+                    {
+                        "tenant_id": tenant_id,
+                        "workflow_run_id": workflow_run_id,
+                        "event_id": event_id,
+                        "event_type": row.get("event_type"),
+                        "occurred_at": row.get("occurred_at"),
+                        "execution_ids": sorted(execution_ids_by_event[event_id]),
+                    }
+                )
+        except Exception:  # noqa: BLE001 - analytics source details stay private
+            return WorkflowTriggerRead(
+                (),
+                False,
+                False,
+                reason="workflow_trigger_event_source_unavailable",
+                source_read_state="unavailable",
+            )
+
+        return WorkflowTriggerRead(
+            tuple(resolved),
+            True,
+            complete and not scope_mismatch,
+            scope_mismatch=scope_mismatch,
+            reason=(
+                "workflow_trigger_event_scope_mismatch"
+                if scope_mismatch
+                else None
+                if complete
+                else "workflow_trigger_event_reference_coverage_incomplete"
+            ),
+            source_read_state="available",
         )
 
     async def actor_identities(
@@ -577,6 +736,43 @@ class Workflow360Provider:
             for row in agent_execution_rows
             if (ref := _agent_execution_evidence(row)) is not None
         ]
+        historical_trigger_scope = bool(
+            request.asOf is not None
+            or context.asOf is not None
+            or request.temporalMode in {"as_of", "compare", "relative"}
+        )
+        if historical_trigger_scope:
+            trigger_read = WorkflowTriggerRead(
+                (),
+                False,
+                False,
+                reason="workflow_trigger_historical_state_unavailable",
+                source_read_state="not_read",
+            )
+        elif subject.kind in _RUN_SUBJECT_KINDS:
+            try:
+                trigger_read = await self._source.run_trigger_events(
+                    tenant_id=tenant_id,
+                    workflow_run_id=subject.id,
+                    execution_rows=tuple(agent_execution_rows),
+                    limit=_MAX_TRIGGER_EVENTS,
+                )
+            except Exception:  # noqa: BLE001 - event source details stay private
+                trigger_read = WorkflowTriggerRead(
+                    (),
+                    False,
+                    False,
+                    reason="workflow_trigger_event_source_unavailable",
+                    source_read_state="unavailable",
+                )
+        else:
+            trigger_read = WorkflowTriggerRead(
+                (),
+                False,
+                False,
+                reason="subject_kind_not_supported_by_workflow_run_evidence",
+                source_read_state="not_read",
+            )
         if subject.kind in _RUN_SUBJECT_KINDS:
             try:
                 approval_read = await self._source.run_execution_approvals(
@@ -669,6 +865,14 @@ class Workflow360Provider:
                 else _safe_reason(agent_execution_read.reason)
             ),
         )
+        triggers_section, trigger_claims, trigger_evidence_refs = _triggers_section(
+            subject,
+            tenant_id=tenant_id,
+            execution_rows=agent_execution_rows,
+            execution_refs=agent_execution_refs,
+            read=trigger_read,
+            time_range=request.timeRange,
+        )
 
         if records and read_complete:
             run_state = "available"
@@ -722,13 +926,14 @@ class Workflow360Provider:
             )
             for record, evidence in zip(records, valid_refs)
         ]
+        claims.extend(trigger_claims)
         claims.extend(actor_claims)
         claims.extend(approval_claims)
         claims.extend(agent_step_claims)
 
         sections: list[ProjectionSection] = [
             _unknown_section("workflow_summary"),
-            _unknown_section("triggers"),
+            triggers_section,
             ProjectionSection(
                 id="runs",
                 state=run_state,
@@ -761,6 +966,8 @@ class Workflow360Provider:
                 complete=read_complete,
                 agent_execution_available=agent_execution_read.available,
                 agent_execution_complete=agent_execution_read_complete,
+                trigger_refs=trigger_evidence_refs,
+                trigger_available=trigger_read.source_read_state == "available",
                 reason=read_reason,
             ),
         ]
@@ -1538,7 +1745,7 @@ def _model_or_dict(value: Any) -> Optional[dict[str, Any]]:
 
 
 def _public_agent_execution(row: dict[str, Any]) -> dict[str, Any]:
-    """Project execution identifiers and status only, omitting payload and reasoning."""
+    """Project execution identifiers and status, omitting claims and private payloads."""
     return {
         "executionId": _safe_identifier(row.get("execution_id")),
         "agentId": _safe_identifier(row.get("agent_id")),
@@ -1548,7 +1755,6 @@ def _public_agent_execution(row: dict[str, Any]) -> dict[str, Any]:
         ),
         "startedAt": _safe_timestamp(row.get("started_at")),
         "endedAt": _safe_timestamp(row.get("ended_at")),
-        "triggeredByEventId": _safe_identifier(row.get("triggered_by_event_id")),
         "delegationId": _safe_identifier(row.get("delegation_id")),
         "sourceRecordKind": "canonical_agent_execution",
     }
@@ -1685,6 +1891,225 @@ def _agent_steps_section(
     )
 
 
+def _triggers_section(
+    subject: Any,
+    *,
+    tenant_id: str,
+    execution_rows: list[dict[str, Any]],
+    execution_refs: list[EvidenceRef],
+    read: WorkflowTriggerRead,
+    time_range: Any,
+) -> tuple[ProjectionSection, list[ClaimEnvelope], list[EvidenceRef]]:
+    """Project only tenant events referenced by exact run-linked executions.
+
+    ``triggered_by_event_id`` is caller-reported execution metadata. Exact event
+    resolution establishes a stored reference; it does not establish causal
+    workflow triggering or complete workflow trigger coverage.
+    """
+    execution_evidence = {ref.id: ref for ref in execution_refs}
+    expected_by_event: dict[str, set[str]] = {}
+    missing_execution_reference = False
+    invalid_execution_reference = False
+    for row in execution_rows:
+        execution_id = (
+            _safe_identifier(row.get("execution_id"))
+            if isinstance(row, dict) and row.get("tenant_id") == tenant_id
+            and row.get("workflow_run_id") == subject.id
+            else None
+        )
+        raw_event_id = row.get("triggered_by_event_id") if isinstance(row, dict) else None
+        if execution_id is None or execution_id not in execution_evidence:
+            invalid_execution_reference = True
+            continue
+        if raw_event_id is None or raw_event_id == "":
+            missing_execution_reference = True
+            continue
+        event_id = _safe_identifier(raw_event_id)
+        if event_id is None:
+            invalid_execution_reference = True
+            continue
+        expected_by_event.setdefault(event_id, set()).add(execution_id)
+
+    lower = _parse_timestamp(getattr(time_range, "from_", None)) if time_range else None
+    upper = _parse_timestamp(getattr(time_range, "to", None)) if time_range else None
+    lower_raw = getattr(time_range, "from_", None) if time_range else None
+    upper_raw = getattr(time_range, "to", None) if time_range else None
+    invalid_window = bool(
+        time_range is not None
+        and (
+            (lower_raw is not None and lower is None)
+            or (upper_raw is not None and upper is None)
+            or (lower is not None and upper is not None and upper < lower)
+        )
+    )
+
+    invalid_read = not isinstance(read.rows, (tuple, list))
+    invalid_record = invalid_execution_reference or invalid_read
+    seen_event_ids: set[str] = set()
+    filtered_outside_time_range = False
+    records: list[dict[str, Any]] = []
+    claims: list[ClaimEnvelope] = []
+    all_refs: list[EvidenceRef] = []
+    rows = read.rows if isinstance(read.rows, (tuple, list)) else ()
+    for raw in rows:
+        event_id = _safe_identifier(raw.get("event_id")) if isinstance(raw, dict) else None
+        execution_ids_raw = raw.get("execution_ids") if isinstance(raw, dict) else None
+        event_type = (
+            _safe_token(raw.get("event_type")) if isinstance(raw, dict) else None
+        )
+        event_at = _parse_timestamp(raw.get("occurred_at")) if isinstance(raw, dict) else None
+        if (
+            not isinstance(raw, dict)
+            or raw.get("tenant_id") != tenant_id
+            or raw.get("workflow_run_id") != subject.id
+            or event_id is None
+            or event_id not in expected_by_event
+            or event_id in seen_event_ids
+            or event_type is None
+            or not isinstance(execution_ids_raw, list)
+            or any(_safe_identifier(value) is None for value in execution_ids_raw)
+            or set(execution_ids_raw) != expected_by_event.get(event_id, set())
+        ):
+            invalid_record = True
+            continue
+        seen_event_ids.add(event_id)
+        if time_range is not None:
+            if event_at is None:
+                invalid_record = True
+                continue
+            if (lower is not None and event_at < lower) or (
+                upper is not None and event_at > upper
+            ):
+                filtered_outside_time_range = True
+                continue
+
+        event_ref = EvidenceRef(
+            id=event_id,
+            type="event",
+            source=_EVENT_SOURCE,
+            observedAt=event_at.isoformat() if event_at is not None else None,
+            uri=f"store://events/{quote(event_id, safe='')}",
+        )
+        linked_execution_ids = sorted(expected_by_event[event_id])
+        linked_execution_refs = [
+            execution_evidence[execution_id]
+            for execution_id in linked_execution_ids
+            if execution_id in execution_evidence
+        ]
+        if len(linked_execution_refs) != len(linked_execution_ids):
+            invalid_record = True
+            continue
+        evidence_refs = _dedupe_evidence_refs([event_ref, *linked_execution_refs])
+        record = {
+            "eventId": event_id,
+            "eventType": event_type,
+            "occurredAt": event_at.isoformat() if event_at is not None else None,
+            "linkedExecutionIds": linked_execution_ids,
+            "referenceKind": "agent_execution_triggered_by_event_id",
+            "causalityState": "not_established",
+            "evidenceRefs": [ref.model_dump(mode="json") for ref in evidence_refs],
+        }
+        records.append(record)
+        all_refs.extend(evidence_refs)
+        claims.append(
+            ClaimEnvelope(
+                id=f"workflow360.trigger_reference.{quote(event_id, safe='')}",
+                kind="tenant_event_referenced_by_workflow_run_execution",
+                subject=subject,
+                evidenceRefs=evidence_refs,
+                claims=[
+                    "A tenant-scoped canonical AgentExecution linked to this workflow run records a triggered_by_event_id that resolves to this tenant event; this proves the stored reference, not event causation or complete workflow trigger coverage."
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=["triggers", "evidence_trace"],
+            )
+        )
+
+    exact_source_complete = (
+        read.available
+        and read.complete
+        and not read.scope_mismatch
+        and not invalid_record
+        and not missing_execution_reference
+        and seen_event_ids == set(expected_by_event)
+    )
+    if invalid_window:
+        state = "unknown"
+        reason_code = "workflow_trigger_time_window_invalid"
+    elif records:
+        state = "degraded"
+        reason_code = (
+            _safe_reason(read.reason)
+            or "execution_event_references_do_not_establish_workflow_causation_or_complete_trigger_coverage"
+            if exact_source_complete
+            else _safe_reason(read.reason)
+            or "workflow_trigger_event_reference_coverage_incomplete"
+        )
+    elif read.source_read_state == "not_read":
+        state = "unknown"
+        reason_code = _safe_reason(read.reason) or "workflow_trigger_event_source_not_read"
+    elif not read.available:
+        state = "degraded"
+        reason_code = _safe_reason(read.reason) or "workflow_trigger_event_source_unavailable"
+    elif filtered_outside_time_range:
+        state = "unknown"
+        reason_code = "workflow_trigger_events_outside_requested_time_range"
+    elif invalid_record or read.scope_mismatch:
+        state = "degraded"
+        reason_code = _safe_reason(read.reason) or "workflow_trigger_event_scope_incomplete"
+    else:
+        state = "unknown"
+        reason_code = _safe_reason(read.reason) or (
+            "workflow_trigger_event_reference_not_available"
+        )
+
+    records.sort(key=lambda item: (item.get("occurredAt") or "", item["eventId"]))
+    all_refs = _dedupe_evidence_refs(all_refs)
+    content = {
+        "tenantId": tenant_id,
+        "subject": {"kind": subject.kind, "id": subject.id},
+        "triggers": records,
+        "triggerCoverageState": (
+            "partial_exact_execution_event_references_only" if records else "unknown"
+        ),
+        "workflowTriggerAuthorityState": "unknown",
+        "causalityState": "reference_only",
+        "sourceReadState": read.source_read_state,
+        "sourceReadCompleteForExactEventReferences": exact_source_complete,
+        "freshness": {
+            "state": "unknown",
+            "latestReturnedObservedAt": max(
+                (record["occurredAt"] for record in records if record["occurredAt"]),
+                default=None,
+            ),
+            "thresholdSeconds": None,
+            "reasonCode": "workflow_trigger_freshness_threshold_not_configured",
+        },
+        "evidenceRefs": [ref.model_dump(mode="json") for ref in all_refs],
+        "reasonCode": reason_code,
+    }
+    return (
+        ProjectionSection(
+            id="triggers",
+            state=state,
+            title="Workflow trigger event references",
+            content=content,
+            warnings=[
+                "Only exact tenant events referenced by run-linked AgentExecution records are shown; the stored reference does not prove causal triggering or complete workflow trigger coverage."
+                if records
+                else reason_code
+            ],
+            canonicalAuthorityRefs=(
+                [_AGENT_EXECUTION_SOURCE, "events"]
+                if read.source_read_state == "available"
+                else None
+            ),
+        ),
+        claims,
+        all_refs,
+    )
+
+
 def _failure_section(
     subject: Any,
     *,
@@ -1739,9 +2164,11 @@ def _evidence_trace_section(
     complete: bool,
     agent_execution_available: bool,
     agent_execution_complete: bool,
+    trigger_refs: list[EvidenceRef],
+    trigger_available: bool,
     reason: Optional[str],
 ) -> ProjectionSection:
-    all_refs = _dedupe_evidence_refs(refs + agent_execution_refs)
+    all_refs = _dedupe_evidence_refs(refs + agent_execution_refs + trigger_refs)
     state = "degraded" if all_refs else "unknown"
     reason_code = "workflow_ai_invocation_and_agent_execution_lineage_partial"
     if not all_refs:
@@ -1761,6 +2188,9 @@ def _evidence_trace_section(
             "agentExecutionRefs": [
                 ref.model_dump(mode="json") for ref in agent_execution_refs
             ],
+            "triggerEventRefs": [
+                ref.model_dump(mode="json") for ref in trigger_refs
+            ],
             "workflowEventLineageState": "unknown",
             "readCompleteForAiInvocationFeed": complete,
             "readCompleteForExactAgentExecutionLinks": agent_execution_complete,
@@ -1774,6 +2204,7 @@ def _evidence_trace_section(
         canonicalAuthorityRefs=(
             ([_SOURCE] if available else [])
             + ([_AGENT_EXECUTION_SOURCE] if agent_execution_available else [])
+            + (["events"] if trigger_available else [])
             or None
         ),
     )

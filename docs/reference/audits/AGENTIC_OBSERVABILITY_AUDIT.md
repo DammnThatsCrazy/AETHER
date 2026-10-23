@@ -11,7 +11,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ea4a7487ff45ae4d994480036ee4319ea01e35b8ab20c84eaef5629d938f116b"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:a9ed39f39cab7d3a3f6ffcd11a23ab9253a49189574f99535a3980a66523c648"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:540f85292689337edc329c9b72b7c4f99487226a5e31aab6526c878e7ea36eeb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -208,7 +208,11 @@ AgentExecutions. The writer stores workflow and invocation references only when
 a unique tenant-scoped AI invocation has `action_id` equal to the stable
 execution ID; Workflow360 rechecks tenant, run, agent, and action equality.
 Workflow definitions, complete actor and step coverage, workflow-wide approval
-authority, policy, and freshness remain unknown. Account360 adds bounded member
+authority, policy, and freshness remain unknown. Workflow360 `triggers` now
+resolves allowlisted metadata only for exact tenant analytics events named by
+run-linked AgentExecution `triggered_by_event_id` references. The output proves
+the stored reference, not event causation or complete trigger coverage; temporal
+requests suppress this current-state read. Account360 adds bounded member
 Risk360 frames from exact tenant-owned `MEMBER_OF` edges after account-slot and
 per-member policy checks, but roster completeness, temporal reads, related
 account aggregation, and freshness remain unknown. Communications360 reads

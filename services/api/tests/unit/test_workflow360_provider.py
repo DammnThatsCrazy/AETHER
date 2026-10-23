@@ -26,6 +26,7 @@ from intelligence.workflow.workflow360_provider import (  # noqa: E402
     Workflow360Provider,
     WorkflowPrincipalIdentityRead,
     WorkflowRunInvocationRead,
+    WorkflowTriggerRead,
     register_provider,
 )
 from shared.contracts_models.epistemic import EpistemicStatus  # noqa: E402
@@ -33,6 +34,7 @@ from shared.intelligence_projections.contracts import (  # noqa: E402
     ProjectionContext,
     ProjectionRequest,
     ProjectionSubject,
+    TimeRangeFilter,
 )
 from shared.intelligence_projections.registry import ProviderRegistry  # noqa: E402
 
@@ -48,6 +50,7 @@ class FakeWorkflowSource:
         agent_executions: WorkflowAgentExecutionRead | None = None,
         principal_identities: WorkflowPrincipalIdentityRead | None = None,
         approvals: WorkflowApprovalRead | None = None,
+        trigger_events: WorkflowTriggerRead | None = None,
     ) -> None:
         self.read = read
         self.identities = identities or WorkflowAgentIdentityRead((), True, True)
@@ -58,10 +61,20 @@ class FakeWorkflowSource:
             (), True, True
         )
         self.approval_read = approvals or WorkflowApprovalRead((), True, True)
+        self.trigger_read = trigger_events or WorkflowTriggerRead(
+            (),
+            True,
+            False,
+            reason="workflow_execution_trigger_reference_not_recorded",
+            source_read_state="available",
+        )
         self.calls: list[tuple[str, str, int]] = []
         self.identity_calls: list[tuple[str, set[str], int]] = []
         self.agent_execution_calls: list[tuple[str, str, int]] = []
         self.principal_identity_calls: list[tuple[str, set[str], int]] = []
+        self.trigger_event_calls: list[
+            tuple[str, str, tuple[dict[str, Any], ...], int]
+        ] = []
 
     async def run_invocations(
         self, *, tenant_id: str, workflow_run_id: str, limit: int
@@ -74,6 +87,19 @@ class FakeWorkflowSource:
     ) -> WorkflowAgentExecutionRead:
         self.agent_execution_calls.append((tenant_id, workflow_run_id, limit))
         return self.agent_execution_read
+
+    async def run_trigger_events(
+        self,
+        *,
+        tenant_id: str,
+        workflow_run_id: str,
+        execution_rows: tuple[dict[str, Any], ...],
+        limit: int,
+    ) -> WorkflowTriggerRead:
+        self.trigger_event_calls.append(
+            (tenant_id, workflow_run_id, execution_rows, limit)
+        )
+        return self.trigger_read
 
     async def actor_identities(
         self, *, tenant_id: str, agent_ids: set[str], limit: int
@@ -156,7 +182,12 @@ def _agent_execution_row(
 
 
 def _request(
-    *, subject_kind: str = "workflow_run", subject_id: str = RUN_ID
+    *,
+    subject_kind: str = "workflow_run",
+    subject_id: str = RUN_ID,
+    as_of: str | None = None,
+    temporal_mode: str | None = None,
+    time_range: TimeRangeFilter | None = None,
 ) -> ProjectionRequest:
     return ProjectionRequest(
         projectionId=PROJECTION_ID,
@@ -164,6 +195,9 @@ def _request(
         subject=ProjectionSubject(kind=subject_kind, id=subject_id),
         includeClaims=True,
         includeSections=list(OUTPUT_SECTIONS),
+        asOf=as_of,
+        temporalMode=temporal_mode,
+        timeRange=time_range,
     )
 
 
@@ -270,6 +304,181 @@ async def test_workflow360_projects_exact_run_invocation_facts_and_unknowns() ->
     }
     assert all(sections[slot_id].state == "unknown" for slot_id in unsupported)
     assert all(sections[slot_id].content["reasonCode"] for slot_id in unsupported)
+
+
+@pytest.mark.asyncio
+async def test_workflow360_projects_exact_trigger_event_references_without_claiming_causality() -> None:
+    execution = _agent_execution_row()
+    source = FakeWorkflowSource(
+        WorkflowRunInvocationRead(
+            (
+                _row(
+                    "invocation-a",
+                    agent_id="canonical-agent-a",
+                    action_id="agent-execution-a",
+                ),
+            ),
+            True,
+            True,
+        ),
+        agent_executions=WorkflowAgentExecutionRead((execution,), True, True),
+        trigger_events=WorkflowTriggerRead(
+            (
+                {
+                    "tenant_id": TENANT_A,
+                    "workflow_run_id": RUN_ID,
+                    "event_id": "event-a",
+                    "event_type": "journey_started",
+                    "occurred_at": "2026-10-18T09:59:59Z",
+                    "execution_ids": ["agent-execution-a"],
+                },
+            ),
+            True,
+            True,
+            source_read_state="available",
+        ),
+    )
+
+    result = await Workflow360Provider(source=source).project(_request(), _context())
+
+    triggers = _sections(result)["triggers"]
+    assert triggers.state == "degraded"
+    assert triggers.content["triggerCoverageState"] == (
+        "partial_exact_execution_event_references_only"
+    )
+    assert triggers.content["workflowTriggerAuthorityState"] == "unknown"
+    assert triggers.content["causalityState"] == "reference_only"
+    assert triggers.content["sourceReadCompleteForExactEventReferences"] is True
+    assert triggers.content["triggers"] == [
+        {
+            "eventId": "event-a",
+            "eventType": "journey_started",
+            "occurredAt": "2026-10-18T09:59:59+00:00",
+            "linkedExecutionIds": ["agent-execution-a"],
+            "referenceKind": "agent_execution_triggered_by_event_id",
+            "causalityState": "not_established",
+            "evidenceRefs": [
+                {
+                    "id": "event-a",
+                    "type": "event",
+                    "source": "services/api/repositories/repos.py:events",
+                    "observedAt": "2026-10-18T09:59:59+00:00",
+                    "confidence": None,
+                    "uri": "store://events/event-a",
+                },
+                {
+                    "id": "agent-execution-a",
+                    "type": "event",
+                    "source": "agent_executions",
+                    "observedAt": "2026-10-18T10:00:02+00:00",
+                    "confidence": None,
+                    "uri": "store://agent_executions/tenant-workflow-a%3Aagent-execution-a",
+                },
+            ],
+        }
+    ]
+    assert source.trigger_event_calls == [
+        (TENANT_A, RUN_ID, (execution,), 200)
+    ]
+    trigger_claim = next(
+        claim for claim in result.claims if claim.kind == "tenant_event_referenced_by_workflow_run_execution"
+    )
+    assert trigger_claim.claimState == EpistemicStatus.OBSERVED
+    assert trigger_claim.domainSlotIds == ["triggers", "evidence_trace"]
+    assert {ref.source for ref in trigger_claim.evidenceRefs} == {
+        "services/api/repositories/repos.py:events",
+        "agent_executions",
+    }
+    evidence_trace = _sections(result)["evidence_trace"].content
+    assert evidence_trace["triggerEventRefs"][0]["id"] == "event-a"
+    assert "private input" not in str(result.model_dump(mode="json"))
+
+
+@pytest.mark.asyncio
+async def test_workflow360_does_not_read_current_trigger_links_for_historical_request() -> None:
+    execution = _agent_execution_row()
+    source = FakeWorkflowSource(
+        WorkflowRunInvocationRead(
+            (_row("invocation-a", agent_id="canonical-agent-a", action_id="agent-execution-a"),),
+            True,
+            True,
+        ),
+        agent_executions=WorkflowAgentExecutionRead((execution,), True, True),
+        trigger_events=WorkflowTriggerRead(
+            (
+                {
+                    "tenant_id": TENANT_A,
+                    "workflow_run_id": RUN_ID,
+                    "event_id": "event-a",
+                    "event_type": "journey_started",
+                    "occurred_at": "2026-10-18T09:59:59Z",
+                    "execution_ids": ["agent-execution-a"],
+                },
+            ),
+            True,
+            True,
+            source_read_state="available",
+        ),
+    )
+
+    result = await Workflow360Provider(source=source).project(
+        _request(as_of="2026-10-18T10:00:00Z", temporal_mode="as_of"), _context()
+    )
+
+    triggers = _sections(result)["triggers"]
+    assert source.trigger_event_calls == []
+    assert triggers.state == "unknown"
+    assert triggers.content["sourceReadState"] == "not_read"
+    assert triggers.content["reasonCode"] == "workflow_trigger_historical_state_unavailable"
+    assert triggers.content["triggers"] == []
+    assert "journey_started" not in str(triggers.content)
+
+
+@pytest.mark.asyncio
+async def test_workflow360_bounds_trigger_events_to_requested_time_range() -> None:
+    execution = _agent_execution_row()
+    source = FakeWorkflowSource(
+        WorkflowRunInvocationRead(
+            (_row("invocation-a", agent_id="canonical-agent-a", action_id="agent-execution-a"),),
+            True,
+            True,
+        ),
+        agent_executions=WorkflowAgentExecutionRead((execution,), True, True),
+        trigger_events=WorkflowTriggerRead(
+            (
+                {
+                    "tenant_id": TENANT_A,
+                    "workflow_run_id": RUN_ID,
+                    "event_id": "event-a",
+                    "event_type": "journey_started",
+                    "occurred_at": "2026-10-18T09:59:59Z",
+                    "execution_ids": ["agent-execution-a"],
+                },
+            ),
+            True,
+            True,
+            source_read_state="available",
+        ),
+    )
+
+    result = await Workflow360Provider(source=source).project(
+        _request(
+            time_range=TimeRangeFilter(
+                from_="2026-10-18T10:00:00Z",
+                to="2026-10-18T11:00:00Z",
+            )
+        ),
+        _context(),
+    )
+
+    triggers = _sections(result)["triggers"]
+    assert triggers.state == "unknown"
+    assert triggers.content["triggers"] == []
+    assert triggers.content["sourceReadCompleteForExactEventReferences"] is True
+    assert triggers.content["reasonCode"] == (
+        "workflow_trigger_events_outside_requested_time_range"
+    )
+    assert "journey_started" not in str(triggers.content)
 
 
 @pytest.mark.asyncio
@@ -718,7 +927,6 @@ async def test_workflow360_projects_only_exact_tenant_run_linked_agent_execution
             "status": "completed",
             "startedAt": "2026-10-18T10:00:00+00:00",
             "endedAt": "2026-10-18T10:00:02+00:00",
-            "triggeredByEventId": "event-a",
             "delegationId": "delegation-a",
             "sourceRecordKind": "canonical_agent_execution",
         }
@@ -930,6 +1138,68 @@ async def test_repository_source_reads_only_exact_run_linked_agent_executions(
     assert read.available is True
     assert read.complete is True
     assert read.rows == (_agent_execution_row(),)
+
+
+@pytest.mark.asyncio
+async def test_repository_source_resolves_trigger_ids_by_exact_tenant_and_event_id(
+    monkeypatch,
+) -> None:
+    from dependencies import providers
+    from repositories import repos
+
+    calls: list[tuple[str, dict[str, str], int]] = []
+
+    class Analytics:
+        def __init__(self, cache: object) -> None:
+            assert cache == "shared-cache"
+
+        async def query_events(
+            self, tenant_id: str, filters: dict[str, str], *, limit: int
+        ) -> list[dict[str, Any]]:
+            calls.append((tenant_id, filters, limit))
+            event_id = filters["event_id"]
+            event_tenant = "tenant-other" if event_id == "event-b" else tenant_id
+            return [
+                {
+                    "tenant_id": event_tenant,
+                    "event_id": event_id,
+                    "event_type": "journey_started",
+                    "occurred_at": "2026-10-18T10:00:00Z",
+                    "properties": {"private": "must not project"},
+                }
+            ]
+
+    first = _agent_execution_row()
+    second = _agent_execution_row("agent-execution-b")
+    second["triggered_by_event_id"] = "event-b"
+    monkeypatch.setattr(providers, "get_cache", lambda: "shared-cache")
+    monkeypatch.setattr(repos, "AnalyticsRepository", Analytics)
+
+    read = await RepositoryWorkflow360Source().run_trigger_events(
+        tenant_id=TENANT_A,
+        workflow_run_id=RUN_ID,
+        execution_rows=(first, second),
+        limit=20,
+    )
+
+    assert calls == [
+        (TENANT_A, {"event_id": "event-a"}, 2),
+        (TENANT_A, {"event_id": "event-b"}, 2),
+    ]
+    assert read.available is True
+    assert read.complete is False
+    assert read.scope_mismatch is True
+    assert read.rows == (
+        {
+            "tenant_id": TENANT_A,
+            "workflow_run_id": RUN_ID,
+            "event_id": "event-a",
+            "event_type": "journey_started",
+            "occurred_at": "2026-10-18T10:00:00Z",
+            "execution_ids": ["agent-execution-a"],
+        },
+    )
+    assert "private" not in str(read.rows)
 
 
 @pytest.mark.parametrize("action", ["approve", "reject", "escalate", "revoke"])

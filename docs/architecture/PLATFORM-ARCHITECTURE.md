@@ -74,7 +74,7 @@ source_hashes:
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
   "services/api/intelligence/risk360/provider.py": "sha256:eba14f9c045f33546133544c86ba27f074b7970ee47a332a58a0da25c3a9732d"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:1e7dd60cc1a3ea528d9738885f04d7c6712e200622d11c3db518f91e43ceb2d3"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:ae6270805d51dccdca157dfe64320fb2c999b361d153628550bf48e202e8a206"
   "services/api/journeys/communication360/provider.py": "sha256:916e154d60723d687221bc2e0183d5aee672ed9b62db755c5d4cc7c939dd0fe6"
   "services/api/main.py": "sha256:fa7455e5dd5a1e6b6b2ac25cc3ce6fc8a09d8bcf5b242b500feb0b797ab2d7b7"
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
@@ -801,6 +801,18 @@ not prove causality. Value360's `ltv` slot exposes evidenced confirmed or
 adjusted conversion net-value observations by native currency for exact
 supported subjects and occurred-at scope. It does not emit an LTV amount while
 lifecycle completeness, outcome attribution, and freshness remain unknown.
+
+The 2026-10-23 projection slice adds partial Social360 `influence_paths`: the
+provider exposes bounded consent-authorized directed FOLLOWS paths and accepts
+per-hop RelationshipFidelity components only when every vector evidence ID
+matches the exact graph edge's relationship-fact evidence. Completeness,
+freshness, actual influence, trust, and causal contagion remain unknown; the
+`social_contagion`, `trust_edges`, and `risk_edges` slots remain unbound.
+Workflow360 `triggers` now resolves only exact tenant events referenced by
+run-linked AgentExecution `triggered_by_event_id` values. The stored reference
+does not prove that an event caused the workflow run or establish complete
+trigger coverage. Both are partial projection paths; the 18-surface contract
+remains incomplete.
 
 Exploration surfaces compose over the engine through projection-backed surface adapters
 

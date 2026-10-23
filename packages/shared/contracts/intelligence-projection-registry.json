@@ -475,12 +475,14 @@
       "canonicalAuthorities": [
         "agent_entities",
         "cohort_membership",
+        "computation",
         "evidence",
         "graph",
         "identity",
         "influence_propagation",
         "population_definitions",
         "relationship_facts",
+        "relationship_fidelity",
         "relationship_predicate_registry",
         "social_observations",
         "source_facts"
@@ -511,6 +513,7 @@
         "interactions",
         "findings",
         "paths",
+        "influence",
         "propagation",
         "syndicates"
       ],
@@ -7447,13 +7450,29 @@
         {
           "id": "influence_paths",
           "requirement": "required",
-          "description": "Evidence backed influence paths and direction.",
+          "description": "Bounded evidence-backed directed FOLLOWS paths enriched with exact per-hop persisted RelationshipFidelity measurements when their evidence fully matches the graph relationship facts. Paths do not establish actual influence, trust, or causal contagion.",
+          "partialImplementationReason": "bounded_paths_and_exact_m7_evidence_join_only_component_measurements_may_be_partial_completeness_freshness_and_causality_unknown",
           "canonicalAuthorityRefs": [
+            "computation",
+            "graph",
+            "influence_propagation",
             "relationship_facts",
-            "social_observations"
+            "relationship_fidelity",
+            "relationship_predicate_registry"
           ],
-          "projectionBindings": [],
-          "unboundReason": "canonical_influence_path_derivation_unavailable"
+          "projectionBindings": [
+            {
+              "projectionId": "social360",
+              "role": "primary",
+              "sectionIds": [
+                "influence"
+              ],
+              "subjectKinds": [
+                "entity",
+                "relationship"
+              ]
+            }
+          ]
         },
         {
           "id": "propagation",
@@ -7717,6 +7736,7 @@
       "sourceOfTruth": {
         "canonicalAuthorities": [
           "cohort_membership",
+          "computation",
           "evidence",
           "geo_observations",
           "graph",
@@ -7725,6 +7745,7 @@
           "locations",
           "population_definitions",
           "relationship_facts",
+          "relationship_fidelity",
           "relationship_predicate_registry",
           "risk_outputs",
           "social_observations",

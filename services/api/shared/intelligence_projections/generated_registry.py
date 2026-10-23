@@ -1293,12 +1293,12 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/architecture/blueprints/social360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("agent", "entity", "population", "relationship", "source"),
-        "canonicalAuthorities": ("agent_entities", "cohort_membership", "evidence", "graph", "identity", "influence_propagation", "population_definitions", "relationship_facts", "relationship_predicate_registry", "social_observations", "source_facts"),
+        "canonicalAuthorities": ("agent_entities", "cohort_membership", "computation", "evidence", "graph", "identity", "influence_propagation", "population_definitions", "relationship_facts", "relationship_fidelity", "relationship_predicate_registry", "social_observations", "source_facts"),
         "hardDependencies": ("relationship_fidelity", "temporal_kernel", "upr"),
         "projectionDependencies": ("profile360", "relationship360"),
         "optionalProjectionDependencies": [],
         "inputRefs": ("EntityRef", "EvidenceRef", "GraphSnapshotRef", "PageRequest", "RelationshipRef", "TimeRangeFilter"),
-        "outputSections": ("evidence", "findings", "interactions", "paths", "propagation", "state", "summary", "syndicates", "timeline"),
+        "outputSections": ("evidence", "findings", "influence", "interactions", "paths", "propagation", "state", "summary", "syndicates", "timeline"),
         "supportedTemporalModes": ("as_of", "relative", "window"),
         "surfaceIds": ("profile360", "social360"),
         "capabilityKeys": ("social360.explore", "social360.read"),
@@ -5280,12 +5280,19 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 ]
             },
             {
-                "canonicalAuthorityRefs": ("relationship_facts", "social_observations"),
-                "description": "Evidence backed influence paths and direction.",
+                "canonicalAuthorityRefs": ("computation", "graph", "influence_propagation", "relationship_facts", "relationship_fidelity", "relationship_predicate_registry"),
+                "description": "Bounded evidence-backed directed FOLLOWS paths enriched with exact per-hop persisted RelationshipFidelity measurements when their evidence fully matches the graph relationship facts. Paths do not establish actual influence, trust, or causal contagion.",
                 "id": "influence_paths",
-                "projectionBindings": [],
-                "requirement": "required",
-                "unboundReason": "canonical_influence_path_derivation_unavailable"
+                "partialImplementationReason": "bounded_paths_and_exact_m7_evidence_join_only_component_measurements_may_be_partial_completeness_freshness_and_causality_unknown",
+                "projectionBindings": [
+                    {
+                        "projectionId": "social360",
+                        "role": "primary",
+                        "subjectKinds": ("entity", "relationship"),
+                        "sectionIds": ("influence",)
+                    }
+                ],
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("graph", "relationship_facts"),
@@ -5468,7 +5475,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("cohort_membership", "evidence", "geo_observations", "graph", "identity", "influence_propagation", "locations", "population_definitions", "relationship_facts", "relationship_predicate_registry", "risk_outputs", "social_observations", "source_coverage", "source_facts"),
+            "canonicalAuthorities": ("cohort_membership", "computation", "evidence", "geo_observations", "graph", "identity", "influence_propagation", "locations", "population_definitions", "relationship_facts", "relationship_fidelity", "relationship_predicate_registry", "risk_outputs", "social_observations", "source_coverage", "source_facts"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },

@@ -35,7 +35,7 @@ source_hashes:
   "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
   "services/api/alembic/versions/20261022_risk_poisoning_evidence.py": "sha256:d158801954e2c76f088f9a367cabc4e507f1d4b2e456e989b6e95c04a9db6237"
   "services/api/intelligence/risk360/store.py": "sha256:447475ba55bc70319c134fcd9f8886d37d9913c27d7a7ae406c721159618b2db"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:1e7dd60cc1a3ea528d9738885f04d7c6712e200622d11c3db518f91e43ceb2d3"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:ae6270805d51dccdca157dfe64320fb2c999b361d153628550bf48e202e8a206"
   "services/api/repositories/commerce_repos.py": "sha256:4402087f991786d8c2e67663f215fc3793694e2f0956bfba6fbe197386c7e518"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
   "services/api/repositories/repos.py": "sha256:1784df01b61c04f087c80397c3eab3b7167aef930bf199b7a82da4bfdc18dbf4"
@@ -185,7 +185,11 @@ when canonical tenant-scoped invocation facts with the same agent and an exact
 `action_id` equal to the stable execution ID resolve to one unambiguous run.
 Workflow360 revalidates the tenant, run, agent, action, and invocation IDs
 before exposing an execution as a workflow step; absent or ambiguous links stay
-unknown. These fields use the existing JSONB record and require no migration.
+unknown. It also resolves a stored `triggered_by_event_id` only when the exact
+tenant-scoped analytics event exists. This exposes the recorded reference with
+event and execution evidence; it does not establish event-to-run causality or
+complete trigger coverage. These fields use the existing JSONB record and
+require no migration.
 
 ### Analytics event store
 
