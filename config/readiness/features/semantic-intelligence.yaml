@@ -68,10 +68,16 @@ implementation:
     rationale: The HTTP surface is proven with the real TenantContext. The authenticated tenant always wins over a
       supplied header (and an unauthenticated request is refused outside local development), a credential needs the
       right permission, a tenant that is not serving is refused, tenant B cannot read or control tenant A by id or
-      through any listing, overlay or rollup, and a genuine Kyber operator is admitted while customers are not. Store,
-      projector and privacy paths are tenant-isolated and fail closed.
+      through any listing, overlay or rollup, and customers are refused the operator surface. An operator holding the
+      configured legacy operator grant is admitted; admission of a Kyber workforce session on these routes is NOT
+      claimed here, because the workforce access context is resolved only by routes that declare a Kyber access
+      dependency and these routes do not (the same platform-wide gap as the other routes guarded only by the operator
+      gate). The route policy now classifies by method, so the declared capability, disclosure and action class of the
+      review-queue resolve route are enforced at the boundary. Store, projector and privacy paths are tenant-isolated
+      and fail closed.
     evidence:
     - services/api/tests/semantic_intelligence/test_semantic_routes_authz.py
+    - tests/security/test_kyber_gate_migration.py
     - services/api/tests/semantic_intelligence/test_semantic_durable_store.py
     - services/api/tests/semantic_intelligence/test_semantic_graph_projector.py
     - services/api/tests/semantic_intelligence/test_semantic_privacy.py
@@ -98,8 +104,9 @@ productionization:
     description: reliability idempotency retry
     weight: 25
     satisfied: true
-    rationale: A redelivered or concurrently redelivered event yields one observation (and the same event id in two
-      tenants stays independent); replay, recompute and graph projection are idempotent; a replay interrupted mid-run
+    rationale: A redelivered or concurrently redelivered event yields one observation and, when subject resolution
+      routes it to review, one review-queue item (the item id is derived from tenant, queue, subject and source
+      event, so the enqueue is idempotent); the same event id in two tenants stays independent; replay, recompute and graph projection are idempotent; a replay interrupted mid-run
       resumes from its cursor on retry; event-emission and shadow-mode failures never break the write path; provider
       and erasure/revocation failures fail closed.
     evidence:
@@ -115,11 +122,13 @@ productionization:
     weight: 25
     satisfied: true
     rationale: Classifier quality is gated by a golden-pinned evaluation (accuracy, per-stance recall and abstention
-      floors), table and policy coverage is gated by the storage-policy release gate, and the semantic suites run in
-      the backend test suites.
+      floors), table and policy coverage is gated by the storage-policy release gate, and the semantic tests (including
+      the classifier evaluation) run in the registered backend-semantic suite, which the verification router selects
+      for any change under the semantic service or its tests.
     evidence:
     - services/api/tests/evaluation/test_semantic_classifier_eval.py
     - scripts/release/check_storage_policies.py
+    - config/test_suites.yaml
     - services/api/tests/semantic_intelligence/
   remaining_work: []
 activation:

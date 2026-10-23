@@ -154,10 +154,12 @@ domains:
     paths: [services/api/**, services/agents/**, services/compliance/**, docs/archive/legacy-architecture/backend/**, tests/**]
     # Component suites are the ordinary-PR authority. The aggregate backend
     # suite remains registered for regression/release lanes only.
-    checks: [backend-identity, backend-ingestion, backend-campaigns, backend-profile360, backend-agent, backend-computation, backend-value, agent-layer, compliance, journey-service, backend-observability, root-unit-control, root-unit-identity-profile, root-unit-ingestion, root-unit-graph, root-unit-frontend-sdk, root-unit-commerce-value, root-unit-security, root-unit-operations, root-unit-platform]
+    checks: [backend-identity, backend-semantic, backend-ingestion, backend-campaigns, backend-profile360, backend-agent, backend-computation, backend-value, agent-layer, compliance, journey-service, backend-observability, root-unit-control, root-unit-identity-profile, root-unit-ingestion, root-unit-graph, root-unit-frontend-sdk, root-unit-commerce-value, root-unit-security, root-unit-operations, root-unit-platform]
     path_checks:
       services/api/identity/identity/**: [backend-identity]
       services/api/ingestion/ingestion/**: [backend-ingestion]
+      services/api/intelligence/semantic_intelligence/**: [backend-semantic]
+      services/api/tests/semantic_intelligence/**: [backend-semantic]
       services/api/journeys/campaign/**: [backend-campaigns]
       services/api/identity/profile/**: [backend-profile360]
       services/api/workers/profile360_workers/**: [backend-profile360]

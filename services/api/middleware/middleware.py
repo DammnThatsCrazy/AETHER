@@ -1191,7 +1191,7 @@ def _evaluate_route_policy(
         from governance.security.route_registry import classify
         from shared.common.common import ForbiddenError
 
-        pol = classify(path)
+        pol = classify(path, getattr(request, "method", None))
         if pol is None:
             if rr.route_registry_enforced:
                 return ForbiddenError("ROUTE_POLICY_UNCLASSIFIED")

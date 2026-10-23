@@ -302,6 +302,43 @@ suites:
     evidence_artifact: "ci-evidence/suites/backend-identity.json"
     quarantine: null
 
+  - id: backend-semantic
+    suite_role: component
+    subsystem: backend
+    owner: intelligence
+    components: [backend-semantic]
+    contracts: [semantic-intelligence]
+    dependencies: []
+    dependency_profile: python-backend
+    runtime_class: medium
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 60
+    hard_runtime_budget_seconds: 240
+    paths:
+      [
+        "services/api/intelligence/semantic_intelligence",
+        "services/api/tests/semantic_intelligence",
+        "services/api/tests/evaluation/test_semantic_classifier_eval.py",
+      ]
+    runner:
+      [
+        "python",
+        "-m",
+        "pytest",
+        "services/api/tests/semantic_intelligence",
+        "services/api/tests/evaluation/test_semantic_classifier_eval.py",
+        "-v",
+        "--tb=short",
+      ]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/backend-semantic.json"
+    quarantine: null
+
   - id: backend-ingestion
     suite_role: component
     subsystem: backend
