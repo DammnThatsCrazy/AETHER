@@ -1262,6 +1262,241 @@ async def test_campaign_commerce_payment_claim_routes_to_value360_slot_with_evid
     assert payment_slot.freshness.state == "unknown"
 
 
+async def test_value_reconciliation_exposes_separate_exact_source_observations(
+    monkeypatch,
+) -> None:
+    from value.economic import journey_operation_evidence
+
+    async def exact_journey_evidence(tenant_id: str, journey_id: str, *, as_of=None):
+        assert (tenant_id, journey_id) == ("tenant-a", "journey-reconcile")
+        return {
+            "journey_id": journey_id,
+            "join_basis": "explicit_journey_step_commerce_order_ref",
+            "completeness": "bounded_read",
+            "operation_links": [],
+            "payment_facts": [
+                {
+                    "factId": "commerce:order-hash:payment:stripe:payment-row:eur",
+                    "kind": "payment",
+                    "commerceOrderRef": "commerce-order-17",
+                    "joinBasis": "explicit_journey_step_commerce_order_ref",
+                    "provider": "stripe",
+                    "sourceRecordId": "provider-payment-22",
+                    "evidenceRecordId": "provider-payment-22",
+                    "amount": "12.50",
+                    "currency": "EUR",
+                    "amountUsd": None,
+                    "normalizationState": "not_normalized",
+                    "lifecycleState": "settled",
+                    "reconciliationState": "matched",
+                    "evidence": [
+                        {
+                            "id": "provider-payment-22",
+                            "type": "transaction",
+                            "source": "stripe",
+                        }
+                    ],
+                },
+                {
+                    "factId": "commerce:order-hash:settlement:stripe:settlement-row:usd",
+                    "kind": "settlement",
+                    "commerceOrderRef": "commerce-order-17",
+                    "joinBasis": "explicit_journey_step_commerce_order_ref",
+                    "provider": "stripe",
+                    "sourceRecordId": "provider-settlement-22",
+                    "evidenceRecordId": "provider-settlement-22",
+                    "amount": "12.50",
+                    "currency": "USD",
+                    "amountUsd": "12.50",
+                    "normalizationState": "native_currency_usd",
+                    "lifecycleState": "settled",
+                    "reconciliationState": "matched",
+                    "settlesPaymentRefs": [
+                        {
+                            "provider": "stripe",
+                            "providerPaymentId": "provider-payment-22",
+                        }
+                    ],
+                    "evidence": [
+                        {
+                            "id": "provider-settlement-22",
+                            "type": "transaction",
+                            "source": "stripe",
+                        }
+                    ],
+                },
+            ],
+            "amounts_included": True,
+            "facts_are_aggregated": False,
+            "evidence_truncated": False,
+        }
+
+    monkeypatch.setattr(
+        journey_operation_evidence,
+        "journey_commerce_operation_evidence",
+        exact_journey_evidence,
+    )
+    provider = Economic360Provider(
+        sources=FakeSource(
+            [
+                _record(
+                    "tenant-a",
+                    "10.00",
+                    "EUR",
+                    usd="11.00",
+                    metric="gross_value",
+                    ident="economic-value-row-19",
+                )
+            ]
+        )
+    )
+
+    async def no_conversion_inventory(request):
+        return {}
+
+    async def no_attribution_credits(request, conversion_inventory):
+        return {}
+
+    monkeypatch.setattr(provider, "_safe_conversion_inventory", no_conversion_inventory)
+    monkeypatch.setattr(provider, "_safe_attribution_credits", no_attribution_credits)
+    subject = ProjectionSubject(kind="journey", id="journey-reconcile")
+    result = await provider.project(
+        _request(subject=subject), await _make_context(ProviderRegistry())
+    )
+
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    reconciliation = evidence.content["value_reconciliation"]
+    assert reconciliation["state"] == "partial"
+    assert reconciliation["joinBasis"] == "explicit_journey_step_commerce_order_ref"
+    assert [fact["kind"] for fact in reconciliation["commerceFacts"]] == [
+        "payment",
+        "settlement",
+    ]
+    eur_payment, usd_settlement = reconciliation["commerceFacts"]
+    assert eur_payment["commerceOrderRef"] == "commerce-order-17"
+    assert eur_payment["amountUsd"] is None
+    assert eur_payment["normalizationState"] == "not_normalized"
+    assert usd_settlement["amountUsd"] == "12.50"
+    assert usd_settlement["normalizationState"] == "native_currency_usd"
+    assert reconciliation["settlementPaymentLinks"] == [
+        {
+            "settlementFactId": usd_settlement["factId"],
+            "paymentFactId": eur_payment["factId"],
+            "commerceOrderRef": "commerce-order-17",
+            "provider": "stripe",
+            "providerPaymentId": "provider-payment-22",
+            "providerSettlementId": "provider-settlement-22",
+            "state": "source_reference_resolved",
+            "basis": "exact_provider_payment_id_and_same_commerce_order_ref",
+            "evidenceRefs": eur_payment["evidenceRefs"] + usd_settlement["evidenceRefs"],
+        }
+    ]
+    assert reconciliation["economicRecords"][0]["evidenceRef"]["id"] == (
+        "economic-value-row-19"
+    )
+    assert reconciliation["economicRecords"][0]["amountUsd"] == "11.00"
+    assert reconciliation["crossSourceMatch"] == {
+        "state": "unavailable",
+        "reason": "economic_records_do_not_retain_exact_commerce_order_payment_or_settlement_ids",
+    }
+    assert "subject_economic_and_commerce_amounts_are_not_compared_or_aggregated" in (
+        reconciliation["limitations"]
+    )
+    assert "settlement_payment_references_do_not_establish_amount_equality_or_finality" in (
+        reconciliation["limitations"]
+    )
+    assert all(
+        "amount" not in link and "amountUsd" not in link and "lifecycleState" not in link
+        for link in reconciliation["settlementPaymentLinks"]
+    )
+
+    reconciliation_claims = [
+        claim for claim in result.claims if "reconciliation" in (claim.domainSlotIds or [])
+    ]
+    assert {claim.kind for claim in reconciliation_claims} == {
+        "commerce_value_reconciliation_observation",
+        "canonical_settlement_payment_reference",
+        "economic_currency_normalization_observation",
+    }
+    assert len(reconciliation_claims) == 4
+    assert all(
+        {ref.id for ref in claim.evidenceRefs}
+        for claim in reconciliation_claims
+    )
+    assert all(
+        "does not match it to a separate economic record" in claim.claims[0]
+        for claim in reconciliation_claims
+        if claim.kind == "commerce_value_reconciliation_observation"
+    )
+    assert all(
+        "not reconciled to the commerce observations" in claim.claims[0]
+        for claim in reconciliation_claims
+        if claim.kind == "economic_currency_normalization_observation"
+    )
+
+
+async def test_value_reconciliation_rejects_commerce_facts_from_wrong_subject(
+    monkeypatch,
+) -> None:
+    from value.economic import journey_operation_evidence
+
+    async def wrong_journey_evidence(tenant_id: str, journey_id: str, *, as_of=None):
+        assert (tenant_id, journey_id) == ("tenant-a", "journey-reconcile")
+        return {
+            "journey_id": "another-journey",
+            "join_basis": "explicit_journey_step_commerce_order_ref",
+            "payment_facts": [
+                {
+                    "factId": "commerce:wrong-subject:payment:stripe:payment-row",
+                    "kind": "payment",
+                    "commerceOrderRef": "commerce-order-other",
+                    "joinBasis": "explicit_journey_step_commerce_order_ref",
+                    "provider": "stripe",
+                    "sourceRecordId": "provider-payment-other",
+                    "amount": "999.00",
+                    "currency": "USD",
+                    "normalizationState": "native_currency_usd",
+                    "amountUsd": "999.00",
+                    "evidence": [
+                        {
+                            "id": "wrong-subject-payment",
+                            "type": "transaction",
+                            "source": "stripe",
+                        }
+                    ],
+                }
+            ],
+        }
+
+    monkeypatch.setattr(
+        journey_operation_evidence,
+        "journey_commerce_operation_evidence",
+        wrong_journey_evidence,
+    )
+    provider = Economic360Provider(sources=FakeSource([]))
+
+    async def no_conversion_inventory(request):
+        return {}
+
+    async def no_attribution_credits(request, conversion_inventory):
+        return {}
+
+    monkeypatch.setattr(provider, "_safe_conversion_inventory", no_conversion_inventory)
+    monkeypatch.setattr(provider, "_safe_attribution_credits", no_attribution_credits)
+    result = await provider.project(
+        _request(subject=ProjectionSubject(kind="journey", id="journey-reconcile")),
+        await _make_context(ProviderRegistry()),
+    )
+
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    reconciliation = evidence.content["value_reconciliation"]
+    assert reconciliation["commerceFacts"] == []
+    assert not any(
+        claim.kind == "commerce_value_reconciliation_observation"
+        for claim in result.claims
+    )
+
+
 async def test_entity_value_slot_is_profile_verified_and_direct_scope_only() -> None:
     class CanonicalProfile:
         async def is_canonical_profile(self, tenant_id: str, entity_id: str):

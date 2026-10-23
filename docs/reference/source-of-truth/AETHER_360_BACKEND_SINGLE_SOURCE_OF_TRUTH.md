@@ -9,7 +9,7 @@ This document replaces the prior broad 360 architecture blueprint as the impleme
 
 ## Repository implementation status (2026-10-23)
 
-This specification remains the acceptance contract for the complete 18-surface backend buildout. The repository currently has partial provider paths for eight required slots, with the remaining limits recorded explicitly:
+This specification remains the acceptance contract for the complete 18-surface backend buildout. The repository currently has partial provider paths for eleven required slots, with the remaining limits recorded explicitly:
 
 - **Episode360 `timeline`:** resolves only observation IDs explicitly recorded by an episode through tenant-scoped semantic Silver rows. Untyped source namespaces, complete activity/session coverage, policy, and freshness remain unresolved.
 - **Campaign360 `signal_sources`:** joins exact campaign touchpoint event references to tenant-scoped canonical events. Broader observation and source-fact authorities, complete event coverage, and freshness remain unresolved.
@@ -19,6 +19,9 @@ This specification remains the acceptance contract for the complete 18-surface b
 - **Agent360 `owner_delegator`:** resolves a configured `owner_entity_id` only through the bounded, exact tenant-scoped entity lookup and preserves configuration plus entity evidence. The configuration reference does not establish legal or effective ownership, historical validity, freshness, or action authorization.
 - **Execution360 `approval_chain`:** joins exact tenant-scoped x402 approval requests and decisions to admitted execution IDs and lifecycle approval references, rejecting recorded action/resource conflicts. Other approval authorities, effective authorization, historical replay, and a freshness threshold remain unknown.
 - **Support360 `resolution`:** exposes resolved or closed lifecycle state only when the applied case event timestamp matches the canonical case state and exact provider-event and connection evidence are present. Business outcome facts, history completeness, and freshness remain unresolved.
+- **Communications360 `policy_state`:** evaluates current server consent only for exact tenant, recipient-entity, and purpose pairs backed by communication identity and evidence. Historical write-time outcomes are kept separate and current consent is not evaluated for as-of frames; non-consent policy, durable current-decision evidence, complete recipient coverage, and freshness remain unknown.
+- **Risk360 `propagation_paths`:** exposes bounded current tenant-scoped FOLLOWS paths only after analytics-consent, endpoint, graph-edge, relationship-evidence, and observed-time checks. The result is observed path context, not causal risk propagation; historical path reads, full coverage, and freshness remain unknown. `social_contagion` remains unbound because no causal detector/evidence authority is connected.
+- **Value360 `reconciliation`:** exposes separate subject-scoped economic records and exact order-linked commerce facts, with settlement-to-payment references resolved only by explicit provider payment ID and the same commerce order. It accepts only native USD identity normalization, does not match economic records to commerce without exact shared identifiers, and does not compute reconciled totals or assert amount equality or settlement finality.
 
 Episode360 `agent_handoffs` remains unknown because episode records and observations do not reference a canonical execution or handoff ID; event labels and agent metadata do not establish that join. The product registry records partial slots and this unjoined authority gap. None of these changes marks its surface complete or reduces the remaining requirements in this specification.
 

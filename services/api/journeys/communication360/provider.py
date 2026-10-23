@@ -130,6 +130,7 @@ _DEFAULT_READ_LIMIT = 100
 _MAX_READ_LIMIT = 500
 _MAX_JOURNEY_LINK_READS = 50
 _MAX_RISK_SIGNAL_READS = 100
+_MAX_CONSENT_POLICY_READS = 100
 
 # Section-level limitation note for subjects without a message-spine join.
 _SCOPE_NOTES: dict[str, str] = {
@@ -356,6 +357,39 @@ class RiskSignalReader(Protocol):
     ) -> list[dict[str, Any]]:
         """Read signals for one exact tenant and typed Risk360 subject."""
         ...
+
+
+class ConsentPolicyReader(Protocol):
+    async def evaluate(
+        self, tenant_id: str, subject_id: str, purpose: str
+    ) -> Any:
+        """Evaluate current server consent for one exact tenant/subject/purpose."""
+        ...
+
+
+class RepositoryConsentPolicyReader:
+    """Read current consent from the canonical server consent authority."""
+
+    async def evaluate(self, tenant_id: str, subject_id: str, purpose: str) -> Any:
+        # Keep governance imports lazy so importing the projection stays
+        # database-free. The authority performs the exact tenant, subject and
+        # purpose lookup and fails closed when a receipt is absent or invalid.
+        from governance.consent.authority import evaluate_consent_with_receipt
+
+        return await evaluate_consent_with_receipt(
+            tenant_id=tenant_id,
+            subject_id=subject_id,
+            anonymous_id=None,
+            purpose=purpose,
+        )
+
+
+@dataclass(frozen=True)
+class ConsentPolicyRead:
+    """Bounded current-consent evaluation over exact communication recipients."""
+
+    state: str
+    content: dict[str, Any]
 
 
 class RepositoryRiskSignalReader:
@@ -784,6 +818,7 @@ def _communication_required_slot_coverage(
     canonical_truncated: bool,
     journey_links: JourneyLinkRead,
     risk_flags: RiskFlagRead,
+    policy_state: ConsentPolicyRead,
 ) -> dict[str, dict[str, Any]]:
     """Expose all SSOT slots without promoting IDs, transport, or policy inputs to truth."""
     message_refs = _dedupe_refs(
@@ -904,16 +939,6 @@ def _communication_required_slot_coverage(
             if isinstance(ref, EvidenceRef)
         ]
         author_refs = _dedupe_refs([*author_refs, *agent_message_refs])
-
-    consent_refs = _dedupe_refs(
-        [
-            ref
-            for message in messages
-            if message.consent_evidence.state == "recorded"
-            for ref in message.consent_evidence.evidence_refs
-            if isinstance(ref, EvidenceRef)
-        ]
-    )
 
     if conversation_refs:
         thread_slot = slot(
@@ -1043,12 +1068,7 @@ def _communication_required_slot_coverage(
         "journey_links": journey_slot,
         "response_events": response_slot,
         "agent_authorship": author_slot,
-        "policy_state": slot(
-            "unknown",
-            "unknown",
-            "consent_receipts_are_lineage_inputs_not_a_policy_decision",
-            consent_refs,
-        ),
+        "policy_state": policy_state.content,
         "risk_flags": slot(
             risk_flags.state,
             "complete" if risk_flags.state == "available" else (
@@ -1059,6 +1079,108 @@ def _communication_required_slot_coverage(
         ),
         "evidence_trace": evidence_slot,
     }
+
+
+def _exact_consent_policy_inputs(
+    messages: list[CommunicationMessage], tenant_id: str
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Collect only recipient/purpose pairs backed by tenant-scoped message evidence."""
+    inputs: dict[tuple[str, str], dict[str, Any]] = {}
+    for message in messages:
+        if message.tenant_id != tenant_id:
+            continue
+        subject_id = message.recipient_entity_id
+        binding_id = message.recipient_identity_binding_id
+        binding_ref = message.recipient_identity_evidence_ref
+        consent = message.consent_evidence
+        purpose = consent.purpose
+        if (
+            not subject_id
+            or not binding_id
+            or not isinstance(purpose, str)
+            or not purpose.strip()
+            or binding_ref is None
+            or binding_ref.id != binding_id
+            or binding_ref.type != "entity"
+            or binding_ref.source != "comms_provider_identities"
+            or binding_ref.uri
+            != f"store://comms_provider_identities/{quote(binding_id, safe='')}"
+            or not message.evidence_refs
+        ):
+            continue
+
+        historical_refs: list[EvidenceRef] = []
+        historical_outcome = "unknown"
+        if consent.state == "recorded":
+            if (
+                consent.subject_entity_id != subject_id
+                or consent.identity_binding_id != binding_id
+                or not consent.receipt_id
+            ):
+                continue
+            receipt_ref = next(
+                (
+                    ref
+                    for ref in consent.evidence_refs
+                    if ref.id == consent.receipt_id
+                    and ref.source == "governance.consent.authority"
+                    and ref.uri
+                    == f"store://consent_receipts/{quote(consent.receipt_id, safe='')}"
+                ),
+                None,
+            )
+            consent_binding_ref = next(
+                (
+                    ref
+                    for ref in consent.evidence_refs
+                    if ref.id == binding_id
+                    and ref.source == "comms_provider_identities"
+                    and ref.uri
+                    == f"store://comms_provider_identities/{quote(binding_id, safe='')}"
+                ),
+                None,
+            )
+            if receipt_ref is None or consent_binding_ref is None:
+                continue
+            historical_refs = [receipt_ref, consent_binding_ref]
+            # The connector writes this lineage only after the server consent
+            # authority returned an allowed receipt. This records that past
+            # processing event; it says nothing about current consent.
+            historical_outcome = "allowed"
+        elif consent.state != "unknown":
+            continue
+
+        pair = (subject_id, purpose.strip())
+        entry = inputs.setdefault(
+            pair,
+            {
+                "subjectEntityId": subject_id,
+                "purpose": purpose.strip(),
+                "messageIds": [],
+                "inputEvidenceRefs": [],
+                "historicalEvidenceRefs": [],
+                "historicalOutcomeAtCommunication": historical_outcome,
+            },
+        )
+        if message.message_id not in entry["messageIds"]:
+            entry["messageIds"].append(message.message_id)
+        entry["inputEvidenceRefs"].extend(
+            [
+                ref
+                for ref in message.evidence_refs
+                if isinstance(ref, EvidenceRef)
+            ]
+        )
+        entry["inputEvidenceRefs"].append(binding_ref)
+        entry["historicalEvidenceRefs"].extend(historical_refs)
+        if historical_outcome == "allowed":
+            entry["historicalOutcomeAtCommunication"] = "allowed"
+
+    for entry in inputs.values():
+        entry["inputEvidenceRefs"] = _dedupe_refs(entry["inputEvidenceRefs"])
+        entry["historicalEvidenceRefs"] = _dedupe_refs(entry["historicalEvidenceRefs"])
+        entry["messageIds"].sort()
+    return inputs
 
 
 def _canonical_open_state_count(
@@ -1271,6 +1393,7 @@ class Communication360Provider:
         entity_identity_reader: Optional[EntityIdentityReader] = None,
         journey_reader: Optional[CurrentJourneyReader] = None,
         risk_signal_reader: Optional[RiskSignalReader] = None,
+        consent_policy_reader: Optional[ConsentPolicyReader] = None,
     ) -> None:
         """Injectable sources (test seam); default = ``default_sources()``.
 
@@ -1304,6 +1427,7 @@ class Communication360Provider:
         )
         self._journeys = journey_reader or RepositoryCurrentJourneyReader()
         self._risk_signals = risk_signal_reader or RepositoryRiskSignalReader()
+        self._consent_policy = consent_policy_reader or RepositoryConsentPolicyReader()
 
     # ── IntelligenceProjectionProvider ─────────────────────────────────────
 
@@ -1425,6 +1549,14 @@ class Communication360Provider:
                 if str(m.tenant_id) == tenant_id and _message_matches_scope(m, scope)
             ]
 
+        policy_state = await self._read_policy_state(
+            request,
+            messages,
+            scope=scope,
+            silver_up=silver_up,
+            silver_truncated=silver_truncated,
+        )
+
         degraded_reasons: list[str] = []
         if not silver_up:
             degraded_reasons.append(REASON_SILVER_SOURCE_UNAVAILABLE)
@@ -1446,6 +1578,7 @@ class Communication360Provider:
                 context,
                 journey_links,
                 risk_flags,
+                policy_state,
             ),
             self._state_section(
                 request,
@@ -1514,6 +1647,202 @@ class Communication360Provider:
         )
 
     # ── Defensive reads ────────────────────────────────────────────────────
+
+    async def _read_policy_state(
+        self,
+        request: ProjectionRequest,
+        messages: list[CommunicationMessage],
+        *,
+        scope: _Scope,
+        silver_up: bool,
+        silver_truncated: bool,
+    ) -> ConsentPolicyRead:
+        """Evaluate current consent only for exact, identity-bound recipients.
+
+        Communication facts preserve the purpose and subject binding used at
+        ingestion. The current consent decision always comes from the canonical
+        server authority; a historical receipt is returned only as historical
+        lineage and can never turn an unevaluated current state into an allow.
+        """
+        base: dict[str, Any] = {
+            "coverage": "unknown",
+            "reason": "no_exact_subject_linked_consent_purpose_observed",
+            "evaluation": "current_server_consent_authority_for_exact_subject_purpose_pairs",
+            "policyScope": "current_consent_only_for_exact_recipient_purposes",
+            "currentPolicyState": "not_evaluated",
+            "currentConsentState": "unknown",
+            "nonConsentPolicyState": "unknown",
+            "decisionEvidenceState": "not_persisted",
+            "historicalDecisionCoverage": "unknown",
+            "historicalDecisionCount": 0,
+            "historicalDecisions": [],
+            "currentDecisionCount": 0,
+            "currentEvaluations": [],
+            "evidenceRefs": [],
+        }
+
+        if _projection_requests_noncurrent_scope(request):
+            base["reason"] = "current_consent_not_evaluated_for_historical_request"
+            return ConsentPolicyRead("unknown", {"state": "unknown", **base})
+        if not scope.bindable:
+            base["reason"] = "message_subject_binding_unavailable_for_consent_policy"
+            return ConsentPolicyRead("unknown", {"state": "unknown", **base})
+        if not silver_up:
+            base["coverage"] = "partial"
+            base["reason"] = "communication_message_authority_unavailable_for_policy_inputs"
+            return ConsentPolicyRead("degraded", {"state": "degraded", **base})
+
+        inputs = _exact_consent_policy_inputs(messages, request.tenantId)
+        if not inputs:
+            if silver_truncated:
+                base["coverage"] = "partial"
+                base["reason"] = "communication_message_policy_inputs_truncated"
+                return ConsentPolicyRead("degraded", {"state": "degraded", **base})
+            base["historicalDecisionCoverage"] = "complete"
+            return ConsentPolicyRead("unknown", {"state": "unknown", **base})
+
+        pairs = sorted(inputs.items())[:_MAX_CONSENT_POLICY_READS]
+        read_truncated = len(inputs) > _MAX_CONSENT_POLICY_READS
+        evaluations: list[dict[str, Any]] = []
+        current_refs: list[EvidenceRef] = []
+        all_input_refs: list[EvidenceRef] = []
+        historical_decisions: list[dict[str, Any]] = []
+        authority_failed = False
+        for (subject_id, purpose), evidence in pairs:
+            evaluated_at = _utc_now_iso()
+            all_input_refs.extend(evidence["inputEvidenceRefs"])
+            all_input_refs.extend(evidence["historicalEvidenceRefs"])
+            historical_decisions.append(
+                {
+                    "subjectEntityId": subject_id,
+                    "purpose": purpose,
+                    "messageIds": list(evidence["messageIds"]),
+                    "outcomeAtCommunication": evidence["historicalOutcomeAtCommunication"],
+                    "evidenceRefs": [
+                        ref.model_dump(mode="json", exclude_none=True)
+                        for ref in evidence["historicalEvidenceRefs"]
+                    ],
+                }
+            )
+            try:
+                raw = await self._consent_policy.evaluate(
+                    request.tenantId, subject_id, purpose
+                )
+            except Exception:  # noqa: BLE001 - do not leak authority details
+                raw = None
+                authority_failed = True
+
+            allowed = (
+                raw.get("allowed")
+                if isinstance(raw, dict)
+                else getattr(raw, "allowed", None)
+            )
+            reason_code = (
+                raw.get("reason_code")
+                if isinstance(raw, dict)
+                else getattr(raw, "reason_code", None)
+            )
+            receipt_id = (
+                raw.get("receipt_id")
+                if isinstance(raw, dict)
+                else getattr(raw, "receipt_id", None)
+            )
+            authority_refs: list[EvidenceRef] = []
+            if allowed is True and isinstance(receipt_id, str) and receipt_id.strip():
+                decision = "allowed"
+                reason = None
+                authority_refs.append(
+                    EvidenceRef(
+                        id=receipt_id,
+                        type="event",
+                        source="governance.consent.authority",
+                        observedAt=evaluated_at,
+                        uri=f"store://consent_receipts/{quote(receipt_id, safe='')}",
+                    )
+                )
+            elif allowed is False:
+                decision = "denied"
+                reason = (
+                    reason_code
+                    if isinstance(reason_code, str) and reason_code
+                    else "consent_denied"
+                )
+            else:
+                decision = "unknown"
+                reason = (
+                    "consent_authority_unavailable"
+                    if raw is None
+                    else "consent_authority_returned_unverifiable_result"
+                )
+                authority_failed = True
+
+            current_refs.extend(authority_refs)
+            evaluations.append(
+                {
+                    "subjectEntityId": subject_id,
+                    "purpose": purpose,
+                    "messageIds": list(evidence["messageIds"]),
+                    "decision": decision,
+                    "reasonCode": reason,
+                    "evaluatedAt": evaluated_at,
+                    "policyDecisionEvidencePersisted": False,
+                    "authorityEvidenceRefs": [
+                        ref.model_dump(mode="json", exclude_none=True)
+                        for ref in authority_refs
+                    ],
+                    "subjectEvidenceRefs": [
+                        ref.model_dump(mode="json", exclude_none=True)
+                        for ref in evidence["inputEvidenceRefs"]
+                    ],
+                }
+            )
+
+        decisions = {entry["decision"] for entry in evaluations}
+        if decisions == {"allowed"}:
+            current_consent_state = "allowed"
+        elif decisions == {"denied"}:
+            current_consent_state = "denied"
+        elif decisions == {"unknown"}:
+            current_consent_state = "unknown"
+        elif "unknown" in decisions:
+            current_consent_state = "partial"
+        else:
+            current_consent_state = "mixed"
+
+        incomplete = authority_failed or read_truncated or silver_truncated
+        slot_state = "degraded" if incomplete else "available"
+        reason = (
+            "consent_authority_unavailable_or_unverifiable_result"
+            if authority_failed
+            else "exact_consent_policy_inputs_truncated"
+            if read_truncated or silver_truncated
+            else "current_consent_evaluated_for_exact_subject_purpose_pairs_other_policy_unjoined"
+        )
+        all_refs = _dedupe_refs([*all_input_refs, *current_refs])
+        historical_count = sum(
+            item["outcomeAtCommunication"] == "allowed"
+            for item in historical_decisions
+        )
+        content = {
+            "state": slot_state,
+            "coverage": "partial",
+            "reason": reason,
+            "evaluation": "current_server_consent_authority_for_exact_subject_purpose_pairs",
+            "policyScope": "current_consent_only_for_exact_recipient_purposes",
+            "currentPolicyState": "partial",
+            "currentConsentState": current_consent_state,
+            "nonConsentPolicyState": "unknown",
+            "decisionEvidenceState": "not_persisted",
+            "historicalDecisionCoverage": "partial",
+            "historicalDecisionCount": historical_count,
+            "historicalDecisions": historical_decisions,
+            "currentDecisionCount": len(evaluations),
+            "currentEvaluations": evaluations,
+            "evidenceRefs": [
+                ref.model_dump(mode="json", exclude_none=True) for ref in all_refs
+            ],
+        }
+        return ConsentPolicyRead(slot_state, content)
 
     async def _read_risk_flags(
         self,
@@ -1822,6 +2151,7 @@ class Communication360Provider:
         context: ProjectionContext,
         journey_links: JourneyLinkRead,
         risk_flags: RiskFlagRead,
+        policy_state: ConsentPolicyRead,
     ) -> ProjectionSection:
         """Summary of a complete message scope or exact canonical fact scope."""
         fact_rows = _communication_fact_rows(rows)
@@ -1918,6 +2248,7 @@ class Communication360Provider:
                     canonical_truncated=canonical_truncated,
                     journey_links=journey_links,
                     risk_flags=risk_flags,
+                    policy_state=policy_state,
                 ),
             },
             warnings=reasons or None,

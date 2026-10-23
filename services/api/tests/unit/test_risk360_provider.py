@@ -70,6 +70,10 @@ from intelligence.risk360.provider import (  # noqa: E402
     register_provider,
 )
 from intelligence.risk360.routes import SERVED_SUBJECT_KINDS, create_router  # noqa: E402
+from services.social360.provider import (  # noqa: E402
+    SocialGraphPathRead,
+    SocialObservedPath,
+)
 from intelligence.risk360.store import (  # noqa: E402
     RiskAssessmentRepository,
     RiskPoisoningEvidenceRead,
@@ -421,6 +425,87 @@ class _FakeReader:
 
     async def financial_flow_path(self, *, tenant_id: str, path_id: str) -> dict | None:
         return self._financial_flow_path
+
+
+class _FakeSocialGraphPathReader:
+    def __init__(self, result: SocialGraphPathRead) -> None:
+        self.result = result
+        self.calls: list[tuple[str, str]] = []
+
+    async def read_paths(self, tenant_id: str, start_entity_id: str) -> SocialGraphPathRead:
+        self.calls.append((tenant_id, start_entity_id))
+        return self.result
+
+
+async def _allow_social_analytics_consent(
+    tenant_id: str,
+    subject_id: str | None,
+    anonymous_id: str | None,
+    purpose: str,
+) -> tuple[bool, str | None]:
+    assert tenant_id == TENANT_A
+    assert anonymous_id is None
+    assert purpose == "analytics"
+    return subject_id is not None, None
+
+
+async def _deny_social_analytics_consent(
+    tenant_id: str,
+    subject_id: str | None,
+    anonymous_id: str | None,
+    purpose: str,
+) -> tuple[bool, str | None]:
+    del tenant_id, subject_id, anonymous_id, purpose
+    return False, "consent_unknown"
+
+
+def _observed_social_path(
+    *, tenant_id: str = TENANT_A, start_id: str = "usr_1", suffix: str = ""
+) -> SocialObservedPath:
+    entity_ids = (start_id, f"entity-b{suffix}", f"entity-c{suffix}")
+    observed_times = ("2026-10-20T10:00:00+00:00", "2026-10-20T10:01:00+00:00")
+    graph_edges = []
+    edge_evidence_refs = []
+    for index, (from_id, to_id) in enumerate(zip(entity_ids, entity_ids[1:])):
+        relationship_id = f"follow:{from_id}:{to_id}"
+        fact_id = f"observation-{index + 1}{suffix}"
+        graph_edges.append(
+            {
+                "edge_type": "FOLLOWS_SOCIAL",
+                "from_vertex_id": from_id,
+                "to_vertex_id": to_id,
+                "properties": {
+                    "tenant_id": tenant_id,
+                    "relationship_predicate": "FOLLOWS",
+                    "idempotency_key": relationship_id,
+                    "evidence_refs": [fact_id],
+                    "valid_from": "2026-10-20T09:00:00Z",
+                    "observed_at": observed_times[index],
+                },
+            }
+        )
+        edge_evidence_refs.append(
+            (
+                _OI_EvidenceRef(
+                    id=relationship_id,
+                    type="relationship",
+                    source="entity_graph",
+                    observedAt="2026-10-20T09:00:00Z",
+                ),
+                _OI_EvidenceRef(
+                    id=fact_id,
+                    type="event",
+                    source="relationship_facts",
+                    observedAt=observed_times[index],
+                ),
+            )
+        )
+    return SocialObservedPath(
+        entity_ids=entity_ids,
+        edge_evidence_refs=tuple(edge_evidence_refs),
+        graph_edges=tuple(graph_edges),
+        edge_observed_at=observed_times,
+    )
 
 
 def _bronze_source_row(
@@ -1053,6 +1138,227 @@ async def test_financial_contagion_emits_only_exact_partial_value_risk_link() ->
         "transfers",
         "ledger",
     }
+
+
+@pytest.mark.asyncio
+async def test_risk_propagation_paths_expose_observed_graph_only_not_social_contagion() -> None:
+    path = _observed_social_path()
+    reader = _FakeSocialGraphPathReader(
+        SocialGraphPathRead(TENANT_A, "usr_1", paths=(path,))
+    )
+    result = await Risk360Provider(
+        sources=_FakeReader(),  # type: ignore[arg-type]
+        social_graph_path_reader=reader,
+        consent_reader=_allow_social_analytics_consent,
+    ).project(_request(), await _context(_available_registry()))
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    coverage = findings.content["requiredSlotCoverage"]
+    assert coverage["propagation_paths"] == {
+        "state": "partial",
+        "reason": "observed_social_graph_paths_do_not_establish_causal_risk_propagation",
+    }
+    assert coverage["social_contagion"] == {
+        "state": "unknown",
+        "reason": "social_contagion_causal_evidence_authority_unavailable",
+    }
+    projected = findings.content["propagationPaths"]
+    assert projected["state"] == "partial"
+    assert projected["freshness"] == "unknown"
+    assert projected["causalRiskPropagationEstablished"] is False
+    assert projected["paths"][0]["entityPath"] == ["usr_1", "entity-b", "entity-c"]
+    assert projected["paths"][0]["timeOrderState"] == "ordered"
+    assert projected["paths"][0]["semantics"] == {
+        "observedDirectedGraphEdges": True,
+        "riskPropagationEstablished": False,
+        "socialContagionEstablished": False,
+        "causalityEstablished": False,
+    }
+
+    path_claims = [claim for claim in result.claims if claim.kind == "risk_social_graph_path_observation"]
+    assert len(path_claims) == 1
+    assert path_claims[0].claimState == EpistemicStatus.OBSERVED
+    assert path_claims[0].domainSlotIds == ["propagation_paths", "evidence_trace"]
+    assert {ref.id for ref in path_claims[0].evidenceRefs} == {
+        "follow:usr_1:entity-b",
+        "observation-1",
+        "follow:entity-b:entity-c",
+        "observation-2",
+    }
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert {row["id"] for row in evidence.content["evidence"]} >= {
+        "follow:usr_1:entity-b",
+        "observation-1",
+        "follow:entity-b:entity-c",
+        "observation-2",
+    }
+    assert reader.calls == [(TENANT_A, "usr_1")]
+
+
+@pytest.mark.asyncio
+async def test_risk_social_paths_fail_closed_on_tenant_mismatch_and_future_observation() -> None:
+    mismatched_reader = _FakeSocialGraphPathReader(
+        SocialGraphPathRead("tenant-other", "usr_1", paths=(_observed_social_path(),))
+    )
+    mismatched = await Risk360Provider(
+        sources=_FakeReader(),  # type: ignore[arg-type]
+        social_graph_path_reader=mismatched_reader,
+        consent_reader=_allow_social_analytics_consent,
+    ).project(_request(), await _context(_available_registry()))
+    mismatch_coverage = next(
+        section for section in mismatched.sections if section.id == "findings"
+    ).content["requiredSlotCoverage"]["propagation_paths"]
+    assert mismatch_coverage == {
+        "state": "degraded",
+        "reason": "canonical_social_path_scope_mismatch",
+    }
+    assert not any(claim.kind == "risk_social_graph_path_observation" for claim in mismatched.claims)
+
+    future_path = _observed_social_path()
+    future_edges = [dict(edge) for edge in future_path.graph_edges]
+    future_edges[0]["properties"] = {
+        **future_edges[0]["properties"],
+        "observed_at": "2026-10-24T10:00:00+00:00",
+    }
+    future_path = SocialObservedPath(
+        entity_ids=future_path.entity_ids,
+        edge_evidence_refs=future_path.edge_evidence_refs,
+        graph_edges=tuple(future_edges),
+        edge_observed_at=future_path.edge_observed_at,
+    )
+    future_reader = _FakeSocialGraphPathReader(
+        SocialGraphPathRead(TENANT_A, "usr_1", paths=(future_path,))
+    )
+    future_result = await Risk360Provider(
+        sources=_FakeReader(),  # type: ignore[arg-type]
+        social_graph_path_reader=future_reader,
+        consent_reader=_allow_social_analytics_consent,
+    ).project(_request(), await _context(_available_registry()))
+    future_coverage = next(
+        section for section in future_result.sections if section.id == "findings"
+    ).content["requiredSlotCoverage"]["propagation_paths"]
+    assert future_coverage == {
+        "state": "degraded",
+        "reason": "canonical_social_path_evidence_incomplete",
+    }
+    assert not any(
+        claim.kind == "risk_social_graph_path_observation" for claim in future_result.claims
+    )
+
+
+@pytest.mark.asyncio
+async def test_risk_social_paths_reject_cross_tenant_edges_and_unjoined_fact_refs() -> None:
+    valid_path = _observed_social_path()
+    cases = []
+    cross_tenant_edges = [dict(edge) for edge in valid_path.graph_edges]
+    cross_tenant_edges[0]["properties"] = {
+        **cross_tenant_edges[0]["properties"],
+        "tenant_id": TENANT_B,
+    }
+    cases.append(
+        SocialObservedPath(
+            entity_ids=valid_path.entity_ids,
+            edge_evidence_refs=valid_path.edge_evidence_refs,
+            graph_edges=tuple(cross_tenant_edges),
+            edge_observed_at=valid_path.edge_observed_at,
+        )
+    )
+    unjoined_fact_edges = [dict(edge) for edge in valid_path.graph_edges]
+    unjoined_fact_edges[0]["properties"] = {
+        **unjoined_fact_edges[0]["properties"],
+        "evidence_refs": ["unjoined-observation"],
+    }
+    cases.append(
+        SocialObservedPath(
+            entity_ids=valid_path.entity_ids,
+            edge_evidence_refs=valid_path.edge_evidence_refs,
+            graph_edges=tuple(unjoined_fact_edges),
+            edge_observed_at=valid_path.edge_observed_at,
+        )
+    )
+
+    for invalid_path in cases:
+        reader = _FakeSocialGraphPathReader(
+            SocialGraphPathRead(TENANT_A, "usr_1", paths=(invalid_path,))
+        )
+        result = await Risk360Provider(
+            sources=_FakeReader(),  # type: ignore[arg-type]
+            social_graph_path_reader=reader,
+            consent_reader=_allow_social_analytics_consent,
+        ).project(_request(), await _context(_available_registry()))
+        coverage = next(
+            section for section in result.sections if section.id == "findings"
+        ).content["requiredSlotCoverage"]["propagation_paths"]
+        assert coverage == {
+            "state": "degraded",
+            "reason": "canonical_social_path_evidence_incomplete",
+        }
+        assert not any(
+            claim.kind == "risk_social_graph_path_observation" for claim in result.claims
+        )
+
+
+@pytest.mark.asyncio
+async def test_risk_social_path_read_suppresses_temporal_and_unconsented_requests() -> None:
+    path_reader = _FakeSocialGraphPathReader(
+        SocialGraphPathRead(TENANT_A, "usr_1", paths=(_observed_social_path(),))
+    )
+    temporal = await Risk360Provider(
+        sources=_FakeReader(),  # type: ignore[arg-type]
+        social_graph_path_reader=path_reader,
+        consent_reader=_allow_social_analytics_consent,
+    ).project(
+        _request(asOf="2026-10-20T12:00:00Z"),
+        await _context(_available_registry()),
+    )
+    temporal_coverage = next(
+        section for section in temporal.sections if section.id == "findings"
+    ).content["requiredSlotCoverage"]["propagation_paths"]
+    assert temporal_coverage == {
+        "state": "unknown",
+        "reason": "social_graph_path_bitemporal_history_unavailable",
+    }
+    assert path_reader.calls == []
+
+    denied_reader = _FakeSocialGraphPathReader(
+        SocialGraphPathRead(TENANT_A, "usr_1", paths=(_observed_social_path(),))
+    )
+    denied = await Risk360Provider(
+        sources=_FakeReader(),  # type: ignore[arg-type]
+        social_graph_path_reader=denied_reader,
+        consent_reader=_deny_social_analytics_consent,
+    ).project(_request(), await _context(_available_registry()))
+    denied_coverage = next(
+        section for section in denied.sections if section.id == "findings"
+    ).content["requiredSlotCoverage"]["propagation_paths"]
+    assert denied_coverage == {
+        "state": "unknown",
+        "reason": "social_path_subject_consent_restricted",
+    }
+    assert denied_reader.calls == []
+    assert not any(claim.kind == "risk_social_graph_path_observation" for claim in denied.claims)
+
+
+@pytest.mark.asyncio
+async def test_risk_social_path_local_cap_marks_completeness_unknown() -> None:
+    paths = tuple(_observed_social_path(suffix=f"-{index}") for index in range(51))
+    reader = _FakeSocialGraphPathReader(
+        SocialGraphPathRead(TENANT_A, "usr_1", paths=paths)
+    )
+    result = await Risk360Provider(
+        sources=_FakeReader(),  # type: ignore[arg-type]
+        social_graph_path_reader=reader,
+        consent_reader=_allow_social_analytics_consent,
+    ).project(_request(), await _context(_available_registry()))
+
+    propagation = next(
+        section for section in result.sections if section.id == "findings"
+    ).content["propagationPaths"]
+    assert propagation["state"] == "degraded"
+    assert propagation["reason"] == "canonical_social_path_evidence_incomplete"
+    assert propagation["completeness"] == "unknown"
+    assert propagation["reasonCodes"] == ["canonical_social_path_result_capped"]
+    assert len(propagation["paths"]) == 50
 
 
 @pytest.mark.asyncio

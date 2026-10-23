@@ -81,6 +81,7 @@ VALUE_ATTRIBUTION_CREDITS_SLOT_ID = "attribution_credits"
 VALUE_REVENUE_EVENTS_SLOT_ID = "revenue_events"
 VALUE_CONFIDENCE_SLOT_ID = "confidence"
 VALUE_EVIDENCE_TRACE_SLOT_ID = "evidence_trace"
+VALUE_RECONCILIATION_SLOT_ID = "reconciliation"
 ACCOUNT_VALUE_SLOT_ID = "value"
 _MAX_CONVERSION_INVENTORY_ROWS = 500
 _MAX_ATTRIBUTION_CONVERSIONS = 100
@@ -1788,6 +1789,372 @@ def _commerce_fact_claims(
     return claims
 
 
+def _value_reconciliation_observations(
+    subject: ProjectionSubject,
+    records: list[dict[str, Any]],
+    operation_evidence: Optional[dict[str, Any]],
+) -> tuple[dict[str, Any], list[ClaimEnvelope]]:
+    """Expose source-side currency/reconciliation facts without cross-source math.
+
+    Economic360 has exact subject-scoped economic rows and a separate path from
+    Journey/Campaign/Entity subjects to a tenant-scoped commerce ledger through
+    explicit commerce-order references. The persisted economic rows do not
+    retain those order/payment/settlement identifiers, so the two authorities
+    cannot be reconciled to each other. Keep both inventories separate and make
+    that gap explicit instead of comparing totals by subject, time, or currency.
+    """
+    expected_join_basis = _COMMERCE_JOIN_BASIS_BY_SUBJECT_KIND.get(subject.kind)
+    scope_field = {
+        "journey": "journey_id",
+        "campaign": "campaign_id",
+        "entity": "entity_id",
+    }.get(subject.kind)
+
+    commerce_facts: list[dict[str, Any]] = []
+    claims: list[ClaimEnvelope] = []
+    if (
+        isinstance(operation_evidence, dict)
+        and expected_join_basis is not None
+        and scope_field is not None
+        and operation_evidence.get("join_basis") == expected_join_basis
+        and operation_evidence.get(scope_field) == subject.id
+    ):
+        raw_facts = operation_evidence.get("payment_facts")
+        if isinstance(raw_facts, list):
+            seen_fact_ids: set[str] = set()
+            for fact in raw_facts:
+                if not isinstance(fact, dict):
+                    continue
+                fact_id = _inventory_text(fact.get("factId"), limit=512)
+                fact_kind = _inventory_text(fact.get("kind"), limit=32)
+                order_ref = _inventory_text(fact.get("commerceOrderRef"), limit=512)
+                provider = _inventory_text(fact.get("provider"), limit=96)
+                source_record_id = _inventory_text(fact.get("sourceRecordId"), limit=512)
+                evidence_record_id = _inventory_text(fact.get("evidenceRecordId"), limit=512)
+                amount = _to_decimal(fact.get("amount"))
+                currency = _inventory_text(fact.get("currency"), limit=16)
+                if (
+                    fact_id is None
+                    or not fact_id.startswith("commerce:")
+                    or fact_id in seen_fact_ids
+                    or fact_kind not in {"order", "payment", "adjustment", "refund", "settlement"}
+                    or order_ref is None
+                    or provider is None
+                    or source_record_id is None
+                    or amount is None
+                    or not amount.is_finite()
+                    or currency is None
+                    or not currency.isascii()
+                    or not currency.isalnum()
+                    or fact.get("joinBasis", expected_join_basis) != expected_join_basis
+                ):
+                    continue
+
+                refs: list[EvidenceRef] = []
+                raw_refs = fact.get("evidence")
+                if isinstance(raw_refs, list):
+                    for raw_ref in raw_refs:
+                        try:
+                            ref = EvidenceRef.model_validate(raw_ref)
+                        except Exception:  # noqa: BLE001 - malformed source evidence fails closed
+                            continue
+                        if ref.type == "transaction":
+                            refs.append(ref)
+                if not refs:
+                    continue
+                if evidence_record_id is None:
+                    evidence_record_id = source_record_id
+                if not any(ref.id == evidence_record_id for ref in refs):
+                    continue
+
+                source_normalization = fact.get("normalizationState")
+                source_normalization = (
+                    source_normalization.strip()
+                    if _safe_source_label(source_normalization)
+                    else "unknown"
+                )
+                # The commerce ledger currently makes only native USD identity
+                # normalization. Ignore any non-USD amountUsd claim here.
+                normalized_usd = None
+                normalization_state = "not_normalized"
+                candidate_usd = _to_decimal(fact.get("amountUsd"))
+                if (
+                    currency.upper() == "USD"
+                    and source_normalization == "native_currency_usd"
+                    and candidate_usd is not None
+                    and candidate_usd.is_finite()
+                    and candidate_usd == amount
+                ):
+                    normalized_usd = format(candidate_usd, "f")
+                    normalization_state = "native_currency_usd"
+
+                lifecycle_state = fact.get("lifecycleState")
+                lifecycle_state = (
+                    lifecycle_state.strip()
+                    if _safe_source_label(lifecycle_state)
+                    else "unknown"
+                )
+                reconciliation_state = fact.get("reconciliationState")
+                reconciliation_state = (
+                    reconciliation_state.strip()
+                    if _safe_source_label(reconciliation_state)
+                    else "unknown"
+                )
+                settles_payment_refs: list[dict[str, str]] = []
+                raw_settles_refs = fact.get("settlesPaymentRefs")
+                if isinstance(raw_settles_refs, list):
+                    for raw_settles_ref in raw_settles_refs:
+                        if not isinstance(raw_settles_ref, dict):
+                            continue
+                        referenced_provider = _inventory_text(
+                            raw_settles_ref.get("provider"), limit=96
+                        )
+                        referenced_payment_id = _inventory_text(
+                            raw_settles_ref.get("providerPaymentId"), limit=512
+                        )
+                        if referenced_provider and referenced_payment_id:
+                            settles_payment_refs.append(
+                                {
+                                    "provider": referenced_provider,
+                                    "providerPaymentId": referenced_payment_id,
+                                }
+                            )
+                fact_observation = {
+                    "factId": fact_id,
+                    "commerceOrderRef": order_ref,
+                    "kind": fact_kind,
+                    "provider": provider,
+                    "sourceRecordId": source_record_id,
+                    "amount": format(amount, "f"),
+                    "currency": currency,
+                    "normalizationState": normalization_state,
+                    "sourceNormalizationState": source_normalization,
+                    "amountUsd": normalized_usd,
+                    "lifecycleState": lifecycle_state,
+                    "reconciliationState": reconciliation_state,
+                    "settlesPaymentRefs": settles_payment_refs,
+                    "evidenceRefs": [ref.model_dump(mode="json") for ref in refs],
+                }
+                commerce_facts.append(fact_observation)
+                seen_fact_ids.add(fact_id)
+                claims.append(
+                    ClaimEnvelope(
+                        id=(
+                            "reconciliation.commerce."
+                            + hashlib.sha256(fact_id.encode("utf-8")).hexdigest()[:32]
+                        ),
+                        kind="commerce_value_reconciliation_observation",
+                        subject=subject,
+                        evidenceRefs=refs,
+                        claims=[
+                            f"tenant-scoped commerce {fact_kind} record from {provider} "
+                            f"references order {order_ref} and records "
+                            f"{format(amount, 'f')} {currency}; source normalization state "
+                            f"{source_normalization}; ledger reconciliation state "
+                            f"{reconciliation_state}. This remains a source observation only; "
+                            "Economic360 does not match it to a separate economic record or "
+                            "compute a reconciled total."
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=[
+                            VALUE_RECONCILIATION_SLOT_ID,
+                            VALUE_EVIDENCE_TRACE_SLOT_ID,
+                        ],
+                    )
+                )
+
+    settlement_payment_links: list[dict[str, Any]] = []
+    for settlement in commerce_facts:
+        if settlement["kind"] != "settlement":
+            continue
+        for payment_ref in settlement["settlesPaymentRefs"]:
+            exact_payments = [
+                payment
+                for payment in commerce_facts
+                if payment["kind"] == "payment"
+                and payment["provider"] == payment_ref["provider"]
+                and payment["sourceRecordId"] == payment_ref["providerPaymentId"]
+                and payment["commerceOrderRef"] == settlement["commerceOrderRef"]
+            ]
+            if len(exact_payments) != 1:
+                settlement_payment_links.append(
+                    {
+                        "settlementFactId": settlement["factId"],
+                        "provider": payment_ref["provider"],
+                        "providerPaymentId": payment_ref["providerPaymentId"],
+                        "state": (
+                            "referenced_payment_unavailable"
+                            if not exact_payments
+                            else "referenced_payment_ambiguous"
+                        ),
+                        "evidenceRefs": settlement["evidenceRefs"],
+                    }
+                )
+                continue
+
+            payment = exact_payments[0]
+            link_evidence = [
+                EvidenceRef.model_validate(raw_ref)
+                for raw_ref in payment["evidenceRefs"] + settlement["evidenceRefs"]
+            ]
+            link = {
+                "settlementFactId": settlement["factId"],
+                "paymentFactId": payment["factId"],
+                "commerceOrderRef": settlement["commerceOrderRef"],
+                "provider": payment_ref["provider"],
+                "providerPaymentId": payment_ref["providerPaymentId"],
+                "providerSettlementId": settlement["sourceRecordId"],
+                "state": "source_reference_resolved",
+                "basis": "exact_provider_payment_id_and_same_commerce_order_ref",
+                "evidenceRefs": [ref.model_dump(mode="json") for ref in link_evidence],
+            }
+            settlement_payment_links.append(link)
+            claims.append(
+                ClaimEnvelope(
+                    id=(
+                        "reconciliation.settlement-payment."
+                        + hashlib.sha256(
+                            f"{settlement['factId']}:{payment['factId']}".encode("utf-8")
+                        ).hexdigest()[:32]
+                    ),
+                    kind="canonical_settlement_payment_reference",
+                    subject=subject,
+                    evidenceRefs=link_evidence,
+                    claims=[
+                        f"canonical {payment_ref['provider']} settlement "
+                        f"{settlement['sourceRecordId']} explicitly references payment "
+                        f"{payment_ref['providerPaymentId']} for the same commerce order; "
+                        "this exact source reference does not establish equal amounts, "
+                        "settlement finality, or reconciled value."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=[
+                        VALUE_RECONCILIATION_SLOT_ID,
+                        VALUE_EVIDENCE_TRACE_SLOT_ID,
+                    ],
+                )
+            )
+
+    economic_records: list[dict[str, Any]] = []
+    for record in records:
+        evidence_ref = _evidence_from_record(record)
+        amount = _to_decimal(record.get("amount"))
+        currency = _inventory_text(record.get("currency"), limit=16)
+        if (
+            evidence_ref is None
+            or amount is None
+            or not amount.is_finite()
+            or currency is None
+            or not currency.isascii()
+            or not currency.isalnum()
+        ):
+            continue
+        monetary = _monetary_from_record(record)
+        normalized_usd = monetary.usd_value
+        if normalized_usd is None or not normalized_usd.is_finite():
+            normalization_state = "not_normalized"
+            usd_value = None
+        elif currency.upper() == "USD" and normalized_usd == amount:
+            normalization_state = "native_currency_usd"
+            usd_value = format(normalized_usd, "f")
+        else:
+            # Explicit non-USD USD values are preserved only as source-reported
+            # normalization evidence; this provider does not recompute FX.
+            normalization_state = "canonical_source_reported_usd"
+            usd_value = format(normalized_usd, "f")
+
+        source = _inventory_text(record.get("_source"), limit=256) or "unknown"
+        economic_observation = {
+            "evidenceRef": evidence_ref.model_dump(mode="json"),
+            "source": source,
+            "metric": _inventory_text(record.get("_metric_name"), limit=128) or "unknown",
+            "amount": format(amount, "f"),
+            "currency": currency,
+            "normalizationState": normalization_state,
+            "amountUsd": usd_value,
+        }
+        economic_records.append(economic_observation)
+        claims.append(
+            ClaimEnvelope(
+                id=(
+                    "reconciliation.economic."
+                    + hashlib.sha256(
+                        f"{subject.kind}:{subject.id}:{evidence_ref.source}:{evidence_ref.id}".encode(
+                            "utf-8"
+                        )
+                    ).hexdigest()[:32]
+                ),
+                kind="economic_currency_normalization_observation",
+                subject=subject,
+                evidenceRefs=[evidence_ref],
+                claims=[
+                    f"exact subject-scoped economic record from {source} records "
+                    f"{format(amount, 'f')} {currency}; normalization state "
+                    f"{normalization_state}"
+                    + (f" with source-reported USD value {usd_value}" if usd_value else "")
+                    + ". The record has no exact commerce order, payment, or settlement "
+                    "reference, so it is not reconciled to the commerce observations."
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=[
+                    VALUE_RECONCILIATION_SLOT_ID,
+                    VALUE_EVIDENCE_TRACE_SLOT_ID,
+                ],
+            )
+        )
+
+    operation_reason = (
+        _inventory_text(operation_evidence.get("reason"), limit=128)
+        if isinstance(operation_evidence, dict)
+        else None
+    )
+    operation_completeness = (
+        _inventory_text(operation_evidence.get("completeness"), limit=48)
+        if isinstance(operation_evidence, dict)
+        else None
+    ) or (
+        "partial"
+        if isinstance(operation_evidence, dict)
+        and (
+            operation_evidence.get("evidence_truncated") is True
+            or operation_evidence.get("ledger_read_errors", 0)
+            or operation_evidence.get("invalid_ledger_records", 0)
+            or operation_evidence.get("unresolved_order_references", 0)
+        )
+        else "bounded_read"
+        if isinstance(operation_evidence, dict)
+        else "unknown"
+    )
+    has_evidence = bool(commerce_facts or economic_records)
+    return (
+        {
+            "state": "partial" if has_evidence else "unknown",
+            "subject": {"kind": subject.kind, "id": subject.id},
+            "joinBasis": expected_join_basis
+            if isinstance(operation_evidence, dict)
+            and operation_evidence.get("join_basis") == expected_join_basis
+            else None,
+            "operationEvidenceCompleteness": operation_completeness,
+            "operationEvidenceReason": operation_reason,
+            "commerceFacts": commerce_facts,
+            "settlementPaymentLinks": settlement_payment_links,
+            "economicRecords": economic_records,
+            "crossSourceMatch": {
+                "state": "unavailable",
+                "reason": "economic_records_do_not_retain_exact_commerce_order_payment_or_settlement_ids",
+            },
+            "limitations": [
+                "commerce_facts_remain_separate_source_observations",
+                "non_usd_commerce_facts_are_not_normalized_by_economic360",
+                "subject_economic_and_commerce_amounts_are_not_compared_or_aggregated",
+                "settlement_payment_references_do_not_establish_amount_equality_or_finality",
+                "source_and_currency_reconciliation_remains_incomplete",
+            ],
+        },
+        claims,
+    )
+
+
 def _safe_source_label(value: Any) -> bool:
     """Allow bounded source enum-like values in claim text without controls."""
     return bool(
@@ -1955,6 +2322,11 @@ class Economic360Provider:
         attribution_credits = await self._safe_attribution_credits(
             request, conversion_inventory
         )
+        value_reconciliation, reconciliation_claims = _value_reconciliation_observations(
+            request.subject,
+            tenant_filtered,
+            operation_evidence,
+        )
         operation_evidence_partial = bool(
             operation_evidence
             and (
@@ -2005,6 +2377,7 @@ class Economic360Provider:
                 source_incomplete_reasons=sorted(source_incomplete_reasons),
                 conversion_inventory=conversion_inventory,
                 attribution_credits=attribution_credits,
+                value_reconciliation=value_reconciliation,
             ),
             self._outcomes_section(tenant_filtered, dep_state, source_partial),
             self._findings_section(warnings, evidence, source_partial),
@@ -2019,6 +2392,7 @@ class Economic360Provider:
             entity_profile_verified=entity_profile_verified,
             conversion_inventory=conversion_inventory,
             attribution_credits=attribution_credits,
+            reconciliation_claims=reconciliation_claims,
         )
 
         degraded_reasons = []
@@ -2319,6 +2693,7 @@ class Economic360Provider:
         source_incomplete_reasons: Optional[list[str]] = None,
         conversion_inventory: Optional[dict[str, Any]] = None,
         attribution_credits: Optional[dict[str, Any]] = None,
+        value_reconciliation: Optional[dict[str, Any]] = None,
     ) -> ProjectionSection:
         """evidence — the canonical evidence refs grounding this projection."""
         source_incomplete_reasons = source_incomplete_reasons or []
@@ -2346,6 +2721,8 @@ class Economic360Provider:
         attribution_credits = attribution_credits or {}
         if attribution_credits:
             content["attribution_credits"] = attribution_credits
+        if value_reconciliation is not None:
+            content["value_reconciliation"] = value_reconciliation
         warnings = []
         if source_truncated:
             warnings.append("economic_source_read_truncated")
@@ -2567,6 +2944,7 @@ class Economic360Provider:
         entity_profile_verified: bool = False,
         conversion_inventory: Optional[dict[str, Any]] = None,
         attribution_credits: Optional[dict[str, Any]] = None,
+        reconciliation_claims: Optional[list[ClaimEnvelope]] = None,
     ) -> list[ClaimEnvelope]:
         """Evidence-grounded claims (requiresEvidence: every claim is grounded)."""
         claims: list[ClaimEnvelope] = []
@@ -2695,6 +3073,7 @@ class Economic360Provider:
                 operation_evidence,
             )
         )
+        claims.extend(reconciliation_claims or [])
 
         inventory = conversion_inventory or {}
         inventory_refs = _inventory_evidence_refs(inventory.get("evidenceRefs"))

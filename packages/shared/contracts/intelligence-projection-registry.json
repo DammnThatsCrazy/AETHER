@@ -710,6 +710,7 @@
       ],
       "canonicalAuthorities": [
         "communication_facts",
+        "consent_policy_decisions",
         "campaign_touchpoints",
         "entities",
         "outcomes",
@@ -1495,6 +1496,7 @@
         "currency_value_normalization",
         "payments",
         "commerce",
+        "evidence",
         "graph",
         "outcome_facts",
         "ai_execution_facts",
@@ -1748,15 +1750,18 @@
       ],
       "canonicalAuthorities": [
         "cluster_membership",
+        "consent_policy_decisions",
         "economic_facts",
         "entity_graph",
         "evidence",
         "flow_trace_paths",
         "flow_traces",
+        "graph",
         "model_governance",
         "risk_assessments",
         "risk_outputs",
         "risk_signals",
+        "relationship_facts",
         "source_provenance",
         "transfers"
       ],
@@ -3102,7 +3107,6 @@
           "unboundCanonicalAuthorityRefs": [
             "agent_entities",
             "identity",
-            "relationship_facts",
             "social_observations"
           ],
           "authorityGapReason": "exact_subject_authority_join_not_implemented"
@@ -5885,12 +5889,32 @@
         {
           "id": "policy_state",
           "requirement": "required",
-          "description": "Required communications360 slot: policy state.",
+          "description": "Current server-consent decisions for exact tenant-scoped recipient and purpose pairs, separated from historical communication-time decisions.",
           "canonicalAuthorityRefs": [
-            "communication_facts"
+            "communication_facts",
+            "consent_policy_decisions",
+            "evidence"
           ],
-          "projectionBindings": [],
-          "unboundReason": "communication_policy_evaluation_authority_not_joined"
+          "projectionBindings": [
+            {
+              "projectionId": "communication360",
+              "role": "primary",
+              "sectionIds": [
+                "summary"
+              ],
+              "subjectKinds": [
+                "agent",
+                "campaign",
+                "episode",
+                "journey",
+                "source"
+              ]
+            }
+          ],
+          "implementationCrosswalk": [
+            "communication_current_consent_policy_state"
+          ],
+          "partialImplementationReason": "Current consent is evaluated only for exact tenant, recipient-entity, and purpose pairs supported by communication identity and evidence. Historical write-time outcomes are separate; non-consent policy, durable current-decision evidence, complete recipient coverage, and freshness remain unknown."
         },
         {
           "id": "risk_flags",
@@ -5955,6 +5979,7 @@
         "canonicalAuthorities": [
           "campaign_touchpoints",
           "communication_facts",
+          "consent_policy_decisions",
           "entities",
           "evidence",
           "identity",
@@ -6173,13 +6198,29 @@
         {
           "id": "propagation_paths",
           "requirement": "required",
-          "description": "Causally supported risk propagation paths.",
+          "description": "Observed, consent-governed social graph paths used as risk investigation context; path evidence alone does not establish risk propagation.",
           "canonicalAuthorityRefs": [
             "graph",
-            "relationship_facts"
+            "relationship_facts",
+            "consent_policy_decisions",
+            "evidence"
           ],
-          "projectionBindings": [],
-          "unboundReason": "canonical_contagion_path_authority_not_connected"
+          "projectionBindings": [
+            {
+              "projectionId": "risk360",
+              "role": "primary",
+              "sectionIds": [
+                "findings"
+              ],
+              "subjectKinds": [
+                "entity"
+              ]
+            }
+          ],
+          "implementationCrosswalk": [
+            "risk_observed_social_graph_paths"
+          ],
+          "partialImplementationReason": "Bounded current tenant-scoped FOLLOWS paths are emitted only with analytics consent, canonical graph and relationship evidence, exact endpoint scope, valid edge state, and acceptable evidence times. Observed edges do not prove causal risk propagation; historical reads, complete path coverage, and freshness remain unknown."
         },
         {
           "id": "financial_contagion",
@@ -6514,6 +6555,7 @@
         "canonicalAuthorities": [
           "actions",
           "ai_execution_facts",
+          "consent_policy_decisions",
           "economic_facts",
           "entity_graph",
           "evidence",
@@ -6811,13 +6853,32 @@
         {
           "id": "reconciliation",
           "requirement": "required",
-          "description": "Source and currency reconciliation evidence.",
+          "description": "Separate source-native economic and commerce observations with exact settlement-to-payment references; cross-source reconciliation remains explicit.",
           "canonicalAuthorityRefs": [
+            "economic_facts",
             "currency_value_normalization",
-            "payments"
+            "commerce",
+            "payments",
+            "evidence"
           ],
-          "projectionBindings": [],
-          "unboundReason": "cross_source_value_reconciliation_not_available"
+          "projectionBindings": [
+            {
+              "projectionId": "economic360",
+              "role": "primary",
+              "sectionIds": [
+                "evidence"
+              ],
+              "subjectKinds": [
+                "campaign",
+                "entity",
+                "journey"
+              ]
+            }
+          ],
+          "implementationCrosswalk": [
+            "value_source_reconciliation_observations"
+          ],
+          "partialImplementationReason": "Subject-scoped economic rows and exact order-linked commerce facts remain separate observations. Settlement-to-payment links require the explicit provider payment ID and same commerce order reference; only native USD identity normalization is accepted. Economic records lack exact order, payment, and settlement IDs, so cross-source matching, non-USD commerce normalization, reconciled totals, and completeness remain unavailable."
         },
         {
           "id": "financial_risk",
@@ -7055,6 +7116,7 @@
           "commerce",
           "currency_value_normalization",
           "economic_facts",
+          "evidence",
           "measurement_contract",
           "model_governance",
           "outcome_facts",

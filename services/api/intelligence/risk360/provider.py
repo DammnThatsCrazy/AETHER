@@ -46,6 +46,7 @@ backing source degrades its section.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -117,6 +118,7 @@ _MAX_SOURCE_PROVENANCE_SCAN = 100
 _MAX_POISONING_EVIDENCE_SCAN = 100
 _MAX_FINANCIAL_PATH_NODES = 21
 _MAX_TRANSFERS_PER_PATH_EDGE = 2
+_MAX_SOCIAL_PROPAGATION_PATHS = 50
 
 _BLUEPRINT_REQUIRED_SLOT_IDS = (
     "risk_summary",
@@ -262,13 +264,15 @@ class RiskSourceReader(Protocol):
     cannot establish an available, complete, exact-subject read may raise; the
     provider boundary sanitizes that failure and degrades the affected section.
 
-    The two reads are the entire Risk360 input surface: the tenant's latest
-    :class:`RiskAssessment` for the subject (the aggregation) and the atomic
-    :class:`RiskSignal` records feeding it. Section mapping: ``summary`` /
+    The risk reads are the tenant's latest :class:`RiskAssessment` for the
+    subject (the aggregation) and the atomic :class:`RiskSignal` records feeding
+    it. Section mapping: ``summary`` /
     ``state`` / ``findings`` render from the assessment (+ its vector
     components), ``evidence`` from the EvidenceRefs both carry, and ``health``
-    from the signal sources. Phase 5 wires real detector output here by writing
-    typed RiskSignal / RiskAssessment rows these reads consume.
+    from the signal sources. Observed social graph paths use a separate,
+    optional canonical graph reader; they are never risk detector output.
+    Phase 5 wires real detector output here by writing typed RiskSignal /
+    RiskAssessment rows these reads consume.
     """
 
     async def latest_assessment(
@@ -681,10 +685,21 @@ class Risk360Provider:
     contract_version: str = INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION
     graph_mutation_policy: str = "read_only"
 
-    def __init__(self, sources: Optional[RiskSourceReader] = None) -> None:
+    def __init__(
+        self,
+        sources: Optional[RiskSourceReader] = None,
+        *,
+        social_graph_path_reader: Optional[Any] = None,
+        consent_reader: Optional[Any] = None,
+    ) -> None:
         # Injected canonical reader (test seam); default reads the Phase-3
         # repositories. Read-only — the provider holds no write path.
         self._sources = sources if sources is not None else RepositoryRiskSourceReader()
+        # Keep the social graph seam lazy. Its default adapter reads canonical
+        # graph + relationship-fact authorities and does not become a second
+        # risk or contagion store.
+        self._social_graph_path_reader = social_graph_path_reader
+        self._consent_reader = consent_reader
 
     # ── IntelligenceProjectionProvider ─────────────────────────────────────
 
@@ -767,12 +782,16 @@ class Risk360Provider:
         financial_link, financial_link_degraded, financial_link_reason = (
             await self._safe_financial_contagion_link(request, context)
         )
+        social_propagation, social_path_claims = await self._safe_social_propagation_paths(
+            request, context
+        )
 
         evidence = self._collect_evidence(
             assessment, signals, source_provenance, poisoning_evidence
         )
         if financial_link is not None:
             evidence = _dedupe_evidence([*evidence, *financial_link["evidence_refs"]])
+        evidence = _dedupe_evidence([*evidence, *social_propagation["evidence_refs"]])
 
         sections = [
             self._summary_section(request, assessment, assessment_degraded, dep_state),
@@ -784,6 +803,7 @@ class Risk360Provider:
                     or signals_degraded
                     or source_provenance_degraded
                     or poisoning_evidence_degraded
+                    or social_propagation["state"] == "degraded"
                 ),
             ),
             self._findings_section(
@@ -801,6 +821,7 @@ class Risk360Provider:
                 financial_link,
                 financial_link_degraded,
                 financial_link_reason,
+                social_propagation,
             ),
             self._health_section(
                 request,
@@ -824,6 +845,7 @@ class Risk360Provider:
             poisoning_evidence,
             financial_link,
         )
+        claims.extend(social_path_claims)
 
         return ProjectionResult(
             projectionId=self.projection_id,
@@ -1047,6 +1069,7 @@ class Risk360Provider:
         financial_link: Optional[dict[str, Any]],
         financial_link_degraded: bool,
         financial_link_reason: Optional[str],
+        social_propagation: dict[str, Any],
     ) -> ProjectionSection:
         """findings — NO risk findings are asserted before materiality exists.
 
@@ -1086,6 +1109,11 @@ class Risk360Provider:
                     degraded=poisoning_evidence_degraded,
                     reason=poisoning_evidence_reason,
                 ),
+                "propagationPaths": {
+                    key: value
+                    for key, value in social_propagation.items()
+                    if key != "evidence_refs"
+                },
                 "requiredSlotCoverage": self._required_slot_coverage(
                     request,
                     assessment,
@@ -1101,9 +1129,11 @@ class Risk360Provider:
                     financial_link,
                     financial_link_degraded,
                     financial_link_reason,
+                    social_propagation,
                 ),
             },
             warnings=warnings or None,
+            canonicalAuthorityRefs=["graph", "relationship_facts"],
         )
 
     @staticmethod
@@ -1208,6 +1238,7 @@ class Risk360Provider:
         financial_link: Optional[dict[str, Any]],
         financial_link_degraded: bool,
         financial_link_reason: Optional[str],
+        social_propagation: dict[str, Any],
     ) -> dict[str, dict[str, str]]:
         """Expose exact 360 slot coverage without converting absence into a claim."""
         agent_amplification = any(
@@ -1295,14 +1326,20 @@ class Risk360Provider:
         unsupported_reasons = {
             "anomaly_events": "canonical_anomaly_event_authority_unavailable",
             "policy_flags": "evaluated_policy_flag_authority_unavailable",
-            "propagation_paths": "canonical_contagion_path_authority_unavailable",
             "financial_contagion": "financial_contagion_attribution_authority_unavailable",
-            "social_contagion": "social_contagion_authority_unavailable",
+            "social_contagion": "social_contagion_causal_evidence_authority_unavailable",
             "interventions": "risk_intervention_authority_unavailable",
             "audit_history": "risk_audit_history_authority_unavailable",
         }
         for slot_id, reason in unsupported_reasons.items():
             supported[slot_id] = {"state": "unknown", "reason": reason}
+        propagation_state = social_propagation.get("state")
+        propagation_reason = social_propagation.get("reason")
+        if propagation_state in {"partial", "degraded", "unknown"}:
+            supported["propagation_paths"] = {
+                "state": propagation_state,
+                "reason": propagation_reason or "canonical_social_path_evidence_unavailable",
+            }
         if financial_link_degraded:
             supported["financial_contagion"] = {
                 "state": "degraded",
@@ -1746,6 +1783,331 @@ class Risk360Provider:
         return claims
 
     # ── Canonical read helpers (defensive) ─────────────────────────────────
+
+    async def _safe_social_propagation_paths(
+        self,
+        request: ProjectionRequest,
+        context: ProjectionContext,
+    ) -> tuple[dict[str, Any], list[ClaimEnvelope]]:
+        """Project exact observed FOLLOWS paths without asserting risk contagion.
+
+        Social Silver observations and the canonical graph establish recorded
+        relationships. They do not establish that risk, behavior, or losses
+        propagated. This read is therefore useful evidence for the
+        ``propagation_paths`` basis only; the causal ``social_contagion`` slot
+        remains unknown until its own detector/evidence writer is connected.
+        """
+        empty: dict[str, Any] = {
+            "state": "unknown",
+            "reason": "exact_entity_subject_required_for_social_graph_path_read",
+            "paths": [],
+            "evidence_refs": [],
+            "coverage": "bounded_current_observed_follows_paths",
+            "completeness": "unknown",
+            "freshness": "unknown",
+            "causalRiskPropagationEstablished": False,
+        }
+        if request.subject.kind != "entity":
+            return empty, []
+        if context.tenantId != request.tenantId:
+            empty.update(
+                state="degraded",
+                reason="social_path_runtime_tenant_context_mismatch",
+            )
+            return empty, []
+
+        time_range = request.timeRange
+        bounded_time_range = time_range is not None and any(
+            getattr(time_range, field, None) is not None for field in ("from_", "to")
+        )
+        if (
+            request.asOf is not None
+            or context.asOf is not None
+            or bounded_time_range
+            or request.temporalMode in {"as_of", "compare", "relative"}
+        ):
+            empty["reason"] = "social_graph_path_bitemporal_history_unavailable"
+            return empty, []
+
+        async def consent_for(entity_id: str) -> tuple[bool, Optional[str]]:
+            reader = self._consent_reader
+            if reader is None:
+                from governance.consent.authority import evaluate_consent
+
+                reader = evaluate_consent
+                self._consent_reader = reader
+            result = await reader(request.tenantId, entity_id, None, "analytics")
+            if isinstance(result, tuple) and result:
+                reason = result[1] if len(result) > 1 and isinstance(result[1], str) else None
+                return result[0] is True, reason
+            allowed = getattr(result, "allowed", False) is True
+            reason = getattr(result, "reason_code", None)
+            return allowed, reason if isinstance(reason, str) else None
+
+        try:
+            subject_allowed, consent_reason = await consent_for(request.subject.id)
+        except Exception:  # noqa: BLE001 - consent failure suppresses graph-derived content
+            empty.update(
+                state="degraded",
+                reason="social_path_consent_authority_unavailable",
+            )
+            return empty, []
+        if not subject_allowed:
+            empty["reason"] = (
+                "social_path_consent_authority_unavailable"
+                if consent_reason == "consent_authority_unavailable"
+                else "social_path_subject_consent_restricted"
+            )
+            if consent_reason == "consent_authority_unavailable":
+                empty["state"] = "degraded"
+            return empty, []
+
+        try:
+            from services.social360.provider import (
+                RepositorySocialGraphPathReader,
+                SocialGraphPathRead,
+                _valid_social_propagation_path,
+            )
+
+            reader = self._social_graph_path_reader
+            if reader is None:
+                reader = RepositorySocialGraphPathReader()
+                self._social_graph_path_reader = reader
+            result = await reader.read_paths(request.tenantId, request.subject.id)
+        except Exception:  # noqa: BLE001 - canonical graph authority fails closed
+            empty.update(
+                state="degraded",
+                reason="canonical_social_graph_authority_unavailable",
+            )
+            return empty, []
+
+        if not isinstance(result, SocialGraphPathRead):
+            empty.update(
+                state="degraded",
+                reason="invalid_social_graph_path_source_contract",
+            )
+            return empty, []
+        if result.tenant_id != request.tenantId or result.start_entity_id != request.subject.id:
+            empty.update(
+                state="degraded",
+                reason="canonical_social_path_scope_mismatch",
+            )
+            return empty, []
+        if not result.available:
+            empty.update(
+                state="degraded",
+                reason="canonical_social_graph_authority_unavailable",
+            )
+            return empty, []
+
+        as_of = datetime.now(timezone.utc)
+        as_of_iso = as_of.isoformat()
+        reasons = set(result.reason_codes)
+        path_items: list[dict[str, Any]] = []
+        path_refs: list[EvidenceRef] = []
+        claims: list[ClaimEnvelope] = []
+        invalid_path = False
+        consent_filtered = False
+        consent_unavailable = False
+        candidate_paths = list(result.paths)
+        candidate_truncated = len(candidate_paths) > _MAX_SOCIAL_PROPAGATION_PATHS
+        if candidate_truncated:
+            candidate_paths = candidate_paths[:_MAX_SOCIAL_PROPAGATION_PATHS]
+            reasons.add("canonical_social_path_result_capped")
+
+        for path in candidate_paths:
+            try:
+                valid = _valid_social_propagation_path(
+                    path,
+                    request.tenantId,
+                    request.subject.id,
+                    as_of=as_of_iso,
+                )
+            except Exception:  # noqa: BLE001 - malformed authority result fails closed
+                valid = False
+            if not valid:
+                invalid_path = True
+                continue
+
+            # Recheck the graph edge fields and exact evidence source sets at
+            # this projection boundary. A social reader result is input, not
+            # permission to widen tenant, predicate, or evidence scope.
+            edge_refs: list[list[EvidenceRef]] = []
+            times: list[Optional[str]] = []
+            parsed_times: list[Optional[datetime]] = []
+            malformed_time = False
+            future_time = False
+            for index, edge in enumerate(path.graph_edges):
+                properties = (
+                    edge.get("properties") or {}
+                    if isinstance(edge, dict)
+                    else getattr(edge, "properties", None) or {}
+                )
+                if not isinstance(properties, dict):
+                    malformed_time = True
+                    break
+                observed_value = properties.get("observed_at")
+                observed_at = _aware_datetime(observed_value)
+                if observed_value is not None and observed_at is None:
+                    malformed_time = True
+                    break
+                if observed_at is not None and observed_at > as_of:
+                    future_time = True
+                    break
+
+                refs = list(path.edge_evidence_refs[index])
+                idempotency_key = properties.get("idempotency_key")
+                evidence_ids = properties.get("evidence_refs")
+                expected_fact_ids = {
+                    str(value).strip()
+                    for value in evidence_ids
+                    if isinstance(value, str) and value.strip()
+                } if isinstance(evidence_ids, (list, tuple)) else set()
+                graph_refs = [ref for ref in refs if ref.source == "entity_graph"]
+                fact_refs = [ref for ref in refs if ref.source == "relationship_facts"]
+                graph_ids = {ref.id for ref in graph_refs}
+                fact_ids = {ref.id for ref in fact_refs}
+                if (
+                    not isinstance(idempotency_key, str)
+                    or graph_ids != {idempotency_key}
+                    or fact_ids != expected_fact_ids
+                    or len(refs) != len(graph_ids) + len(fact_ids)
+                    or any(ref.type != "relationship" for ref in graph_refs)
+                    or any(ref.type != "event" for ref in fact_refs)
+                ):
+                    malformed_time = True
+                    break
+                edge_refs.append(_dedupe_evidence(refs))
+                times.append(path.edge_observed_at[index])
+                parsed_times.append(observed_at)
+
+            if malformed_time or future_time:
+                invalid_path = True
+                continue
+
+            endpoint_allowed = True
+            for entity_id in path.entity_ids[1:]:
+                try:
+                    allowed, reason = await consent_for(entity_id)
+                except Exception:  # noqa: BLE001 - failed consent read suppresses the path
+                    allowed, reason = False, "consent_authority_unavailable"
+                if not allowed:
+                    endpoint_allowed = False
+                    consent_unavailable = consent_unavailable or (
+                        reason == "consent_authority_unavailable"
+                    )
+            if not endpoint_allowed:
+                consent_filtered = True
+                continue
+
+            if any(value is None for value in parsed_times):
+                time_order_state = "unknown"
+                reasons.add("social_path_source_observation_time_missing")
+            elif parsed_times == sorted(parsed_times):
+                time_order_state = "ordered"
+            else:
+                time_order_state = "conflicted"
+                reasons.add("social_path_source_observation_order_conflicted")
+
+            refs = _dedupe_evidence([ref for edge in edge_refs for ref in edge])
+            if not refs:
+                invalid_path = True
+                continue
+            path_refs.extend(refs)
+            path_items.append(
+                {
+                    "entityPath": list(path.entity_ids),
+                    "edgePredicate": "FOLLOWS",
+                    "edgeEvidenceRefs": [
+                        [ref.model_dump(mode="json") for ref in edge] for edge in edge_refs
+                    ],
+                    "sourceObservedAtByEdge": times,
+                    "timeOrderState": time_order_state,
+                    "semantics": {
+                        "observedDirectedGraphEdges": True,
+                        "riskPropagationEstablished": False,
+                        "socialContagionEstablished": False,
+                        "causalityEstablished": False,
+                    },
+                    "evidenceRefs": [ref.model_dump(mode="json") for ref in refs],
+                }
+            )
+            path_digest = hashlib.sha256(
+                "\x1f".join([*path.entity_ids, *(ref.id for ref in refs)]).encode("utf-8")
+            ).hexdigest()[:24]
+            claims.append(
+                ClaimEnvelope(
+                    id=f"risk360.social-path.{path_digest}",
+                    kind="risk_social_graph_path_observation",
+                    subject=ProjectionSubject(kind=request.subject.kind, id=request.subject.id),
+                    evidenceRefs=refs,
+                    claims=[
+                        "The tenant-scoped canonical graph and relationship facts record this "
+                        "directed sequence of FOLLOWS edges. It is observed path context only; "
+                        "the evidence does not establish chronological risk propagation, social "
+                        "contagion, causation, or attributable loss."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["propagation_paths", "evidence_trace"],
+                )
+            )
+
+        if invalid_path:
+            reasons.add("canonical_social_path_validation_failed")
+        if consent_filtered:
+            reasons.add("social_path_endpoint_consent_restricted")
+        if consent_unavailable:
+            reasons.add("social_path_consent_authority_unavailable")
+        if result.truncated:
+            reasons.add("canonical_social_path_read_bounded")
+
+        authority_incomplete = bool(
+            set(result.reason_codes)
+            - {"no_bounded_observed_follows_paths", "canonical_graph_subject_unresolved"}
+        )
+        if path_items:
+            state = (
+                "degraded"
+                if result.truncated
+                or candidate_truncated
+                or invalid_path
+                or consent_unavailable
+                or authority_incomplete
+                else "partial"
+            )
+            reason = (
+                "canonical_social_path_evidence_incomplete"
+                if state == "degraded"
+                else "observed_social_graph_paths_do_not_establish_causal_risk_propagation"
+            )
+        elif (
+            result.truncated
+            or candidate_truncated
+            or invalid_path
+            or consent_unavailable
+            or authority_incomplete
+        ):
+            state = "degraded"
+            reason = "canonical_social_path_evidence_incomplete"
+        else:
+            state = "unknown"
+            reason = next(iter(sorted(reasons)), "no_bounded_observed_follows_paths")
+
+        return {
+            "state": state,
+            "reason": reason,
+            "paths": path_items,
+            "evidence_refs": _dedupe_evidence(path_refs),
+            "coverage": "bounded_current_observed_follows_paths",
+            "completeness": (
+                "unknown"
+                if result.truncated or candidate_truncated or authority_incomplete
+                else "complete_within_declared_bounds"
+            ),
+            "freshness": "unknown",
+            "causalRiskPropagationEstablished": False,
+            "reasonCodes": sorted(reasons),
+        }, claims
 
     async def _safe_financial_contagion_link(
         self,

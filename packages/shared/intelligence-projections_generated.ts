@@ -462,7 +462,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/architecture/blueprints/communication360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['agent', 'campaign', 'entity', 'episode', 'journey', 'source'],
-    canonicalAuthorities: ['campaign_touchpoints', 'communication_facts', 'entities', 'evidence', 'journeys', 'outcomes', 'risk_signals'],
+    canonicalAuthorities: ['campaign_touchpoints', 'communication_facts', 'consent_policy_decisions', 'entities', 'evidence', 'journeys', 'outcomes', 'risk_signals'],
     hardDependencies: ['contract_spine', 'temporal_kernel'],
     projectionDependencies: ['episode360', 'outcome360', 'profile360', 'relationship360'],
     optionalProjectionDependencies: [],
@@ -589,7 +589,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/architecture/blueprints/economic360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['account', 'agent', 'campaign', 'cluster', 'conversion', 'entity', 'episode', 'journey', 'profile', 'source'],
-    canonicalAuthorities: ['ai_execution_facts', 'attribution_credits', 'attribution_runs', 'canonical_conversions', 'commerce', 'currency_value_normalization', 'economic_facts', 'graph', 'outcome_facts', 'payments'],
+    canonicalAuthorities: ['ai_execution_facts', 'attribution_credits', 'attribution_runs', 'canonical_conversions', 'commerce', 'currency_value_normalization', 'economic_facts', 'evidence', 'graph', 'outcome_facts', 'payments'],
     hardDependencies: ['measurement_outcome_contract', 'temporal_kernel'],
     projectionDependencies: ['outcome360', 'profile360', 'relationship360'],
     optionalProjectionDependencies: [],
@@ -1256,7 +1256,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/architecture/blueprints/risk360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['agent', 'cluster', 'contagion_path', 'entity', 'population', 'relationship', 'source'],
-    canonicalAuthorities: ['cluster_membership', 'economic_facts', 'entity_graph', 'evidence', 'flow_trace_paths', 'flow_traces', 'model_governance', 'risk_assessments', 'risk_outputs', 'risk_signals', 'source_provenance', 'transfers'],
+    canonicalAuthorities: ['cluster_membership', 'consent_policy_decisions', 'economic_facts', 'entity_graph', 'evidence', 'flow_trace_paths', 'flow_traces', 'graph', 'model_governance', 'relationship_facts', 'risk_assessments', 'risk_outputs', 'risk_signals', 'source_provenance', 'transfers'],
     hardDependencies: ['computation_substrate', 'evidence_provenance', 'model_governance'],
     projectionDependencies: ['cluster360', 'economic360', 'profile360'],
     optionalProjectionDependencies: [],
@@ -2319,7 +2319,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
           }
         ],
         requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['agent_entities', 'identity', 'relationship_facts', 'social_observations']
+        unboundCanonicalAuthorityRefs: ['agent_entities', 'identity', 'social_observations']
       },
       {
         canonicalAuthorityRefs: ['graph', 'relationship_facts', 'temporal'],
@@ -2951,12 +2951,20 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
-        canonicalAuthorityRefs: ['communication_facts'],
-        description: 'Required communications360 slot: policy state.',
+        canonicalAuthorityRefs: ['communication_facts', 'consent_policy_decisions', 'evidence'],
+        description: 'Current server-consent decisions for exact tenant-scoped recipient and purpose pairs, separated from historical communication-time decisions.',
         id: 'policy_state',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'communication_policy_evaluation_authority_not_joined'
+        implementationCrosswalk: ['communication_current_consent_policy_state'],
+        partialImplementationReason: 'Current consent is evaluated only for exact tenant, recipient-entity, and purpose pairs supported by communication identity and evidence. Historical write-time outcomes are separate; non-consent policy, durable current-decision evidence, complete recipient coverage, and freshness remain unknown.',
+        projectionBindings: [
+          {
+            projectionId: 'communication360',
+            role: 'primary',
+            subjectKinds: ['agent', 'campaign', 'episode', 'journey', 'source'],
+            sectionIds: ['summary']
+          }
+        ],
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['communication_facts', 'identity'],
@@ -3043,7 +3051,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       }
     ],
     sourceOfTruth: {
-      canonicalAuthorities: ['campaign_touchpoints', 'communication_facts', 'entities', 'evidence', 'identity', 'journeys', 'risk_outputs', 'risk_signals'],
+      canonicalAuthorities: ['campaign_touchpoints', 'communication_facts', 'consent_policy_decisions', 'entities', 'evidence', 'identity', 'journeys', 'risk_outputs', 'risk_signals'],
       ownsCanonicalTruth: false,
       prohibitedOwnership: ['economic_facts', 'execution_facts', 'graph', 'identity', 'observations', 'risk_outputs', 'source_provenance']
     },
@@ -4907,12 +4915,20 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         unboundReason: 'evaluated_policy_flag_authority_not_connected'
       },
       {
-        canonicalAuthorityRefs: ['graph', 'relationship_facts'],
-        description: 'Causally supported risk propagation paths.',
+        canonicalAuthorityRefs: ['consent_policy_decisions', 'evidence', 'graph', 'relationship_facts'],
+        description: 'Observed, consent-governed social graph paths used as risk investigation context; path evidence alone does not establish risk propagation.',
         id: 'propagation_paths',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'canonical_contagion_path_authority_not_connected'
+        implementationCrosswalk: ['risk_observed_social_graph_paths'],
+        partialImplementationReason: 'Bounded current tenant-scoped FOLLOWS paths are emitted only with analytics consent, canonical graph and relationship evidence, exact endpoint scope, valid edge state, and acceptable evidence times. Observed edges do not prove causal risk propagation; historical reads, complete path coverage, and freshness remain unknown.',
+        projectionBindings: [
+          {
+            projectionId: 'risk360',
+            role: 'primary',
+            subjectKinds: ['entity'],
+            sectionIds: ['findings']
+          }
+        ],
+        requirement: 'required'
       },
       {
         id: 'relationship_network_context',
@@ -5060,7 +5076,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       }
     ],
     sourceOfTruth: {
-      canonicalAuthorities: ['actions', 'ai_execution_facts', 'economic_facts', 'entity_graph', 'evidence', 'execution_facts', 'flow_trace_paths', 'flow_traces', 'fraud_synthesis', 'graph', 'graph_motifs', 'model_governance', 'mutation_history', 'observations', 'relationship_facts', 'risk_assessments', 'risk_outputs', 'risk_signals', 'social_observations', 'source_provenance', 'transfers'],
+      canonicalAuthorities: ['actions', 'ai_execution_facts', 'consent_policy_decisions', 'economic_facts', 'entity_graph', 'evidence', 'execution_facts', 'flow_trace_paths', 'flow_traces', 'fraud_synthesis', 'graph', 'graph_motifs', 'model_governance', 'mutation_history', 'observations', 'relationship_facts', 'risk_assessments', 'risk_outputs', 'risk_signals', 'social_observations', 'source_provenance', 'transfers'],
       ownsCanonicalTruth: false,
       prohibitedOwnership: ['economic_facts', 'execution_facts', 'graph', 'identity', 'observations', 'risk_outputs', 'source_provenance']
     },
@@ -5967,12 +5983,20 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
-        canonicalAuthorityRefs: ['currency_value_normalization', 'payments'],
-        description: 'Source and currency reconciliation evidence.',
+        canonicalAuthorityRefs: ['commerce', 'currency_value_normalization', 'economic_facts', 'evidence', 'payments'],
+        description: 'Separate source-native economic and commerce observations with exact settlement-to-payment references; cross-source reconciliation remains explicit.',
         id: 'reconciliation',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'cross_source_value_reconciliation_not_available'
+        implementationCrosswalk: ['value_source_reconciliation_observations'],
+        partialImplementationReason: 'Subject-scoped economic rows and exact order-linked commerce facts remain separate observations. Settlement-to-payment links require the explicit provider payment ID and same commerce order reference; only native USD identity normalization is accepted. Economic records lack exact order, payment, and settlement IDs, so cross-source matching, non-USD commerce normalization, reconciled totals, and completeness remain unavailable.',
+        projectionBindings: [
+          {
+            projectionId: 'economic360',
+            role: 'primary',
+            subjectKinds: ['campaign', 'entity', 'journey'],
+            sectionIds: ['evidence']
+          }
+        ],
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['economic_facts', 'payments'],
@@ -6083,7 +6107,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       }
     ],
     sourceOfTruth: {
-      canonicalAuthorities: ['ai_execution_facts', 'attribution_credits', 'attribution_runs', 'campaign_facts', 'campaign_touchpoints', 'canonical_conversions', 'commerce', 'currency_value_normalization', 'economic_facts', 'measurement_contract', 'model_governance', 'outcome_facts', 'payments', 'risk_outputs', 'temporal_kernel'],
+      canonicalAuthorities: ['ai_execution_facts', 'attribution_credits', 'attribution_runs', 'campaign_facts', 'campaign_touchpoints', 'canonical_conversions', 'commerce', 'currency_value_normalization', 'economic_facts', 'evidence', 'measurement_contract', 'model_governance', 'outcome_facts', 'payments', 'risk_outputs', 'temporal_kernel'],
       ownsCanonicalTruth: false,
       prohibitedOwnership: ['economic_facts', 'execution_facts', 'graph', 'identity', 'observations', 'risk_outputs', 'source_provenance']
     },

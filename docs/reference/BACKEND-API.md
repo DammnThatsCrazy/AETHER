@@ -2014,6 +2014,23 @@ unknown because episode records and observations have no canonical execution or
 handoff reference. The frame route preserves these slot limitations and adds
 no new endpoint.
 
+The next provider slice adds three partial required-slot paths without new
+routes or surface completion. Communications360 `policy_state` evaluates the
+canonical current-consent authority only for exact tenant, recipient-entity,
+and purpose pairs supported by communication identity and evidence; historical
+write-time outcomes remain separate, while non-consent policy, durable current
+decision evidence, complete recipient coverage, and freshness remain unknown.
+Risk360 `propagation_paths` exposes bounded current FOLLOWS graph paths only
+after analytics consent, endpoint, tenant, relationship-evidence, and observed-
+time checks; the evidence records path context and does not establish risk
+propagation or social contagion. `social_contagion` remains unknown because a
+causal detector/evidence authority is not connected. Value360 `reconciliation`
+keeps subject economic records and exact order-linked commerce facts separate,
+and resolves settlement-to-payment references only through an explicit
+provider payment ID and the same commerce order. Cross-source economic matching,
+non-USD commerce normalization, reconciled totals, amount equality, and
+settlement finality remain unavailable.
+
 ### Support case lifecycle evidence ingress
 
 `POST /v1/support/cases/ingest` accepts one allow-listed lifecycle event under

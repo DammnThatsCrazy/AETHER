@@ -11,7 +11,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:52a8f83bc397310667f42cb1d4d9cf4dc553682a506beabb6ba8168efa44df31"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:d7cf0aa3b03f0c060b96a7af46a717361a09ae6f3af2f11fcb247db5f2d00ed1"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:540f85292689337edc329c9b72b7c4f99487226a5e31aab6526c878e7ea36eeb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -31,8 +31,10 @@ source_hashes:
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
   "services/api/intelligence/risk360/": "sha256:595590d43ef5d1be824ad90e31c30018c023a431667a8165aaa4b008959220dc"
   "services/api/journeys/communication360/provider.py": "sha256:103203807abc92ff1c262e358335e9697873c24706ab42d81a512af3c0cf1efc"
+  "services/api/shared/store.py": "sha256:ff4198cf285ac4c250481ef0ae476037c26b1f4d1fa00751964638ff1f91fa8c"
+  "services/api/value/commerce/order_payment_reconciliation.py": "sha256:eefcfa3b35c8ff888be7141bcf91d2bfe08399a17b986b09abb9cafac41566b8"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
-  "services/api/value/economic/economic360_provider.py": "sha256:feefe5903f7faa2fee321e31f11c2e89d344353ad9b0f585325ebd0d349cc57f"
+  "services/api/value/economic/economic360_provider.py": "sha256:c53dc4f182204f1ebffd2a4d5e07d559123e0a8e696d4fa5ff74d18fd9fd1b94"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
   "services/api/value/x402/": "sha256:49f3660ba1468f6481b067fcd46ad230199aee60d7e7316ba57b7c69c368c4a9"
   "services/api/workers/runtime/specs.py": "sha256:b86659249b2f805b3ba81631c57e71ca57be089de07278fedccbe25b576df64b"
@@ -190,6 +192,17 @@ step records are not yet connected; workflow definition and complete step
 coverage remain unknown. Episode360 `agent_handoffs` remains unknown because
 episode records and observations do not reference a canonical execution or
 handoff ID. Event labels and agent metadata do not establish that relationship.
+
+The next provider slice adds bounded Communications360 `policy_state`, Risk360
+`propagation_paths`, and Value360 `reconciliation` evidence. Communications360
+checks current server consent only for exact recipient-entity and purpose pairs
+and keeps historical outcomes separate; non-consent policy and durable current
+decision evidence remain unavailable. Risk360 exposes consent-gated observed
+FOLLOWS paths with relationship evidence, but leaves causal social contagion
+unknown. Value360 preserves separate economic and commerce observations and
+resolves only explicit settlement-to-payment references within the same order;
+it does not match economic rows across sources or calculate reconciled totals.
+All three are partial slot paths and do not complete their product surfaces.
 
 ## Bucket 1 — Correctly observation-only
 

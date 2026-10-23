@@ -192,6 +192,21 @@ class FakeRiskSignalReader:
         return list(self.rows)
 
 
+class FakeConsentPolicyReader:
+    """Exact tenant/recipient/purpose consent authority test double."""
+
+    def __init__(self, result: dict | None = None, *, raises: bool = False) -> None:
+        self.result = dict(result or {})
+        self.raises = raises
+        self.calls: list[tuple[str, str, str]] = []
+
+    async def evaluate(self, tenant_id: str, subject_id: str, purpose: str):
+        self.calls.append((tenant_id, subject_id, purpose))
+        if self.raises:
+            raise RuntimeError("consent authority failed: private backend detail")
+        return dict(self.result)
+
+
 class FakeEntityIdentityReader:
     """Exact tenant/entity registry read used by entity communication tests."""
 
@@ -1783,6 +1798,153 @@ async def test_communications_unsupported_slots_stay_unknown_without_exact_evide
     assert coverage["journey_links"]["state"] == "unknown"
     assert coverage["policy_state"]["state"] == "unknown"
     assert coverage["risk_flags"]["state"] == "unknown"
+
+
+def _message_with_consent_lineage(
+    *, state: str, purpose: str = "marketing", subject_id: str = "profile-policy-1"
+) -> CommunicationMessage:
+    binding_id = "recipient-binding-policy-1"
+    message = _entity_bound_message(
+        TENANT_A,
+        "message-policy-1",
+        subject_id,
+        side="recipient",
+        binding_id=binding_id,
+    )
+    if state == "recorded":
+        consent = CommunicationConsentEvidence(
+            state="recorded",
+            purpose=purpose,
+            receipt_id="historical-receipt-1",
+            subject_entity_id=subject_id,
+            identity_binding_id=binding_id,
+            evidence_refs=[
+                EvidenceRef(
+                    id="historical-receipt-1",
+                    type="event",
+                    source="governance.consent.authority",
+                    uri="store://consent_receipts/historical-receipt-1",
+                ),
+                EvidenceRef(
+                    id=binding_id,
+                    type="entity",
+                    source="comms_provider_identities",
+                    uri=f"store://comms_provider_identities/{binding_id}",
+                ),
+            ],
+        )
+    else:
+        consent = CommunicationConsentEvidence(state="unknown", purpose=purpose)
+    return message.model_copy(update={"consent_evidence": consent})
+
+
+async def test_communications_policy_state_evaluates_exact_current_consent_and_keeps_history_separate() -> None:
+    message = _message_with_consent_lineage(state="recorded")
+    reader = FakeConsentPolicyReader(
+        {"allowed": True, "reason_code": None, "receipt_id": "current-receipt-2"}
+    )
+    provider = Communication360Provider(
+        sources=FakeSource(messages=[message]), consent_policy_reader=reader
+    )
+    request, context = await _make_context(ProviderRegistry())
+
+    result = await provider.project(request, context)
+
+    policy = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]["policy_state"]
+    assert reader.calls == [(TENANT_A, "profile-policy-1", "marketing")]
+    assert policy["state"] == "available"
+    assert policy["coverage"] == "partial"
+    assert policy["currentPolicyState"] == "partial"
+    assert policy["currentConsentState"] == "allowed"
+    assert policy["decisionEvidenceState"] == "not_persisted"
+    assert policy["historicalDecisions"][0]["outcomeAtCommunication"] == "allowed"
+    assert policy["currentEvaluations"][0]["decision"] == "allowed"
+    assert policy["currentEvaluations"][0]["reasonCode"] is None
+    assert policy["currentEvaluations"][0]["authorityEvidenceRefs"][0]["id"] == (
+        "current-receipt-2"
+    )
+    assert policy["currentEvaluations"][0]["subjectEvidenceRefs"]
+    assert {ref["id"] for ref in policy["evidenceRefs"]} >= {
+        "ev-message-policy-1",
+        "historical-receipt-1",
+        "current-receipt-2",
+        "recipient-binding-policy-1",
+    }
+
+
+async def test_communications_policy_state_never_turns_missing_consent_into_allow() -> None:
+    message = _message_with_consent_lineage(state="unknown")
+    reader = FakeConsentPolicyReader(
+        {
+            "allowed": False,
+            "reason_code": "consent_receipt_missing",
+            "receipt_id": None,
+        }
+    )
+    provider = Communication360Provider(
+        sources=FakeSource(messages=[message]), consent_policy_reader=reader
+    )
+    request, context = await _make_context(ProviderRegistry())
+
+    result = await provider.project(request, context)
+
+    policy = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]["policy_state"]
+    assert reader.calls == [(TENANT_A, "profile-policy-1", "marketing")]
+    assert policy["state"] == "available"
+    assert policy["currentConsentState"] == "denied"
+    assert policy["currentEvaluations"][0]["decision"] == "denied"
+    assert policy["currentEvaluations"][0]["reasonCode"] == "consent_receipt_missing"
+    assert policy["currentEvaluations"][0]["authorityEvidenceRefs"] == []
+    assert policy["historicalDecisions"][0]["outcomeAtCommunication"] == "unknown"
+
+
+async def test_communications_policy_state_degrades_on_authority_outage_without_leaking_error() -> None:
+    message = _message_with_consent_lineage(state="recorded")
+    reader = FakeConsentPolicyReader(raises=True)
+    provider = Communication360Provider(
+        sources=FakeSource(messages=[message]), consent_policy_reader=reader
+    )
+    request, context = await _make_context(ProviderRegistry())
+
+    result = await provider.project(request, context)
+
+    policy = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]["policy_state"]
+    assert reader.calls == [(TENANT_A, "profile-policy-1", "marketing")]
+    assert policy["state"] == "degraded"
+    assert policy["currentConsentState"] == "unknown"
+    assert policy["currentEvaluations"][0]["decision"] == "unknown"
+    assert policy["currentEvaluations"][0]["reasonCode"] == "consent_authority_unavailable"
+    assert "private backend detail" not in str(result.model_dump(mode="json"))
+
+
+async def test_communications_policy_state_does_not_apply_current_consent_to_as_of_frame() -> None:
+    message = _message_with_consent_lineage(state="recorded")
+    reader = FakeConsentPolicyReader(
+        {"allowed": True, "reason_code": None, "receipt_id": "current-receipt-2"}
+    )
+    provider = Communication360Provider(
+        sources=FakeSource(messages=[message]), consent_policy_reader=reader
+    )
+    request, context = await _make_context(
+        ProviderRegistry(), asOf="2026-10-20T13:00:00Z"
+    )
+
+    result = await provider.project(request, context)
+
+    policy = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]["policy_state"]
+    assert reader.calls == []
+    assert policy["state"] == "unknown"
+    assert policy["currentConsentState"] == "unknown"
+    assert policy["currentPolicyState"] == "not_evaluated"
+    assert policy["reason"] == "current_consent_not_evaluated_for_historical_request"
 
 
 async def test_communication360_resolves_explicit_journey_reference_with_tenant_evidence() -> None:

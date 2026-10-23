@@ -33,7 +33,7 @@ Declared binding counts are registry coverage, not proof that a slot or surface 
 | [Agent 360](#agent-360) | source_aligned | `agent`, `entity` | 11 | 11/11 | 6 | 0 | 4 | `agent360`, `communication360`, `economic360`, `execution360`, `outcome360`, `relationship360`, `risk360` | — |
 | [Campaign 360](#campaign-360) | source_aligned | `campaign` | 11 | 10/11 | 3 | 1 | 0 | `campaign360`, `communication360`, `economic360`, `outcome360` | — |
 | [Commerce 360](#commerce-360) | source_aligned | `entity`, `campaign`, `journey`, `commerce`, `product`, `offer`, `sku`, `checkout` | 11 | 6/11 | 2 | 5 | 0 | `commerce360` | — |
-| [Communications 360](#communications-360) | source_aligned | `message`, `thread`, `profile`, `campaign`, `episode`, `agent`, `journey`, `source` | 11 | 9/11 | 2 | 2 | 0 | `communication360` | — |
+| [Communications 360](#communications-360) | source_aligned | `message`, `thread`, `profile`, `campaign`, `episode`, `agent`, `journey`, `source` | 11 | 10/11 | 3 | 1 | 0 | `communication360` | — |
 | [Episode 360](#episode-360) | source_aligned | `episode`, `session`, `conversation`, `activity_window`, `entity`, `campaign` | 11 | 6/11 | 2 | 5 | 1 | `communication360`, `campaign360`, `episode360`, `profile360`, `relationship360` | — |
 | [Execution 360](#execution-360) | source_aligned | `agent`, `entity`, `episode`, `execution` | 11 | 11/11 | 5 | 0 | 0 | `execution360` | — |
 | [Identity 360](#identity-360) | source_aligned | `entity`, `agent`, `source` | 10 | 10/10 | 1 | 0 | 3 | `agent360`, `execution360`, `profile360`, `relationship360` | `Identity360Provider` (runtime_wired) |
@@ -41,11 +41,11 @@ Declared binding counts are registry coverage, not proof that a slot or surface 
 | [Location 360](#location-360) | source_aligned | `location`, `place`, `geohash`, `timezone`, `region`, `entity`, `population`, `source` | 11 | 5/11 | 2 | 6 | 4 | `geographic360`, `population360`, `profile360` | — |
 | [Memory 360](#memory-360) | source_aligned | `entity`, `semantic_entity`, `memory`, `card`, `topic` | 10 | 8/10 | 2 | 2 | 0 | `memory360` | — |
 | [Profile 360](#profile-360) | source_aligned | `profile`, `entity`, `agent`, `anonymous_subject`, `account_member`, `cluster` | 13 | 11/13 | 7 | 2 | 6 | `economic360`, `outcome360`, `profile360`, `geographic360`, `relationship360`, `risk360` | — |
-| [Risk 360](#risk-360) | source_aligned | `risk`, `entity`, `profile`, `agent`, `account`, `source`, `campaign`, `contagion_path`, `relationship`, `cluster` | 12 | 6/12 | 2 | 6 | 6 | `economic360`, `execution360`, `fraud360`, `relationship360`, `risk360`, `social360` | — |
+| [Risk 360](#risk-360) | source_aligned | `risk`, `entity`, `profile`, `agent`, `account`, `source`, `campaign`, `contagion_path`, `relationship`, `cluster` | 12 | 7/12 | 3 | 5 | 6 | `economic360`, `execution360`, `fraud360`, `relationship360`, `risk360`, `social360` | — |
 | [Signals 360](#signals-360) | source_aligned | `entity`, `signal`, `source`, `event`, `observation`, `stream` | 10 | 7/10 | 4 | 3 | 0 | `signals360` | — |
 | [Social 360](#social-360) | source_aligned | `entity`, `profile`, `relationship`, `community`, `syndicate`, `source`, `population` | 10 | 5/10 | 2 | 5 | 5 | `geographic360`, `population360`, `relationship360`, `social360`, `source360` | — |
 | [Support 360](#support-360) | source_aligned | `support_case`, `callback`, `conversation`, `ticket`, `entity`, `agent`, `episode`, `source` | 10 | 4/10 | 3 | 6 | 6 | `agent360`, `episode360`, `outcome360`, `profile360`, `risk360`, `source360`, `support360` | — |
-| [Value 360](#value-360) | source_aligned | `value`, `profile`, `account`, `conversion`, `cluster`, `campaign`, `episode`, `journey`, `entity`, `agent`, `source` | 11 | 6/11 | 4 | 5 | 5 | `campaign360`, `economic360`, `outcome360`, `temporal360` | — |
+| [Value 360](#value-360) | source_aligned | `value`, `profile`, `account`, `conversion`, `cluster`, `campaign`, `episode`, `journey`, `entity`, `agent`, `source` | 11 | 7/11 | 5 | 4 | 5 | `campaign360`, `economic360`, `outcome360`, `temporal360` | — |
 | [Workflow 360](#workflow-360) | source_aligned | `workflow`, `automation`, `trigger`, `run`, `workflow_run` | 11 | 5/11 | 2 | 6 | 0 | `workflow360` | — |
 
 ## Account 360
@@ -294,7 +294,7 @@ Governed view of communication facts, delivery and engagement evidence, campaign
 | `journey_links` | required |  | `communication_facts`, `journeys` | `communication360` (primary): subjects `agent`, `campaign`, `episode`, `journey`, `source`; `summary`, `evidence` | — | Partial: `current_explicit_journey_references_only_no_historical_replay` | Explicit journey references on in-scope communication facts resolved to current tenant journey versions. |
 | `message_inventory` | required |  | `communication_facts`, `evidence` | `communication360` (primary): subjects `agent`, `campaign`; `timeline`, `evidence` | — | — | Bounded observed message entries with message evidence. |
 | `participants` | required |  | `communication_facts`, `entities` | `communication360` (primary): subjects `agent`, `campaign`; `interactions` | — | — | Participant binding rows and endpoint metadata; full role resolution is pending. |
-| `policy_state` | required |  | `communication_facts` | — | — | Unbound: `communication_policy_evaluation_authority_not_joined` | Required communications360 slot: policy state. |
+| `policy_state` | required |  | `communication_facts`, `consent_policy_decisions`, `evidence` | `communication360` (primary): subjects `agent`, `campaign`, `episode`, `journey`, `source`; `summary` | — | Partial: `Current consent is evaluated only for exact tenant, recipient-entity, and purpose pairs supported by communication identity and evidence. Historical write-time outcomes are separate; non-consent policy, durable current-decision evidence, complete recipient coverage, and freshness remain unknown.` | Current server-consent decisions for exact tenant-scoped recipient and purpose pairs, separated from historical communication-time decisions. |
 | `profile_links` | required |  | `communication_facts`, `identity` | — | — | Unbound: `typed_profile_message_link_authority_not_joined` | Required communications360 slot: profile links. |
 | `response_events` | required |  | `communication_facts` | `communication360` (primary): subjects `agent`, `campaign`; `interactions` | — | — | Observed response-like communication acts; expectations stay distinct. |
 | `risk_flags` | required |  | `risk_outputs`, `risk_signals` | `communication360` (primary): subjects `agent`, `source`; `summary`, `evidence` | — | Authority: `message_scoped_composite_risk_output_not_joined`; Partial: `agent_and_source_current_risk_signals_only` | Exact current risk-signal records for direct source or identity-resolved agent communication subjects. |
@@ -314,7 +314,7 @@ Governed view of communication facts, delivery and engagement evidence, campaign
 
 ### Authority and governance contract
 
-Canonical authorities: `campaign_touchpoints`, `communication_facts`, `entities`, `evidence`, `identity`, `journeys`, `risk_outputs`, `risk_signals`.
+Canonical authorities: `campaign_touchpoints`, `communication_facts`, `consent_policy_decisions`, `entities`, `evidence`, `identity`, `journeys`, `risk_outputs`, `risk_signals`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -746,7 +746,7 @@ Governed view of risk findings, evidence, relationship and economic exposure, wi
 | `interventions` | required |  | `actions`, `risk_outputs` | — | — | Unbound: `risk_intervention_authority_not_connected` | Recorded risk interventions and results. |
 | `poisoning_evidence` | required |  | `risk_outputs`, `source_provenance` | `risk360` (primary): subjects `agent`, `cluster`, `contagion_path`, `entity`, `relationship`, `source`; `evidence`, `findings` | — | Partial: `Risk360 reads explicitly stored detector evidence for exact tenant and subject bindings, with temporal anchors, lifecycle, restatement lineage, and evidence references. Detector coverage, independent source verification, population-wide completeness, and a source freshness SLA remain unknown.` | Tenant-scoped detector evidence for exact subjects, with versioned lifecycle and evidence references; detector completeness and source reputation remain unknown. |
 | `policy_flags` | required |  | `risk_outputs`, `model_governance` | — | — | Unbound: `evaluated_policy_flag_authority_not_connected` | Evaluated risk policy flags with policy version and evidence. |
-| `propagation_paths` | required |  | `graph`, `relationship_facts` | — | — | Unbound: `canonical_contagion_path_authority_not_connected` | Causally supported risk propagation paths. |
+| `propagation_paths` | required |  | `graph`, `relationship_facts`, `consent_policy_decisions`, `evidence` | `risk360` (primary): subjects `entity`; `findings` | — | Partial: `Bounded current tenant-scoped FOLLOWS paths are emitted only with analytics consent, canonical graph and relationship evidence, exact endpoint scope, valid edge state, and acceptable evidence times. Observed edges do not prove causal risk propagation; historical reads, complete path coverage, and freshness remain unknown.` | Observed, consent-governed social graph paths used as risk investigation context; path evidence alone does not establish risk propagation. |
 | `relationship_network_context` | optional |  | `entity_graph`, `relationship_facts`, `graph` | `relationship360` (primary): subjects `agent`, `entity`, `relationship`; `summary`, `interactions`, `evidence`; `risk360` (supporting): subjects `entity`, `relationship`, `cluster`; `summary`, `evidence` | — | — | Entity graph and relationship evidence relevant to risk. |
 | `risk_assessment_state` | optional |  | `risk_outputs`, `model_governance` | `risk360` (primary): subjects `agent`, `entity`, `relationship`, `cluster`; `summary`, `state`, `findings`, `health` | — | — | Risk outputs, model governance context, and assessment state. |
 | `risk_evidence_and_limitations` | optional |  | `evidence` | `risk360` (primary): subjects `agent`, `entity`, `relationship`, `cluster`; `evidence`, `findings` | — | — | Evidence and limitations supporting risk findings. |
@@ -773,7 +773,7 @@ Governed view of risk findings, evidence, relationship and economic exposure, wi
 
 ### Authority and governance contract
 
-Canonical authorities: `actions`, `ai_execution_facts`, `economic_facts`, `entity_graph`, `evidence`, `execution_facts`, `flow_trace_paths`, `flow_traces`, `fraud_synthesis`, `graph`, `graph_motifs`, `model_governance`, `mutation_history`, `observations`, `relationship_facts`, `risk_assessments`, `risk_outputs`, `risk_signals`, `social_observations`, `source_provenance`, `transfers`.
+Canonical authorities: `actions`, `ai_execution_facts`, `consent_policy_decisions`, `economic_facts`, `entity_graph`, `evidence`, `execution_facts`, `flow_trace_paths`, `flow_traces`, `fraud_synthesis`, `graph`, `graph_motifs`, `model_governance`, `mutation_history`, `observations`, `relationship_facts`, `risk_assessments`, `risk_outputs`, `risk_signals`, `social_observations`, `source_provenance`, `transfers`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -983,7 +983,7 @@ Governed view of economic facts, payment and commerce evidence, attribution, and
 | `ltv` | required |  | `economic_facts`, `outcome_facts` | — | — | Unbound: `canonical_ltv_measurement_authority_not_available` | Lifetime value over a defined subject and temporal window. |
 | `measured_outcomes` | optional |  | `outcome_facts`, `measurement_contract` | `outcome360` (primary): subjects `campaign`, `episode`, `journey`; `summary`, `evidence`, `outcomes` | — | — | Measured outcome facts linked to economic value. |
 | `payments_and_commerce_evidence` | optional |  | `payments`, `commerce`, `ai_execution_facts` | `economic360` (primary): subjects `campaign`, `episode`, `journey`; `evidence`, `outcomes` | — | — | Payment and commerce evidence from the corresponding authorities. |
-| `reconciliation` | required |  | `currency_value_normalization`, `payments` | — | — | Unbound: `cross_source_value_reconciliation_not_available` | Source and currency reconciliation evidence. |
+| `reconciliation` | required |  | `economic_facts`, `currency_value_normalization`, `commerce`, `payments`, `evidence` | `economic360` (primary): subjects `campaign`, `entity`, `journey`; `evidence` | — | Partial: `Subject-scoped economic rows and exact order-linked commerce facts remain separate observations. Settlement-to-payment links require the explicit provider payment ID and same commerce order reference; only native USD identity normalization is accepted. Economic records lack exact order, payment, and settlement IDs, so cross-source matching, non-USD commerce normalization, reconciled totals, and completeness remain unavailable.` | Separate source-native economic and commerce observations with exact settlement-to-payment references; cross-source reconciliation remains explicit. |
 | `revenue_events` | required |  | `payments`, `economic_facts` | `economic360` (primary): subjects `campaign`, `entity`, `journey`; `evidence` | — | Partial: `all_revenue_event_sources_and_attribution_not_joined` | Source-recorded settled payment events with an explicit operation join and transaction evidence; no attributed revenue total. |
 | `temporal_context` | optional |  | `temporal_kernel` | `temporal360` (primary): subjects none; `state`, `timeline` | — | — | Temporal context for value facts and comparisons. |
 | `value_summary` | required |  | `economic_facts`, `currency_value_normalization` | `economic360` (primary): subjects `agent`, `campaign`, `entity`, `episode`, `journey`, `source`; `summary` | — | — | Subject-scoped computed economic value with explicit missing, zero, and source currency states; no inferred attribution or AI cost aggregation. |
@@ -1007,7 +1007,7 @@ Governed view of economic facts, payment and commerce evidence, attribution, and
 
 ### Authority and governance contract
 
-Canonical authorities: `ai_execution_facts`, `attribution_runs`, `attribution_credits`, `campaign_facts`, `campaign_touchpoints`, `canonical_conversions`, `commerce`, `currency_value_normalization`, `economic_facts`, `measurement_contract`, `model_governance`, `outcome_facts`, `payments`, `risk_outputs`, `temporal_kernel`.
+Canonical authorities: `ai_execution_facts`, `attribution_runs`, `attribution_credits`, `campaign_facts`, `campaign_touchpoints`, `canonical_conversions`, `commerce`, `currency_value_normalization`, `economic_facts`, `evidence`, `measurement_contract`, `model_governance`, `outcome_facts`, `payments`, `risk_outputs`, `temporal_kernel`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 

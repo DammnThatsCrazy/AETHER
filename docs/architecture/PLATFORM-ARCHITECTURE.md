@@ -64,7 +64,7 @@ source_hashes:
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
-  "services/api/journeys/communication360/provider.py": "sha256:103203807abc92ff1c262e358335e9697873c24706ab42d81a512af3c0cf1efc"
+  "services/api/journeys/communication360/provider.py": "sha256:3d62c71b8f51ed7b4230f6a6f6f630ad746c6757bcff893eac76391c489c61f5"
   "services/api/main.py": "sha256:fa7455e5dd5a1e6b6b2ac25cc3ce6fc8a09d8bcf5b242b500feb0b797ab2d7b7"
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
@@ -686,6 +686,17 @@ provider evidence. Effective agent authorization, other approval authorities,
 business outcome facts, historical validity, and freshness remain unknown, so
 these paths do not complete their surfaces or change their providers' `in_flight`
 status.
+The next provider slice adds three partial paths: Communications360
+`policy_state` evaluates current consent for exact tenant, recipient-entity, and
+purpose pairs while retaining historical communication-time outcomes
+separately; Risk360 `propagation_paths` exposes bounded consent-gated observed
+FOLLOWS paths with relationship evidence but no causal contagion claim; and
+Value360 `reconciliation` returns separate economic and order-linked commerce
+observations, resolving settlement references only by exact provider payment
+ID and shared order reference. Non-consent policy, causal social contagion,
+cross-source economic matching, reconciled totals, historical replay, complete
+coverage, and freshness remain unproved. None of these paths completes its
+surface or changes technical provider readiness.
 Exploration surfaces compose over the engine through projection-backed surface adapters
 
 (`services/api/journeys/exploration/adapters/projection.py`).
