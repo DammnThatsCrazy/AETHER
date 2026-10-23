@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { GlassPage } from '@aether-app/components/app-shell';
-import { Eyebrow, InlineNotice, MetricTile, TonePill } from '@aether-app/components/ae-ui';
+import {
+  Eyebrow, InlineNotice, MetricTile, PrimaryButton, SecondaryButton, TonePill, toneColor,
+} from '@aether-app/components/ae-ui';
 import {
   EmptySlot,
   GlassSearch,
@@ -14,13 +16,22 @@ import {
 } from '@aether-app/components/ae-campaigns-geo-ui';
 import {
   MEMBER_READ_LIMIT,
+  RULE_OPERATORS,
+  SYNDICATE_TYPES,
+  useCreateSyndicate,
   useDiscoveredClusters,
   useOverlap,
   usePopulationGroup,
   usePopulationGroups,
   usePopulationMembers,
   useTenantScope,
+  validateSyndicateDraft,
   type DiscoveredCluster,
+  type RuleOperator,
+  type SyndicateDraft,
+  type SyndicateDraftErrors,
+  type SyndicateRuleDraft,
+  type SyndicateType,
   type SyndicateGroup,
   type SyndicateMember,
 } from '@aether-app/features/syndicates/use-syndicates';
@@ -151,7 +162,13 @@ function Venn({ a, b, onlyA, both, onlyB }: { readonly a: string; readonly b: st
   );
 }
 
-function OverlapView({ tenantId, groups }: { readonly tenantId: string; readonly groups: readonly SyndicateGroup[] }) {
+function OverlapView({ tenantId, groups, visible }: {
+  readonly tenantId: string;
+  /** Every rule-defined group (selection lookups). */
+  readonly groups: readonly SyndicateGroup[];
+  /** Groups the search and filter leave on screen as chips; a selected group always stays. */
+  readonly visible: readonly SyndicateGroup[];
+}) {
   const [params, setParams] = useSearchParams();
   const picked = [params.get('a'), params.get('b')].filter((v): v is string => !!v);
   const a = groups.find(g => g.id === picked[0]) ?? null;
@@ -179,7 +196,7 @@ function OverlapView({ tenantId, groups }: { readonly tenantId: string; readonly
     <GlassSection testId="overlap">
       <Eyebrow>Overlap · select two</Eyebrow>
       <span className="flex flex-wrap gap-1.5">
-        {groups.map(g => (
+        {groups.filter(g => picked.includes(g.id) || visible.some(v => v.id === g.id)).map(g => (
           <OutlineChip key={g.id} selected={picked.includes(g.id)} onClick={() => toggle(g.id)}>
             {g.name}{g.memberCount !== null ? ` · ${count(g.memberCount)}` : ''}
           </OutlineChip>
@@ -205,12 +222,162 @@ function OverlapView({ tenantId, groups }: { readonly tenantId: string; readonly
   );
 }
 
+const FIELD_CLASS = 'ae-focus w-full min-w-0 rounded-xl border bg-transparent px-3 py-2 text-[13px] outline-none placeholder:text-[var(--ae-faint)]';
+
+function fieldBorder(bad: boolean) {
+  return { borderColor: bad ? toneColor('ember') : 'var(--ae-edge)', color: 'var(--ae-ink)' };
+}
+
+function FieldError({ id, message }: { readonly id: string; readonly message: string | undefined }) {
+  if (!message) return null;
+  return <span id={id} className="text-[12px]" style={{ color: toneColor('ember') }}>{message}</span>;
+}
+
+const BLANK_RULE: SyndicateRuleDraft = { field: '', op: '=', value: '' };
+
+function NewSyndicateForm({ tenantId, onCancel, onCreated }: {
+  readonly tenantId: string;
+  readonly onCancel: () => void;
+  readonly onCreated: (group: SyndicateGroup | null) => void;
+}) {
+  const create = useCreateSyndicate(tenantId);
+  const [draft, setDraft] = useState<SyndicateDraft>({ name: '', type: 'segment', description: '', rules: [BLANK_RULE] });
+  const [errors, setErrors] = useState<SyndicateDraftErrors>({});
+  const setRule = (index: number, patch: Partial<SyndicateRuleDraft>) =>
+    setDraft(d => ({ ...d, rules: d.rules.map((r, i) => (i === index ? { ...r, ...patch } : r)) }));
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const result = validateSyndicateDraft(draft);
+    setErrors(result.errors);
+    if (!result.body) return;
+    const created = await create.mutate(result.body);
+    // `mutate` resolves null on failure; the error notice below says why.
+    if (created !== null) onCreated(created.group);
+  }
+
+  return (
+    <form
+      noValidate
+      onSubmit={e => void submit(e)}
+      className="ae-glass-card flex flex-col gap-3 rounded-[24px] px-5 py-4"
+      data-testid="syndicate-form"
+      aria-label="New syndicate"
+    >
+      <Eyebrow>New syndicate</Eyebrow>
+      <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
+        <label className="flex min-w-0 flex-col gap-1">
+          <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>Name</span>
+          <input
+            value={draft.name}
+            onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
+            aria-label="Name"
+            placeholder="Name the group"
+            className={FIELD_CLASS}
+            style={fieldBorder(Boolean(errors.name))}
+            aria-invalid={Boolean(errors.name)}
+            aria-describedby={errors.name ? 'syndicate-name-error' : undefined}
+          />
+          <FieldError id="syndicate-name-error" message={errors.name} />
+        </label>
+        <label className="flex min-w-0 flex-col gap-1">
+          <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>Type</span>
+          <select
+            value={draft.type}
+            onChange={e => setDraft(d => ({ ...d, type: e.target.value as SyndicateType }))}
+            className={FIELD_CLASS}
+            style={fieldBorder(false)}
+          >
+            {SYNDICATE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </label>
+      </div>
+      <label className="flex min-w-0 flex-col gap-1">
+        <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>Description (optional)</span>
+        <input
+          value={draft.description}
+          onChange={e => setDraft(d => ({ ...d, description: e.target.value }))}
+          placeholder="What these members have in common"
+          className={FIELD_CLASS}
+          style={fieldBorder(false)}
+        />
+      </label>
+      <fieldset className="flex min-w-0 flex-col gap-2">
+        <legend className="mb-1 text-[12px]" style={{ color: 'var(--ae-mute)' }}>Rules · a member matches every rule</legend>
+        {draft.rules.map((rule, index) => {
+          const rowError = errors.ruleRows?.[index];
+          return (
+            <div key={index} className="flex min-w-0 flex-col gap-1" data-testid="syndicate-rule-row">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <input
+                  value={rule.field}
+                  onChange={e => setRule(index, { field: e.target.value })}
+                  placeholder="field"
+                  aria-label={`Rule ${index + 1} field`}
+                  className={`${FIELD_CLASS} ae-mono flex-[2_1_140px] !w-auto`}
+                  style={fieldBorder(Boolean(rowError))}
+                />
+                <select
+                  value={rule.op}
+                  onChange={e => setRule(index, { op: e.target.value as RuleOperator })}
+                  aria-label={`Rule ${index + 1} operator`}
+                  className={`${FIELD_CLASS} ae-mono flex-[0_0_96px] !w-auto`}
+                  style={fieldBorder(false)}
+                >
+                  {RULE_OPERATORS.map(op => <option key={op} value={op}>{op}</option>)}
+                </select>
+                <input
+                  value={rule.value}
+                  onChange={e => setRule(index, { value: e.target.value })}
+                  placeholder={rule.op === 'in' ? 'a, b, c' : 'value'}
+                  aria-label={`Rule ${index + 1} value`}
+                  className={`${FIELD_CLASS} ae-mono flex-[2_1_140px] !w-auto`}
+                  style={fieldBorder(Boolean(rowError))}
+                />
+                {draft.rules.length > 1 && (
+                  <button
+                    type="button"
+                    className="ae-focus text-[12px] hover:underline"
+                    style={{ color: 'var(--ae-mute)' }}
+                    onClick={() => setDraft(d => ({ ...d, rules: d.rules.filter((_, i) => i !== index) }))}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              <FieldError id={`syndicate-rule-${index}-error`} message={rowError} />
+            </div>
+          );
+        })}
+        <button
+          type="button"
+          className="ae-focus self-start text-[12px] hover:underline"
+          style={{ color: 'var(--ae-blue-ink)' }}
+          onClick={() => setDraft(d => ({ ...d, rules: [...d.rules, BLANK_RULE] }))}
+        >
+          + Add rule
+        </button>
+        <FieldError id="syndicate-rules-error" message={errors.rules} />
+      </fieldset>
+      {create.error && <InlineNotice tone="ember">The syndicate was not created: {create.error}</InlineNotice>}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <SecondaryButton onClick={onCancel} disabled={create.isLoading} className="!px-4 !py-[7px] text-[12px]">Cancel</SecondaryButton>
+        <PrimaryButton type="submit" disabled={create.isLoading} className="!px-4 !py-[7px] text-[12px]" data-testid="syndicate-save">
+          {create.isLoading ? 'Creating…' : 'Create syndicate'}
+        </PrimaryButton>
+      </div>
+    </form>
+  );
+}
+
 function SyndicateList() {
   const [params, setParams] = useSearchParams();
   const filterParam = params.get('view');
   const filter: Filter = isFilter(filterParam) ? filterParam : 'all';
   const mode: Mode = params.get('mode') === 'overlap' ? 'overlap' : 'list';
   const [query, setQuery] = useState('');
+  const [creating, setCreating] = useState(false);
+  const navigate = useNavigate();
   const tenant = useTenantScope();
   const groups = usePopulationGroups(tenant.tenantId);
   const clusters = useDiscoveredClusters(tenant.tenantId);
@@ -227,6 +394,11 @@ function SyndicateList() {
   const q = query.trim().toLowerCase();
   const groupRows = useMemo(() => (groups.data ?? []).filter(g => {
     if (filter === 'discovered') return false;
+    if (filter === 'recent' && !changedRecently(g.updatedAt ?? g.createdAt)) return false;
+    return !q || g.name.toLowerCase().includes(q) || g.rules.some(r => r.toLowerCase().includes(q));
+  }), [groups.data, filter, q]);
+  // Overlap compares rule-defined groups only, so "Discovered" narrows nothing there.
+  const overlapRows = useMemo(() => (groups.data ?? []).filter(g => {
     if (filter === 'recent' && !changedRecently(g.updatedAt ?? g.createdAt)) return false;
     return !q || g.name.toLowerCase().includes(q) || g.rules.some(r => r.toLowerCase().includes(q));
   }), [groups.data, filter, q]);
@@ -261,17 +433,29 @@ function SyndicateList() {
             Groups of people and agents that behave alike. Some are defined by rules; others the graph discovers on its own.
           </span>
         </span>
-        {mode === 'list' && (
-          <span className="flex w-full flex-wrap gap-2 sm:w-auto">
-            <GlassSearch value={query} onChange={setQuery} placeholder="Search syndicates" label="Search syndicates" />
-          </span>
-        )}
+        <span className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <GlassSearch value={query} onChange={setQuery} placeholder="Search syndicates" label="Search syndicates" />
+          {!creating && !tenant.error && (
+            <PrimaryButton onClick={() => setCreating(true)} className="!px-4 !py-[9px] text-[13px]" data-testid="syndicate-new">
+              + New syndicate
+            </PrimaryButton>
+          )}
+        </span>
       </div>
 
+      {creating && tenant.tenantId && (
+        <NewSyndicateForm
+          tenantId={tenant.tenantId}
+          onCancel={() => setCreating(false)}
+          onCreated={group => {
+            setCreating(false);
+            if (group) navigate(`/syndicates/${encodeURIComponent(group.id)}`);
+          }}
+        />
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {mode === 'list' ? (
-          <SegmentedTabs label="Syndicate filters" options={filters} value={filter} onChange={v => setParam('view', v === 'all' ? null : v)} />
-        ) : <span />}
+        <SegmentedTabs label="Syndicate filters" options={filters} value={filter} onChange={v => setParam('view', v === 'all' ? null : v)} />
         <SegmentedTabs label="Syndicate views" options={modes} value={mode} onChange={v => setParam('mode', v === 'list' ? null : v)} />
       </div>
 
@@ -281,7 +465,7 @@ function SyndicateList() {
 
       <div className="ae-rise flex flex-col gap-3" key={mode} role="tabpanel">
         {mode === 'overlap' && (
-          groupsPending ? <LoadingRow label="Loading syndicates…" /> : groups.data ? <OverlapView tenantId={tenant.tenantId} groups={groups.data} /> : null
+          groupsPending ? <LoadingRow label="Loading syndicates…" /> : groups.data ? <OverlapView tenantId={tenant.tenantId} groups={groups.data} visible={overlapRows} /> : null
         )}
         {mode === 'list' && !tenant.error && (
           <>
@@ -291,7 +475,7 @@ function SyndicateList() {
             {!groupsPending && !clustersPending && anyData && groupRows.length === 0 && clusterRows.length === 0 && (
               <EmptySlot testId="syndicates-empty">
                 {nothingAtAll
-                  ? 'No syndicates yet. Rule-defined groups appear here once they are created through the population API, and discovered clusters appear as the graph forms them.'
+                  ? 'No syndicates yet. Create a rule-defined syndicate with “+ New syndicate”; discovered clusters appear as the graph forms them.'
                   : 'No syndicates match.'}
               </EmptySlot>
             )}

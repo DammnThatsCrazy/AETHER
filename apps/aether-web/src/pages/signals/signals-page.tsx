@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { GlassPage } from '@aether-app/components/app-shell';
 import {
-  Eyebrow, InlineNotice, LinkButton, PrimaryButton, SecondaryButton, TonePill, toneColor,
+  ChoiceChip, Eyebrow, InlineNotice, LinkButton, PrimaryButton, SecondaryButton, TonePill, toneColor,
 } from '@aether-app/components/ae-ui';
 import {
   EmptySlot, GlassSection, LoadingRow, OutlineChip, SegmentedTabs, type SegmentOption,
@@ -11,7 +11,8 @@ import { useAuth } from '@aether-app/features/auth';
 import type { InboxNotification } from '@aether-app/features/notifications/use-inbox';
 import { useNotificationPreferences } from '@aether-app/features/notifications/use-notification-preferences';
 import {
-  useAcknowledgeSignal, useAlertRules, useMarkSignalRead, useSignalFeed, type AlertRule,
+  RULE_CHANNELS, useAcknowledgeSignal, useAlertRules, useCreateAlertRule, useMarkSignalRead, useSignalFeed,
+  validateAlertRuleDraft, type AlertRule, type AlertRuleDraft, type AlertRuleDraftErrors,
 } from '@aether-app/features/signals/use-signals';
 import {
   LEVELS, LEVEL_LABEL, LEVEL_TONE, RANGES, appLink, byUrgency, categoryLabel, countByLevel, inRange,
@@ -24,12 +25,12 @@ import {
  *
  * Every signal is a row of the tenant in-app inbox. Acknowledge archives the
  * row on the server, so History is the archived rows of the same read. Rules
- * are the tenant's alert rules, read-only because the backend cannot update
- * or toggle a rule. The Digest tab previews what is open now and shows the
+ * are the tenant's alert rules; "+ New rule" creates one, but a stored rule
+ * cannot be edited or toggled because the backend has no update for it. The Digest tab previews what is open now and shows the
  * stored digest schedule; it is changed in Settings.
  *
  * Omitted from the design because no backend read exists: Watchlist, Snooze,
- * per-signal confidence / sparklines / affected profiles, and the rule editor.
+ * per-signal confidence / sparklines / affected profiles, and rule edit / toggle.
  */
 
 type Tab = 'inbox' | 'types' | 'rules' | 'history' | 'digest';
@@ -248,19 +249,157 @@ function TypesView({
 
 // ── Rules ─────────────────────────────────────────────────────────────────────
 
+/** A stored rule's severity, when it has one (`P0`…`P3`, or a plain level word). */
+function ruleLevel(severity: string): SignalLevel {
+  const s = severity.trim().toLowerCase();
+  if (s === 'critical' || s === 'high') return 'critical';
+  if (s === 'watch' || s === 'warning' || s === 'medium') return 'watch';
+  return signalLevel(severity);
+}
+
+const FIELD_CLASS = 'ae-focus w-full rounded-xl border bg-transparent px-3 py-2 text-[13px] outline-none placeholder:text-[var(--ae-faint)]';
+
+function fieldBorder(bad: boolean) {
+  return { borderColor: bad ? toneColor('ember') : 'var(--ae-edge)' };
+}
+
+function FieldError({ id, message }: { readonly id: string; readonly message: string | undefined }) {
+  if (!message) return null;
+  return <span id={id} className="text-[12px]" style={{ color: toneColor('ember') }}>{message}</span>;
+}
+
+function NewRuleForm({ tenantId, onDone }: { readonly tenantId: string; readonly onDone: () => void }) {
+  const create = useCreateAlertRule(tenantId);
+  const [draft, setDraft] = useState<AlertRuleDraft>({ name: '', condition: '', channels: ['in_app'], recipients: '' });
+  const [errors, setErrors] = useState<AlertRuleDraftErrors>({});
+  const toggleChannel = (channel: string) =>
+    setDraft(d => ({ ...d, channels: d.channels.includes(channel) ? d.channels.filter(c => c !== channel) : [...d.channels, channel] }));
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const result = validateAlertRuleDraft(draft);
+    setErrors(result.errors);
+    if (!result.body) return;
+    const saved = await create.mutate(result.body);
+    if (saved !== null) onDone();
+  }
+
+  return (
+    <form
+      noValidate
+      onSubmit={e => void submit(e)}
+      className="ae-glass-card flex flex-col gap-3 rounded-[20px] px-4 py-4 sm:px-5"
+      data-testid="signals-rule-form"
+      aria-label="New rule"
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="flex flex-col gap-1">
+          <span className="text-[12px]" style={MUTE}>Name</span>
+          <input
+            value={draft.name}
+            onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
+            aria-label="Name"
+            placeholder="Name the rule"
+            className={FIELD_CLASS}
+            style={fieldBorder(Boolean(errors.name))}
+            aria-invalid={Boolean(errors.name)}
+            aria-describedby={errors.name ? 'rule-name-error' : undefined}
+          />
+          <FieldError id="rule-name-error" message={errors.name} />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[12px]" style={MUTE}>Recipients</span>
+          <input
+            value={draft.recipients}
+            onChange={e => setDraft(d => ({ ...d, recipients: e.target.value }))}
+            placeholder="Comma separated roles or addresses"
+            className={FIELD_CLASS}
+            style={fieldBorder(false)}
+          />
+        </label>
+      </div>
+      <label className="flex flex-col gap-1">
+        <span className="text-[12px]" style={MUTE}>Condition</span>
+        <input
+          value={draft.condition}
+          onChange={e => setDraft(d => ({ ...d, condition: e.target.value }))}
+          aria-label="Condition"
+          placeholder="field operator value"
+          className={`${FIELD_CLASS} ae-mono`}
+          style={fieldBorder(Boolean(errors.condition))}
+          aria-invalid={Boolean(errors.condition)}
+          aria-describedby={errors.condition ? 'rule-condition-error' : undefined}
+        />
+        <FieldError id="rule-condition-error" message={errors.condition} />
+      </label>
+      <fieldset className="flex flex-col gap-1.5">
+        <legend className="mb-1 text-[12px]" style={MUTE}>Channels</legend>
+        <div className="flex flex-wrap gap-2">
+          {RULE_CHANNELS.map(channel => (
+            <ChoiceChip
+              key={channel}
+              size="sm"
+              selected={draft.channels.includes(channel)}
+              onClick={() => toggleChannel(channel)}
+              data-testid={`rule-channel-${channel}`}
+            >
+              {channel}
+            </ChoiceChip>
+          ))}
+        </div>
+        <FieldError id="rule-channels-error" message={errors.channels} />
+      </fieldset>
+      {create.error && <InlineNotice tone="ember">The rule was not saved: {create.error}</InlineNotice>}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <SecondaryButton onClick={onDone} disabled={create.isLoading} className="!px-4 !py-[7px] text-[12px]">Cancel</SecondaryButton>
+        <PrimaryButton type="submit" disabled={create.isLoading} className="!px-4 !py-[7px] text-[12px]" data-testid="signals-rule-save">
+          {create.isLoading ? 'Saving…' : 'Save rule'}
+        </PrimaryButton>
+      </div>
+    </form>
+  );
+}
+
+function RuleCard({ rule }: { readonly rule: AlertRule }) {
+  const level = rule.severity ? ruleLevel(rule.severity) : null;
+  const meta = [
+    rule.recipients.length ? `notifies ${rule.recipients.join(', ')}` : 'no recipients recorded',
+    rule.channels.length ? `via ${rule.channels.join(', ')}` : 'no channel recorded',
+  ].join(' · ');
+  return (
+    <article className="ae-glass-card flex min-w-0 flex-col gap-1 rounded-[20px] px-4 py-3.5 sm:px-5" data-testid="signals-rule">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-[15px] font-medium leading-[1.3]">{rule.name}</h3>
+        {level && <TonePill tone={LEVEL_TONE[level]}>{LEVEL_LABEL[level]}</TonePill>}
+      </div>
+      <span className="ae-mono break-words text-[12px]">{rule.condition ?? 'Condition not recorded'}</span>
+      <span className="ae-mono text-[11px]" style={MUTE}>{meta}</span>
+    </article>
+  );
+}
+
 function RulesView({ tenantId }: { readonly tenantId: string }) {
   const navigate = useNavigate();
   const rules = useAlertRules(tenantId);
+  const [creating, setCreating] = useState(false);
   const list: readonly AlertRule[] = rules.data ?? [];
   return (
     <div className="flex flex-col gap-3" data-testid="signals-rules">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="max-w-[640px] text-[13px] leading-[1.5]" style={MUTE}>
-          A rule decides when a change becomes a signal and who is told. Rules are shown as stored; changing a rule is
-          not available here yet.
+          A rule decides when a change becomes a signal and who is told. New rules can be added here; editing or
+          turning off a stored rule is not available yet.
         </p>
-        <LinkButton onClick={() => void navigate('/settings/notifications')}>Notification channels →</LinkButton>
+        <div className="flex flex-wrap items-center gap-3">
+          <LinkButton onClick={() => void navigate('/settings/notifications')}>Notification channels →</LinkButton>
+          {!creating && (
+            <PrimaryButton onClick={() => setCreating(true)} className="!px-4 !py-[7px] text-[12px]" data-testid="signals-new-rule">
+              + New rule
+            </PrimaryButton>
+          )}
+        </div>
       </div>
+      {creating && <NewRuleForm tenantId={tenantId} onDone={() => setCreating(false)} />}
       {rules.error ? (
         <Unavailable what="Alert rules" onRetry={rules.refetch} />
       ) : !rules.data ? (
@@ -268,24 +407,9 @@ function RulesView({ tenantId }: { readonly tenantId: string }) {
       ) : list.length === 0 ? (
         <EmptySlot testId="signals-rules-empty">No alert rules yet.</EmptySlot>
       ) : (
-        <GlassSection>
-          {list.map((rule, i) => (
-            <div
-              key={rule.id}
-              className="flex flex-col gap-1 py-2.5"
-              style={{ borderTop: i ? '1px solid var(--ae-edge-soft)' : undefined }}
-              data-testid="signals-rule"
-            >
-              <span className="text-[14px] font-medium">{rule.name}</span>
-              <span className="ae-mono break-words text-[12px]">{rule.condition ?? 'Condition not recorded'}</span>
-              <span className="text-[12px]" style={MUTE}>
-                {rule.channels.length ? `via ${rule.channels.join(', ')}` : 'No channel recorded'}
-                {' · '}
-                {rule.recipients.length ? `notifies ${rule.recipients.join(', ')}` : 'no recipients recorded'}
-              </span>
-            </div>
-          ))}
-        </GlassSection>
+        <div className="flex flex-col gap-2.5">
+          {list.map(rule => <RuleCard key={rule.id} rule={rule} />)}
+        </div>
       )}
     </div>
   );

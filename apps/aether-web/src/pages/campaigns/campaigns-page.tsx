@@ -1,21 +1,21 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  DataTable, ErrorState, LoadingState,
+  DataTable, ErrorState, Icon, LoadingState,
   formatCount, useTimeContext,
 } from '@aether/ui';
 import { TruthBanner, encodeExplorationContext } from '@aether/ui/exploration';
 import { GlassPage } from '@aether-app/components/app-shell';
 import { BrandMark } from '@aether-app/components/brand-mark';
 import {
-  Eyebrow, InlineNotice, LinkButton, MetricTile, PrimaryButton, SecondaryButton, TonePill, type Tone,
+  Eyebrow, InlineNotice, LinkButton, MetricTile, PrimaryButton, SecondaryButton, TonePill, toneColor, type Tone,
 } from '@aether-app/components/ae-ui';
 import {
   EmptySlot, GlassSearch, GlassSection, LoadingRow, SegmentedTabs, ShareRow, type SegmentOption,
 } from '@aether-app/components/ae-campaigns-geo-ui';
 import { useCampaigns, usePlatformOverview, useAutomationInsights } from '@aether-app/features/campaigns/use-campaigns';
 import { useCampaignQuality } from '@aether-app/features/campaigns/use-campaign-quality';
-import { useMappingReviews } from '@aether-app/features/campaigns/use-mapping-review';
+import { useIgnoreReview, useMappingReviews, useResolveReview } from '@aether-app/features/campaigns/use-mapping-review';
 import {
   useCampaignExploration,
   type CampaignExplorationRow,
@@ -262,16 +262,23 @@ function evidenceChips(review: AnyRecord): { label: string; value: string }[] {
 
 function ReviewQueue() {
   const navigate = useNavigate();
-  const timeCtx = useTimeContext();
   const { data, isLoading, error } = useMappingReviews({ status: 'open', limit: 50 });
+  const campaigns = useCampaigns({ limit: 50 });
   const raw = asRecord(data);
   const reviews = (Array.isArray(raw.items) ? raw.items : Array.isArray(data) ? data : []) as AnyRecord[];
+  const names = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of asList(asRecord(campaigns.data).campaigns ?? campaigns.data).map(campaignSummary)) {
+      if (c.id) map.set(c.id, c.name);
+    }
+    return map;
+  }, [campaigns.data]);
   const openQueue = () => void navigate('/campaign-intelligence/mapping-review');
 
   return (
     <div className="flex flex-col gap-3" data-testid="campaign-review">
       <span className="max-w-[640px] text-[13px] leading-relaxed" style={{ color: 'var(--ae-mute)' }}>
-        These source campaigns did not group cleanly. A source label or medium alone never decides a campaign’s identity, so a person confirms them in the review queue.
+        These source campaigns did not group cleanly. A source label or medium alone never decides a campaign’s identity, so a person confirms them.
       </span>
       {error && (
         <InlineNotice tone="ember">
@@ -283,43 +290,153 @@ function ReviewQueue() {
       {!error && data !== undefined && data !== null && reviews.length === 0 && (
         <EmptySlot>The queue is clear. Every observed source campaign is grouped.</EmptySlot>
       )}
-      {reviews.map((review, i) => {
-        const evidence = asRecord(review.evidence);
-        const platform = evidence.platform ? String(evidence.platform) : null;
-        const observed = num(review.observed_count);
-        const touchpoints = num(review.affected_touchpoints);
-        const chips = evidenceChips(review);
-        return (
-          <article key={text(review.review_id ?? review.id, String(i))} className="ae-glass-card flex flex-col gap-3 rounded-[24px] px-5 py-4">
-            <span className="flex flex-wrap items-start justify-between gap-2.5">
-              <span className="flex flex-col gap-1.5">
-                <span className="flex flex-wrap items-center gap-1.5">
-                  {platform && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full border py-0.5 pl-1 pr-2.5 text-[12px]" style={{ borderColor: 'var(--ae-edge-soft)', background: 'var(--ae-glass-card)' }}>
-                      <BrandMark token={platform} label={platform} size={18} markSize={12} shape="round" />
-                      {platform}
-                    </span>
-                  )}
-                  {chips.map(chip => (
-                    <span key={chip.label} className="ae-mono rounded-full border px-2.5 py-0.5 text-[11px]" style={{ borderColor: 'var(--ae-edge-soft)' }}>
-                      <span style={{ color: 'var(--ae-faint)' }}>{chip.label} </span>{chip.value}
-                    </span>
-                  ))}
-                </span>
-                <span className="text-[13px]" style={{ color: 'var(--ae-mute)' }}>
-                  {observed !== null ? `${formatCount(observed, timeCtx)} observation${observed === 1 ? '' : 's'}` : 'Observations not reported'}
-                  {touchpoints !== null && touchpoints > 0 ? ` · ${formatCount(touchpoints, timeCtx)} touchpoints waiting` : ''}
-                </span>
-              </span>
-              <TonePill tone="amber">needs a person</TonePill>
-            </span>
-            <span className="flex flex-wrap gap-2 border-t pt-2.5" style={{ borderColor: 'var(--ae-edge-soft)' }}>
-              <LinkButton onClick={openQueue}>Resolve or ignore in the review queue →</LinkButton>
-            </span>
-          </article>
-        );
-      })}
+      {reviews.map((review, i) => (
+        <ReviewCard
+          key={text(review.review_id ?? review.id, String(i))}
+          review={review}
+          names={names}
+          onOpenQueue={openQueue}
+        />
+      ))}
     </div>
+  );
+}
+
+/** Review confidence, when the payload carries one (0–1 or 0–100). */
+function reviewConfidence(review: AnyRecord): number | null {
+  const value = num(review.confidence ?? asRecord(review.evidence).confidence);
+  if (value === null) return null;
+  return value <= 1 ? value * 100 : value;
+}
+
+/** Matching signals, when the payload carries them: `[{ label, matched }]` or plain labels. */
+function matchingSignals(review: AnyRecord): { label: string; matched: boolean | null }[] {
+  const list = review.matching_signals ?? review.signals ?? asRecord(review.evidence).matching_signals;
+  if (!Array.isArray(list)) return [];
+  return list.flatMap(item => {
+    if (typeof item === 'string' && item.trim()) return [{ label: item, matched: null }];
+    const r = asRecord(item);
+    const label = r.label ?? r.name ?? r.signal;
+    if (typeof label !== 'string' || !label.trim()) return [];
+    return [{ label, matched: typeof r.matched === 'boolean' ? r.matched : typeof r.match === 'boolean' ? r.match : null }];
+  });
+}
+
+function candidateIds(review: AnyRecord): string[] {
+  const list = review.candidate_campaign_ids;
+  return Array.isArray(list) ? list.map(String).filter(Boolean) : [];
+}
+
+function ReviewCard({ review, names, onOpenQueue }: {
+  review: AnyRecord;
+  names: ReadonlyMap<string, string>;
+  onOpenQueue: () => void;
+}) {
+  const timeCtx = useTimeContext();
+  const resolve = useResolveReview();
+  const ignore = useIgnoreReview();
+  const reviewId = text(review.review_id ?? review.id, '');
+  const evidence = asRecord(review.evidence);
+  const platform = evidence.platform ? String(evidence.platform) : null;
+  const sourceLabel = evidence.utm_campaign ?? evidence.external_campaign_id;
+  const observed = num(review.observed_count);
+  const touchpoints = num(review.affected_touchpoints);
+  // The platform chip already carries the source label; don't repeat it as an evidence chip.
+  const chips = evidenceChips(review).filter(chip => !(platform && sourceLabel && chip.value === String(sourceLabel)));
+  const confidence = reviewConfidence(review);
+  const signals = matchingSignals(review);
+  const candidates = candidateIds(review);
+  const [picked, setPicked] = useState(candidates[0] ?? '');
+  const busy = resolve.isLoading || ignore.isLoading;
+  const proposed = candidates.map(id => names.get(id) ?? id);
+  const failure = resolve.error ?? ignore.error;
+
+  return (
+    <article className="ae-glass-card flex flex-col gap-3 rounded-[24px] px-5 py-4" data-testid="review-item" data-review-id={reviewId}>
+      <span className="flex flex-wrap items-start justify-between gap-2.5">
+        <span className="flex min-w-0 flex-col gap-1.5">
+          <span className="flex flex-wrap items-center gap-1.5">
+            {platform && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border py-0.5 pl-1 pr-2.5 text-[12px]" style={{ borderColor: 'var(--ae-edge-soft)', background: 'var(--ae-glass-card)' }}>
+                <BrandMark token={platform} label={platform} size={18} markSize={12} shape="round" />
+                {sourceLabel ? <span className="ae-mono">{String(sourceLabel)}</span> : platform}
+              </span>
+            )}
+            {chips.map(chip => (
+              <span key={chip.label} className="ae-mono rounded-full border px-2.5 py-0.5 text-[11px]" style={{ borderColor: 'var(--ae-edge-soft)' }}>
+                <span style={{ color: 'var(--ae-faint)' }}>{chip.label} </span>{chip.value}
+              </span>
+            ))}
+          </span>
+          {proposed.length > 0 && (
+            <span className="text-[15px] font-medium" data-testid="review-proposed">Proposed: {proposed.join(' or ')}</span>
+          )}
+          <span className="text-[13px]" style={{ color: 'var(--ae-mute)' }}>
+            {observed !== null ? `${formatCount(observed, timeCtx)} observation${observed === 1 ? '' : 's'}` : 'Observations not reported'}
+            {touchpoints !== null && touchpoints > 0 ? ` · ${formatCount(touchpoints, timeCtx)} touchpoints waiting` : ''}
+          </span>
+          {signals.length > 0 && (
+            <span className="flex flex-wrap gap-1.5" data-testid="review-signals">
+              {signals.map(sig => {
+                const tone: Tone = sig.matched === true ? 'sage' : sig.matched === false ? 'ember' : 'mute';
+                return (
+                  <TonePill key={sig.label} tone={tone} className="gap-1 !text-[11px] !px-2.5 !py-0.5">
+                    {sig.matched !== null && <Icon name={sig.matched ? 'circle-check' : 'circle-x'} decorative size="sm" />}
+                    {sig.label}
+                  </TonePill>
+                );
+              })}
+            </span>
+          )}
+        </span>
+        {confidence !== null ? (
+          <span className="ae-mono text-[13px]" style={{ color: toneColor(confidence >= 60 ? 'amber' : 'ember') }} data-testid="review-confidence">
+            {Math.round(confidence)}% confidence
+          </span>
+        ) : (
+          <TonePill tone="amber">needs a person</TonePill>
+        )}
+      </span>
+      {failure && (
+        <InlineNotice tone="ember">
+          {resolve.error ? 'The grouping was not confirmed' : 'The item was not ignored'}: {failure}
+        </InlineNotice>
+      )}
+      <span className="flex flex-wrap items-center gap-2 border-t pt-2.5" style={{ borderColor: 'var(--ae-edge-soft)' }}>
+        {candidates.length > 1 && (
+          <select
+            value={picked}
+            onChange={e => setPicked(e.target.value)}
+            aria-label="Campaign to group under"
+            className="ae-focus rounded-xl border bg-transparent px-3 py-[7px] text-[12px]"
+            style={{ borderColor: 'var(--ae-edge)', color: 'var(--ae-ink)' }}
+          >
+            {candidates.map(id => <option key={id} value={id}>{names.get(id) ?? id}</option>)}
+          </select>
+        )}
+        <PrimaryButton
+          onClick={() => void resolve.mutate({ reviewId, campaignId: picked })}
+          disabled={busy || !reviewId || !picked}
+          className="!px-4 !py-[7px] text-[12px]"
+          data-testid="review-confirm"
+        >
+          {resolve.isLoading ? 'Confirming…' : 'Confirm grouping'}
+        </PrimaryButton>
+        <SecondaryButton
+          onClick={() => void ignore.mutate({ reviewId })}
+          disabled={busy || !reviewId}
+          className="!px-4 !py-[7px] text-[12px]"
+          data-testid="review-ignore"
+        >
+          {ignore.isLoading ? 'Ignoring…' : 'Ignore'}
+        </SecondaryButton>
+        {candidates.length === 0 && (
+          <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }}>No campaign was proposed; pick one in the review queue.</span>
+        )}
+        <span className="flex-1" />
+        <LinkButton onClick={onOpenQueue}>Open in the review queue →</LinkButton>
+      </span>
+    </article>
   );
 }
 

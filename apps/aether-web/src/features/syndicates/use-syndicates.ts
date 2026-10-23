@@ -1,4 +1,4 @@
-import { useQuery } from '@aether/ui';
+import { useMutation, useQuery } from '@aether/ui';
 import { useMeProfile } from '@aether-app/features/account/use-me-profile';
 import { api } from '@aether-app/lib/api/endpoints';
 
@@ -118,9 +118,13 @@ export function toGroup(raw: unknown): SyndicateGroup | null {
   };
 }
 
+export function populationGroupsKey(tenantId: string): string {
+  return `syndicates:${tenantId}:groups`;
+}
+
 export function usePopulationGroups(tenantId: string) {
   return useQuery({
-    key: `syndicates:${tenantId}:groups`,
+    key: populationGroupsKey(tenantId),
     fetcher: async () => {
       const data = asRecord(await api.population.groups(tenantId, 200));
       const list = Array.isArray(data.groups) ? data.groups : [];
@@ -138,6 +142,94 @@ export function usePopulationGroup(tenantId: string, groupId: string) {
     fetcher: async () => ({ group: toGroup(await api.population.group(groupId, tenantId)) }),
     staleTime: STALE,
     enabled: !!tenantId && !!groupId,
+  });
+}
+
+// ── Create ──────────────────────────────────────────────────────────────────
+
+/** `PopulationType` values accepted by `POST /v1/population/groups` (identity/population/models.py). */
+export const SYNDICATE_TYPES = [
+  'segment', 'cohort', 'cluster', 'community', 'batch', 'archetype', 'anomaly', 'lookalike', 'risk', 'lifecycle',
+] as const;
+export type SyndicateType = typeof SYNDICATE_TYPES[number];
+
+export const RULE_OPERATORS = ['=', '!=', '>', '>=', '<', '<=', 'contains', 'in'] as const;
+export type RuleOperator = typeof RULE_OPERATORS[number];
+
+export interface SyndicateRuleDraft {
+  readonly field: string;
+  readonly op: RuleOperator;
+  readonly value: string;
+}
+
+export interface SyndicateDraft {
+  readonly name: string;
+  readonly type: SyndicateType;
+  readonly description: string;
+  readonly rules: readonly SyndicateRuleDraft[];
+}
+
+export interface SyndicateRule {
+  readonly field: string;
+  readonly op: RuleOperator;
+  readonly value: string | number | boolean | string[];
+}
+
+export interface SyndicateBody {
+  readonly name: string;
+  readonly population_type: SyndicateType;
+  readonly description: string;
+  readonly definition: { readonly rules: SyndicateRule[] };
+}
+
+export interface SyndicateDraftErrors {
+  name?: string;
+  rules?: string;
+  /** Per-row message, by rule index. */
+  ruleRows?: Record<number, string>;
+}
+
+function ruleValue(op: RuleOperator, raw: string): SyndicateRule['value'] {
+  const v = raw.trim();
+  if (op === 'in') return v.split(',').map(x => x.trim()).filter(Boolean);
+  if (v === 'true' || v === 'false') return v === 'true';
+  const n = Number(v);
+  return v !== '' && Number.isFinite(n) ? n : v;
+}
+
+/**
+ * The backend stores `definition` as a free-form dict; the app writes
+ * `{ rules: [{ field, op, value }] }`, the shape `describeRules` reads back.
+ * Fully blank rule rows are ignored; a segment (rule-based) needs one rule.
+ */
+export function validateSyndicateDraft(draft: SyndicateDraft): { errors: SyndicateDraftErrors; body: SyndicateBody | null } {
+  const errors: SyndicateDraftErrors = {};
+  const name = draft.name.trim();
+  if (!name) errors.name = 'Give the syndicate a name.';
+  const rules: SyndicateRule[] = [];
+  const ruleRows: Record<number, string> = {};
+  draft.rules.forEach((rule, index) => {
+    const field = rule.field.trim();
+    const value = rule.value.trim();
+    if (!field && !value) return;
+    if (!field) ruleRows[index] = 'Name the field this rule checks.';
+    else if (!value) ruleRows[index] = 'Give the value to compare against.';
+    else rules.push({ field, op: rule.op, value: ruleValue(rule.op, value) });
+  });
+  if (Object.keys(ruleRows).length > 0) errors.ruleRows = ruleRows;
+  else if (draft.type === 'segment' && rules.length === 0) errors.rules = 'A segment needs at least one rule.';
+  if (errors.name || errors.rules || errors.ruleRows) return { errors, body: null };
+  return {
+    errors,
+    body: { name, population_type: draft.type, description: draft.description.trim(), definition: { rules } },
+  };
+}
+
+export function useCreateSyndicate(tenantId: string) {
+  // Wrapped so a created-but-unreadable record ({ group: null }) differs from a failed write (mutate → null).
+  return useMutation<SyndicateBody, { readonly group: SyndicateGroup | null }>({
+    mutationFn: async body => ({ group: toGroup(await api.population.createGroup({ ...body })) }),
+    invalidateKeys: [populationGroupsKey(tenantId)],
   });
 }
 

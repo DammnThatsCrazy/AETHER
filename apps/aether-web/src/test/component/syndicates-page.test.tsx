@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { ThemeProvider, queryCache } from '@aether/ui';
@@ -9,6 +9,7 @@ const s = vi.hoisted(() => ({
   clusters: (() => Promise.resolve({ nodes: [], edges: [] })) as () => Promise<unknown>,
   group: ((id: string) => Promise.resolve({ id, name: id })) as (id: string) => Promise<unknown>,
   members: ((id: string) => Promise.resolve({ population_id: id, members: [], count: 0 })) as (id: string) => Promise<unknown>,
+  createGroup: vi.fn(),
 }));
 
 vi.mock('@aether-app/lib/api/endpoints', () => ({
@@ -18,6 +19,7 @@ vi.mock('@aether-app/lib/api/endpoints', () => ({
       groups: () => s.groups(),
       group: (id: string) => s.group(id),
       groupMembers: (id: string) => s.members(id),
+      createGroup: (body: unknown) => s.createGroup(body),
     },
     graphIntelligence: { query: () => s.clusters() },
   },
@@ -68,6 +70,7 @@ describe('Syndicates', () => {
     s.clusters = () => Promise.resolve({ nodes: [], edges: [] });
     s.group = (id: string) => Promise.resolve(GROUPS.find(g => g.id === id) ?? { id, name: id });
     s.members = (id: string) => Promise.resolve({ population_id: id, members: [], count: 0 });
+    s.createGroup.mockReset();
   });
 
   it('shows a loading state before the reads settle', () => {
@@ -202,5 +205,83 @@ describe('Syndicates', () => {
     renderAt('/syndicates/g1');
     expect(await screen.findByText('Members could not be read right now, so membership charts are unavailable.')).toBeInTheDocument();
     expect(screen.queryByText('No active members yet.')).not.toBeInTheDocument();
+  });
+  it('keeps the search and filter tabs visible in overlap mode, narrowing the chips', async () => {
+    s.groups = () => Promise.resolve({ groups: GROUPS, count: 2 });
+    renderAt('/syndicates?mode=overlap');
+    const panel = await screen.findByTestId('overlap');
+    expect(screen.getByLabelText('Search syndicates')).toBeInTheDocument();
+    expect(screen.getByRole('tablist', { name: 'Syndicate filters' })).toBeInTheDocument();
+    expect(screen.getByTestId('syndicate-new')).toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole('button', { name: /Agent delegators/ }));
+    fireEvent.change(screen.getByLabelText('Search syndicates'), { target: { value: 'repeat' } });
+    // The selected group stays; the search narrows the rest.
+    expect(within(panel).getByRole('button', { name: /Repeat buyers/ })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: /Agent delegators/ })).toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole('button', { name: /Agent delegators/ }));
+    expect(within(panel).queryByRole('button', { name: /Agent delegators/ })).not.toBeInTheDocument();
+  });
+
+  it('creates a syndicate with typed rules, refreshes the list and opens it', async () => {
+    let listed: unknown[] = [];
+    s.groups = () => Promise.resolve({ groups: listed, count: listed.length });
+    s.createGroup.mockImplementation((body: { name: string }) => {
+      const created = { id: 'g-new', name: body.name, population_type: 'segment', definition: { rules: [{ field: 'order_count', op: '>=', value: 2 }] } };
+      listed = [created];
+      return Promise.resolve(created);
+    });
+    s.group = (id: string) => Promise.resolve(listed.find(g => (g as { id: string }).id === id) ?? { id, name: id });
+    renderAt('/syndicates');
+    await screen.findByTestId('syndicates-empty');
+    fireEvent.click(screen.getByTestId('syndicate-new'));
+    const form = screen.getByTestId('syndicate-form');
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: ' Repeat buyers ' } });
+    fireEvent.change(within(form).getByLabelText('Rule 1 field'), { target: { value: 'order_count' } });
+    fireEvent.change(within(form).getByLabelText('Rule 1 operator'), { target: { value: '>=' } });
+    fireEvent.change(within(form).getByLabelText('Rule 1 value'), { target: { value: '2' } });
+    fireEvent.click(within(form).getByRole('button', { name: '+ Add rule' }));
+    fireEvent.change(within(form).getByLabelText('Rule 2 field'), { target: { value: 'country' } });
+    fireEvent.change(within(form).getByLabelText('Rule 2 operator'), { target: { value: 'in' } });
+    fireEvent.change(within(form).getByLabelText('Rule 2 value'), { target: { value: 'US, CA' } });
+    fireEvent.click(within(form).getByTestId('syndicate-save'));
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('/syndicates/g-new'));
+    expect(s.createGroup).toHaveBeenCalledWith({
+      name: 'Repeat buyers',
+      population_type: 'segment',
+      description: '',
+      definition: { rules: [{ field: 'order_count', op: '>=', value: 2 }, { field: 'country', op: 'in', value: ['US', 'CA'] }] },
+    });
+    expect(await screen.findByTestId('syndicate-detail')).toHaveTextContent('Repeat buyers');
+    // The list read was invalidated, so going back shows the new group.
+    fireEvent.click(screen.getByRole('button', { name: /← Syndicates/ }));
+    expect(await screen.findByTestId('syndicate-row')).toHaveTextContent('Repeat buyers');
+  });
+
+  it('validates the syndicate form before writing', async () => {
+    renderAt('/syndicates');
+    await screen.findByTestId('syndicates-empty');
+    fireEvent.click(screen.getByTestId('syndicate-new'));
+    const form = screen.getByTestId('syndicate-form');
+    fireEvent.click(within(form).getByTestId('syndicate-save'));
+    expect(await within(form).findByText('Give the syndicate a name.')).toBeInTheDocument();
+    expect(within(form).getByText('A segment needs at least one rule.')).toBeInTheDocument();
+    fireEvent.change(within(form).getByLabelText('Rule 1 field'), { target: { value: 'order_count' } });
+    fireEvent.click(within(form).getByTestId('syndicate-save'));
+    expect(await within(form).findByText('Give the value to compare against.')).toBeInTheDocument();
+    expect(s.createGroup).not.toHaveBeenCalled();
+  });
+
+  it('keeps the syndicate form open and says why when the create fails', async () => {
+    s.createGroup.mockRejectedValue(new Error('write permission required'));
+    renderAt('/syndicates');
+    await screen.findByTestId('syndicates-empty');
+    fireEvent.click(screen.getByTestId('syndicate-new'));
+    const form = screen.getByTestId('syndicate-form');
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Lookalikes' } });
+    fireEvent.change(within(form).getByLabelText('Type'), { target: { value: 'lookalike' } });
+    fireEvent.click(within(form).getByTestId('syndicate-save'));
+    expect(await within(form).findByText(/The syndicate was not created: write permission required/)).toBeInTheDocument();
+    expect(s.createGroup).toHaveBeenCalledWith(expect.objectContaining({ population_type: 'lookalike', definition: { rules: [] } }));
+    expect(screen.getByTestId('where')).toHaveTextContent(/^\/syndicates$/);
   });
 });

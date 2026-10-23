@@ -10,6 +10,7 @@ const s = vi.hoisted(() => ({
   config: { tenant_id: 't1', digest: null, timezone: null } as unknown,
   archive: vi.fn(),
   markRead: vi.fn(),
+  createAlert: vi.fn(),
   release: null as null | (() => void),
 }));
 
@@ -26,7 +27,7 @@ vi.mock('@aether-app/lib/api/endpoints', () => ({
       archive: (id: string) => s.archive(id),
       markRead: (id: string) => s.markRead(id),
     },
-    notifications: { alerts: () => settle(s.rules) },
+    notifications: { alerts: () => settle(s.rules), createAlert: (body: unknown) => s.createAlert(body) },
     notificationChannels: { getConfig: () => Promise.resolve(s.config) },
   },
 }));
@@ -79,6 +80,7 @@ describe('Signals', () => {
     s.config = { tenant_id: 't1', digest: null, timezone: null };
     s.archive.mockReset().mockResolvedValue({ id: 'n1', archived: true });
     s.markRead.mockReset().mockResolvedValue({ id: 'n1', read: true });
+    s.createAlert.mockReset().mockResolvedValue({ id: 'r-new' });
   });
 
   it('shows a loading state while the feed is read', async () => {
@@ -177,16 +179,71 @@ describe('Signals', () => {
     expect(await screen.findByTestId('signals-rules-empty')).toBeInTheDocument();
   });
 
-  it('renders alert rules from the backend and links to channels', async () => {
-    s.rules = [{ id: 'r1', name: 'Ceiling breach', condition: 'agent.spend > ceiling', channels: ['slack'], recipients: ['owner@x.io'] }];
+  it('renders alert rules from the backend as cards and links to channels', async () => {
+    s.rules = [
+      { id: 'r1', name: 'Ceiling breach', condition: 'agent.spend > ceiling', channels: ['slack'], recipients: ['owner@x.io'], severity: 'P1' },
+      { id: 'r2', name: 'Stale connector', condition: 'connector.age > 30m', channels: ['in_app'], recipients: [] },
+    ];
     renderSignals('/signals?tab=rules');
-    const rule = await screen.findByTestId('signals-rule');
-    expect(within(rule).getByText('Ceiling breach')).toBeInTheDocument();
-    expect(within(rule).getByText('agent.spend > ceiling')).toBeInTheDocument();
-    expect(within(rule).getByText(/via slack · notifies owner@x.io/)).toBeInTheDocument();
+    const [rule, plain] = await screen.findAllByTestId('signals-rule');
+    expect(within(rule!).getByText('Ceiling breach')).toBeInTheDocument();
+    expect(within(rule!).getByText('agent.spend > ceiling')).toBeInTheDocument();
+    expect(within(rule!).getByText('notifies owner@x.io · via slack')).toBeInTheDocument();
+    expect(within(rule!).getByText('Critical')).toBeInTheDocument();
+    // No severity is stored on this rule, so no pill is invented for it.
+    expect(within(plain!).queryByText(/Critical|Watch|Info/)).not.toBeInTheDocument();
+    expect(within(plain!).getByText('no recipients recorded · via in_app')).toBeInTheDocument();
+    // Toggle / edit have no endpoint, so they are not offered.
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Save rule/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByText('Notification channels →'));
     expect(await screen.findByText('NOTIFICATION CHANNELS')).toBeInTheDocument();
+  });
+
+  it('creates a rule with the backend body and refreshes the list', async () => {
+    renderSignals('/signals?tab=rules');
+    await screen.findByTestId('signals-rules-empty');
+    fireEvent.click(screen.getByTestId('signals-new-rule'));
+    const form = screen.getByTestId('signals-rule-form');
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: '  Ceiling breach ' } });
+    fireEvent.change(within(form).getByLabelText('Condition'), { target: { value: 'agent.spend > ceiling' } });
+    fireEvent.change(within(form).getByLabelText('Recipients'), { target: { value: 'owner, admin, owner' } });
+    fireEvent.click(within(form).getByTestId('rule-channel-email'));
+    s.rules = [{ id: 'r-new', name: 'Ceiling breach', condition: 'agent.spend > ceiling', channels: ['in_app', 'email'], recipients: ['owner', 'admin'] }];
+    fireEvent.click(within(form).getByTestId('signals-rule-save'));
+    await waitFor(() => expect(screen.queryByTestId('signals-rule-form')).not.toBeInTheDocument());
+    expect(s.createAlert).toHaveBeenCalledWith({
+      name: 'Ceiling breach', condition: 'agent.spend > ceiling', channels: ['in_app', 'email'], recipients: ['owner', 'admin'],
+    });
+    expect(await screen.findByText('Ceiling breach')).toBeInTheDocument();
+  });
+
+  it('validates the rule form before writing', async () => {
+    renderSignals('/signals?tab=rules');
+    await screen.findByTestId('signals-rules-empty');
+    fireEvent.click(screen.getByTestId('signals-new-rule'));
+    const form = screen.getByTestId('signals-rule-form');
+    fireEvent.click(within(form).getByTestId('rule-channel-in_app'));
+    fireEvent.click(within(form).getByTestId('signals-rule-save'));
+    expect(await within(form).findByText('Give the rule a name.')).toBeInTheDocument();
+    expect(within(form).getByText('Describe the condition that raises a signal.')).toBeInTheDocument();
+    expect(within(form).getByText('Pick at least one channel.')).toBeInTheDocument();
+    expect(within(form).getByLabelText('Name')).toHaveAttribute('aria-invalid', 'true');
+    expect(s.createAlert).not.toHaveBeenCalled();
+  });
+
+  it('keeps the form open and says why when the create fails', async () => {
+    s.createAlert.mockRejectedValue(new Error('permission denied'));
+    renderSignals('/signals?tab=rules');
+    await screen.findByTestId('signals-rules-empty');
+    fireEvent.click(screen.getByTestId('signals-new-rule'));
+    const form = screen.getByTestId('signals-rule-form');
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Ceiling breach' } });
+    fireEvent.change(within(form).getByLabelText('Condition'), { target: { value: 'agent.spend > ceiling' } });
+    fireEvent.click(within(form).getByTestId('signals-rule-save'));
+    expect(await within(form).findByText(/The rule was not saved: permission denied/)).toBeInTheDocument();
+    expect(screen.getByTestId('signals-rule-form')).toBeInTheDocument();
+    expect(screen.getByTestId('signals-rules-empty')).toBeInTheDocument();
   });
 
   it('marks unavailable rules as unavailable', async () => {
