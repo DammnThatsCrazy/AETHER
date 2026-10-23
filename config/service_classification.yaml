@@ -96,6 +96,7 @@ services:
   investigation: {class: beta, stage: action, reason: "investigation case CRUD and status transitions"}
   jobs: {class: core, stage: control-plane, reason: "durable Postgres job control plane"}
   journeys: {class: core, stage: intelligence, reason: "journey stitching and routes"}
+  handoff: {class: beta, stage: product, reason: "single-use cross-device journey handoff tokens"}
   kyber: {class: internal, stage: control-plane, reason: "Kyber internal operating plane"}
   kyber_operator: {class: internal, stage: control-plane, reason: "privileged tenant access and fleet envelope for Kyber"}
   lake: {class: core, stage: evidence, reason: "Bronze, Silver and Gold data lake"}
