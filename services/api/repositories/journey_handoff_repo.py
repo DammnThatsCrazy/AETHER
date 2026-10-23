@@ -162,6 +162,43 @@ class JourneyHandoffRepository:
             return None, "wrong_scope"
         return None, "already_redeemed" if existing["state"] != "issued" else "expired"
 
+    async def peek_source(
+        self,
+        *,
+        tenant_id: str,
+        app_namespace: str,
+        token_hash: str,
+        now: Optional[datetime] = None,
+    ) -> Optional[str]:
+        """Return the source anonymous ID of a still-redeemable token, else None.
+
+        Read-only and scoped to the caller's tenant and app: a token that is
+        unknown, out of scope, spent or expired all answer None, so the caller
+        can re-evaluate the source subject's consent before the atomic consume
+        without learning which of those it was.
+        """
+        now = now or utc_now()
+        pool = await self._backend()
+        if pool is None:
+            async with _mem_lock():
+                row = _MEM.get(token_hash)
+                if (
+                    row is None
+                    or row["tenant_id"] != tenant_id
+                    or row["app_namespace"] != app_namespace
+                    or row["state"] != "issued"
+                    or row["expires_at"] <= now
+                ):
+                    return None
+                return str(row["source_anonymous_id"])
+        found = await pool.fetchrow(
+            "SELECT source_anonymous_id FROM journey_handoffs "
+            "WHERE token_hash=$1 AND tenant_id=$2 AND app_namespace=$3 "
+            "AND state='issued' AND expires_at > $4",
+            token_hash, tenant_id, app_namespace, now,
+        )
+        return str(found["source_anonymous_id"]) if found is not None else None
+
     async def list_for_journey(
         self, tenant_id: str, journey_id: str, limit: int = 50
     ) -> list[dict[str, Any]]:

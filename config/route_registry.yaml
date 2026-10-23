@@ -109,6 +109,7 @@ known_prefixes:
   - /sdk/heartbeat
   - /sdk/identity
   - /sdk/identify
+  - /sdk/journey-handoff
   - /sdk/reset
   - /v1/activation
   - /v1/admin

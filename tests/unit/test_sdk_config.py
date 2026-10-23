@@ -1,6 +1,7 @@
 """
 Tests for SDK Remote Config & Auto-Update Service.
-Uses module-level stubs so tests run without FastAPI/cryptography installed.
+Uses module-level stubs so tests run without FastAPI installed (signing needs `cryptography`,
+a declared dependency).
 """
 
 from __future__ import annotations
@@ -60,30 +61,87 @@ async def publish_test_manifest(svc, rollout_percentage: int = 100):
 # ── Signing & verification ─────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_manifest_signing_produces_signature(config_service):
-    svc, _ = config_service
+async def test_manifest_signing_produces_a_raw_p256_signature(config_service):
+    svc, mod = config_service
     manifest = await publish_test_manifest(svc)
 
-    assert manifest.signature != ""
-    assert len(manifest.signature) == 64  # SHA-256 hex
+    assert manifest.signature_alg == "ecdsa-p256-sha256"
+    # base64url of 64 raw bytes (r || s), unpadded
+    assert len(manifest.signature) == 86
+    assert len(mod.manifest_signing.b64url_decode(manifest.signature)) == 64
 
 
 @pytest.mark.asyncio
 async def test_manifest_signature_verification_valid(config_service):
-    svc, _ = config_service
+    svc, mod = config_service
     manifest = await publish_test_manifest(svc)
 
-    valid = svc.verify_signature(manifest.canonical_payload(), manifest.signature)
-    assert valid is True
+    assert svc.verify_manifest(manifest) is True
+    # What a client sees: the JSON body with the public key it was configured with.
+    assert mod.manifest_signing.verify(svc.public_key(), manifest.to_dict()) is True
 
 
 @pytest.mark.asyncio
 async def test_manifest_signature_verification_tampered(config_service):
-    svc, _ = config_service
+    svc, mod = config_service
     manifest = await publish_test_manifest(svc)
 
-    valid = svc.verify_signature(manifest.canonical_payload(), "deadbeef" * 8)
-    assert valid is False
+    for field, value in (
+        ("rollout_percentage", 1),
+        ("features", {"evil": True}),
+        ("endpoints", {"events": "https://evil.example"}),
+        ("flags", {"x": 1}),
+        ("manifest_version", "999"),
+    ):
+        body = manifest.to_dict()
+        body[field] = value
+        assert mod.manifest_signing.verify(svc.public_key(), body) is False, field
+
+    body = manifest.to_dict()
+    body["signature"] = mod.manifest_signing.b64url_encode(b"\x00" * 64)
+    assert mod.manifest_signing.verify(svc.public_key(), body) is False
+
+
+@pytest.mark.asyncio
+async def test_manifest_signature_cannot_be_downgraded_or_stripped(config_service):
+    svc, mod = config_service
+    manifest = await publish_test_manifest(svc)
+
+    for mutate in (
+        lambda b: b.update(signature_alg="none"),
+        lambda b: b.pop("signature_alg"),
+        lambda b: b.update(signature=""),
+        lambda b: b.pop("signature"),
+    ):
+        body = manifest.to_dict()
+        mutate(body)
+        assert mod.manifest_signing.verify(svc.public_key(), body) is False
+
+
+@pytest.mark.asyncio
+async def test_manifest_is_resigned_on_delivery_with_the_current_key(config_service, monkeypatch):
+    svc, mod = config_service
+    await publish_test_manifest(svc)
+
+    delivered = await svc.get_manifest("tenant-test", "sdk-1")
+    assert delivered is not None and svc.verify_manifest(delivered)
+
+    # A different platform secret yields a different key; a manifest signed under
+    # the old one must not verify against the new public key.
+    monkeypatch.setenv("SDK_CONFIG_SECRET", "rotated-secret-xyz")
+    rotated = type(svc)()
+    assert rotated.public_key() != svc.public_key()
+    assert mod.manifest_signing.verify(rotated.public_key(), delivered.to_dict()) is False
+
+
+@pytest.mark.asyncio
+async def test_publish_rejects_values_that_cannot_be_signed(config_service):
+    svc, mod = config_service
+    with pytest.raises(mod.BadRequestError):
+        await svc.publish_manifest(
+            tenant_id="tenant-test", min_sdk_version="1.0.0", schema_version="1.0.0",
+            features={}, endpoints={}, flags={"ratio": 0.5}, rollout_percentage=100,
+        )
 
 
 # ── Version incrementing ───────────────────────────────────────────────────────

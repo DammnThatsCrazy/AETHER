@@ -22,6 +22,7 @@ from typing import Any, Optional
 
 from repositories.journey_handoff_repo import get_journey_handoff_repository
 from shared.common.common import utc_now
+from shared.temporal.instant import coerce_utc_lenient
 
 TOKEN_PREFIX = "hnd_"
 DEFAULT_TTL_SECONDS = 600
@@ -35,6 +36,16 @@ def hash_token(token: str) -> str:
 
 def _clean(value: Optional[str], limit: int = 256) -> str:
     return (value or "").strip()[:limit]
+
+
+def _projected_state(row: dict[str, Any], now: Any) -> str:
+    """An unredeemed token past ``expires_at`` is persisted as ``issued`` but is
+    unusable, so reads report it as ``expired`` rather than outstanding."""
+    state = row["state"]
+    if state != "issued":
+        return state
+    expires_at = coerce_utc_lenient(row.get("expires_at"))
+    return "expired" if expires_at is not None and expires_at <= now else state
 
 
 async def issue_handoff(
@@ -69,6 +80,17 @@ async def issue_handoff(
     })
     # The raw token is returned exactly once and never stored.
     return {"token": token, "handoff_id": record["handoff_id"], "expires_at": record["expires_at"]}
+
+
+async def peek_handoff_source(
+    *, tenant_id: str, app_namespace: str, token: str
+) -> Optional[str]:
+    """Source anonymous ID of a still-redeemable token (scoped), else None."""
+    if not token.startswith(TOKEN_PREFIX):
+        return None
+    return await get_journey_handoff_repository().peek_source(
+        tenant_id=tenant_id, app_namespace=app_namespace, token_hash=hash_token(token),
+    )
 
 
 async def redeem_handoff(
@@ -120,17 +142,19 @@ async def redeem_handoff(
 
 async def list_handoffs(tenant_id: str, journey_id: str) -> list[dict[str, Any]]:
     rows = await get_journey_handoff_repository().list_for_journey(tenant_id, journey_id)
+    now = utc_now()
     return [
         {
             "handoff_id": r["handoff_id"],
             "journey_id": r["journey_id"],
-            "state": r["state"],
+            "state": _projected_state(r, now),
             "link_basis": LINK_BASIS_EXPLICIT if r["state"] == "redeemed" else None,
             "from_session_id": r["source_session_id"],
             "from_platform": r["source_platform"],
             "to_session_id": r.get("redeemed_session_id"),
             "to_platform": r.get("redeemed_platform"),
             "created_at": r["created_at"],
+            "expires_at": r.get("expires_at"),
             "redeemed_at": r.get("redeemed_at"),
         }
         for r in rows

@@ -15,6 +15,7 @@ file/symbol is missing. Keep both in sync when SDK behavior changes.
 | `supported` | Implemented and exercised by tests in this SDK. |
 | `partial` | Implemented with a documented limitation. |
 | `delegated_native` | Surfaced by this SDK but enforced in the native iOS/Android layer it bridges to. |
+| `unsupported` | Not implemented in this SDK: a known gap, recorded rather than claimed. |
 | `not_applicable` | Out of scope for this SDK's role. |
 
 ## Capability matrix
@@ -25,7 +26,7 @@ file/symbol is missing. Keep both in sync when SDK behavior changes.
 | consent-gated enqueue (§2.6) | supported | partial | delegated | supported | supported | n/a |
 | batching → /v1/batch (§2.6) | supported | supported | delegated | supported | supported | n/a |
 | manifest fetch (§2.9) | supported | n/a | supported | supported | supported | n/a |
-| manifest signature verify (§2.9) | supported | n/a | partial | supported | supported | n/a |
+| manifest signature verify (§2.9) | supported | n/a | delegated | supported | supported | n/a |
 | batch health metrics (§2.8) | supported | supported | supported | supported | supported | supported (parse-only) |
 | retry / backoff (§2.6) | supported | supported | delegated | supported | supported | n/a |
 | offline queue (§2.6) | supported | partial | delegated | supported | supported | n/a |
@@ -41,9 +42,12 @@ file/symbol is missing. Keep both in sync when SDK behavior changes.
   them at startup.
 - **react-native** — the JS bridge exposes `observe`, `queueDepth`, and
   `onBatchResult`, but consent gating, batching, retry, and offline persistence are enforced in the
-  native iOS/Android modules the bridge delegates to. Native manifest signature
-  verification exists too, but the JS `fetchAndApplyManifest()` path applies a
-  fetched manifest without checking its `signature`, so this cell is `partial`.
+  native iOS/Android modules the bridge delegates to. Manifest signature
+  verification is delegated too: `manifestPublicKey` is forwarded to the native
+  SDKs, which verify the manifests they fetch, and the JS manifest path
+  (`fetchAndApplyManifest`) calls `Aether.verifyManifest()`, which uses the same
+  native ES256 verifier because Hermes has no WebCrypto. It fails closed when the
+  native method is missing (an older native build).
 - **python** — an observation-envelope builder with no client-side emit
   pipeline; it can still parse the `/v1/batch` BatchResponse into a uniform
   `BatchHealth` via `parse_batch_health`.
@@ -65,13 +69,16 @@ Every SDK that reports batch health surfaces these five counters. `accepted` /
 
 ## Manifest signature verification (§2.9)
 
-- **Algorithm**: HMAC-SHA256 over a deterministic canonical serialization of the
-  manifest (signature field excluded; top-level fields and feature keys sorted),
-  hex-encoded signature, constant-time comparison.
-- **Key source**: the tenant `SDK_CONFIG_SECRET`, provisioned out-of-band. On
-  web/server this is `signingSecret`; on iOS/Android it is
-  `AetherConfig.manifestVerificationKey`, forwarded to the health agent.
-- **Fail-closed**: when a verification key is configured, an unsigned or
-  invalid-signature manifest is rejected and the last-known-good manifest is
-  kept. When no key is configured, the manifest is applied unverified
-  (back-compat) — production tenants MUST configure a key.
+- **Algorithm**: ES256 — ECDSA P-256 / SHA-256 over the canonical JSON of the
+  manifest (signature field excluded), raw `r || s` signature, base64url. The
+  backend signs each manifest when it is delivered with a key derived from
+  `SDK_CONFIG_SECRET`; clients hold only the public key. Normative spec:
+  [`docs/reference/sdks/manifest-signing.md`](../../docs/reference/sdks/manifest-signing.md),
+  shared vectors: `tests/fixtures/sdk/manifest-signing-vectors.json`.
+- **Key source**: `python scripts/sdk_manifest_public_key.py` prints the public
+  key. On web it is `advanced.manifestPublicKey`; on iOS/Android it is
+  `AetherConfig.manifestPublicKey`, forwarded to the health agent.
+- **Fail-closed**: when a public key is configured, an unsigned, malformed,
+  tampered or wrongly signed manifest is rejected and the last-known-good
+  manifest is kept. When no key is configured, the manifest is applied
+  unverified — production apps MUST configure a key.

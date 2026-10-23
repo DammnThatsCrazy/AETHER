@@ -37,10 +37,12 @@ public struct AetherConfig {
     public var privacy: PrivacyConfig = PrivacyConfig()
     public var batchSize: Int = 10
     public var flushInterval: TimeInterval = 5.0
-    /// Optional HMAC-SHA256 secret to verify the remote SDK manifest signature
-    /// before applying it (Truth Kernel §2.9). When set, unsigned/invalid
-    /// manifests are rejected and the last-known-good config is kept.
-    public var manifestVerificationKey: String? = nil
+    /// Optional base64url SPKI P-256 public key to verify the remote SDK manifest
+    /// signature before applying it (Truth Kernel §2.9; print it with
+    /// `python scripts/sdk_manifest_public_key.py`). When set, unsigned/invalid
+    /// manifests are rejected and the last-known-good config is kept. When unset,
+    /// manifests are applied without verification.
+    public var manifestPublicKey: String? = nil
     public var autoResumeJourney: Bool = true
     public var onJourneyResumed: ((_ resolvedAnonymousId: String, _ resolvedUserId: String?) -> Void)? = nil
     // Native identity -> subject-hints convergence (WS-C / Invariant #4).
@@ -1424,7 +1426,7 @@ public final class Aether: NSObject {
             apiKey: config.apiKey,
             platform: "ios",
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
-            manifestVerificationKey: config.manifestVerificationKey
+            manifestPublicKey: config.manifestPublicKey
         )
         hAgent.getDynamicState = { [weak self] in
             guard let self = self else { return (0, false, false, false) }

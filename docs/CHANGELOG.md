@@ -12,7 +12,7 @@ canonical_owner: release@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "CHANGELOG.md": "sha256:aaa8d26501364df9f6788faf0bd61f12700c425c5a7087e15cff13c2445ce71f"
+  "CHANGELOG.md": "sha256:5f1596569c3412a17f2ad09477153ba524832e4d8bb08e46d90ea2aec36fe1c9"
 ---
 # Changelog
 
@@ -31,6 +31,7 @@ source_hashes:
 - Root-layout gate (`scripts/validate_root_layout.py`) and deprecated-language gate (`scripts/check_deprecated_language.py`), both run by `make repo-doctor` and `make docs-check`.
 - Legacy-tag and blueprint-adaptation notes in `docs/operations/releases/tag-policy.md` and `docs/reference/source-of-truth/repo-truth.md`.
 - Reconciled Control Plane seam: a site install is observed as a managed integration and admitted through the §16 lifecycle, so an install the loader could not bring up reconciles as drift instead of as nothing to reconcile.
+- Scale-readiness verification: concurrency proofs on the real SDK ingestion handler (`services/api/tests/scale`) show tenant isolation, exactly-once acceptance of duplicate and overlapping batches, claim release so retries are accepted after a bus failure, and the declared claim-store-outage degradation. `scale-readiness` moves to `VERIFIED` (activation stays `INFRASTRUCTURE_WAITING`: staging is not provisioned and no staging load baseline is recorded).
 
 ### Changed
 
@@ -43,6 +44,10 @@ source_hashes:
 
 ### Fixed
 
+- SDK manifest signatures now work end to end. The backend signs each delivered manifest with ES256 (ECDSA P-256) over a canonical JSON form, derived from `SDK_CONFIG_SECRET` so clients only need a public key; web, iOS and Android verify it with `manifestPublicKey` (print it with `scripts/sdk_manifest_public_key.py`). Previously the backend signed one payload with a server secret while the web and native clients verified two different, incompatible payloads with a client-held HMAC key, so no client could verify a real manifest. Specification and shared test vectors: `docs/reference/sdks/manifest-signing.md`, `tests/fixtures/sdk/manifest-signing-vectors.json`.
+- The iOS and Android SDKs read the remote manifest from the top level of the response instead of the `data` envelope the backend returns, so they never applied one. They now unwrap the envelope.
+- The web SDK no longer skips manifest verification when WebCrypto is unavailable; with a public key configured it now fails closed.
+- React Native advertised `manifestSignatureVerification: true` with no verification path. It now forwards `manifestPublicKey` to the native SDKs and verifies the JS manifest path through a new native `verifyManifest` method (Hermes has no WebCrypto), failing closed; `sdk-parity.json` gains an explicit `unsupported` status for recorded gaps.
 - `bump_version.py` now writes and checks the root `VERSION` file and rejects numeric prerelease identifiers with leading zeroes.
 - The React Native podspec pins `AetherSDK` to the current minor for 0.x versions instead of the major.
 - `Web3TransactionProjector` handles `wallet` and `transaction`, and the projector ownership registry now declares them, so `validate_projector_ownership.py` passes.
