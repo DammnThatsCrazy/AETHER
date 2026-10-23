@@ -559,9 +559,15 @@ server-owned path is available behind `JOURNEY_HANDOFF_ENABLED` (default off):
    that moment. It does not merge identities, assert a user ID, or select a
    profile; resolution still decides that from its own evidence.
 
-Identity-link consent is required for the anonymous ID at both ends (fail
-closed). `GET /sdk/journey-handoff/journeys/{journey_id}` (`read`) lists the
-handoffs for a journey. Not done: SDK client methods (callers use the REST
+Identity-link consent is required at both ends (fail closed). The source
+subject's consent is re-evaluated at redemption, because redeeming creates an
+explicit link carrying its identifiers; if it has lapsed the response is the
+same 404 as an unknown token and the token is left unspent (it expires on its
+own). The routes are classified in `config/route_registry.yaml`, and a
+site-bound publishable key may call exactly the issue and redeem POSTs (the
+tenant read is not reachable with one). `GET /sdk/journey-handoff/journeys/{journey_id}`
+(`read`) lists the handoffs for a journey; a token past `expires_at` that was
+never redeemed is reported as `expired`. Not done: SDK client methods (callers use the REST
 routes), and projection of the link into Profile360 or the graph.
 
 ## Agent Identity Resolution

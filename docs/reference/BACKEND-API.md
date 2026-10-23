@@ -3275,19 +3275,19 @@ Run-explanation evidence separates `delegation_resolution` (canonical record/par
 
 ### Agent spawn lineage
 
-- `GET /v1/agent/agents/{root_agent_ref}/lineage?max_depth=8` — `agent:manage`. Orchestrator to sub-agent tree from `agent_subagent_spawned` facts with run, tool-call and outcome rollups. Source-reported, tenant-scoped, bounded (`truncated` lists applied bounds); it never identifies a controlling person.
+- `GET /v1/agent/agents/{root_agent_ref}/lineage?max_depth=8` — `agent:manage`. Orchestrator to sub-agent tree from `agent_subagent_spawned` facts with run, tool-call and outcome rollups. Source-reported, tenant-scoped, bounded (`truncated` lists applied bounds); it never identifies a controlling person. The spawn and per-agent activity reads are capped (1,000 spawn facts, 200 facts per agent); when a cap bites, `source_truncation` says so and `source_status` is `incomplete` rather than `empty`.
 
 ### Journey handoff (flag `JOURNEY_HANDOFF_ENABLED`)
 
-- `POST /sdk/journey-handoff` — SDK key. Issues a single-use handoff token for a journey/session; requires identity-link consent for the anonymous ID.
-- `POST /sdk/journey-handoff/redeem` — SDK key. Redeems it from the destination session and returns an `explicit_handoff` link; never merges identities. Every failure returns the same 404.
-- `GET /sdk/journey-handoff/journeys/{journey_id}` — `read`. Handoffs recorded for one journey.
+- `POST /sdk/journey-handoff` — SDK key (a site-bound publishable key may call it). Issues a single-use handoff token for a journey/session; requires identity-link consent for the anonymous ID. Identifiers are trimmed; blank ones are a 422.
+- `POST /sdk/journey-handoff/redeem` — SDK key (a site-bound publishable key may call it). Redeems it from the destination session and returns an `explicit_handoff` link; never merges identities. Consent is checked for the destination and re-checked for the token's source subject; every failure, including a revoked source, returns the same 404 and leaves the token unspent.
+- `GET /sdk/journey-handoff/journeys/{journey_id}` — `read`; not reachable with a publishable key. Handoffs recorded for one journey; an unredeemed token past `expires_at` reads as `expired`.
 
 ### Fleet hypotheses (flag `FEATURE_FRAUD_NETWORKS`)
 
 - `POST /v1/fraud/fleet-hypotheses/build` — `fraud:evaluate`. Builds an evidence-graded common-operator hypothesis for an orchestrator.
 - `GET /v1/fraud/fleet-hypotheses` and `GET /v1/fraud/fleet-hypotheses/{id}` — `fraud:read`.
-- `POST /v1/fraud/fleet-hypotheses/{id}/review` — `fraud:evaluate`. Human `confirm`/`reject` with a reason; the only path to a confirmed status.
+- `POST /v1/fraud/fleet-hypotheses/{id}/review` — `fraud:evaluate`. Human `confirm`/`reject` with a reason; the only path to a confirmed status. Written atomically against the record's `revision`, so concurrent reviews are all kept in `review_history`.
 
 ## Agentic Observability Layer
 

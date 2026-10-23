@@ -197,7 +197,20 @@ are separate from the eight detectors above and do not create a fraud network.
 - Status starts `unconfirmed` or `needs_review` (fleet of 5+, or any member with
   a Risk360 signal, and confidence >= 0.35). Only `POST .../review` can set
   `confirmed_by_reviewer` or `rejected_by_reviewer`; confirming needs an
-  observed principal and a written reason, and a rebuild never undoes a review.
+  observed principal and a written reason. A rebuild keeps a review only while
+  the evidence fingerprint (root, evidence types, linked principals) is
+  unchanged; if the evidence or person link changed since the reviewer decided,
+  the decision is recorded as `superseded` in `review_history` and the hypothesis
+  returns to the builder's status for a fresh review.
+- A person link is only ever made to a grantor the canonical identity authority
+  resolves to an active `human` subject (merge tombstones followed; the
+  surviving id is recorded). Agents, organizations and unresolved ids are not
+  principals. Evidence event references come from the spawn edges traversed into
+  the selected lineage, and a hypothesis built from a capped read carries
+  `source_truncation`.
+- Writes are compare-and-set on `revision` (first write is insert-if-absent), so
+  concurrent reviews and rebuilds cannot overwrite one another, and `created_at`
+  is preserved across both.
 - Routes (under `FEATURE_FRAUD_NETWORKS`): `POST /v1/fraud/fleet-hypotheses/build`
   (`fraud:evaluate`), `GET /v1/fraud/fleet-hypotheses[/{id}]` (`fraud:read`),
   `POST /v1/fraud/fleet-hypotheses/{id}/review` (`fraud:evaluate`).

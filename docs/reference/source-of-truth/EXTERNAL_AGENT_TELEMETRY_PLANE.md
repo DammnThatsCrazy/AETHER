@@ -317,7 +317,11 @@ from the parent to the **child** (earlier code read the child from
 `GET /v1/agent/agents/{root_agent_ref}/lineage` (`agent:manage`, registry flag)
 returns the orchestrator tree with per-agent run, tool-call and outcome
 rollups. It is tenant-scoped, cycle-safe, and bounded (depth 8, 100 agents);
-bounds that apply are listed in `truncated`. Every node and edge is
+bounds that apply are listed in `truncated`. The Silver reads behind it are
+capped too (1,000 spawn facts per tenant, 200 facts per agent, newest first);
+a cap that bites is reported in `source_truncation` and the response's
+`source_status` is `incomplete`, never `empty`, so unrelated tenant activity
+cannot silently evict the requested topology. Every node and edge is
 `source_reported` and the response states `attribution: "none"`: the tree shows
 which agent references spawned which, never who controls them. Silver stores
 the event type as `source_event_type`; the readers accept `event_name` only for
