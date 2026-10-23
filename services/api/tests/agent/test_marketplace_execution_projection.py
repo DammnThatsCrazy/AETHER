@@ -1236,3 +1236,44 @@ async def test_graph_recovery_rebuilds_only_validated_deployment_identity_edges(
     assert len(identity_edges) == 1
     assert identity_edges[0].from_vertex_id == "canonical-agent"
     assert identity_edges[0].to_vertex_id == deployment["id"]
+
+
+@pytest.mark.asyncio
+async def test_postgres_shaped_silver_rows_keep_their_event_type(monkeypatch):
+    """Postgres has no ``event_name`` column: the event type is ``source_event_type``."""
+    import actions.agent.deployment_routes as routes_module
+    from repositories.repos import AnalyticsRepository
+
+    tenant_id = _tenant()
+    deployment = await AgentDeploymentRepository().create(
+        tenant_id,
+        {"agent_id": "agent-pg", "display_name": "Bot", "external_platform": "web_widget"},
+    )
+    rows = [
+        {"source_event_id": "e2", "source_event_type": "agent_task_completed", "run_id": "run-1",
+         "occurred_at": "2026-10-10T10:02:00Z", "outcome_ref": "e2", "outcome": "completed"},
+        {"source_event_id": "e1", "source_event_type": "agent_tool_invocation_observed",
+         "run_id": "run-1", "occurred_at": "2026-10-10T10:01:00Z", "tool_name": "search"},
+    ]
+
+    async def query_silver(self, table, filters, *, limit=50):
+        return [dict(r) for r in rows]
+
+    monkeypatch.setattr(AnalyticsRepository, "query_silver", query_silver)
+    settings = routes_module.settings
+    monkeypatch.setattr(
+        settings, "external_agent_telemetry",
+        dataclasses.replace(settings.external_agent_telemetry, enabled=True, registry_enabled=True),
+    )
+    request = SimpleNamespace(state=SimpleNamespace(
+        tenant=SimpleNamespace(tenant_id=tenant_id, user_id="u", require_permission=lambda _: None),
+        request_id="req",
+    ), headers={})
+    index = await routes_module.list_agent_runs(deployment["id"], request, limit=500)
+    assert index["data"]["runs"][0]["event_types"] == [
+        "agent_task_completed", "agent_tool_invocation_observed",
+    ]
+    explained = await routes_module.explain_agent_run(deployment["id"], "run-1", request)
+    assert [e["event_type"] for e in explained["data"]["evidence"]] == [
+        "agent_tool_invocation_observed", "agent_task_completed",
+    ]

@@ -704,7 +704,9 @@ async def list_agent_runs(
         # query_silver is newest-first: the first row for a run is its latest.
         summary["first_event_at"] = occurred_at or summary["first_event_at"]
         summary["event_count"] += 1
-        event_type = str(row.get("event_name") or row.get("event_type") or "")
+        event_type = str(
+            row.get("source_event_type") or row.get("event_name") or row.get("event_type") or ""
+        )
         if event_type and event_type not in summary["event_types"] and len(summary["event_types"]) < 12:
             summary["event_types"].append(event_type)
 
@@ -778,7 +780,7 @@ async def explain_agent_run(
             resolved = await resolver.resolve(row)
         return {
             "source_event_id": row.get("source_event_id"),
-            "event_type": row.get("event_name"),
+            "event_type": row.get("source_event_type") or row.get("event_name"),
             "occurred_at": row.get("occurred_at"),
             "evidence_authority": "tenant_source_asserted",
             "task_ref": row.get("task_ref"),
