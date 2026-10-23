@@ -43,9 +43,9 @@
       "experimental_features": [],
       "coverage": {
         "implementation": {
-          "ok": 25,
+          "ok": 26,
           "of": 32,
-          "percent": 78.1
+          "percent": 81.2
         },
         "productionization": {
           "ok": 0,
@@ -105,7 +105,7 @@
         "profile-360": "TECHNICALLY_RELEASE_ELIGIBLE",
         "provider-certification-plane": "TECHNICALLY_RELEASE_ELIGIBLE",
         "push-notification-delivery": "TECHNICALLY_RELEASE_ELIGIBLE",
-        "scale-readiness": "BLOCKED_BY_CODE",
+        "scale-readiness": "TECHNICALLY_RELEASE_ELIGIBLE",
         "sdks": "TECHNICALLY_RELEASE_ELIGIBLE",
         "security-compliance": "TECHNICALLY_RELEASE_ELIGIBLE",
         "semantic-intelligence": "TECHNICALLY_RELEASE_ELIGIBLE",
@@ -129,9 +129,6 @@
         "payment-rail-observability: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
         "payment-rail-observability: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor",
         "payment-rail-observability: open repository work: complete repository-controlled verification + hardening",
-        "scale-readiness: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
-        "scale-readiness: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor",
-        "scale-readiness: open repository work: complete repository-controlled verification + hardening",
         "stablecoin-intelligence: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
         "stablecoin-intelligence: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor",
         "stablecoin-intelligence: open repository work: complete repository-controlled verification + hardening"
@@ -142,7 +139,7 @@
     {
       "profile": "staging",
       "title": "Staging",
-      "disposition": "BLOCKED_BY_CODE",
+      "disposition": "READY_TO_ACTIVATE",
       "required_features": [
         "backend-api",
         "campaign-intelligence",
@@ -182,14 +179,14 @@
       ],
       "coverage": {
         "implementation": {
-          "ok": 23,
+          "ok": 24,
           "of": 24,
-          "percent": 95.8
+          "percent": 100.0
         },
         "productionization": {
-          "ok": 23,
+          "ok": 24,
           "of": 24,
-          "percent": 95.8
+          "percent": 100.0
         },
         "activation": {
           "ok": 15,
@@ -244,7 +241,7 @@
         "profile-360": "READY_TO_VALIDATE",
         "provider-certification-plane": "READY_TO_ACTIVATE",
         "push-notification-delivery": "READY_TO_ACTIVATE",
-        "scale-readiness": "BLOCKED_BY_CODE",
+        "scale-readiness": "READY_TO_ACTIVATE",
         "sdks": "READY_TO_VALIDATE",
         "security-compliance": "READY_TO_VALIDATE",
         "semantic-intelligence": "READY_TO_ACTIVATE",
@@ -268,9 +265,6 @@
         "payment-rail-observability: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
         "payment-rail-observability: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor",
         "payment-rail-observability: open repository work: complete repository-controlled verification + hardening",
-        "scale-readiness: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
-        "scale-readiness: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor",
-        "scale-readiness: open repository work: complete repository-controlled verification + hardening",
         "stablecoin-intelligence: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
         "stablecoin-intelligence: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor",
         "stablecoin-intelligence: open repository work: complete repository-controlled verification + hardening"
@@ -434,9 +428,7 @@
         "payment-rail-observability: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
         "payment-rail-observability: implementation state RUNTIME_INTEGRATED is below the TURNKEY floor",
         "payment-rail-observability: open repository work: complete repository-controlled verification + hardening",
-        "scale-readiness: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
-        "scale-readiness: implementation state RUNTIME_INTEGRATED is below the TURNKEY floor",
-        "scale-readiness: open repository work: complete repository-controlled verification + hardening",
+        "scale-readiness: implementation state VERIFIED is below the TURNKEY floor",
         "sdks: implementation state VERIFIED is below the TURNKEY floor",
         "security-compliance: implementation state VERIFIED is below the TURNKEY floor",
         "semantic-intelligence: implementation state VERIFIED is below the TURNKEY floor",
@@ -504,9 +496,9 @@
           "percent": 43.5
         },
         "productionization": {
-          "ok": 22,
+          "ok": 23,
           "of": 23,
-          "percent": 95.7
+          "percent": 100.0
         },
         "activation": {
           "ok": 15,
@@ -568,9 +560,7 @@
         "kyber-operator-console: implementation state VERIFIED is below the TURNKEY floor",
         "measurement-attribution: implementation state VERIFIED is below the TURNKEY floor",
         "measurement-integrity: implementation state VERIFIED is below the TURNKEY floor",
-        "scale-readiness: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
-        "scale-readiness: implementation state RUNTIME_INTEGRATED is below the TURNKEY floor",
-        "scale-readiness: open repository work: complete repository-controlled verification + hardening",
+        "scale-readiness: implementation state VERIFIED is below the TURNKEY floor",
         "sdks: implementation state VERIFIED is below the TURNKEY floor",
         "security-compliance: implementation state VERIFIED is below the TURNKEY floor",
         "semantic-intelligence: implementation state VERIFIED is below the TURNKEY floor",
@@ -628,9 +618,9 @@
           "percent": 40.9
         },
         "productionization": {
-          "ok": 21,
+          "ok": 22,
           "of": 22,
-          "percent": 95.5
+          "percent": 100.0
         },
         "activation": {
           "ok": 15,
@@ -692,9 +682,7 @@
         "kyber-operator-console: implementation state VERIFIED is below the TURNKEY floor",
         "measurement-attribution: implementation state VERIFIED is below the TURNKEY floor",
         "measurement-integrity: implementation state VERIFIED is below the TURNKEY floor",
-        "scale-readiness: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
-        "scale-readiness: implementation state RUNTIME_INTEGRATED is below the TURNKEY floor",
-        "scale-readiness: open repository work: complete repository-controlled verification + hardening",
+        "scale-readiness: implementation state VERIFIED is below the TURNKEY floor",
         "sdks: implementation state VERIFIED is below the TURNKEY floor",
         "security-compliance: implementation state VERIFIED is below the TURNKEY floor",
         "semantic-intelligence: implementation state VERIFIED is below the TURNKEY floor",

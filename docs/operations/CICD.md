@@ -29,7 +29,7 @@ reviewed_source_commits:
   - commit: "c71ebc5cb"
     reason: "Reviewed Access Kit container workflow cadence: pull requests build on ready_for_review, with explicit dispatch and development/main push lanes for targeted or post-landing builds; no staging wake or deployment is added."
 source_hashes:
-  ".github/workflows/": "sha256:880e81a82106f854cfdd522886de0232ed1479a906a69015d3611cd446b39be7"
+  ".github/workflows/": "sha256:aded28fe443bc2538172a1fc4717a7980c78d66478e7edf7c45db81a5b24d63b"
   "config/delivery_workflow_authority.yaml": "sha256:2412ea1ace2008760b340ce12d9922d2256d1ffa6daff9dbd96d04fb7c6acad8"
   "config/staging_apply_iam_policy.yaml": "sha256:ba50b6e911a80c9b43706a4230afa181efc007cc0bd2bf3beaccc454506adbce"
   "infra/aws/terraform/modules/aurora/main.tf": "sha256:afb45881042e91e038652ba1fd155d94c3213d551f9f213285552055b6415ed8"
@@ -332,7 +332,7 @@ workers by the registry's expected runtime, and runs path-selected non-suite
 static gates plus the tests no suite runs (which need a Python extra), the pnpm
 proof-package builds, the functionality-proof gating jobs, Slither, the Access Kit
 container smoke (pnpm, Python or Docker), the always-on control gates that replace
-`universal-fast`, and the selected Node and backend image builds. `verdict`
+`universal-fast`, and the selected Node and backend image builds. The `checks` job runs on `ubuntu-24.04`, not `ubuntu-latest`: the latest image became Ubuntu 26.04, which Playwright cannot install chromium on, so the browser checks failed in setup. Move it back once the Playwright version in use supports the newer image. `verdict`
 uploads one tiny diagnostic artifact, `ci-verdict-evidence`, only for a passing
 non-draft run. A manual `workflow_dispatch` replay chooses its own diff base, so it
 publishes under the name `ci / verdict (manual replay)` and uploads no evidence;

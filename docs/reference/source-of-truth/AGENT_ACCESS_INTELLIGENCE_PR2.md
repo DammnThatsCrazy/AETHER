@@ -323,7 +323,7 @@ out as a deliberate behavioral change rather than buried.
 ### B2 — declared identity, scanning, drift inputs (second commit)
 
 - **§9.3 artifact/publisher identity.** No publisher/provenance/SBOM concept exists in the
-  backend (`services/api/ingestion/sdk_config/service.py`'s HMAC-signed SDK manifest is for *our own* SDK, not
+  backend (`services/api/ingestion/sdk_config/service.py`'s ES256-signed SDK manifest is for *our own* SDK, not
   third-party MCP servers). Nothing in the system can cryptographically verify a third-party
   capability's publisher, so **no `verified` state is offered** — offering one would be a
   fabricated assurance. B2 derives what is honestly derivable: a `publisher_ref` from the

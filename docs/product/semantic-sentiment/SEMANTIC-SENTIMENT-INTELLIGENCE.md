@@ -17,7 +17,7 @@ source_hashes:
   "packages/shared/semantic-sentiment.ts": "sha256:85333759d1977c54a8655e634b30a1ee90a644c0a6fe357f1bfc6132a2b0cda0"
   "services/api/intelligence/semantic_intelligence/engine.py": "sha256:e900f05e6bf78a126f7de31165fe2289e5e20904fab2131c01c0d68830d26d6a"
   "services/api/intelligence/semantic_intelligence/models.py": "sha256:1b92bc04ddd1cd7e94ec09044012491c0bfcf11fcf7e8a738ad985cb5e4db28e"
-  "services/api/intelligence/semantic_intelligence/routes.py": "sha256:d9d17f23ae914259fb94e3e2748fbefc3baa193e7984616a34238abc1ecbf6e4"
+  "services/api/intelligence/semantic_intelligence/routes.py": "sha256:8d3c1abd53f007c95349cb6b551f3d376701d883a20be7a0afddaf73133386f7"
 ---
 
 # Semantic-Sentiment Intelligence Plane

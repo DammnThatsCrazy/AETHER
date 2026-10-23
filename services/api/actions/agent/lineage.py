@@ -26,6 +26,10 @@ OUTCOME_EVENTS = frozenset({
 MAX_DEPTH = 8
 MAX_NODES = 100
 _TOOL_SAMPLE = 20
+# Per-read fact bounds. A read that returns more than its limit is cut at the
+# limit and reported as truncated (see ``read_lineage_facts``), never silently.
+SPAWN_FACT_LIMIT = 1000
+ACTIVITY_FACT_LIMIT = 200
 
 
 def _ref(value: Any) -> Optional[str]:
@@ -184,3 +188,77 @@ def agent_refs_in_tree(tree: dict[str, Any]) -> list[str]:
         refs.append(node["agent_ref"])
         stack.extend(reversed(node["children"]))
     return refs
+
+
+def edge_event_refs(tree: dict[str, Any], limit: int = 25) -> list[str]:
+    """Source events of the spawn edges actually traversed into this tree.
+
+    Evidence for a lineage must come from the edges that put each agent in it,
+    not from every tenant spawn fact that happens to omit a root: with several
+    spawn trees in one tenant the latter cites another fleet's events.
+    """
+    refs: list[str] = []
+    stack = [tree]
+    while stack and len(refs) < limit:
+        node = stack.pop()
+        via = node.get("spawned_by") or {}
+        event_id = via.get("source_event_id")
+        if event_id:
+            refs.append(str(event_id))
+        stack.extend(reversed(node["children"]))
+    return refs
+
+
+async def read_lineage_facts(
+    analytics: Any,
+    *,
+    tenant_id: str,
+    root_agent_ref: str,
+    max_depth: int = MAX_DEPTH,
+) -> dict[str, Any]:
+    """Read bounded spawn and activity facts and build the tree, reporting bounds.
+
+    Both reads are newest-first and capped, so on a busy tenant an older root's
+    edges, or an agent's older activity, can fall outside the cap. Each read
+    asks for one row past its limit to detect that, and the result says so in
+    ``source_truncation`` instead of presenting a partial topology or an
+    undercounted rollup as complete.
+    """
+    rows = await analytics.query_silver(
+        "silver_agent_execution_facts",
+        {"tenant_id": tenant_id, "source_event_type": SPAWN_EVENT},
+        limit=SPAWN_FACT_LIMIT + 1,
+    )
+    spawn_truncated = len(rows) > SPAWN_FACT_LIMIT
+    spawn_rows = rows[:SPAWN_FACT_LIMIT]
+    shape = build_lineage_tree(
+        tenant_id=tenant_id, root_agent_ref=root_agent_ref,
+        spawn_rows=spawn_rows, max_depth=max_depth,
+    )
+    activity: dict[str, list[dict[str, Any]]] = {}
+    activity_truncated: list[str] = []
+    for ref in agent_refs_in_tree(shape["tree"])[:MAX_NODES]:
+        agent_rows = await analytics.query_silver(
+            "silver_agent_execution_facts",
+            {"tenant_id": tenant_id, "agent_id": ref},
+            limit=ACTIVITY_FACT_LIMIT + 1,
+        )
+        if len(agent_rows) > ACTIVITY_FACT_LIMIT:
+            activity_truncated.append(ref)
+        activity[ref] = agent_rows[:ACTIVITY_FACT_LIMIT]
+    shape = build_lineage_tree(
+        tenant_id=tenant_id, root_agent_ref=root_agent_ref, spawn_rows=spawn_rows,
+        activity_rows=activity, max_depth=max_depth,
+    )
+    shape["source_truncation"] = {
+        "spawn_facts": spawn_truncated,
+        "spawn_fact_limit": SPAWN_FACT_LIMIT,
+        "activity_truncated_agents": activity_truncated,
+        "activity_fact_limit": ACTIVITY_FACT_LIMIT,
+    }
+    return {"shape": shape, "spawn_rows": spawn_rows, "activity": activity}
+
+
+def source_is_truncated(shape: dict[str, Any]) -> bool:
+    cut = shape.get("source_truncation") or {}
+    return bool(cut.get("spawn_facts") or cut.get("activity_truncated_agents"))

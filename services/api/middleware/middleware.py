@@ -1163,6 +1163,14 @@ def _evaluate_kyber_capability(request: Request, path: str, pol) -> Optional[Aet
     return None
 
 
+# Journey handoff is the one SDK surface beyond ingestion that an ingest-only
+# credential may call: the source and destination SDKs issue and redeem a token
+# with the same site-bound key they ingest with. Exact paths only. The tenant
+# read under /sdk/journey-handoff/journeys/{id} is deliberately NOT here, so a
+# publishable key (which ships in page HTML) can never read handoff records.
+_SDK_HANDOFF_PATHS = frozenset({"/sdk/journey-handoff", "/sdk/journey-handoff/redeem"})
+
+
 def _evaluate_route_policy(
     request: Request, path: str, context, *, platform_operator: bool = False
 ) -> Optional[AetherError]:
@@ -1257,7 +1265,11 @@ def _evaluate_route_policy(
 
         credential_class = getattr(context, "credential_class", "legacy")
         if credential_class in ("public_ingest_identifier", CREDENTIAL_CLASS_PUBLISHABLE):
-            if path not in ("/v1/batch", "/v1/track") and not path.startswith("/v1/ingest"):
+            if (
+                path not in ("/v1/batch", "/v1/track")
+                and not path.startswith("/v1/ingest")
+                and path not in _SDK_HANDOFF_PATHS
+            ):
                 return ForbiddenError("ROUTE_POLICY_INGEST_IDENTIFIER_SCOPE")
         if credential_class == CREDENTIAL_CLASS_PUBLISHABLE:
             # A publishable key ships in public HTML, so it is confined above to

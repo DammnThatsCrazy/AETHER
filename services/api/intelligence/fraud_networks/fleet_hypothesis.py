@@ -20,13 +20,14 @@ Rules this module enforces:
 from __future__ import annotations
 
 import hashlib
+import json
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional
 from urllib.parse import urlparse
 
 from repositories.repos import BaseRepository
-from shared.common.common import utc_now
+from shared.common.common import ConflictError, utc_now
 
 CIRCUMSTANTIAL_CAP = 0.55
 DELEGATION_CAP = 0.9
@@ -137,6 +138,20 @@ def _combine(strengths: list[float]) -> float:
     return round(1.0 - remaining, 2)
 
 
+def evidence_fingerprint(hypothesis: dict[str, Any]) -> str:
+    """Digest of what a reviewer actually evaluates: the root, the kinds of
+    evidence, and who the fleet is linked to. A human decision is only valid for
+    the evidence it was made on, so a rebuild whose fingerprint differs must
+    not inherit it. Fleet membership is deliberately left out: sub-agents
+    coming and going is routine drift, not a new claim about who controls it."""
+    basis = {
+        "root": hypothesis.get("root_agent_ref"),
+        "evidence_types": sorted(str(e.get("type")) for e in hypothesis.get("evidence", [])),
+        "principals": sorted((hypothesis.get("person_link") or {}).get("principal_entity_ids", [])),
+    }
+    return hashlib.sha256(json.dumps(basis, sort_keys=True).encode()).hexdigest()[:32]
+
+
 def hypothesis_id(tenant_id: str, root_agent_ref: str) -> str:
     digest = hashlib.sha256(f"{tenant_id}\x00{root_agent_ref}".encode()).hexdigest()[:24]
     return f"{tenant_id}:fleet_hyp:{digest}"
@@ -151,6 +166,7 @@ def build_fleet_hypothesis(
     principal_entity_ids: Optional[list[str]] = None,
     risk_flagged_refs: Optional[set[str]] = None,
     source_event_refs: Optional[list[str]] = None,
+    source_truncation: Optional[dict[str, Any]] = None,
 ) -> Optional[dict[str, Any]]:
     """Return an unconfirmed hypothesis, or None when the fleet is too small."""
     members = [m for m in dict.fromkeys(member_refs) if m != root_agent_ref]
@@ -242,7 +258,7 @@ def build_fleet_hypothesis(
             "note": "No canonical delegation ties this fleet to a person; any person link would be speculation.",
         })
 
-    return {
+    hypothesis = {
         "hypothesis_id": hypothesis_id(tenant_id, root_agent_ref),
         "tenant_id": tenant_id,
         "kind": "common_operator",
@@ -273,8 +289,11 @@ def build_fleet_hypothesis(
             else "normal" if review_worthy else "low"
         ),
         "review_history": [],
+        "source_truncation": source_truncation or {},
         "created_at": utc_now().isoformat(),
     }
+    hypothesis["evidence_fingerprint"] = evidence_fingerprint(hypothesis)
+    return hypothesis
 
 
 class ReviewError(ValueError):
@@ -295,6 +314,7 @@ def apply_review(
         raise ReviewError("cannot confirm: no observed principal to link the fleet to")
     updated = dict(hypothesis)
     updated["status"] = _REVIEW_STATUSES[decision]
+    updated["reviewed_fingerprint"] = evidence_fingerprint(hypothesis)
     updated["review_history"] = [
         *hypothesis.get("review_history", []),
         {
@@ -306,22 +326,91 @@ def apply_review(
     return updated
 
 
+_MAX_WRITE_ATTEMPTS = 5
+
+
+def _revision_guard(row: dict[str, Any]) -> dict[str, Any]:
+    """What a conditional write must still find. Rows written before revisions
+    existed match on their id, which is the best a legacy row allows."""
+    if "revision" in row:
+        return {"revision": row["revision"]}
+    return {"hypothesis_id": row["hypothesis_id"]}
+
+
 class FleetHypothesisRepository(BaseRepository):
+    """Every write after the first is a compare-and-set on ``revision``.
+
+    Reviews are the audit trail for human-confirmed fraud attribution. Two
+    reviewers (or a reviewer and a rebuild) that read the same row must not
+    overwrite one another, so a lost race re-reads and re-applies instead of
+    replacing whole records last-write-wins.
+    """
+
     def __init__(self) -> None:
         super().__init__("fleet_hypotheses")
 
     async def save(self, hypothesis: dict[str, Any]) -> dict[str, Any]:
-        """Upsert by (tenant, root). A reviewed hypothesis keeps its status and history."""
-        existing = await self.find_by_id(hypothesis["hypothesis_id"])
-        record = dict(hypothesis)
-        if existing and existing.get("tenant_id") == hypothesis["tenant_id"]:
-            if existing.get("status") in (STATUS_CONFIRMED, STATUS_REJECTED):
-                record["status"] = existing["status"]
-            record["review_history"] = existing.get("review_history", [])
+        """Upsert by (tenant, root).
+
+        A reviewed hypothesis keeps its decision only while its evidence
+        fingerprint is unchanged; otherwise the decision is superseded (kept in
+        ``review_history``) and the rebuilt status stands, so a person link the
+        reviewer never saw is not presented as confirmed. ``created_at`` and
+        the review history always survive a rebuild.
+        """
+        tenant_id = hypothesis["tenant_id"]
+        for _ in range(_MAX_WRITE_ATTEMPTS):
+            existing = await self.get(tenant_id, hypothesis["hypothesis_id"])
+            record = dict(hypothesis)
+            if existing is None:
+                record["revision"] = 1
+                if await self.insert_if_absent(record["hypothesis_id"], record, tenant_id):
+                    return record
+                continue  # lost the create race: re-read and merge into the winner
+            record["revision"] = int(existing.get("revision", 0)) + 1
             record["created_at"] = existing.get("created_at", record["created_at"])
-        return await self.insert_tenant_scoped(
-            record["hypothesis_id"], record, record["tenant_id"]
-        )
+            record["review_history"] = list(existing.get("review_history", []))
+            if existing.get("status") in (STATUS_CONFIRMED, STATUS_REJECTED):
+                reviewed = existing.get("reviewed_fingerprint") or evidence_fingerprint(existing)
+                if reviewed == record["evidence_fingerprint"]:
+                    record["status"] = existing["status"]
+                    record["reviewed_fingerprint"] = reviewed
+                else:
+                    record["review_history"].append({
+                        "decision": "superseded",
+                        "reason": "evidence_or_person_link_changed_since_review",
+                        "previous_status": existing["status"],
+                        "reviewed_fingerprint": reviewed,
+                        "new_fingerprint": record["evidence_fingerprint"],
+                        "superseded_at": utc_now().isoformat(),
+                    })
+            if await self.replace_if_matches(
+                record["hypothesis_id"], record, tenant_id, _revision_guard(existing)
+            ):
+                return record
+        raise ConflictError("fleet hypothesis changed concurrently; retry")
+
+    async def review(
+        self, tenant_id: str, hypothesis_id_: str, *,
+        reviewer_id: str, decision: str, reason: str,
+    ) -> Optional[dict[str, Any]]:
+        """Apply a human decision atomically. ``None`` when the row is missing.
+
+        ``ReviewError`` propagates unchanged. If another writer lands between
+        the read and the write, the decision is re-applied to the newer row, so
+        both reviews end up in ``review_history`` in the order they committed.
+        """
+        for _ in range(_MAX_WRITE_ATTEMPTS):
+            row = await self.get(tenant_id, hypothesis_id_)
+            if row is None:
+                return None
+            updated = apply_review(row, reviewer_id=reviewer_id, decision=decision, reason=reason)
+            updated["revision"] = int(row.get("revision", 0)) + 1
+            if await self.replace_if_matches(
+                updated["hypothesis_id"], updated, tenant_id, _revision_guard(row)
+            ):
+                return updated
+        raise ConflictError("fleet hypothesis changed concurrently; retry")
 
     async def get(self, tenant_id: str, hypothesis_id_: str) -> Optional[dict[str, Any]]:
         row = await self.find_by_id(hypothesis_id_)

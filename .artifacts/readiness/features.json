@@ -4916,28 +4916,24 @@
         "deferred": []
       },
       "repository_ceiling": {
-        "type": "RUNTIME_INTEGRATED",
+        "type": "VERIFIED",
         "achieved": true,
         "remaining_after_ceiling": [
-          "Provision the required cloud backend (apply Terraform for the target profile)."
+          "Provision the required cloud backend (apply Terraform for the target profile).",
+          "Record the staging load baseline (make load-smoke against staging) in docs/operations/LOAD-BASELINES.md."
         ],
-        "remaining_is_repository_controlled": true
+        "remaining_is_repository_controlled": false
       },
       "implementation": {
-        "state": "RUNTIME_INTEGRATED",
-        "completion_percent": 80.0,
+        "state": "VERIFIED",
+        "completion_percent": 100.0,
         "denominator": "in-scope repository controls (migration-derived)",
-        "remaining_work": [
-          "complete repository-controlled verification + hardening"
-        ]
+        "remaining_work": []
       },
       "productionization": {
-        "completion_percent": 50.0,
+        "completion_percent": 100.0,
         "denominator": "in-scope productionization controls (migration-derived)",
-        "remaining_work": [
-          "reliability idempotency retry",
-          "ci and release gates"
-        ]
+        "remaining_work": []
       },
       "activation": {
         "state": "INFRASTRUCTURE_WAITING",
@@ -5015,42 +5011,36 @@
         "remaining_work": []
       },
       "confidence": {
-        "level": "LOW",
+        "level": "MODERATE",
         "reasons": [
-          "repository evidence: tests/load/"
+          "repository evidence: tests/load/",
+          "repository evidence: services/api/tests/scale/test_ingest_concurrency.py"
         ],
         "evidence_gaps": [
-          "credentialed environment execution not yet performed"
+          "credentialed environment execution not yet performed",
+          "staging load baseline not yet recorded"
         ]
       },
       "release_profiles": {
         "local": {
           "participation": "required",
-          "disposition": "BLOCKED_BY_CODE",
-          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
           "implementation_floor": "VERIFIED",
           "environment_gate": "local",
           "environment_state": "VERIFIED",
-          "hard_blockers": [
-            "implementation state RUNTIME_INTEGRATED is below the VERIFIED floor",
-            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
-            "open repository work: complete repository-controlled verification + hardening"
-          ],
+          "hard_blockers": [],
           "external_blockers": [],
           "warnings": []
         },
         "staging": {
           "participation": "required",
-          "disposition": "BLOCKED_BY_CODE",
-          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
           "implementation_floor": "VERIFIED",
           "environment_gate": "staging",
           "environment_state": "BLOCKED_EXTERNAL",
-          "hard_blockers": [
-            "implementation state RUNTIME_INTEGRATED is below the VERIFIED floor",
-            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
-            "open repository work: complete repository-controlled verification + hardening"
-          ],
+          "hard_blockers": [],
           "external_blockers": [
             "INFRASTRUCTURE_WAITING: Scale Readiness activation waits on an external infra condition. (owner: platform-ops)"
           ],
@@ -5064,9 +5054,7 @@
           "environment_gate": "pilot",
           "environment_state": "NOT_ATTEMPTED",
           "hard_blockers": [
-            "implementation state RUNTIME_INTEGRATED is below the TURNKEY floor",
-            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
-            "open repository work: complete repository-controlled verification + hardening"
+            "implementation state VERIFIED is below the TURNKEY floor"
           ],
           "external_blockers": [
             "INFRASTRUCTURE_WAITING: Scale Readiness activation waits on an external infra condition. (owner: platform-ops)"
@@ -5081,9 +5069,7 @@
           "environment_gate": "production",
           "environment_state": "NOT_ATTEMPTED",
           "hard_blockers": [
-            "implementation state RUNTIME_INTEGRATED is below the TURNKEY floor",
-            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
-            "open repository work: complete repository-controlled verification + hardening"
+            "implementation state VERIFIED is below the TURNKEY floor"
           ],
           "external_blockers": [
             "INFRASTRUCTURE_WAITING: Scale Readiness activation waits on an external infra condition. (owner: platform-ops)"
@@ -5098,9 +5084,7 @@
           "environment_gate": "scale",
           "environment_state": "NOT_ATTEMPTED",
           "hard_blockers": [
-            "implementation state RUNTIME_INTEGRATED is below the TURNKEY floor",
-            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
-            "open repository work: complete repository-controlled verification + hardening"
+            "implementation state VERIFIED is below the TURNKEY floor"
           ],
           "external_blockers": [
             "INFRASTRUCTURE_WAITING: Scale Readiness activation waits on an external infra condition. (owner: platform-ops)"
