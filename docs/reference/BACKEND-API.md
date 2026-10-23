@@ -34,7 +34,7 @@ source_hashes:
   "services/api/identity/": "sha256:5fa73eaa767b2f8a34eb4eb12e226e6267b2659e8f87124707be9cffbb0515bc"
   "services/api/ingestion/": "sha256:9a84a8c185865fecbf450f8a10e7f83a023d7be79679638006f44435cfa96c42"
   "services/api/intelligence/": "sha256:0fcf635319447fcc0eb16ab21ba4de41613ade71ade0ef2c46d76566d2cfd688"
-  "services/api/journeys/": "sha256:8c1c79efce541c0077f0a9c62c23fc571e30924a262886f8ffb9d31fac342c84"
+  "services/api/journeys/": "sha256:f9e5a9616be435998416cead197a6be150a2d87f02b97f6f07a3dcdc1227ba24"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
   "services/api/value/": "sha256:1626191c92bea173b1bd586811d48941fa6bf7cf6c6946784d692eebaf3873c0"
@@ -3282,6 +3282,8 @@ Run-explanation evidence separates `delegation_resolution` (canonical record/par
 - `POST /sdk/journey-handoff` — SDK key. Issues a single-use handoff token for a journey/session; requires identity-link consent for the anonymous ID.
 - `POST /sdk/journey-handoff/redeem` — SDK key. Redeems it from the destination session and returns an `explicit_handoff` link; never merges identities. Every failure returns the same 404.
 - `GET /sdk/journey-handoff/journeys/{journey_id}` — `read`. Handoffs recorded for one journey.
+
+Handoff rows hold both anonymous IDs: they are retained 90 days (`journey_handoff_sweep`, maintenance role) and erased by anonymous ID through the `journey_handoffs` DSR component.
 
 ### Fleet hypotheses (flag `FEATURE_FRAUD_NETWORKS`)
 
