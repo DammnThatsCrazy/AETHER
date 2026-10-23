@@ -2725,31 +2725,28 @@ async def test_repository_risk_reader_uses_canonical_exact_tenant_execution_subj
     assert result.reason == "execution_risk_signal_scope_mismatch"
 
 
-async def test_repository_risk_reader_batches_admitted_execution_ids_by_tenant(
+async def test_repository_risk_reader_uses_exact_tenant_execution_subjects(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from intelligence.risk360 import store as risk_store
 
-    calls: list[tuple[dict[str, str], int]] = []
+    calls: list[tuple[str, str, str, int]] = []
 
     class RiskSignalRepo:
-        async def find_many(self, *, filters, limit):
-            calls.append((filters, limit))
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            calls.append((tenant_id, subject_kind, subject_id, limit))
+            signal = (
+                _execution_risk_signal_row()
+                if subject_id == "exec-1"
+                else _execution_risk_signal_row(signal_id="risk-exec-2", subject_id="exec-2")
+            )
             return [
                 {
-                    **_execution_risk_signal_row(),
-                    "id": f"{TENANT}:risk-exec-1",
+                    **signal,
+                    "id": f"{tenant_id}:{signal['signal_id']}",
                     "created_at": "2026-10-16T10:00:00+00:00",
                     "updated_at": "2026-10-16T10:00:00+00:00",
-                },
-                {
-                    **_execution_risk_signal_row(signal_id="risk-exec-2", subject_id="exec-2"),
-                    "id": f"{TENANT}:risk-exec-2",
-                    "created_at": "2026-10-16T10:00:00+00:00",
-                    "updated_at": "2026-10-16T10:00:00+00:00",
-                },
-                _execution_risk_signal_row(signal_id="risk-other", subject_id="exec-other"),
-                _execution_risk_signal_row(signal_id="risk-foreign", tenant_id="tenant-other"),
+                }
             ]
 
     monkeypatch.setattr(risk_store, "RiskSignalRepository", RiskSignalRepo)
@@ -2759,12 +2756,16 @@ async def test_repository_risk_reader_batches_admitted_execution_ids_by_tenant(
         limit=10,
     )
 
-    assert calls == [({"tenant_id": TENANT, "subject_kind": "execution"}, 1001)]
+    assert calls == [
+        (TENANT, "execution", "exec-1", 11),
+        (TENANT, "execution", "exec-2", 11),
+    ]
     assert result.available is True
-    assert result.scope_known is False
+    assert result.scope_known is True
     assert [row["signal_id"] for row in result.rows] == ["risk-exec-1", "risk-exec-2"]
     assert all("id" not in row and "created_at" not in row for row in result.rows)
-    assert result.reason == "execution_risk_signal_scope_mismatch"
+    assert result.truncated is False
+    assert result.reason is None
 
 
 async def test_unavailable_sources_degrade_without_leaking_diagnostics() -> None:

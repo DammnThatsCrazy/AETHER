@@ -343,6 +343,48 @@ async def test_workflow360_keeps_actor_claim_unknown_for_cross_tenant_identity()
 
 
 @pytest.mark.asyncio
+async def test_workflow360_does_not_infer_human_actors_from_unjoined_ids() -> None:
+    invocation = _row("invocation-a")
+    invocation.update(
+        {
+            "actor_id": "raw-human-actor",
+            "user_id": "raw-user-reference",
+            "initiated_by": "raw-initiator-reference",
+            "initiating_principal_user_id": "raw-principal-reference",
+            "approver_id": "raw-approver-reference",
+            "approval_id": "unjoined-approval-reference",
+            "approval_decision_id": "unjoined-decision-reference",
+            "authority_id": "unjoined-authority-reference",
+        }
+    )
+    source = FakeWorkflowSource(
+        WorkflowRunInvocationRead((invocation,), True, True),
+        identities=WorkflowAgentIdentityRead((), True, True),
+    )
+
+    result = await Workflow360Provider(source=source).project(_request(), _context())
+
+    actors = _sections(result)["actors"]
+    assert actors.state == "unknown"
+    assert actors.content["actorCoverageState"] == "unknown"
+    assert actors.content["workflowActorAuthorityState"] == "unknown"
+    assert actors.content["actors"] == []
+    assert _sections(result)["approvals"].state == "unknown"
+    serialized = str(actors.content) + str(result.claims)
+    for raw_reference in (
+        "raw-human-actor",
+        "raw-user-reference",
+        "raw-initiator-reference",
+        "raw-principal-reference",
+        "raw-approver-reference",
+        "unjoined-approval-reference",
+        "unjoined-decision-reference",
+        "unjoined-authority-reference",
+    ):
+        assert raw_reference not in serialized
+
+
+@pytest.mark.asyncio
 async def test_workflow360_projects_only_exact_tenant_run_linked_agent_executions() -> None:
     valid = _agent_execution_row()
     source = FakeWorkflowSource(

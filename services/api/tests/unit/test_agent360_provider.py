@@ -680,6 +680,106 @@ async def test_agent360_does_not_attach_stale_active_status_to_changed_delegatio
 
 
 @pytest.mark.asyncio
+async def test_agent360_joins_adjacent_delegation_records_without_claiming_transitive_authority():
+    class AdjacentDelegationsSource(FakeSource):
+        async def outgoing_delegations(self, tenant_id, canonical_agent_entity_id, limit):
+            self.delegation_subjects.append(canonical_agent_entity_id)
+            return [
+                {
+                    "tenant_id": tenant_id,
+                    "delegation_id": "delegation-out-1",
+                    "grantor_entity_id": canonical_agent_entity_id,
+                    "grantee_entity_id": "downstream-agent",
+                    "authorization_kind": "capability",
+                    "capability_id": "tool-2",
+                    "scope": {"actions": ["invoke"], "resources": ["capability:tool-2"]},
+                    "starts_at": "2026-10-02T00:00:00Z",
+                    "ends_at": None,
+                    "revoked_at": None,
+                }
+            ]
+
+        async def delegation_party_identities(self, tenant_id, party_entity_ids):
+            batch = await super().delegation_party_identities(tenant_id, party_entity_ids)
+            rows = list(batch.rows)
+            if "downstream-agent" in party_entity_ids:
+                rows.append(
+                    {
+                        "tenant_id": tenant_id,
+                        "party_entity_id": "downstream-agent",
+                        "party_entity_type": "agent",
+                        "identity_evidence_id": "downstream-agent",
+                        "identity_evidence_source": "entities",
+                        "identity_observed_at": "2026-09-03T00:00:00Z",
+                    }
+                )
+            return Agent360ReadBatch(rows=rows, truncated=batch.truncated)
+
+    result = await Agent360Provider(AdjacentDelegationsSource()).project(_request(), _context())
+    authority = next(
+        item
+        for item in _sections(result)["state"].content["dimensions"]
+        if item["id"] == "authority_and_delegation"
+    )["content"]
+    chain = authority["delegationChain"]
+
+    assert chain["state"] == "partial"
+    assert chain["intermediateCanonicalAgentEntityId"] == "canonical-agent-a"
+    assert chain["observedAdjacentPathCount"] == 1
+    assert chain["boundedReadComplete"] is True
+    assert chain["transitiveAuthority"] == "unknown"
+    assert chain["effectiveAuthorizationDecision"] == "unknown"
+    path = chain["observedAdjacentPaths"][0]
+    assert path["delegationRecordIds"] == ["delegation-in-1", "delegation-out-1"]
+    assert path["partyEntityIds"] == ["owner-1", "canonical-agent-a", "downstream-agent"]
+    assert [party["state"] for party in path["partyIdentities"]] == [
+        "resolved",
+        "resolved",
+        "resolved",
+    ]
+    assert {
+        (ref["source"], ref["id"]) for ref in path["evidenceRefs"] if ref["source"] == "delegations"
+    } == {
+        ("delegations", "delegation-in-1"),
+        ("delegations", "delegation-out-1"),
+    }
+    assert "no transitive scope" in path["interpretation"]
+
+
+@pytest.mark.asyncio
+async def test_agent360_does_not_join_foreign_tenant_delegation_as_adjacent_path():
+    class ForeignOutgoingDelegationSource(FakeSource):
+        async def outgoing_delegations(self, tenant_id, canonical_agent_entity_id, limit):
+            self.delegation_subjects.append(canonical_agent_entity_id)
+            return [
+                {
+                    "tenant_id": "other-tenant",
+                    "delegation_id": "foreign-delegation-out-1",
+                    "grantor_entity_id": canonical_agent_entity_id,
+                    "grantee_entity_id": "downstream-agent",
+                    "scope": {"actions": ["invoke"], "resources": ["capability:tool-2"]},
+                }
+            ]
+
+    result = await Agent360Provider(ForeignOutgoingDelegationSource()).project(
+        _request(), _context()
+    )
+    authority = next(
+        item
+        for item in _sections(result)["state"].content["dimensions"]
+        if item["id"] == "authority_and_delegation"
+    )["content"]
+    chain = authority["delegationChain"]
+
+    assert chain["state"] == "unknown"
+    assert chain["observedAdjacentPaths"] == []
+    assert chain["observedAdjacentPathCount"] is None
+    assert chain["boundedReadComplete"] is False
+    assert chain["effectiveAuthorizationDecision"] == "unknown"
+    assert authority["state"] == "degraded"
+
+
+@pytest.mark.asyncio
 async def test_agent360_projects_scoped_evidence_without_inventing_authority_or_outcomes():
     source = FakeSource()
     result = await Agent360Provider(source).project(_request(), _context())

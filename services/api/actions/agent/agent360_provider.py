@@ -1678,6 +1678,16 @@ class Agent360Provider:
             item["granteeParty"] = side_views["grantee"]
             if len(delegation_items) < limit:
                 delegation_items.append(item)
+        delegation_chain_context = self._observed_adjacent_delegation_paths(
+            resolved_canonical_actor=resolved_canonical_actor,
+            delegation_records=delegation_records,
+            party_identity_views=delegation_party_views,
+            actor_identity_evidence_refs=actor_identity_refs,
+            incoming_read=data["incoming_delegations"],
+            outgoing_read=data["outgoing_delegations"],
+            party_identity_read=data["delegation_parties"],
+            limit=limit,
+        )
         action_scoped_decisions = [
             decision
             for row in execution_rows[:limit]
@@ -1753,6 +1763,7 @@ class Agent360Provider:
             "state": authority_state,
             "configuredOwnerIdentity": actor_attribution["configuredOwnerIdentity"],
             "delegationRecords": delegation_items,
+            "delegationChain": delegation_chain_context,
             "delegationReadConflicts": list(active_delegation_conflicts.values()),
             "actionScopedDecisions": action_scoped_decisions,
             "actionScopedDecisionState": self._aggregate_read_state(
@@ -3146,6 +3157,203 @@ class Agent360Provider:
         }
 
     @staticmethod
+    def _observed_adjacent_delegation_paths(
+        *,
+        resolved_canonical_actor: Optional[str],
+        delegation_records: list[tuple[dict[str, Any], str, bool]],
+        party_identity_views: dict[tuple[str, str], dict[str, Any]],
+        actor_identity_evidence_refs: list[dict[str, Any]],
+        incoming_read: _Read,
+        outgoing_read: _Read,
+        party_identity_read: _Read,
+        limit: int,
+    ) -> dict[str, Any]:
+        """Join stored incoming/outgoing records at one resolved Agent entity.
+
+        These paths describe adjacent tenant-scoped records only. They do not
+        assert that delegation is transitive, combine scopes, or establish an
+        effective authorization decision.
+        """
+        if resolved_canonical_actor is None:
+            return {
+                "state": "unknown",
+                "intermediateCanonicalAgentEntityId": None,
+                "observedAdjacentPaths": [],
+                "observedAdjacentPathCount": None,
+                "boundedReadComplete": False,
+                "transitiveAuthority": "unknown",
+                "effectiveAuthorizationDecision": "unknown",
+                "temporalSemantics": "current_bounded_repository_records; no historical replay",
+                "reason": "a unique tenant-owned canonical Agent identity is required to join the records",
+            }
+
+        reads_complete = all(
+            read.available
+            and not read.truncated
+            and not read.scope_mismatch
+            and read.scope_known
+            for read in (incoming_read, outgoing_read, party_identity_read)
+        )
+        incoming = [
+            row
+            for row, relation, _ in delegation_records
+            if relation == "incoming" and row.get("grantee_entity_id") == resolved_canonical_actor
+        ]
+        outgoing = [
+            row
+            for row, relation, _ in delegation_records
+            if relation == "outgoing" and row.get("grantor_entity_id") == resolved_canonical_actor
+        ]
+        record_shape_complete = all(
+            _first(row, "delegation_id", "id") and _first(row, "grantor_entity_id")
+            for row in incoming_read.rows or []
+        ) and all(
+            _first(row, "delegation_id", "id") and _first(row, "grantee_entity_id")
+            for row in outgoing_read.rows or []
+        )
+
+        paths: list[dict[str, Any]] = []
+        paths_truncated = False
+        for incoming_row in incoming:
+            incoming_id = _first(incoming_row, "delegation_id", "id")
+            incoming_ref = Agent360Provider._ref_one(
+                incoming_row,
+                "delegations",
+                ("delegation_id", "id"),
+                ("starts_at",),
+            )
+            incoming_party_id = _first(incoming_row, "grantor_entity_id")
+            if incoming_id is None or incoming_ref is None or incoming_party_id is None:
+                continue
+            for outgoing_row in outgoing:
+                outgoing_id = _first(outgoing_row, "delegation_id", "id")
+                outgoing_ref = Agent360Provider._ref_one(
+                    outgoing_row,
+                    "delegations",
+                    ("delegation_id", "id"),
+                    ("starts_at",),
+                )
+                outgoing_party_id = _first(outgoing_row, "grantee_entity_id")
+                if (
+                    outgoing_id is None
+                    or outgoing_id == incoming_id
+                    or outgoing_ref is None
+                    or outgoing_party_id is None
+                ):
+                    continue
+                if len(paths) >= max(1, limit):
+                    paths_truncated = True
+                    break
+
+                incoming_party = party_identity_views.get((incoming_id, "grantor"), {})
+                intermediary_party = party_identity_views.get((incoming_id, "grantee"), {})
+                outgoing_intermediary = party_identity_views.get(
+                    (outgoing_id, "grantor"), {}
+                )
+                outgoing_party = party_identity_views.get((outgoing_id, "grantee"), {})
+                path_party_views = (
+                    incoming_party,
+                    intermediary_party,
+                    outgoing_intermediary,
+                    outgoing_party,
+                )
+                identity_refs = [
+                    ref
+                    for view in path_party_views
+                    for ref in view.get("evidenceRefs", [])
+                    if isinstance(ref, dict)
+                ]
+                identity_refs.extend(actor_identity_evidence_refs)
+                evidence_refs = _dedupe_json_refs(
+                    [
+                        incoming_ref.model_dump(mode="json"),
+                        outgoing_ref.model_dump(mode="json"),
+                        *identity_refs,
+                    ]
+                )
+                paths.append(
+                    {
+                        "kind": "observed_adjacent_delegation_records",
+                        "delegationRecordIds": [incoming_id, outgoing_id],
+                        "partyEntityIds": [
+                            incoming_party_id,
+                            resolved_canonical_actor,
+                            outgoing_party_id,
+                        ],
+                        "partyIdentities": [
+                            {
+                                "entityId": incoming_party_id,
+                                **incoming_party,
+                            },
+                            {
+                                "entityId": resolved_canonical_actor,
+                                "state": "resolved",
+                                "party": {"kind": "agent", "id": resolved_canonical_actor},
+                                "evidenceRefs": _dedupe_json_refs(
+                                    [
+                                        *intermediary_party.get("evidenceRefs", []),
+                                        *outgoing_intermediary.get("evidenceRefs", []),
+                                        *actor_identity_evidence_refs,
+                                    ]
+                                ),
+                                "reason": None,
+                            },
+                            {
+                                "entityId": outgoing_party_id,
+                                **outgoing_party,
+                            },
+                        ],
+                        "evidenceRefs": evidence_refs,
+                        "interpretation": (
+                            "Two distinct tenant-scoped delegation records share this resolved "
+                            "canonical Agent as an intermediate party; no transitive scope or "
+                            "effective authorization is inferred."
+                        ),
+                    }
+                )
+            if paths_truncated:
+                break
+
+        endpoint_identity_complete = all(
+            path["partyIdentities"][index].get("state") == "resolved"
+            for path in paths
+            for index in (0, 2)
+        )
+        bounded_read_complete = reads_complete and record_shape_complete and not paths_truncated
+        if paths:
+            state = (
+                "partial"
+                if bounded_read_complete and endpoint_identity_complete
+                else "degraded"
+            )
+        elif reads_complete and record_shape_complete:
+            state = "empty"
+        else:
+            state = "unknown"
+        return {
+            "state": state,
+            "intermediateCanonicalAgentEntityId": resolved_canonical_actor,
+            "observedAdjacentPaths": paths,
+            "observedAdjacentPathCount": (
+                len(paths) if bounded_read_complete else None
+            ),
+            "boundedReadComplete": bounded_read_complete,
+            "transitiveAuthority": "unknown",
+            "effectiveAuthorizationDecision": "unknown",
+            "temporalSemantics": "current_bounded_repository_records; no historical replay",
+            "reason": (
+                "stored adjacent records do not establish transitive delegation, combined scope, "
+                "or effective authorization"
+                if state == "partial"
+                else "delegation path evidence or endpoint identity is incomplete"
+                if state == "degraded"
+                else "no adjacent incoming and outgoing records were observed in the complete bounded read"
+                if state == "empty"
+                else "tenant-scoped delegation inputs are incomplete"
+            ),
+        }
+
+    @staticmethod
     def _read_state(read: _Read) -> str:
         if not read.available:
             return "unavailable"
@@ -3937,6 +4145,11 @@ class Agent360Provider:
                 "slot": "authority_envelope",
                 "state": "unknown",
                 "reason": "stored grants and historical action-scoped decisions do not establish a current standing authority envelope",
+            },
+            {
+                "slot": "delegation_chain",
+                "state": "partial",
+                "reason": "exact incoming/outgoing records may be linked through a canonical Agent; transitive delegation and combined authority remain unknown",
             },
             {
                 "slot": "policy_boundary",

@@ -865,29 +865,61 @@ class RepositoryExecution360Source:
         self, *, tenant_id: str, execution_ids: tuple[str, ...], limit: int
     ) -> ExecutionRiskEventRead:
         """Read RiskSignals whose subjects match admitted tenant execution IDs."""
-        admitted_ids = {
-            value for raw in execution_ids if (value := _safe_text(raw)) is not None
-        }
+        admitted_ids = sorted(
+            {value for raw in execution_ids if (value := _safe_text(raw)) is not None}
+        )
         if not admitted_ids:
             return ExecutionRiskEventRead(rows=[], available=True, scope_known=True)
+
+        # RiskSignalRepository exposes an exact tenant + subject lookup. Use it
+        # for every admitted execution instead of scanning all execution signals
+        # for the tenant and relying on a post-query subject filter. Divide the
+        # bounded source scan across subjects so a large execution set cannot
+        # turn this read into an unbounded fan-out.
+        query_ids = admitted_ids[: max(1, _MAX_EXECUTION_RISK_SIGNAL_SCAN // 2)]
+        per_subject_scan_limit = min(
+            max(1, limit),
+            max(1, _MAX_EXECUTION_RISK_SIGNAL_SCAN // len(query_ids) - 1),
+        )
+        exact_rows: list[dict[str, Any]] = []
+        mismatch = False
+        scan_truncated = len(query_ids) < len(admitted_ids)
         try:
             from intelligence.risk360.store import RiskSignalRepository
 
             repository = RiskSignalRepository()
-            if len(admitted_ids) == 1:
+            for execution_id in query_ids:
                 rows = await repository.list_by_subject(
                     tenant_id,
                     "execution",
-                    next(iter(admitted_ids)),
-                    limit=limit + 1,
+                    execution_id,
+                    limit=per_subject_scan_limit + 1,
                 )
-                scan_limit = limit
-            else:
-                rows = await repository.find_many(
-                    filters={"tenant_id": tenant_id, "subject_kind": "execution"},
-                    limit=_MAX_EXECUTION_RISK_SIGNAL_SCAN + 1,
-                )
-                scan_limit = _MAX_EXECUTION_RISK_SIGNAL_SCAN
+                if not isinstance(rows, list):
+                    return ExecutionRiskEventRead(
+                        rows=[],
+                        available=False,
+                        scope_known=False,
+                        reason="execution_risk_signal_read_invalid",
+                    )
+                if len(rows) > per_subject_scan_limit:
+                    scan_truncated = True
+                for row in rows[:per_subject_scan_limit]:
+                    if (
+                        not isinstance(row, dict)
+                        or row.get("tenant_id") != tenant_id
+                        or row.get("subject_kind") != "execution"
+                        or row.get("subject_id") != execution_id
+                    ):
+                        mismatch = True
+                        continue
+                    exact_rows.append(
+                        {
+                            key: value
+                            for key, value in row.items()
+                            if key not in {"id", "created_at", "updated_at"}
+                        }
+                    )
         except Exception:  # noqa: BLE001 - optional canonical source failure is isolated
             return ExecutionRiskEventRead(
                 rows=[],
@@ -896,34 +928,6 @@ class RepositoryExecution360Source:
                 reason="execution_risk_signal_source_unavailable",
             )
 
-        if not isinstance(rows, list):
-            return ExecutionRiskEventRead(
-                rows=[],
-                available=False,
-                scope_known=False,
-                reason="execution_risk_signal_read_invalid",
-            )
-        scan_truncated = len(rows) > scan_limit
-        bounded = rows[:scan_limit]
-        mismatch = any(
-            not isinstance(row, dict)
-            or row.get("tenant_id") != tenant_id
-            or row.get("subject_kind") != "execution"
-            or (len(admitted_ids) == 1 and row.get("subject_id") not in admitted_ids)
-            for row in bounded
-        )
-        exact_rows = [
-            {
-                key: value
-                for key, value in row.items()
-                if key not in {"id", "created_at", "updated_at"}
-            }
-            for row in bounded
-            if isinstance(row, dict)
-            and row.get("tenant_id") == tenant_id
-            and row.get("subject_kind") == "execution"
-            and row.get("subject_id") in admitted_ids
-        ]
         truncated = scan_truncated or len(exact_rows) > limit
         exact_rows = exact_rows[:limit]
         return ExecutionRiskEventRead(
