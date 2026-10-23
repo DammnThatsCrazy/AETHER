@@ -13,7 +13,8 @@
     "supported": "Capability is implemented and exercised by tests in this SDK.",
     "partial": "Implemented with a documented limitation (see note).",
     "delegated_native": "Surfaced by this SDK but enforced in the native iOS/Android layer it bridges to.",
-    "not_applicable": "Out of scope for this SDK's role (e.g. an envelope builder with no client/queue)."
+    "not_applicable": "Out of scope for this SDK's role (e.g. an envelope builder with no client/queue).",
+    "unsupported": "Capability is not implemented in this SDK (a known gap, recorded rather than claimed)."
   },
   "capabilities": [
     {
@@ -155,9 +156,8 @@
           "status": "not_applicable"
         },
         "react-native": {
-          "status": "partial",
-          "evidence": "packages/sdk/react-native/src/bridge.ts#capabilities.manifestSignatureVerification",
-          "note": "Native iOS/Android AetherHealthAgent verifies signatures, but the React Native JS fetchAndApplyManifest() path applies a fetched manifest without checking its signature."
+          "status": "unsupported",
+          "note": "The React Native bridge neither exposes a manifest verification key nor verifies the manifest signature in JS; fetchAndApplyManifest() applies a fetched manifest unverified. The native iOS/Android SDKs verify only when given manifestVerificationKey, which the React Native module never sets."
         },
         "ios": {
           "status": "supported",

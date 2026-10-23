@@ -8,9 +8,9 @@
 //   - flags/features → RNFeatureFlags overrides (isEnabled/getValue reflect it)
 //   - rollout_percentage → a JS-side sampling rate for JS-emitted events
 //   - endpoints → per-name endpoint overrides
-// Native signature verification (manifestSignatureVerification) remains the
-// native layer's responsibility; this JS apply trusts the authenticated HTTPS
-// response, consistent with the SDK's other config/heartbeat calls.
+// This JS apply does NOT verify the manifest `signature`; it trusts the
+// authenticated HTTPS response, consistent with the SDK's other config/heartbeat
+// calls. The bridge therefore reports manifestSignatureVerification: false.
 // =============================================================================
 
 import { RNFeatureFlags } from './FeatureFlags';
