@@ -11,7 +11,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:a9ed39f39cab7d3a3f6ffcd11a23ab9253a49189574f99535a3980a66523c648"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ca595f9aa8235c5c74118bb78e1ff013d5770015ae2a6e4cad39a819b68fb28d"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:540f85292689337edc329c9b72b7c4f99487226a5e31aab6526c878e7ea36eeb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -34,7 +34,7 @@ source_hashes:
   "services/api/journeys/communication360/provider.py": "sha256:103203807abc92ff1c262e358335e9697873c24706ab42d81a512af3c0cf1efc"
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:1e7dd60cc1a3ea528d9738885f04d7c6712e200622d11c3db518f91e43ceb2d3"
   "services/api/repositories/repos.py": "sha256:2deaf337debdc8fc0fa1585901e1a736e2a269b967d0091bba4d0d7d8369d19f"
-  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:ecb8238325c7d5efa5294e3c603675b99d97e424f8b236900ce4d973e76892ce"
+  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:7fe5e09dbbd3dbf1a3ece14391786e6e2e228aab77da9584fee0b0867dc22dd2"
   "services/api/shared/store.py": "sha256:ff4198cf285ac4c250481ef0ae476037c26b1f4d1fa00751964638ff1f91fa8c"
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:eefcfa3b35c8ff888be7141bcf91d2bfe08399a17b986b09abb9cafac41566b8"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
@@ -121,10 +121,14 @@ Risk360 evidence under the product frame's risk-summary binding and does not
 compute a local risk score. Agent360 no longer reads raw `obs_agent_risk_signals`
 for this slot. Its provider-level nested Risk360 reader requires exact Agent
 identity, a current analytics-consent receipt, evidence lineage, and an
-explicit `risk_summary` plus `risk360.read` authorization decision; the frame
-runtime does not yet forward that decision, so this nested read remains
-suppressed by default. Agent-specific freshness, historical replay, and causal
-contagion remain unknown. Its `spawned_agents` slot reads only outgoing `SPAWNED_SUBAGENT` graph
+explicit `risk_summary` plus `risk360.read` authorization decision. The frame
+runtime now forwards a request-scoped server-derived envelope only after the
+exact slot was requested and allowed, the binding targets Risk360, and the
+projection declares the required capability. The envelope carries the exact
+tenant, surface, subject, slot, consumer, target, capability, and policy result.
+An independent actor-granted `risk360.read` authority remains unrepresented.
+Agent-specific freshness, historical replay, and causal contagion remain
+unknown. Its `spawned_agents` slot reads only outgoing `SPAWNED_SUBAGENT` graph
 ledger evidence through Relationship360. No observed edge is unknown rather
 than empty, and any observed edge remains degraded because the ledger has no
 completeness watermark. Account360's `communications` slot can now consume
@@ -146,7 +150,11 @@ telemetry, not tool latency or business value; unknown or estimated source
 semantics stay explicit. It still lacks a general server-owned external effect
 receipt, canonical plan-step evidence, complete input/output capture, and
 detailed failures. Its approval-chain join covers current x402 decisions only;
-other approval authorities and historical run links remain unknown.
+other approval authorities and historical run links remain unknown. For
+`workflow_run` subjects it admits stored tenant-scoped AgentExecution references
+only when each invocation ID matches a current tenant AI fact with the same
+run, action, and agent. This does not establish full workflow step coverage,
+completion, or a source telemetry crosswalk.
 Execution360 actor attribution now records the authenticated initiating user
 separately from the acting agent. A principal resolves to a canonical Human
 only through an exact tenant-scoped active `USER_ID` alias and active surviving

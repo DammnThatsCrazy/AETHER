@@ -36,6 +36,7 @@ from shared.intelligence_projections.contracts import (
     Experience360Quality,
     EvidenceRef,
     ProjectionDegradation,
+    ProjectionReadAuthorization,
     ProjectionRequest,
     ProjectionResult,
     ProjectionSection,
@@ -297,15 +298,74 @@ async def build_experience360_frame(
             lensIds=request.lensIds,
             temporalMode=temporal_surface_mode,
         )
+        read_authorizations: list[ProjectionReadAuthorization] = []
+        if request.surfaceId == "agent360" and projection_id == "agent360":
+            # Agent360 can make a nested current Risk360 read while assembling
+            # its broader state section. Carry the exact outer slot decision
+            # only when that slot was requested, allowed by policy, and bound
+            # to a projection that declares the required read capability.
+            # The public frame body cannot provide this server-derived envelope.
+            risk_slot_id = "risk_summary"
+            risk_slot = surface.get("domainSlots", [])
+            risk_slot_definition = next(
+                (
+                    item
+                    for item in risk_slot
+                    if isinstance(item, Mapping) and item.get("id") == risk_slot_id
+                ),
+                None,
+            )
+            risk_disposition = selected_policy.get(risk_slot_id)
+            risk_bindings = (
+                risk_slot_definition.get("projectionBindings", [])
+                if isinstance(risk_slot_definition, Mapping)
+                else []
+            )
+            risk_binding = next(
+                (
+                    binding
+                    for binding in risk_bindings
+                    if isinstance(binding, Mapping)
+                    and binding.get("projectionId") == "risk360"
+                    and request.subject.kind in binding.get("subjectKinds", [])
+                ),
+                None,
+            )
+            risk_definition = INTELLIGENCE_PROJECTION_DEFINITIONS.get("risk360", {})
+            capability_keys = risk_definition.get("capabilityKeys", [])
+            if (
+                risk_slot_id in requested_slot_ids
+                and risk_disposition is not None
+                and risk_disposition.state == "allowed"
+                and isinstance(risk_binding, Mapping)
+                and isinstance(capability_keys, (list, tuple))
+                and "risk360.read" in capability_keys
+            ):
+                read_authorizations.append(
+                    ProjectionReadAuthorization(
+                        tenantId=request.tenantId,
+                        sourceSurfaceId=request.surfaceId,
+                        sourceSubject=request.subject,
+                        sourceSlotId=risk_slot_id,
+                        consumerProjectionId="agent360",
+                        targetProjectionId="risk360",
+                        capabilityKey="risk360.read",
+                        policyState=risk_disposition.state,
+                        policyIds=list(risk_disposition.policyIds),
+                        policyEvaluatedAt=risk_disposition.evaluatedAt,
+                    )
+                )
         async with semaphore:
             try:
-                result = await runner.execute_projection(
-                    projection_request,
-                    lens_ids=request.lensIds,
-                    temporal_mode=(
+                execution_kwargs = {
+                    "lens_ids": request.lensIds,
+                    "temporal_mode": (
                         TemporalMode.AS_OF if request.asOf is not None else TemporalMode.LIVE
                     ),
-                )
+                }
+                if read_authorizations:
+                    execution_kwargs["experience360_read_authorizations"] = read_authorizations
+                result = await runner.execute_projection(projection_request, **execution_kwargs)
             except Exception:  # noqa: BLE001 - fail-isolated projection boundary
                 result = _unavailable_result(
                     projection_id,

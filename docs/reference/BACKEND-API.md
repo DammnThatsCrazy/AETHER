@@ -2102,10 +2102,13 @@ The latest provider slice adds Agent360 `risk_summary`, Execution360
 longer reads raw `obs_agent_risk_signals`; its canonical Risk360 reader checks
 exact canonical Agent scope, current analytics consent with a receipt, and
 Risk360 claim/evidence scope. The product frame's separate Risk360 binding is
-subject to the normal slot gate. Agent360's nested reader also requires an
-explicit slot and `risk360.read` authorization decision that the runtime does
-not yet forward, so that nested provider path stays suppressed by default.
-Agent-specific freshness, historical replay, and contagion remain unknown.
+subject to the normal slot gate. The frame runtime passes a request-scoped
+authorization envelope to Agent360 only when `risk_summary` was requested and
+allowed, bound to Risk360, and the projection declares `risk360.read`. The
+envelope binds the exact tenant, subject, slot, consumer, target, capability,
+and evaluated policy decision. An independent actor-granted `risk360.read`
+authority is not yet represented. Agent-specific freshness, historical replay,
+and contagion remain unknown.
 Execution360 now exposes producer coverage and RiskAssessment snapshot coverage
 as unknown because `risk_events` reads bounded, current RiskSignals joined to
 exact admitted execution IDs; it does not establish causality. Value360's `ltv`
@@ -2123,7 +2126,11 @@ completeness, freshness, actual influence, trust, and causal contagion remain
 unknown. Workflow360 `triggers` resolves allowlisted event metadata only for
 exact tenant events referenced by run-linked AgentExecutions. That stored
 reference does not prove event causation or complete trigger coverage. The
-changes add no HTTP routes and leave both projections partial.
+changes add no HTTP routes and leave both projections partial. Execution360
+also accepts `workflow_run` subjects for exact tenant-scoped AgentExecution
+references whose stored invocation IDs match AI facts with the same run,
+action, and agent. It does not prove workflow-wide step coverage or completion,
+and source telemetry remains unlinked without a canonical run crosswalk.
 
 ### Support case lifecycle evidence ingress
 
@@ -2143,6 +2150,13 @@ observed only when the applied resolved/closed event's occurrence time matches
 the authoritative case timestamp and both exact provider-event and connection
 evidence are present. The slot remains degraded because business outcome facts,
 complete case history, and a freshness threshold are unavailable.
+For canonical cases, Support360 also reads communication metadata only through
+the exact tenant, provider connection, and source case key on the canonical
+case. It suppresses message bodies and unresolved participant IDs, preserves
+case/connection/lifecycle/fact evidence, and reports current-store read
+completeness separately from unknown source-history completeness and freshness.
+Callbacks, SLA timers, journeys, agent assignment and handoffs, and case risk
+remain unjoined.
 
 The caller must send one of `support_case_created`, `support_case_updated`,
 `support_case_escalated`, `support_case_resolved`, `support_case_reopened`, or

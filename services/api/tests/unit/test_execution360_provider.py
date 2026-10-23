@@ -23,6 +23,7 @@ from actions.agent.execution360_provider import (  # noqa: E402
     ExecutionPrincipalIdentityRead,
     ExecutionRiskEventRead,
     ExecutionToolCallRead,
+    ExecutionWorkflowRunInvocationRead,
     OUTPUT_SECTIONS,
     Execution360Provider,
     ExecutionRead,
@@ -544,6 +545,58 @@ async def test_provider_emits_registry_sections_evidence_and_catalog_bound_claim
     serialized = result.model_dump_json()
     assert "must-not-appear" not in serialized
     assert "workerRunLinkage" in serialized
+
+
+async def test_workflow_run_subject_admits_only_exact_lifecycle_rows() -> None:
+    matching = _server_row()
+    matching["workflow_run_id"] = "workflow-run-1"
+    matching["workflow_run_invocation_evidence_refs"] = [
+        EvidenceRef(
+            id="invocation-workflow-1",
+            type="event",
+            source="ai_execution_facts",
+            observedAt="2026-10-16T10:00:00Z",
+        ).model_dump(mode="json", by_alias=True)
+    ]
+    other_run = _server_row()
+    other_run["execution_id"] = "exec-other-run"
+    other_run["workflow_run_id"] = "workflow-run-2"
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[matching, other_run],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead(
+            rows=[],
+            available=True,
+            scope_known=False,
+            reason="source_reported_run_id_not_canonically_linked_to_workflow_run",
+        ),
+    )
+    request = _request(
+        subject=ProjectionSubject(kind="workflow_run", id="workflow-run-1")
+    )
+
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    state = next(section for section in result.sections if section.id == "state")
+    executions = state.content["serverRecordedExecutions"]
+    assert [row["executionId"] for row in executions] == ["exec-1"]
+    assert executions[0]["workflowRunId"] == "workflow-run-1"
+    linkage_claims = [
+        claim
+        for claim in result.claims
+        if claim.kind == "server_recorded_workflow_run_execution_reference"
+    ]
+    assert [claim.evidenceRefs[0].id for claim in linkage_claims] == ["exec-1"]
+    assert {ref.source for ref in linkage_claims[0].evidenceRefs} == {
+        "agent_executions",
+        "ai_execution_facts",
+    }
+    assert "workflow_run_execution_scope_mismatch" in result.degradedReasons
+    assert "exec-other-run" not in result.model_dump_json()
 
 
 async def test_latency_cost_joins_exact_canonical_ai_invocation_facts() -> None:
@@ -2102,6 +2155,120 @@ async def test_repository_execution_adapter_joins_source_ids_to_canonical_agents
     assert foreign_execution.rows == []
     assert foreign_execution.scope_known is False
     assert foreign_execution.reason == "execution_subject_scope_unresolved"
+
+
+async def test_repository_execution_adapter_reads_exact_workflow_run_execution_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import actions.agent.execution360_provider as provider_module
+    import repositories.repos as repos_module
+
+    source_agent_id = "runtime-agent-workflow"
+    canonical_agent_id = "canonical-agent-workflow"
+    workflow_run_id = "workflow-run-exact"
+    execution_row = _server_row(agent_id=source_agent_id)
+    execution_row.update(
+        execution_id="execution-workflow-exact",
+        workflow_run_id=workflow_run_id,
+        workflow_run_invocation_ids=["invocation-workflow-exact"],
+        delegation_id=None,
+    )
+    invocation_fact = {
+        "tenant_id": TENANT,
+        "workflow_run_id": workflow_run_id,
+        "invocation_id": "invocation-workflow-exact",
+        "action_id": "execution-workflow-exact",
+        "agent_id": source_agent_id,
+        "observed_at": "2026-10-16T10:00:00+00:00",
+    }
+
+    class AgentConfigs:
+        async def find_by_id(self, agent_id):
+            assert agent_id == source_agent_id
+            return {
+                "tenant_id": TENANT,
+                "agent_id": source_agent_id,
+                "owner_entity_id": "owner-workflow",
+            }
+
+    class AgentExecutions:
+        async def find_many(self, *, filters, limit):
+            assert filters == {
+                "tenant_id": TENANT,
+                "workflow_run_id": workflow_run_id,
+            }
+            assert limit == 11
+            return [execution_row]
+
+    class Delegations:
+        async def find_by_id(self, delegation_id):
+            raise AssertionError("row has no delegation reference")
+
+    class Graph:
+        async def get_edges_for_tenant(self, tenant_id, *, limit, edge_types):
+            assert tenant_id == TENANT
+            return [], False
+
+    async def resolve_identity_map(tenant_id, source_agent_ids):
+        assert tenant_id == TENANT
+        if not source_agent_ids:
+            return {}, False, False
+        assert source_agent_ids == {source_agent_id}
+        return (
+            {
+                source_agent_id: {
+                    "agent_id": source_agent_id,
+                    "canonical_agent_entity_id": canonical_agent_id,
+                }
+            },
+            False,
+            False,
+        )
+
+    async def read_invocation_facts(tenant_id, requested_run_id, limit):
+        assert tenant_id == TENANT
+        assert requested_run_id == workflow_run_id
+        assert limit == 200
+        return ExecutionWorkflowRunInvocationRead(
+            rows=[invocation_fact], available=True, scope_known=True
+        )
+
+    monkeypatch.setattr(repos_module, "AgentConfigRepository", AgentConfigs)
+    monkeypatch.setattr(repos_module, "AgentExecutionRepository", AgentExecutions)
+    monkeypatch.setattr(repos_module, "DelegationRepository", Delegations)
+    monkeypatch.setattr(provider_module, "_resolve_agent_identity_map", resolve_identity_map)
+    monkeypatch.setattr(
+        provider_module,
+        "_read_workflow_run_invocation_facts",
+        read_invocation_facts,
+    )
+
+    source = RepositoryExecution360Source(graph_client=Graph())
+    read = await source.server_executions(
+        tenant_id=TENANT,
+        subject=ProjectionSubject(kind="workflow_run", id=workflow_run_id),
+        limit=10,
+    )
+
+    assert read.available is True
+    assert read.scope_known is True
+    assert read.agent_ids == (canonical_agent_id,)
+    assert [row["execution_id"] for row in read.rows] == ["execution-workflow-exact"]
+    assert read.rows[0]["workflow_run_id"] == workflow_run_id
+    assert read.rows[0]["canonical_agent_entity_id"] == canonical_agent_id
+    assert read.rows[0]["workflow_run_invocation_evidence_refs"][0]["id"] == (
+        "invocation-workflow-exact"
+    )
+
+    invocation_fact["action_id"] = "execution-from-another-action"
+    mismatched_link = await source.server_executions(
+        tenant_id=TENANT,
+        subject=ProjectionSubject(kind="workflow_run", id=workflow_run_id),
+        limit=10,
+    )
+    assert mismatched_link.rows == []
+    assert mismatched_link.scope_known is False
+    assert mismatched_link.reason == "workflow_run_execution_scope_mismatch"
 
 
 async def test_server_delegation_reference_joins_policy_log_to_tenant_grantee() -> None:

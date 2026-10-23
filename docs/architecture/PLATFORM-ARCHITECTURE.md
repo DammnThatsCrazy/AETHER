@@ -791,16 +791,28 @@ The latest provider slice adds three evidence-bounded paths. Agent360's
 Risk360 path checks exact Agent scope, current analytics consent with a receipt,
 and claim/evidence lineage. The product slot also has a separate Risk360
 projection binding evaluated through the frame slot gate. The Agent360
-provider's nested reader requires an explicit `risk_summary` and `risk360.read`
-authorization decision that the frame runtime does not yet pass, so that nested
-read remains suppressed by default. Agent-specific freshness, historical replay,
-and causal contagion remain unknown. Execution360's `risk_events` now declares
+provider's nested reader receives a request-scoped authorization envelope only
+when `risk_summary` was requested and allowed, the slot binds to Risk360, and
+the projection declares `risk360.read`. The envelope binds tenant, surface,
+subject, slot, consumer, target, capability, and evaluated policy IDs. No
+independent actor-granted `risk360.read` capability authority is represented
+yet. Agent-specific freshness, historical replay, and causal contagion remain
+unknown. Execution360's `risk_events` now declares
 producer and RiskAssessment coverage unknown because it joins current,
 execution-scoped RiskSignals rather than assessment snapshots; the signals do
 not prove causality. Value360's `ltv` slot exposes evidenced confirmed or
 adjusted conversion net-value observations by native currency for exact
 supported subjects and occurred-at scope. It does not emit an LTV amount while
 lifecycle completeness, outcome attribution, and freshness remain unknown.
+
+The next 2026-10-23 provider slice adds partial `workflow_run` support to
+Execution360. It admits tenant-scoped AgentExecution rows only when their
+stored run ID and invocation IDs match current AI facts with the same action
+and agent; run-wide step coverage, workflow completion, standalone run links,
+and telemetry crosswalks remain unknown. Support360's case path now joins
+communication metadata through the exact tenant, canonical provider
+connection, and source case key. Message bodies and participant IDs stay
+suppressed, and source-history completeness and freshness remain unknown.
 
 The 2026-10-23 projection slice adds partial Social360 `influence_paths`: the
 provider exposes bounded consent-authorized directed FOLLOWS paths and accepts

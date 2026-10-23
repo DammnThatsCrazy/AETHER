@@ -43,11 +43,15 @@ from shared.intelligence_projections.contracts import (  # noqa: E402
     Experience360FrameRequest,
     Experience360PolicyDisposition,
     Experience360PolicyEvaluation,
+    ProjectionReadAuthorization,
     ProjectionSection,
 )
 from graph.operational_intelligence.models import EvidenceRef  # noqa: E402
 from shared.intelligence_projections.composition import compose_experience360_frame  # noqa: E402
 from shared.intelligence_projections.frame_runtime import build_experience360_frame  # noqa: E402
+from shared.intelligence_projections.registry import ProviderRegistry  # noqa: E402
+from shared.projection_engine.executor import ProjectionExecutor  # noqa: E402
+from shared.projection_engine.runtime import ProjectionRuntime  # noqa: E402
 
 
 TENANT = "tenant-a"
@@ -543,6 +547,155 @@ async def test_agent360_risk_summary_fails_closed_without_outer_slot_authority()
     assert source.risk_signal_calls == 0
     assert risk_dimension["content"]["riskAssessment"]["state"] == "suppressed"
     assert not any(claim.domainSlotIds == ["risk_summary"] for claim in result.claims)
+
+
+@pytest.mark.asyncio
+async def test_agent360_nested_risk_read_uses_exact_frame_policy_context():
+    source = FakeSource()
+    registry = ProviderRegistry()
+    registry.register(Agent360Provider(source), source="test")
+    runtime = ProjectionRuntime(executor=ProjectionExecutor(registry=registry))
+    evaluated_at = "2026-10-23T14:00:00Z"
+
+    class AllowExactRiskSlot:
+        async def evaluate(self, request):
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt=evaluated_at,
+                frameDisposition=Experience360PolicyDisposition(
+                    state="allowed", evaluatedAt=evaluated_at
+                ),
+                slotDispositions={
+                    "owner_delegator": Experience360PolicyDisposition(
+                        state="allowed",
+                        policyIds=["access_control.evaluate"],
+                        evaluatedAt=evaluated_at,
+                    ),
+                    "risk_summary": Experience360PolicyDisposition(
+                        state="allowed",
+                        policyIds=["access_control.evaluate"],
+                        evaluatedAt=evaluated_at,
+                    ),
+                },
+            )
+
+    await build_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="agent360",
+            tenantId=TENANT,
+            subject=ProjectionSubject(kind="agent", id="canonical-agent-a"),
+            requestedSlotIds=["owner_delegator", "risk_summary"],
+        ),
+        policy_evaluator=AllowExactRiskSlot(),
+        projection_runtime=runtime,
+    )
+
+    assert source.risk_summary_calls == [
+        (TENANT, "canonical-agent-a", "canonical-agent-a", 100)
+    ]
+    assert source.risk_signal_calls == 0
+
+
+@pytest.mark.parametrize(
+    ("requested_slots", "risk_slot_state"),
+    [
+        (["owner_delegator", "risk_summary"], "denied"),
+        (["owner_delegator"], None),
+    ],
+)
+@pytest.mark.asyncio
+async def test_agent360_nested_risk_read_is_skipped_when_outer_slot_is_not_allowed(
+    requested_slots, risk_slot_state
+):
+    source = FakeSource()
+    registry = ProviderRegistry()
+    registry.register(Agent360Provider(source), source="test")
+    runtime = ProjectionRuntime(executor=ProjectionExecutor(registry=registry))
+    evaluated_at = "2026-10-23T14:00:00Z"
+
+    class DenyOrOmitRiskSlot:
+        async def evaluate(self, request):
+            dispositions = {
+                "owner_delegator": Experience360PolicyDisposition(
+                    state="allowed",
+                    policyIds=["access_control.evaluate"],
+                    evaluatedAt=evaluated_at,
+                )
+            }
+            if risk_slot_state is not None:
+                dispositions["risk_summary"] = Experience360PolicyDisposition(
+                    state=risk_slot_state,
+                    policyIds=["access_control.evaluate"],
+                    evaluatedAt=evaluated_at,
+                )
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt=evaluated_at,
+                frameDisposition=Experience360PolicyDisposition(
+                    state="allowed", evaluatedAt=evaluated_at
+                ),
+                slotDispositions=dispositions,
+            )
+
+    await build_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="agent360",
+            tenantId=TENANT,
+            subject=ProjectionSubject(kind="agent", id="canonical-agent-a"),
+            requestedSlotIds=requested_slots,
+        ),
+        policy_evaluator=DenyOrOmitRiskSlot(),
+        projection_runtime=runtime,
+    )
+
+    assert source.risk_summary_calls == []
+    assert source.risk_signal_calls == 0
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"tenantId": "other-tenant"},
+        {"sourceSurfaceId": "profile360"},
+        {"sourceSubject": ProjectionSubject(kind="agent", id="other-agent")},
+        {"sourceSlotId": "owner_delegator"},
+        {"consumerProjectionId": "execution360"},
+        {"targetProjectionId": "profile360"},
+        {"capabilityKey": "agent360.read"},
+        {"policyState": "denied"},
+    ],
+)
+@pytest.mark.asyncio
+async def test_agent360_nested_risk_read_rejects_mismatched_frame_authorization(overrides):
+    source = FakeSource()
+    authorization = ProjectionReadAuthorization(
+        tenantId=TENANT,
+        sourceSurfaceId="agent360",
+        sourceSubject=ProjectionSubject(kind="agent", id=AGENT),
+        sourceSlotId="risk_summary",
+        consumerProjectionId="agent360",
+        targetProjectionId="risk360",
+        capabilityKey="risk360.read",
+        policyState="allowed",
+        policyIds=["access_control.evaluate"],
+        policyEvaluatedAt="2026-10-23T14:00:00Z",
+    )
+    authorization = authorization.model_copy(update=overrides)
+    context = _context().model_copy(
+        update={"experience360ReadAuthorizations": [authorization]}
+    )
+
+    result = await Agent360Provider(source).project(_request(), context)
+    risk_dimension = next(
+        dimension
+        for dimension in _sections(result)["state"].content["dimensions"]
+        if dimension["id"] == "risk_and_contagion"
+    )
+
+    assert source.risk_summary_calls == []
+    assert risk_dimension["content"]["riskAssessment"]["state"] == "suppressed"
 
 
 @pytest.mark.asyncio

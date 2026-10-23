@@ -471,6 +471,78 @@ class CommsFactsRepository:
             )
         return _page_fetched_facts([dict(record) for record in records], limit=limit)
 
+    async def list_for_support_case(
+        self,
+        tenant_id: str,
+        connection_id: str,
+        source_case_id: str,
+        *,
+        category: Optional[str] = None,
+        after: Optional[str] = None,
+        before: Optional[str] = None,
+        limit: int = 50,
+        cursor: Optional[str] = None,
+    ) -> tuple[list[dict[str, Any]], Optional[str]]:
+        """Read facts linked to one exact tenant/connection/source case tuple.
+
+        ``support_case_id`` is provider-scoped source data. It is safe to use
+        only alongside the exact tenant and provider connection that the
+        canonical SupportCase authority resolved for that source case.
+        """
+        exact_tenant = str(tenant_id or "").strip()
+        exact_connection = str(connection_id or "").strip()
+        exact_source_case = str(source_case_id or "").strip()
+        if not exact_tenant or not exact_connection or not exact_source_case:
+            return [], None
+
+        pool = await self._pool()
+        if pool is None:
+            rows = [
+                row
+                for row in _local_facts.values()
+                if row.get("tenant_id") == exact_tenant
+                and str(row.get("source_connector_id") or "") == exact_connection
+                and str(row.get("support_case_id") or "") == exact_source_case
+            ]
+            rows = _apply_local_filters(rows, category=category, after=after, before=before)
+            return _page_local_facts(rows, limit=limit, cursor=cursor)
+
+        conditions = [
+            "tenant_id = $1",
+            "source_connector_id = $2",
+            "support_case_id = $3",
+        ]
+        params: list[Any] = [exact_tenant, exact_connection, exact_source_case]
+
+        def _add(sql: str, value: Any) -> None:
+            params.append(value)
+            conditions.append(sql.format(n=len(params)))
+
+        if category:
+            _add("message_category = ${n}", category)
+        if after:
+            _add("occurred_at >= ${n}", _parse_ts(after))
+        if before:
+            _add("occurred_at <= ${n}", _parse_ts(before))
+        if cursor:
+            occurred_at, fact_id = _decode_cursor(cursor)
+            params.extend((_parse_ts(occurred_at), fact_id))
+            conditions.append(
+                f"(occurred_at, fact_id::text) < (${len(params) - 1}, ${len(params)})"
+            )
+
+        async with pool.acquire() as conn:
+            records = await conn.fetch(
+                f"""
+                SELECT * FROM silver_comms_facts
+                WHERE {" AND ".join(conditions)}
+                ORDER BY occurred_at DESC, fact_id DESC
+                LIMIT {max(1, int(limit)) + 1}
+                """,
+                *params,
+            )
+        return _page_fetched_facts([dict(record) for record in records], limit=limit)
+
     async def entity_summary(self, tenant_id: str, entity_id: str) -> dict[str, Any]:
         """Aggregate communication counts for the Profile360 summary card."""
         pool = await self._pool()

@@ -715,7 +715,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationState: 'in_flight',
     implementationBlueprint: 'docs/blueprints/execution360.md',
     ownsCanonicalTruth: false,
-    subjectKinds: ['agent', 'entity', 'episode', 'execution'],
+    subjectKinds: ['agent', 'entity', 'episode', 'execution', 'workflow_run'],
     canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'economic_facts', 'entity_registry', 'episode_facts', 'events', 'evidence', 'execution_facts', 'graph', 'identity', 'outcome_facts', 'resources', 'risk_signals', 'temporal_kernel', 'tools'],
     hardDependencies: ['agentic_runtime_access', 'temporal_kernel'],
     projectionDependencies: ['agent360', 'episode360', 'outcome360', 'temporal360'],
@@ -2017,7 +2017,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         id: 'value',
         requirement: 'required',
         description: 'Direct entity-scoped economic value for the canonical account profile, without member or execution-cost aggregation.',
-        canonicalAuthorityRefs: ['economic_facts'],
+        canonicalAuthorityRefs: ['ai_execution_facts', 'economic_facts'],
         projectionBindings: [
           {
             projectionId: 'economic360',
@@ -2305,12 +2305,12 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        authorityGapReason: 'agent360_nested_risk_read_fails_closed_until_frame_runtime_forwards_exact_slot_and_capability_authorization',
+        authorityGapReason: 'agent_risk_summary_identity_relationship_and_social_authorities_not_fully_joined',
         canonicalAuthorityRefs: ['agent_entities', 'identity', 'relationship_facts', 'risk_outputs', 'social_observations'],
         description: 'Required Agent 360 blueprint slot: risk summary.',
         id: 'risk_summary',
         implementationCrosswalk: ['risk_and_contagion'],
-        partialImplementationReason: 'Canonical Risk360 evidence requires resolved Agent identity and an affirmative current analytics receipt. The nested Agent360 read remains suppressed until frame runtime forwards the risk_summary and risk360.read decisions; Agent-specific freshness, historical replay, and causal contagion remain unknown.',
+        partialImplementationReason: 'Canonical Risk360 evidence requires resolved Agent identity and an affirmative current analytics receipt. The nested read proceeds only after the frame runtime forwards the exact allowed risk_summary slot decision and the bound risk360.read capability. Agent-specific freshness, historical replay, unbound identity and social authority joins, and causal contagion remain unknown.',
         projectionBindings: [
           {
             projectionId: 'risk360',
@@ -2544,7 +2544,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         id: 'performance',
         requirement: 'required',
         description: 'Observed economic and outcome performance facts for the campaign.',
-        canonicalAuthorityRefs: ['commerce', 'economic_facts', 'outcome_facts', 'payments'],
+        canonicalAuthorityRefs: ['ai_execution_facts', 'commerce', 'economic_facts', 'outcome_facts', 'payments'],
         projectionBindings: [
           {
             projectionId: 'economic360',
@@ -2658,7 +2658,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       }
     ],
     sourceOfTruth: {
-      canonicalAuthorities: ['attribution_credits', 'campaign_facts', 'campaign_touchpoints', 'cluster_definitions', 'cluster_membership', 'cohort_membership', 'commerce', 'communication_facts', 'economic_facts', 'events', 'journeys', 'measurement_contract', 'observations', 'outcome_facts', 'payments', 'relationship_facts', 'risk_outputs', 'source_facts', 'source_provenance', 'targeting_leakage_findings', 'touchpoints'],
+      canonicalAuthorities: ['ai_execution_facts', 'attribution_credits', 'campaign_facts', 'campaign_touchpoints', 'cluster_definitions', 'cluster_membership', 'cohort_membership', 'commerce', 'communication_facts', 'economic_facts', 'events', 'journeys', 'measurement_contract', 'observations', 'outcome_facts', 'payments', 'relationship_facts', 'risk_outputs', 'source_facts', 'source_provenance', 'targeting_leakage_findings', 'touchpoints'],
       ownsCanonicalTruth: false,
       prohibitedOwnership: ['economic_facts', 'execution_facts', 'graph', 'identity', 'observations', 'risk_outputs', 'source_provenance']
     },
@@ -3381,15 +3381,16 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       },
       {
         authorityGapReason: 'exact_subject_authority_join_not_implemented',
-        canonicalAuthorityRefs: ['evidence', 'source_provenance'],
+        canonicalAuthorityRefs: ['ai_execution_facts', 'evidence', 'source_provenance'],
         description: 'Required Execution 360 blueprint slot: evidence trace.',
         id: 'evidence_trace',
         implementationCrosswalk: ['evidence_and_lineage'],
+        partialImplementationReason: 'Exact workflow_run execution references include matching invocation evidence; source provenance joins, source telemetry, complete workflow step coverage, and a freshness threshold remain unknown.',
         projectionBindings: [
           {
             projectionId: 'execution360',
             role: 'primary',
-            subjectKinds: ['agent', 'entity', 'episode', 'execution'],
+            subjectKinds: ['agent', 'entity', 'episode', 'execution', 'workflow_run'],
             sectionIds: ['evidence']
           }
         ],
@@ -3397,15 +3398,16 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         unboundCanonicalAuthorityRefs: ['source_provenance']
       },
       {
-        canonicalAuthorityRefs: ['agent_executions', 'execution_facts'],
+        canonicalAuthorityRefs: ['agent_executions', 'ai_execution_facts', 'execution_facts'],
         description: 'Required Execution 360 blueprint slot: execution summary.',
         id: 'execution_summary',
         implementationCrosswalk: ['execution_identity_and_state'],
+        partialImplementationReason: 'For workflow_run subjects, execution evidence is limited to tenant-scoped agent_executions rows whose stored workflow_run_id and invocation IDs match current ai_execution_facts; this does not prove all workflow steps, completion, or external effects.',
         projectionBindings: [
           {
             projectionId: 'execution360',
             role: 'primary',
-            subjectKinds: ['agent', 'entity', 'episode', 'execution'],
+            subjectKinds: ['agent', 'entity', 'episode', 'execution', 'workflow_run'],
             sectionIds: ['state', 'summary']
           }
         ],
@@ -3540,7 +3542,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       ownsCanonicalTruth: false,
       prohibitedOwnership: ['economic_facts', 'execution_facts', 'graph', 'identity', 'observations', 'risk_outputs', 'source_provenance']
     },
-    subjectKinds: ['agent', 'entity', 'episode', 'execution']
+    subjectKinds: ['agent', 'entity', 'episode', 'execution', 'workflow_run']
   },
   identity360: {
     backendCapabilities: {
@@ -4710,7 +4712,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        canonicalAuthorityRefs: ['economic_facts', 'outcome_facts'],
+        canonicalAuthorityRefs: ['ai_execution_facts', 'economic_facts', 'outcome_facts'],
         description: 'Direct tenant-scoped economic facts for the exact canonical entity or Agent subject; measured outcomes and attribution remain unresolved.',
         id: 'value_summary',
         partialImplementationReason: 'Economic360 reads exact tenant-scoped economic facts for canonical entity and Agent subjects; Outcome360 does not yet support exact entity/profile subjects for attributed outcomes, and Profile-specific freshness remains unknown.',
@@ -5652,18 +5654,19 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        id: 'conversation_history',
-        requirement: 'required',
+        canonicalAuthorityRefs: ['communication_facts', 'evidence', 'provider_connections', 'support_case_events', 'support_cases'],
         description: 'Tenant scoped support communication metadata; bodies require separate content permission.',
-        canonicalAuthorityRefs: ['communication_facts', 'evidence'],
+        id: 'conversation_history',
+        partialImplementationReason: 'Canonical support_case history joins only through the exact tenant, provider connection, and source case key; message bodies and participant identities stay suppressed without their separate authorities, source-history completeness is unverified, and no freshness SLA is available.',
         projectionBindings: [
           {
             projectionId: 'support360',
             role: 'primary',
-            subjectKinds: ['entity'],
-            sectionIds: ['evidence', 'state', 'timeline']
+            subjectKinds: ['entity', 'support_case'],
+            sectionIds: ['interactions']
           }
-        ]
+        ],
+        requirement: 'required'
       },
       {
         id: 'entity_and_agent_context',
@@ -5911,7 +5914,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
     displayName: 'Value 360',
     domainSlots: [
       {
-        canonicalAuthorityRefs: ['attribution_credits', 'attribution_runs', 'campaign_touchpoints', 'canonical_conversions'],
+        canonicalAuthorityRefs: ['ai_execution_facts', 'attribution_credits', 'attribution_runs', 'campaign_touchpoints', 'canonical_conversions'],
         description: 'Credited value allocated by canonical attribution authority.',
         id: 'attribution_credits',
         partialImplementationReason: 'current_credit_read_is_unbounded_and_attribution_history_is_not_bitemporal',
@@ -5941,7 +5944,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       },
       {
         authorityGapReason: 'model_governance_calibration_and_validation_not_joined',
-        canonicalAuthorityRefs: ['attribution_credits', 'attribution_runs', 'canonical_conversions', 'model_governance'],
+        canonicalAuthorityRefs: ['ai_execution_facts', 'attribution_credits', 'attribution_runs', 'canonical_conversions', 'model_governance'],
         description: 'Evidence-linked, model-reported attribution confidence only; not a calibrated estimate of realized value or ROI.',
         id: 'confidence',
         partialImplementationReason: 'Only exact conversion/run/credit-linked model-reported attribution confidence with model type and version is exposed; calibration and applicability to realized value remain unvalidated.',
@@ -5957,7 +5960,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         unboundCanonicalAuthorityRefs: ['model_governance']
       },
       {
-        canonicalAuthorityRefs: ['canonical_conversions'],
+        canonicalAuthorityRefs: ['ai_execution_facts', 'canonical_conversions'],
         description: 'Canonical conversion ledger records linked to an exact subject reference; aggregate attribution and unsupported value or wallet-cluster joins remain unknown.',
         id: 'conversion_inventory',
         partialImplementationReason: 'value_subject_wallet_cluster_and_historical_inventory_joins_not_available',
@@ -5989,7 +5992,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         id: 'evidence_trace',
         requirement: 'required',
         description: 'Canonical economic, payment, commerce, and conversion evidence references for exact supported subjects.',
-        canonicalAuthorityRefs: ['canonical_conversions', 'commerce', 'economic_facts', 'payments'],
+        canonicalAuthorityRefs: ['ai_execution_facts', 'canonical_conversions', 'commerce', 'economic_facts', 'payments'],
         projectionBindings: [
           {
             projectionId: 'economic360',
@@ -6008,7 +6011,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         unboundReason: 'financial_risk_value_join_not_connected'
       },
       {
-        canonicalAuthorityRefs: ['canonical_conversions', 'evidence'],
+        canonicalAuthorityRefs: ['ai_execution_facts', 'canonical_conversions', 'evidence'],
         description: 'Evidence-backed confirmed or adjusted canonical conversion net value over a defined subject and temporal scope; full lifetime coverage remains unknown and native currencies stay partitioned.',
         id: 'ltv',
         partialImplementationReason: 'Exact evidence-backed confirmed_or_adjusted conversion net values are reported only for the canonical rows returned; lifetime and historical completeness, outcome attribution, and freshness remain unknown, missing net values degrade the slot, and native currency totals are not combined.',
@@ -6051,7 +6054,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
-        canonicalAuthorityRefs: ['commerce', 'currency_value_normalization', 'economic_facts', 'evidence', 'payments'],
+        canonicalAuthorityRefs: ['ai_execution_facts', 'commerce', 'currency_value_normalization', 'economic_facts', 'evidence', 'payments'],
         description: 'Separate source-native economic and commerce observations with exact settlement-to-payment references; cross-source reconciliation remains explicit.',
         id: 'reconciliation',
         implementationCrosswalk: ['value_source_reconciliation_observations'],
@@ -6067,7 +6070,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        canonicalAuthorityRefs: ['economic_facts', 'payments'],
+        canonicalAuthorityRefs: ['ai_execution_facts', 'economic_facts', 'payments'],
         description: 'Source-recorded settled payment events with an explicit operation join and transaction evidence; no attributed revenue total.',
         id: 'revenue_events',
         partialImplementationReason: 'all_revenue_event_sources_and_attribution_not_joined',
@@ -6099,7 +6102,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         id: 'value_summary',
         requirement: 'required',
         description: 'Subject-scoped computed economic value with explicit missing, zero, and source currency states; no inferred attribution or AI cost aggregation.',
-        canonicalAuthorityRefs: ['currency_value_normalization', 'economic_facts'],
+        canonicalAuthorityRefs: ['ai_execution_facts', 'currency_value_normalization', 'economic_facts'],
         projectionBindings: [
           {
             projectionId: 'economic360',

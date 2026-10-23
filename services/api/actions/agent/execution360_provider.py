@@ -183,6 +183,17 @@ class ExecutionApprovalRead:
 
 
 @dataclass(frozen=True)
+class ExecutionWorkflowRunInvocationRead:
+    """Bounded exact AI invocation facts used to validate run links."""
+
+    rows: list[dict[str, Any]]
+    available: bool
+    scope_known: bool
+    truncated: bool = False
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class ExecutionApprovalContext:
     """Evidence-backed x402 approval requests and decisions for executions."""
 
@@ -254,6 +265,67 @@ class EpisodeExecutionScope:
     agent_ids: tuple[str, ...] = ()
     complete: bool = False
     reason: Optional[str] = None
+
+
+async def _read_workflow_run_invocation_facts(
+    tenant_id: str, workflow_run_id: str, limit: int
+) -> ExecutionWorkflowRunInvocationRead:
+    """Read exact tenant/run invocation facts for validating stored run links."""
+    if not tenant_id or not workflow_run_id:
+        return ExecutionWorkflowRunInvocationRead(
+            [], False, False, reason="exact_tenant_workflow_run_scope_required"
+        )
+    try:
+        from config.settings import settings
+
+        if not settings.ai_economics.execution_facts_enabled:
+            return ExecutionWorkflowRunInvocationRead(
+                [], False, False, reason="ai_execution_facts_disabled"
+            )
+        from value.economic.ai_aggregation import list_facts
+
+        bounded_limit = min(
+            max(1, int(limit)), _MAX_EXECUTION_COST_FACTS_PER_SUBJECT
+        )
+        facts = await list_facts(
+            tenant_id,
+            workflow_run_id=workflow_run_id,
+            limit=bounded_limit + 1,
+        )
+    except Exception:  # noqa: BLE001 - optional canonical source stays unknown
+        return ExecutionWorkflowRunInvocationRead(
+            [], False, False, reason="workflow_run_ai_invocation_source_unavailable"
+        )
+
+    if not isinstance(facts, list):
+        return ExecutionWorkflowRunInvocationRead(
+            [], False, False, reason="workflow_run_ai_invocation_read_invalid"
+        )
+    truncated = len(facts) > bounded_limit
+    scoped: list[dict[str, Any]] = []
+    scope_known = True
+    for row in facts[:bounded_limit]:
+        if (
+            not isinstance(row, dict)
+            or row.get("tenant_id") != tenant_id
+            or row.get("workflow_run_id") != workflow_run_id
+        ):
+            scope_known = False
+            continue
+        scoped.append(row)
+    return ExecutionWorkflowRunInvocationRead(
+        scoped,
+        True,
+        scope_known and not truncated,
+        truncated=truncated,
+        reason=(
+            "workflow_run_ai_invocation_scope_mismatch"
+            if not scope_known
+            else "workflow_run_ai_invocation_read_truncated"
+            if truncated
+            else None
+        ),
+    )
 
 
 class Execution360Source(Protocol):
@@ -475,6 +547,7 @@ class RepositoryExecution360Source:
             configs = AgentConfigRepository()
             executions = AgentExecutionRepository()
             source_truncated = bool(episode_scope and not episode_scope.complete)
+            source_scope_mismatch = False
             if subject.kind == "agent":
                 config = await configs.find_by_id(subject.id)
                 if not _tenant_agent_config(config, tenant_id, subject.id):
@@ -533,6 +606,157 @@ class RepositoryExecution360Source:
                 rows = [execution]
                 agent_ids = {source_agent_id}
                 owner_by_agent = {source_agent_id: config.get("owner_entity_id")}
+            elif subject.kind == "workflow_run":
+                # A workflow run may include only lifecycle rows that carry
+                # the exact tenant-scoped workflow_run_id. The canonical
+                # AgentExecution writer stores this reference only after its
+                # AI invocation facts resolve to one exact run, action ID, and
+                # agent. This does not establish workflow-wide step coverage.
+                workflow_run_id = _safe_text(subject.id)
+                if workflow_run_id is None:
+                    return ExecutionRead(
+                        rows=[],
+                        available=True,
+                        scope_known=False,
+                        reason="workflow_run_subject_id_invalid",
+                    )
+                raw_rows = await executions.find_many(
+                    filters={
+                        "tenant_id": tenant_id,
+                        "workflow_run_id": workflow_run_id,
+                    },
+                    limit=limit + 1,
+                )
+                if not isinstance(raw_rows, list):
+                    return ExecutionRead(
+                        rows=[],
+                        available=False,
+                        scope_known=False,
+                        reason="workflow_run_execution_read_invalid",
+                    )
+                if len(raw_rows) > limit:
+                    source_truncated = True
+                    raw_rows = raw_rows[:limit]
+
+                invocation_read = await _read_workflow_run_invocation_facts(
+                    tenant_id,
+                    workflow_run_id,
+                    _MAX_EXECUTION_COST_FACTS_PER_SUBJECT,
+                )
+                if not invocation_read.available:
+                    return ExecutionRead(
+                        rows=[],
+                        available=False,
+                        scope_known=False,
+                        reason=(
+                            invocation_read.reason
+                            or "workflow_run_ai_invocation_source_unavailable"
+                        ),
+                    )
+                if invocation_read.truncated:
+                    source_truncated = True
+                if not invocation_read.scope_known:
+                    source_scope_mismatch = True
+                invocations_by_id: dict[str, Optional[dict[str, Any]]] = {}
+                for fact in invocation_read.rows:
+                    invocation_id = _safe_text(fact.get("invocation_id"))
+                    if invocation_id is None:
+                        source_scope_mismatch = True
+                        continue
+                    if invocation_id in invocations_by_id:
+                        invocations_by_id[invocation_id] = None
+                        source_scope_mismatch = True
+                        continue
+                    invocations_by_id[invocation_id] = fact
+
+                rows = []
+                agent_ids = set()
+                owner_by_agent = {}
+                seen_execution_ids: set[str] = set()
+                for row in raw_rows:
+                    if (
+                        not isinstance(row, dict)
+                        or row.get("tenant_id") != tenant_id
+                        or row.get("workflow_run_id") != workflow_run_id
+                        or row.get("event_type") is not None
+                    ):
+                        source_scope_mismatch = True
+                        continue
+                    execution_id = _safe_text(row.get("execution_id"))
+                    source_agent_id = _safe_text(row.get("agent_id"))
+                    if (
+                        execution_id is None
+                        or source_agent_id is None
+                        or execution_id in seen_execution_ids
+                    ):
+                        source_scope_mismatch = True
+                        continue
+                    seen_execution_ids.add(execution_id)
+                    config = await configs.find_by_id(source_agent_id)
+                    if not _tenant_agent_config(config, tenant_id, source_agent_id):
+                        source_scope_mismatch = True
+                        continue
+
+                    raw_invocation_ids = row.get("workflow_run_invocation_ids")
+                    invocation_ids = (
+                        [
+                            value
+                            for raw_id in raw_invocation_ids
+                            if (value := _safe_text(raw_id)) is not None
+                        ]
+                        if isinstance(raw_invocation_ids, list)
+                        else []
+                    )
+                    if (
+                        not invocation_ids
+                        or len(invocation_ids) != len(raw_invocation_ids or [])
+                        or len(set(invocation_ids)) != len(invocation_ids)
+                    ):
+                        source_scope_mismatch = True
+                        continue
+                    linked_facts = [
+                        invocations_by_id.get(invocation_id)
+                        for invocation_id in invocation_ids
+                    ]
+                    if any(
+                        not isinstance(fact, dict)
+                        or fact.get("tenant_id") != tenant_id
+                        or fact.get("workflow_run_id") != workflow_run_id
+                        or fact.get("action_id") != execution_id
+                        or fact.get("agent_id") != source_agent_id
+                        for fact in linked_facts
+                    ):
+                        source_scope_mismatch = True
+                        continue
+                    invocation_evidence_refs = [
+                        evidence_ref.model_dump(
+                            mode="json", by_alias=True, exclude_none=True
+                        )
+                        for fact in linked_facts
+                        if isinstance(fact, dict)
+                        and (
+                            evidence_ref := _evidence_ref(
+                                evidence_id=fact.get("invocation_id"),
+                                source="ai_execution_facts",
+                                observed_at=fact.get("observed_at"),
+                                store="ai_execution_facts",
+                            )
+                        )
+                        is not None
+                    ]
+                    if len(invocation_evidence_refs) != len(invocation_ids):
+                        source_scope_mismatch = True
+                        continue
+                    rows.append(
+                        {
+                            **row,
+                            "workflow_run_invocation_evidence_refs": (
+                                invocation_evidence_refs
+                            ),
+                        }
+                    )
+                    agent_ids.add(source_agent_id)
+                    owner_by_agent[source_agent_id] = config.get("owner_entity_id")
             elif subject.kind == "entity":
                 owner_configs = await configs.find_many(
                     filters={"tenant_id": tenant_id, "owner_entity_id": subject.id},
@@ -623,6 +847,7 @@ class RepositoryExecution360Source:
             set(identity_map) == agent_ids
             and not identity_mismatch
             and not identity_truncated
+            and not source_scope_mismatch
             and (episode_scope is None or episode_scope.complete)
         )
 
@@ -682,7 +907,13 @@ class RepositoryExecution360Source:
             available=True,
             scope_known=complete_identity_scope,
             truncated=source_truncated or identity_truncated or len(scoped) > limit,
-            reason=("agent_identity_binding_incomplete" if not complete_identity_scope else None),
+            reason=(
+                "workflow_run_execution_scope_mismatch"
+                if source_scope_mismatch
+                else "agent_identity_binding_incomplete"
+                if not complete_identity_scope
+                else None
+            ),
             subject_event_ids=(episode_scope.event_ids if episode_scope is not None else ()),
             agent_ids=tuple(
                 sorted(
@@ -857,6 +1088,16 @@ class RepositoryExecution360Source:
     async def observed_facts(
         self, *, tenant_id: str, subject: ProjectionSubject, limit: int
     ) -> ExecutionRead:
+        if subject.kind == "workflow_run":
+            # Provider-reported run_id values in source telemetry are not a
+            # canonical workflow_run_id crosswalk. Keep this source unknown
+            # instead of assigning telemetry to a run by identifier shape.
+            return ExecutionRead(
+                rows=[],
+                available=True,
+                scope_known=False,
+                reason="source_reported_run_id_not_canonically_linked_to_workflow_run",
+            )
         if subject.kind == "execution":
             # Source telemetry has run/task references but no canonical join
             # from those references to this AETHER execution ID yet.
@@ -2111,6 +2352,12 @@ def _internal_record(row: dict[str, Any]) -> dict[str, Any]:
         resolution_status = "unverified_join_metadata"
     return {
         "executionId": _safe_text(row.get("execution_id")),
+        "workflowRunId": _safe_text(row.get("workflow_run_id")),
+        "workflowRunInvocationEvidenceRefs": (
+            row.get("workflow_run_invocation_evidence_refs")
+            if isinstance(row.get("workflow_run_invocation_evidence_refs"), list)
+            else []
+        ),
         "approvalId": _safe_text(row.get("approval_id")),
         "approvalDecisionId": _safe_text(row.get("approval_decision_id")),
         "agentId": (
@@ -2338,6 +2585,17 @@ class Execution360Provider:
                 scope_known=False,
                 reason="server_execution_scope_mismatch",
             )
+        if request.subject.kind == "workflow_run" and any(
+            not isinstance(row, dict)
+            or row.get("workflow_run_id") != request.subject.id
+            or row.get("event_type") is not None
+            for row in server.rows
+        ):
+            server = replace(
+                server,
+                scope_known=False,
+                reason="workflow_run_execution_scope_mismatch",
+            )
         if any(
             not isinstance(row, dict)
             or _safe_text(row.get("tenantId")) != tenant_id
@@ -2446,7 +2704,12 @@ class Execution360Provider:
                     and request.subject.kind == "execution"
                 )
                 or (
-                    row.get("agentId") in allowed_agent_ids
+                    row.get("workflowRunId") == request.subject.id
+                    and request.subject.kind == "workflow_run"
+                )
+                or (
+                    request.subject.kind in {"agent", "entity", "episode"}
+                    and row.get("agentId") in allowed_agent_ids
                     and row.get("canonicalActorResolved") is True
                 )
             )
@@ -2460,7 +2723,14 @@ class Execution360Provider:
                     row.get("executionId") == request.subject.id
                     and request.subject.kind == "execution"
                 )
-                or row.get("agentId") in allowed_agent_ids
+                or (
+                    row.get("workflowRunId") == request.subject.id
+                    and request.subject.kind == "workflow_run"
+                )
+                or (
+                    request.subject.kind in {"agent", "entity", "episode"}
+                    and row.get("agentId") in allowed_agent_ids
+                )
             )
             and (
                 request.subject.kind != "entity"
@@ -2492,6 +2762,13 @@ class Execution360Provider:
             internal = [row for row in internal if row.get("executionId") == request.subject.id]
             # No source telemetry is attached unless a canonical execution/run
             # crosswalk is available; this provider deliberately leaves it out.
+            external = []
+        elif request.subject.kind == "workflow_run":
+            internal = [
+                row for row in internal if row.get("workflowRunId") == request.subject.id
+            ]
+            # Telemetry run_id values lack a canonical workflow_run_id
+            # crosswalk, so only exact lifecycle references are admitted.
             external = []
         else:
             internal = []
@@ -2970,6 +3247,19 @@ class Execution360Provider:
                     continue
                 seen.add((ref.id, ref.source))
                 refs.append(ref)
+        for row in internal:
+            raw_refs = row.get("workflowRunInvocationEvidenceRefs")
+            if not isinstance(raw_refs, list):
+                continue
+            for raw_ref in raw_refs:
+                try:
+                    ref = EvidenceRef.model_validate(raw_ref)
+                except Exception:  # noqa: BLE001 - malformed run evidence is omitted
+                    continue
+                if ref.source != "ai_execution_facts" or (ref.id, ref.source) in seen:
+                    continue
+                seen.add((ref.id, ref.source))
+                refs.append(ref)
         for signal in risk_events.signals:
             for ref in signal.evidence_refs:
                 if (ref.id, ref.source) in seen:
@@ -3026,6 +3316,33 @@ class Execution360Provider:
                     ],
                 )
             )
+            if (
+                subject.kind == "workflow_run"
+                and row.get("workflowRunId") == subject.id
+            ):
+                linked_evidence = [evidence]
+                raw_invocation_refs = row.get("workflowRunInvocationEvidenceRefs")
+                if isinstance(raw_invocation_refs, list):
+                    for raw_ref in raw_invocation_refs:
+                        try:
+                            invocation_ref = EvidenceRef.model_validate(raw_ref)
+                        except Exception:  # noqa: BLE001 - malformed run evidence is omitted
+                            continue
+                        if invocation_ref.source == "ai_execution_facts":
+                            linked_evidence.append(invocation_ref)
+                claims.append(
+                    ClaimEnvelope(
+                        id=f"execution360:workflow-run-reference:{row['executionId']}",
+                        kind="server_recorded_workflow_run_execution_reference",
+                        subject=subject,
+                        evidenceRefs=linked_evidence,
+                        claims=[
+                            f"AETHER's canonical execution record {row['executionId']} stores the exact requested workflow_run_id {subject.id}; this stored reference does not establish workflow-wide step coverage, workflow completion, or an external action effect."
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=[SLOT_EXECUTION_STATE, SLOT_EVIDENCE],
+                    )
+                )
             elapsed_ms = _lifecycle_elapsed_ms(row)
             if elapsed_ms is not None:
                 claims.append(

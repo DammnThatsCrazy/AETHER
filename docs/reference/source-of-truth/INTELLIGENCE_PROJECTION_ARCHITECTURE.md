@@ -46,8 +46,8 @@ architecture validator hard-fails on anything else.
 
 ## 2. The tetris inventory — what exists today
 
-The technical projection registry currently has **20 projections**: 9 are
-marked `implemented` and 11 are `in_flight`. These are projection-plane
+The technical projection registry currently has **24 projections**: 9 are
+marked `implemented` and 15 are `in_flight`. These are projection-plane
 convergence states, not claims that all product 360 requirements are complete.
 The registry is the authoritative technical inventory and maps each projection
 to its routes, surfaces, services, dependencies, and declared pending
@@ -56,21 +56,21 @@ authorities.
 The product 360 contract is a separate catalog in the same registry. It has
 **18 product surfaces** with subject kinds, required and optional domain slots,
 canonical authority references, candidate projection/section bindings,
-policy, freshness, evidence, and lens requirements. As of 2026-10-18, all 18
-are marked `reconstructed_pending_source_alignment`; this work reconstructs
-the contract from repository evidence and does not yet attest alignment with
-the original full blueprint source. A `catalog_only` binding is a declared
-requirement, not proof that a provider path is live. The complete surface list
-and slot matrix is published in [`docs/product/360-surfaces.md`](../../product/360-surfaces.md).
+policy, freshness, evidence, and lens requirements. As of 2026-10-23, all 18
+are marked `source_aligned`, confirming that the product contract has been
+reconciled with the original full blueprint. This is a catalog-level source
+alignment state; it does not attest that every required slot has a complete
+provider path. A `catalog_only` binding is a declared requirement, not proof
+that a provider path is live. The complete surface list and slot matrix is
+published in [`docs/product/360-surfaces.md`](../../product/360-surfaces.md).
 
-This implementation phase adds the shared authenticated frame route,
-composition and policy contracts, direct provider paths for selected slots,
-and route-level matrix coverage across all 18 surfaces. The matrix proves
-request routing, tenant scope, policy ordering, and composition behavior; it
-does not turn an unbound slot or an `in_flight` projection into a completed
-provider. Agent action-scoped authorization, external execution receipts,
-remaining provider/slot convergence, and source alignment remain follow-up
-work.
+The shared authenticated frame route, composition and policy contracts,
+direct provider paths for selected slots, and route-level matrix coverage are
+implemented across the catalog. The matrix proves request routing, tenant
+scope, policy ordering, and composition behavior; it does not turn an unbound
+slot or an `in_flight` projection into a completed provider. Remaining work
+includes agent action-scoped authority, external execution receipts, and
+provider convergence across required slots.
 
 ### Surface capability catalog (21 entries) — `packages/shared/contracts/surface-capability-registry.json`
 
@@ -96,7 +96,7 @@ route classified in `config/route_registry.yaml`.
 | social360 | relationship_360 | `/v1/profile/{id}/social-intelligence` (single endpoint, served by the profile handler) | profile360 | thin — folded into profile |
 | episode360 | sequence_360 | `/v1/journeys`, `/v1/events`; journey/timeline surfaces | journeys, timeline | spine `journey_continuity` |
 | communication360 | sequence_360 | `/v1/comms`, `/v1/contact`, `/v1/delivery`, `/v1/notifications`; `services/api/journeys/comms/repository` feeds profile summary | timeline, profile360 | metricRefs: `email_open_rate`/`click`/`reply` resolve |
-| execution360 | sequence_360 | `/v1/agents/{id}/execute`, `/v1/agent/runs`, `/v1/jobs`, `/v1/flows`, `/v1/computations` | timeline | — |
+| execution360 | sequence_360 | `/v1/agents/{id}/execute`, `/v1/agent/runs`, `/v1/jobs`, `/v1/flows`, `/v1/computations`; exact `workflow_run` joins through stored tenant-scoped AgentExecution references and matched invocation evidence | timeline | workflow-wide step coverage, standalone run and telemetry joins, external execution receipts |
 | temporal360 | context_360 | **`implemented`** (T2.4) — `Temporal360Provider` in `services/api/graph/temporal360/`; the `graph_history_replay` spine resolved by a read-side knowledge-time reconstruction (`shared/graph replay_state` + ledger-prefix reads, `services/api/graph/temporal360/history_replay.py`); reads bitemporal `as_of`/`compare` | temporal360 | — (zero pending; `converged`, `docs/architecture/blueprints/temporal360.md`) |
 | geographic360 | context_360 | **`implemented`** (G4.5) — `Geographic360Provider` in `services/api/graph/geographic360/` over governed location facts (`LocationFactRepository`, table `location_facts`, in-memory/asyncpg); reads canonical `location_facts` (`geo` legacy service); `context_capsule_semantics` spine resolved (`services/api/graph/geographic360/capsule_semantics.py`); DSR coverage — `location_facts` revoke | geographic360 | — (zero pending; `converged`, `docs/architecture/blueprints/geographic360.md`; `projectionDependencies profile360/temporal360` remain `in_flight` → region/posture lenses degrade, never lie) |
 | population360 | context_360 | **`implemented`** (P3.5) — `Population360Provider` in `services/api/identity/population360/` over governed membership (`PopulationMembershipGovernor`, MEMBER_OF-via-gateway, append-only `population_definition_versions`, DSR coverage — `services/api/identity/population`); `grouping_membership` spine resolved | population360 | — (zero pending; `converged`, `docs/architecture/blueprints/population360.md`; `projectionDependencies profile360/relationship360` remain `in_flight` → demographic lens / relationship semantics degrade, never lie) |
@@ -108,19 +108,19 @@ route classified in `config/route_registry.yaml`.
 | fraud360 | risk_360 | `/v1/fraud`, `/v1/fraud/networks`; `services/api/intelligence/fraud/`, `fraud_networks/` | graph | — |
 | source360 | operational_workbench | `/v1/imports`, `/v1/kyber/imports`, `/v1/providers`; UPR; `services/api/journeys/traffic/classifier.py` | campaign360 | — |
 | connection360 | operational_workbench | `/v1/integrations/connectors`, `/v1/provider-connections`, `/v1/client-sync`; `provider_runtime` connections/credentials/health | (**new surface `connection360` added in P0**) | spine `reconciled_control_plane` (harness rollup PR #529 merged; spine not yet formalized) |
-| support360 | operational_workbench | `services/api/journeys/support360/`; governed communication, episode, identity, and source evidence composition | support360 | source alignment and provider slot convergence remain pending |
+| support360 | operational_workbench | `services/api/journeys/support360/`; canonical case lifecycle plus case-linked, body-suppressed communication metadata using exact tenant, provider connection, and source case keys | support360 | callbacks, participants, SLA, journeys, agent assignment, risk, value, outcome, source-history completeness, freshness |
 | infrastructure360 | infrastructure_360 | **`implemented`** (S4) — 19th projection; `Infrastructure360Provider` in `services/api/graph/infrastructure/` (read-only, `graphMutationPolicy: read_only`, no write path); `GET /v1/infrastructure/{subject_kind}/{subject_id}` + `/health` (classified in `config/route_registry.yaml`); reads `infrastructure_facts`/`infrastructure_state`/`deployments` authorities over the `infrastructure_model` spine | infrastructure360 | — (zero pending; `converged`, `docs/architecture/blueprints/infrastructure360.md`) |
 
-**Tetris mechanics.** Existing technical projection rows (all 20) sit on the board with their
+**Tetris mechanics.** Existing technical projection rows (all 24) sit on the board with their
 real coordinates (routes → `legacyBindings`, surfaces → `surfaceIds`, metrics
 → `metricRefs`). Nine projections are currently marked `implemented`; the
 other eleven remain `in_flight`, including `agent360` and `execution360`.
 Two unformalized spines (`journey_continuity` and
 `reconciled_control_plane`) remain declared pending authorities for
-`episode360` and `connection360`. The 18 product-surface contract rows remain
-pending source alignment and have some unbound required subject/slot
-combinations. These are the current follow-up pieces; they are not considered
-closed by the catalog or generic frame route. Earlier vertical slices such as
+`episode360` and `connection360`. The 18 product-surface contract rows are
+source-aligned and still have unbound required subject/slot combinations.
+These are the current follow-up pieces; they are not considered closed by the
+catalog or generic frame route. Earlier vertical slices such as
 `outcome360`, `economic360`, `infrastructure360`, `temporal360`,
 `population360`, and `geographic360` were built on the base, then their
 dependencies formalized in the canonical spine registry
@@ -136,13 +136,13 @@ actor/authority semantics before a product surface is called complete.
 
 The **Intelligence Projection Registry**
 (`packages/shared/contracts/intelligence-projection-registry.json`) is the
-single canonical registry for the 20 technical projections and the separate
+single canonical registry for the 24 technical projections and the separate
 18-surface product catalog. `schemaVersion` /
 `contractVersion` are present; vocab arrays (`projectionKinds`,
 `implementationStates`, `graphMutationPolicies`, `sectionStates`,
 `temporalModes`, `migrationModes`, `subjectKinds`) are non-empty unique
 `lower_snake` idents; every per-entry field is present and typed;
-`ownsCanonicalTruth` is `false` for all 20. `implementationState` is repo
+`ownsCanonicalTruth` is `false` for all 24. `implementationState` is repo
 metadata, **not** readiness (see `docs/architecture/decisions/ADR-010-intelligence-projection-plane.md` §D3).
 
 Generated artifacts (via `scripts/generate_platform_contracts.py`, the

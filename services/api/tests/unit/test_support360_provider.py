@@ -29,6 +29,7 @@ from journeys.support360.provider import (  # noqa: E402
     _REASON_CALLBACK_AUTHORITY_MISSING,
     _REASON_JOURNEY_JOIN_MISSING,
     _REASON_PARTIAL_ENTITY_JOIN,
+    _REASON_PARTICIPANT_AUTHORITY_MISSING,
     _REASON_RESOLUTION_AUTHORITY_MISSING,
     _REASON_SUPPORT_BUSINESS_OUTCOME_MISSING,
     _REASON_SOURCE_UNAVAILABLE,
@@ -418,6 +419,7 @@ async def test_canonical_support_case_subject_reads_exact_case_summary_with_evid
     assert result.claims[0].domainSlotIds == ["case_summary", "evidence_trace"]
     assert result.claims[0].claimState.value == "observed"
     assert {ref.id for ref in result.claims[0].evidenceRefs} == {
+        record["case_id"],
         "support-case-created-42",
         "support-connection-a",
     }
@@ -483,9 +485,171 @@ async def test_support_case_history_keeps_only_exact_event_evidence_on_each_entr
     all_evidence = sections["evidence"].content["evidenceRefs"]
     assert "unrelated-event" not in {reference.id for reference in all_evidence}
     assert {reference.id for reference in result.claims[0].evidenceRefs} == {
+        record["case_id"],
         "support-case-created-event-evidence",
         "support-connection-event-evidence",
     }
+    reset_local_support_case_store()
+
+
+@pytest.mark.asyncio
+async def test_canonical_case_joins_only_same_tenant_connection_and_source_case_communications(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from datetime import datetime, timezone
+
+    from journeys.comms.repository import CommsFactsRepository, reset_local_stores
+
+    reset_local_support_case_store()
+    reset_local_stores()
+    case_repository = SupportCaseRepository()
+    case_record = await case_repository.ingest_event(
+        tenant_id=TENANT_A,
+        connection_id="case-connection-a",
+        provider_identity="support-desk",
+        connection_verified_at="2026-10-17T10:00:00Z",
+        event=SupportCaseEventInput(
+            source_case_id="private-source-case-a",
+            source_event_id="case-created-a",
+            event_type=SupportCaseEventType.CREATED,
+            occurred_at=datetime(2026, 10, 17, 11, tzinfo=timezone.utc),
+        ),
+    )
+    facts_repository = CommsFactsRepository()
+
+    async def local_pool():
+        return None
+
+    monkeypatch.setattr(facts_repository, "_pool", local_pool)
+    await facts_repository.upsert(
+        {
+            **_row("case-message-exact", support_case_id="private-source-case-a"),
+            "idempotency_key": "case-message-exact",
+            "source_connector_id": "case-connection-a",
+            "sender_entity_id": "entity-support-agent-unresolved",
+        }
+    )
+    await facts_repository.upsert(
+        {
+            **_row("case-message-other-case", support_case_id="private-source-case-b"),
+            "idempotency_key": "case-message-other-case",
+            "source_connector_id": "case-connection-a",
+        }
+    )
+    await facts_repository.upsert(
+        {
+            **_row("case-message-other-connection", support_case_id="private-source-case-a"),
+            "idempotency_key": "case-message-other-connection",
+            "source_connector_id": "case-connection-b",
+        }
+    )
+    await facts_repository.upsert(
+        {
+            **_row(
+                "case-message-other-tenant",
+                tenant_id=TENANT_B,
+                support_case_id="private-source-case-a",
+            ),
+            "idempotency_key": "case-message-other-tenant",
+            "source_connector_id": "case-connection-a",
+        }
+    )
+    source = RepositorySupport360Source(facts=facts_repository)
+    request = _request("support_case", case_record["case_id"])
+
+    result = await Support360Provider(source, case_repository=case_repository).project(
+        request,
+        _context(request),
+    )
+
+    sections = _sections(result)
+    slots = sections["state"].content["requiredSlots"]
+    history = slots["conversation_history"]
+    assert history["state"] == "degraded"
+    assert history["messageBodyState"] == "suppressed"
+    assert history["sourceHistoryComplete"] is False
+    assert history["entryCount"] == 1
+    entry = history["entries"]["entries"][0]
+    assert entry["factId"] == "case-message-exact"
+    assert entry["canonicalSupportCaseId"] == case_record["case_id"]
+    assert {reference.id for reference in entry["caseJoinEvidenceRefs"]} >= {
+        case_record["case_id"],
+        "case-created-a",
+        "case-connection-a",
+    }
+    assert "sourceReportedSupportCaseRef" not in entry
+    assert slots["participants"]["state"] == "unknown"
+    assert slots["participants"]["reasonCode"] == _REASON_PARTICIPANT_AUTHORITY_MISSING
+    assert {reference.id for reference in sections["evidence"].content["evidenceRefs"]} >= {
+        case_record["case_id"],
+        "case-created-a",
+        "case-connection-a",
+        "case-message-exact",
+    }
+    assert "private customer message" not in repr(result.model_dump())
+    assert "private-source-case-a" not in repr(result.model_dump())
+    assert "entity-support-agent-unresolved" not in repr(result.model_dump())
+    assert ENTITY_ID not in repr(result.model_dump())
+    assert result.page.hasNextPage is False
+    assert any(
+        claim.kind == "support_case_communication_metadata"
+        and "conversation_history" in claim.domainSlotIds
+        and "participants" not in claim.domainSlotIds
+        for claim in result.claims
+    )
+    reset_local_support_case_store()
+    reset_local_stores()
+
+
+@pytest.mark.asyncio
+async def test_canonical_case_skips_communication_read_without_allowed_interaction_section():
+    from datetime import datetime, timezone
+
+    reset_local_support_case_store()
+    case_repository = SupportCaseRepository()
+    case_record = await case_repository.ingest_event(
+        tenant_id=TENANT_A,
+        connection_id="case-connection-policy",
+        provider_identity="support-desk",
+        connection_verified_at="2026-10-17T10:00:00Z",
+        event=SupportCaseEventInput(
+            source_case_id="private-source-case-policy",
+            source_event_id="case-created-policy",
+            event_type=SupportCaseEventType.CREATED,
+            occurred_at=datetime(2026, 10, 17, 11, tzinfo=timezone.utc),
+        ),
+    )
+
+    class CaseReadSpy(FakeSource):
+        def __init__(self) -> None:
+            super().__init__(SupportFactsRead(rows=[_row("must-not-read")], available=True))
+            self.case_calls: list[tuple[str, str, str]] = []
+
+        async def support_facts_for_case(
+            self,
+            tenant_id: str,
+            connection_id: str,
+            source_case_id: str,
+            **_kwargs: Any,
+        ) -> SupportFactsRead:
+            self.case_calls.append((tenant_id, connection_id, source_case_id))
+            return self.read
+
+    source = CaseReadSpy()
+    request = _request("support_case", case_record["case_id"]).model_copy(
+        update={"includeSections": ["state"]}
+    )
+
+    result = await Support360Provider(source, case_repository=case_repository).project(
+        request,
+        _context(request),
+    )
+
+    state = _sections(result)["state"].content
+    assert source.case_calls == []
+    assert state["requiredSlots"]["conversation_history"]["state"] == "unknown"
+    assert state["requiredSlots"]["conversation_history"]["entries"] is None
+    assert "must-not-read" not in repr(result.model_dump())
     reset_local_support_case_store()
 
 
@@ -952,6 +1116,70 @@ async def test_repository_source_uses_exact_tenant_entity_and_support_filter(mon
             },
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_communication_repository_case_read_uses_exact_scope_predicates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from journeys.comms.repository import CommsFactsRepository
+
+    class Connection:
+        query = ""
+        params: tuple[Any, ...] = ()
+
+        async def fetch(self, query: str, *params: Any):
+            self.query = query
+            self.params = params
+            return []
+
+    class Acquire:
+        def __init__(self, connection: Connection) -> None:
+            self.connection = connection
+
+        async def __aenter__(self) -> Connection:
+            return self.connection
+
+        async def __aexit__(self, *_args: Any) -> None:
+            return None
+
+    connection = Connection()
+
+    class Pool:
+        def acquire(self) -> Acquire:
+            return Acquire(connection)
+
+    async def get_pool_for_test():
+        return Pool()
+
+    repository = CommsFactsRepository()
+    monkeypatch.setattr(repository, "_pool", get_pool_for_test)
+
+    rows, next_cursor = await repository.list_for_support_case(
+        TENANT_A,
+        "case-connection-a",
+        "private-source-case-a",
+        category="support",
+        after="2026-10-17T11:00:00Z",
+        before="2026-10-17T13:00:00Z",
+        limit=17,
+    )
+
+    assert rows == []
+    assert next_cursor is None
+    assert "tenant_id = $1" in connection.query
+    assert "source_connector_id = $2" in connection.query
+    assert "support_case_id = $3" in connection.query
+    assert "message_category = $4" in connection.query
+    assert connection.params[:4] == (
+        TENANT_A,
+        "case-connection-a",
+        "private-source-case-a",
+        "support",
+    )
+    assert connection.params[4].isoformat() == "2026-10-17T11:00:00+00:00"
+    assert connection.params[5].isoformat() == "2026-10-17T13:00:00+00:00"
+    assert "LIMIT 18" in connection.query
 
 
 def test_support360_is_an_in_flight_projection_id_when_contract_is_generated() -> None:

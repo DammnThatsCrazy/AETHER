@@ -1301,6 +1301,7 @@ class Agent360Provider:
                 tenant_id=tenant_id,
                 request_subject=request.subject,
                 canonical_agent_entity_id=delegation_agent_id,
+                context=context,
             )
             if delegation_agent_id is not None
             and request.asOf is None
@@ -2955,31 +2956,51 @@ class Agent360Provider:
         tenant_id: str,
         request_subject: ProjectionSubject,
         canonical_agent_entity_id: str,
+        context: ProjectionContext,
     ) -> bool:
         """Require the outer slot and capability decision before nested reads.
 
-        ProjectionContext does not carry the frame runtime's evaluated slot
-        policy or capability decision. Callers that run Agent360 inside a
-        frame must therefore supply a gate that answers for this exact tenant,
-        requested subject, resolved canonical Agent, slot, and capability.
-        Unknown, malformed, or failing decisions deny the Risk360 read.
+        The frame runtime passes a per-call, server-derived authorization
+        envelope only after the outer ``risk_summary`` slot is explicitly
+        allowed and bound to a projection declaring ``risk360.read``. A test or
+        alternate runtime may inject an equivalent exact-scope gate. Unknown,
+        malformed, or failing decisions deny the Risk360 read.
         """
         gate = self._risk_slot_authorizer
-        if not callable(gate):
+        if callable(gate):
+            try:
+                decision = gate(
+                    tenant_id=tenant_id,
+                    request_subject=request_subject,
+                    canonical_agent_entity_id=canonical_agent_entity_id,
+                    slot_id="risk_summary",
+                    capability="risk360.read",
+                )
+                if hasattr(decision, "__await__"):
+                    decision = await decision
+                return decision is True
+            except Exception:  # noqa: BLE001 - authorization failures deny by default
+                return False
+
+        if context.projectionId != self.projection_id or context.tenantId != tenant_id:
             return False
-        try:
-            decision = gate(
-                tenant_id=tenant_id,
-                request_subject=request_subject,
-                canonical_agent_entity_id=canonical_agent_entity_id,
-                slot_id="risk_summary",
-                capability="risk360.read",
-            )
-            if hasattr(decision, "__await__"):
-                decision = await decision
-            return decision is True
-        except Exception:  # noqa: BLE001 - authorization failures deny by default
-            return False
+        for authorization in context.experience360ReadAuthorizations:
+            if (
+                authorization.tenantId == tenant_id
+                and authorization.sourceSurfaceId == "agent360"
+                and authorization.sourceSubject == request_subject
+                and authorization.sourceSlotId == "risk_summary"
+                and authorization.consumerProjectionId == self.projection_id
+                and authorization.targetProjectionId == "risk360"
+                and authorization.capabilityKey == "risk360.read"
+                and authorization.policyState == "allowed"
+                and bool(authorization.policyIds)
+                and bool(authorization.policyEvaluatedAt)
+            ):
+                # canonical_agent_entity_id was resolved by this provider from
+                # the same tenant-scoped subject before this gate is reached.
+                return bool(canonical_agent_entity_id)
+        return False
 
     @staticmethod
     def _reason_for(name: str) -> str:

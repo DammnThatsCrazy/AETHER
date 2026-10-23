@@ -158,6 +158,26 @@ class ProjectionDependencyState(ProjectionContract):
     reason: Optional[str] = None
 
 
+class ProjectionReadAuthorization(ProjectionContract):
+    """Server-derived outer 360 decision authorizing one nested projection read.
+
+    This is an internal runtime envelope, not caller-supplied request data. It
+    binds the outer product slot's policy result to the exact tenant, subject,
+    consumer provider, target projection, and declared read capability.
+    """
+
+    tenantId: str
+    sourceSurfaceId: Experience360SurfaceId
+    sourceSubject: ProjectionSubject
+    sourceSlotId: str
+    consumerProjectionId: ProjectionId
+    targetProjectionId: ProjectionId
+    capabilityKey: str
+    policyState: Literal["allowed", "denied", "unknown", "redacted", "not_applicable"]
+    policyIds: list[str] = Field(default_factory=list)
+    policyEvaluatedAt: Optional[str] = None
+
+
 class ProjectionContext(ProjectionContract):
     """Build-time context the runtime computes for a projection request."""
 
@@ -167,6 +187,10 @@ class ProjectionContext(ProjectionContract):
     dependencyState: list[ProjectionDependencyState]
     asOf: Optional[str] = None
     warnings: list[str]
+    experience360ReadAuthorizations: list[ProjectionReadAuthorization] = Field(
+        default_factory=list,
+        description="Server-derived outer 360 read decisions scoped to this provider call.",
+    )
 
 
 class ProjectionSection(ProjectionContract):
@@ -776,6 +800,7 @@ __all__ = [
     "ProjectionContext",
     "ProjectionDegradation",
     "ProjectionDependencyState",
+    "ProjectionReadAuthorization",
     "ProjectionId",
     "ProjectionRegistryState",
     "ProjectionRequest",
