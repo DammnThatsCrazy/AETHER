@@ -25,11 +25,11 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:28c4ab588304a0ed165523d45f4c8840ddde750a27336c235c50a493f9898825"
+  "services/api/actions/": "sha256:e248893a00ec959cece229e46bd3850da69ccaf5bf6a53441417f0f2ba63df0e"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:8d3cf4489ee6a8ec59d84a8466f2f2e505b4715283de72970242997a43e3b2f6"
-  "services/api/governance/": "sha256:d8349fbd9ccbeb432133c7d509e952d660f5ae26e68ebc27cb6ca80d191e5286"
+  "services/api/governance/": "sha256:4deeed1e9d995ceec84770affc2dfb018f1acb191be3cbeb3b9f19eb9d537db9"
   "services/api/graph/": "sha256:c4a96fb8c0a9d00c7f87f6fb72fac95e589710253f059c71c36c279c49e658da"
   "services/api/identity/": "sha256:5fa73eaa767b2f8a34eb4eb12e226e6267b2659e8f87124707be9cffbb0515bc"
   "services/api/ingestion/": "sha256:9a84a8c185865fecbf450f8a10e7f83a023d7be79679638006f44435cfa96c42"
@@ -38,7 +38,7 @@ source_hashes:
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
   "services/api/value/": "sha256:1626191c92bea173b1bd586811d48941fa6bf7cf6c6946784d692eebaf3873c0"
-  "services/api/workers/": "sha256:62b80fbcf0fed7df62c169f9ec263635d26e65da656162f01f4fe70e65236ad4"
+  "services/api/workers/": "sha256:a11cd6bc5393aa14ebaa11cc37b3eb1180f0425f1eb072adb78daefff01324d1"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 

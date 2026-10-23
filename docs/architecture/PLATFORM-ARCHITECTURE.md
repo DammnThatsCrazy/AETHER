@@ -41,7 +41,7 @@ reviewed_source_commits:
 source_hashes:
   "packages/shared/": "sha256:a26bbaa0608773bc64a5e1ebb341fc0f5b51f5d42be342a16ee95ec654a3bba2"
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
-  "services/api/actions/agent/deployment_routes.py": "sha256:7594a7221a17d04c134a84f8b703b58f436732601615eba8ade9273c5645bc0a"
+  "services/api/actions/agent/deployment_routes.py": "sha256:67e92406e08a0975a3db184275056ad882405d818fe2d076f2a699544f7c7782"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
@@ -57,7 +57,7 @@ source_hashes:
   "services/api/main.py": "sha256:fa7455e5dd5a1e6b6b2ac25cc3ce6fc8a09d8bcf5b242b500feb0b797ab2d7b7"
   "services/api/middleware/middleware.py": "sha256:da6d7c92bd082a2c1823b72aca5d4bfa5c17faf0a3fb9e85fc7bd9a88a5b0654"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
-  "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
+  "services/api/workers/runtime/specs.py": "sha256:b86659249b2f805b3ba81631c57e71ca57be089de07278fedccbe25b576df64b"
 ---
 # Aether vNext — Architecture Guide
 

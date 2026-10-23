@@ -244,6 +244,11 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_export_expiry_sweep_coro()
 
+    def _journey_handoff_sweep() -> Coroutine[Any, Any, None]:
+        from journeys.handoff.sweep import build_journey_handoff_sweep_coro
+
+        return build_journey_handoff_sweep_coro()
+
     def _rights_deletion_executor() -> Coroutine[Any, Any, None]:
         """Execute the deletions the Rights Authority retention seam schedules.
 
@@ -600,6 +605,13 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
         WorkerSpec(
             name="export_expiry_sweep",
             factory=_export_expiry_sweep,
+        ),
+        # Retention for journey handoff rows (they hold anonymous IDs): hard
+        # deletes rows past their retention window. Runs even when the handoff
+        # flag is off so disabling the feature never strands data.
+        WorkerSpec(
+            name="journey_handoff_sweep",
+            factory=_journey_handoff_sweep,
         ),
         # Rights Authority retention DELETION EXECUTOR: the sweep that actually
         # deletes artifacts whose retention expiry has passed (before it, only

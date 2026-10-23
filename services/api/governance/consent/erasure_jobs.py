@@ -101,6 +101,12 @@ MOBILE_CONTINUATION_COMPONENT = "continuation_records"
 MOBILE_INSTALLATION_COMPONENT = "mobile_installations"
 MOBILE_CLIENT_SYNC_COMPONENT = "client_sync_records"
 
+# Cross-device journey handoff rows carry only anonymous IDs (source and
+# destination), no user_id, so they are located through the request's
+# ``anonymous_id``. A user-id-only request has nothing to look them up by; those
+# rows are bounded by the 90-day retention sweep (journey_handoff_sweep).
+JOURNEY_HANDOFF_COMPONENT = "journey_handoffs"
+
 # The operator (kyber) device-plane components (M8-E1). A data-subject erasure
 # that names an operator physically erases the device personal data: trusted
 # devices, WebAuthn credentials and device proof keys. The append-only
@@ -869,6 +875,42 @@ def register_consent_erasure_handler() -> None:
                     logger.warning(
                         "failed to mark analytics DSR component %s failed",
                         ANALYTICS_EVENTS_COMPONENT,
+                        exc_info=True,
+                    )
+
+            # ── Journey handoff rows (anonymous-ID keyed) ────────────────────
+            try:
+                from repositories.journey_handoff_repo import get_journey_handoff_repository
+
+                handoff_anonymous_id = str(payload.get("anonymous_id") or "")
+                erased_handoffs = (
+                    await get_journey_handoff_repository().delete_by_anonymous_id(
+                        ctx.tenant_id, handoff_anonymous_id
+                    )
+                    if handoff_anonymous_id else 0
+                )
+                await dsr_propagation_service.mark_step(
+                    propagation_request_id,
+                    JOURNEY_HANDOFF_COMPONENT,
+                    "completed",
+                    tenant_id=ctx.tenant_id,
+                    records_impacted=int(erased_handoffs),
+                    audit_event_id=ctx.job_id,
+                )
+            except Exception as exc:  # noqa: BLE001 — isolate this store
+                errors.append(f"{JOURNEY_HANDOFF_COMPONENT}: {exc}")
+                try:
+                    await dsr_propagation_service.mark_step(
+                        propagation_request_id,
+                        JOURNEY_HANDOFF_COMPONENT,
+                        "failed",
+                        tenant_id=ctx.tenant_id,
+                        audit_event_id=ctx.job_id,
+                    )
+                except Exception:  # noqa: BLE001 — never let marking abort
+                    logger.warning(
+                        "failed to mark DSR component %s failed",
+                        JOURNEY_HANDOFF_COMPONENT,
                         exc_info=True,
                     )
 

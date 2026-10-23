@@ -20,7 +20,7 @@ canonical_owner: security@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "services/api/actions/agent/deployment_routes.py": "sha256:7594a7221a17d04c134a84f8b703b58f436732601615eba8ade9273c5645bc0a"
+  "services/api/actions/agent/deployment_routes.py": "sha256:67e92406e08a0975a3db184275056ad882405d818fe2d076f2a699544f7c7782"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"

@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/graph-contract.ts": "sha256:662e10a7d4737ba53c673173105344ccf1720ac7e62497d36346734898575087"
-  "services/api/actions/agent/deployment_routes.py": "sha256:7594a7221a17d04c134a84f8b703b58f436732601615eba8ade9273c5645bc0a"
+  "services/api/actions/agent/deployment_routes.py": "sha256:67e92406e08a0975a3db184275056ad882405d818fe2d076f2a699544f7c7782"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"

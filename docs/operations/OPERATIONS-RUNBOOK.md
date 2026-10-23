@@ -37,7 +37,7 @@ estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "infra/legacy-staging/bootstrap.sh": "sha256:33e18270618ab4ff6af6836c173d2b116fdcf700230cf040cae5ab06cd4b1e3a"
-  "services/api/actions/agent/deployment_routes.py": "sha256:7594a7221a17d04c134a84f8b703b58f436732601615eba8ade9273c5645bc0a"
+  "services/api/actions/agent/deployment_routes.py": "sha256:67e92406e08a0975a3db184275056ad882405d818fe2d076f2a699544f7c7782"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
@@ -59,8 +59,8 @@ source_hashes:
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
   "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
-  "services/api/workers/runtime/roles.py": "sha256:061fee9712dee6e5354ba7bc8162eeb06a909e526e6ed45d1dee9a4afe9c63b2"
-  "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
+  "services/api/workers/runtime/roles.py": "sha256:177a03032ec77edbb35748aa4ca71521f8cc26e50c0ee9f6ecc0bcb9d864b9a8"
+  "services/api/workers/runtime/specs.py": "sha256:b86659249b2f805b3ba81631c57e71ca57be089de07278fedccbe25b576df64b"
 ---
 # Operations Runbook v0.1.0-alpha.0
 

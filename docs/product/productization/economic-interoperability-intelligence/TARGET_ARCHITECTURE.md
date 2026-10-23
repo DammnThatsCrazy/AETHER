@@ -9,7 +9,7 @@ since_version: 0.1.0
 source_files: [services/api/main.py, services/api/config/settings.py, services/api/actions/agent/deployment_routes.py, services/api/actions/agent_marketplace/catalog.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/graph_state_check.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py]
 canonical_owner: platform@aether
 source_hashes:
-  "services/api/actions/agent/deployment_routes.py": "sha256:7594a7221a17d04c134a84f8b703b58f436732601615eba8ade9273c5645bc0a"
+  "services/api/actions/agent/deployment_routes.py": "sha256:67e92406e08a0975a3db184275056ad882405d818fe2d076f2a699544f7c7782"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
