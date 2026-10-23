@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 source_hashes:
   "docs/operations/SECRETS-MANAGEMENT.md": "sha256:ccf7080c9c4c2c9ba95b7256339674e0fdb31e12ed0b8dfd6fc203209f677d7a"
-  "services/api/shared/certification/registry.py": "sha256:f0d9c01a6f3b2341afca6901db34c4361a444742eb9e403593f669a493a67abc"
+  "services/api/shared/certification/registry.py": "sha256:fd03f0130f4b54e5a0f061b01c15f02050027faa794aff7c4b96326630bdf620"
 ---
 
 # Credential & Secret Reference
@@ -55,6 +55,14 @@ LayerZero, Wormhole, Axelar, Chainlink CCIP, Hyperlane, IBC, deBridge require a
 `per_network_json_rpc` endpoint per chain they scan (no API credential). Some
 providers additionally consume a guardian/attestation API (e.g. Wormhole's
 signed-VAA endpoint) — see the provider adapter.
+
+### Prediction market (2) — payload-driven
+Polymarket and Kalshi currently need **no** credential in Aether: callers submit
+venue market payloads to `/v1/prediction-markets/observations` and Aether
+normalizes and stores them. There is no live polling, so no venue API key is read
+by this path (the older `POLYMARKET_API_KEY` / `KALSHI_API_KEY` env vars belong to
+the generic provider clients, not this domain). Live polling would add a
+read-only credential and is not implemented.
 
 ### Stablecoin chain (2) — RPC-driven
 The EVM and SVM observers require a `json_rpc` endpoint per observed chain. No
