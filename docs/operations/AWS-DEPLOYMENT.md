@@ -192,7 +192,17 @@ repository-secret write access with a disposable GitHub secret, then verifies
 that secret was removed. The preflight's `iam:SimulatePrincipalPolicy` call
 runs under `AetherStagingDeploy` and is covered by the application-delivery and
 apply-state-backend contracts; it is intentionally absent from the
-`AetherStagingLifecycle` policy. The checked-in
+`AetherStagingLifecycle` policy.
+
+`AetherStagingDeploy` is managed outside Terraform, so its trust policy is
+mirrored in `config/staging_application_delivery_trust_policy.json` and pinned
+by a unit test. The immutable build job in `deploy.yml` has no environment, so
+on a push to `staging` it presents the branch subject
+`repo:DammnThatsCrazy/AETHER:ref:refs/heads/staging`; the role must trust that
+subject (alongside `main`, `environment:staging` and
+`environment:staging-terraform`) or the build stops at "Configure AWS
+credentials" with `AssumeRoleWithWebIdentity` denied. Change the live role and
+the manifest together. The checked-in
 IAM manifests are validated against the workflow action inventory so adding a
 new lifecycle AWS call without its least-privilege grant fails CI before a
 rehearsal can start. AWS evaluates several lifecycle namespace/read APIs against

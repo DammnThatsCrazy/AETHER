@@ -23,7 +23,7 @@ ALLOWED_ROOT_FILES = frozenset(
      "ARCHITECTURE.md", "CHANGELOG.md", "CLAUDE.md", "CONTRIBUTING.md", "DEVELOPMENT.md",
      "LICENSE", "Makefile", "README.md", "RELEASES.md", "SECURITY.md", "VERSION",
      "amplify.yml", "eslint.config.mjs", "package-lock.json", "package.json",
-     "pnpm-lock.yaml", "pnpm-workspace.yaml", "pnpm.config.cjs", "pnpm.config.yaml",
+     "pnpm-lock.yaml", "pnpm-workspace.yaml",
      "pyproject.toml", "tsconfig.json", "vitest.config.fps.ts"}
 )
 
