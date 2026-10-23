@@ -15,7 +15,7 @@ reviewed_source_commits:
   - commit: "f63d631"
     reason: "Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required."
 source_hashes:
-  "services/api/intelligence/fraud_networks/": "sha256:5b5f524518b3d56744b81820e775aef0b8adfe7c72d89deb8face8daca5b48c5"
+  "services/api/intelligence/fraud_networks/": "sha256:304c0ee785afebf3a1d7a59596fc4b0e4d6f04446bfd20a985d87b7e405ab580"
   "services/api/repositories/repos.py": "sha256:d09d752ef63f4b6eb1c46fe1b1e3f8c00399f40d1a6e86fb15ebad9685459568"
 ---
 
@@ -177,6 +177,33 @@ presence 15%, amount 10% (log-scaled).
 | `detect_commerce_abuse` | `commerce_abuse` | orders + refunds by entity |
 
 All detectors are pure functions: no async, no I/O. They return `list[tuple[signal_name, entity_ids, detail_dict]]`.
+
+### Fleet hypotheses (agent swarms)
+
+`fleet_hypothesis.py` / `fleet_routes.py` answer "do these agents share a
+controlling operator?" for an orchestrator that spawned many sub-agents. They
+are separate from the eight detectors above and do not create a fraud network.
+
+- Evidence is graded `observed` (spawn tree, canonical principal delegation) or
+  `inferred` (spawn burst, shared MCP endpoint host, identical tool sequence,
+  overlapping wallet/account targets), each with source event references.
+- Without an observed principal, confidence is capped at 0.55. With a canonical
+  non-spawn delegation to the orchestrator it is capped at 0.90. A delegation
+  proves authority was granted, not intent; `principal_is_not_the_actor` is
+  always listed as a competing explanation.
+- Competing explanations are generated from the evidence (shared third-party
+  infrastructure, same vendor template, legitimate parallel workflow, no human
+  principal observed).
+- Status starts `unconfirmed` or `needs_review` (fleet of 5+, or any member with
+  a Risk360 signal, and confidence >= 0.35). Only `POST .../review` can set
+  `confirmed_by_reviewer` or `rejected_by_reviewer`; confirming needs an
+  observed principal and a written reason, and a rebuild never undoes a review.
+- Routes (under `FEATURE_FRAUD_NETWORKS`): `POST /v1/fraud/fleet-hypotheses/build`
+  (`fraud:evaluate`), `GET /v1/fraud/fleet-hypotheses[/{id}]` (`fraud:read`),
+  `POST /v1/fraud/fleet-hypotheses/{id}/review` (`fraud:evaluate`).
+- Not done: Risk360 projection of a hypothesis, and egress/IP evidence (Silver
+  agent facts carry no source address; MCP endpoint host is the only
+  infrastructure signal).
 
 ---
 

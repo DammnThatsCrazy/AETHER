@@ -225,7 +225,8 @@ def build_external_agent_run_mutations(
     action_evidence_fields = (
         "action_ref", "action_type", "trigger_ref", "trigger_type", "tool_name",
         "policy_id", "policy_decision", "delegation_id", "delegated_to_ref",
-        "outcome_ref",
+        "outcome_ref", "parent_agent_ref", "child_agent_ref", "root_agent_ref",
+        "parent_run_id",
     )
     action_fields = (*action_evidence_fields, "status", "principal_id")
     event_name = str(row.get("event_name") or "")
@@ -233,6 +234,7 @@ def build_external_agent_run_mutations(
         "agent_task_started", "agent_task_completed", "agent_task_failed",
         "agent_tool_invocation_observed", "agent_tool_called", "agent_tool_observed",
         "agent_policy_evaluated", "agent_delegated_task", "agent_outcome_recorded",
+        "agent_subagent_spawned",
     }
     if has_action_evidence:
         action_vertex_id = _tenant_scoped_graph_id(

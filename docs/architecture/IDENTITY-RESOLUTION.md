@@ -31,7 +31,7 @@ reviewed_source_commits:
     reason: "Reviewed the accepted-observation consent receipt correlation addition. The batch response and audit metadata now retain real receipt IDs; source namespace, canonical identity, and resolution decisions are unchanged."
 source_hashes:
   "packages/shared/identity.ts": "sha256:574974d03d8c4f8b99ad414c7b738b675cc293723f764e2ca3b76dc2ca40d8a2"
-  "services/api/actions/agent/deployment_routes.py": "sha256:f0cb4ff2fb6a2d504e740a8e7d18b16cd99716937beb310cc81d6a118cd69e5d"
+  "services/api/actions/agent/deployment_routes.py": "sha256:7594a7221a17d04c134a84f8b703b58f436732601615eba8ade9273c5645bc0a"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
@@ -541,6 +541,28 @@ aether.identify('user-123', {
 // When a user connects MetaMask on desktop AND Phantom on mobile,
 // the backend resolves both to the same identity cluster.
 ```
+
+## Cross-device journey handoff (mobile to web)
+
+The legacy stitcher infers a handoff from consecutive events that change
+session or device type; that is an inference and stays labelled as one. A
+server-owned path is available behind `JOURNEY_HANDOFF_ENABLED` (default off):
+
+1. The source device calls `POST /sdk/journey-handoff` with its journey, session
+   and anonymous ID. The server returns a single-use token (30-900 s TTL, default
+   600 s). Only its SHA-256 is stored (`journey_handoffs`).
+2. The destination calls `POST /sdk/journey-handoff/redeem`. Redemption is one
+   atomic conditional update bound to tenant and app namespace; expired,
+   already-used, wrong-scope and unknown tokens all return the same 404.
+3. A redemption yields a link with `link_basis: "explicit_handoff"` and
+   `identity_merge: "not_performed"`. It proves one party held both sessions at
+   that moment. It does not merge identities, assert a user ID, or select a
+   profile; resolution still decides that from its own evidence.
+
+Identity-link consent is required for the anonymous ID at both ends (fail
+closed). `GET /sdk/journey-handoff/journeys/{journey_id}` (`read`) lists the
+handoffs for a journey. Not done: SDK client methods (callers use the REST
+routes), and projection of the link into Profile360 or the graph.
 
 ## Agent Identity Resolution
 

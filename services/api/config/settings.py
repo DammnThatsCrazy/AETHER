@@ -2006,6 +2006,8 @@ class IdentityContinuityConfig:
     explainability_enabled: bool = _env_bool("IDENTITY_EXPLAINABILITY_ENABLED", False)
     activation_dashboard_enabled: bool = _env_bool("TENANT_IDENTITY_ACTIVATION_DASHBOARD_ENABLED", False)
     agent_resolution_enabled: bool = _env_bool("AGENT_IDENTITY_RESOLUTION_ENABLED", False)
+    # Server-issued cross-device journey handoff tokens (mobile -> web).
+    journey_handoff_enabled: bool = _env_bool("JOURNEY_HANDOFF_ENABLED", False)
 
 
 @dataclass(frozen=True)

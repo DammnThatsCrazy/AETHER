@@ -134,6 +134,12 @@ class AgentExecutionProjector(BaseProjector):
             # Every accepted event already has a stable source_event_id. Use it
             # as the source outcome reference when a producer omits outcomeId.
             outcome_ref = _source_reference(row.get("source_event_id"))
+        spawn_parent_ref = _source_reference(
+            p.get("parentAgentId") or p.get("parent_agent_id")
+        )
+        spawn_child_ref = _source_reference(
+            p.get("childAgentId") or p.get("child_agent_id")
+        )
         event_status = {
             "agent_task_started": "started",
             "agent_task_completed": "completed",
@@ -166,6 +172,17 @@ class AgentExecutionProjector(BaseProjector):
             "delegated_to_ref": _source_reference(
                 p.get("delegatedToAgentId") or p.get("delegated_to_agent_id")
                 or p.get("targetAgentId") or p.get("target_agent_id")
+                or (spawn_child_ref if event_name == "agent_subagent_spawned" else None)
+            ),
+            # Sub-agent spawn lineage. Source-reported references only; the
+            # lineage reader treats them as claims until deployments resolve.
+            "parent_agent_ref": spawn_parent_ref,
+            "child_agent_ref": spawn_child_ref,
+            "root_agent_ref": _source_reference(
+                p.get("rootAgentId") or p.get("root_agent_id")
+            ),
+            "parent_run_id": _source_reference(
+                p.get("parentRunId") or p.get("parent_run_id")
             ),
             # A delegation target is namespaced independently from the actor.
             # Authority resolution must not infer this from the actor provider.

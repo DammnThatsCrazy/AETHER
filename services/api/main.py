@@ -1001,6 +1001,9 @@ def create_app() -> FastAPI:
     app.include_router(events_router)
     app.include_router(user_agents_router)  # Profile 360: user/org-owned agents (always-on)
     app.include_router(sdk_router)          # SDK utilities: cross-device identity resolution
+    if settings.identity_continuity.journey_handoff_enabled:
+        from journeys.handoff.routes import router as journey_handoff_router
+        app.include_router(journey_handoff_router)  # SDK + tenant: /sdk/journey-handoff
     app.include_router(sdk_lifecycle_router)  # SDK lifecycle: heartbeat/identify/alias/reset/consent (SourceIdentityRegistry wired)
     # /v1/journeys is owned solely by the persisted measurement journey
     # authority (measurement_journeys_router, mounted below). The in-memory
@@ -1293,6 +1296,8 @@ def create_app() -> FastAPI:
     if fi.fraud_networks_enabled:
         from intelligence.fraud_networks.routes import router as fraud_networks_router
         app.include_router(fraud_networks_router)
+        from intelligence.fraud_networks.fleet_routes import router as fleet_hypothesis_router
+        app.include_router(fleet_hypothesis_router)
         logger.info("Fraud Network Intelligence: routes mounted (/v1/fraud/networks)")
     else:
         logger.info("Fraud Network Intelligence: disabled (set FEATURE_FRAUD_NETWORKS=true to enable)")
@@ -1484,8 +1489,9 @@ def create_app() -> FastAPI:
     # ── External Agent observations (no hosting or execution) ──
     telemetry_flags = settings.external_agent_telemetry
     if telemetry_flags.registry_enabled or telemetry_flags.marketplace_catalog_enabled:
-        from actions.agent.deployment_routes import deployments_router
+        from actions.agent.deployment_routes import deployments_router, lineage_router
         app.include_router(deployments_router)
+        app.include_router(lineage_router)
         logger.info(
             "External Agent Telemetry: deployment/catalog routes mounted "
             "(/v1/agent/deployments)"

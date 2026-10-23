@@ -377,6 +377,25 @@ Database health is probed via `SELECT 1` in `ResourceRegistry.health_check()`. E
 - `asyncpg` not installed in production → `RuntimeError` at startup
 - PostgreSQL unreachable in local → falls back to in-memory dicts
 
+## Agent lineage, handoff and fleet tables
+
+- `20261022_agent_spawn_lineage` adds `parent_agent_ref`, `child_agent_ref`,
+  `root_agent_ref`, `parent_run_id` and the MCP endpoint / object / trade columns
+  the projector already emitted (`server_url`, `server_name`, `object_type`,
+  `object_id`, `symbol`, `side`, `quantity`, `total_value`, `external_order_id`,
+  `account_kind`) to `silver_agent_execution_facts`. The generic Silver writer
+  drops row keys without a column, so those fields were not persisted before.
+  Silver stores the event type in `source_event_type`; there is no `event_name`
+  column.
+- `20261022_journey_handoffs` creates `journey_handoffs` (token hash only,
+  tenant/app/journey bound, single-use state), owned by
+  `repositories/journey_handoff_repo.py` with DDL parity tested.
+- `fleet_hypotheses` is a runtime-created `BaseRepository` table keyed
+  `{tenant}:fleet_hyp:{hash}`.
+
+These migrations are authored in the branch; this page does not claim they
+have been applied.
+
 ## Fraud Intelligence Repositories
 
 Six repositories were added to `repositories/repos.py` for the fraud intelligence subsystem. All follow `BaseRepository` and use the same in-memory / DynamoDB / Postgres dispatch:

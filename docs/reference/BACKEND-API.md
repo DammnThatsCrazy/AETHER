@@ -25,16 +25,16 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:8f8eba47bf0ac718973b60139881c6eb6d371e0fc43c155c392123cc24094d04"
+  "services/api/actions/": "sha256:28c4ab588304a0ed165523d45f4c8840ddde750a27336c235c50a493f9898825"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:8d3cf4489ee6a8ec59d84a8466f2f2e505b4715283de72970242997a43e3b2f6"
   "services/api/governance/": "sha256:d8349fbd9ccbeb432133c7d509e952d660f5ae26e68ebc27cb6ca80d191e5286"
   "services/api/graph/": "sha256:c4a96fb8c0a9d00c7f87f6fb72fac95e589710253f059c71c36c279c49e658da"
   "services/api/identity/": "sha256:5fa73eaa767b2f8a34eb4eb12e226e6267b2659e8f87124707be9cffbb0515bc"
-  "services/api/ingestion/": "sha256:d78406f2a61f3b192307cbbc280e2f7402f4366ad48818fe99921dd23705da8c"
-  "services/api/intelligence/": "sha256:c743fbecea5edbdf8cc56724801f25925552687b8cdb489adddaf536486246b3"
-  "services/api/journeys/": "sha256:bc5a7ba82a3a890c8bf91a75d2c18914e8dca88d9a16addb2338cc0b1b116830"
+  "services/api/ingestion/": "sha256:ef43161ed27c2cc518721542cee2798c55c1ffe9f4b0eae940cd43078d27b7a2"
+  "services/api/intelligence/": "sha256:0fcf635319447fcc0eb16ab21ba4de41613ade71ade0ef2c46d76566d2cfd688"
+  "services/api/journeys/": "sha256:8c1c79efce541c0077f0a9c62c23fc571e30924a262886f8ffb9d31fac342c84"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
   "services/api/value/": "sha256:d7962d1864c3ce6d643243b553c4fa6b3e99b3172c7339723d7859ed8fb01043"
@@ -3272,6 +3272,22 @@ Kyber operator routes require admin permission and an explicit tenant scope for 
 - `GET /v1/admin/kyber/agent-telemetry/graph-projection/state-check?tenant_id=...&limit=...` — bounded read-only check of known tenant deployment, Silver, delegation, and economic references against supported graph vertices/edges. Reports `consistent`, `inconsistent`, or `partial`, with missing/extra/mismatched/unresolved/unauthorized findings and truncation/coverage. It is `best_effort_non_snapshot`, does not mutate or drain the outbox, and does not certify all graph contents.
 
 Run-explanation evidence separates `delegation_resolution` (canonical record/party binding), `delegation_authorization` (event-time scope result), and `execution_occurrence`. Canonical grant data may support `within_scope`, `out_of_scope`, or `indeterminate`; action, resource, and event time are source-asserted. Target party binding uses source `delegatedToNamespace` (`delegated_to_namespace` in Silver); missing/invalid namespace remains unresolved and does not fall back to the actor namespace. Without a server-owned external execution receipt, occurrence remains `source_reported` and `verified=false`. A grant match is not proof the reported action occurred.
+
+### Agent spawn lineage
+
+- `GET /v1/agent/agents/{root_agent_ref}/lineage?max_depth=8` — `agent:manage`. Orchestrator to sub-agent tree from `agent_subagent_spawned` facts with run, tool-call and outcome rollups. Source-reported, tenant-scoped, bounded (`truncated` lists applied bounds); it never identifies a controlling person.
+
+### Journey handoff (flag `JOURNEY_HANDOFF_ENABLED`)
+
+- `POST /sdk/journey-handoff` — SDK key. Issues a single-use handoff token for a journey/session; requires identity-link consent for the anonymous ID.
+- `POST /sdk/journey-handoff/redeem` — SDK key. Redeems it from the destination session and returns an `explicit_handoff` link; never merges identities. Every failure returns the same 404.
+- `GET /sdk/journey-handoff/journeys/{journey_id}` — `read`. Handoffs recorded for one journey.
+
+### Fleet hypotheses (flag `FEATURE_FRAUD_NETWORKS`)
+
+- `POST /v1/fraud/fleet-hypotheses/build` — `fraud:evaluate`. Builds an evidence-graded common-operator hypothesis for an orchestrator.
+- `GET /v1/fraud/fleet-hypotheses` and `GET /v1/fraud/fleet-hypotheses/{id}` — `fraud:read`.
+- `POST /v1/fraud/fleet-hypotheses/{id}/review` — `fraud:evaluate`. Human `confirm`/`reject` with a reason; the only path to a confirmed status.
 
 ## Agentic Observability Layer
 
