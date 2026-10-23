@@ -25,7 +25,7 @@ file/symbol is missing. Keep both in sync when SDK behavior changes.
 | consent-gated enqueue (§2.6) | supported | partial | delegated | supported | supported | n/a |
 | batching → /v1/batch (§2.6) | supported | supported | delegated | supported | supported | n/a |
 | manifest fetch (§2.9) | supported | n/a | supported | supported | supported | n/a |
-| manifest signature verify (§2.9) | supported | n/a | delegated | supported | supported | n/a |
+| manifest signature verify (§2.9) | supported | n/a | partial | supported | supported | n/a |
 | batch health metrics (§2.8) | supported | supported | supported | supported | supported | supported (parse-only) |
 | retry / backoff (§2.6) | supported | supported | delegated | supported | supported | n/a |
 | offline queue (§2.6) | supported | partial | delegated | supported | supported | n/a |
@@ -35,12 +35,15 @@ file/symbol is missing. Keep both in sync when SDK behavior changes.
 - **server / consent-gating** — the server SDK tracks consent and forwards
   granted purposes to the backend as an ingestion hint; it does not drop events
   locally, so `BatchHealth.dropped_by_consent` is always `0`.
-- **server / offline queue** — a bounded in-process queue with exponential
-  backoff retry; there is no cross-restart disk persistence.
+- **server / offline queue** — by default a bounded in-process queue with
+  exponential backoff retry; `durable: true` or `spoolPath` selects the
+  disk-backed `DurableEventQueue`, which persists accepted events and replays
+  them at startup.
 - **react-native** — the JS bridge exposes `observe`, `queueDepth`, and
-  `onBatchResult`, but consent gating, batching, retry, offline persistence, and
-  manifest signature verification are enforced in the native iOS/Android modules
-  the bridge delegates to.
+  `onBatchResult`, but consent gating, batching, retry, and offline persistence are enforced in the
+  native iOS/Android modules the bridge delegates to. Native manifest signature
+  verification exists too, but the JS `fetchAndApplyManifest()` path applies a
+  fetched manifest without checking its `signature`, so this cell is `partial`.
 - **python** — an observation-envelope builder with no client-side emit
   pipeline; it can still parse the `/v1/batch` BatchResponse into a uniform
   `BatchHealth` via `parse_batch_health`.

@@ -38,9 +38,10 @@ stable release; it is not a production-readiness claim.
   meant to be enforced by the native iOS/Android SDKs it wraps
   (`delegated_native`). On Android the React Native package does not declare the
   native `com.aether.sdk` core as a dependency, so consumers must add it
-  themselves. Manifest signature verification is likewise claimed as native;
-  the JS `fetchAndApplyManifest()` path does not check the manifest `signature`,
-  so do not treat remote manifests as fail-closed on React Native.
+  themselves. Native manifest signature verification exists, but the JS
+  `fetchAndApplyManifest()` path does not check the manifest `signature`
+  (`partial` in `sdk-parity.json`), so do not treat remote manifests as
+  fail-closed on React Native.
 - The **server** SDK (`packages/sdk/server`) and the **Python** envelope builder
   (`packages/sdk/python`) are not columns here. By default the server SDK keeps a
   bounded in-process queue; setting `durable: true` or `spoolPath` selects the
@@ -52,4 +53,7 @@ stable release; it is not a production-readiness claim.
   per SDK in `packages/shared/sdk-parity.json`, which is canonical.
   `scripts/validate_sdk_parity.py` checks that each claimed cell's evidence
   file and symbol exist; it does not prove the behavior is enforced end to end.
-  The remaining rows are not machine-checked.
+  Other validators cover other things (for example
+  `scripts/validate_sdk_release_alignment.py` for versions and the publish
+  workflow, and `scripts/validate_sdk_distribution_artifacts.py` for the web and
+  React entry-point artifacts); the remaining rows here have no dedicated check.
