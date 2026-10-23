@@ -57,6 +57,7 @@ services:
   consent: {class: core, stage: control-plane, reason: "consent records, data subject requests and audit logs"}
   contact: {class: beta, stage: product, reason: "enterprise inquiry and lead capture endpoints"}
   continuation: {class: beta, stage: product, reason: "cross-device continuation plane"}
+  handoff: {class: experimental, stage: resolution, reason: "server-issued cross-device journey handoff tokens; default off (JOURNEY_HANDOFF_ENABLED)"}
   crossdomain: {class: experimental, stage: graph, reason: "cross-domain business, TradFi and web intelligence graph"}
   data_exchange: {class: core, stage: intake, reason: "governed tenant import and export control plane"}
   data_quality: {class: beta, stage: explanation, reason: "data quality and drift views"}
