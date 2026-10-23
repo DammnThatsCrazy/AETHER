@@ -74,6 +74,7 @@ DSRComponent = Literal[
     "bronze_events",
     "web3_observations",
     "x402_commerce",
+    "journey_handoffs",
 ]
 DSR_COMPONENTS: tuple[DSRComponent, ...] = (
     "identity_aliases",
@@ -111,6 +112,7 @@ DSR_COMPONENTS: tuple[DSRComponent, ...] = (
     "bronze_events",
     "web3_observations",
     "x402_commerce",
+    "journey_handoffs",
 )
 
 # ── Per-step status machine (prompt §3.11) ────────────────────────────────────

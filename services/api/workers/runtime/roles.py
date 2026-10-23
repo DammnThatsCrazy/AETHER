@@ -191,6 +191,9 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
             "job_worker",
             "job_lease_sweeper",
             "job_scheduler",
+            # Retention for journey handoff rows (anonymous IDs): one low-frequency
+            # periodic loop, so it rides maintenance.
+            "journey_handoff_sweep",
             # Kyber workforce directory reconciliation. A single periodic loop,
             # so it rides the existing maintenance role rather than justifying a
             # dedicated runtime role and the deploy-profile/compose/Terraform

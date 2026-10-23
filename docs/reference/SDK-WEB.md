@@ -11,7 +11,7 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "packages/sdk/web/src/index.ts": "sha256:7b69124d8a03c32d31cb5d2a7b2ae0b640635a01735f9f985b93589f70bae363"
+  "packages/sdk/web/src/index.ts": "sha256:1ea4b4df56cacf5fd355f5f6edca6dca9eeafac7b5ab4a2341abd7ca18bc152a"
   "packages/sdk/web/src/tracking/traffic-source-tracker.ts": "sha256:392b73c57579e4b890252cd4cb79b804108467e69e720f5906723d4a3f2cd2c9"
   "packages/shared/acquisition-evidence.ts": "sha256:deb3c17644361b9efae9580a03b6e77e7f153d6b5b59430a3495fa0064f77b7d"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
@@ -203,6 +203,29 @@ aether.init({
   },
 });
 ```
+
+### Continuing a journey from another device (handoff)
+
+A mobile app (or another web session) can hand its current journey to this page with a
+server-issued, single-use token. On the source device call `createJourneyHandoff()` and pass the
+token along as `?aether_handoff=<token>` (link, QR code or deep link). On the destination:
+
+```typescript
+// On a landing page: reads and removes ?aether_handoff=…, then redeems it.
+const link = await aether.redeemJourneyHandoffFromUrl();
+// or explicitly: await aether.redeemJourneyHandoff(token);
+
+if (link) {
+  // link.linkBasis === 'explicit_handoff', link.identityMerge === 'not_performed'
+  // The source journey continues here (journey_resumed carries the handoff id).
+}
+```
+
+`createJourneyHandoff({ ttlSeconds? })` resolves `{ token, handoffId, expiresAt }` or `null`;
+redeem resolves a `JourneyHandoffLink` or `null`. Both return `null` on every failure (no active
+journey, flag off, no identity-link consent at either end, unknown/expired/used token) and the
+server does not say which. A handoff proves the same party held both sessions; it never merges
+identities. Requires backend `JOURNEY_HANDOFF_ENABLED`.
 
 The same `ResolvedIdentity` shape is re-exported from the Aether SDK so
 React Native and the Web SDK can share types.

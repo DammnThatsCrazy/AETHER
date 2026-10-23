@@ -14,7 +14,7 @@ asserted equal by tests/unit/test_journey_handoff_ddl_parity.py.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from repositories.repos import get_pool
@@ -48,6 +48,9 @@ JOURNEY_HANDOFF_INDEXES = [
     "CREATE INDEX IF NOT EXISTS ix_journey_handoffs_expiry "
     "ON journey_handoffs (expires_at)",
 ]
+
+# Redeemed/expired rows are kept this long for the per-journey audit listing.
+RETAIN_DAYS = 90
 
 _MEM: dict[str, dict[str, Any]] = {}
 _MEM_LOCK: Optional[asyncio.Lock] = None
@@ -217,6 +220,71 @@ class JourneyHandoffRepository:
             tenant_id, journey_id, limit,
         )
         return [_public(dict(r)) for r in rows]
+
+    async def redeemed_for_sessions(
+        self, tenant_id: str, session_ids: list[str], limit: int = 500
+    ) -> list[dict[str, Any]]:
+        """Redeemed handoffs where either end is one of ``session_ids`` (tenant-scoped)."""
+        wanted = {s for s in session_ids if s}
+        if not wanted:
+            return []
+        pool = await self._backend()
+        if pool is None:
+            async with _mem_lock():
+                rows = [
+                    _public(r) for r in _MEM.values()
+                    if r["tenant_id"] == tenant_id and r["state"] == "redeemed"
+                    and (r["source_session_id"] in wanted or r.get("redeemed_session_id") in wanted)
+                ]
+            return rows[:limit]
+        rows = await pool.fetch(
+            "SELECT * FROM journey_handoffs WHERE tenant_id=$1 AND state='redeemed' AND "
+            "(source_session_id = ANY($2::text[]) OR redeemed_session_id = ANY($2::text[])) "
+            "LIMIT $3",
+            tenant_id, sorted(wanted), limit,
+        )
+        return [_public(dict(r)) for r in rows]
+
+    async def sweep_expired(self, retain_days: int = RETAIN_DAYS) -> int:
+        """Delete rows created more than ``retain_days`` ago (redeemed or not)."""
+        cutoff = utc_now() - timedelta(days=retain_days)
+        pool = await self._backend()
+        if pool is None:
+            async with _mem_lock():
+                stale = [k for k, r in _MEM.items() if r["created_at"] < cutoff]
+                for k in stale:
+                    del _MEM[k]
+                return len(stale)
+        return _rowcount(await pool.execute(
+            "DELETE FROM journey_handoffs WHERE created_at < $1", cutoff
+        ))
+
+    async def delete_by_anonymous_id(self, tenant_id: str, anonymous_id: str) -> int:
+        """DSR erasure hook: remove every handoff naming this anonymous ID at either end."""
+        pool = await self._backend()
+        if pool is None:
+            async with _mem_lock():
+                hit = [
+                    k for k, r in _MEM.items()
+                    if r["tenant_id"] == tenant_id and anonymous_id in (
+                        r["source_anonymous_id"], r.get("redeemed_anonymous_id"),
+                    )
+                ]
+                for k in hit:
+                    del _MEM[k]
+                return len(hit)
+        return _rowcount(await pool.execute(
+            "DELETE FROM journey_handoffs WHERE tenant_id=$1 AND "
+            "(source_anonymous_id=$2 OR redeemed_anonymous_id=$2)",
+            tenant_id, anonymous_id,
+        ))
+
+
+def _rowcount(result: Any) -> int:
+    try:
+        return int(str(result).split()[-1])
+    except (ValueError, IndexError):
+        return 0
 
 
 _repo: Optional[JourneyHandoffRepository] = None

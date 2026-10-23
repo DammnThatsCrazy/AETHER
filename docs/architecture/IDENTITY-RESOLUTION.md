@@ -31,7 +31,7 @@ reviewed_source_commits:
     reason: "Reviewed the accepted-observation consent receipt correlation addition. The batch response and audit metadata now retain real receipt IDs; source namespace, canonical identity, and resolution decisions are unchanged."
 source_hashes:
   "packages/shared/identity.ts": "sha256:574974d03d8c4f8b99ad414c7b738b675cc293723f764e2ca3b76dc2ca40d8a2"
-  "services/api/actions/agent/deployment_routes.py": "sha256:656cfa6ad330dc906667193afb23df0680a33fa0bf728ea08a51a5c14ddf3d2b"
+  "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
@@ -567,8 +567,20 @@ own). The routes are classified in `config/route_registry.yaml`, and a
 site-bound publishable key may call exactly the issue and redeem POSTs (the
 tenant read is not reachable with one). `GET /sdk/journey-handoff/journeys/{journey_id}`
 (`read`) lists the handoffs for a journey; a token past `expires_at` that was
-never redeemed is reported as `expired`. Not done: SDK client methods (callers use the REST
-routes), and projection of the link into Profile360 or the graph.
+never redeemed is reported as `expired`. Rows hold both anonymous IDs, so they are
+retained 90 days (`journey_handoff_sweep`, maintenance role, runs even when the flag is
+off) and erased by anonymous ID through the `journey_handoffs` DSR component. SDK client
+methods exist on web, React Native, iOS and Android (`createJourneyHandoff` /
+`redeemJourneyHandoff`).
+
+**Journey projection.** When the measurement compiler builds a journey it looks up
+redeemed handoffs for the sessions involved. A step whose previous and current
+session are exactly a redeemed (source, destination) pair gets
+`transition_evidence.link_basis = "explicit_handoff"` (with the `handoff_id` and
+`identity_merge: "not_performed"`); every other cross-device or platform-change hop
+is labelled `"inferred"`. `GET /v1/journeys/{id}/transitions` returns the counts as
+`link_basis`. The label appears the next time the journey is compiled; redeeming a
+handoff does not itself trigger a rebuild. A failed lookup leaves hops inferred.
 
 ## Agent Identity Resolution
 

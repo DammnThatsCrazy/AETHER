@@ -987,7 +987,10 @@ def _safe_observed_fact(
         "tenantId": _safe_text(row.get("tenant_id")),
         "sourceEventId": source_event_id,
         "occurredAt": _safe_text(row.get("occurred_at")),
-        "eventName": _safe_text(row.get("event_name") or row.get("event_type")),
+        # Postgres rows carry the type as ``source_event_type`` (no ``event_name`` column).
+        "eventName": _safe_text(
+            row.get("source_event_type") or row.get("event_name") or row.get("event_type")
+        ),
         "runId": _safe_text(row.get("run_id")),
         "actorAgentId": _safe_text(authorization.get("actor_entity_id")),
         "actorIdentityStatus": _safe_text(actor_resolution.get("actor_identity_status")),

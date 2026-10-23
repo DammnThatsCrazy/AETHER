@@ -68,6 +68,11 @@ canonical observations only. The backend stitches sessions, assigns/merges journ
 computes handoff confidence, and decides whether a journey is linked, ambiguous, active,
 abandoned, or completed.
 
+Cross-device continuation can also be explicit: `createJourneyHandoff` / `redeemJourneyHandoff`
+transport a server-issued, single-use token and nothing else. The backend verifies it
+(tenant, app, expiry, single use, consent on both ends) and records an `explicit_handoff`
+link; the SDK never decides who the person is and a handoff never merges identities.
+
 SDKs must not make identity truth decisions. Fingerprints are collected only where
 allowed by consent and are support signals, not sole proof. Cross-device linking is
 always tenant-scoped and requires valid consent plus stronger identity evidence when the

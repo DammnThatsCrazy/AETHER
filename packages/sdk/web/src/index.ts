@@ -12,7 +12,7 @@
 import type {
   AetherConfig, AetherSDKInterface, AetherPlugin,
   IdentityData, Identity, WalletInfo, TransactionOptions,
-  VMType, ConsentCallback, ConnectedWallet, ResolvedIdentity,
+  VMType, ConsentCallback, ConnectedWallet, ResolvedIdentity, JourneyHandoffToken, JourneyHandoffLink,
   ConsentState, ConsentPurpose, ConsentBannerConfig, WalletInterface, ConsentInterface,
   CommerceInterface, AgentInterface, X402Interface,
   CurrentJourney, JourneyLifecycleEventType, JourneyPayload,
@@ -285,6 +285,109 @@ class AetherSDK implements AetherSDKInterface {
     if (!this.currentJourney) return;
     this.updateJourney('continued', { stepId: properties?.stepId ?? stepIdOrName, stepName: properties?.stepName ?? stepIdOrName, ...properties });
     this.emitJourneyEvent('journey_continued', this.currentJourney);
+  }
+
+  /**
+   * Ask the backend for a single-use handoff token for the current journey so another
+   * device (for example the web app after a mobile session) can continue it. Returns
+   * null when there is no active journey/session or the server refuses (consent,
+   * flag off, unauthorised app). The token is shown once; hand it over out of band
+   * (link, QR code, deep link) as `aether_handoff=<token>`.
+   */
+  async createJourneyHandoff(opts?: { ttlSeconds?: number }): Promise<JourneyHandoffToken | null> {
+    if (!this.config || !this.identityManager || !this.currentJourney) return null;
+    const sessionId = this.sessionManager?.getSession()?.id;
+    if (!sessionId) return null;
+    const endpoint = this.config.endpoint ?? DEFAULT_ENDPOINT;
+    try {
+      const res = await fetch(`${endpoint}/sdk/journey-handoff`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': this.config.apiKey },
+        body: JSON.stringify({
+          journey_id: this.currentJourney.journeyId,
+          session_id: sessionId,
+          anonymous_id: this.identityManager.getAnonymousId(),
+          platform: 'web',
+          ...(opts?.ttlSeconds ? { ttl_seconds: opts.ttlSeconds } : {}),
+        }),
+      });
+      if (!res.ok) return null;
+      const body = await res.json() as { data?: { token?: string; handoff_id?: string; expires_at?: string } };
+      const d = body.data;
+      if (!d?.token || !d.handoff_id) return null;
+      return { token: d.token, handoffId: d.handoff_id, expiresAt: d.expires_at ?? '' };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Redeem a handoff token on this device. On success the source journey continues here
+   * (`journey_resumed` with `linkBasis: 'explicit_handoff'`) and the verified link is
+   * returned. Any failure (unknown, expired, already used, wrong app/tenant, no consent)
+   * returns null; the server deliberately does not say which.
+   */
+  async redeemJourneyHandoff(token: string): Promise<JourneyHandoffLink | null> {
+    if (!this.config || !this.identityManager || !token) return null;
+    const sessionId = this.sessionManager?.getSession()?.id;
+    if (!sessionId) return null;
+    const endpoint = this.config.endpoint ?? DEFAULT_ENDPOINT;
+    try {
+      const res = await fetch(`${endpoint}/sdk/journey-handoff/redeem`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': this.config.apiKey },
+        body: JSON.stringify({
+          token,
+          session_id: sessionId,
+          anonymous_id: this.identityManager.getAnonymousId(),
+          platform: 'web',
+        }),
+      });
+      if (!res.ok) return null;
+      const body = await res.json() as { data?: Record<string, any> };
+      const d = body.data;
+      if (!d || d.link_basis !== 'explicit_handoff' || !d.journey_id) return null;
+      const side = (x: Record<string, string> | undefined) => ({
+        sessionId: x?.session_id ?? '', anonymousId: x?.anonymous_id ?? '', platform: x?.platform ?? '',
+      });
+      const link: JourneyHandoffLink = {
+        handoffId: String(d.handoff_id ?? ''),
+        journeyId: String(d.journey_id),
+        linkBasis: 'explicit_handoff',
+        identityMerge: 'not_performed',
+        from: side(d.from),
+        to: side(d.to),
+        redeemedAt: String(d.redeemed_at ?? ''),
+      };
+      this.currentJourney = null;
+      this.resumeJourney('handoff', {
+        journeyId: link.journeyId,
+        handoffId: link.handoffId,
+        linkBasis: link.linkBasis,
+        handoffFromPlatform: link.from.platform,
+      });
+      return link;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Convenience for landing pages: if the URL carries `aether_handoff=<token>`, remove it
+   * from the address bar (so it is not copied or bookmarked) and redeem it.
+   */
+  async redeemJourneyHandoffFromUrl(): Promise<JourneyHandoffLink | null> {
+    if (typeof window === 'undefined') return null;
+    const url = new URL(window.location.href);
+    const token = url.searchParams.get('aether_handoff');
+    if (!token) return null;
+    url.searchParams.delete('aether_handoff');
+    try {
+      window.history.replaceState(window.history.state, '', url.toString());
+    } catch {
+      /* non-fatal: still redeem */
+    }
+    return this.redeemJourneyHandoff(token);
   }
 
   completeJourney(reason?: string, properties?: JourneyPayload): void {

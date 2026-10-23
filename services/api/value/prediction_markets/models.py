@@ -8,7 +8,7 @@ rejected) and provider references are preserved verbatim.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from typing import Optional
 
@@ -66,3 +66,53 @@ class MarketObservation:
             raise PredictionMarketValidationError("volume must not be a float")
         if self.execution_by_aether:
             raise PredictionMarketValidationError("Aether never executes market orders")
+
+
+def _dec_str(value: Optional[Decimal]) -> Optional[str]:
+    return None if value is None else format(value, "f")
+
+
+def _dec_from(value: object, name: str) -> Optional[Decimal]:
+    if value is None:
+        return None
+    try:
+        return Decimal(str(value))
+    except InvalidOperation as exc:
+        raise PredictionMarketValidationError(f"{name} is not a decimal: {value!r}") from exc
+
+
+def observation_to_payload(observation: MarketObservation) -> dict:
+    """JSON-safe, deterministic form of an observation (Decimals as strings)."""
+    return {
+        "schema_version": observation.schema_version,
+        "venue": observation.venue.value,
+        "market_ref": observation.market_ref,
+        "title": observation.title,
+        "status": observation.status.value,
+        "outcomes": [
+            {"label": quote.label, "price": _dec_str(quote.price)}
+            for quote in observation.outcomes
+        ],
+        "volume": _dec_str(observation.volume),
+        "closes_at": observation.closes_at,
+        "reported_resolution": observation.reported_resolution,
+        "execution_by_aether": observation.execution_by_aether,
+    }
+
+
+def observation_from_payload(payload: dict) -> MarketObservation:
+    return MarketObservation(
+        venue=MarketVenue(payload["venue"]),
+        market_ref=payload["market_ref"],
+        title=payload.get("title", ""),
+        status=MarketStatus(payload["status"]),
+        outcomes=tuple(
+            OutcomeQuote(item["label"], _dec_from(item.get("price"), "price"))
+            for item in payload.get("outcomes", [])
+        ),
+        volume=_dec_from(payload.get("volume"), "volume"),
+        closes_at=payload.get("closes_at"),
+        reported_resolution=payload.get("reported_resolution"),
+        schema_version=payload.get("schema_version", SCHEMA_VERSION),
+        execution_by_aether=bool(payload.get("execution_by_aether", False)),
+    )

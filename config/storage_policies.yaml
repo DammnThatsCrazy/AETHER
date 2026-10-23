@@ -1055,6 +1055,26 @@ policies:
     requires_consent_invalidation: false
     requires_permission_hash: false
 
+  # Prediction-market observations are tenant-submitted venue market data
+  # (quotes, volume, venue-reported resolution). They contain no personal data;
+  # rows are immutable and keyed by content hash.
+  - resource_type: prediction_market_observations
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
   - resource_type: overage_invoices
     authoritative_store: postgres
     metadata_store: postgres
@@ -8075,6 +8095,9 @@ policies:
   # Journey handoff tokens (repositories/journey_handoff_repo.py,
   # alembic 20261022_journey_handoffs). Short-lived, single-use rows that store
   # only the SHA-256 of a token plus session references — never a raw graph.
+  # Rows also hold source/destination anonymous IDs: retention is bounded by
+  # sweep_expired() (journey_handoff_sweep worker) and erasure by
+  # delete_by_anonymous_id() (DSR component journey_handoffs).
   - resource_type: journey_handoffs
     authoritative_store: postgres
     metadata_store: postgres
@@ -8083,11 +8106,11 @@ policies:
     format: row
     cache_ttl_seconds: 0
     materialization_mode: none
-    retention_class: standard
+    retention_class: short_lived
     delete_behavior: hard_delete
     legal_hold_supported: true
     allow_adaptive_materialization: false
     allow_object_externalization: false
     allow_historical_table_storage: true
-    requires_consent_invalidation: false
+    requires_consent_invalidation: true
     requires_permission_hash: false

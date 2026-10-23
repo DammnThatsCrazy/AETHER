@@ -9,10 +9,10 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 source_files: [services/api/governance/consent/erasure_jobs.py, services/api/governance/consent/erasure_planes.py, services/api/governance/dsr_propagation/models.py, services/api/value/x402/commerce_store.py, services/api/graph/web3/registries.py, services/api/shared/storage/lifecycle.py, scripts/release/check_dsr_coverage.py]
 source_hashes:
-  "scripts/release/check_dsr_coverage.py": "sha256:2cca7e381e2c76b5e47e178828a8522cbc0794ffb45cdaad304d01e20f9ae1b4"
-  "services/api/governance/consent/erasure_jobs.py": "sha256:fc3d6a55d104aea374737caf8f21965fa03a87afdb05c8a86120472365e4a959"
+  "scripts/release/check_dsr_coverage.py": "sha256:90d75c47faaf4be6fb66522597490c30a588af6b131f89747284047889c21260"
+  "services/api/governance/consent/erasure_jobs.py": "sha256:d325d7622fbdf0e5ceda1c08f77e5252e50641736c8599ca67e4d91969da4848"
   "services/api/governance/consent/erasure_planes.py": "sha256:d62cf1c9e9bbe0f7404790dd32011a025f3e340013653c0d9f401b5576d48ae6"
-  "services/api/governance/dsr_propagation/models.py": "sha256:c5afa46e9327a7d48ab0583836932ffb3e8f14ce3f420d7afe404ae5afe3450f"
+  "services/api/governance/dsr_propagation/models.py": "sha256:5152135c02f24854e6c6b1658792cb5478904694d54d678a3114b19f7292eaa9"
   "services/api/graph/web3/registries.py": "sha256:13f14a786f6da928db1526c5f01d553f21fd388805feb368c4f6c18493ebdffe"
   "services/api/shared/storage/lifecycle.py": "sha256:f5446beb697cab99031cf464d9dcdb95310ad83870036fe0e5f1baf09d16d712"
   "services/api/value/x402/commerce_store.py": "sha256:b8ad52e6ef1587e0b9439787c7d6cbc0e15c66ab05f2434e80890dae5ba44835"
@@ -85,6 +85,7 @@ every other plane succeeded in the same attempt; otherwise they are marked
 | `bronze_events` | `bronze_sdk_events` (+ externalized objects), `event_outbox` | chain-preserving tombstone + re-pack; payload redaction | rows affected |
 | `web3_observations` | `web3_observations` | exact subject-ref match in tenant-owned structured fields / payload; hard delete, legal hold respected | rows deleted |
 | `x402_commerce` | commerce challenges, approvals, policies, authorizations, receipts, settlements, entitlements, grants, fulfillments, budget policies | hard delete rows whose requester/subject/holder id equals a subject ref; per-resource legal holds respected | rows deleted by store |
+| `journey_handoffs` | cross-device journey handoff rows (source and destination anonymous IDs, token hash only) | hard delete rows where the request `anonymous_id` is either end; a user-id-only request locates nothing, so those rows are bounded by the 90-day `journey_handoff_sweep` | rows deleted by store |
 
 Matching in exports is exact-value (a short id never matches as a substring);
 an artifact that cannot be decoded is purged conservatively because it is a

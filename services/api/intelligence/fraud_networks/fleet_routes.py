@@ -41,6 +41,22 @@ def _require(request: Request, tenant_id: str, permission: str) -> None:
         raise ForbiddenError("tenantId does not match authenticated tenant")
 
 
+async def _project_to_fraud360(saved: dict) -> dict:
+    """Mirror the fleet hypothesis into Fraud360 (flag-gated, failure-isolated)."""
+    if not settings.risk_fraud_360.fraud360_enabled:
+        return {"status": "disabled"}
+    try:
+        from .fleet_fraud360 import project_fleet_hypothesis
+
+        return await project_fleet_hypothesis(saved)
+    except Exception as exc:  # noqa: BLE001 — never let the projection fail the write
+        logger.warning(
+            "fleet_hypothesis.fraud360_projection_failed",
+            extra={"tenant_id": saved.get("tenant_id"), "error_type": type(exc).__name__},
+        )
+        return {"status": "failed"}
+
+
 async def _risk_flagged(tenant_id: str, refs: list[str]) -> set[str]:
     """Agents with any Risk360 signal. Best effort: failures mean 'not flagged'."""
     flagged: set[str] = set()
@@ -138,7 +154,7 @@ async def build(body: BuildRequest, request: Request) -> dict:
         return {"data": {"status": "insufficient_fleet", "root_agent_ref": body.root_agent_ref}}
     saved = await _repo.save(hypothesis)
     metrics.increment("fleet_hypothesis_built_total", labels={"status": saved["status"]})
-    return {"data": saved}
+    return {"data": saved, "fraud360": await _project_to_fraud360(saved)}
 
 
 @router.get("", response_model=None)
@@ -172,4 +188,4 @@ async def review(hypothesis_id: str, body: ReviewRequest, request: Request) -> d
     if saved is None:
         raise NotFoundError("fleet hypothesis")
     metrics.increment("fleet_hypothesis_reviewed_total", labels={"decision": body.decision})
-    return {"data": saved}
+    return {"data": saved, "fraud360": await _project_to_fraud360(saved)}
