@@ -57,6 +57,9 @@ export function useReplay(count: number) {
 
 export type Replay = ReturnType<typeof useReplay>;
 
+/** Width (px) reserved on the left of the swimlane for lane labels. */
+export const SWIMLANE_LABEL_GUTTER = 92;
+
 function xPct(i: number, count: number): number {
   return count > 1 ? 4 + (i / (count - 1)) * 92 : 50;
 }
@@ -130,46 +133,49 @@ export function SwimlaneReplay({
             className="absolute inset-x-0 flex items-center px-3"
             style={{ top: li * laneH, height: laneH, borderTop: li ? '1px dashed var(--ae-edge-soft)' : undefined }}
           >
-            <span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>{l.label}</span>
+            <span className="truncate text-[11px]" style={{ color: 'var(--ae-mute)', maxWidth: SWIMLANE_LABEL_GUTTER - 16 }} data-lane-label={l.key}>{l.label}</span>
           </div>
         ))}
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
-          <polyline points={pts.join(' ')} fill="none" stroke="var(--ae-edge)" strokeWidth={1.4} vectorEffect="non-scaling-stroke" />
-          <polyline points={pts.slice(0, replay.index + 1).join(' ')} fill="none" stroke="var(--ae-blue)" strokeWidth={2.2} vectorEffect="non-scaling-stroke" />
-        </svg>
-        <span className="pointer-events-none absolute inset-y-0 w-px" style={{ left: `${head}%`, background: 'var(--ae-blue)', opacity: 0.5, transition: replay.playing ? 'left .05s linear' : 'left .3s cubic-bezier(.22,1,.36,1)' }} />
-        {steps.map((s, i) => {
-          const color = laneMeta(stepLane(s)).color;
-          const done = i <= replay.index;
-          return (
-            <button
-              key={s.step_id}
-              type="button"
-              title={stepLabel(s)}
-              aria-label={`Step ${i + 1}: ${stepLabel(s)}`}
-              onClick={() => replay.seek(i)}
-              className="ae-focus absolute -translate-x-1/2 -translate-y-1/2 rounded-full"
-              style={{
-                left: `${xPct(i, steps.length)}%`,
-                top: `${yPct(i)}%`,
-                width: i === replay.index ? 14 : 10,
-                height: i === replay.index ? 14 : 10,
-                background: done ? color : 'var(--ae-card)',
-                border: `2px solid ${color}`,
-                transition: 'width .2s, height .2s, background .2s',
-              }}
+        {/* Plot area starts after the lane-label gutter so labels never sit under the first node. */}
+        <div className="absolute inset-y-0 right-3" style={{ left: SWIMLANE_LABEL_GUTTER }} data-testid="swimlane-plot">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
+            <polyline points={pts.join(' ')} fill="none" stroke="var(--ae-edge)" strokeWidth={1.4} vectorEffect="non-scaling-stroke" />
+            <polyline points={pts.slice(0, replay.index + 1).join(' ')} fill="none" stroke="var(--ae-blue)" strokeWidth={2.2} vectorEffect="non-scaling-stroke" />
+          </svg>
+          <span className="pointer-events-none absolute inset-y-0 w-px" style={{ left: `${head}%`, background: 'var(--ae-blue)', opacity: 0.5, transition: replay.playing ? 'left .05s linear' : 'left .3s cubic-bezier(.22,1,.36,1)' }} />
+          {steps.map((s, i) => {
+            const color = laneMeta(stepLane(s)).color;
+            const done = i <= replay.index;
+            return (
+              <button
+                key={s.step_id}
+                type="button"
+                title={stepLabel(s)}
+                aria-label={`Step ${i + 1}: ${stepLabel(s)}`}
+                onClick={() => replay.seek(i)}
+                className="ae-focus absolute -translate-x-1/2 -translate-y-1/2 rounded-full"
+                style={{
+                  left: `${xPct(i, steps.length)}%`,
+                  top: `${yPct(i)}%`,
+                  width: i === replay.index ? 14 : 10,
+                  height: i === replay.index ? 14 : 10,
+                  background: done ? color : 'var(--ae-card)',
+                  border: `2px solid ${color}`,
+                  transition: 'width .2s, height .2s, background .2s',
+                }}
+              />
+            );
+          })}
+          {spawns.map(i => (
+            <span
+              key={`spawn-${i}`}
+              className="pointer-events-none absolute h-2 w-2 -translate-x-1/2 rotate-45"
+              style={{ left: `${xPct(i, steps.length)}%`, top: `calc(${yPct(i)}% - 16px)`, background: 'var(--ae-violet)' }}
+              title="Agent spawn point"
+              data-testid="spawn-point"
             />
-          );
-        })}
-        {spawns.map(i => (
-          <span
-            key={`spawn-${i}`}
-            className="pointer-events-none absolute h-2 w-2 -translate-x-1/2 rotate-45"
-            style={{ left: `${xPct(i, steps.length)}%`, top: `calc(${yPct(i)}% - 16px)`, background: 'var(--ae-violet)' }}
-            title="Agent spawn point"
-            data-testid="spawn-point"
-          />
-        ))}
+          ))}
+        </div>
       </div>
 
       {footer}

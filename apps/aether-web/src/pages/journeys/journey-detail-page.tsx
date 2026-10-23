@@ -126,12 +126,12 @@ function Overview({
         )}
       </Panel>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]" data-testid="journey-overview-grid">
         <Panel className="flex flex-col gap-2 px-4 py-4 sm:px-5">
           <Eyebrow>The journey, step by step</Eyebrow>
           <ol className="flex flex-col" data-testid="journey-chain">
             {steps.map((s, i) => (
-              <li key={s.step_id} className="grid gap-x-3" style={{ gridTemplateColumns: '14px 1fr' }}>
+              <li key={s.step_id} className="grid gap-x-3" style={{ gridTemplateColumns: '14px minmax(0,1fr)' }}>
                 <span className="flex flex-col items-center">
                   <span className="mt-1.5"><LaneDot step={s} size={10} /></span>
                   {i < steps.length - 1 && <span className="w-px flex-1" style={{ background: 'var(--ae-edge)' }} />}
@@ -153,7 +153,7 @@ function Overview({
           )}
         </Panel>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4">
           <Panel className="flex flex-col gap-2.5 px-4 py-4 sm:px-5">
             <Eyebrow>Who did the work</Eyebrow>
             <span className="flex h-2 overflow-hidden rounded-full" aria-hidden="true">
@@ -282,7 +282,7 @@ export function ParticipantsGrid({ steps, profileId, profileName }: { steps: rea
   const p = participants(steps);
   const count = (pred: (s: JourneyStep) => boolean) => steps.filter(pred).length;
   return (
-    <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }} data-testid="participants">
+    <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))' }} data-testid="participants">
       <ParticipantGroup
         title="Person"
         empty="No person is attached."
@@ -344,7 +344,7 @@ function Outcome({ journey, profileId }: { journey: ProfileJourney; profileId: s
   const attributionDown = journey.degraded.includes('attribution_credits');
   const converted = summary?.convertedAt ? Date.parse(summary.convertedAt) : NaN;
   return (
-    <div className="grid gap-4 lg:grid-cols-2" data-testid="journey-outcome">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2" data-testid="journey-outcome">
       <Panel className="flex flex-col gap-2 px-4 py-4 sm:px-5">
         <Eyebrow>Primary</Eyebrow>
         <span className="text-[20px] font-medium tracking-[-0.3px]">
@@ -453,7 +453,7 @@ export function JourneyDetailPage() {
       <div className="flex min-w-0 flex-col gap-4" data-testid="aether-journey-detail">
         <Crumb to="/journeys" section="Journeys" name={identity.name} />
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex min-w-0 max-w-full flex-col gap-1">
             <span className="flex flex-wrap items-center gap-2.5">
               <h1 className={`truncate text-[clamp(22px,3vw,28px)] font-medium tracking-[-0.5px] ${identity.nameIsId ? 'ae-mono' : ''}`}>{identity.name}</h1>
               {state && <TonePill tone={journeyStateTone(state)}>{humanizeToken(state)}</TonePill>}

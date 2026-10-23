@@ -157,7 +157,7 @@ export function EpisodeDetailPage() {
               <MetricTile label="Actor classes" value={actors} sub={visibleLanes(steps).filter(l => steps.some(s => stepLane(s) === l.key)).map(l => l.label).join(', ')} />
               <MetricTile label="Peak" value={Math.max(0, ...dens.bins)} sub={dens.binMs === 60_000 ? 'events in a minute' : `events per ${formatDuration(dens.binMs)}`} />
             </div>
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]" data-testid="episode-overview-grid">
               <Panel className="flex flex-col gap-3 px-4 py-4 sm:px-5">
                 <SwimlaneReplay
                   steps={steps}

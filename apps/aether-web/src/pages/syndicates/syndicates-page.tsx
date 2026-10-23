@@ -307,7 +307,17 @@ function SyndicateList() {
 const RANGES = [7, 30, 90] as const;
 type Range = typeof RANGES[number];
 
-function MembersOverTime({ members, range }: { readonly members: readonly SyndicateMember[]; readonly range: Range }) {
+/**
+ * Join curve over the members read. The member read is paged, so when it is
+ * partial the curve only covers those members: "now" comes from the group's
+ * own member count and the chart is labelled as covering the members read.
+ */
+function MembersOverTime({ members, range, memberCount }: {
+  readonly members: readonly SyndicateMember[];
+  readonly range: Range;
+  /** The group's reported member count (null when not reported). */
+  readonly memberCount: number | null;
+}) {
   const [hover, setHover] = useState<number | null>(null);
   const series = useMemo(() => {
     const joins = members.map(m => (m.joinedAt ? Date.parse(m.joinedAt) : NaN)).filter(t => !Number.isNaN(t)).sort((x, y) => x - y);
@@ -330,11 +340,22 @@ function MembersOverTime({ members, range }: { readonly members: readonly Syndic
   const y = (v: number) => 94 - ((v - min) / ((max - min) || 1)) * 80;
   const line = series.map((p, k) => `${k ? 'L' : 'M'}${((k / (series.length - 1)) * 100).toFixed(2)} ${y(p.v).toFixed(2)}`).join(' ');
   const h = hover !== null ? series[hover] : null;
+  const partial = memberCount !== null && members.length < memberCount;
+  const now = memberCount ?? series[series.length - 1]!.v;
   return (
     <>
       <span className="ae-mono text-[12px]" style={{ color: 'var(--ae-blue-ink)' }} data-testid="members-readout">
-        {h ? `${shortDate(h.t)} · ${count(h.v)} members` : `${count(series[series.length - 1]!.v)} members now`}
+        {h
+          ? partial
+            ? `${shortDate(h.t)} · ${count(h.v)} joins among the first ${count(members.length)} members read`
+            : `${shortDate(h.t)} · ${count(h.v)} members`
+          : `${count(now)} members now`}
       </span>
+      {partial && (
+        <span className="text-[12px]" style={{ color: 'var(--ae-mute)' }} data-testid="members-chart-scope">
+          Chart shows joins among the first {count(members.length)} members read, of {count(memberCount)}.
+        </span>
+      )}
       <div
         className="relative cursor-crosshair"
         style={{ height: 'clamp(130px, 20vw, 170px)' }}
@@ -480,7 +501,7 @@ function SyndicateDetail({ id }: { readonly id: string }) {
 
       <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(170px, 100%), 1fr))' }}>
         <MetricTile label="Members" value={count(s.memberCount)} sub="active now" />
-        <MetricTile label="Joined" value={members.data ? `+${count(joinedInRange)}` : '—'} sub={`last ${range} days`} tone="sage" />
+        <MetricTile label="Joined" value={members.data ? `+${count(joinedInRange)}` : '—'} sub={partial ? `last ${range} days · among first ${count(list.length)} read` : `last ${range} days`} tone="sage" />
         <MetricTile label="Average confidence" value={avgConfidence === null ? '—' : `${Math.round(avgConfidence * 100)}%`} sub={avgConfidence === null ? 'not reported' : 'membership confidence'} tone="blue" />
         <MetricTile label="Created" value={relative(s.createdAt) ?? '—'} sub={s.updatedAt ? `updated ${relative(s.updatedAt) ?? '—'}` : 'no update recorded'} />
       </div>
@@ -500,7 +521,7 @@ function SyndicateDetail({ id }: { readonly id: string }) {
                 onChange={v => setRange(Number(v) as Range)}
               />
             </span>
-            {list.length === 0 ? <span className="text-[13px]" style={{ color: 'var(--ae-mute)' }}>No active members yet.</span> : <MembersOverTime members={list} range={range} />}
+            {list.length === 0 ? <span className="text-[13px]" style={{ color: 'var(--ae-mute)' }}>No active members yet.</span> : <MembersOverTime members={list} range={range} memberCount={s.memberCount} />}
           </GlassSection>
 
           <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(300px, 100%), 1fr))' }}>
@@ -515,7 +536,7 @@ function SyndicateDetail({ id }: { readonly id: string }) {
               <div className="flex gap-2.5">
                 <span className="flex flex-1 flex-col rounded-[14px] px-3 py-2.5" style={{ background: 'var(--ae-sage-tint)' }}>
                   <span className="ae-mono text-[18px] font-medium" style={{ color: 'var(--ae-sage)' }}>+{count(joinedInRange)}</span>
-                  <span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>Joined</span>
+                  <span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>{partial ? `Joined · among first ${count(list.length)} read` : 'Joined'}</span>
                 </span>
                 <span className="flex flex-1 flex-col rounded-[14px] px-3 py-2.5" style={{ background: 'var(--ae-edge-soft)' }}>
                   <span className="ae-mono text-[18px] font-medium" style={{ color: 'var(--ae-mute)' }}>—</span>

@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useTheme, type Theme } from '@aether/ui';
 import { Bar, ChoiceChip, Eyebrow, InlineNotice, Panel, Spinner, TonePill, type Tone } from '@aether-app/components/ae-ui';
-import { OutcomeLedgerPanel } from '@aether-app/components/outcome-ledger-panel';
 import { useAuth } from '@aether-app/features/auth';
 import { useMeProfile, useUsage } from '@aether-app/features/account';
 import { useOrganizationProfile, useTenantTemporalDefaults } from '@aether-app/features/onboarding/use-workspace-setup';
@@ -268,8 +267,8 @@ export function BillingHub() {
       <SettingsBlock title="Manage">
         <LinkRow label="Plans, checkout and invoices" description="Change plan, open the billing portal and download invoices." to="/billing" />
         <LinkRow label="Usage & plan detail" description="Enabled modules, included versus current usage and value created." to="/usage-plan" />
+        <LinkRow label="Outcome ledger" description="Value, capture and loop health now live on the Value page." to="/value-review?tab=outcomes" />
       </SettingsBlock>
-      <OutcomeLedgerPanel />
     </>
   );
 }

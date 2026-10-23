@@ -14,8 +14,6 @@ const s = vi.hoisted(() => ({
   campaigns: { campaigns: [] as unknown[], total: 0 },
 }));
 
-vi.mock('@aether-app/components/outcome-ledger-panel', () => ({ OutcomeLedgerPanel: () => <div>OUTCOME LEDGER</div> }));
-vi.mock('@aether-app/components/decision-intelligence-panel', () => ({ DecisionIntelligencePanel: () => <div>DECISION INTELLIGENCE</div> }));
 vi.mock('@aether-app/features/auth', () => ({ useAuth: () => ({ user: { id: 't1', displayName: 'Owner' } }) }));
 vi.mock('@aether-app/features/activation/use-activation', () => ({ useActivationStatus: () => s.activation }));
 vi.mock('@aether-app/features/activation/use-tenant-readiness', () => ({ useTenantReadiness: () => s.readiness }));
@@ -90,7 +88,13 @@ describe('Home', () => {
       blocking: [],
       checks: [{ name: 'events_received', status: 'passed' }, { name: 'identity_resolution_verified', status: 'failed' }],
     });
-    s.campaigns = { campaigns: [{ id: 'c1', name: 'Spring Upgrade', status: 'active', platform: 'meta', impressions: 4200 }], total: 1 };
+    s.campaigns = {
+      campaigns: [
+        { id: 'c1', name: 'Spring Upgrade', status: 'active', platform: 'shopify', impressions: 4200 },
+        { id: 'c2', name: 'Winback', status: 'paused', platform: 'google_ads' },
+      ],
+      total: 2,
+    };
 
     renderHome();
     expect(screen.getByText('Your graph is building from live events')).toBeInTheDocument();
@@ -109,5 +113,24 @@ describe('Home', () => {
 
     expect(await screen.findByText('Spring Upgrade')).toBeInTheDocument();
     expect(document.querySelector('[data-stage="identity_resolution_verified"]')).toHaveAttribute('data-stage-status', 'failed');
+
+    // Campaign sources show the provider's name, never the raw platform token.
+    const table = screen.getByTestId('home-campaigns');
+    expect(within(table).getAllByText('Shopify').length).toBeGreaterThan(0);
+    expect(within(table).getByText('Google Ads')).toBeInTheDocument();
+    expect(within(table).queryByText('google_ads')).not.toBeInTheDocument();
+    expect(within(table).queryByText('shopify')).not.toBeInTheDocument();
+  });
+
+  it('no longer hosts the legacy outcome, decision or model-routing panels (they live on Value)', async () => {
+    vi.stubEnv('VITE_FEATURE_FLAGS', JSON.stringify({ enableModelHarness: true }));
+    renderHome();
+    await screen.findByText(/No campaigns yet/);
+    expect(screen.queryByText('Model routing preference')).not.toBeInTheDocument();
+    vi.unstubAllEnvs();
+    expect(screen.queryByText('Outcome Ledger')).not.toBeInTheDocument();
+    expect(screen.queryByText('Decision intelligence feed')).not.toBeInTheDocument();
+    expect(screen.queryByText('Playbooks')).not.toBeInTheDocument();
+    expect(document.querySelector('.ae-legacy')).toBeNull();
   });
 });

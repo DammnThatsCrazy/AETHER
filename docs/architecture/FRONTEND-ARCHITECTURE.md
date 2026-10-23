@@ -45,7 +45,7 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:c7319bf4b3e04410b5a6135427d8380e8c6a2658a54b08ca414cf01818f2a3e5"
+  "apps/aether-web/src/": "sha256:8510b00275386ab53f4f7dcc1786894e40d6156e8922ba6b5de6dfb814a8ab44"
   "apps/kyber-web/src/": "sha256:df447130af2090e329c0620134a1b1dee8caf8597ac360b30f6862e74f3e6781"
   "packages/ui/core/src/": "sha256:01c95e007bc50d0b7378c5cb5274fd5e5d60b51f9575e5c28bf8549ab9cefde1"
 ---
@@ -389,7 +389,11 @@ Home (`pages/home/home-page.tsx`) shows 24-hour event, people and session
 counts, imported campaigns, connection health with brand marks, the graph
 readiness stages, the event-type mix, and attention items derived from the
 activation record, failing syncs and failed readiness checks. Each section shows
-an explicit empty or unavailable state rather than illustrative data.
+an explicit empty or unavailable state rather than illustrative data. Campaign
+rows name the provider (the matched integration's display name) rather than its
+raw token. The outcome ledger, decision intelligence feed, playbooks and model
+routing panels are not on Home; they live in Value's "Loop and decisions"
+section.
 Explore (Graph) composes the shared context bar, time rail, and collapsed Noesis
 context strip around the existing server-backed graph canvas, loading/error/empty
 states, table/path modes, and inspector. Above the explorer, the design's
@@ -418,8 +422,11 @@ design elements without a backing read are omitted or empty-stated.
   graph relationships, and `?profile=<id>` opens with that profile expanded.
   **Profile 360** (`/users/:id`) has an identity hero and Overview, Timeline,
   Journeys, Agents, Network and Identity tabs (`?tab=`; legacy `relationships`
-  and `graph` map to Network), with every earlier signal tab kept under "More
-  signals". Both render their own `GlassPage` (frameless routes).
+  and `graph` map to Network), with every earlier signal tab kept in a "More"
+  menu beside the tabs (same `?tab=` values). The Network edge table resolves
+  the other end of both edge contracts (`from_/to_entity_id` and
+  `source_/target_entity_id`) and never lists the profile itself. Both render
+  their own `GlassPage` (frameless routes).
 - **Campaigns** (`/campaigns`, `/campaign-intelligence`) shows campaign cards,
   platform KPIs, and Active / Paused / Ended / All / Review / Attribution /
   Exploration views (`?view=`). **Campaign 360** (`/campaigns/:id`) keeps its
@@ -435,9 +442,16 @@ design elements without a backing read are omitted or empty-stated.
   Amounts are summed only within one currency (the one most events use);
   events in other currencies are counted, not added, and the page says so.
   Campaign and outcome-ledger reads that hit their limit are labelled partial.
-- **Agents** (`/agent-access`) is a read-only directory with an open-agent view
-  (Overview, Authority, Exposure, Lifecycle); the selected agent and view live
-  in the URL.
+  The Outcomes tab ends with a "Loop and decisions" section: the outcome ledger
+  (value variant), the decision intelligence feed with playbooks, and model
+  routing when that harness is enabled. Settings → Billing links here.
+- **Agents** (`/agent-access`) is a read-only directory: the list ends after
+  the agent network and the selected-agent card, as in the design. Tenant-wide
+  findings, inventory and authorizations open at
+  `?view=all&tab=findings|inventory|authorizations`, and an open-agent view
+  (Overview, Authority, Exposure, Lifecycle) opens per agent; the selected
+  agent and view live in the URL. Timestamps render as relative time or
+  formatted dates, never raw ISO strings.
 - **Settings** groups the existing `/settings/*` sections into the design's
   Workspace, Connections & Data, Members & Access, Billing & Usage, Security &
   Governance and Personal groups; groups without their own route open at

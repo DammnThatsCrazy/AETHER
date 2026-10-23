@@ -156,7 +156,9 @@ describe('SettingsPage', () => {
     renderAt('/settings?section=billing');
     expect(screen.getByText('Growth')).toBeInTheDocument();
     expect(screen.getByText('400 of 1,000')).toBeInTheDocument();
-    expect(screen.getByText('OUTCOME LEDGER')).toBeInTheDocument();
+    // The outcome ledger moved to Value; Billing links there instead of embedding it.
+    expect(screen.queryByText('OUTCOME LEDGER')).not.toBeInTheDocument();
+    expect(document.querySelector('[data-settings-link="/value-review?tab=outcomes"]')).not.toBeNull();
     await userEvent.click(document.querySelector('[data-settings-link="/billing"]') as HTMLElement);
     expect(screen.getByTestId('location')).toHaveTextContent('/billing');
   });

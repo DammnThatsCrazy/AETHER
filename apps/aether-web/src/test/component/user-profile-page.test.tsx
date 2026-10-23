@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { ThemeProvider, ToastProvider } from '@aether/ui';
 import { UserProfilePage } from '@aether-app/pages/user-profile';
-import { profileNetwork, profileIdentity, timelineEvents } from '@aether-app/pages/user-profile/profile-model';
+import { edgeCounterparty, graphNodeKinds, profileNetwork, profileIdentity, timelineEvents } from '@aether-app/pages/user-profile/profile-model';
 
 type Read = { data: unknown; isLoading: boolean; error: string | null; refetch: () => void };
 const settled = (data: unknown): Read => ({ data, isLoading: false, error: null, refetch: vi.fn() });
@@ -23,7 +23,7 @@ vi.mock('@aether-app/features/users/use-user-profile', () => {
   ];
   return Object.fromEntries(names.map(n => [n, () => s.reads[n] ?? { data: undefined, isLoading: false, error: null, refetch: () => undefined }]));
 });
-vi.mock('@aether-app/features/profile360', () => ({ ProfileExplorationPanel: () => null }));
+vi.mock('@aether-app/features/profile360', () => ({ ProfileExplorationPanel: () => <div>CANONICAL ENTITY PROJECTION</div> }));
 vi.mock('@aether-app/features/identity/Profile360IdentityPanel', () => ({ Profile360IdentityPanel: () => <div>IDENTITY PANEL</div> }));
 vi.mock('@aether-app/components/outcome-ledger-panel', () => ({ OutcomeLedgerPanel: () => <div>OUTCOME LEDGER</div> }));
 vi.mock('@aether-app/features/journey', () => ({
@@ -197,15 +197,103 @@ describe('Profile 360', () => {
     expect(screen.getByText('No journeys')).toBeInTheDocument();
   });
 
-  it('keeps every legacy signal reachable under More signals', async () => {
+  it('keeps every secondary signal reachable from the More menu with its ?tab= value', async () => {
     renderProfile();
-    for (const name of ['Sessions & Devices', 'Communications', 'Social', 'Web3 Wallets', 'Financials', 'Behavior', 'Attribution', 'Outcomes', 'DeFi', 'Funnel', 'Protocols', 'Insights']) {
-      expect(screen.getByRole('tab', { name })).toBeInTheDocument();
+    // Secondary signals are not an always-visible chip row any more.
+    expect(screen.queryByText('More signals')).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Outcomes' })).not.toBeInTheDocument();
+    const more = screen.getByTestId('profile-more-tabs');
+    expect(more).toHaveTextContent('More');
+    await userEvent.click(more);
+    const menu = screen.getByRole('menu', { name: 'More profile signals' });
+    const expected: Array<[string, string]> = [
+      ['Sessions & Devices', 'sessions'], ['Communications', 'communications'], ['Social', 'social'],
+      ['Web3 Wallets', 'wallets'], ['Financials', 'financials'], ['Behavior', 'behavioral'],
+      ['Attribution', 'attribution'], ['Outcomes', 'outcomes'], ['DeFi', 'defi'], ['Funnel', 'funnel'],
+      ['Protocols', 'protocols'], ['Insights', 'insights'],
+    ];
+    for (const [name, value] of expected) {
+      expect(within(menu).getByRole('menuitemradio', { name })).toHaveAttribute('data-tab', value);
     }
-    await userEvent.click(screen.getByRole('tab', { name: 'Outcomes' }));
+    await userEvent.click(within(menu).getByRole('menuitemradio', { name: 'Outcomes' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/users/u1?tab=outcomes');
     expect(screen.getByText('OUTCOME LEDGER')).toBeInTheDocument();
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    // The trigger names the open secondary section.
+    expect(screen.getByTestId('profile-more-tabs')).toHaveTextContent('Outcomes');
     await userEvent.click(screen.getByRole('tab', { name: 'Identity' }));
     expect(screen.getByText('IDENTITY PANEL')).toBeInTheDocument();
+  });
+
+  it('opens a secondary section directly from its ?tab= link', () => {
+    renderProfile('/users/u1?tab=wallets');
+    expect(screen.getByTestId('profile-more-tabs')).toHaveTextContent('Web3 Wallets');
+    expect(screen.getByRole('tabpanel', { name: 'Web3 Wallets' })).toBeInTheDocument();
+  });
+
+  it('closes the More menu on Escape', async () => {
+    renderProfile();
+    await userEvent.click(screen.getByTestId('profile-more-tabs'));
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it('no longer renders the legacy canonical entity projection on the overview', () => {
+    renderProfile();
+    expect(screen.getByTestId('profile-overview')).toBeInTheDocument();
+    expect(screen.queryByText('CANONICAL ENTITY PROJECTION')).not.toBeInTheDocument();
+  });
+
+  it('keeps the hero actions in their own right-aligned group beside the name block', () => {
+    renderProfile();
+    const actions = screen.getByTestId('profile-hero-actions');
+    expect(actions.className).toContain('ml-auto');
+    expect(actions.className).toContain('flex-none');
+    expect(within(actions).getByTestId('profile-view-journey')).toBeInTheDocument();
+    expect(within(actions).getByTestId('profile-open-graph')).toBeInTheDocument();
+    expect(within(actions).queryByTestId('profile-hero-pills')).toBeNull();
+  });
+
+  it('shows a plain unavailable message instead of raw schema-validation text', () => {
+    s.reads.useUserIntelligence = { data: null, isLoading: false, error: 'Response validation failed: Required, Required', refetch: vi.fn() };
+    renderProfile();
+    const card = screen.getByTestId('profile-scores');
+    expect(within(card).getByText('This read is unavailable right now.')).toBeInTheDocument();
+    expect(screen.queryByText(/Response validation failed/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Required, Required/)).not.toBeInTheDocument();
+  });
+
+  it('resolves the edge-table counterparty and kind for the /v1/entities graph contract', () => {
+    s.reads.useUserGraph = settled({
+      nodes: [
+        { entity_id: 'u1', kind: 'person' },
+        { entity_id: 'agent-1', kind: 'agent', actor_class: 'A' },
+        { entity_id: 'p-2', kind: 'person' },
+      ],
+      edges: [
+        { id: 'x1', source_entity_id: 'u1', target_entity_id: 'agent-1', edge_type: 'delegates_to', interaction_class: 'H2A', confidence: 0.9 },
+        { id: 'x2', source_entity_id: 'p-2', target_entity_id: 'u1', edge_type: 'household', interaction_class: 'H2H', confidence: 0.8 },
+      ],
+    });
+    renderProfile('/users/u1?tab=network');
+    const cps = screen.getAllByTestId('edge-counterparty').map(n => n.textContent);
+    expect(cps).toEqual(['agent-1', 'p-2']);
+    const rows = screen.getAllByTestId('edge-counterparty').map(n => n.closest('tr') as HTMLElement);
+    expect(within(rows[0]!).getByText('agent')).toBeInTheDocument();
+    expect(within(rows[0]!).getByText('delegates to')).toBeInTheDocument();
+    expect(within(rows[1]!).getByText('person')).toBeInTheDocument();
+    expect(within(rows[1]!).getByText('household')).toBeInTheDocument();
+    // The profile itself is the root, not a connected entity.
+    const connected = screen.getByTestId('profile-connected-entities');
+    expect(within(connected).queryByText('u1')).toBeNull();
+    expect(within(connected).getByText('agent-1')).toBeInTheDocument();
+  });
+
+  it('still resolves the counterparty for profile-graph (from_/to_) edges, including inbound ones', () => {
+    s.reads.useUserGraph = settled(GRAPH);
+    renderProfile('/users/u1?tab=network');
+    expect(screen.getAllByTestId('edge-counterparty').map(n => n.textContent)).toEqual(['agent-1', 'p-2', 'w-1']);
   });
 });
 
@@ -224,6 +312,16 @@ describe('profile-model', () => {
     expect(n.links.find(l => l.other === 'w-1')?.inferred).toBe(true);
     expect(n.byClass[0]).toEqual({ cls: 'H2A', count: 1 });
     expect(profileNetwork(undefined, 'u1')).toEqual({ nodes: [], links: [], byClass: [] });
+  });
+
+  it('resolves the other end of an edge for both graph contracts', () => {
+    const kinds = graphNodeKinds({ nodes: [{ entity_id: 'a', kind: 'agent' }, { id: 'b', type: 'wallet' }] });
+    expect(edgeCounterparty({ source_entity_id: 'r', target_entity_id: 'a' }, 'r', kinds)).toEqual({ id: 'a', kind: 'agent' });
+    expect(edgeCounterparty({ source_entity_id: 'b', target_entity_id: 'r' }, 'r', kinds)).toEqual({ id: 'b', kind: 'wallet' });
+    expect(edgeCounterparty({ from_entity_id: 'r', to_entity_id: 'z', to_kind: 'device' }, 'r')).toEqual({ id: 'z', kind: 'device' });
+    expect(edgeCounterparty({ from_entity_id: 'z', to_entity_id: 'r', from_kind: 'human' }, 'r')).toEqual({ id: 'z', kind: 'human' });
+    expect(edgeCounterparty({ source_entity_id: 'r', target_entity_id: 'r' }, 'r')).toEqual({ id: null, kind: null });
+    expect(profileNetwork({ edges: [{ id: 'e', source_entity_id: 'q', target_entity_id: 'r', edge_type: 'owns' }] }, 'r').links[0]).toMatchObject({ id: 'e', other: 'q', relation: 'owns' });
   });
 
   it('normalises timeline events newest first', () => {
