@@ -6,11 +6,11 @@ A release profile is only as ready as its weakest **required** capability. The d
 
 | Profile | Disposition | Required | Impl | Prod | Activation | Env evidence | Deps | Ownership |
 |---|---|--:|--:|--:|--:|--:|--:|--:|
-| Local development | BLOCKED_BY_CODE | 32 | 78.1% | n/a | 50% | 100% | 100% | 100% |
-| Staging | BLOCKED_BY_CODE | 24 | 95.8% | 95.8% | 62.5% | 0% | 100% | 100% |
+| Local development | BLOCKED_BY_CODE | 32 | 81.2% | n/a | 50% | 100% | 100% | 100% |
+| Staging | READY_TO_ACTIVATE | 24 | 100% | 100% | 62.5% | 0% | 100% | 100% |
 | Pilot | READY_TO_ACTIVATE | 3 | 100% | 100% | 33.3% | 0% | 100% | 100% |
-| Production | BLOCKED_BY_CODE | 23 | 43.5% | 95.7% | 65.2% | 0% | 100% | 100% |
-| Production (at scale) | BLOCKED_BY_CODE | 22 | 40.9% | 95.5% | 68.2% | 0% | 100% | 100% |
+| Production | BLOCKED_BY_CODE | 23 | 43.5% | 100% | 65.2% | 0% | 100% | 100% |
+| Production (at scale) | BLOCKED_BY_CODE | 22 | 40.9% | 100% | 68.2% | 0% | 100% | 100% |
 
 ## Local development (`local`) — BLOCKED_BY_CODE
 
@@ -42,7 +42,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - `scale-readiness`: TECHNICALLY_RELEASE_ELIGIBLE
 - `sdks`: TECHNICALLY_RELEASE_ELIGIBLE
 - `security-compliance`: TECHNICALLY_RELEASE_ELIGIBLE
-- `semantic-intelligence`: BLOCKED_BY_CODE
+- `semantic-intelligence`: TECHNICALLY_RELEASE_ELIGIBLE
 - `smart-contracts-rewards`: TECHNICALLY_RELEASE_ELIGIBLE
 - `stablecoin-intelligence`: BLOCKED_BY_CODE
 - `tenant-import-engine`: TECHNICALLY_RELEASE_ELIGIBLE
@@ -63,14 +63,11 @@ A release profile is only as ready as its weakest **required** capability. The d
 - payment-rail-observability: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - payment-rail-observability: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - payment-rail-observability: open repository work: complete repository-controlled verification + hardening
-- semantic-intelligence: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
-- semantic-intelligence: implementation state IMPLEMENTED is below the VERIFIED floor
-- semantic-intelligence: open repository work: complete runtime integration; complete repository-controlled verification
 - stablecoin-intelligence: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - stablecoin-intelligence: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - stablecoin-intelligence: open repository work: complete repository-controlled verification + hardening
 
-## Staging (`staging`) — BLOCKED_BY_CODE
+## Staging (`staging`) — READY_TO_ACTIVATE
 
 - `backend-api`: READY_TO_VALIDATE
 - `campaign-intelligence`: READY_TO_VALIDATE
@@ -94,7 +91,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - `scale-readiness`: READY_TO_ACTIVATE
 - `sdks`: READY_TO_VALIDATE
 - `security-compliance`: READY_TO_VALIDATE
-- `semantic-intelligence`: BLOCKED_BY_CODE
+- `semantic-intelligence`: READY_TO_ACTIVATE
 - `tenant-import-engine`: READY_TO_VALIDATE
 
 **Hard blockers:**
@@ -113,9 +110,6 @@ A release profile is only as ready as its weakest **required** capability. The d
 - payment-rail-observability: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - payment-rail-observability: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - payment-rail-observability: open repository work: complete repository-controlled verification + hardening
-- semantic-intelligence: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
-- semantic-intelligence: implementation state IMPLEMENTED is below the VERIFIED floor
-- semantic-intelligence: open repository work: complete runtime integration; complete repository-controlled verification
 - stablecoin-intelligence: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - stablecoin-intelligence: implementation state RUNTIME_INTEGRATED is below the VERIFIED floor
 - stablecoin-intelligence: open repository work: complete repository-controlled verification + hardening
@@ -175,9 +169,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - scale-readiness: implementation state VERIFIED is below the TURNKEY floor
 - sdks: implementation state VERIFIED is below the TURNKEY floor
 - security-compliance: implementation state VERIFIED is below the TURNKEY floor
-- semantic-intelligence: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
-- semantic-intelligence: implementation state IMPLEMENTED is below the TURNKEY floor
-- semantic-intelligence: open repository work: complete runtime integration; complete repository-controlled verification
+- semantic-intelligence: implementation state VERIFIED is below the TURNKEY floor
 - stablecoin-intelligence: implementation completion 80% (< 100% of in-scope repository controls (migration-derived))
 - stablecoin-intelligence: implementation state RUNTIME_INTEGRATED is below the TURNKEY floor
 - stablecoin-intelligence: open repository work: complete repository-controlled verification + hardening
@@ -241,9 +233,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - scale-readiness: implementation state VERIFIED is below the TURNKEY floor
 - sdks: implementation state VERIFIED is below the TURNKEY floor
 - security-compliance: implementation state VERIFIED is below the TURNKEY floor
-- semantic-intelligence: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
-- semantic-intelligence: implementation state IMPLEMENTED is below the TURNKEY floor
-- semantic-intelligence: open repository work: complete runtime integration; complete repository-controlled verification
+- semantic-intelligence: implementation state VERIFIED is below the TURNKEY floor
 - tenant-import-engine: implementation state VERIFIED is below the TURNKEY floor
 
 **External blockers:**
@@ -295,9 +285,7 @@ A release profile is only as ready as its weakest **required** capability. The d
 - scale-readiness: implementation state VERIFIED is below the TURNKEY floor
 - sdks: implementation state VERIFIED is below the TURNKEY floor
 - security-compliance: implementation state VERIFIED is below the TURNKEY floor
-- semantic-intelligence: implementation completion 60% (< 100% of in-scope repository controls (migration-derived))
-- semantic-intelligence: implementation state IMPLEMENTED is below the TURNKEY floor
-- semantic-intelligence: open repository work: complete runtime integration; complete repository-controlled verification
+- semantic-intelligence: implementation state VERIFIED is below the TURNKEY floor
 - tenant-import-engine: implementation state VERIFIED is below the TURNKEY floor
 
 **External blockers:**

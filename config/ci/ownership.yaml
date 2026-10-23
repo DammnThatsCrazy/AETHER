@@ -45,7 +45,7 @@ fanout:
 # per-subdirectory rules missed suites (agent-layer, contracts, journey-service).
 extra:
   - include: ["services/api/**"]
-    suites: [backend-identity, backend-ingestion, backend-campaigns, backend-profile360,
+    suites: [backend-identity, backend-semantic, backend-ingestion, backend-campaigns, backend-profile360,
              backend-agent, backend-computation, backend-value, backend-observability,
              agent-layer, contracts, journey-service, root-unit-control,
              root-unit-identity-profile, root-unit-ingestion, root-unit-graph,

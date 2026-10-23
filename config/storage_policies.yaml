@@ -3226,6 +3226,27 @@ policies:
     requires_consent_invalidation: true
     requires_permission_hash: false
 
+  # Append-only semantic memory records (20261021_semantic_memory_records). Subject-
+  # linked memory payloads: retention and consent revocation act on them
+  # (semantic_intelligence/retention.py and privacy.py) and erasure is a hard
+  # delete through the DSR erasure planes, so the policy states the same.
+  - resource_type: semantic_memory_records
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: true
+    requires_permission_hash: false
+
   - resource_type: silver_sentiment_observations
     authoritative_store: postgres
     metadata_store: postgres

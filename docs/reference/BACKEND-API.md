@@ -33,7 +33,7 @@ source_hashes:
   "services/api/graph/": "sha256:c4a96fb8c0a9d00c7f87f6fb72fac95e589710253f059c71c36c279c49e658da"
   "services/api/identity/": "sha256:5fa73eaa767b2f8a34eb4eb12e226e6267b2659e8f87124707be9cffbb0515bc"
   "services/api/ingestion/": "sha256:9a84a8c185865fecbf450f8a10e7f83a023d7be79679638006f44435cfa96c42"
-  "services/api/intelligence/": "sha256:4a15df4a8c40fa1b7b6eaa4bb59b740234c77be8efd65359dce8db4caa3a6f20"
+  "services/api/intelligence/": "sha256:d268f2e23a0f0b0451c2aa8734c8e8f6ebec4c485310fd789453752f68ad52dd"
   "services/api/journeys/": "sha256:4642ebb6ce077181b6ebde22aa32fe136d7965a2f387c200e3281b76a9b12ea9"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
@@ -3611,7 +3611,7 @@ server-controlled durable endpoint ids; tenant ownership is resolved from the
 
 ## Semantic-Sentiment Intelligence APIs
 
-The semantic-sentiment intelligence plane adds tenant-scoped APIs under `/v1/semantic` for observation creation, observation reads, entity state, entity sentiment, timelines, narrative listing, cascade status, and bounded reprocessing. Kyber operator APIs under `/v1/kyber/semantic` expose fleet health and review queues and require explicit operator scope.
+The semantic-sentiment intelligence plane adds tenant-scoped APIs under `/v1/semantic` for observation creation, observation reads, entity state, entity sentiment, timelines, narrative listing, cascade status, and bounded reprocessing. Kyber operator APIs under `/v1/kyber/semantic` expose fleet health and review queues and require explicit operator scope (the canonical Kyber operator gate, so a customer admin is refused); the route policy classifies by HTTP method, so the declared capability, disclosure and action class of `POST /v1/kyber/semantic/review-queue/{item_id}/resolve` are enforced at the boundary. Review-queue items raised from a source event are idempotent per tenant, queue, subject and event, so a redelivered event does not create a second operator work item. Tenant routes act as the authenticated tenant only: the `x-tenant-id` header is honored in local development alone, `read`/`write` permissions are checked, and a tenant that is not serving is refused.
 
 The APIs return real classified observations from the semantic-sentiment repository, include evidence/model/taxonomy metadata, enforce canonical `camp_*` campaign IDs, and preserve insufficient-data states instead of returning fake zero insights.
 

@@ -5459,30 +5459,23 @@
         "deferred": []
       },
       "repository_ceiling": {
-        "type": "CODE_COMPLETE",
+        "type": "VERIFIED",
         "achieved": true,
         "remaining_after_ceiling": [
           "Insert provider credentials into the credential platform; run credentials-preflight."
         ],
-        "remaining_is_repository_controlled": true
+        "remaining_is_repository_controlled": false
       },
       "implementation": {
-        "state": "IMPLEMENTED",
-        "completion_percent": 60.0,
+        "state": "VERIFIED",
+        "completion_percent": 100.0,
         "denominator": "in-scope repository controls (migration-derived)",
-        "remaining_work": [
-          "complete runtime integration",
-          "complete repository-controlled verification"
-        ]
+        "remaining_work": []
       },
       "productionization": {
-        "completion_percent": 25.0,
+        "completion_percent": 100.0,
         "denominator": "in-scope productionization controls (migration-derived)",
-        "remaining_work": [
-          "observability metrics logs",
-          "reliability idempotency retry",
-          "ci and release gates"
-        ]
+        "remaining_work": []
       },
       "activation": {
         "state": "CREDENTIAL_WAITING",
@@ -5562,42 +5555,36 @@
         "remaining_work": []
       },
       "confidence": {
-        "level": "LOW",
+        "level": "MODERATE",
         "reasons": [
-          "repository evidence: services/api/intelligence/semantic_intelligence/"
+          "repository evidence: services/api/intelligence/semantic_intelligence/",
+          "repository evidence: services/api/tests/semantic_intelligence/"
         ],
         "evidence_gaps": [
-          "credentialed environment execution not yet performed"
+          "credentialed environment execution not yet performed",
+          "provider credentials not yet inserted; credentials-preflight not yet run"
         ]
       },
       "release_profiles": {
         "local": {
           "participation": "required",
-          "disposition": "BLOCKED_BY_CODE",
-          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
           "implementation_floor": "VERIFIED",
           "environment_gate": "local",
           "environment_state": "VERIFIED",
-          "hard_blockers": [
-            "implementation state IMPLEMENTED is below the VERIFIED floor",
-            "implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
-            "open repository work: complete runtime integration; complete repository-controlled verification"
-          ],
+          "hard_blockers": [],
           "external_blockers": [],
           "warnings": []
         },
         "staging": {
           "participation": "required",
-          "disposition": "BLOCKED_BY_CODE",
-          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
           "implementation_floor": "VERIFIED",
           "environment_gate": "staging",
           "environment_state": "BLOCKED_EXTERNAL",
-          "hard_blockers": [
-            "implementation state IMPLEMENTED is below the VERIFIED floor",
-            "implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
-            "open repository work: complete runtime integration; complete repository-controlled verification"
-          ],
+          "hard_blockers": [],
           "external_blockers": [
             "CREDENTIAL_WAITING: Semantic Intelligence activation waits on an external credential condition. (owner: tenant / platform-ops)"
           ],
@@ -5611,9 +5598,7 @@
           "environment_gate": "pilot",
           "environment_state": "NOT_ATTEMPTED",
           "hard_blockers": [
-            "implementation state IMPLEMENTED is below the TURNKEY floor",
-            "implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
-            "open repository work: complete runtime integration; complete repository-controlled verification"
+            "implementation state VERIFIED is below the TURNKEY floor"
           ],
           "external_blockers": [
             "CREDENTIAL_WAITING: Semantic Intelligence activation waits on an external credential condition. (owner: tenant / platform-ops)"
@@ -5628,9 +5613,7 @@
           "environment_gate": "production",
           "environment_state": "NOT_ATTEMPTED",
           "hard_blockers": [
-            "implementation state IMPLEMENTED is below the TURNKEY floor",
-            "implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
-            "open repository work: complete runtime integration; complete repository-controlled verification"
+            "implementation state VERIFIED is below the TURNKEY floor"
           ],
           "external_blockers": [
             "CREDENTIAL_WAITING: Semantic Intelligence activation waits on an external credential condition. (owner: tenant / platform-ops)"
@@ -5645,9 +5628,7 @@
           "environment_gate": "scale",
           "environment_state": "NOT_ATTEMPTED",
           "hard_blockers": [
-            "implementation state IMPLEMENTED is below the TURNKEY floor",
-            "implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
-            "open repository work: complete runtime integration; complete repository-controlled verification"
+            "implementation state VERIFIED is below the TURNKEY floor"
           ],
           "external_blockers": [
             "CREDENTIAL_WAITING: Semantic Intelligence activation waits on an external credential condition. (owner: tenant / platform-ops)"

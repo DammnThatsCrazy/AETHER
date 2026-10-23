@@ -13,7 +13,7 @@ canonical_owner: platform-intelligence@aether
 estimated_read_minutes: 6
 source_hashes:
   "services/api/alembic/versions/20260702_semantic_sentiment.py": "sha256:2d092c70599288b4966360b916e2c2c20a1110829524e828a4126fd9ebd3e426"
-  "services/api/intelligence/semantic_intelligence/routes.py": "sha256:d9d17f23ae914259fb94e3e2748fbefc3baa193e7984616a34238abc1ecbf6e4"
+  "services/api/intelligence/semantic_intelligence/routes.py": "sha256:8d3c1abd53f007c95349cb6b551f3d376701d883a20be7a0afddaf73133386f7"
 ---
 
 # Semantic-Sentiment Operations Runbook
@@ -35,8 +35,9 @@ source_hashes:
 
 1. Disable semantic reads for the affected tenant using the feature flag system.
 2. Verify observation reads fail across tenant boundaries.
-3. Review audit records and evidence references.
-4. Rebuild derived state after invalidating contaminated cache or graph overlays.
+3. Expected access behavior: outside `Environment.LOCAL` an unauthenticated request is refused with 401 (it no longer falls back to a default tenant), a suspended tenant, organization, membership or credential is denied, and the operator endpoints (fleet health) require Kyber operator access.
+4. Review audit records and evidence references.
+5. Rebuild derived state after invalidating contaminated cache or graph overlays.
 
 ## Campaign mapping spike
 

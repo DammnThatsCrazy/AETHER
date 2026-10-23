@@ -17,7 +17,7 @@ source_hashes:
   "packages/shared/semantic-sentiment.ts": "sha256:85333759d1977c54a8655e634b30a1ee90a644c0a6fe357f1bfc6132a2b0cda0"
   "services/api/intelligence/semantic_intelligence/engine.py": "sha256:e900f05e6bf78a126f7de31165fe2289e5e20904fab2131c01c0d68830d26d6a"
   "services/api/intelligence/semantic_intelligence/models.py": "sha256:1b92bc04ddd1cd7e94ec09044012491c0bfcf11fcf7e8a738ad985cb5e4db28e"
-  "services/api/intelligence/semantic_intelligence/routes.py": "sha256:d9d17f23ae914259fb94e3e2748fbefc3baa193e7984616a34238abc1ecbf6e4"
+  "services/api/intelligence/semantic_intelligence/routes.py": "sha256:8d3c1abd53f007c95349cb6b551f3d376701d883a20be7a0afddaf73133386f7"
 ---
 
 # Semantic-Sentiment Intelligence Plane
@@ -72,7 +72,9 @@ disabled provider that abstains — never a silent keyword fallback):
 - Sentiment requires `target_subject_ref`.
 - Campaign associations require canonical `camp_*` IDs.
 - Every observation carries tenant scope, evidence, model ID, model version, taxonomy version, schema version, status, confidence, stable hash, and idempotency key.
-- Kyber operations require operator scope.
+- Every tenant route acts as the authenticated tenant. An `x-tenant-id` header or the `local_tenant` default is honored only in local development; elsewhere a request with no authenticated tenant is refused (401), so a caller can never choose whose data a request reads or writes.
+- Reads need the `read` permission and writes the `write` permission, and a tenant, organization, membership or credential that is not in the `active` state is refused (403). These checks run in the handlers as well as in the route policy.
+- Kyber operations require operator scope: the canonical Kyber operator gate (workforce session or the configured operator grant), not a tenant role. A customer admin is refused (403) and an unauthenticated caller gets 401.
 - Unsupported or empty content is represented as an abstention, not as fake zero insight.
 
 ## APIs
