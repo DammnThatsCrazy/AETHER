@@ -155,9 +155,9 @@
           "status": "not_applicable"
         },
         "react-native": {
-          "status": "delegated_native",
+          "status": "partial",
           "evidence": "packages/sdk/react-native/src/bridge.ts#capabilities.manifestSignatureVerification",
-          "note": "Enforced in the native iOS/Android AetherHealthAgent the bridge delegates to."
+          "note": "Native iOS/Android AetherHealthAgent verifies signatures, but the React Native JS fetchAndApplyManifest() path applies a fetched manifest without checking its signature."
         },
         "ios": {
           "status": "supported",
@@ -246,7 +246,7 @@
         "server": {
           "status": "partial",
           "evidence": "packages/sdk/server/src/queue.ts#EventQueue",
-          "note": "Bounded in-process queue with retry; no cross-restart disk persistence."
+          "note": "Bounded in-process queue with retry by default; durable: true or spoolPath selects the disk-backed DurableEventQueue (persists and replays at startup)."
         },
         "react-native": {
           "status": "delegated_native",
