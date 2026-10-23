@@ -45,7 +45,7 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:d14b3c2d2db8aaeb83e0ce0c73e5db4e416042c246c9ba06fc5d70943ebc5f73"
+  "apps/aether-web/src/": "sha256:e85ef8b35985bc665c5106e14ade4b0ab14483e5b540e0ca02c516f2969f3fcf"
   "apps/kyber-web/src/": "sha256:df447130af2090e329c0620134a1b1dee8caf8597ac360b30f6862e74f3e6781"
   "packages/ui/core/src/": "sha256:01c95e007bc50d0b7378c5cb5274fd5e5d60b51f9575e5c28bf8549ab9cefde1"
 ---
@@ -438,10 +438,12 @@ design elements without a backing read are omitted or empty-stated.
   anomaly lenses. These routes are frameless.
 - **Value** (`/value-review`) has Overview, Sources, Campaigns, Customers and
   Outcomes tabs over value-created events, the outcome ledger and campaign
-  overviews. A page-wide 7/30/90-day window (`?window=`) bounds the
-  value-created read (`start`/`end`) and the campaign overviews; Compare
-  previous (`?compare=1`) reads the prior window of equal length for the four
-  headline tiles. Agents value is empty-stated until value is attributed to agents.
+  overviews. A page-wide window of the last 7/30/90 local calendar days,
+  today included (`?window=`), bounds the value-created read (`start`/`end`)
+  and the campaign overviews, and the daily chart buckets by calendar day.
+  Compare previous (`?compare=1`) reads the prior window of equal length for
+  the four headline tiles; the money baseline is drawn only when the previous
+  period has priced events. Agents value is empty-stated until value is attributed to agents.
   Amounts are summed only within one currency (the one most events use);
   events in other currencies are counted, not added, and the page says so.
   Campaign and outcome-ledger reads that hit their limit are labelled partial.

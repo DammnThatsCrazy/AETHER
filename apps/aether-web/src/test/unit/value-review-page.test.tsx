@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { queryCache } from '@aether/ui';
 import { ValueReviewPage } from '@aether-app/pages/value-review';
-import { compareFigures, parseValueEvents, valueWindows, windowSeries } from '@aether-app/pages/value-review/value-model';
+import { compareFigures, parseValueEvents, rangeLabel, valueWindows, windowSeries } from '@aether-app/pages/value-review/value-model';
 import { initials } from '@aether-app/pages/value-review/value-tabs';
 
 const m = vi.hoisted(() => ({
@@ -277,7 +277,8 @@ describe('Aether Value page', () => {
     expect(Math.round((Date.parse(first.end) - Date.parse(first.start)) / 86_400_000)).toBe(30);
     const opts = { month: 'short', day: 'numeric' } as const;
     expect(screen.getByTestId('value-range')).toHaveTextContent(
-      `${new Date(first.start).toLocaleDateString('en-US', opts)} – ${new Date(first.end).toLocaleDateString('en-US', opts)}`,
+      // The range names the last calendar day in the window (end is exclusive local midnight).
+      `${new Date(first.start).toLocaleDateString('en-US', opts)} – ${new Date(Date.parse(first.end) - 1).toLocaleDateString('en-US', opts)}`,
     );
     expect(screen.getByTestId('value-window-30')).toHaveAttribute('aria-selected', 'true');
 
@@ -363,6 +364,16 @@ describe('Aether Value page', () => {
       expect(screen.queryByTestId('value-previous-series')).toBeNull();
     });
 
+    it('draws no money baseline when the previous period has no amounts', async () => {
+      answer(current, { items: [ev('p1', null, 40)], truncated: false });
+      renderPage('/value-review?compare=1');
+      expect(await within(await screen.findByTestId('value-tile-value')).findByText('No comparison: no amounts in the previous period')).toBeInTheDocument();
+      expect(screen.queryByTestId('value-previous-series')).toBeNull();
+      expect(screen.getByTestId('value-previous-note')).toHaveTextContent('no previous period: the previous period has no amounts');
+      // Counts still compare.
+      expect(within(screen.getByTestId('value-tile-events')).getByText('↑100% vs previous 30 days')).toBeInTheDocument();
+    });
+
     it('never compares money across currencies', async () => {
       answer(current, { items: [ev('p1', 1000, 40, 'EUR')], truncated: false });
       renderPage('/value-review?compare=1');
@@ -375,30 +386,33 @@ describe('Aether Value page', () => {
 });
 
 describe('Value window helpers', () => {
-  const anchor = new Date('2026-10-23T12:00:00Z');
+  // Local time, mid-afternoon: windows must still be whole local calendar days.
+  const anchor = new Date(2026, 9, 23, 15, 0);
 
-  it('builds the previous window back to back with the current one', () => {
+  it('builds whole calendar-day windows ending today, back to back', () => {
     const { current, previous } = valueWindows(7, anchor);
-    expect(current.end.toISOString()).toBe('2026-10-23T12:00:00.000Z');
-    expect(current.start.toISOString()).toBe('2026-10-16T12:00:00.000Z');
-    expect(previous.end.toISOString()).toBe(current.start.toISOString());
-    expect(previous.start.toISOString()).toBe('2026-10-09T12:00:00.000Z');
+    expect(current.end).toEqual(new Date(2026, 9, 24));
+    expect(current.start).toEqual(new Date(2026, 9, 17));
+    expect(previous.end).toEqual(current.start);
+    expect(previous.start).toEqual(new Date(2026, 9, 10));
+    expect(rangeLabel(current, anchor)).toBe('Oct 17 – Oct 23');
   });
 
-  it('buckets events by day from the window start and drops events outside it', () => {
+  it('buckets events by their local calendar day and drops events outside the window', () => {
     const { current } = valueWindows(7, anchor);
     const events = parseValueEvents({
       items: [
-        { value_event_id: 'a', value_amount: 10, occurred_at: '2026-10-16T13:00:00Z' },
-        { value_event_id: 'b', value_amount: 5, occurred_at: '2026-10-23T11:00:00Z' },
-        { value_event_id: 'c', value_amount: 99, occurred_at: '2026-10-23T12:00:00Z' },
-        { value_event_id: 'd', value_amount: 99, occurred_at: '2026-10-01T12:00:00Z' },
+        { value_event_id: 'a', value_amount: 10, occurred_at: new Date(2026, 9, 17, 0, 30).toISOString() },
+        // Earlier on the anchor's day than the anchor's time: still today's bucket.
+        { value_event_id: 'b', value_amount: 5, occurred_at: new Date(2026, 9, 23, 10, 0).toISOString() },
+        { value_event_id: 'c', value_amount: 99, occurred_at: new Date(2026, 9, 24, 0, 0).toISOString() },
+        { value_event_id: 'd', value_amount: 99, occurred_at: new Date(2026, 9, 16, 23, 59).toISOString() },
       ],
     });
     const series = windowSeries(events, current);
-    expect(series).toHaveLength(7);
-    expect(series[0]).toMatchObject({ total: 10, events: 1 });
-    expect(series[6]).toMatchObject({ total: 5, events: 1 });
+    expect(series.map(p => p.day)).toEqual(['2026-10-17', '2026-10-18', '2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23']);
+    expect(series[0]).toMatchObject({ day: '2026-10-17', total: 10, events: 1 });
+    expect(series[6]).toMatchObject({ day: '2026-10-23', total: 5, events: 1 });
     expect(series.reduce((a, p) => a + p.events, 0)).toBe(2);
   });
 

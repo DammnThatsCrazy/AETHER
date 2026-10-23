@@ -296,9 +296,14 @@ export function treemap(items: ReadonlyArray<{ key: string; value: number }>): T
 export const WINDOWS = [7, 30, 90] as const;
 export type WindowDays = (typeof WINDOWS)[number];
 
-const DAY_MS = 86_400_000;
+/** `date` moved by `n` local calendar days (DST-safe: keeps the wall-clock time). */
+function addDays(date: Date, n: number): Date {
+  const out = new Date(date.getTime());
+  out.setDate(out.getDate() + n);
+  return out;
+}
 
-/** A half-open period [start, end) of `days` days. */
+/** A half-open period [start, end) of `days` whole local calendar days. */
 export interface ValueWindow {
   readonly days: number;
   readonly start: Date;
@@ -306,37 +311,40 @@ export interface ValueWindow {
 }
 
 /**
- * The selected window ending at `anchor`, and the immediately preceding window
- * of equal length (its end is the current window's start, so no event is in both).
+ * The `days` local calendar days ending with the anchor's day (so today is
+ * included and every bucket is a real calendar day), and the immediately
+ * preceding window of equal length (its end is the current window's start, so
+ * no event is in both).
  */
 export function valueWindows(days: number, anchor: Date): { current: ValueWindow; previous: ValueWindow } {
-  const end = new Date(anchor.getTime());
-  const start = new Date(end.getTime() - days * DAY_MS);
-  return { current: { days, start, end }, previous: { days, start: new Date(start.getTime() - days * DAY_MS), end: start } };
+  const today = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
+  const end = addDays(today, 1);
+  const start = addDays(end, -days);
+  return { current: { days, start, end }, previous: { days, start: addDays(start, -days), end: start } };
 }
 
-/** "Sep 23 – Oct 23" (years added only when the window crosses one or is not this year). */
+/** "Sep 24 – Oct 23", first to last calendar day (years added only when the window crosses one or is not this year). */
 export function rangeLabel(window: ValueWindow, now: Date = new Date()): string {
-  const sameYear = window.start.getFullYear() === window.end.getFullYear() && window.end.getFullYear() === now.getFullYear();
+  const last = addDays(window.end, -1);
+  const sameYear = window.start.getFullYear() === last.getFullYear() && last.getFullYear() === now.getFullYear();
   const opts: Intl.DateTimeFormatOptions = sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' };
-  return `${window.start.toLocaleDateString('en-US', opts)} – ${window.end.toLocaleDateString('en-US', opts)}`;
+  return `${window.start.toLocaleDateString('en-US', opts)} – ${last.toLocaleDateString('en-US', opts)}`;
 }
 
 /**
- * One bucket per day of the window, counted from its start, so two windows of
+ * One bucket per local calendar day of the window, in order, so two windows of
  * equal length line up index by index. Events outside the window are ignored.
  */
 export function windowSeries(events: readonly ValueEvent[], window: ValueWindow): DayPoint[] {
-  const out = Array.from({ length: window.days }, (_, i) => {
-    const day = new Date(window.start.getTime() + i * DAY_MS);
-    return { day: dayKey(day), total: 0, events: 0 };
-  });
+  const out = Array.from({ length: window.days }, (_, i) => ({ day: dayKey(addDays(window.start, i)), total: 0, events: 0 }));
+  const index = new Map(out.map((point, i) => [point.day, i]));
   const from = window.start.getTime();
+  const to = window.end.getTime();
   for (const event of events) {
-    if (!event.occurredAt) continue;
-    const index = Math.floor((event.occurredAt.getTime() - from) / DAY_MS);
-    const bucket = out[index];
-    if (index < 0 || !bucket) continue;
+    const at = event.occurredAt?.getTime();
+    if (at === undefined || at < from || at >= to) continue;
+    const bucket = out[index.get(dayKey(event.occurredAt!)) ?? -1];
+    if (!bucket) continue;
     bucket.events += 1;
     bucket.total += event.amount ?? 0;
   }

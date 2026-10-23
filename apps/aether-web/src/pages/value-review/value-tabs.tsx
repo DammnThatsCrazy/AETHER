@@ -205,7 +205,11 @@ export function OverviewTab({
         .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))
     : [];
 
-  const chartCompare = prev.kind === 'ready' && !(anyAmount && currencyClash)
+  // A money baseline needs priced events in the previous period; missing amounts are never drawn as $0.
+  const prevUnpriced = prev.kind === 'ready' && anyAmount && !prev.read.events.some(e => e.amount !== null)
+    ? 'the previous period has no amounts'
+    : null;
+  const chartCompare = prev.kind === 'ready' && !(anyAmount && currencyClash) && !prevUnpriced
     ? prev.series.map(p => (anyAmount ? p.total : p.events))
     : null;
   const chartNote = prev.kind === 'off'
@@ -216,7 +220,9 @@ export function OverviewTab({
         ? `no previous period: ${prev.reason}`
         : anyAmount && currencyClash
           ? `no previous period: ${currencyClash}`
-          : null;
+          : prevUnpriced
+            ? `no previous period: ${prevUnpriced}`
+            : null;
 
   return (
     <div className="flex flex-col gap-[18px]" data-testid="value-overview">
