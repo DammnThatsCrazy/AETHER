@@ -35,7 +35,7 @@ source_hashes:
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
-  "services/api/identity/identity/": "sha256:e7c17369f765ef089f8270e243831a937994eb76494cc9413233219710819c0d"
+  "services/api/identity/identity/": "sha256:4ec9d07c5fed6301d02577307d8fac82846805aca1e9d2497dfc1f39a7ec4f1c"
   "services/api/identity/profile/aggregator.py": "sha256:228b48e5b06d6f4355c1d5fda2363ef5e3265570e750863bd7fd98941a41109f"
   "services/api/identity/profile/composer.py": "sha256:aae09f67a164f0e2b940676e52841ff325f36650ac4b1c022cc2a60a31505c20"
   "services/api/ingestion/ingestion/batch.py": "sha256:c1fddf5e0e2d31384b586ef0f4e73429f397c9351d35e8d6a12fdedd94896955"
@@ -112,10 +112,14 @@ inventory: inventory completeness and freshness remain unknown until dedicated
 device/session authorities are joined.
 
 The current `identifier_inventory`, `namespace_map`, and `aliases` paths also
-require record-level evidence before returning a row. Namespace entries remain
-partial because the provider does not yet join the canonical provider registry;
-missing or conflicting identity rows remain unknown or degraded, not evidence
-that an identifier or alias does not exist.
+require record-level evidence before returning a row. For `namespace_map`, the
+provider takes the exact `source_system_id` already stored on a tenant- and
+evidence-validated source identity and looks up that exact key in the loaded
+provider runtime registry. It does not infer a provider from a namespace
+prefix or connection. Returned provider metadata is allowlisted; missing keys
+remain unknown, and the slot stays partial because the provider registry has
+no freshness watermark. Missing or conflicting identity rows remain unknown
+or degraded, not evidence that an identifier or alias does not exist.
 
 The batch backend stamps `context.identity_namespace` from the authenticated
 site binding. The SDK cannot select its own namespace. This lets profile and

@@ -74,7 +74,7 @@ source_hashes:
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
   "services/api/intelligence/risk360/provider.py": "sha256:eba14f9c045f33546133544c86ba27f074b7970ee47a332a58a0da25c3a9732d"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:ae6270805d51dccdca157dfe64320fb2c999b361d153628550bf48e202e8a206"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:5a338c0e96e8af181e6e0cdbab061c7ded7333535bec55706cd8908de20bcbc9"
   "services/api/journeys/communication360/provider.py": "sha256:916e154d60723d687221bc2e0183d5aee672ed9b62db755c5d4cc7c939dd0fe6"
   "services/api/main.py": "sha256:fa7455e5dd5a1e6b6b2ac25cc3ce6fc8a09d8bcf5b242b500feb0b797ab2d7b7"
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
@@ -684,7 +684,9 @@ present, and non-agent, historical, and complete-coverage behavior remains
 unknown. `anomaly_events` stays unbound because no exact subject-scoped anomaly
 event authority with evidence is available.
 Additional partial paths include Identity360 device/session identifier-type
-metadata, Execution360 exact execution-linked RiskSignals, Social360
+metadata and an exact recorded `source_system_id` join to the provider runtime
+registry; provider-registry freshness is unknown. Other partial paths include
+Execution360's exact execution-linked RiskSignals, Social360's
 propagation-eligible observed paths, and Episode360 exact episode-linked
 communication facts. These paths remain partial where membership, anomaly,
 stage, normalization, device/session inventory, risk-signal
@@ -825,6 +827,18 @@ run-linked AgentExecution `triggered_by_event_id` values. The stored reference
 does not prove that an event caused the workflow run or establish complete
 trigger coverage. Both are partial projection paths; the 18-surface contract
 remains incomplete.
+
+The latest provider wave binds Identity360 `namespace_map` to an exact
+`source_system_id` lookup in the already loaded provider runtime registry,
+with allowlisted metadata and unknown registry freshness. Signals360
+`campaign_links` follows exact tenant/source-event touchpoints and resolves
+each campaign through its same-tenant canonical repository. Episode360
+`conversion_events` resolves only exact outcome IDs recorded by episode rows
+and emits registered conversion definitions with canonical evidence.
+Workflow360 `outcomes` follows outcome IDs explicitly referenced by exact
+tenant/run AI invocation facts; the link records association only. Missing
+policy, complete coverage, causal attribution, or source watermarks remain
+unknown, and all four product slots remain partial.
 
 Exploration surfaces compose over the engine through projection-backed surface adapters
 

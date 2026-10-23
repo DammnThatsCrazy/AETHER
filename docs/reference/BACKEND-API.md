@@ -2077,11 +2077,12 @@ place labels, and source-clock timezone values are not used to infer one.
 
 The current 2026-10-23 provider wave adds partial Identity360
 `identifier_inventory`, `namespace_map`, and `aliases` rows with record-level
-evidence. Namespace entries remain partial because the canonical provider
-registry is not joined. Social360's `syndicates` slot now binds explicitly
-opted-in membership to an exact tenant entity and current `MEMBER_OF` graph
-mutation ledger edge; roster completeness, historical membership, and freshness
-remain unknown. Value360's `attribution_credits` slot now rejoins each credit's
+evidence. `namespace_map` resolves only the exact recorded `source_system_id`
+against the loaded provider runtime registry, returning allowlisted metadata;
+registry freshness remains unknown. Social360's `syndicates` slot now binds
+explicitly opted-in membership to an exact tenant entity and current
+`MEMBER_OF` graph mutation ledger edge; roster completeness, historical
+membership, and freshness remain unknown. Value360's `attribution_credits` slot now rejoins each credit's
 conversion and touchpoint IDs to tenant-scoped canonical records and checks
 campaign consistency. Historical attribution remains unavailable, touchpoint
 lookups are capped, and the underlying credit query remains unbounded.
@@ -2131,6 +2132,18 @@ also accepts `workflow_run` subjects for exact tenant-scoped AgentExecution
 references whose stored invocation IDs match AI facts with the same run,
 action, and agent. It does not prove workflow-wide step coverage or completion,
 and source telemetry remains unlinked without a canonical run crosswalk.
+
+The latest provider slice adds four partial joins and no HTTP routes.
+Signals360 `campaign_links` exposes an event/observation link only after an
+exact tenant/source-event campaign touchpoint resolves to a canonical campaign
+for the same tenant. Episode360 `conversion_events` follows exact outcome IDs
+stored on tenant episode records and admits only registered conversion
+definitions with canonical evidence. Workflow360 `outcomes` follows exact
+outcome IDs from tenant/run AI invocation facts through the canonical outcome
+store and describes reference association without claiming workflow causality.
+Identity360 `namespace_map` resolves only the exact recorded `source_system_id`
+to allowlisted provider runtime metadata. Each remains partial: incomplete
+source coverage, policy, freshness, or historical behavior stays unknown.
 
 ### Support case lifecycle evidence ingress
 

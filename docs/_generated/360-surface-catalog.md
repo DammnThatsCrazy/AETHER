@@ -34,19 +34,19 @@ Declared binding counts are registry coverage, not proof that a slot or surface 
 | [Campaign 360](#campaign-360) | source_aligned | `campaign` | 11 | 10/11 | 3 | 1 | 0 | `campaign360`, `communication360`, `economic360`, `outcome360` | — |
 | [Commerce 360](#commerce-360) | source_aligned | `entity`, `campaign`, `journey`, `commerce`, `product`, `offer`, `sku`, `checkout` | 11 | 7/11 | 3 | 4 | 0 | `commerce360` | — |
 | [Communications 360](#communications-360) | source_aligned | `message`, `thread`, `profile`, `campaign`, `episode`, `agent`, `journey`, `source` | 11 | 11/11 | 4 | 0 | 0 | `communication360` | — |
-| [Episode 360](#episode-360) | source_aligned | `episode`, `session`, `conversation`, `activity_window`, `entity`, `campaign` | 11 | 6/11 | 2 | 5 | 1 | `communication360`, `campaign360`, `episode360`, `profile360`, `relationship360` | — |
+| [Episode 360](#episode-360) | source_aligned | `episode`, `session`, `conversation`, `activity_window`, `entity`, `campaign` | 11 | 7/11 | 3 | 4 | 1 | `communication360`, `campaign360`, `episode360`, `profile360`, `relationship360` | — |
 | [Execution 360](#execution-360) | source_aligned | `agent`, `entity`, `episode`, `execution`, `workflow_run` | 11 | 11/11 | 6 | 0 | 0 | `execution360` | — |
-| [Identity 360](#identity-360) | source_aligned | `entity`, `agent`, `source` | 10 | 10/10 | 1 | 0 | 3 | `agent360`, `execution360`, `profile360`, `relationship360` | `Identity360Provider` (runtime_wired) |
+| [Identity 360](#identity-360) | source_aligned | `entity`, `agent`, `source` | 10 | 10/10 | 2 | 0 | 3 | `agent360`, `execution360`, `profile360`, `relationship360` | `Identity360Provider` (runtime_wired) |
 | [Journey 360](#journey-360) | source_aligned | `journey`, `profile`, `account`, `campaign`, `episode`, `entity` | 11 | 7/11 | 5 | 4 | 2 | `episode360`, `profile360`, `communication360` | — |
 | [Location 360](#location-360) | source_aligned | `location`, `place`, `geohash`, `timezone`, `region`, `entity`, `population`, `source` | 11 | 5/11 | 2 | 6 | 4 | `geographic360`, `population360`, `profile360` | — |
 | [Memory 360](#memory-360) | source_aligned | `entity`, `semantic_entity`, `memory`, `card`, `topic` | 10 | 8/10 | 2 | 2 | 0 | `memory360` | — |
 | [Profile 360](#profile-360) | source_aligned | `profile`, `entity`, `agent`, `anonymous_subject`, `account_member`, `cluster` | 13 | 12/13 | 8 | 1 | 6 | `economic360`, `outcome360`, `profile360`, `geographic360`, `relationship360`, `risk360` | — |
 | [Risk 360](#risk-360) | source_aligned | `risk`, `entity`, `profile`, `agent`, `account`, `source`, `campaign`, `contagion_path`, `relationship`, `cluster` | 12 | 9/12 | 5 | 3 | 6 | `economic360`, `execution360`, `fraud360`, `relationship360`, `risk360`, `social360` | — |
-| [Signals 360](#signals-360) | source_aligned | `entity`, `signal`, `source`, `event`, `observation`, `stream` | 10 | 7/10 | 4 | 3 | 0 | `signals360` | — |
+| [Signals 360](#signals-360) | source_aligned | `entity`, `signal`, `source`, `event`, `observation`, `stream` | 10 | 8/10 | 5 | 2 | 0 | `signals360` | — |
 | [Social 360](#social-360) | source_aligned | `entity`, `profile`, `relationship`, `community`, `syndicate`, `source`, `population` | 10 | 7/10 | 4 | 3 | 5 | `geographic360`, `population360`, `relationship360`, `social360`, `source360` | — |
 | [Support 360](#support-360) | source_aligned | `support_case`, `callback`, `conversation`, `ticket`, `entity`, `agent`, `episode`, `source` | 10 | 4/10 | 4 | 6 | 6 | `agent360`, `episode360`, `outcome360`, `profile360`, `risk360`, `source360`, `support360` | — |
 | [Value 360](#value-360) | source_aligned | `value`, `profile`, `account`, `conversion`, `cluster`, `campaign`, `episode`, `journey`, `entity`, `agent`, `source` | 11 | 8/11 | 6 | 3 | 5 | `campaign360`, `economic360`, `outcome360`, `temporal360` | — |
-| [Workflow 360](#workflow-360) | source_aligned | `workflow`, `automation`, `trigger`, `run`, `workflow_run` | 11 | 6/11 | 3 | 5 | 0 | `workflow360` | — |
+| [Workflow 360](#workflow-360) | source_aligned | `workflow`, `automation`, `trigger`, `run`, `workflow_run` | 11 | 7/11 | 4 | 4 | 0 | `workflow360` | — |
 
 ## Account 360
 
@@ -343,7 +343,7 @@ Governed time-bounded view of related events and journey activity, with entity c
 | `agent_handoffs` | required |  | `agent_executions` | — | — | Unbound: `episode_records_and_observations_do_not_reference_canonical_agent_execution_or_handoff_id` | Required episode360 slot: agent handoffs. |
 | `attribution_links` | required |  | `attribution_credits` | — | — | Unbound: `episode_attribution_credit_authority_not_joined` | Required episode360 slot: attribution links. |
 | `communications` | required |  | `communication_facts` | `communication360` (supporting): subjects `episode`; `interactions` | — | Partial: `episode_communication_facts_are_exact_but_message_spine_join_and_completeness_are_unavailable` | Exact tenant episode_id-linked communication facts; message history and complete conversation membership remain unavailable. |
-| `conversion_events` | required |  | `outcome_facts` | — | — | Unbound: `episode_outcome_ids_are_not_conversion_records` | Required episode360 slot: conversion events. |
+| `conversion_events` | required |  | `episode_facts`, `outcome_facts`, `evidence` | `episode360` (primary): subjects `episode`; `outcomes` | — | Partial: `Only outcome IDs explicitly recorded by tenant episode rows are joined and admitted for registered campaign_conversion or journey_completion definitions with canonical evidence; these references do not establish complete coverage or causal attribution, and freshness and policy remain unknown.` | Canonical conversion outcomes explicitly referenced by exact tenant episode records; only registered conversion definitions are admitted. |
 | `entity_and_relationship_context` | optional |  | `campaign_facts`, `episode_facts`, `graph`, `identity`, `relationship_facts` | `profile360` (primary): subjects `entity`, `episode`; `evidence`, `state`, `summary`; `relationship360` (supporting): subjects `entity`, `episode`; `interactions`, `evidence`; `episode360` (supporting): subjects `campaign`, `entity`, `episode`; `episode_context`; `campaign360` (primary): subjects `campaign`; `evidence`, `state`, `summary` | — | — | Canonical identity for entity and episode subjects, campaign identity for campaign subjects, and graph relationships where the subject has a supported entity graph. |
 | `episode_summary` | required |  | `episode_facts`, `evidence` | `episode360` (primary): subjects `episode`; `summary`, `evidence` | — | — | Exact tenant episode record with evidence lineage. |
 | `evidence_trace` | required |  | `episode_facts`, `evidence` | `episode360` (primary): subjects `episode`; `evidence` | — | — | Episode record and lineage refs; source event provenance is partial. |
@@ -457,7 +457,7 @@ Governed view of resolved identities, source identifiers, actor bindings, relati
 | `evidence_trace` | required |  | `identity`, `source_provenance`, `evidence` | — | `Identity360Provider` (runtime_wired) | — | Required Identity 360 blueprint slot: evidence trace. |
 | `identifier_inventory` | required |  | `identity`, `source_provenance`, `evidence` | — | `Identity360Provider` (runtime_wired) | — | Required Identity 360 blueprint slot: identifier inventory. |
 | `match_evidence` | required |  | `identity`, `entities`, `entity_registry`, `evidence` | — | `Identity360Provider` (runtime_wired) | — | Required Identity 360 blueprint slot: match evidence. |
-| `namespace_map` | required |  | `identity`, `source_provenance`, `evidence` | — | `Identity360Provider` (runtime_wired) | — | Required Identity 360 blueprint slot: namespace map. |
+| `namespace_map` | required |  | `identity`, `provider_registry`, `source_provenance`, `evidence` | — | `Identity360Provider` (runtime_wired) | Partial: `Only exact recorded source_system_id values on tenant- and evidence-validated source identities are resolved; missing provider keys remain unknown and provider registry freshness is unavailable.` | Maps an exact source-system identity namespace to an already registered provider runtime identity without inferring a provider from namespace prefixes. |
 | `policy_redactions` | required |  | `identity`, `evidence` | — | `Identity360Provider` (runtime_wired) | — | Required Identity 360 blueprint slot: policy redactions. |
 | `relationship_identity_context` | optional |  | `graph`, `relationship_facts` | `relationship360` (primary): subjects `entity`; `evidence`, `interactions` | — | — | Optional Aether provider context retained for Identity 360: relationship identity context. |
 | `resolved_subject_identity` | optional |  | `entity_registry`, `identity` | `profile360` (primary): subjects `agent`, `entity`; `state`, `summary` | — | — | Optional Aether provider context retained for Identity 360: resolved subject identity. |
@@ -480,7 +480,7 @@ Governed view of resolved identities, source identifiers, actor bindings, relati
 
 ### Authority and governance contract
 
-Canonical authorities: `agent_access`, `agent_entities`, `agent_entity`, `entities`, `entity_registry`, `evidence`, `graph`, `identity`, `relationship_facts`, `source_provenance`.
+Canonical authorities: `agent_access`, `agent_entities`, `agent_entity`, `entities`, `entity_registry`, `evidence`, `graph`, `identity`, `provider_registry`, `relationship_facts`, `source_provenance`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 
@@ -800,7 +800,7 @@ Governed view of risk, fraud, source, social, and outcome signals with evidence 
 
 | Slot | Requirement | Required frame metadata | Canonical authority refs | Explicit projection section bindings | Direct surface provider | Implementation gap | Description |
 |---|---|---|---|---|---|---|---|
-| `campaign_links` | required |  | `campaign_facts`, `campaign_touchpoints` | — | — | Unbound: `canonical_signal_campaign_join_not_available` | Required signals360 slot: campaign links. |
+| `campaign_links` | required |  | `campaign_facts`, `campaign_touchpoints` | `signals360` (primary): subjects `event`, `observation`; `campaign_links` | — | Partial: `Only exact event or observation IDs linked by tenant-scoped campaign touchpoints and resolved to canonical tenant campaigns are available; entity, source, stream, missing-reference, and incomplete reads remain unknown or degraded.` | Exact tenant source-event links from campaign touchpoints, admitted only after the campaign owner resolves the referenced canonical campaign. |
 | `classification` | required |  | `events`, `observations` | `signals360` (primary): subjects `event`, `observation`; `classification` | — | Partial: `Exact gateway-accepted SDK event type and family are registry-validated; source attribution, semantic signal classification, policy, and freshness remain unknown.` | Required signals360 slot: classification. |
 | `evidence_trace` | required |  | `behavioral_signals` | `signals360` (primary): subjects `entity`; `evidence_trace` | — | — | Evidence references for bounded derived signal records. |
 | `freshness` | required |  | `behavioral_signals` | `signals360` (primary): subjects `entity`; `freshness` | — | — | Source timestamps retained from bounded derived signal records; freshness threshold remains unknown. |
@@ -1040,7 +1040,7 @@ Governed operational view of agent executions, actions and tools, integration li
 | `approvals` | required |  | `agent_access`, `agent_executions`, `commerce` | `workflow360` (primary): subjects `run`, `workflow_run`; `approvals` | — | Authority: `canonical_workflow_approval_authority_not_joined`; Partial: `Only exact x402 approval decisions referenced by admitted run-linked AgentExecutions are joined; workflow-level approval coverage and authorization remain unknown.` | Exact x402 approval requests and decisions referenced by tenant and run-linked AgentExecutions; workflow-wide approval coverage and authorization policy remain unknown. |
 | `evidence_trace` | required |  | `ai_execution_facts` | `workflow360` (primary): subjects `run`, `workflow_run`; `evidence_trace` | — | — | Lineage of exact workflow run linked AI invocation facts. |
 | `failures` | required |  | `ai_execution_facts` | `workflow360` (primary): subjects `run`, `workflow_run`; `failures` | — | — | Observed AI invocation failure status only; workflow failure state is unknown. |
-| `outcomes` | required |  | `outcome_facts` | — | — | Unbound: `canonical_workflow_business_outcome_join_not_available` | Required Workflow 360 slot: outcomes. |
+| `outcomes` | required |  | `ai_execution_facts`, `outcome_facts`, `evidence` | `workflow360` (primary): subjects `run`, `workflow_run`; `outcomes` | — | Partial: `Only canonical outcome IDs explicitly referenced by tenant/run invocation facts are joined with invocation and outcome evidence; this association does not establish workflow causality or complete outcome coverage, and policy and freshness remain unknown.` | Canonical outcomes explicitly referenced by tenant-scoped invocation facts for an exact workflow run. |
 | `risk` | required |  | `risk_outputs` | — | — | Unbound: `canonical_workflow_risk_policy_join_not_available` | Required Workflow 360 slot: risk. |
 | `runs` | required |  | `ai_execution_facts` | `workflow360` (primary): subjects `run`, `workflow_run`; `runs` | — | — | AI invocation facts explicitly linked to a workflow run ID; run state is partial. |
 | `triggers` | required |  | `events` | — | — | Unbound: `canonical_workflow_trigger_authority_not_available` | Required Workflow 360 slot: triggers. |
@@ -1060,7 +1060,7 @@ Governed operational view of agent executions, actions and tools, integration li
 
 ### Authority and governance contract
 
-Canonical authorities: `actions`, `agent_access`, `agent_entities`, `agent_executions`, `ai_execution_facts`, `events`, `execution_facts`, `commerce`, `identity`, `outcome_facts`, `resources`, `risk_outputs`, `tools`.
+Canonical authorities: `actions`, `agent_access`, `agent_entities`, `agent_executions`, `ai_execution_facts`, `evidence`, `events`, `execution_facts`, `commerce`, `identity`, `outcome_facts`, `resources`, `risk_outputs`, `tools`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 

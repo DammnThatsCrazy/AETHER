@@ -13,7 +13,7 @@ source_files: [services/api/journeys/campaign/routes.py, services/api/journeys/c
 source_hashes:
   "services/api/journeys/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
   "services/api/journeys/campaign/routes.py": "sha256:872f533120f44707b938829206f76d24497d34c17d5ae945da3b16de0ef19186"
-  "services/api/journeys/measurement/repositories/touchpoint_repo.py": "sha256:fe9b5f6c7f24fa33a0288533013677fe2741b36b86e71308579d08cc4e2a68f0"
+  "services/api/journeys/measurement/repositories/touchpoint_repo.py": "sha256:d08121dd99500425f59f0ea5d283a271e4769d5c60bf303868e6b23dc4565f31"
 ---
 
 # Campaign 360 API Reference
@@ -165,6 +165,14 @@ population tier and returned with attribution economics.
 ### GET `/{campaign_id}/touchpoints`
 
 Paginated touchpoint list for the campaign.
+
+The backend also exposes an internal exact source-event read to Signals360:
+`TouchpointRepository.list_by_source_event(tenant_id, source_event_id)` queries
+the tenant-owned `silver_campaign_touchpoint_facts` rows by both keys. A
+resulting campaign link is emitted only when the canonical campaign repository
+resolves that ID in the same tenant. This is a projection dependency, not a
+public Campaign 360 route, and it does not infer links from names or source
+labels.
 
 **Query parameters:**
 

@@ -468,6 +468,7 @@ EXPECTED_DIRECT_PROVIDER_BINDINGS = {
                 "entity_registry",
                 "evidence",
                 "identity",
+                "provider_registry",
                 "source_provenance",
             ],
             "implementationRef": "services/api/identity/identity/identity360_provider.py",

@@ -14,6 +14,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 from identity.identity.identity360_provider import (
     Identity360Provider,
     IdentityBatchRead,
+    IdentityProviderRegistryRead,
     IdentityRecordRead,
     RepositoryIdentity360Source,
 )
@@ -137,6 +138,8 @@ class FakeIdentity360Source:
         self.force_truncate_aliases = False
         self.claim_read_called = False
         self.batch_reads: list[str] = []
+        self.provider_registry_reads: list[str] = []
+        self.provider_registry_entries: dict[str, dict[str, Any]] = {}
 
     async def canonical_entity(self, tenant_id: str, entity_id: str) -> IdentityRecordRead:
         return IdentityRecordRead(record=self.entity)
@@ -146,6 +149,16 @@ class FakeIdentity360Source:
 
     async def source_identity(self, tenant_id: str, source_identity_id: str) -> IdentityRecordRead:
         return IdentityRecordRead(record=self.source)
+
+    async def provider_registry_entry(
+        self, source_system_id: str
+    ) -> IdentityProviderRegistryRead:
+        self.provider_registry_reads.append(source_system_id)
+        entry = self.provider_registry_entries.get(source_system_id)
+        return IdentityProviderRegistryRead(
+            entry=entry,
+            reason=None if entry is not None else "provider_identity_not_registered",
+        )
 
     async def source_identities_for_entity(
         self, tenant_id: str, entity_id: str, *, limit: int
@@ -236,7 +249,7 @@ async def test_entity_identity_projects_scoped_evidence_without_sensitive_values
     assert namespace_mapping["canonicalEntityId"] == "entity-1"
     assert namespace_mapping["evidenceRef"]["id"] == "source-row-1"
     assert namespace_mapping["evidenceRef"]["source"] == "identity_source_identities"
-    assert result.slot("namespace_map").content["canonicalNamespaceRegistryJoin"]["state"] == "unknown"
+    assert result.slot("namespace_map").content["canonicalNamespaceRegistryJoin"]["state"] == "partial"
     assert result.slot("match_evidence").state == "available"
     assert result.slot("match_evidence").content["semantics"] == (
         "recorded_identity_resolution_evidence_only"
@@ -364,6 +377,130 @@ async def test_inventory_and_namespace_rows_require_record_level_provenance() ->
 
 
 @pytest.mark.asyncio
+async def test_namespace_map_joins_only_exact_registered_source_system_identity() -> None:
+    source = FakeIdentity360Source()
+    source.source_rows[0]["source_system_id"] = "shopify.admin.orders_read"
+    source.provider_registry_entries["shopify.admin.orders_read"] = {
+        "identityKey": "shopify.admin.orders_read",
+        "providerFamily": "shopify",
+        "productId": "admin",
+        "capabilityId": "orders_read",
+        "displayName": "Shopify Admin Orders Read",
+        "category": "commerce",
+        "credentialSecret": "must-not-escape-provider-registry",
+    }
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"namespace_map"}
+    )
+
+    namespaces = result.slot("namespace_map")
+    mapping = namespaces.content["mappings"][0]
+    assert source.provider_registry_reads == ["shopify.admin.orders_read"]
+    assert namespaces.state == "partial"
+    assert mapping["sourceNamespace"] == "crm:customers"
+    assert mapping["providerIdentity"] == "shopify.admin.orders_read"
+    assert mapping["provider"]["providerFamily"] == "shopify"
+    assert mapping["providerRegistryJoin"] == {"state": "resolved", "reason": None}
+    assert mapping["evidenceRef"]["id"] == "source-row-1"
+    summary = namespaces.content["canonicalNamespaceRegistryJoin"]
+    assert summary["joinState"] == "resolved"
+    assert summary["resolvedEntries"] == 1
+    assert summary["freshness"]["state"] == "unknown"
+    assert namespaces.reason == "provider_registry_freshness_unknown"
+    assert "must-not-escape-provider-registry" not in json.dumps(_payload(result))
+
+    # A namespace prefix that resembles a provider never substitutes for its
+    # exact source_system_id foreign-key claim.
+    source.source_rows[0]["source_system_id"] = "shopify"
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"namespace_map"}
+    )
+    mapping = result.slot("namespace_map").content["mappings"][0]
+    assert source.provider_registry_reads[-1] == "shopify"
+    assert mapping["providerIdentity"] is None
+    assert mapping["providerRegistryJoin"]["state"] == "unknown"
+    assert result.slot("namespace_map").state == "partial"
+
+
+@pytest.mark.asyncio
+async def test_repository_identity_source_uses_exact_runtime_provider_key(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from connectors.provider_runtime.registry import provider_registry
+
+    exact_key = "shopify.admin.orders_read"
+    plugin = SimpleNamespace(
+        identity=lambda: SimpleNamespace(key=exact_key),
+        manifest=lambda: SimpleNamespace(
+            identity_key=exact_key,
+            provider_family="shopify",
+            product_id="admin",
+            capability_id="orders_read",
+            display_name="Shopify Admin Orders Read",
+            category="commerce",
+        ),
+    )
+    monkeypatch.setattr(
+        provider_registry,
+        "get",
+        lambda requested: plugin if requested == exact_key else None,
+    )
+
+    source = RepositoryIdentity360Source(identity_repository=object())
+    registered = await source.provider_registry_entry(exact_key)
+    missing = await source.provider_registry_entry("shopify")
+
+    assert registered.available is True
+    assert registered.entry == {
+        "identityKey": exact_key,
+        "providerFamily": "shopify",
+        "productId": "admin",
+        "capabilityId": "orders_read",
+        "displayName": "Shopify Admin Orders Read",
+        "category": "commerce",
+    }
+    assert missing.available is True
+    assert missing.entry is None
+    assert missing.reason == "provider_identity_not_registered"
+
+
+@pytest.mark.asyncio
+async def test_namespace_provider_registry_is_not_read_when_slot_is_not_requested() -> None:
+    source = FakeIdentity360Source()
+    source.source_rows[0]["source_system_id"] = "shopify.admin.orders_read"
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"identifier_inventory"}
+    )
+
+    assert result.slot("namespace_map").state == "unknown"
+    assert result.slot("namespace_map").reason == "identity_slot_not_requested"
+    assert source.provider_registry_reads == []
+
+
+@pytest.mark.asyncio
+async def test_namespace_map_does_not_join_provider_for_cross_tenant_identity_row() -> None:
+    source = FakeIdentity360Source()
+    source.source_rows[0]["tenant_id"] = "tenant-b"
+    source.source_rows[0]["source_system_id"] = "shopify.admin.orders_read"
+    source.provider_registry_entries["shopify.admin.orders_read"] = {
+        "identityKey": "shopify.admin.orders_read",
+        "providerFamily": "shopify",
+    }
+
+    result = await Identity360Provider(source).read(
+        "tenant-a", "entity", "entity-1", requested_slot_ids={"namespace_map"}
+    )
+
+    namespaces = result.slot("namespace_map")
+    assert namespaces.state == "degraded"
+    assert namespaces.content["mappings"] == []
+    assert source.provider_registry_reads == []
+    assert namespaces.reason == "identity_row_tenant_mismatch"
+
+
+@pytest.mark.asyncio
 async def test_alias_records_require_their_own_evidence_reference() -> None:
     source = FakeIdentity360Source()
     source.aliases = [
@@ -465,8 +602,8 @@ async def test_source_subject_uses_exact_tenant_scoped_record_and_sanitized_clai
     evidence = result.slot("evidence_trace")
     assert inventory.state == "available"
     assert namespaces.state == "partial"
-    assert namespaces.content["canonicalNamespaceRegistryJoin"]["state"] == "unknown"
-    assert "source_provider_registry_join_not_performed" in result.warnings
+    assert namespaces.content["canonicalNamespaceRegistryJoin"]["state"] == "partial"
+    assert "source_system_id_not_recorded" in result.warnings
     assert inventory.content["sourceIdentities"][0]["identifierTypes"] == ["external_id"]
     assert inventory.content["claims"][0]["claimType"] == "email"
     assert inventory.content["claims"][0]["evidenceRef"]["id"] == "claim-1"

@@ -20,10 +20,12 @@ from intelligence.signals.signals360_provider import (  # noqa: E402
     OUTPUT_SECTIONS,
     PROJECTION_ID,
     Signals360Provider,
+    CampaignLinksRead,
     LinkedEntitiesRead,
     LinkedEntity,
     ObservationQualityRead,
     RepositorySignal360Source,
+    SignalCampaignLink,
     SignalSummaryRead,
     register_provider,
 )
@@ -77,6 +79,19 @@ class FakeLinkedEntitySignalSource(FakeSignalSource):
         return self.link_read
 
 
+class FakeCampaignLinkSignalSource(FakeSignalSource):
+    def __init__(self, read: CampaignLinksRead) -> None:
+        super().__init__(SignalSummaryRead((), available=False, complete=False))
+        self.campaign_link_read = read
+        self.campaign_link_calls: list[tuple[str, str, str]] = []
+
+    async def campaign_links(
+        self, *, tenant_id: str, subject_kind: str, subject_id: str
+    ) -> CampaignLinksRead:
+        self.campaign_link_calls.append((tenant_id, subject_kind, subject_id))
+        return self.campaign_link_read
+
+
 class FakeSignalRepository:
     def __init__(self, row: dict[str, Any] | None) -> None:
         self.row = row
@@ -114,6 +129,35 @@ class FakeIdentityRepository:
     ) -> dict[str, Any] | None:
         self.subject_calls.append((tenant_id, entity_id))
         row = self.subjects.get(entity_id)
+        return row if row is not None and row.get("tenant_id") == tenant_id else None
+
+
+class FakeCampaignTouchpointRepository:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self.rows = rows
+        self.calls: list[tuple[str, str, int]] = []
+
+    async def list_by_source_event(
+        self, tenant_id: str, source_event_id: str, *, limit: int
+    ) -> list[dict[str, Any]]:
+        self.calls.append((tenant_id, source_event_id, limit))
+        return [
+            row
+            for row in self.rows
+            if row.get("tenant_id") == tenant_id
+            and row.get("source_event_id") == source_event_id
+        ][:limit]
+
+
+class FakeCampaignRepository:
+    def __init__(self, rows: dict[str, dict[str, Any]]) -> None:
+        self.rows = rows
+        self.calls: list[tuple[str, str]] = []
+
+    async def get_by_id(self, tenant_id: str, campaign_id: Any) -> dict[str, Any] | None:
+        campaign_id = str(campaign_id)
+        self.calls.append((tenant_id, campaign_id))
+        row = self.rows.get(campaign_id)
         return row if row is not None and row.get("tenant_id") == tenant_id else None
 
 
@@ -848,3 +892,148 @@ async def test_signals360_rejects_mismatched_projection_tenant_context() -> None
         await Signals360Provider(source=source).project(_request(), context)
 
     assert source.calls == []
+
+
+@pytest.mark.asyncio
+async def test_signals360_campaign_link_requires_exact_event_and_canonical_campaign_scope() -> None:
+    from uuid import uuid4
+
+    campaign_id = str(uuid4())
+    touchpoint_id = str(uuid4())
+    event_id = "evt-signals-campaign-link"
+    rows = [
+        {
+            "tenant_id": TENANT_A,
+            "source_event_id": event_id,
+            "campaign_id": campaign_id,
+            "touchpoint_id": touchpoint_id,
+            "occurred_at": "2026-10-20T10:00:00Z",
+        },
+        {
+            "tenant_id": "tenant-signals-b",
+            "source_event_id": event_id,
+            "campaign_id": str(uuid4()),
+            "touchpoint_id": str(uuid4()),
+            "occurred_at": "2026-10-20T10:00:00Z",
+        },
+        {
+            "tenant_id": TENANT_A,
+            "source_event_id": "another-event",
+            "campaign_id": str(uuid4()),
+            "touchpoint_id": str(uuid4()),
+            "occurred_at": "2026-10-20T10:00:00Z",
+        },
+    ]
+
+    class UntrustedTouchpointReader:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str, int]] = []
+
+        async def list_by_source_event(
+            self, tenant_id: str, source_event_id: str, *, limit: int
+        ) -> list[dict[str, Any]]:
+            self.calls.append((tenant_id, source_event_id, limit))
+            return rows
+
+    touchpoints = UntrustedTouchpointReader()
+    campaigns = FakeCampaignRepository(
+        {
+            campaign_id: {
+                "tenant_id": TENANT_A,
+                "campaign_id": campaign_id,
+                "updated_at": "2026-10-20T10:01:00Z",
+            }
+        }
+    )
+    source = RepositorySignal360Source(
+        campaign_touchpoints=touchpoints,
+        campaign_repository=campaigns,
+    )
+
+    read = await source.campaign_links(
+        tenant_id=TENANT_A,
+        subject_kind="event",
+        subject_id=event_id,
+    )
+
+    assert touchpoints.calls == [(TENANT_A, event_id, 101)]
+    assert campaigns.calls == [(TENANT_A, campaign_id)]
+    assert read.available is True
+    assert read.complete is False
+    assert read.reason == "campaign_touchpoint_scope_mismatch"
+    assert [link.campaign_id for link in read.links] == [campaign_id]
+    assert {
+        ref.source
+        for ref in read.links[0].evidence_refs
+    } == {
+        "services/api/journeys/measurement/repositories/"
+        "touchpoint_repo.py:silver_campaign_touchpoint_facts",
+        "services/api/journeys/measurement/repositories/"
+        "touchpoint_repo.py:silver_campaign_touchpoint_facts:source_event_id",
+        "services/api/journeys/campaign/repository.py:campaigns",
+    }
+
+
+@pytest.mark.asyncio
+async def test_signals360_projects_campaign_links_with_touchpoint_and_campaign_evidence() -> None:
+    from uuid import uuid4
+
+    campaign_id = str(uuid4())
+    touchpoint_id = str(uuid4())
+    refs = (
+        EvidenceRef(
+            id=touchpoint_id,
+            type="event",
+            source=(
+                "services/api/journeys/measurement/repositories/"
+                "touchpoint_repo.py:silver_campaign_touchpoint_facts"
+            ),
+        ),
+        EvidenceRef(
+            id="obs-campaign-linked",
+            type="event",
+            source=(
+                "services/api/journeys/measurement/repositories/"
+                "touchpoint_repo.py:silver_campaign_touchpoint_facts:source_event_id"
+            ),
+        ),
+        EvidenceRef(
+            id=campaign_id,
+            type="entity",
+            source="services/api/journeys/campaign/repository.py:campaigns",
+        ),
+    )
+    read = CampaignLinksRead(
+        tenant_id=TENANT_A,
+        subject_kind="observation",
+        subject_id="obs-campaign-linked",
+        links=(SignalCampaignLink(campaign_id=campaign_id, evidence_refs=refs),),
+        available=True,
+        complete=True,
+    )
+    source = FakeCampaignLinkSignalSource(read)
+
+    result = await Signals360Provider(source=source).project(
+        _request(subject_kind="observation", subject_id="obs-campaign-linked"),
+        _context(),
+    )
+
+    section = _sections(result)["campaign_links"]
+    assert source.campaign_link_calls == [
+        (TENANT_A, "observation", "obs-campaign-linked")
+    ]
+    assert section.state == "available"
+    assert section.content["links"] == [
+        {"campaignId": campaign_id, "linkState": "exact_tenant_campaign_touchpoint"}
+    ]
+    assert section.content["authorityReadComplete"] is True
+    assert {item["id"] for item in section.content["evidenceRefs"]} == {
+        touchpoint_id,
+        "obs-campaign-linked",
+        campaign_id,
+    }
+    assert any(
+        claim.domainSlotIds == ["campaign_links"]
+        and campaign_id in " ".join(claim.claims)
+        for claim in result.claims
+    )

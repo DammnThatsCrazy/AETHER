@@ -15,7 +15,7 @@ source_hashes:
   "services/api/journeys/campaign/routes.py": "sha256:872f533120f44707b938829206f76d24497d34c17d5ae945da3b16de0ef19186"
   "services/api/journeys/measurement/repositories/attribution_run_repo.py": "sha256:5c5a1edbacb8ebe97e641b0a577eab924a1a0ca5b76e75967711bd88e8ae46dd"
   "services/api/journeys/measurement/repositories/conversion_repo.py": "sha256:7b3f6cdb71101a726f21444595ef22224b8cc57f7b02fa37313f478e546eebb8"
-  "services/api/journeys/measurement/repositories/touchpoint_repo.py": "sha256:fe9b5f6c7f24fa33a0288533013677fe2741b36b86e71308579d08cc4e2a68f0"
+  "services/api/journeys/measurement/repositories/touchpoint_repo.py": "sha256:d08121dd99500425f59f0ea5d283a271e4769d5c60bf303868e6b23dc4565f31"
   "services/api/journeys/traffic/repair.py": "sha256:309a31315d07945083aa693341cff37b4fe5cefbc71592925c38ad818acfab68"
 ---
 
@@ -117,6 +117,15 @@ entity-level drill-down.
 reads for the Account360 and Agent360 projections. These are separate subject
 lookups: they do not infer a campaign association, replace the campaign
 touchpoint join, or change the campaign-scoped `list_by_campaign()` path.
+
+Signals360 uses a separate event-to-campaign read through
+`TouchpointRepository.list_by_source_event(tenant_id, source_event_id)`. The
+query requires both exact keys. A touchpoint's campaign ID is exposed only
+after `CampaignRepository.get_by_id()` resolves that exact ID for the same
+tenant. This projection read does not infer links from campaign names, source
+labels, or external IDs; malformed, unresolved, cross-tenant, and truncated
+results keep the slot partial or degraded. It does not add a public Campaign
+360 endpoint.
 
 Source classification is evidence carried through the canonical touchpoint,
 journey step, attribution credit, and Campaign 360 read models. Campaign 360

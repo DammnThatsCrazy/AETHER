@@ -18,6 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional, Protocol
+from uuid import UUID
 
 from graph.operational_intelligence.models import EvidenceRef
 from shared.contracts_models.epistemic import EpistemicStatus
@@ -51,6 +52,7 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
 )
 
 _MAX_SIGNAL_RECORDS = 100
+_MAX_SIGNAL_CAMPAIGN_TOUCHPOINTS = 100
 _SUMMARY_SOURCE = "repositories.repos.SignalRepository:behavioral_signals"
 
 
@@ -96,6 +98,27 @@ class LinkedEntitiesRead:
     reason: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class SignalCampaignLink:
+    """One exact source-event link to a canonical tenant-owned campaign."""
+
+    campaign_id: str
+    evidence_refs: tuple[EvidenceRef, ...]
+
+
+@dataclass(frozen=True)
+class CampaignLinksRead:
+    """Bounded tenant-scoped event-to-campaign link read."""
+
+    tenant_id: str
+    subject_kind: str
+    subject_id: str
+    links: tuple[SignalCampaignLink, ...]
+    available: bool
+    complete: bool
+    reason: Optional[str] = None
+
+
 def _linked_read(
     tenant_id: str,
     subject_kind: str,
@@ -117,6 +140,27 @@ def _linked_read(
     )
 
 
+def _campaign_links_read(
+    tenant_id: str,
+    subject_kind: str,
+    subject_id: str,
+    *,
+    links: tuple[SignalCampaignLink, ...] = (),
+    available: bool,
+    complete: bool,
+    reason: Optional[str] = None,
+) -> CampaignLinksRead:
+    return CampaignLinksRead(
+        tenant_id=tenant_id,
+        subject_kind=subject_kind,
+        subject_id=subject_id,
+        links=links,
+        available=available,
+        complete=complete,
+        reason=reason,
+    )
+
+
 class Signal360Source(Protocol):
     """Tenant-scoped read seam for derived behavior signal records."""
 
@@ -132,6 +176,10 @@ class Signal360Source(Protocol):
         self, *, tenant_id: str, subject_kind: str, subject_id: str
     ) -> LinkedEntitiesRead: ...
 
+    async def campaign_links(
+        self, *, tenant_id: str, subject_kind: str, subject_id: str
+    ) -> CampaignLinksRead: ...
+
 
 class RepositorySignal360Source:
     """Adapter over behavioral signals and exact SDK observation Bronze rows."""
@@ -142,10 +190,14 @@ class RepositorySignal360Source:
         bronze: Any = None,
         signals: Any = None,
         identity_repository: Any = None,
+        campaign_touchpoints: Any = None,
+        campaign_repository: Any = None,
     ) -> None:
         self._bronze = bronze
         self._signals = signals
         self._identity_repository = identity_repository
+        self._campaign_touchpoints = campaign_touchpoints
+        self._campaign_repository = campaign_repository
 
     async def entity_signals(
         self, *, tenant_id: str, entity_id: str, limit: int
@@ -294,6 +346,184 @@ class RepositorySignal360Source:
                 complete=False,
                 reason="canonical_identity_join_unavailable",
             )
+
+    async def campaign_links(
+        self, *, tenant_id: str, subject_kind: str, subject_id: str
+    ) -> CampaignLinksRead:
+        """Join an exact event id through tenant touchpoints to canonical campaigns.
+
+        The touchpoint row is only a relationship assertion. A campaign is
+        exposed as a resolved link only after the same tenant's canonical
+        campaign repository returns that exact campaign id.
+        """
+        if not _safe_identifier(tenant_id) or not _safe_identifier(subject_id):
+            return _campaign_links_read(
+                tenant_id,
+                subject_kind,
+                subject_id,
+                available=False,
+                complete=False,
+                reason="exact_campaign_link_subject_scope_required",
+            )
+        if subject_kind not in {"event", "observation"}:
+            return _campaign_links_read(
+                tenant_id,
+                subject_kind,
+                subject_id,
+                available=True,
+                complete=True,
+                reason="subject_kind_has_no_exact_campaign_event_join",
+            )
+
+        try:
+            if self._campaign_touchpoints is None:
+                from journeys.measurement.repositories.touchpoint_repo import (
+                    TouchpointRepository,
+                )
+
+                self._campaign_touchpoints = TouchpointRepository()
+            rows = await self._campaign_touchpoints.list_by_source_event(
+                tenant_id,
+                subject_id,
+                limit=_MAX_SIGNAL_CAMPAIGN_TOUCHPOINTS + 1,
+            )
+        except Exception:  # noqa: BLE001 - authority diagnostics stay private
+            return _campaign_links_read(
+                tenant_id,
+                subject_kind,
+                subject_id,
+                available=False,
+                complete=False,
+                reason="campaign_touchpoint_authority_unavailable",
+            )
+        if not isinstance(rows, list):
+            return _campaign_links_read(
+                tenant_id,
+                subject_kind,
+                subject_id,
+                available=False,
+                complete=False,
+                reason="campaign_touchpoint_read_invalid",
+            )
+
+        complete = len(rows) <= _MAX_SIGNAL_CAMPAIGN_TOUCHPOINTS
+        if not complete:
+            rows = rows[:_MAX_SIGNAL_CAMPAIGN_TOUCHPOINTS]
+        campaign_touchpoints: dict[str, list[EvidenceRef]] = {}
+        reason: Optional[str] = (
+            "campaign_touchpoint_read_truncated" if not complete else None
+        )
+        for row in rows:
+            if (
+                not isinstance(row, dict)
+                or row.get("tenant_id") != tenant_id
+                or row.get("source_event_id") != subject_id
+            ):
+                complete = False
+                reason = "campaign_touchpoint_scope_mismatch"
+                continue
+            campaign_id = _safe_identifier(row.get("campaign_id"))
+            touchpoint_id = _safe_identifier(row.get("touchpoint_id"))
+            if campaign_id is None or touchpoint_id is None:
+                complete = False
+                reason = "campaign_touchpoint_canonical_reference_missing"
+                continue
+            try:
+                canonical_campaign_id = str(UUID(campaign_id))
+            except (TypeError, ValueError, AttributeError):
+                complete = False
+                reason = "campaign_touchpoint_campaign_id_invalid"
+                continue
+            campaign_touchpoints.setdefault(canonical_campaign_id, []).append(
+                EvidenceRef(
+                    id=touchpoint_id,
+                    type="event",
+                    source=(
+                        "services/api/journeys/measurement/repositories/"
+                        "touchpoint_repo.py:silver_campaign_touchpoint_facts"
+                    ),
+                    observedAt=_safe_timestamp(row.get("occurred_at")),
+                    uri=(
+                        "store://silver_campaign_touchpoint_facts/"
+                        f"{touchpoint_id}"
+                    ),
+                )
+            )
+            campaign_touchpoints[canonical_campaign_id].append(
+                EvidenceRef(
+                    id=subject_id,
+                    type="event",
+                    source=(
+                        "services/api/journeys/measurement/repositories/"
+                        "touchpoint_repo.py:silver_campaign_touchpoint_facts:source_event_id"
+                    ),
+                    observedAt=_safe_timestamp(row.get("occurred_at")),
+                    uri=(
+                        "store://silver_campaign_touchpoint_facts/"
+                        f"{touchpoint_id}#source_event_id"
+                    ),
+                )
+            )
+
+        if self._campaign_repository is None:
+            try:
+                from journeys.campaign.repository import CampaignRepository
+
+                self._campaign_repository = CampaignRepository()
+            except Exception:  # noqa: BLE001 - authority diagnostics stay private
+                return _campaign_links_read(
+                    tenant_id,
+                    subject_kind,
+                    subject_id,
+                    available=False,
+                    complete=False,
+                    reason="canonical_campaign_authority_unavailable",
+                )
+
+        links: list[SignalCampaignLink] = []
+        for campaign_id, touchpoint_refs in sorted(campaign_touchpoints.items()):
+            try:
+                campaign = await self._campaign_repository.get_by_id(
+                    tenant_id, UUID(campaign_id)
+                )
+            except Exception:  # noqa: BLE001 - preserve slot-local unknown
+                complete = False
+                reason = "canonical_campaign_lookup_unavailable"
+                continue
+            if (
+                not isinstance(campaign, dict)
+                or campaign.get("tenant_id") != tenant_id
+                or str(campaign.get("campaign_id")) != campaign_id
+            ):
+                complete = False
+                reason = "touchpoint_campaign_not_resolved_in_tenant"
+                continue
+            campaign_evidence = EvidenceRef(
+                id=campaign_id,
+                type="entity",
+                source="services/api/journeys/campaign/repository.py:campaigns",
+                observedAt=_safe_timestamp(
+                    campaign.get("updated_at") or campaign.get("created_at")
+                ),
+                uri=f"store://campaigns/{campaign_id}",
+            )
+            links.append(
+                SignalCampaignLink(
+                    campaign_id=campaign_id,
+                    evidence_refs=tuple(
+                        _unique_evidence_refs((*touchpoint_refs, campaign_evidence))
+                    ),
+                )
+            )
+        return _campaign_links_read(
+            tenant_id,
+            subject_kind,
+            subject_id,
+            links=tuple(links),
+            available=True,
+            complete=complete,
+            reason=reason,
+        )
 
     async def _linked_signal_entity(
         self, tenant_id: str, signal_id: str
@@ -673,6 +903,26 @@ class Signals360Provider(IntelligenceProjectionProvider):
                         reason="canonical_identity_join_unavailable",
                     )
 
+        campaign_links_read: Optional[CampaignLinksRead] = None
+        if "campaign_links" in requested_sections:
+            reader = getattr(self._source, "campaign_links", None)
+            if callable(reader):
+                try:
+                    campaign_links_read = await reader(
+                        tenant_id=tenant_id,
+                        subject_kind=request.subject.kind,
+                        subject_id=request.subject.id,
+                    )
+                except Exception:  # noqa: BLE001 - source details stay private
+                    campaign_links_read = _campaign_links_read(
+                        tenant_id,
+                        request.subject.kind,
+                        request.subject.id,
+                        available=False,
+                        complete=False,
+                        reason="campaign_touchpoint_authority_unavailable",
+                    )
+
         rows, scope_mismatch = _scoped_rows(
             read.rows if read is not None else (),
             tenant_id=tenant_id,
@@ -786,6 +1036,14 @@ class Signals360Provider(IntelligenceProjectionProvider):
                 )
                 sections.append(linked_section)
                 claims.extend(linked_claims)
+            elif slot_id == "campaign_links":
+                campaign_section, campaign_claims = _campaign_links_section(
+                    request.subject,
+                    tenant_id=tenant_id,
+                    read=campaign_links_read,
+                )
+                sections.append(campaign_section)
+                claims.extend(campaign_claims)
             else:
                 sections.append(_unknown_section(slot_id))
         sections.extend(
@@ -1144,6 +1402,140 @@ def _linked_entities_section(
                     domainSlotIds=["linked_entities"],
                 )
             )
+    return section, claims
+
+
+def _campaign_links_section(
+    subject: ProjectionSubject,
+    *,
+    tenant_id: str,
+    read: Optional[CampaignLinksRead],
+) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+    """Render only exact touchpoint references resolved by the campaign owner."""
+    scope_mismatch = bool(
+        read is not None
+        and (
+            read.tenant_id != tenant_id
+            or read.subject_kind != subject.kind
+            or read.subject_id != subject.id
+        )
+    )
+    reason = (
+        "campaign_link_read_scope_mismatch"
+        if scope_mismatch
+        else _safe_reason(read.reason)
+        if read is not None
+        else "canonical_signal_campaign_join_not_available"
+    )
+    links: list[dict[str, Any]] = []
+    claim_refs: list[tuple[str, tuple[EvidenceRef, ...]]] = []
+    invalid_link = False
+    if read is not None and not scope_mismatch:
+        for link in read.links:
+            campaign_id = _safe_identifier(link.campaign_id)
+            refs = [ref for ref in link.evidence_refs if isinstance(ref, EvidenceRef)]
+            try:
+                valid_campaign_id = campaign_id is not None and str(UUID(campaign_id)) == campaign_id
+            except (TypeError, ValueError, AttributeError):
+                valid_campaign_id = False
+            required_sources = {
+                "services/api/journeys/measurement/repositories/"
+                "touchpoint_repo.py:silver_campaign_touchpoint_facts",
+                "services/api/journeys/measurement/repositories/"
+                "touchpoint_repo.py:silver_campaign_touchpoint_facts:source_event_id",
+                "services/api/journeys/campaign/repository.py:campaigns",
+            }
+            if (
+                not valid_campaign_id
+                or not refs
+                or not required_sources.issubset({ref.source for ref in refs})
+            ):
+                invalid_link = True
+                break
+            links.append(
+                {
+                    "campaignId": campaign_id,
+                    "linkState": "exact_tenant_campaign_touchpoint",
+                }
+            )
+            claim_refs.append((campaign_id, tuple(refs)))
+    if invalid_link:
+        links = []
+        claim_refs = []
+        reason = "campaign_link_evidence_invalid"
+
+    if (
+        read is None
+        or scope_mismatch
+        or invalid_link
+        or not read.available
+        or not read.complete
+    ):
+        state = "degraded" if read is not None and not scope_mismatch else "unknown"
+    elif read.reason == "subject_kind_has_no_exact_campaign_event_join":
+        state = "unknown"
+    elif links:
+        state = "available"
+    else:
+        state = "empty"
+
+    all_refs = _unique_evidence_refs(
+        [ref for _, refs in claim_refs for ref in refs]
+    )
+    content: dict[str, Any] = {
+        "tenantId": tenant_id,
+        "subject": {"kind": subject.kind, "id": subject.id},
+        "coverage": (
+            "exact_tenant_source_event_campaign_touchpoint"
+            if subject.kind in {"event", "observation"}
+            else "unsupported_subject_kind"
+        ),
+        "links": links,
+        "authorityReadComplete": bool(
+            read is not None
+            and not scope_mismatch
+            and read.available
+            and read.complete
+        ),
+        "reasonCode": reason or (
+            "exact_tenant_campaign_touchpoint_links_observed"
+            if links
+            else "no_exact_tenant_campaign_touchpoint_link"
+        ),
+        "evidenceRefs": [ref.model_dump(mode="json") for ref in all_refs],
+    }
+    if read is not None and read.available and not scope_mismatch:
+        content["returnedCampaignCount"] = len(links)
+    section = ProjectionSection(
+        id="campaign_links",
+        state=state,
+        title="Campaigns linked by exact source-event touchpoints",
+        content=content,
+        warnings=(
+            []
+            if links and read is not None and read.complete
+            else [reason or "campaign links are unavailable or incomplete"]
+        ),
+        canonicalAuthorityRefs=(
+            ["campaign_touchpoints", "campaign_facts"]
+            if subject.kind in {"event", "observation"}
+            else []
+        ),
+    )
+    claims = [
+        ClaimEnvelope(
+            id=f"signals360.campaign_link.{subject.kind}.{subject.id}.{campaign_id}",
+            kind="exact_source_event_campaign_touchpoint_link",
+            subject=subject,
+            evidenceRefs=list(refs),
+            claims=[
+                f"A tenant-scoped campaign touchpoint for this exact source event resolves to canonical campaign {campaign_id}."
+            ],
+            claimState=EpistemicStatus.OBSERVED,
+            domainSlotIds=["campaign_links"],
+        )
+        for campaign_id, refs in claim_refs
+    ]
     return section, claims
 
 

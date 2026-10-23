@@ -180,3 +180,50 @@ async def test_touchpoint_non_conversion_still_persists_properties() -> None:
     assert fetched["is_conversion"] is False
     assert fetched["revenue_usd"] == Decimal("0.0")
     assert isinstance(fetched["revenue_usd"], Decimal)
+
+
+@pytest.mark.asyncio
+async def test_list_by_source_event_is_exact_and_tenant_scoped() -> None:
+    repo = TouchpointRepository()
+    event_id = "event-touchpoint-exact"
+    tenant_a_campaign = "campaign-a"
+
+    await repo.upsert(
+        {
+            "tenant_id": "tenant-a",
+            "idempotency_key": "tenant-a-exact-event",
+            "touchpoint_id": str(uuid4()),
+            "source_event_id": event_id,
+            "campaign_id": tenant_a_campaign,
+            "occurred_at": "2026-10-20T10:00:00+00:00",
+        }
+    )
+    await repo.upsert(
+        {
+            "tenant_id": "tenant-b",
+            "idempotency_key": "tenant-b-same-event",
+            "touchpoint_id": str(uuid4()),
+            "source_event_id": event_id,
+            "campaign_id": "campaign-private",
+            "occurred_at": "2026-10-20T10:00:00+00:00",
+        }
+    )
+    await repo.upsert(
+        {
+            "tenant_id": "tenant-a",
+            "idempotency_key": "tenant-a-other-event",
+            "touchpoint_id": str(uuid4()),
+            "source_event_id": "other-event",
+            "campaign_id": "campaign-other",
+            "occurred_at": "2026-10-20T10:01:00+00:00",
+        }
+    )
+
+    rows = await TouchpointRepository().list_by_source_event(
+        "tenant-a", event_id, limit=5
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["tenant_id"] == "tenant-a"
+    assert rows[0]["source_event_id"] == event_id
+    assert rows[0]["campaign_id"] == tenant_a_campaign

@@ -63,6 +63,15 @@ class IdentityBatchRead:
     reason: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class IdentityProviderRegistryRead:
+    """Exact provider-runtime registry lookup for one recorded source system."""
+
+    entry: Optional[dict[str, Any]] = None
+    available: bool = True
+    reason: Optional[str] = None
+
+
 class Identity360Source(Protocol):
     """Injectable reads from canonical entity, identity and evidence stores."""
 
@@ -73,6 +82,10 @@ class Identity360Source(Protocol):
     async def source_identity(
         self, tenant_id: str, source_identity_id: str
     ) -> IdentityRecordRead: ...
+
+    async def provider_registry_entry(
+        self, source_system_id: str
+    ) -> IdentityProviderRegistryRead: ...
 
     async def source_identities_for_entity(
         self, tenant_id: str, entity_id: str, *, limit: int
@@ -157,6 +170,50 @@ class RepositoryIdentity360Source:
                 reason=f"source_identities_{type(exc).__name__}",
             )
         return IdentityRecordRead(record=row)
+
+    async def provider_registry_entry(
+        self, source_system_id: str
+    ) -> IdentityProviderRegistryRead:
+        """Resolve only an exact recorded provider key against the runtime registry.
+
+        This does not parse a namespace, infer a provider from a prefix, or load
+        plugins as a side effect of a read. The application loads the registry
+        during startup; an absent exact key therefore remains explicitly
+        unknown to Identity360.
+        """
+        if not source_system_id.strip():
+            return IdentityProviderRegistryRead(reason="source_system_id_not_recorded")
+        try:
+            from connectors.provider_runtime.registry import provider_registry
+
+            plugin = provider_registry.get(source_system_id)
+            if plugin is None:
+                return IdentityProviderRegistryRead(reason="provider_identity_not_registered")
+            identity = plugin.identity()
+            manifest = plugin.manifest()
+        except Exception as exc:  # noqa: BLE001 - lookup failures stay content-free
+            return IdentityProviderRegistryRead(
+                available=False,
+                reason=f"provider_registry_{type(exc).__name__}",
+            )
+
+        identity_key = _safe_text(getattr(identity, "key", None))
+        manifest_key = _safe_text(getattr(manifest, "identity_key", None))
+        if identity_key != source_system_id or manifest_key != source_system_id:
+            return IdentityProviderRegistryRead(
+                available=False,
+                reason="provider_registry_identity_mismatch",
+            )
+        return IdentityProviderRegistryRead(
+            entry={
+                "identityKey": identity_key,
+                "providerFamily": _safe_text(getattr(manifest, "provider_family", None)),
+                "productId": _safe_text(getattr(manifest, "product_id", None)),
+                "capabilityId": _safe_text(getattr(manifest, "capability_id", None)),
+                "displayName": _safe_text(getattr(manifest, "display_name", None)),
+                "category": _safe_text(getattr(manifest, "category", None)),
+            }
+        )
 
     async def source_identities_for_entity(
         self, tenant_id: str, entity_id: str, *, limit: int
@@ -499,6 +556,7 @@ class Identity360Provider:
         conflicts_read = IdentityBatchRead()
         verification_read = IdentityBatchRead()
         claim_read = IdentityBatchRead()
+        provider_registry_reads: dict[str, IdentityProviderRegistryRead] = {}
 
         source_rows: list[dict[str, Any]] = []
         claim_rows: list[dict[str, Any]] = []
@@ -562,6 +620,22 @@ class Identity360Provider:
                 conflicts_read = await self._safe_batch(
                     "identity_conflicts",
                     self._source.conflicts_for_entity(tenant_id, entity_id, limit=self._limit),
+                )
+
+        # Namespace metadata is joined only through the exact source-system key
+        # recorded by the tenant-scoped identity authority. In particular, never
+        # derive a provider from a namespace prefix or infer a tenant connection.
+        if want_namespaces and not source_suppressed:
+            provider_system_ids = {
+                source_system_id
+                for row in source_rows
+                if not _is_suppressed(row.get("status"))
+                and _safe_text(row.get("source_namespace"))
+                and (source_system_id := _safe_text(row.get("source_system_id")))
+            }
+            for source_system_id in sorted(provider_system_ids):
+                provider_registry_reads[source_system_id] = (
+                    await self._safe_provider_registry_entry(source_system_id)
                 )
 
         aliases, aliases_read = self._validated_rows(
@@ -694,8 +768,9 @@ class Identity360Provider:
             if ref is not None
         ]
 
-        if subject_kind == "source" and source_row is not None and not source_suppressed:
-            warnings.append("source_provider_registry_join_not_performed")
+        for provider_read in provider_registry_reads.values():
+            if provider_read.reason:
+                warnings.append(provider_read.reason)
 
         freshness = _freshness(
             [
@@ -792,19 +867,110 @@ class Identity360Provider:
                 "identity_subject_not_resolved" if not subject_scope_known else None
             )
 
-        namespace_items = [
-            {
-                "sourceIdentityId": item.get("id"),
-                "sourceKind": item.get("sourceKind"),
-                "sourceNamespace": item.get("sourceNamespace"),
-                "canonicalEntityId": item.get("canonicalEntityId"),
-                "status": item.get("status"),
-                "evidenceRef": item.get("evidenceRef"),
-            }
-            for item in source_items
-            if item.get("sourceNamespace")
-        ]
+        source_row_by_id = {
+            source_id: row
+            for row in source_rows
+            if (source_id := _safe_text(row.get("id"))) is not None
+        }
+        namespace_items: list[dict[str, Any]] = []
+        for item in source_items:
+            if not item.get("sourceNamespace"):
+                continue
+            source_row = source_row_by_id.get(str(item.get("id") or ""), {})
+            source_system_id = _safe_text(source_row.get("source_system_id"))
+            provider_read = provider_registry_reads.get(source_system_id or "")
+            provider_entry = provider_read.entry if provider_read is not None else None
+            provider_join_state = (
+                "resolved"
+                if provider_entry is not None
+                else "degraded"
+                if provider_read is not None and not provider_read.available
+                else "unknown"
+            )
+            namespace_items.append(
+                {
+                    "sourceIdentityId": item.get("id"),
+                    "sourceKind": item.get("sourceKind"),
+                    "sourceNamespace": item.get("sourceNamespace"),
+                    "canonicalEntityId": item.get("canonicalEntityId"),
+                    "status": item.get("status"),
+                    "evidenceRef": item.get("evidenceRef"),
+                    "providerIdentity": (
+                        provider_entry.get("identityKey") if provider_entry is not None else None
+                    ),
+                    "provider": provider_entry,
+                    "providerRegistryJoin": {
+                        "state": provider_join_state,
+                        "reason": (
+                            None
+                            if provider_join_state == "resolved"
+                            else provider_read.reason
+                            if provider_read is not None
+                            else "source_system_id_not_recorded"
+                        ),
+                    },
+                }
+            )
+            if provider_read is None:
+                warnings.append("source_system_id_not_recorded")
         namespace_metadata_incomplete = len(namespace_items) < len(source_items)
+        namespace_provider_reads = [
+            provider_registry_reads[source_system_id]
+            for row in source_rows
+            if not _is_suppressed(row.get("status"))
+            and _safe_text(row.get("source_namespace"))
+            and (source_system_id := _safe_text(row.get("source_system_id")))
+            and source_system_id in provider_registry_reads
+        ]
+        namespace_registry_degraded = any(
+            not provider_read.available for provider_read in namespace_provider_reads
+        )
+        namespace_registry_complete = (
+            bool(source_items)
+            and not namespace_metadata_incomplete
+            and len(namespace_items) == len(source_items)
+            and len(namespace_provider_reads) == len(namespace_items)
+            and all(provider_read.entry is not None for provider_read in namespace_provider_reads)
+        )
+        namespace_registry_summary = {
+            "state": "partial"
+            if namespace_registry_complete
+            else "degraded"
+            if namespace_registry_degraded
+            else "partial"
+            if source_items
+            else "unknown",
+            "authority": "provider_runtime_registry",
+            "joinState": "resolved"
+            if namespace_registry_complete
+            else "degraded"
+            if namespace_registry_degraded
+            else "unknown",
+            "resolvedEntries": sum(
+                provider_read.entry is not None for provider_read in namespace_provider_reads
+            ),
+            "unknownEntries": sum(
+                provider_read.entry is None and provider_read.available
+                for provider_read in namespace_provider_reads
+            )
+            + max(0, len(namespace_items) - len(namespace_provider_reads)),
+            "degradedEntries": sum(
+                not provider_read.available for provider_read in namespace_provider_reads
+            ),
+            "reason": (
+                "provider_registry_freshness_unknown"
+                if namespace_registry_complete
+                else "provider_identity_lookup_incomplete"
+                if source_items and not namespace_registry_degraded
+                else "provider_registry_read_degraded"
+                if namespace_registry_degraded
+                else None
+            ),
+            "freshness": {
+                "state": "unknown",
+                "reason": "provider_runtime_registry_has_no_read_watermark",
+            },
+        }
         if subject_kind == "source":
             if source_row is None:
                 namespace_state: IdentitySlotState = (
@@ -814,12 +980,18 @@ class Identity360Provider:
             elif source_suppressed:
                 namespace_state = "suppressed"
                 namespace_reason = "source_identity_suppressed"
+            elif namespace_items and namespace_registry_complete:
+                namespace_state = "partial"
+                namespace_reason = "provider_registry_freshness_unknown"
+            elif namespace_items and namespace_registry_degraded:
+                namespace_state = "degraded"
+                namespace_reason = "source_provider_registry_read_degraded"
             elif namespace_items:
                 namespace_state = "partial"
                 namespace_reason = (
-                    "source_provider_registry_join_not_performed"
-                    if not namespace_metadata_incomplete
-                    else "source_namespace_metadata_incomplete_and_provider_registry_unjoined"
+                    "source_namespace_metadata_incomplete"
+                    if namespace_metadata_incomplete
+                    else "source_provider_identity_unresolved"
                 )
             else:
                 namespace_state = "unknown"
@@ -839,12 +1011,19 @@ class Identity360Provider:
             elif not source_items:
                 namespace_state = "empty"
                 namespace_reason = None
-            elif namespace_metadata_incomplete:
+            elif namespace_metadata_incomplete or namespace_registry_degraded:
                 namespace_state = "degraded"
-                namespace_reason = "source_namespace_metadata_incomplete"
+                namespace_reason = (
+                    "source_provider_registry_read_degraded"
+                    if namespace_registry_degraded
+                    else "source_namespace_metadata_incomplete"
+                )
+            elif namespace_registry_complete:
+                namespace_state = "partial"
+                namespace_reason = "provider_registry_freshness_unknown"
             elif namespace_items:
                 namespace_state = "partial"
-                namespace_reason = "source_provider_registry_join_not_performed"
+                namespace_reason = "source_provider_identity_unresolved"
             else:
                 namespace_state = "degraded"
                 namespace_reason = "source_namespace_not_recorded"
@@ -1120,10 +1299,7 @@ class Identity360Provider:
                         "mappings": namespace_items,
                         "authority": "identity_source_identities",
                         "completeness": "observed_source_identity_metadata",
-                        "canonicalNamespaceRegistryJoin": {
-                            "state": "unknown",
-                            "reason": "source_provider_registry_join_not_performed",
-                        },
+                        "canonicalNamespaceRegistryJoin": namespace_registry_summary,
                         "freshness": freshness,
                     }
                     if want_namespaces
@@ -1481,6 +1657,55 @@ class Identity360Provider:
                 available=False,
                 reason=f"{source_name}_{type(exc).__name__}",
             )
+
+    async def _safe_provider_registry_entry(
+        self, source_system_id: str
+    ) -> IdentityProviderRegistryRead:
+        reader = getattr(self._source, "provider_registry_entry", None)
+        if not callable(reader):
+            return IdentityProviderRegistryRead(
+                available=False,
+                reason="provider_registry_reader_unavailable",
+            )
+        try:
+            result = await reader(source_system_id)
+        except Exception as exc:  # noqa: BLE001 - keep registry diagnostics private
+            return IdentityProviderRegistryRead(
+                available=False,
+                reason=f"provider_registry_{type(exc).__name__}",
+            )
+        if not isinstance(result, IdentityProviderRegistryRead):
+            return IdentityProviderRegistryRead(
+                available=False,
+                reason="provider_registry_invalid_read_result",
+            )
+        if not result.available:
+            return IdentityProviderRegistryRead(
+                available=False,
+                reason=result.reason or "provider_registry_read_degraded",
+            )
+        if result.entry is not None and result.entry.get("identityKey") != source_system_id:
+            return IdentityProviderRegistryRead(
+                available=False,
+                reason="provider_registry_identity_mismatch",
+            )
+        if result.entry is None:
+            return result
+        return IdentityProviderRegistryRead(
+            entry={
+                "identityKey": source_system_id,
+                **{
+                    field: _safe_text(result.entry.get(field))
+                    for field in (
+                        "providerFamily",
+                        "productId",
+                        "capabilityId",
+                        "displayName",
+                        "category",
+                    )
+                },
+            }
+        )
 
     @staticmethod
     def _scope_record(
@@ -1927,6 +2152,7 @@ __all__ = [
     "Identity360Result",
     "Identity360Slot",
     "Identity360Source",
+    "IdentityProviderRegistryRead",
     "IdentityBatchRead",
     "IdentityRecordRead",
     "RepositoryIdentity360Source",

@@ -94,15 +94,18 @@ route classified in `config/route_registry.yaml`.
 | agent360 | agentic_360 | `/v1/agent`, `/v1/agents`, `/v1/profile360/{type}/{id}` (AgentProfile360Composer); `services/api/actions/agent/`, `agentic_observability` | profile360 | — |
 | relationship360 | relationship_360 | `/v1/graph` (relationship paths, H2H/A2A layers), `/v1/semantic` (`gold_relationship_semantic_state`), `/v1/entities` | graph, profile360 | — |
 | social360 | relationship_360 | `/v1/profile/{id}/social-intelligence` (single endpoint, served by the profile handler) | profile360 | thin — folded into profile |
-| episode360 | sequence_360 | `/v1/journeys`, `/v1/events`; journey/timeline surfaces | journeys, timeline | spine `journey_continuity` |
+| episode360 | sequence_360 | `/v1/journeys`, `/v1/events`; `services/api/journeys/measurement/episodes/`; exact episode-recorded observation and canonical outcome ID joins | journeys, timeline | spine `journey_continuity`; full activity/session, policy, and freshness coverage |
 | communication360 | sequence_360 | `/v1/comms`, `/v1/contact`, `/v1/delivery`, `/v1/notifications`; `services/api/journeys/comms/repository` feeds profile summary | timeline, profile360 | metricRefs: `email_open_rate`/`click`/`reply` resolve |
 | execution360 | sequence_360 | `/v1/agents/{id}/execute`, `/v1/agent/runs`, `/v1/jobs`, `/v1/flows`, `/v1/computations`; exact `workflow_run` joins through stored tenant-scoped AgentExecution references and matched invocation evidence | timeline | workflow-wide step coverage, standalone run and telemetry joins, external execution receipts |
+| workflow360 | context_360 | shared frame route; `services/api/intelligence/workflow/`; exact tenant/run invocation, AgentExecution, trigger, approval, and referenced outcome evidence | timeline | workflow definitions/state, complete steps and actors, causal outcome attribution, risk, policy, freshness |
+| signals360 | context_360 | shared frame route; `services/api/intelligence/signals/`; exact SDK event classification and source-event campaign touchpoint joins | profile360 | source attribution, semantic normalization, risk authority, complete subject coverage, freshness |
 | temporal360 | context_360 | **`implemented`** (T2.4) — `Temporal360Provider` in `services/api/graph/temporal360/`; the `graph_history_replay` spine resolved by a read-side knowledge-time reconstruction (`shared/graph replay_state` + ledger-prefix reads, `services/api/graph/temporal360/history_replay.py`); reads bitemporal `as_of`/`compare` | temporal360 | — (zero pending; `converged`, `docs/architecture/blueprints/temporal360.md`) |
 | geographic360 | context_360 | **`implemented`** (G4.5) — `Geographic360Provider` in `services/api/graph/geographic360/` over governed location facts (`LocationFactRepository`, table `location_facts`, in-memory/asyncpg); reads canonical `location_facts` (`geo` legacy service); `context_capsule_semantics` spine resolved (`services/api/graph/geographic360/capsule_semantics.py`); DSR coverage — `location_facts` revoke | geographic360 | — (zero pending; `converged`, `docs/architecture/blueprints/geographic360.md`; `projectionDependencies profile360/temporal360` remain `in_flight` → region/posture lenses degrade, never lie) |
 | population360 | context_360 | **`implemented`** (P3.5) — `Population360Provider` in `services/api/identity/population360/` over governed membership (`PopulationMembershipGovernor`, MEMBER_OF-via-gateway, append-only `population_definition_versions`, DSR coverage — `services/api/identity/population`); `grouping_membership` spine resolved | population360 | — (zero pending; `converged`, `docs/architecture/blueprints/population360.md`; `projectionDependencies profile360/relationship360` remain `in_flight` → demographic lens / relationship semantics degrade, never lie) |
 | cluster360 | operational_workbench | `/v1/clusters`; `cluster360` surface + tenant page | cluster360, graph | — |
 | outcome360 | measurement_360 | **`implemented`** (S2) — `Outcome360Provider` in `services/api/journeys/measurement/outcome/`; reads outcome ledger + measurement engine (`gold_materializer`, `journey_compiler`); reads canonical `outcome_facts`/`measurement_contract`/`graph`/`evidence` | campaign360, outcome360 | — (zero pending; `migrationMode: converged`, `docs/architecture/blueprints/outcome360.md`) |
 | economic360 | measurement_360 | **`implemented`** (S3) — `Economic360Provider` in `services/api/value/economic/`; reads `ai_costs`/`ai_models`/`computed_results`/`value_diagnostics` + `economic-metrics.ts` taxonomy; USD-safe value semantics (`value.value`), no cross-currency sums | campaign360, product_intelligence, economic360 | — (metricRefs `revenue`/`campaign_spend`/`campaign_roas`/`campaign_cac`/`campaign_ltv` all resolve; zero pending; `converged`, `docs/architecture/blueprints/economic360.md`; `projectionDependencies profile360/relationship360` remain `in_flight` → those sections degrade, never lie) |
+| commerce360 | context_360 | shared frame route; `Commerce360Provider` reads tenant-scoped product/offer catalog lifecycle evidence | product_intelligence | inventory availability, current offer price, and freshness |
 | campaign360 | measurement_360 | `/v1/campaigns`, `/v1/campaign-sources`, `/v1/mapping-review`, `/v1/campaign-quality`; campaign materializer; measurement campaign engine | campaign360, comparison_workbench | metricRefs `conversion_rate`/`attributed_conversions`/`revenue`/`touchpoints` resolve |
 | risk360 | risk_360 | `/v1/risk-overlays` (flag-gated OFF), `/v1/capability-risk`; CIS gateway | graph, comparison_workbench | flag-gated today |
 | fraud360 | risk_360 | `/v1/fraud`, `/v1/fraud/networks`; `services/api/intelligence/fraud/`, `fraud_networks/` | graph | — |
@@ -110,11 +113,13 @@ route classified in `config/route_registry.yaml`.
 | connection360 | operational_workbench | `/v1/integrations/connectors`, `/v1/provider-connections`, `/v1/client-sync`; `provider_runtime` connections/credentials/health | (**new surface `connection360` added in P0**) | spine `reconciled_control_plane` (harness rollup PR #529 merged; spine not yet formalized) |
 | support360 | operational_workbench | `services/api/journeys/support360/`; canonical case lifecycle plus case-linked, body-suppressed communication metadata using exact tenant, provider connection, and source case keys | support360 | callbacks, participants, SLA, journeys, agent assignment, risk, value, outcome, source-history completeness, freshness |
 | infrastructure360 | infrastructure_360 | **`implemented`** (S4) — 19th projection; `Infrastructure360Provider` in `services/api/graph/infrastructure/` (read-only, `graphMutationPolicy: read_only`, no write path); `GET /v1/infrastructure/{subject_kind}/{subject_id}` + `/health` (classified in `config/route_registry.yaml`); reads `infrastructure_facts`/`infrastructure_state`/`deployments` authorities over the `infrastructure_model` spine | infrastructure360 | — (zero pending; `converged`, `docs/architecture/blueprints/infrastructure360.md`) |
+| memory360 | context_360 | shared frame route; tenant memory records, semantic graph, consent decisions, and evidence | profile360 | complete source links, current policy evaluation, and freshness |
 
 **Tetris mechanics.** Existing technical projection rows (all 24) sit on the board with their
 real coordinates (routes → `legacyBindings`, surfaces → `surfaceIds`, metrics
 → `metricRefs`). Nine projections are currently marked `implemented`; the
-other eleven remain `in_flight`, including `agent360` and `execution360`.
+other fifteen remain `in_flight`, including `agent360`, `execution360`, and
+`workflow360`.
 Two unformalized spines (`journey_continuity` and
 `reconciled_control_plane`) remain declared pending authorities for
 `episode360` and `connection360`. The 18 product-surface contract rows are
@@ -131,6 +136,20 @@ projection validator derives its resolved-spine index from that registry rather
 than a hand-maintained list. New providers and slot bindings must close against
 their canonical authorities and preserve evidence, policy, freshness, and
 actor/authority semantics before a product surface is called complete.
+
+The latest provider wave binds four additional partial paths. Identity360
+`namespace_map` resolves only an exact recorded `source_system_id` to the
+loaded provider runtime registry; it does not infer from namespace prefixes,
+and registry freshness is unknown. Signals360 `campaign_links` reads exact
+tenant/source-event touchpoints and emits a link only after the same tenant's
+CampaignRepository resolves the canonical campaign. Episode360
+`conversion_events` joins only exact episode-recorded outcome IDs and admits
+registered conversion definitions with canonical evidence. Workflow360
+`outcomes` joins only outcome IDs on exact tenant/run AI invocation facts and
+reports association without workflow causality. All four paths retain unknown
+or partial status where coverage, policy, freshness, or lineage is incomplete;
+the projections remain `in_flight` and no product surface is complete by this
+binding alone.
 
 ## 3. Registry ownership + generated artifacts
 

@@ -597,6 +597,7 @@
         "events",
         "journeys",
         "canonical_conversions",
+        "outcome_facts",
         "episode_facts",
         "graph",
         "evidence",
@@ -2409,6 +2410,8 @@
       ],
       "canonicalAuthorities": [
         "behavioral_signals",
+        "campaign_facts",
+        "campaign_touchpoints",
         "events",
         "identity",
         "observations",
@@ -2723,7 +2726,9 @@
         "agent_entities",
         "agent_executions",
         "commerce",
-        "identity"
+        "identity",
+        "outcome_facts",
+        "evidence"
       ],
       "hardDependencies": [
         "contract_spine"
@@ -4089,12 +4094,25 @@
         {
           "id": "conversion_events",
           "requirement": "required",
-          "description": "Required episode360 slot: conversion events.",
+          "description": "Canonical conversion outcomes explicitly referenced by exact tenant episode records; only registered conversion definitions are admitted.",
           "canonicalAuthorityRefs": [
-            "outcome_facts"
+            "episode_facts",
+            "outcome_facts",
+            "evidence"
           ],
-          "projectionBindings": [],
-          "unboundReason": "episode_outcome_ids_are_not_conversion_records"
+          "projectionBindings": [
+            {
+              "projectionId": "episode360",
+              "role": "primary",
+              "sectionIds": [
+                "outcomes"
+              ],
+              "subjectKinds": [
+                "episode"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Only outcome IDs explicitly recorded by tenant episode rows are joined and admitted for registered campaign_conversion or journey_completion definitions with canonical evidence; these references do not establish complete coverage or causal attribution, and freshness and policy remain unknown."
         },
         {
           "id": "attribution_links",
@@ -4992,13 +5010,15 @@
         {
           "id": "namespace_map",
           "requirement": "required",
-          "description": "Required Identity 360 blueprint slot: namespace map.",
+          "description": "Maps an exact source-system identity namespace to an already registered provider runtime identity without inferring a provider from namespace prefixes.",
           "canonicalAuthorityRefs": [
             "identity",
+            "provider_registry",
             "source_provenance",
             "evidence"
           ],
           "projectionBindings": [],
+          "partialImplementationReason": "Only exact recorded source_system_id values on tenant- and evidence-validated source identities are resolved; missing provider keys remain unknown and provider registry freshness is unavailable.",
           "implementationCrosswalk": [
             "source_identifier_lineage"
           ]
@@ -5259,6 +5279,7 @@
             "entity_registry",
             "evidence",
             "identity",
+            "provider_registry",
             "source_provenance"
           ]
         }
@@ -5273,6 +5294,7 @@
           "evidence",
           "graph",
           "identity",
+          "provider_registry",
           "relationship_facts",
           "source_provenance"
         ],
@@ -8444,13 +8466,25 @@
         {
           "id": "campaign_links",
           "requirement": "required",
-          "description": "Required signals360 slot: campaign links.",
+          "description": "Exact tenant source-event links from campaign touchpoints, admitted only after the campaign owner resolves the referenced canonical campaign.",
           "canonicalAuthorityRefs": [
             "campaign_facts",
             "campaign_touchpoints"
           ],
-          "projectionBindings": [],
-          "unboundReason": "canonical_signal_campaign_join_not_available"
+          "projectionBindings": [
+            {
+              "projectionId": "signals360",
+              "role": "primary",
+              "sectionIds": [
+                "campaign_links"
+              ],
+              "subjectKinds": [
+                "event",
+                "observation"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Only exact event or observation IDs linked by tenant-scoped campaign touchpoints and resolved to canonical tenant campaigns are available; entity, source, stream, missing-reference, and incomplete reads remain unknown or degraded."
         },
         {
           "id": "risk_flags",
@@ -9648,12 +9682,26 @@
         {
           "id": "outcomes",
           "requirement": "required",
-          "description": "Required Workflow 360 slot: outcomes.",
+          "description": "Canonical outcomes explicitly referenced by tenant-scoped invocation facts for an exact workflow run.",
           "canonicalAuthorityRefs": [
-            "outcome_facts"
+            "ai_execution_facts",
+            "outcome_facts",
+            "evidence"
           ],
-          "projectionBindings": [],
-          "unboundReason": "canonical_workflow_business_outcome_join_not_available"
+          "projectionBindings": [
+            {
+              "projectionId": "workflow360",
+              "role": "primary",
+              "sectionIds": [
+                "outcomes"
+              ],
+              "subjectKinds": [
+                "run",
+                "workflow_run"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Only canonical outcome IDs explicitly referenced by tenant/run invocation facts are joined with invocation and outcome evidence; this association does not establish workflow causality or complete outcome coverage, and policy and freshness remain unknown."
         },
         {
           "id": "risk",
@@ -9702,6 +9750,7 @@
           "agent_entities",
           "agent_executions",
           "ai_execution_facts",
+          "evidence",
           "events",
           "execution_facts",
           "commerce",

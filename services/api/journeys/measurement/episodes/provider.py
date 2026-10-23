@@ -25,7 +25,7 @@ from typing import Any, Optional, Protocol
 from urllib.parse import quote
 from uuid import UUID
 
-from shared.backend_interpretation.primitives import EpisodeRecord
+from shared.backend_interpretation.primitives import EpisodeRecord, OutcomeTruthRecord
 from shared.backend_interpretation.stores import EpisodeStore
 from shared.contracts_models.epistemic import EpistemicStatus
 from graph.operational_intelligence.models import EvidenceRef, PageInfo
@@ -71,8 +71,12 @@ _JOURNEY_CONVERSION_SOURCE = (
 )
 _EPISODE_RECORD_SOURCE = "shared.backend_interpretation.stores.EpisodeStore"
 _EPISODE_OBSERVATION_SOURCE = "semantic_intelligence.silver_semantic_observations"
+_EPISODE_OUTCOME_TRUTH_SOURCE = "shared.backend_interpretation.stores.OutcomeTruthStore"
 _EPISODE_AGENT_HANDOFF_GAP_REASON = (
     "episode_records_and_observations_do_not_reference_canonical_agent_execution_or_handoff_id"
+)
+_EPISODE_CONVERSION_DEFINITION_REFS = frozenset(
+    {"campaign_conversion", "journey_completion"}
 )
 _JOURNEY_STEP_CAP = 200
 _JOURNEY_TOUCHPOINT_CAP = 200
@@ -82,6 +86,7 @@ _JOURNEY_TOUCHPOINT_READ_CONCURRENCY = 8
 _EPISODE_PAGE_DEFAULT = 50
 _EPISODE_SUBJECT_RELATIONSHIP_CAP = 100
 _EPISODE_OBSERVATION_CAP = 200
+_EPISODE_OUTCOME_CAP = 100
 _GRAPH_LEDGER_SOURCE = "graph_mutation_ledger"
 _JOURNEY_REQUIRED_SLOT_IDS = (
     "journey_summary",
@@ -184,6 +189,43 @@ class EpisodeObservationRead:
             or self.missing_ids
             or self.read_failed
         )
+
+
+@dataclass(frozen=True)
+class EpisodeOutcomeRead:
+    """Exact tenant-bound outcome records referenced by episode rows."""
+
+    requested_ids: tuple[str, ...] = ()
+    resolved_ids: tuple[str, ...] = ()
+    conversions: tuple[dict[str, Any], ...] = ()
+    evidence_refs: tuple[EvidenceRef, ...] = ()
+    available: bool = True
+    truncated: bool = False
+    invalid_records: bool = False
+    tenant_mismatch: bool = False
+    missing_ids: tuple[str, ...] = ()
+    missing_evidence_ids: tuple[str, ...] = ()
+    read_failed: bool = False
+    disabled: bool = False
+
+    @property
+    def complete(self) -> bool:
+        return not (
+            not self.available
+            or self.truncated
+            or self.invalid_records
+            or self.tenant_mismatch
+            or self.missing_ids
+            or self.missing_evidence_ids
+            or self.read_failed
+            or self.disabled
+        )
+
+
+class EpisodeOutcomeSource(Protocol):
+    """Exact composite-key reader over canonical outcome truth."""
+
+    async def get(self, tenant_id: str, outcome_id: str) -> Any: ...
 
 
 class EpisodeObservationSource(Protocol):
@@ -378,6 +420,7 @@ class Episode360Provider:
         conversion_source: Optional[JourneyConversionSource] = None,
         subject_relationship_reader: Optional[EpisodeSubjectRelationshipReader] = None,
         observation_source: Optional[EpisodeObservationSource] = None,
+        outcome_source: Optional[EpisodeOutcomeSource] = None,
     ) -> None:
         """``episode_store`` may be injected (tests); defaults to the durable
         :class:`EpisodeStore` (WS-D item 2). Observation rows default to the
@@ -387,6 +430,7 @@ class Episode360Provider:
         self._touchpoint_source = touchpoint_source
         self._conversion_source = conversion_source
         self._observation_source = observation_source
+        self._outcome_source = outcome_source
         self._subject_relationship_reader = (
             subject_relationship_reader
             if subject_relationship_reader is not None
@@ -560,6 +604,160 @@ class Episode360Provider:
             missing_ids=tuple(missing_ids),
         )
 
+    async def _load_episode_outcomes(
+        self, tenant_id: str, episodes: list[EpisodeRecord]
+    ) -> EpisodeOutcomeRead:
+        """Resolve only canonical outcomes explicitly referenced by episodes.
+
+        ``outcome_ids`` are not treated as conversion IDs. Each exact ID is
+        looked up in the tenant-keyed canonical outcome truth store, then only
+        outcomes with a registered conversion definition are emitted. The
+        episode reference set is incomplete evidence of the broader conversion
+        inventory, so this join can only produce a partial slot.
+        """
+        episode_ids_by_outcome: dict[str, list[str]] = {}
+        invalid_references = False
+        for episode in episodes:
+            episode_seen: set[str] = set()
+            for raw_id in episode.outcome_ids:
+                outcome_id = _journey_text(raw_id)
+                if outcome_id is None:
+                    invalid_references = True
+                    continue
+                if outcome_id in episode_seen:
+                    invalid_references = True
+                    continue
+                episode_seen.add(outcome_id)
+                episode_ids_by_outcome.setdefault(outcome_id, []).append(episode.episode_id)
+
+        requested_ids = list(episode_ids_by_outcome)
+        truncated = len(requested_ids) > _EPISODE_OUTCOME_CAP
+        bounded_ids = requested_ids[:_EPISODE_OUTCOME_CAP]
+        if not bounded_ids:
+            return EpisodeOutcomeRead(
+                available=True,
+                invalid_records=invalid_references,
+            )
+
+        source = self._outcome_source
+        if source is None:
+            try:
+                from shared.backend_interpretation.flags import outcome_truth_store_enabled
+
+                if not outcome_truth_store_enabled():
+                    return EpisodeOutcomeRead(
+                        requested_ids=tuple(requested_ids),
+                        available=False,
+                        truncated=truncated,
+                        invalid_records=invalid_references,
+                        disabled=True,
+                    )
+                from shared.backend_interpretation.stores import OutcomeTruthStore
+
+                source = OutcomeTruthStore()
+            except Exception:  # noqa: BLE001 - optional authority stays unknown
+                return EpisodeOutcomeRead(
+                    requested_ids=tuple(requested_ids),
+                    available=False,
+                    truncated=truncated,
+                    invalid_records=invalid_references,
+                    read_failed=True,
+                )
+
+        semaphore = asyncio.Semaphore(_JOURNEY_TOUCHPOINT_READ_CONCURRENCY)
+
+        async def read_one(outcome_id: str) -> tuple[str, Optional[dict[str, Any]], bool]:
+            async with semaphore:
+                try:
+                    raw = await source.get(tenant_id, outcome_id)
+                except Exception:  # noqa: BLE001 - exact authority failures stay unknown
+                    return outcome_id, None, True
+            return outcome_id, _as_mapping(raw), False
+
+        results = await asyncio.gather(*(read_one(value) for value in bounded_ids))
+        missing_ids: list[str] = []
+        missing_evidence_ids: list[str] = []
+        resolved_ids: list[str] = []
+        conversions: list[dict[str, Any]] = []
+        evidence_refs: list[EvidenceRef] = []
+        tenant_mismatch = False
+        read_failed = False
+        invalid_records = invalid_references
+
+        for outcome_id, row, failed in results:
+            if failed:
+                read_failed = True
+                continue
+            if row is None:
+                missing_ids.append(outcome_id)
+                continue
+            try:
+                canonical_outcome = OutcomeTruthRecord.model_validate(row)
+            except Exception:  # noqa: BLE001 - malformed canonical rows stay unknown
+                invalid_records = True
+                continue
+            row = canonical_outcome.model_dump(mode="json")
+            if row.get("tenant_id") != tenant_id:
+                tenant_mismatch = True
+                continue
+            if _journey_text(row.get("outcome_id")) != outcome_id:
+                invalid_records = True
+                continue
+
+            resolved_ids.append(outcome_id)
+            outcome_refs: list[EvidenceRef] = []
+            raw_refs = row.get("evidence_refs")
+            if not isinstance(raw_refs, list):
+                raw_refs = []
+            for raw_ref in raw_refs:
+                try:
+                    ref = EvidenceRef.model_validate(raw_ref)
+                except Exception:  # noqa: BLE001 - malformed source lineage is omitted
+                    invalid_records = True
+                    continue
+                if ref.id and ref.source:
+                    outcome_refs.append(ref)
+            outcome_refs = _dedupe_evidence_refs(outcome_refs)
+            if not outcome_refs:
+                missing_evidence_ids.append(outcome_id)
+                continue
+            evidence_refs.extend(outcome_refs)
+
+            definition_ref = _journey_text(row.get("definition_ref"))
+            if definition_ref not in _EPISODE_CONVERSION_DEFINITION_REFS:
+                continue
+            conversions.append(
+                {
+                    "outcomeId": outcome_id,
+                    "episodeIds": episode_ids_by_outcome[outcome_id],
+                    "conversionType": definition_ref,
+                    "outcomeState": _journey_text(row.get("state")),
+                    "claimType": _journey_text(row.get("claim_type")),
+                    "occurredAt": (
+                        _journey_timestamp(row.get("achieved_at"))
+                        or _journey_timestamp(row.get("observed_at"))
+                    ),
+                    "evidenceRefs": [
+                        ref.model_dump(mode="json", exclude_none=True)
+                        for ref in outcome_refs
+                    ],
+                }
+            )
+
+        return EpisodeOutcomeRead(
+            requested_ids=tuple(requested_ids),
+            resolved_ids=tuple(resolved_ids),
+            conversions=tuple(conversions),
+            evidence_refs=tuple(_dedupe_evidence_refs(evidence_refs)),
+            available=True,
+            truncated=truncated,
+            invalid_records=invalid_records,
+            tenant_mismatch=tenant_mismatch,
+            missing_ids=tuple(missing_ids),
+            missing_evidence_ids=tuple(missing_evidence_ids),
+            read_failed=read_failed,
+        )
+
     async def _load_journey_touchpoints(
         self,
         tenant_id: str,
@@ -723,6 +921,7 @@ class Episode360Provider:
         read = await self._load_episodes(request)
         episodes = list(read.episodes)
         observation_read = await self._load_episode_observations(request.tenantId, episodes)
+        outcome_read = await self._load_episode_outcomes(request.tenantId, episodes)
         warnings: list[str] = []
         if read.truncated:
             warnings.append("episode_page_truncated")
@@ -746,6 +945,20 @@ class Episode360Provider:
             warnings.append("episode_observation_timestamps_missing_or_invalid")
         if observation_read.missing_ids:
             warnings.append("episode_observation_references_unresolved")
+        if outcome_read.disabled:
+            warnings.append("episode_outcome_truth_store_disabled")
+        if outcome_read.read_failed:
+            warnings.append("episode_outcome_truth_authority_unavailable")
+        if outcome_read.truncated:
+            warnings.append("episode_outcome_reference_read_truncated")
+        if outcome_read.invalid_records:
+            warnings.append("episode_outcome_rows_invalid_or_ambiguous")
+        if outcome_read.tenant_mismatch:
+            warnings.append("episode_outcome_tenant_scope_mismatch")
+        if outcome_read.missing_ids:
+            warnings.append("episode_outcome_references_unresolved")
+        if outcome_read.missing_evidence_ids:
+            warnings.append("episode_outcome_lineage_unavailable")
         if not read.available:
             availability = "missing"
         elif not read.complete:
@@ -799,10 +1012,11 @@ class Episode360Provider:
             warnings,
             subject_relationship_context=subject_relationship_context,
             observation_read=observation_read,
+            outcome_read=outcome_read,
         )
         section_by_id = {section.id: section for section in sections}
         sections = [section_by_id[section_id] for section_id in _EPISODE360_SECTIONS]
-        claims = self._build_claims(request, episodes)
+        claims = self._build_claims(request, episodes, outcome_read)
         return ProjectionResult(
             projectionId=self.projection_id,
             tenantId=request.tenantId,
@@ -1213,9 +1427,12 @@ class Episode360Provider:
         *,
         subject_relationship_context: Optional[dict[str, Any]] = None,
         observation_read: Optional[EpisodeObservationRead] = None,
+        outcome_read: Optional[EpisodeOutcomeRead] = None,
     ) -> list[ProjectionSection]:
         complete = availability in {"available", "empty"}
         observation_read = observation_read or EpisodeObservationRead(available=False)
+        outcome_read = outcome_read or EpisodeOutcomeRead(available=False, read_failed=True)
+        conversion_context = _episode_conversion_context(outcome_read)
         by_kind = _kind_counts(episodes)
         by_status = _status_distribution(episodes)
         episode_evidence = _collect_evidence(episodes)
@@ -1362,6 +1579,7 @@ class Episode360Provider:
                             availability=availability,
                             evidence_refs=evidence,
                             observation_read=observation_read,
+                            outcome_read=outcome_read,
                         )
                         if request.subject.kind == "episode"
                         else None
@@ -1520,8 +1738,7 @@ class Episode360Provider:
                         if episode.outcome_ids
                     ],
                     "conversionEvents": {
-                        **_unknown_episode_slot("episode_outcome_ids_are_not_conversion_ids"),
-                        "events": [],
+                        **conversion_context,
                     },
                     "attributionLinks": {
                         **_unknown_episode_slot("episode_attribution_authority_not_joined"),
@@ -1609,7 +1826,10 @@ class Episode360Provider:
         ]
 
     def _build_claims(
-        self, request: ProjectionRequest, episodes: list[EpisodeRecord]
+        self,
+        request: ProjectionRequest,
+        episodes: list[EpisodeRecord],
+        outcome_read: Optional[EpisodeOutcomeRead] = None,
     ) -> list[ClaimEnvelope]:
         claims: list[ClaimEnvelope] = []
         for episode in episodes:
@@ -1689,6 +1909,39 @@ class Episode360Provider:
                         domainSlotIds=["timeline", "evidence_trace"],
                     )
                 )
+        for conversion in (outcome_read or EpisodeOutcomeRead()).conversions:
+            evidence_refs: list[EvidenceRef] = []
+            raw_refs = conversion.get("evidenceRefs")
+            if isinstance(raw_refs, list):
+                for raw_ref in raw_refs:
+                    try:
+                        evidence_refs.append(EvidenceRef.model_validate(raw_ref))
+                    except Exception:  # noqa: BLE001 - invalid claim evidence is omitted
+                        continue
+            if not evidence_refs:
+                continue
+            outcome_id = str(conversion["outcomeId"])
+            claim_type = conversion.get("claimType")
+            claim_state = (
+                EpistemicStatus.OBSERVED
+                if claim_type == "observed"
+                else EpistemicStatus.DERIVED
+                if claim_type == "derived"
+                else EpistemicStatus.UNKNOWN
+            )
+            claims.append(
+                ClaimEnvelope(
+                    id=f"episode360.conversion:{quote(outcome_id, safe='')}",
+                    kind="episode_referenced_canonical_conversion_outcome",
+                    subject=request.subject,
+                    evidenceRefs=evidence_refs,
+                    claims=[
+                        f"Episode record(s) {', '.join(conversion['episodeIds'])} reference canonical outcome {outcome_id!r}, whose registered definition is {conversion['conversionType']!r}; this does not establish complete conversion coverage or causal attribution."
+                    ],
+                    claimState=claim_state,
+                    domainSlotIds=["conversion_events", "evidence_trace"],
+                )
+            )
         return claims
 
 
@@ -3182,6 +3435,83 @@ def _unknown_episode_slot(reason: str) -> dict[str, Any]:
     return {"state": "unknown", "coverage": "unknown", "items": [], "reason": reason}
 
 
+def _episode_conversion_context(
+    read: EpisodeOutcomeRead,
+) -> dict[str, Any]:
+    """Render only conversion outcomes joined through explicit episode IDs."""
+    events = list(read.conversions)
+    if not read.requested_ids:
+        state = "unknown"
+        coverage = "unknown"
+        reason = "episode_record_has_no_outcome_references"
+    elif read.disabled:
+        state = "unknown"
+        coverage = "unknown"
+        reason = "canonical_outcome_truth_store_disabled"
+    elif read.read_failed or not read.available:
+        state = "degraded" if events else "unknown"
+        coverage = "partial" if events else "unknown"
+        reason = "canonical_outcome_truth_read_incomplete"
+    elif read.tenant_mismatch:
+        state = "degraded" if events else "unknown"
+        coverage = "partial" if events else "unknown"
+        reason = "canonical_outcome_truth_scope_mismatch"
+    elif read.invalid_records:
+        state = "degraded" if events else "unknown"
+        coverage = "partial" if events else "unknown"
+        reason = "canonical_outcome_truth_rows_invalid_or_ambiguous"
+    elif read.missing_evidence_ids:
+        state = "degraded" if events else "unknown"
+        coverage = "partial" if events else "unknown"
+        reason = "canonical_outcome_truth_lineage_missing"
+    elif read.missing_ids:
+        state = "degraded" if events else "unknown"
+        coverage = "partial" if events else "unknown"
+        reason = "episode_outcome_references_not_found_in_canonical_outcome_truth"
+    elif read.truncated:
+        state = "degraded" if events else "unknown"
+        coverage = "partial" if events else "unknown"
+        reason = "episode_outcome_reference_read_truncated"
+    elif events:
+        state = "degraded"
+        coverage = "exact_episode_outcome_ids_only"
+        reason = "registered_conversion_outcomes_resolved_from_explicit_episode_references"
+    else:
+        state = "degraded"
+        coverage = "exact_episode_outcome_ids_only"
+        reason = "episode_outcome_references_resolved_without_registered_conversion_definitions"
+
+    evidence = [ref.model_dump(mode="json", exclude_none=True) for ref in read.evidence_refs]
+    return {
+        "state": state,
+        "coverage": coverage,
+        "count": None,
+        "observedCount": len(events),
+        "requestedOutcomeIds": list(read.requested_ids),
+        "resolvedOutcomeIds": list(read.resolved_ids),
+        "events": events,
+        "evidenceRefs": evidence,
+        "reason": reason,
+        "freshness": {
+            "state": "unknown",
+            "evaluation": "not_performed",
+            "reason": "canonical_outcome_truth_source_watermark_not_available",
+        },
+        "policy": {
+            "state": "unknown",
+            "evaluation": "not_performed",
+            "reason": "episode_conversion_outcome_policy_not_evaluated_by_projection",
+        },
+        "provenance": {
+            "state": "partial" if read.resolved_ids else "unknown",
+            "authority": _EPISODE_OUTCOME_TRUTH_SOURCE,
+            "referenceAuthority": _EPISODE_RECORD_SOURCE,
+            "coverage": "episode_record_outcome_ids_only",
+            "reason": reason,
+        },
+    }
+
+
 def _episode_required_slot_coverage(
     request: ProjectionRequest,
     episodes: list[EpisodeRecord],
@@ -3189,6 +3519,7 @@ def _episode_required_slot_coverage(
     availability: str,
     evidence_refs: list[EvidenceRef],
     observation_read: EpisodeObservationRead,
+    outcome_read: EpisodeOutcomeRead,
 ) -> dict[str, dict[str, Any]]:
     """Expose the SSOT slot status without promoting partial sources to complete."""
     evidence = [ref.model_dump() for ref in evidence_refs]
@@ -3227,6 +3558,7 @@ def _episode_required_slot_coverage(
         else "episode_subject_kind_does_not_identify_a_participant"
     )
     session_state = "degraded" if episode.subject.kind == "session" else "unknown"
+    conversion_context = _episode_conversion_context(outcome_read)
     return {
         "episode_summary": {
             "state": "available",
@@ -3280,10 +3612,10 @@ def _episode_required_slot_coverage(
             "evidenceRefs": [],
         },
         "conversion_events": {
-            "state": "unknown",
-            "coverage": "unknown",
-            "reason": "episode_outcome_ids_are_not_conversion_ids",
-            "evidenceRefs": [],
+            "state": conversion_context["state"],
+            "coverage": conversion_context["coverage"],
+            "reason": conversion_context["reason"],
+            "evidenceRefs": conversion_context["evidenceRefs"],
         },
         "attribution_links": {
             "state": "unknown",
@@ -3339,6 +3671,8 @@ def _flatten(lists: Any) -> list[str]:
 
 __all__ = [
     "Episode360Provider",
+    "EpisodeOutcomeRead",
+    "EpisodeOutcomeSource",
     "EpisodeObservationRead",
     "EpisodeObservationSource",
     "EpisodeSubjectGraphRead",

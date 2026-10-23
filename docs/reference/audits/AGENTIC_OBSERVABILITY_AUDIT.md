@@ -11,7 +11,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ca595f9aa8235c5c74118bb78e1ff013d5770015ae2a6e4cad39a819b68fb28d"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:8d986914d6f30c3aee5c95ce51b17eba27510dd5cb2bc0737dae38c47e71421d"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:540f85292689337edc329c9b72b7c4f99487226a5e31aab6526c878e7ea36eeb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -267,7 +267,9 @@ changes completes a product surface or adds agent execution authority.
 
 The current 2026-10-23 provider wave adds evidence-backed Identity360 source
 identifier, namespace, and alias rows; namespace/provider-registry linkage
-remains partial. Social360 now exposes opted-in Syndicates membership only
+uses the exact recorded `source_system_id` to resolve allowlisted metadata
+from the loaded provider runtime registry, while registry freshness remains
+unknown. Social360 now exposes opted-in Syndicates membership only
 after an exact tenant `MEMBER_OF` graph-ledger join, with roster completeness,
 history, and freshness unknown. Value360 attribution credits now rejoin exact
 conversion and campaign-touchpoint records, but historical attribution is not
@@ -289,6 +291,17 @@ currency subtotals; every row must retain canonical conversion evidence. The
 slot never reports a scalar LTV amount because lifetime completeness, outcome
 attribution, and freshness are unproved. Missing net values reduce reported
 coverage, and absent rows remain empty rather than being treated as zero.
+
+The latest 2026-10-23 slice adds four partial provider joins. Signals360
+`campaign_links` follows exact tenant/source-event touchpoints and exposes a
+campaign only after a same-tenant canonical campaign lookup. Episode360
+`conversion_events` joins only outcome IDs recorded on exact tenant episode
+rows and admits registered conversion definitions with canonical evidence.
+Workflow360 `outcomes` follows outcome IDs referenced by exact tenant/run AI
+invocation facts through `OutcomeTruthStore`, without claiming workflow
+causality; historical reads are suppressed. These paths preserve incomplete
+coverage and unknown policy/freshness. They do not complete any of the 18
+product surfaces or add action authority.
 
 ## Bucket 1 — Correctly observation-only
 

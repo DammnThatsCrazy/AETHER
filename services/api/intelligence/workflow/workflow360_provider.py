@@ -1,21 +1,24 @@
-"""Read-only Workflow360 projection over exact workflow-run invocation refs.
+"""Read-only Workflow360 projection over exact workflow-run evidence links.
 
-The repository has no general workflow definition, trigger, schedule, approval,
-or workflow-run state authority yet. The only exact workflow-run join currently
-available is ``workflow_run_id`` on tenant-scoped ``ai_execution_facts``. This
-provider exposes those records as observed AI invocations associated with the
-requested run ID. It does not infer that they are a complete workflow trace,
-that a workflow definition exists, or that a business outcome occurred.
+The repository does not yet have a complete workflow-definition, trigger,
+approval, or run-state authority. Exact run-linked evidence comes from
+tenant-scoped ``ai_execution_facts`` and AgentExecution rows validated against
+their explicit invocation ``action_id`` links. These records can reference
+canonical Agent identities, trigger events, x402 approvals, and outcome IDs.
+Those references do not establish complete workflow coverage, event causality,
+external action receipts, or workflow-attributed business outcomes.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from typing import Any, Literal, Optional, Protocol
 from urllib.parse import quote
 
 from graph.operational_intelligence.models import EvidenceRef
+from shared.backend_interpretation.primitives import CLAIM_TYPES, OUTCOME_STATES, VALUE_STATES
 from shared.contracts_models.epistemic import EpistemicStatus
 from shared.intelligence_projections.contracts import (
     ClaimEnvelope,
@@ -48,11 +51,15 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
 _MAX_INVOCATION_FACTS = 200
 _MAX_AGENT_EXECUTIONS = 200
 _MAX_TRIGGER_EVENTS = 200
+_MAX_WORKFLOW_OUTCOMES = 200
 _RUN_SUBJECT_KINDS = frozenset({"run", "workflow_run"})
 _APPROVAL_DECISION_ACTIONS = frozenset({"approve", "reject", "escalate", "revoke"})
+_OUTCOME_STATES = frozenset(OUTCOME_STATES)
+_OUTCOME_VALUE_STATES = frozenset(VALUE_STATES)
 _SOURCE = "ai_execution_facts"
 _AGENT_EXECUTION_SOURCE = "agent_executions"
 _EVENT_SOURCE = "services/api/repositories/repos.py:events"
+_OUTCOME_SOURCE = "outcome_truth"
 
 
 @dataclass(frozen=True)
@@ -121,6 +128,17 @@ class WorkflowApprovalRead:
     reason: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class WorkflowOutcomeRead:
+    """Exact tenant outcome rows referenced by this run's invocation facts."""
+
+    rows: tuple[dict[str, Any], ...]
+    available: bool
+    complete: bool
+    scope_mismatch: bool = False
+    reason: Optional[str] = None
+
+
 class Workflow360Source(Protocol):
     """Tenant-scoped exact-ID read seam for workflow run evidence."""
 
@@ -158,12 +176,27 @@ class Workflow360Source(Protocol):
         limit: int,
     ) -> WorkflowApprovalRead: ...
 
+    async def run_linked_outcomes(
+        self,
+        *,
+        tenant_id: str,
+        workflow_run_id: str,
+        invocation_rows: tuple[dict[str, Any], ...],
+        limit: int,
+    ) -> WorkflowOutcomeRead: ...
+
 
 class RepositoryWorkflow360Source:
     """Adapter over the existing derived AI invocation facts store."""
 
-    def __init__(self, *, principal_identity_repository: Any = None) -> None:
+    def __init__(
+        self,
+        *,
+        principal_identity_repository: Any = None,
+        outcome_truth_store: Any = None,
+    ) -> None:
         self._principal_identity_repository = principal_identity_repository
+        self._outcome_truth_store = outcome_truth_store
 
     async def run_invocations(
         self, *, tenant_id: str, workflow_run_id: str, limit: int
@@ -617,6 +650,114 @@ class RepositoryWorkflow360Source:
                 (), False, False, reason="canonical_execution_approval_source_unavailable"
             )
 
+    async def run_linked_outcomes(
+        self,
+        *,
+        tenant_id: str,
+        workflow_run_id: str,
+        invocation_rows: tuple[dict[str, Any], ...],
+        limit: int,
+    ) -> WorkflowOutcomeRead:
+        """Resolve only exact outcome IDs referenced by this tenant/run's AI facts.
+
+        The invocation-to-outcome reference establishes association only. The
+        canonical outcome record supplies the outcome state and its independent
+        evidence lineage; this reader never infers workflow causation.
+        """
+        if not tenant_id or not workflow_run_id:
+            return WorkflowOutcomeRead(
+                (), False, False, reason="exact_tenant_workflow_run_scope_required"
+            )
+
+        invocation_ids_by_outcome: dict[str, set[str]] = {}
+        complete = True
+        scope_mismatch = False
+        for row in invocation_rows:
+            if (
+                not isinstance(row, dict)
+                or row.get("tenant_id") != tenant_id
+                or row.get("workflow_run_id") != workflow_run_id
+            ):
+                complete = False
+                scope_mismatch = True
+                continue
+            invocation_id = _safe_identifier(row.get("invocation_id"))
+            raw_outcome_id = row.get("outcome_id")
+            if invocation_id is None:
+                complete = False
+                continue
+            if raw_outcome_id is None or raw_outcome_id == "":
+                continue
+            outcome_id = _safe_identifier(raw_outcome_id)
+            if outcome_id is None:
+                complete = False
+                continue
+            invocation_ids_by_outcome.setdefault(outcome_id, set()).add(invocation_id)
+
+        bounded_limit = min(max(int(limit), 1), _MAX_WORKFLOW_OUTCOMES)
+        outcome_ids = sorted(invocation_ids_by_outcome)
+        queried_ids = outcome_ids[:bounded_limit]
+        truncated = len(queried_ids) < len(outcome_ids)
+        if not queried_ids:
+            return WorkflowOutcomeRead(
+                (), True, complete, scope_mismatch=scope_mismatch,
+                reason=None if complete else "canonical_outcome_reference_read_incomplete",
+            )
+        try:
+            from shared.backend_interpretation.flags import outcome_truth_store_enabled
+
+            if not outcome_truth_store_enabled():
+                return WorkflowOutcomeRead(
+                    (), False, False, reason="canonical_outcome_truth_store_disabled"
+                )
+            store = self._outcome_truth_store
+            if store is None:
+                from shared.backend_interpretation.stores import OutcomeTruthStore
+
+                store = OutcomeTruthStore()
+            rows: list[dict[str, Any]] = []
+            for outcome_id in queried_ids:
+                record = await store.get(tenant_id, outcome_id)
+                if record is None:
+                    complete = False
+                    continue
+                data = _model_or_dict(record)
+                if (
+                    not isinstance(data, dict)
+                    or data.get("tenant_id") != tenant_id
+                    or data.get("outcome_id") != outcome_id
+                ):
+                    complete = False
+                    scope_mismatch = True
+                    continue
+                rows.append(
+                    {
+                        "tenant_id": tenant_id,
+                        "workflow_run_id": workflow_run_id,
+                        "outcome_id": outcome_id,
+                        "invocation_ids": sorted(invocation_ids_by_outcome[outcome_id]),
+                        "outcome_record": data,
+                    }
+                )
+        except Exception:  # noqa: BLE001 - optional canonical source failure stays unknown
+            return WorkflowOutcomeRead(
+                (), False, False, reason="canonical_outcome_truth_source_unavailable"
+            )
+
+        return WorkflowOutcomeRead(
+            tuple(rows),
+            True,
+            complete and not truncated and not scope_mismatch,
+            scope_mismatch=scope_mismatch,
+            reason=(
+                "canonical_outcome_truth_scope_mismatch"
+                if scope_mismatch
+                else "canonical_outcome_reference_read_incomplete"
+                if not complete or truncated
+                else None
+            ),
+        )
+
 
 class Workflow360Provider:
     """Tenant-safe projection for the current Workflow360 evidence contract."""
@@ -773,6 +914,59 @@ class Workflow360Provider:
                 reason="subject_kind_not_supported_by_workflow_run_evidence",
                 source_read_state="not_read",
             )
+        outcome_requested = (
+            request.includeSections is None or "outcomes" in request.includeSections
+        )
+        historical_outcome_scope = bool(
+            request.asOf is not None
+            or context.asOf is not None
+            or request.temporalMode in {"as_of", "compare", "relative"}
+        )
+        if not outcome_requested:
+            outcome_read = WorkflowOutcomeRead(
+                (), False, False, reason="workflow_outcome_slot_not_requested"
+            )
+        elif historical_outcome_scope:
+            outcome_read = WorkflowOutcomeRead(
+                (), False, False, reason="workflow_outcome_historical_state_unavailable"
+            )
+        elif subject.kind in _RUN_SUBJECT_KINDS and rows:
+            try:
+                outcome_read = await self._source.run_linked_outcomes(
+                    tenant_id=tenant_id,
+                    workflow_run_id=subject.id,
+                    invocation_rows=tuple(rows),
+                    limit=_MAX_WORKFLOW_OUTCOMES,
+                )
+            except Exception:  # noqa: BLE001 - optional canonical source stays unknown
+                outcome_read = WorkflowOutcomeRead(
+                    (), False, False, reason="canonical_outcome_truth_source_unavailable"
+                )
+        elif subject.kind in _RUN_SUBJECT_KINDS:
+            outcome_read = WorkflowOutcomeRead(
+                (), read_available, read_complete,
+                reason=("workflow_run_invocation_outcome_references_not_recorded"
+                        if read_complete else read_reason),
+            )
+        else:
+            outcome_read = WorkflowOutcomeRead(
+                (), False, False,
+                reason="subject_kind_not_supported_by_workflow_run_evidence",
+            )
+        outcome_rows, outcome_scope_mismatch, outcome_join_incomplete = _scoped_linked_outcome_rows(
+            outcome_read.rows,
+            tenant_id=tenant_id,
+            workflow_run_id=subject.id if subject.kind in _RUN_SUBJECT_KINDS else None,
+            invocation_rows=rows,
+        )
+        outcome_read_complete = bool(
+            outcome_read.available
+            and outcome_read.complete
+            and not outcome_read.scope_mismatch
+            and not outcome_scope_mismatch
+            and not outcome_join_incomplete
+            and read_complete
+        )
         if subject.kind in _RUN_SUBJECT_KINDS:
             try:
                 approval_read = await self._source.run_execution_approvals(
@@ -873,6 +1067,25 @@ class Workflow360Provider:
             read=trigger_read,
             time_range=request.timeRange,
         )
+        outcomes_section, outcome_claims = _linked_outcomes_section(
+            subject,
+            tenant_id=tenant_id,
+            invocation_rows=rows,
+            invocation_refs=valid_refs,
+            outcome_rows=outcome_rows,
+            available=outcome_read.available,
+            complete=outcome_read_complete,
+            reason=(
+                _safe_reason(outcome_read.reason)
+                if not outcome_read.available
+                else "unscoped_or_invalid_canonical_outcome_rows_dropped"
+                if outcome_scope_mismatch or outcome_read.scope_mismatch
+                else "canonical_outcome_reference_join_incomplete"
+                if outcome_join_incomplete
+                else _safe_reason(outcome_read.reason)
+            ),
+            time_range=request.timeRange,
+        )
 
         if records and read_complete:
             run_state = "available"
@@ -930,6 +1143,7 @@ class Workflow360Provider:
         claims.extend(actor_claims)
         claims.extend(approval_claims)
         claims.extend(agent_step_claims)
+        claims.extend(outcome_claims)
 
         sections: list[ProjectionSection] = [
             _unknown_section("workflow_summary"),
@@ -955,7 +1169,7 @@ class Workflow360Provider:
                 complete=read_complete,
                 reason=read_reason,
             ),
-            _unknown_section("outcomes"),
+            outcomes_section,
             _unknown_section("risk"),
             _evidence_trace_section(
                 subject,
@@ -1731,6 +1945,332 @@ def _scoped_approval_rows(
     return scoped[:_MAX_AGENT_EXECUTIONS], mismatch
 
 
+def _scoped_linked_outcome_rows(
+    rows: tuple[dict[str, Any], ...] | list[dict[str, Any]],
+    *,
+    tenant_id: str,
+    workflow_run_id: Optional[str],
+    invocation_rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], bool, bool]:
+    """Validate canonical outcomes against exact tenant/run invocation refs."""
+    expected: dict[str, set[str]] = {}
+    scope_mismatch = False
+    for invocation in invocation_rows:
+        if (
+            not isinstance(invocation, dict)
+            or invocation.get("tenant_id") != tenant_id
+            or workflow_run_id is None
+            or invocation.get("workflow_run_id") != workflow_run_id
+        ):
+            scope_mismatch = True
+            continue
+        raw_outcome_id = invocation.get("outcome_id")
+        if raw_outcome_id is None or raw_outcome_id == "":
+            continue
+        outcome_id = _safe_identifier(raw_outcome_id)
+        invocation_id = _safe_identifier(invocation.get("invocation_id"))
+        if outcome_id is None or invocation_id is None:
+            scope_mismatch = True
+            continue
+        expected.setdefault(outcome_id, set()).add(invocation_id)
+
+    scoped: list[dict[str, Any]] = []
+    seen_outcome_ids: set[str] = set()
+    for row in rows:
+        outcome_id = _safe_identifier(row.get("outcome_id")) if isinstance(row, dict) else None
+        invocation_ids_raw = row.get("invocation_ids") if isinstance(row, dict) else None
+        invocation_ids = (
+            {
+                value
+                for raw in invocation_ids_raw
+                if (value := _safe_identifier(raw)) is not None
+            }
+            if isinstance(invocation_ids_raw, list)
+            else set()
+        )
+        outcome_record = (
+            _model_or_dict(row.get("outcome_record")) if isinstance(row, dict) else None
+        )
+        expected_invocation_ids = expected.get(outcome_id or "")
+        if (
+            not isinstance(row, dict)
+            or row.get("tenant_id") != tenant_id
+            or workflow_run_id is None
+            or row.get("workflow_run_id") != workflow_run_id
+            or outcome_id is None
+            or outcome_id not in expected
+            or outcome_id in seen_outcome_ids
+            or not isinstance(invocation_ids_raw, list)
+            or len(invocation_ids) != len(invocation_ids_raw)
+            or invocation_ids != expected_invocation_ids
+            or not isinstance(outcome_record, dict)
+            or outcome_record.get("tenant_id") != tenant_id
+            or outcome_record.get("outcome_id") != outcome_id
+        ):
+            scope_mismatch = True
+            continue
+        seen_outcome_ids.add(outcome_id)
+        scoped.append(
+            {
+                "tenant_id": tenant_id,
+                "workflow_run_id": workflow_run_id,
+                "outcome_id": outcome_id,
+                "invocation_ids": sorted(invocation_ids),
+                "outcome_record": outcome_record,
+            }
+        )
+
+    join_incomplete = seen_outcome_ids != set(expected)
+    return scoped[:_MAX_WORKFLOW_OUTCOMES], scope_mismatch, join_incomplete
+
+
+def _linked_outcomes_section(
+    subject: Any,
+    *,
+    tenant_id: str,
+    invocation_rows: list[dict[str, Any]],
+    invocation_refs: list[EvidenceRef],
+    outcome_rows: list[dict[str, Any]],
+    available: bool,
+    complete: bool,
+    reason: Optional[str],
+    time_range: Any,
+) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+    """Project exact outcome-ID links without asserting workflow causation."""
+    invocation_evidence = {
+        invocation_id: ref
+        for row in invocation_rows
+        if (invocation_id := _safe_identifier(row.get("invocation_id"))) is not None
+        and (ref := next((item for item in invocation_refs if item.id == invocation_id), None))
+        is not None
+    }
+    lower = _parse_timestamp(getattr(time_range, "from_", None)) if time_range else None
+    upper = _parse_timestamp(getattr(time_range, "to", None)) if time_range else None
+    lower_raw = getattr(time_range, "from_", None) if time_range else None
+    upper_raw = getattr(time_range, "to", None) if time_range else None
+    invalid_window = bool(
+        time_range is not None
+        and (
+            (lower_raw is not None and lower is None)
+            or (upper_raw is not None and upper is None)
+            or (lower is not None and upper is not None and upper < lower)
+        )
+    )
+    invalid_rows = False
+    filtered_outside_time_range = False
+    records: list[dict[str, Any]] = []
+    claims: list[ClaimEnvelope] = []
+    all_refs: list[EvidenceRef] = []
+    returned_observed_at: list[str] = []
+    for link in outcome_rows:
+        outcome = link.get("outcome_record")
+        outcome_id = _safe_identifier(link.get("outcome_id"))
+        definition_ref = _safe_token(outcome.get("definition_ref")) if isinstance(outcome, dict) else None
+        outcome_state = (
+            _safe_token(outcome.get("state"), allowed=set(_OUTCOME_STATES))
+            if isinstance(outcome, dict)
+            else None
+        )
+        value_state = (
+            _safe_token(outcome.get("value_state"), allowed=set(_OUTCOME_VALUE_STATES))
+            if isinstance(outcome, dict)
+            else None
+        )
+        invocation_ids = link.get("invocation_ids")
+        if (
+            not isinstance(outcome, dict)
+            or link.get("tenant_id") != tenant_id
+            or link.get("workflow_run_id") != subject.id
+            or outcome.get("tenant_id") != tenant_id
+            or outcome.get("outcome_id") != outcome_id
+            or outcome_id is None
+            or definition_ref is None
+            or outcome_state is None
+            or value_state is None
+            or not isinstance(invocation_ids, list)
+            or not invocation_ids
+        ):
+            invalid_rows = True
+            continue
+
+        outcome_evidence_raw = outcome.get("evidence_refs")
+        outcome_evidence: list[EvidenceRef] = []
+        if isinstance(outcome_evidence_raw, list):
+            for raw_ref in outcome_evidence_raw:
+                try:
+                    outcome_evidence.append(EvidenceRef.model_validate(raw_ref))
+                except Exception:  # noqa: BLE001 - invalid canonical provenance is omitted
+                    invalid_rows = True
+        if not outcome_evidence:
+            invalid_rows = True
+            continue
+        invocation_refs_for_outcome = [
+            invocation_evidence[invocation_id]
+            for raw_id in invocation_ids
+            if (invocation_id := _safe_identifier(raw_id)) is not None
+            and invocation_id in invocation_evidence
+        ]
+        if len(invocation_refs_for_outcome) != len(invocation_ids):
+            invalid_rows = True
+            continue
+
+        outcome_observed_at = (
+            _safe_timestamp(outcome.get("achieved_at"))
+            or _safe_timestamp(outcome.get("observed_at"))
+            or _safe_timestamp(outcome.get("updated_at"))
+        )
+        outcome_instant = _parse_timestamp(outcome_observed_at)
+        if time_range is not None:
+            if outcome_instant is None:
+                invalid_rows = True
+                continue
+            if (lower is not None and outcome_instant < lower) or (
+                upper is not None and outcome_instant > upper
+            ):
+                filtered_outside_time_range = True
+                continue
+
+        value_amount: Optional[str] = None
+        value_currency = _safe_token(outcome.get("value_currency"))
+        if value_state in {"present", "zero"}:
+            raw_amount = outcome.get("value_amount")
+            if raw_amount is None and value_state == "zero":
+                value_amount = "0"
+            elif raw_amount is None:
+                invalid_rows = True
+                continue
+            else:
+                try:
+                    amount = Decimal(str(raw_amount))
+                except (InvalidOperation, ValueError, TypeError):
+                    invalid_rows = True
+                    continue
+                if not amount.is_finite() or (value_state == "zero" and amount != 0):
+                    invalid_rows = True
+                    continue
+                value_amount = str(raw_amount)
+
+        canonical_refs = _dedupe_evidence_refs(outcome_evidence)
+        invocation_refs_for_outcome = _dedupe_evidence_refs(invocation_refs_for_outcome)
+        evidence_refs = _dedupe_evidence_refs(invocation_refs_for_outcome + canonical_refs)
+        if not evidence_refs:
+            invalid_rows = True
+            continue
+        record = {
+            "outcomeId": outcome_id,
+            "definitionRef": definition_ref,
+            "outcomeState": outcome_state,
+            "claimType": _safe_token(
+                outcome.get("claim_type"), allowed=set(CLAIM_TYPES)
+            ),
+            "achievedAt": _safe_timestamp(outcome.get("achieved_at")),
+            "valueState": value_state,
+            "linkedInvocationIds": sorted(
+                value for raw in invocation_ids if (value := _safe_identifier(raw)) is not None
+            ),
+            "outcomeEvidenceRefs": [
+                ref.model_dump(mode="json") for ref in canonical_refs
+            ],
+            "invocationEvidenceRefs": [
+                ref.model_dump(mode="json") for ref in invocation_refs_for_outcome
+            ],
+            "evidenceRefs": [ref.model_dump(mode="json") for ref in evidence_refs],
+        }
+        if value_amount is not None:
+            record["valueAmount"] = value_amount
+            if value_currency is not None:
+                record["valueCurrency"] = value_currency
+        records.append(record)
+        if outcome_observed_at is not None:
+            returned_observed_at.append(outcome_observed_at)
+        all_refs.extend(evidence_refs)
+        claims.append(
+            ClaimEnvelope(
+                id=f"workflow360.outcome.{quote(outcome_id, safe='')}",
+                kind="canonical_outcome_explicitly_referenced_by_workflow_run_invocation",
+                subject=subject,
+                evidenceRefs=evidence_refs,
+                claims=[
+                    f"A tenant-scoped AI invocation linked to workflow run {subject.id} explicitly references canonical outcome {outcome_id}, and the tenant outcome authority contains that record; this establishes association, not workflow causation or complete outcome coverage."
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=["outcomes", "evidence_trace"],
+            )
+        )
+
+    records.sort(key=lambda row: (row.get("achievedAt") or "", row["outcomeId"]))
+    if invalid_window:
+        state = "unknown"
+        reason_code = "workflow_outcome_time_window_invalid"
+    elif records:
+        state = "degraded"
+        reason_code = reason or (
+            "canonical_outcomes_linked_by_invocation_reference_only"
+            if complete and not invalid_rows
+            else "workflow_outcome_reference_coverage_incomplete"
+        )
+    else:
+        state = "unknown"
+        reason_code = (
+            reason
+            or "canonical_workflow_outcome_records_not_available"
+        )
+        if not invocation_rows:
+            reason_code = reason or "workflow_run_invocation_outcome_references_not_recorded"
+        elif not any(_safe_identifier(row.get("outcome_id")) for row in invocation_rows):
+            reason_code = "workflow_run_invocation_outcome_references_not_recorded"
+        elif filtered_outside_time_range:
+            reason_code = "no_canonical_workflow_outcome_in_requested_time_range"
+    latest_observed_at = max(returned_observed_at, default=None)
+    content = {
+        "tenantId": tenant_id,
+        "subject": {"kind": subject.kind, "id": subject.id},
+        "outcomes": records,
+        "outcomeCoverageState": (
+            "partial_explicit_invocation_outcome_refs_only" if records else "unknown"
+        ),
+        "workflowOutcomeCausalityState": "not_established",
+        "sourceReadCompleteForReportedOutcomeRefs": complete and not invalid_rows,
+        "freshness": {
+            "state": "unknown",
+            "latestReturnedObservedAt": latest_observed_at,
+            "evidenceReadCompleteForReportedRefs": complete,
+            "thresholdSeconds": None,
+            "freshnessAuthorityState": "unknown",
+            "reasonCode": "workflow_outcome_freshness_threshold_not_configured",
+        },
+        "evidenceRefs": [
+            ref.model_dump(mode="json") for ref in _dedupe_evidence_refs(all_refs)
+        ],
+        "reasonCode": reason_code,
+    }
+    if available:
+        content["returnedCanonicalOutcomeCount"] = len(records)
+    if records:
+        content["canonicalOutcomeCount"] = len(records)
+    if invalid_rows:
+        content["invalidOutcomeEvidenceDropped"] = True
+    if filtered_outside_time_range:
+        content["outcomesFilteredByRequestedTimeRange"] = True
+    return (
+        ProjectionSection(
+            id="outcomes",
+            state=state,
+            title="Canonical workflow-linked outcome evidence",
+            content=content,
+            warnings=[
+                "Only canonical outcomes explicitly referenced by linked AI invocations are shown; this join does not establish workflow causation or complete business outcome coverage."
+                if records
+                else reason_code
+            ],
+            canonicalAuthorityRefs=(
+                [_SOURCE, _OUTCOME_SOURCE] if available and records else None
+            ),
+        ),
+        claims,
+    )
+
+
 def _model_or_dict(value: Any) -> Optional[dict[str, Any]]:
     if isinstance(value, dict):
         return value
@@ -2344,6 +2884,7 @@ __all__ = [
     "WorkflowApprovalRead",
     "WorkflowPrincipalIdentityRead",
     "Workflow360Source",
+    "WorkflowOutcomeRead",
     "WorkflowRunInvocationRead",
     "register_provider",
 ]

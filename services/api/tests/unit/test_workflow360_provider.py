@@ -25,6 +25,7 @@ from intelligence.workflow.workflow360_provider import (  # noqa: E402
     WorkflowApprovalRead,
     Workflow360Provider,
     WorkflowPrincipalIdentityRead,
+    WorkflowOutcomeRead,
     WorkflowRunInvocationRead,
     WorkflowTriggerRead,
     register_provider,
@@ -51,6 +52,7 @@ class FakeWorkflowSource:
         principal_identities: WorkflowPrincipalIdentityRead | None = None,
         approvals: WorkflowApprovalRead | None = None,
         trigger_events: WorkflowTriggerRead | None = None,
+        outcomes: WorkflowOutcomeRead | None = None,
     ) -> None:
         self.read = read
         self.identities = identities or WorkflowAgentIdentityRead((), True, True)
@@ -68,11 +70,15 @@ class FakeWorkflowSource:
             reason="workflow_execution_trigger_reference_not_recorded",
             source_read_state="available",
         )
+        self.outcome_read = outcomes or WorkflowOutcomeRead((), True, True)
         self.calls: list[tuple[str, str, int]] = []
         self.identity_calls: list[tuple[str, set[str], int]] = []
         self.agent_execution_calls: list[tuple[str, str, int]] = []
         self.principal_identity_calls: list[tuple[str, set[str], int]] = []
         self.trigger_event_calls: list[
+            tuple[str, str, tuple[dict[str, Any], ...], int]
+        ] = []
+        self.outcome_calls: list[
             tuple[str, str, tuple[dict[str, Any], ...], int]
         ] = []
 
@@ -123,6 +129,19 @@ class FakeWorkflowSource:
     ) -> WorkflowApprovalRead:
         return self.approval_read
 
+    async def run_linked_outcomes(
+        self,
+        *,
+        tenant_id: str,
+        workflow_run_id: str,
+        invocation_rows: tuple[dict[str, Any], ...],
+        limit: int,
+    ) -> WorkflowOutcomeRead:
+        self.outcome_calls.append(
+            (tenant_id, workflow_run_id, invocation_rows, limit)
+        )
+        return self.outcome_read
+
 
 def _row(
     invocation_id: str,
@@ -134,6 +153,7 @@ def _row(
     status: str = "succeeded",
     task_type: str = "summarize",
     observed_at: str = "2026-10-18T10:00:00Z",
+    outcome_id: str = "unverified-outcome-ref",
 ) -> dict[str, Any]:
     return {
         "invocation_id": invocation_id,
@@ -151,7 +171,7 @@ def _row(
         "error_code": "private-provider-error",
         "agent_id": agent_id,
         "action_id": action_id,
-        "outcome_id": "unverified-outcome-ref",
+        "outcome_id": outcome_id,
     }
 
 
@@ -304,6 +324,298 @@ async def test_workflow360_projects_exact_run_invocation_facts_and_unknowns() ->
     }
     assert all(sections[slot_id].state == "unknown" for slot_id in unsupported)
     assert all(sections[slot_id].content["reasonCode"] for slot_id in unsupported)
+
+
+@pytest.mark.asyncio
+async def test_workflow360_projects_exact_canonical_outcome_links_without_causal_claims() -> None:
+    invocation = _row("invocation-a", outcome_id="canonical-outcome-a")
+    outcome_evidence = {
+        "id": "outcome-event-a",
+        "type": "event",
+        "source": "outcome_facts",
+        "observedAt": "2026-10-18T12:00:00Z",
+        "uri": "store://outcome_facts/outcome-event-a",
+    }
+    source = FakeWorkflowSource(
+        WorkflowRunInvocationRead((invocation,), True, True),
+        outcomes=WorkflowOutcomeRead(
+            rows=(
+                {
+                    "tenant_id": TENANT_A,
+                    "workflow_run_id": RUN_ID,
+                    "outcome_id": "canonical-outcome-a",
+                    "invocation_ids": ["invocation-a"],
+                    "outcome_record": {
+                        "tenant_id": TENANT_A,
+                        "outcome_id": "canonical-outcome-a",
+                        "definition_ref": "qualified_value",
+                        "state": "final",
+                        "claim_type": "observed",
+                        "achieved_at": "2026-10-18T12:00:00Z",
+                        "value_state": "present",
+                        "value_amount": "42.50",
+                        "value_currency": "USD",
+                        "observed_at": "2026-10-18T12:00:00Z",
+                        "updated_at": "2026-10-18T12:01:00Z",
+                        "evidence_refs": [outcome_evidence],
+                        # Outcome subject details are not part of this public view.
+                        "subject": {"kind": "entity", "id": "private-entity"},
+                    },
+                },
+            ),
+            available=True,
+            complete=True,
+        ),
+    )
+
+    result = await Workflow360Provider(source=source).project(_request(), _context())
+
+    outcomes = _sections(result)["outcomes"]
+    assert outcomes.state == "degraded"
+    assert outcomes.content["outcomeCoverageState"] == (
+        "partial_explicit_invocation_outcome_refs_only"
+    )
+    assert outcomes.content["workflowOutcomeCausalityState"] == "not_established"
+    assert outcomes.content["sourceReadCompleteForReportedOutcomeRefs"] is True
+    assert outcomes.content["freshness"]["state"] == "unknown"
+    assert outcomes.content["freshness"]["latestReturnedObservedAt"] == (
+        "2026-10-18T12:00:00+00:00"
+    )
+    assert outcomes.content["outcomes"] == [
+        {
+            "outcomeId": "canonical-outcome-a",
+            "definitionRef": "qualified_value",
+            "outcomeState": "final",
+            "claimType": "observed",
+            "achievedAt": "2026-10-18T12:00:00+00:00",
+            "valueState": "present",
+            "linkedInvocationIds": ["invocation-a"],
+            "outcomeEvidenceRefs": [
+                {
+                    "id": "outcome-event-a",
+                    "type": "event",
+                    "source": "outcome_facts",
+                    "observedAt": "2026-10-18T12:00:00Z",
+                    "confidence": None,
+                    "uri": "store://outcome_facts/outcome-event-a",
+                }
+            ],
+            "invocationEvidenceRefs": [
+                {
+                    "id": "invocation-a",
+                    "type": "event",
+                    "source": "ai_execution_facts",
+                    "observedAt": "2026-10-18T10:00:00+00:00",
+                    "confidence": None,
+                    "uri": "store://ai_execution_facts/tenant-workflow-a%3Ainvocation-a",
+                }
+            ],
+            "evidenceRefs": [
+                {
+                    "id": "invocation-a",
+                    "type": "event",
+                    "source": "ai_execution_facts",
+                    "observedAt": "2026-10-18T10:00:00+00:00",
+                    "confidence": None,
+                    "uri": "store://ai_execution_facts/tenant-workflow-a%3Ainvocation-a",
+                },
+                {
+                    "id": "outcome-event-a",
+                    "type": "event",
+                    "source": "outcome_facts",
+                    "observedAt": "2026-10-18T12:00:00Z",
+                    "confidence": None,
+                    "uri": "store://outcome_facts/outcome-event-a",
+                },
+            ],
+            "valueAmount": "42.50",
+            "valueCurrency": "USD",
+        }
+    ]
+    assert "private-entity" not in str(outcomes.content)
+    claim = next(claim for claim in result.claims if "outcomes" in claim.domainSlotIds)
+    assert claim.claimState == EpistemicStatus.OBSERVED
+    assert claim.domainSlotIds == ["outcomes", "evidence_trace"]
+    assert {ref.source for ref in claim.evidenceRefs} == {
+        "ai_execution_facts",
+        "outcome_facts",
+    }
+    assert "not workflow causation" in claim.claims[0]
+    assert source.outcome_calls == [
+        (TENANT_A, RUN_ID, (invocation,), 200)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_workflow360_drops_cross_tenant_canonical_outcome_rows() -> None:
+    invocation = _row("invocation-a", outcome_id="private-outcome")
+    source = FakeWorkflowSource(
+        WorkflowRunInvocationRead((invocation,), True, True),
+        outcomes=WorkflowOutcomeRead(
+            (
+                {
+                    "tenant_id": "tenant-workflow-b",
+                    "workflow_run_id": RUN_ID,
+                    "outcome_id": "private-outcome",
+                    "invocation_ids": ["invocation-a"],
+                    "outcome_record": {
+                        "tenant_id": "tenant-workflow-b",
+                        "outcome_id": "private-outcome",
+                        "definition_ref": "private_definition",
+                        "state": "final",
+                        "value_state": "missing",
+                        "evidence_refs": [
+                            {
+                                "id": "private-event",
+                                "type": "event",
+                                "source": "outcome_facts",
+                            }
+                        ],
+                    },
+                },
+            ),
+            True,
+            True,
+        ),
+    )
+
+    result = await Workflow360Provider(source=source).project(_request(), _context())
+
+    outcomes = _sections(result)["outcomes"]
+    assert outcomes.state == "unknown"
+    assert outcomes.content["outcomes"] == []
+    assert outcomes.content["reasonCode"] == (
+        "unscoped_or_invalid_canonical_outcome_rows_dropped"
+    )
+    assert "private-outcome" not in str(outcomes.content)
+    assert "private-event" not in str(result.claims)
+
+
+@pytest.mark.asyncio
+async def test_workflow360_outcome_freshness_excludes_filtered_rows() -> None:
+    source = FakeWorkflowSource(
+        WorkflowRunInvocationRead(
+            (_row("invocation-a", outcome_id="outcome-a"),), True, True
+        ),
+        outcomes=WorkflowOutcomeRead(
+            (
+                {
+                    "tenant_id": TENANT_A,
+                    "workflow_run_id": RUN_ID,
+                    "outcome_id": "outcome-a",
+                    "invocation_ids": ["invocation-a"],
+                    "outcome_record": {
+                        "tenant_id": TENANT_A,
+                        "outcome_id": "outcome-a",
+                        "definition_ref": "qualified_value",
+                        "state": "final",
+                        "value_state": "missing",
+                        "achieved_at": "2026-10-18T12:00:00Z",
+                        "evidence_refs": [
+                            {
+                                "id": "outcome-event-a",
+                                "type": "event",
+                                "source": "outcome_facts",
+                            }
+                        ],
+                    },
+                },
+            ),
+            True,
+            True,
+        ),
+    )
+
+    result = await Workflow360Provider(source=source).project(
+        _request(
+            time_range=TimeRangeFilter(
+                from_="2026-10-18T10:00:00Z",
+                to="2026-10-18T11:00:00Z",
+            )
+        ),
+        _context(),
+    )
+
+    outcomes = _sections(result)["outcomes"]
+    assert outcomes.content["outcomes"] == []
+    assert outcomes.content["freshness"]["latestReturnedObservedAt"] is None
+    assert outcomes.content["reasonCode"] == (
+        "no_canonical_workflow_outcome_in_requested_time_range"
+    )
+
+
+@pytest.mark.asyncio
+async def test_workflow360_skips_outcome_read_when_slot_not_requested_or_historical() -> None:
+    source = FakeWorkflowSource(WorkflowRunInvocationRead((_row("invocation-a"),), True, True))
+
+    await Workflow360Provider(source=source).project(
+        _request(),
+        _context(),
+    )
+    first_read_count = len(source.outcome_calls)
+    await Workflow360Provider(source=source).project(
+        ProjectionRequest(
+            projectionId=PROJECTION_ID,
+            tenantId=TENANT_A,
+            subject=ProjectionSubject(kind="workflow_run", id=RUN_ID),
+            includeClaims=True,
+            includeSections=["runs"],
+        ),
+        _context(),
+    )
+    assert first_read_count == 1
+    assert len(source.outcome_calls) == first_read_count
+
+    historical = _request(as_of="2026-10-18T11:00:00Z")
+    await Workflow360Provider(source=source).project(historical, _context())
+    assert len(source.outcome_calls) == first_read_count
+
+
+@pytest.mark.asyncio
+async def test_repository_source_reads_exact_tenant_outcome_ids(monkeypatch) -> None:
+    from shared.backend_interpretation import flags
+
+    class FakeOutcomeStore:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str]] = []
+
+        async def get(self, tenant_id: str, outcome_id: str) -> dict[str, Any]:
+            self.calls.append((tenant_id, outcome_id))
+            return {
+                "tenant_id": tenant_id,
+                "outcome_id": outcome_id,
+                "definition_ref": "journey_completion",
+                "state": "final",
+                "value_state": "missing",
+                "evidence_refs": [
+                    {
+                        "id": "canonical-outcome-event",
+                        "type": "event",
+                        "source": "outcome_facts",
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(flags, "outcome_truth_store_enabled", lambda: True)
+    store = FakeOutcomeStore()
+    source = RepositoryWorkflow360Source(outcome_truth_store=store)
+
+    read = await source.run_linked_outcomes(
+        tenant_id=TENANT_A,
+        workflow_run_id=RUN_ID,
+        invocation_rows=(
+            _row("invocation-a", outcome_id="outcome-a"),
+            _row("invocation-b", outcome_id="outcome-a"),
+            _row("invocation-c", outcome_id="outcome-b"),
+        ),
+        limit=2,
+    )
+
+    assert store.calls == [(TENANT_A, "outcome-a"), (TENANT_A, "outcome-b")]
+    assert read.available is True
+    assert read.complete is True
+    assert [row["outcome_id"] for row in read.rows] == ["outcome-a", "outcome-b"]
+    assert read.rows[0]["invocation_ids"] == ["invocation-a", "invocation-b"]
 
 
 @pytest.mark.asyncio
