@@ -4,6 +4,7 @@ import { EmptyState, LoadingState } from '@aether/ui';
 import { ChoiceChip } from '@aether-app/components/ae-ui';
 import { api } from '@aether-app/lib/api/endpoints';
 import { WINDOWS, asRecord, str, type Row, type WindowDays } from './value-model';
+import { LoopAndDecisionsSection } from './value-loop-section';
 import { AgentsValueTab, CampaignsTab, CustomersTab, OutcomesTab, OverviewTab, SourcesTab } from './value-tabs';
 
 const TABS = [
@@ -109,7 +110,12 @@ export function ValueReviewPage() {
         {tab === 'campaigns' && <CampaignsTab tenant={tenant} days={days} />}
         {tab === 'agents' && <AgentsValueTab />}
         {tab === 'customers' && <CustomersTab tenant={tenant} />}
-        {tab === 'outcomes' && <OutcomesTab tenant={tenant} />}
+        {tab === 'outcomes' && (
+          <div className="flex min-w-0 flex-col gap-[18px]">
+            <OutcomesTab tenant={tenant} />
+            <LoopAndDecisionsSection />
+          </div>
+        )}
       </div>
     </div>
   );

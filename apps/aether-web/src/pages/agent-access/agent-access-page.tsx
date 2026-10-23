@@ -19,7 +19,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  Badge, DataTable, EmptyState, ErrorState, Icon, LoadingState,
+  Badge, DataTable, EmptyState, ErrorState, Icon, LoadingState, formatDateTime, useTimeContext,
 } from '@aether/ui';
 import { BrandMark } from '@aether-app/components/brand-mark';
 import { ChoiceChip, Eyebrow, LinkButton, PrimaryButton, TonePill, type Tone } from '@aether-app/components/ae-ui';
@@ -62,6 +62,32 @@ function text(value: unknown, fallback = 'Not recorded'): string {
 }
 
 const MUTE = { color: 'var(--ae-mute)' } as const;
+
+/**
+ * A backend timestamp shown for people: relative ("3h ago") for past
+ * observations, or the full local date-time for schedules and timelines. The
+ * exact instant is always on hover and in `dateTime`. An absent value keeps
+ * its honest fallback; an unparseable one is shown as received.
+ */
+function Stamp({
+  iso,
+  mode = 'relative',
+  fallback = 'Not recorded',
+}: {
+  readonly iso: string | null | undefined;
+  readonly mode?: 'relative' | 'absolute';
+  readonly fallback?: string;
+}) {
+  const timeCtx = useTimeContext();
+  if (!iso) return <>{fallback}</>;
+  if (Number.isNaN(Date.parse(iso))) return <>{iso}</>;
+  const full = formatDateTime(iso, timeCtx);
+  return (
+    <time dateTime={iso} title={full}>
+      {mode === 'relative' ? relativeTime(iso) : full}
+    </time>
+  );
+}
 
 // ── Inventory summary ────────────────────────────────────────────────────────
 
@@ -175,7 +201,7 @@ function ObservedCapabilities() {
                   ? <UnknownValue />
                   : <span className="ae-mono">{r.observation_count}</span>,
             },
-            { key: 'last', header: 'Last observed', render: r => text(r.last_seen_at) },
+            { key: 'last', header: 'Last observed', render: r => <Stamp iso={r.last_seen_at} /> },
           ]}
           data={rows}
           keyExtractor={r => r.capability_id}
@@ -442,11 +468,11 @@ function AgentProfilePanel({ agentId }: { readonly agentId: string }) {
       <dl className="grid gap-3 text-[12px]" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
         <div>
           <dt style={MUTE}>First observed</dt>
-          <dd className="ae-mono">{text(data.observation.first_seen_at)}</dd>
+          <dd><Stamp iso={data.observation.first_seen_at} /></dd>
         </div>
         <div>
           <dt style={MUTE}>Last observed</dt>
-          <dd className="ae-mono">{text(data.observation.last_seen_at)}</dd>
+          <dd><Stamp iso={data.observation.last_seen_at} /></dd>
         </div>
         <div>
           <dt style={MUTE}>Providers observed</dt>
@@ -646,7 +672,7 @@ function AgentLifecyclePanel({ agent, agentId }: { readonly agent: AgentProfileI
               </span>
               <span className="flex flex-col leading-tight">
                 <span className="text-[13px]">{e.label}</span>
-                <span className="ae-mono text-[11px]" style={MUTE}>{e.at}</span>
+                <span className="text-[11px]" style={MUTE}><Stamp iso={e.at} mode="absolute" /></span>
               </span>
             </li>
           ))}
@@ -930,8 +956,8 @@ function AuthorizationRows({ items }: { readonly items: readonly CapabilityAutho
                 )
                 : <UnknownValue />,
           },
-          { key: 'starts', header: 'Starts', render: r => text(r.authorization.starts_at, 'Immediately') },
-          { key: 'ends', header: 'Ends', render: r => text(r.authorization.ends_at, 'No end date') },
+          { key: 'starts', header: 'Starts', render: r => <Stamp iso={r.authorization.starts_at} mode="absolute" fallback="Immediately" /> },
+          { key: 'ends', header: 'Ends', render: r => <Stamp iso={r.authorization.ends_at} mode="absolute" fallback="No end date" /> },
         ]}
         data={rows}
         keyExtractor={r => r.key}
@@ -966,10 +992,80 @@ function AuthorizationsSection() {
   );
 }
 
+// ── Tenant-wide access (findings, inventory, authorizations) ────────────────
+
+const TENANT_TABS = [
+  { key: 'findings', label: 'Findings' },
+  { key: 'inventory', label: 'Inventory' },
+  { key: 'authorizations', label: 'Authorizations' },
+] as const;
+type TenantTab = (typeof TENANT_TABS)[number]['key'];
+
+/**
+ * Everything about the tenant's agent access that is not about one agent:
+ * scan and drift findings, the observed inventory and explicit
+ * authorizations. Reached from the list ("All findings"), so the list itself
+ * stays the directory and the selected agent, as in the design.
+ */
+function TenantAccessView({
+  summary,
+  tab,
+  onTab,
+  onBack,
+}: {
+  readonly summary: ReturnType<typeof useAccessInventory>['data'];
+  readonly tab: TenantTab;
+  readonly onTab: (tab: TenantTab) => void;
+  readonly onBack: () => void;
+}) {
+  return (
+    <div className="ae-rise flex min-w-0 flex-col gap-[18px]" data-testid="agent-access-all">
+      <span className="flex items-center gap-1 text-[13px]" style={MUTE}>
+        <LinkButton onClick={onBack} tone="mute" className="text-[13px]">Agents</LinkButton>
+        <span>/</span>
+        <span style={{ color: 'var(--ae-ink)' }}>All findings</span>
+      </span>
+      <div className="flex max-w-[640px] flex-col gap-1">
+        <h1 className="text-[28px] font-medium leading-tight tracking-[-0.56px]">All findings</h1>
+        <p className="text-[14px]" style={MUTE}>
+          Tenant-wide scan findings, the observed inventory and explicit authorizations. Observed reach is not
+          authorization, and anything that could not be computed reads as “Unknown”, never as zero.
+        </p>
+      </div>
+      <div className="ae-scroll-none -mx-1 flex gap-1.5 overflow-x-auto px-1" role="group" aria-label="Tenant access views">
+        {TENANT_TABS.map(t => (
+          <ChoiceChip key={t.key} selected={tab === t.key} onClick={() => onTab(t.key)} data-testid={`agent-access-tab-${t.key}`}>{t.label}</ChoiceChip>
+        ))}
+      </div>
+      <div className="ae-rise min-w-0" key={tab}>
+        {tab === 'findings' && (
+          <Section id="agent-access-findings" title="What to look at first" description="Scan and drift findings, highest risk first.">
+            <FindingsSection />
+          </Section>
+        )}
+        {tab === 'inventory' && (
+          <Section id="agent-access-inventory" title="Inventory" description="What your agents can reach, as observed.">
+            {summary ? <InventorySummary summary={summary} /> : <LoadingState lines={3} />}
+          </Section>
+        )}
+        {tab === 'authorizations' && (
+          <Section id="agent-access-authorizations" title="What is authorized" description="Explicit capability authorizations. Observed reach is not authorization.">
+            <AuthorizationsSection />
+          </Section>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 function isAgentTab(value: string | null): value is AgentTab {
   return AGENT_TABS.some(t => t.key === value);
+}
+
+function isTenantTab(value: string | null): value is TenantTab {
+  return TENANT_TABS.some(t => t.key === value);
 }
 
 export function AgentAccessPage() {
@@ -977,9 +1073,11 @@ export function AgentAccessPage() {
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState('');
   const agentId = params.get('agent') ?? '';
-  const open = params.get('view') === 'agent' && agentId !== '';
+  const view = params.get('view');
+  const open = view === 'agent' && agentId !== '';
   const rawTab = params.get('tab');
   const tab: AgentTab = isAgentTab(rawTab) ? rawTab : 'overview';
+  const tenantTab: TenantTab = isTenantTab(rawTab) ? rawTab : 'findings';
 
   const update = (next: Record<string, string | null>) => {
     const merged = new URLSearchParams(params);
@@ -1009,6 +1107,7 @@ export function AgentAccessPage() {
   // and must never fall through to this branch.
   const nothingObserved = summary?.summary_known === true && summary.observed_any === false;
   const counts = summary?.summary_known ? summary.counts : null;
+  const totalsUnknown = summary?.summary_known === false;
 
   if (open) {
     return (
@@ -1021,6 +1120,19 @@ export function AgentAccessPage() {
     );
   }
 
+  if (view === 'all') {
+    return (
+      <TenantAccessView
+        summary={summary}
+        tab={tenantTab}
+        onTab={next => update({ tab: next })}
+        onBack={() => update({ view: null, tab: null })}
+      />
+    );
+  }
+
+  const openAll = (next: TenantTab = 'findings') => update({ view: 'all', tab: next });
+
   return (
     <div className="ae-rise flex min-w-0 flex-col gap-[18px]" data-testid="aether-agents">
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -1032,23 +1144,33 @@ export function AgentAccessPage() {
             computed reads as “Unknown”, never as zero.
           </p>
         </div>
-        <div className="flex flex-col items-end gap-2">
+        <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
           <input
             type="search"
             value={query}
             onChange={event => setQuery(event.target.value)}
             placeholder="Search agents"
             aria-label="Search agents"
-            className="ae-focus min-w-[220px] rounded-full px-4 py-2 text-[13px] outline-none"
+            className="ae-focus w-full rounded-full px-4 py-2 text-[13px] outline-none sm:w-auto sm:min-w-[220px]"
             style={{ border: '1px solid var(--ae-edge)', background: 'var(--ae-glass-card)', color: 'var(--ae-ink)' }}
           />
-          {counts ? (
-            <span className="flex flex-wrap justify-end gap-x-3.5 gap-y-1 text-[12px]" style={MUTE} data-testid="agents-counters">
-              <span><span className="ae-mono" style={{ color: 'var(--ae-ink)' }}>{countText(counts.agents)}</span> agents</span>
-              <span><span className="ae-mono" style={{ color: 'var(--ae-ink)' }}>{countText(counts.authorizations_active)}</span> active authorizations</span>
-              <span><span className="ae-mono" style={{ color: 'var(--ae-ink)' }}>{countText(counts.capabilities)}</span> capabilities</span>
-            </span>
-          ) : null}
+          <span className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[12px] sm:justify-end" style={MUTE} data-testid="agents-counters">
+            {counts ? (
+              <>
+                <span><span className="ae-mono" style={{ color: 'var(--ae-ink)' }}>{countText(counts.agents)}</span> agents</span>
+                <span><span className="ae-mono" style={{ color: 'var(--ae-ink)' }}>{countText(counts.authorizations_active)}</span> active authorizations</span>
+                <span><span className="ae-mono" style={{ color: 'var(--ae-ink)' }}>{countText(counts.capabilities)}</span> capabilities</span>
+              </>
+            ) : null}
+            {totalsUnknown ? (
+              <button type="button" onClick={() => openAll('inventory')} className="ae-focus" data-testid="agents-totals-unknown">
+                <TonePill tone="amber">Totals unknown, not zero</TonePill>
+              </button>
+            ) : null}
+            {!nothingObserved ? (
+              <LinkButton onClick={() => openAll()} className="text-[12px]">All findings →</LinkButton>
+            ) : null}
+          </span>
         </div>
       </header>
 
@@ -1058,44 +1180,14 @@ export function AgentAccessPage() {
           description="No agent, server, or capability has been observed for this tenant. That is an absence of observation, not evidence that your agents reach nothing."
         />
       ) : (
-        <>
-          <Section
-            id="agent-access-agents"
-            title="Who is acting"
-            description="Observed agents. Select one for a summary, then open it for its profile, authority, exposure and lifecycle."
-          >
-            <AgentDirectory
-              query={query}
-              selectedId={agentId}
-              onSelect={id => update({ agent: id })}
-              onOpen={id => update({ agent: id, view: 'agent', tab: 'overview' })}
-            />
-          </Section>
-
-          <Section
-            id="agent-access-inventory"
-            title="Inventory"
-            description="What your agents can reach, as observed."
-          >
-            {summary ? <InventorySummary summary={summary} /> : <LoadingState lines={3} />}
-          </Section>
-
-          <Section
-            id="agent-access-findings"
-            title="What to look at first"
-            description="Scan and drift findings, highest risk first."
-          >
-            <FindingsSection />
-          </Section>
-
-          <Section
-            id="agent-access-authorizations"
-            title="What is authorized"
-            description="Explicit capability authorizations. Observed reach is not authorization."
-          >
-            <AuthorizationsSection />
-          </Section>
-        </>
+        <section aria-label="Who is acting" className="flex min-w-0 flex-col gap-3" id="agent-access-agents">
+          <AgentDirectory
+            query={query}
+            selectedId={agentId}
+            onSelect={id => update({ agent: id })}
+            onOpen={id => update({ agent: id, view: 'agent', tab: 'overview' })}
+          />
+        </section>
       )}
     </div>
   );

@@ -4,20 +4,16 @@ import { useQuery, useTheme } from '@aether/ui';
 import { GlassPage } from '@aether-app/components/app-shell';
 import { BrandMark } from '@aether-app/components/brand-mark';
 import { Bar, Eyebrow, InlineNotice, LinkButton, MetricTile, PrimaryButton, TonePill, type Tone } from '@aether-app/components/ae-ui';
-import { DecisionIntelligencePanel } from '@aether-app/components/decision-intelligence-panel';
-import { OutcomeLedgerPanel } from '@aether-app/components/outcome-ledger-panel';
 import { useActivationStatus } from '@aether-app/features/activation/use-activation';
 import { useTenantReadiness } from '@aether-app/features/activation/use-tenant-readiness';
 import { useAuth } from '@aether-app/features/auth';
 import { useTenantIntegrations, type TenantIntegrationItem } from '@aether-app/features/integrations';
-import { ModelSelectionPanel } from '@aether-app/features/model-selection';
 import {
   useAnalyticsSummary,
   useOrganizationProfile,
   useTenantApiKeys,
 } from '@aether-app/features/onboarding/use-workspace-setup';
 import { api } from '@aether-app/lib/api/endpoints';
-import { isFeatureEnabled } from '@aether-app/lib/featureFlags';
 import { GRAPH_STAGES, stageStatuses } from '@aether-app/pages/onboarding/onboarding-model';
 
 type Row = Record<string, unknown>;
@@ -44,6 +40,27 @@ function relative(iso: string | null | undefined): string {
   const hours = Math.round(mins / 60);
   if (hours < 48) return `${hours}h ago`;
   return `${Math.round(hours / 24)}d ago`;
+}
+
+function tokenKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Human name for a campaign's source platform. Campaigns are imported from
+ * connected systems, so the matching integration's display name is the
+ * authoritative label; an unmatched token is shown in words rather than as a
+ * raw identifier (`google_ads` → "Google Ads").
+ */
+function platformLabel(token: string, integrations: readonly TenantIntegrationItem[]): string {
+  const key = tokenKey(token);
+  if (!key) return '';
+  const match = integrations.find(i => tokenKey(i.family) === key || tokenKey(i.display_name) === key);
+  if (match) return match.display_name;
+  return token
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, ch => ch.toUpperCase());
 }
 
 function needsAttention(item: TenantIntegrationItem): boolean {
@@ -385,6 +402,7 @@ export function HomePage() {
                   const funnel = (c['funnel'] ?? metrics['funnel'] ?? {}) as Row;
                   const id = String(c['id'] ?? c['campaign_id'] ?? '');
                   const platform = String(c['platform'] ?? c['origin'] ?? c['source'] ?? '');
+                  const platformName = platformLabel(platform, items);
                   const status = String(c['status'] ?? '—');
                   return (
                     <button
@@ -396,10 +414,10 @@ export function HomePage() {
                       style={{ gridTemplateColumns: 'minmax(160px,1.8fr) 90px 80px 80px 80px', borderColor: 'var(--ae-edge)' }}
                     >
                       <span className="flex min-w-0 items-center gap-2.5">
-                        <BrandMark token={platform || 'aether'} label={platform || 'Aether'} size={22} markSize={14} />
+                        <BrandMark token={platform || 'aether'} label={platformName || 'Aether'} size={22} markSize={14} />
                         <span className="flex min-w-0 flex-col leading-tight">
                           <span className="truncate">{String(c['name'] ?? id)}</span>
-                          <span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>{platform || 'source unknown'}</span>
+                          <span className="text-[11px]" style={{ color: 'var(--ae-mute)' }}>{platformName || 'source unknown'}</span>
                         </span>
                       </span>
                       <span className="text-[12px]" style={{ color: /active|live|running/i.test(status) ? 'var(--ae-sage)' : 'var(--ae-mute)' }}>● {status}</span>
@@ -414,18 +432,6 @@ export function HomePage() {
           )}
         </section>
 
-        {/* Outcomes and decisions (existing evidence panels) */}
-        <div className="ae-legacy grid gap-[18px]" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(360px, 100%), 1fr))' }}>
-          <OutcomeLedgerPanel />
-          <DecisionIntelligencePanel />
-        </div>
-
-        {/* ADR-008 D9: tenant model-routing preference. Feature-flag gated (D8). */}
-        {isFeatureEnabled('enableModelHarness') && (
-          <div className="ae-legacy">
-            <ModelSelectionPanel {...(user?.id ? { tenantId: user.id } : {})} />
-          </div>
-        )}
       </div>
     </GlassPage>
   );

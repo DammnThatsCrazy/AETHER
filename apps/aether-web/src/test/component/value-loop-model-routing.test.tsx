@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '@aether/ui';
-import { HomePage } from '@aether-app/pages/home/home-page';
+import { LoopAndDecisionsSection } from '@aether-app/pages/value-review/value-loop-section';
 import type { ModelRegistryModel } from '@aether-app/features/model-selection/types';
 
 const mocks = vi.hoisted(() => ({
@@ -12,35 +12,15 @@ const mocks = vi.hoisted(() => ({
   logout: vi.fn(),
 }));
 
-// The workspace home already hosts outcome/decision panels; stub them so this
-// suite asserts the model-routing surface, not those separately-covered panels.
+// The Value page's "Loop and decisions" section also hosts the outcome/decision
+// panels; stub them so this suite asserts the model-routing surface, not those
+// separately-covered panels.
 vi.mock('@aether-app/components/outcome-ledger-panel', () => ({
   OutcomeLedgerPanel: () => <div>OUTCOME LEDGER</div>,
 }));
 
 vi.mock('@aether-app/components/decision-intelligence-panel', () => ({
   DecisionIntelligencePanel: () => <div>DECISION INTELLIGENCE</div>,
-}));
-
-// Home's own workspace reads (readiness, activation, connections, keys, event
-// summary, campaigns) are settled as empty here so this suite only exercises
-// the model-routing surface.
-vi.mock('@aether-app/features/activation/use-tenant-readiness', () => ({
-  useTenantReadiness: () => ({ data: null, isLoading: false, error: null, refetch: vi.fn() }),
-}));
-vi.mock('@aether-app/features/activation/use-activation', () => ({
-  useActivationStatus: () => ({ data: null, isLoading: false, error: null, refetch: vi.fn() }),
-}));
-vi.mock('@aether-app/features/integrations', () => ({
-  useTenantIntegrations: () => ({ data: null, isLoading: false, error: null, refetch: vi.fn() }),
-}));
-vi.mock('@aether-app/features/onboarding/use-workspace-setup', () => ({
-  useAnalyticsSummary: () => ({ data: null, isLoading: false, error: null, refetch: vi.fn() }),
-  useOrganizationProfile: () => ({ data: null, isLoading: false, error: null, refetch: vi.fn() }),
-  useTenantApiKeys: () => ({ data: null, isLoading: false, error: null, refetch: vi.fn() }),
-}));
-vi.mock('@aether-app/lib/api/endpoints', () => ({
-  api: { campaigns: { list: () => Promise.resolve({ campaigns: [], total: 0 }) } },
 }));
 
 // Authenticated tenant context — the panel's `tenantId` label derives from this.
@@ -79,17 +59,17 @@ const MODELS: ModelRegistryModel[] = [
   },
 ];
 
-function renderHome() {
+function renderSection() {
   return render(
     <ThemeProvider>
       <MemoryRouter>
-        <HomePage />
+        <LoopAndDecisionsSection />
       </MemoryRouter>
     </ThemeProvider>,
   );
 }
 
-describe('HomePage model-routing surface (ADR-008 D9 / enableModelHarness)', () => {
+describe('Value "Loop and decisions" model-routing surface (ADR-008 D9 / enableModelHarness)', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     mocks.getModels.mockReset();
@@ -107,7 +87,7 @@ describe('HomePage model-routing surface (ADR-008 D9 / enableModelHarness)', () 
   });
 
   it('renders nothing and fires no model-runtime request when the flag is OFF', () => {
-    renderHome();
+    renderSection();
     expect(screen.queryByText('Model routing preference')).not.toBeInTheDocument();
     expect(mocks.getModels).not.toHaveBeenCalled();
     expect(mocks.setTenantDefault).not.toHaveBeenCalled();
@@ -118,8 +98,8 @@ describe('HomePage model-routing surface (ADR-008 D9 / enableModelHarness)', () 
       vi.stubEnv('VITE_FEATURE_FLAGS', JSON.stringify({ enableModelHarness: true }));
     });
 
-    it('mounts the panel and triggers the model-list API on the tenant home', async () => {
-      renderHome();
+    it('mounts the panel and triggers the model-list API on the Value page', async () => {
+      renderSection();
 
       // The tenant-facing surface is present and populated from the model
       // registry — the flag now has a real user-visible effect.
@@ -130,13 +110,13 @@ describe('HomePage model-routing surface (ADR-008 D9 / enableModelHarness)', () 
     }, 15_000);
 
     it('labels the surface with the authenticated tenant id', async () => {
-      renderHome();
+      renderSection();
       expect(await screen.findByLabelText('Model routing preference for tenant-t1')).toBeInTheDocument();
     }, 15_000);
 
-    it('lets the tenant change their default from the home page', async () => {
+    it('lets the tenant change their default from the Value page', async () => {
       const user = userEvent.setup();
-      renderHome();
+      renderSection();
 
       const gptRow = (await screen.findByText('gpt-4o-mini')).closest('li') as HTMLElement;
       await user.click(within(gptRow).getByRole('button', { name: 'Set as default' }));

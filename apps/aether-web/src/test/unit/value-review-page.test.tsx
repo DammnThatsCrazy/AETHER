@@ -22,6 +22,14 @@ vi.mock('@aether-app/lib/api/endpoints', () => ({
   },
 }));
 
+// The "Loop and decisions" panels have their own suites; stub them here so this
+// suite asserts where they mount, not their internals.
+vi.mock('@aether-app/components/outcome-ledger-panel', () => ({
+  OutcomeLedgerPanel: ({ variant }: { variant?: string }) => <div data-testid="ledger-panel" data-variant={variant}>OUTCOME LEDGER</div>,
+}));
+vi.mock('@aether-app/components/decision-intelligence-panel', () => ({ DecisionIntelligencePanel: () => <div>DECISION INTELLIGENCE</div> }));
+vi.mock('@aether-app/features/auth', () => ({ useAuth: () => ({ user: { id: 'tenant-user' } }) }));
+
 const REVIEW = {
   tenant_id: 'tenant-under-test',
   observed_value: 10000,
@@ -224,5 +232,20 @@ describe('Aether Value page', () => {
     m.outcomeLedger.mockRejectedValue(new Error('ledger offline'));
     renderPage('/value-review?tab=customers');
     expect(await screen.findByText(/The outcome ledger is unavailable right now/)).toBeInTheDocument();
+  });
+
+  it('hosts the outcome ledger, decision feed and playbooks under "Loop and decisions" on the Outcomes tab only', async () => {
+    const { unmount } = renderPage('/value-review?tab=outcomes');
+    const section = await screen.findByTestId('value-loop-decisions');
+    expect(within(section).getByRole('heading', { name: 'Loop and decisions' })).toBeInTheDocument();
+    expect(within(section).getByText('DECISION INTELLIGENCE')).toBeInTheDocument();
+    // The tab already draws the funnel and loop health; the panel adds the value figures.
+    expect(within(section).getByTestId('ledger-panel')).toHaveAttribute('data-variant', 'value');
+    expect(section.querySelector('.ae-legacy')).toBeNull();
+    unmount();
+
+    renderPage('/value-review?tab=overview');
+    await screen.findByRole('heading', { name: 'Value' });
+    expect(screen.queryByTestId('value-loop-decisions')).toBeNull();
   });
 });
