@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -52,6 +52,8 @@ from intelligence.risk360.contracts import (  # noqa: E402
     MonetaryAmount,
     RiskAssessment,
     RiskComponent,
+    RiskPoisoningEvidence,
+    RiskPoisoningLifecycleEvent,
     RiskSignal,
     RiskVector,
     ValueState,
@@ -70,6 +72,8 @@ from intelligence.risk360.provider import (  # noqa: E402
 from intelligence.risk360.routes import SERVED_SUBJECT_KINDS, create_router  # noqa: E402
 from intelligence.risk360.store import (  # noqa: E402
     RiskAssessmentRepository,
+    RiskPoisoningEvidenceRead,
+    RiskPoisoningEvidenceRepository,
     RiskSignalRepository,
 )
 from shared.intelligence_projections import (  # noqa: E402
@@ -345,6 +349,10 @@ class _FakeReader:
         source_provenance: list[dict] | None = None,
         source_provenance_truncated: bool = False,
         raise_source_provenance: bool = False,
+        poisoning_evidence: list[object] | None = None,
+        poisoning_evidence_complete: bool = True,
+        poisoning_evidence_reason: str | None = None,
+        raise_poisoning_evidence: bool = False,
         financial_flow_path: dict | None = None,
     ) -> None:
         self._assessment = assessment
@@ -357,6 +365,12 @@ class _FakeReader:
         self._source_provenance_truncated = source_provenance_truncated
         self._raise_source_provenance = raise_source_provenance
         self.source_provenance_calls = 0
+        self._poisoning_evidence = list(poisoning_evidence or [])
+        self._poisoning_evidence_complete = poisoning_evidence_complete
+        self._poisoning_evidence_reason = poisoning_evidence_reason
+        self._raise_poisoning_evidence = raise_poisoning_evidence
+        self.poisoning_evidence_calls = 0
+        self.poisoning_evidence_as_of: datetime | None = None
         self._financial_flow_path = financial_flow_path
 
     async def latest_assessment(self, *, tenant_id: str, subject: object) -> dict | None:
@@ -380,6 +394,30 @@ class _FakeReader:
         if self._raise_source_provenance:
             raise RuntimeError("boom: secret-detail")
         return list(self._source_provenance), self._source_provenance_truncated
+
+    async def poisoning_evidence(
+        self,
+        *,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        as_of: datetime | None,
+    ) -> RiskPoisoningEvidenceRead:
+        self.poisoning_evidence_calls += 1
+        self.poisoning_evidence_as_of = as_of
+        if self._raise_poisoning_evidence:
+            raise RuntimeError("boom: secret-detail")
+        return RiskPoisoningEvidenceRead(
+            records=list(self._poisoning_evidence),  # type: ignore[arg-type]
+            complete=self._poisoning_evidence_complete,
+            reason=(
+                self._poisoning_evidence_reason
+                or (
+                    "poisoning_evidence_scan_truncated"
+                    if not self._poisoning_evidence_complete
+                    else None
+                )
+            ),
+        )
 
     async def financial_flow_path(self, *, tenant_id: str, path_id: str) -> dict | None:
         return self._financial_flow_path
@@ -446,6 +484,49 @@ def _source_provenance_claim_row(
             "uri": f"store://bronze_sdk_events/bronze-{event_id}",
         },
     }
+
+
+def _poisoning_evidence_record(
+    *,
+    evidence_id: str = "poison-1",
+    tenant_id: str = TENANT_A,
+    source_id: str = "provider:crm",
+    subject_kind: str = "source",
+    subject_id: str = "provider:crm",
+    status: str = "open",
+    recorded_at: datetime | None = None,
+    lifecycle_events: list[RiskPoisoningLifecycleEvent] | None = None,
+    superseded_by_evidence_id: str | None = None,
+) -> RiskPoisoningEvidence:
+    seen = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
+    return RiskPoisoningEvidence(
+        evidence_id=evidence_id,
+        tenant_id=tenant_id,
+        source_id=source_id,
+        subject_kind=subject_kind,
+        subject_id=subject_id,
+        poisoning_type="communication_injection",
+        signal_strength=0.76,
+        confidence="high",
+        claim_state=EpistemicStatus.INFERRED,
+        detector_id="comm-injection-detector",
+        detector_version="3.1.0",
+        source_record_id="message-record-17",
+        evidence_refs=[
+            EvidenceRef(
+                id="message-evidence-17",
+                type="event",
+                source="message-security",
+                uri="store://message-security/evidence-17",
+            )
+        ],
+        first_seen_at=seen,
+        last_seen_at=seen,
+        recorded_at=recorded_at or seen,
+        status=status,  # type: ignore[arg-type]
+        superseded_by_evidence_id=superseded_by_evidence_id,
+        lifecycle_events=list(lifecycle_events or []),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -705,6 +786,189 @@ async def test_source_trust_projects_only_ingress_classification_and_marks_other
     assert source_claims[0].claimState == EpistemicStatus.OBSERVED
     assert source_claims[0].evidenceRefs[0].id == "source-event-1"
     assert source_claims[0].domainSlotIds == ["source_trust", "evidence_trace"]
+
+
+@pytest.mark.asyncio
+async def test_poisoning_evidence_projects_exact_detector_record_without_escalating_claim() -> None:
+    source_id = "provider:crm"
+    record = _poisoning_evidence_record(source_id=source_id, subject_id=source_id)
+    result = await Risk360Provider(
+        sources=_FakeReader(poisoning_evidence=[record])
+    ).project(
+        _request(subject=ProjectionSubject(kind="source", id=source_id)),
+        await _context(_available_registry()),
+    )
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    payload = findings.content["poisoningEvidence"]
+    assert payload["state"] == "partial"
+    assert payload["records"][0]["sourceId"] == source_id
+    assert payload["records"][0]["subject"] == {"kind": "source", "id": source_id}
+    assert payload["records"][0]["detectorVersion"] == "3.1.0"
+    assert payload["records"][0]["evidenceRefs"][0]["id"] == "message-evidence-17"
+    assert payload["coverage"] == {
+        "completeEvidenceScan": True,
+        "detectorCoverage": "unattested",
+        "negativeFindingInference": "prohibited",
+    }
+    assert payload["freshness"]["threshold"] == "unconfigured"
+    assert payload["policy"] == {
+        "scope": "tenant_read_gated",
+        "projection": "metadata_only",
+        "rawPayload": "excluded",
+    }
+    assert findings.content["requiredSlotCoverage"]["poisoning_evidence"] == {
+        "state": "partial",
+        "reason": "poisoning_detector_coverage_not_attested",
+    }
+    assert findings.content["requiredSlotCoverage"]["source_trust"] == {
+        "state": "degraded",
+        "reason": "open_poisoning_evidence_requires_source_review",
+    }
+    claim = next(
+        claim for claim in result.claims if claim.kind == "source_poisoning_detector_evidence"
+    )
+    assert claim.id == "risk360.poisoning.poison-1.v1"
+    assert claim.claimState is EpistemicStatus.INFERRED
+    assert claim.confidence is None
+    assert claim.domainSlotIds == ["poisoning_evidence", "evidence_trace", "source_trust"]
+    assert "does not by itself verify" in claim.claims[0]
+    serialized = result.model_dump_json()
+    assert "suspected_payload_hash" not in serialized
+    assert "payload_hash" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_poisoning_evidence_rejects_tenant_and_source_subject_mismatches() -> None:
+    source_id = "provider:crm"
+    wrong_tenant = _poisoning_evidence_record(
+        source_id=source_id,
+        subject_id=source_id,
+        tenant_id=TENANT_B,
+    )
+    wrong_source = _poisoning_evidence_record(
+        evidence_id="poison-2",
+        source_id="provider:other",
+        subject_id=source_id,
+    )
+    for record in (wrong_tenant, wrong_source):
+        result = await Risk360Provider(
+            sources=_FakeReader(poisoning_evidence=[record])
+        ).project(
+            _request(subject=ProjectionSubject(kind="source", id=source_id)),
+            await _context(_available_registry()),
+        )
+        findings = next(section for section in result.sections if section.id == "findings")
+        coverage = findings.content["requiredSlotCoverage"]["poisoning_evidence"]
+        assert coverage["state"] == "degraded"
+        assert not findings.content["poisoningEvidence"]["records"]
+        assert not [
+            claim for claim in result.claims if claim.kind == "source_poisoning_detector_evidence"
+        ]
+
+
+@pytest.mark.asyncio
+async def test_empty_and_incomplete_poisoning_reads_have_honest_states() -> None:
+    empty = await Risk360Provider(sources=_FakeReader()).project(
+        _request(), await _context(_available_registry())
+    )
+    empty_findings = next(section for section in empty.sections if section.id == "findings")
+    assert empty_findings.content["poisoningEvidence"]["state"] == "unknown"
+    assert empty_findings.content["poisoningEvidence"]["coverage"]["completeEvidenceScan"] is True
+    assert empty_findings.content["requiredSlotCoverage"]["poisoning_evidence"] == {
+        "state": "unknown",
+        "reason": "poisoning_detector_coverage_not_attested",
+    }
+
+    partial = await Risk360Provider(
+        sources=_FakeReader(
+            poisoning_evidence=[_poisoning_evidence_record(subject_kind="entity", subject_id="usr_1")],
+            poisoning_evidence_complete=False,
+        )
+    ).project(_request(), await _context(_available_registry()))
+    partial_findings = next(section for section in partial.sections if section.id == "findings")
+    assert partial_findings.content["poisoningEvidence"]["state"] == "degraded"
+    assert partial_findings.content["requiredSlotCoverage"]["poisoning_evidence"]["state"] == "degraded"
+    assert next(section for section in partial.sections if section.id == "health").state == "degraded"
+
+
+@pytest.mark.asyncio
+async def test_poisoning_read_reason_degrades_even_when_authority_marks_it_complete() -> None:
+    result = await Risk360Provider(
+        sources=_FakeReader(
+            poisoning_evidence_complete=True,
+            poisoning_evidence_reason="poisoning_evidence_partial_authority_read",
+        )
+    ).project(_request(), await _context(_available_registry()))
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    assert findings.content["poisoningEvidence"]["state"] == "degraded"
+    assert findings.content["requiredSlotCoverage"]["poisoning_evidence"] == {
+        "state": "degraded",
+        "reason": "poisoning_evidence_partial_authority_read",
+    }
+    assert next(section for section in result.sections if section.id == "health").state == "degraded"
+
+
+@pytest.mark.asyncio
+async def test_poisoning_evidence_reconstructs_point_in_time_lifecycle() -> None:
+    recorded_at = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
+    acknowledged_at = recorded_at + timedelta(seconds=30)
+    superseded_at = recorded_at + timedelta(minutes=2)
+    events = [
+        RiskPoisoningLifecycleEvent(
+            event_id="life-1",
+            from_status="open",
+            to_status="acknowledged",
+            occurred_at=acknowledged_at,
+            actor_id="operator-1",
+            reason="review started",
+        ),
+        RiskPoisoningLifecycleEvent(
+            event_id="life-2",
+            from_status="acknowledged",
+            to_status="superseded",
+            occurred_at=superseded_at,
+            actor_id="detector-release-2",
+            reason="new detector result",
+        ),
+    ]
+    record = _poisoning_evidence_record(
+        status="superseded",
+        recorded_at=recorded_at,
+        lifecycle_events=events,
+        superseded_by_evidence_id="poison-2",
+    )
+    reader = _FakeReader(poisoning_evidence=[record])
+    anchor = acknowledged_at + timedelta(seconds=1)
+    result = await Risk360Provider(sources=reader).project(
+        _request(
+            subject=ProjectionSubject(kind="source", id="provider:crm"),
+            asOf=anchor.isoformat(),
+            temporalMode="as_of",
+        ),
+        await _context(_available_registry()),
+    )
+    assert reader.poisoning_evidence_as_of == anchor
+    findings = next(section for section in result.sections if section.id == "findings")
+    historical = findings.content["poisoningEvidence"]["records"][0]
+    assert historical["status"] == "acknowledged"
+    assert historical["supersededByEvidenceId"] is None
+    assert [event["eventId"] for event in historical["lifecycle"]] == ["life-1"]
+
+
+@pytest.mark.asyncio
+async def test_repository_reader_joins_canonical_poisoning_authority() -> None:
+    source_id = "provider:crm"
+    await RiskPoisoningEvidenceRepository().create(
+        _poisoning_evidence_record(source_id=source_id, subject_id=source_id)
+    )
+    result = await Risk360Provider().project(
+        _request(subject=ProjectionSubject(kind="source", id=source_id)),
+        await _context(_available_registry()),
+    )
+    findings = next(section for section in result.sections if section.id == "findings")
+    assert findings.content["poisoningEvidence"]["records"][0]["evidenceId"] == "poison-1"
 
 
 @pytest.mark.asyncio

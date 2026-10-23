@@ -60,15 +60,16 @@ keyed on ``user_id`` and the request's ``anonymous_id`` when present, recomputes
 other identities' session rollups that counted the subject's events, and drops
 the tenant's cached analytics query results.
 
-The ``web3_observations`` and ``x402_commerce`` components also erase exact
-tenant-scoped subject references from raw Web3 observations and x402 lifecycle
-records, while honoring their storage-policy legal holds.
+The ``web3_observations``, ``x402_commerce``, and
+``risk_poisoning_evidence`` components also erase exact tenant-scoped
+references from raw Web3 observations, x402 lifecycle records, and risk-owned
+poisoning evidence, while honoring their storage-policy legal holds.
 
-The entity-keyed stores add ``web3_observations`` and ``x402_commerce``: the
-first deletes raw tenant observations whose structured fields contain an exact
-subject reference; the second removes tenant commerce lifecycle rows that
-directly name the subject. Both run through isolated entity planes and return
-their own durable row receipts.
+The entity-keyed stores add ``web3_observations``,
+``x402_commerce``, and ``risk_poisoning_evidence``: these planes delete
+tenant rows with exact subject/source references, and x402 approval decisions
+are also removed when their approval is erased. Each plane returns its own row
+receipt.
 """
 
 from __future__ import annotations
@@ -495,7 +496,7 @@ async def _run_completeness_planes(
         + planes.IDENTITY_COMPONENTS
         # Keep explicit names here as well as in ENTITY_PLANES so static
         # coverage proves both newly connected stores are job-owned.
-        + ("web3_observations", "x402_commerce")
+        + ("web3_observations", "x402_commerce", "risk_poisoning_evidence")
     ))
     try:
         subject = await planes.resolve_subject(tenant_id, user_id, anonymous_id)

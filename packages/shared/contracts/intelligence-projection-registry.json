@@ -239,7 +239,8 @@
         "graph",
         "identity",
         "observations",
-        "outcome_facts"
+        "outcome_facts",
+        "source_provenance"
       ],
       "hardDependencies": [
         "contract_spine",
@@ -836,6 +837,7 @@
         "agent_access",
         "agent_entities",
         "agent_executions",
+        "commerce",
         "economic_facts",
         "entity_registry",
         "episode_facts",
@@ -2865,7 +2867,7 @@
           "description": "Observed current capability grants and recorded action-scoped delegation decisions; no standing action or resource authorization verdict.",
           "canonicalAuthorityRefs": [
             "agent_access",
-        "agent_executions",
+            "agent_executions",
             "identity"
           ],
           "projectionBindings": [
@@ -3123,10 +3125,7 @@
           "implementationCrosswalk": [
             "source_evidence_lineage"
           ],
-          "unboundCanonicalAuthorityRefs": [
-            "source_provenance"
-          ],
-          "authorityGapReason": "exact_subject_authority_join_not_implemented"
+          "partialImplementationReason": "Canonical Bronze links are joined to exact tenant, agent, source-row, event, schema, and timestamp references. Registered Rights source identity, source trust, freshness SLA, complete lineage coverage, and unlinked historical rows remain unknown."
         },
         {
           "id": "actor_attribution",
@@ -3568,13 +3567,28 @@
         {
           "id": "approval_chain",
           "requirement": "required",
-          "description": "Required Execution 360 blueprint slot: approval chain.",
+          "description": "Exact tenant-scoped x402 commerce approval decisions linked to admitted agent execution records.",
           "canonicalAuthorityRefs": [
             "agent_access",
             "agent_entities",
+            "commerce",
             "identity"
           ],
-          "projectionBindings": [],
+          "projectionBindings": [
+            {
+              "projectionId": "execution360",
+              "role": "primary",
+              "sectionIds": [
+                "interactions"
+              ],
+              "subjectKinds": [
+                "agent",
+                "entity",
+                "episode",
+                "execution"
+              ]
+            }
+          ],
           "implementationCrosswalk": [
             "actor_and_delegation"
           ],
@@ -3582,7 +3596,7 @@
             "slotActorAttribution",
             "slotAuthorityDecision"
           ],
-          "unboundReason": "execution_approval_id_canonical_join_not_available"
+          "partialImplementationReason": "Execution360 joins immutable x402 commerce approval decisions to exact admitted run IDs and latest approval decision references. Other approval authorities, historical run linkage, and full authority-decision coverage remain unknown."
         },
         {
           "id": "authority_check",
@@ -3792,6 +3806,7 @@
           "agent_entities",
           "agent_executions",
           "ai_execution_facts",
+          "commerce",
           "economic_facts",
           "episode_facts",
           "events",
@@ -4456,13 +4471,26 @@
         {
           "id": "relationships",
           "requirement": "required",
-          "description": "Canonical relationship facts for the profile.",
+          "description": "Tenant-scoped canonical graph relationships observed for the exact entity subject; no profile, account-member, or alias identity is inferred.",
           "canonicalAuthorityRefs": [
             "graph",
             "relationship_facts"
           ],
-          "projectionBindings": [],
-          "unboundReason": "profile_relationship_subject_mapping_not_proven"
+          "projectionBindings": [
+            {
+              "projectionId": "relationship360",
+              "role": "primary",
+              "sectionIds": [
+                "evidence",
+                "interactions",
+                "summary"
+              ],
+              "subjectKinds": [
+                "entity"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Relationship360 reads the exact tenant entity from the graph mutation ledger; profile/member alias resolution, a ledger completeness watermark, and Profile-specific freshness remain unknown."
         },
         {
           "id": "value_summary",
@@ -4517,13 +4545,25 @@
         {
           "id": "location_temporal",
           "requirement": "required",
-          "description": "Time scoped location evidence for the exact profile.",
+          "description": "Tenant-scoped observed location facts and their recorded temporal bounds for the exact entity subject.",
+          "partialImplementationReason": "The source reports recorded entity location facts only; profile alias resolution, continuous trajectory reconstruction, cross-surface completeness, historical point-in-time reconstruction, and Profile-specific freshness remain unknown.",
           "canonicalAuthorityRefs": [
             "geo_observations",
             "temporal"
           ],
-          "projectionBindings": [],
-          "unboundReason": "profile_location_temporal_join_not_available"
+          "projectionBindings": [
+            {
+              "projectionId": "geographic360",
+              "role": "primary",
+              "sectionIds": [
+                "evidence",
+                "timeline"
+              ],
+              "subjectKinds": [
+                "entity"
+              ]
+            }
+          ]
         },
         {
           "id": "likely_next_states",
@@ -4727,6 +4767,12 @@
           "providerImplementationState": "in_flight"
         },
         {
+          "projectionId": "geographic360",
+          "role": "primary",
+          "bindingStatus": "catalog_only",
+          "providerImplementationState": "implemented"
+        },
+        {
           "projectionId": "relationship360",
           "role": "primary",
           "bindingStatus": "catalog_only",
@@ -4797,6 +4843,8 @@
         "projectionCapabilityKeys": [
           "economic360.explore",
           "economic360.read",
+          "geographic360.explore",
+          "geographic360.read",
           "outcome360.explore",
           "outcome360.read",
           "profile360.explore",
@@ -6065,13 +6113,30 @@
         {
           "id": "poisoning_evidence",
           "requirement": "required",
-          "description": "Verified data poisoning evidence with source lineage.",
+          "description": "Tenant-scoped detector evidence for exact subjects, with versioned lifecycle and evidence references; detector completeness and source reputation remain unknown.",
           "canonicalAuthorityRefs": [
             "risk_outputs",
             "source_provenance"
           ],
-          "projectionBindings": [],
-          "unboundReason": "data_poisoning_evidence_authority_not_connected"
+          "projectionBindings": [
+            {
+              "projectionId": "risk360",
+              "role": "primary",
+              "sectionIds": [
+                "evidence",
+                "findings"
+              ],
+              "subjectKinds": [
+                "agent",
+                "cluster",
+                "contagion_path",
+                "entity",
+                "relationship",
+                "source"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Risk360 reads explicitly stored detector evidence for exact tenant and subject bindings, with temporal anchors, lifecycle, restatement lineage, and evidence references. Detector coverage, independent source verification, population-wide completeness, and a source freshness SLA remain unknown."
         },
         {
           "id": "source_trust",
@@ -6948,7 +7013,7 @@
       "sourceOfTruth": {
         "canonicalAuthorities": [
           "ai_execution_facts",
-            "attribution_runs",
+          "attribution_runs",
           "attribution_credits",
           "campaign_facts",
           "campaign_touchpoints",
@@ -10380,10 +10445,10 @@
           "journeys",
           "measurement_contract",
           "outcome_facts",
-            "provider_connections",
+          "provider_connections",
           "risk_outputs",
-            "support_cases",
-            "support_case_events",
+          "support_cases",
+          "support_case_events",
           "source_coverage",
           "source_provenance"
         ],

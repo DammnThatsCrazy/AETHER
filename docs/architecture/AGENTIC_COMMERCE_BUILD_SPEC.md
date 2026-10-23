@@ -30,7 +30,7 @@ source_hashes:
   "services/api/value/commerce/": "sha256:b96641f8d5b28f66fcf7aea39c2494a2af76f6e08e2f2c205b5e5abf92bbf03c"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
-  "services/api/value/x402/": "sha256:49f3660ba1468f6481b067fcd46ad230199aee60d7e7316ba57b7c69c368c4a9"
+  "services/api/value/x402/": "sha256:a92283788ffc7dab83f99071da7dc9de7cd695eb5a46fb614afa5cbdbdadb708"
   "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
 ---
 # Aether Agentic Commerce — Day-1 Build Specification

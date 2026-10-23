@@ -100,6 +100,7 @@ SILVER_FACTS_COMPONENT = "silver_facts"
 BRONZE_EVENTS_COMPONENT = "bronze_events"
 WEB3_OBSERVATIONS_COMPONENT = "web3_observations"
 X402_COMMERCE_COMPONENT = "x402_commerce"
+RISK_POISONING_EVIDENCE_COMPONENT = "risk_poisoning_evidence"
 
 ERASURE_ACTOR = "dsr_erasure_job"
 ERASURE_REASON = "dsr_erasure"
@@ -1322,7 +1323,8 @@ async def erase_x402_commerce_plane(subject: ErasureSubject) -> dict[str, Receip
     from shared.storage.lifecycle import StorageLifecycle
     lifecycle = StorageLifecycle()
     for resource_type in (
-        "commerce_challenges", "commerce_approvals", "commerce_entitlements",
+        "commerce_challenges", "commerce_approvals", "commerce_approval_decisions",
+        "commerce_entitlements",
         "commerce_authorizations", "commerce_receipts", "commerce_settlements",
         "commerce_grants", "commerce_fulfillments", "commerce_budget_policies",
     ):
@@ -1340,6 +1342,35 @@ async def erase_x402_commerce_plane(subject: ErasureSubject) -> dict[str, Receip
         records_impacted=sum(counts.values()),
         detail={f"x402_{name}": count for name, count in counts.items()},
     )}
+
+
+async def erase_risk_poisoning_evidence_plane(
+    subject: ErasureSubject,
+) -> dict[str, Receipt]:
+    """Erase exact tenant subject/source poisoning evidence, honoring holds."""
+    from shared.storage.lifecycle import StorageLifecycle
+    from intelligence.risk360.store import RiskPoisoningEvidenceRepository
+
+    lifecycle = StorageLifecycle()
+    for ref in sorted(subject.refs):
+        hold = await lifecycle.active_hold(
+            subject.tenant_id, "risk_poisoning_evidence", ref
+        )
+        if hold is not None:
+            return {
+                RISK_POISONING_EVIDENCE_COMPONENT: Receipt(
+                    status="skipped_legal_hold",
+                    policy_decision_id=f"storage_legal_hold:{hold.get('hold_id')}",
+                    blocked_reason=str(hold.get("reason") or "legal hold"),
+                )
+            }
+
+    deleted = await RiskPoisoningEvidenceRepository().erase_subject_refs(
+        subject.tenant_id, set(subject.refs)
+    )
+    return {
+        RISK_POISONING_EVIDENCE_COMPONENT: Receipt(records_impacted=deleted)
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1364,6 +1395,11 @@ ENTITY_PLANES: tuple[tuple[str, tuple[str, ...], PlaneFn], ...] = (
     ("bronze", (BRONZE_EVENTS_COMPONENT,), erase_bronze_plane),
     ("web3_observations", (WEB3_OBSERVATIONS_COMPONENT,), erase_web3_observations_plane),
     ("x402_commerce", (X402_COMMERCE_COMPONENT,), erase_x402_commerce_plane),
+    (
+        "risk_poisoning_evidence",
+        (RISK_POISONING_EVIDENCE_COMPONENT,),
+        erase_risk_poisoning_evidence_plane,
+    ),
     ("cached_views", (CACHED_VIEWS_COMPONENT,), erase_cached_views_plane),
 )
 ML_ARTIFACT_COMPONENTS = (TRAINING_DATASETS_COMPONENT, MODEL_ARTIFACTS_COMPONENT)

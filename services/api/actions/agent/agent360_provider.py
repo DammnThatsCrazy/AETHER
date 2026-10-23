@@ -41,6 +41,11 @@ from shared.intelligence_projections.registry import ProviderRegistry
 from graph.operational_intelligence.models import EvidenceRef
 from shared.contracts_models.epistemic import EpistemicStatus
 from shared.temporal.instant import try_parse_instant
+from actions.agentic_observability.provenance import (
+    AgentEvidenceReference,
+    AgenticProvenanceQuery,
+    read_agentic_provenance_records,
+)
 
 
 OUTPUT_SECTIONS: tuple[str, ...] = (
@@ -69,6 +74,7 @@ REASON_TOOL_UNAVAILABLE = "agent_tool_source_unavailable"
 REASON_RISK_UNAVAILABLE = "agent_risk_source_unavailable"
 REASON_COMMUNICATION_UNAVAILABLE = "agent_communication_source_unavailable"
 REASON_TEMPORAL_REPLAY_UNAVAILABLE = "agent_temporal_replay_unavailable"
+REASON_EVIDENCE_PROVENANCE_UNAVAILABLE = "agent_evidence_provenance_source_unavailable"
 
 
 @dataclass(frozen=True)
@@ -130,6 +136,14 @@ class Agent360Source(Protocol):
     async def risk_signals(
         self, tenant_id: str, agent_id: str, limit: int
     ) -> list[dict[str, Any]]: ...
+
+    async def agentic_provenance(
+        self,
+        tenant_id: str,
+        agent_id: str,
+        queries: list[AgenticProvenanceQuery],
+        limit: int,
+    ) -> Agent360ReadBatch: ...
 
     async def communications(
         self, tenant_id: str, agent_id: str, limit: int
@@ -444,6 +458,33 @@ class RepositoryAgent360Source:
             filters={"tenant_id": tenant_id, "agent_id": agent_id}, limit=limit + 1
         )
 
+    async def agentic_provenance(
+        self,
+        tenant_id: str,
+        agent_id: str,
+        queries: list[AgenticProvenanceQuery],
+        limit: int,
+    ) -> Agent360ReadBatch:
+        if not tenant_id or not agent_id:
+            return Agent360ReadBatch(rows=[], scope_known=False)
+        foreign = [
+            query
+            for query in queries
+            if query.evidence_ref.tenant_id != tenant_id
+            or query.evidence_ref.agent_id != agent_id
+        ]
+        scoped_queries = [query for query in queries if query not in foreign]
+        batch = await read_agentic_provenance_records(
+            tenant_id=tenant_id,
+            queries=scoped_queries[:limit],
+        )
+        return Agent360ReadBatch(
+            rows=batch.rows,
+            truncated=batch.truncated or len(scoped_queries) > limit,
+            scope_mismatch=batch.scope_mismatch or bool(foreign),
+            scope_known=batch.scope_known,
+        )
+
     async def communications(self, tenant_id: str, agent_id: str, limit: int) -> Agent360ReadBatch:
         """Join observed messages to an agent only through its tenant inbox rows.
 
@@ -749,6 +790,82 @@ def _temporal_slice(
             continue
         selected.append(row)
     return _TemporalSlice(rows=selected, omitted_undated=omitted_undated)
+
+
+def _agentic_provenance_queries(
+    *,
+    tenant_id: str,
+    agent_id: str,
+    activities: list[dict[str, Any]],
+    tools: list[dict[str, Any]],
+    risks: list[dict[str, Any]],
+) -> tuple[list[AgenticProvenanceQuery], int, int]:
+    """Build exact Bronze lookups from admitted compatibility rows only."""
+    groups = (
+        (
+            activities,
+            "obs_agent_activities",
+            ("observation_id", "activity_id", "id"),
+            ("observed_at", "occurred_at"),
+            None,
+        ),
+        (
+            tools,
+            "obs_agent_tools",
+            ("invocation_id", "tool_id", "id"),
+            ("observed_at", "occurred_at"),
+            "agent_tool_invocation_observed",
+        ),
+        (
+            risks,
+            "obs_agent_risk_signals",
+            ("signal_id", "id"),
+            ("detected_at", "observed_at"),
+            "agent_risk_signal_observed",
+        ),
+    )
+    queries: list[AgenticProvenanceQuery] = []
+    unlinked = 0
+    mismatched = 0
+    for rows, source, id_keys, time_keys, fixed_event_type in groups:
+        for row in rows:
+            evidence_id = _first(row, *id_keys)
+            event_id = row.get("canonical_event_id")
+            schema_version = row.get("canonical_event_schema_version")
+            event_type = fixed_event_type or _first(row, "event_name")
+            if not event_id or not schema_version:
+                unlinked += 1
+                continue
+            if (
+                row.get("tenant_id") != tenant_id
+                or row.get("agent_id") != agent_id
+                or not isinstance(evidence_id, str)
+                or not isinstance(event_id, str)
+                or not isinstance(schema_version, str)
+                or not isinstance(event_type, str)
+            ):
+                mismatched += 1
+                continue
+            try:
+                reference = AgentEvidenceReference(
+                    tenant_id=tenant_id,
+                    agent_id=agent_id,
+                    source=source,
+                    id=evidence_id,
+                    observed_at=_timestamp(row, time_keys),
+                    event_type=event_type,
+                )
+            except Exception:  # noqa: BLE001 - invalid refs cannot back an evidence claim
+                mismatched += 1
+                continue
+            queries.append(
+                AgenticProvenanceQuery(
+                    bronze_event_id=event_id,
+                    bronze_schema_version=schema_version,
+                    evidence_ref=reference,
+                )
+            )
+    return queries, unlinked, mismatched
 
 
 class Agent360Provider:
@@ -1242,6 +1359,57 @@ class Agent360Provider:
         if invalid_window:
             degraded_reasons.append("agent_temporal_window_invalid")
 
+        provenance_queries, unlinked_provenance_rows, invalid_provenance_rows = (
+            _agentic_provenance_queries(
+                tenant_id=tenant_id,
+                agent_id=agent_id,
+                activities=timeline_activity.rows,
+                tools=timeline_tools.rows,
+                risks=timeline_risks.rows,
+            )
+        )
+        provenance_loader = getattr(self._source, "agentic_provenance", None)
+        if not provenance_queries:
+            provenance_read = _Read(rows=[], available=True)
+        elif callable(provenance_loader):
+            provenance_read = await self._safe_read(
+                "agentic_provenance",
+                lambda: provenance_loader(
+                    tenant_id,
+                    agent_id,
+                    provenance_queries,
+                    min(len(provenance_queries), 3 * MAX_READ_LIMIT),
+                ),
+                min(len(provenance_queries), 3 * MAX_READ_LIMIT),
+            )
+        else:
+            provenance_read = _Read(rows=None, available=False)
+        data["agentic_provenance"] = provenance_read
+        provenance_rows = provenance_read.rows or []
+        provenance_by_event = {
+            row.get("bronze_event_id"): row
+            for row in provenance_rows
+            if isinstance(row.get("bronze_event_id"), str)
+        }
+        exact_provenance_count = sum(
+            1
+            for query in provenance_queries
+            if query.bronze_event_id in provenance_by_event
+        )
+        unresolved_provenance_links = max(0, len(provenance_queries) - exact_provenance_count)
+        provenance_scope_mismatch = (
+            invalid_provenance_rows > 0 or provenance_read.scope_mismatch
+        )
+        scope_mismatch = scope_mismatch or provenance_scope_mismatch
+        if not provenance_read.available:
+            degraded_reasons.append(REASON_EVIDENCE_PROVENANCE_UNAVAILABLE)
+        if provenance_read.truncated:
+            degraded_reasons.append("agent_evidence_provenance_read_truncated")
+        if provenance_scope_mismatch:
+            degraded_reasons.append("agent_evidence_provenance_scope_mismatch")
+        if unlinked_provenance_rows or unresolved_provenance_links:
+            degraded_reasons.append("agent_evidence_provenance_links_incomplete")
+
         evidence_refs, evidence_rows_missing = self._collect_evidence(
             config_rows=config_rows,
             agent_identities=actor_identity_rows,
@@ -1274,6 +1442,71 @@ class Agent360Provider:
             )
         else:
             claim_evidence_refs = evidence_refs
+
+        bronze_evidence_refs: list[EvidenceRef] = []
+        for row in provenance_rows:
+            try:
+                bronze_evidence_refs.append(
+                    EvidenceRef.model_validate(row.get("bronze_evidence_ref"))
+                )
+            except Exception:  # noqa: BLE001 - malformed refs cannot back an evidence claim
+                provenance_scope_mismatch = True
+                degraded_reasons.append("agent_evidence_provenance_scope_mismatch")
+        if provenance_scope_mismatch:
+            scope_mismatch = True
+            data["agentic_provenance"] = replace(
+                data["agentic_provenance"], scope_mismatch=True
+            )
+            provenance_read = data["agentic_provenance"]
+        evidence_refs = _dedupe_refs(evidence_refs + bronze_evidence_refs)
+        if claim_evidence_refs:
+            claim_evidence_refs = _dedupe_refs(claim_evidence_refs + bronze_evidence_refs)
+
+        agentic_provenance_state = (
+            "empty"
+            if not (timeline_activity.rows or timeline_tools.rows or timeline_risks.rows)
+            and provenance_read.available
+            else "partial"
+        )
+        record_freshness_states = {
+            row.get("freshness_state")
+            for row in provenance_rows
+            if row.get("freshness_state") in {"not_assessed", "undated"}
+        }
+        freshness_state = (
+            "not_assessed"
+            if "not_assessed" in record_freshness_states
+            else "undated"
+            if record_freshness_states
+            else "not_assessed"
+        )
+        agentic_provenance_content = {
+            "state": agentic_provenance_state,
+            "lineageState": (
+                "verified"
+                if provenance_queries
+                and exact_provenance_count == len(provenance_queries)
+                and not provenance_scope_mismatch
+                and not provenance_read.truncated
+                else "partial"
+                if timeline_activity.rows or timeline_tools.rows or timeline_risks.rows
+                else "unknown"
+            ),
+            "records": provenance_rows,
+            "exactBronzeLinks": exact_provenance_count,
+            "unlinkedCompatibilityRows": unlinked_provenance_rows,
+            "unresolvedLinks": unresolved_provenance_links + invalid_provenance_rows,
+            "sourceIdentityState": "unresolved",
+            "sourceTrust": "unknown",
+            "freshness": {
+                "state": freshness_state,
+                "slaSeconds": None,
+                "reason": "agentic_source_freshness_sla_not_configured",
+            },
+            "reason": (
+                "Bronze links are exact tenant, event, schema, agent, source-row, and event-time references. The provider claim is not joined to a registered Rights source, and no source freshness SLA is configured."
+            ),
+        }
 
         source_states = {name: self._read_state(read) for name, read in data.items()}
         config_ref = (
@@ -1518,13 +1751,13 @@ class Agent360Provider:
                 "evidenceRef": (
                     self._ref_one(
                         row,
-                        "agent_risk_signals",
+                        "obs_agent_risk_signals",
                         ("signal_id", "id"),
                         ("detected_at", "observed_at"),
                     ).model_dump(mode="json")
                     if self._ref_one(
                         row,
-                        "agent_risk_signals",
+                        "obs_agent_risk_signals",
                         ("signal_id", "id"),
                         ("detected_at", "observed_at"),
                     )
@@ -1746,6 +1979,7 @@ class Agent360Provider:
                 "evidence": [ref.model_dump(mode="json") for ref in evidence_refs],
                 "evidenceMissingRows": evidence_rows_missing or None,
                 "sourceStates": source_states,
+                "sourceProvenance": agentic_provenance_content,
             },
             warnings=self._warnings(data, scope_mismatch, evidence_rows_missing),
         )
@@ -1906,7 +2140,7 @@ class Agent360Provider:
                     subject=request.subject,
                     evidenceRefs=claim_evidence_refs[:MAX_READ_LIMIT],
                     claims=[
-                        "Tenant-scoped Agent360 source rows contributed the cited stable evidence references; this bounded trace does not establish complete source coverage or an authorization decision."
+                        "Tenant-scoped Agent360 source rows contributed the cited stable evidence references. Canonical Bronze lineage is included only for exact joined records; the bounded trace does not establish complete source coverage, verified source identity, freshness, or an authorization decision."
                     ],
                     claimState=EpistemicStatus.OBSERVED,
                     domainSlotIds=["evidence_trace"],

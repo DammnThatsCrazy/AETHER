@@ -17,6 +17,7 @@ os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from actions.agent.execution360_provider import (  # noqa: E402
+    ExecutionApprovalRead,
     ExecutionEpisodeContextRead,
     ExecutionRiskEventRead,
     ExecutionToolCallRead,
@@ -355,6 +356,7 @@ class FakeSource:
         *,
         error: Exception | None = None,
         risk_events: ExecutionRiskEventRead | None = None,
+        approval_decisions: ExecutionApprovalRead | None = None,
     ) -> None:
         self.server = server or ExecutionRead(
             rows=[_server_row()],
@@ -372,7 +374,11 @@ class FakeSource:
         self.risk_event_read = risk_events or ExecutionRiskEventRead(
             rows=[], available=True, scope_known=True
         )
+        self.approval_decision_read = approval_decisions or ExecutionApprovalRead(
+            rows=[], available=True, scope_known=True
+        )
         self.risk_event_calls: list[tuple[str, tuple[str, ...], int]] = []
+        self.approval_decision_calls: list[tuple[str, tuple[str, ...], int]] = []
 
     async def server_executions(
         self, *, tenant_id: str, subject: ProjectionSubject, limit: int
@@ -395,6 +401,14 @@ class FakeSource:
             raise self.error
         self.risk_event_calls.append((tenant_id, execution_ids, limit))
         return self.risk_event_read
+
+    async def execution_approval_decisions(
+        self, *, tenant_id: str, execution_ids: tuple[str, ...], limit: int
+    ) -> ExecutionApprovalRead:
+        if self.error:
+            raise self.error
+        self.approval_decision_calls.append((tenant_id, execution_ids, limit))
+        return self.approval_decision_read
 
 
 async def test_provider_emits_registry_sections_evidence_and_catalog_bound_claims() -> None:
@@ -423,6 +437,7 @@ async def test_provider_emits_registry_sections_evidence_and_catalog_bound_claim
             "tool_calls",
             "actor_attribution",
             "authority_check",
+            "approval_chain",
             "authority_envelope",
             "evidence_trace",
             "execution_history",
@@ -917,8 +932,11 @@ async def test_tool_telemetry_remains_unlinked_from_server_execution_without_exa
     }
     assert interactions.content["approvalChainLinkage"] == {
         "state": "unknown",
-        "reason": "execution_approval_id_canonical_join_not_available",
-        "sourceReadState": "not_read",
+        "reason": "no_linked_commerce_approval_non_commerce_authority_coverage_unknown",
+        "sourceReadState": "available",
+        "completeness": "x402_commerce_decisions_only",
+        "scopeKnown": True,
+        "truncated": False,
         "joinedExecutionApprovals": [],
         "evidenceRefs": [],
     }
@@ -930,6 +948,101 @@ async def test_tool_telemetry_remains_unlinked_from_server_execution_without_exa
     assert source_reported["toolName"] == "payments.send"
     assert source_reported["runId"] == "source-run-1"
     assert "executionId" not in source_reported
+
+
+async def test_commerce_approval_decision_joins_exact_tenant_execution_and_lifecycle_ref() -> None:
+    server = _server_row()
+    server.update(
+        {
+            "approval_id": "approval-1",
+            "approval_decision_id": "decision-1",
+        }
+    )
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[server],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        approval_decisions=ExecutionApprovalRead(
+            rows=[
+                {
+                    "tenant_id": TENANT,
+                    "execution_id": "exec-1",
+                    "approval_id": "approval-1",
+                    "decision_id": "decision-1",
+                    "action": "approve",
+                    "decided_by": "human-1",
+                    "decided_at": "2026-10-16T09:59:00+00:00",
+                    "is_override": False,
+                }
+            ],
+            available=True,
+            scope_known=True,
+        ),
+    )
+
+    result = await Execution360Provider(source).project(_request(), await _context(_request()))
+
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["approvalChainLinkage"]
+    assert linkage["state"] == "partial"
+    assert linkage["sourceReadState"] == "available"
+    assert linkage["scopeKnown"] is True
+    assert linkage["joinedExecutionApprovals"][0]["executionId"] == "exec-1"
+    assert linkage["joinedExecutionApprovals"][0]["decisionId"] == "decision-1"
+    assert linkage["joinedExecutionApprovals"][0]["authorizedExecutionDecision"] is True
+    assert linkage["evidenceRefs"][0]["source"] == "commerce_approval_decisions"
+    claim = next(
+        claim for claim in result.claims if claim.kind == "canonically_linked_commerce_approval_decision"
+    )
+    assert claim.domainSlotIds == ["approval_chain", "evidence_trace"]
+
+
+async def test_execution_approval_scope_or_lifecycle_reference_conflict_is_degraded() -> None:
+    server = _server_row()
+    server.update(
+        {
+            "approval_id": "approval-1",
+            "approval_decision_id": "decision-1",
+        }
+    )
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[server],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+        approval_decisions=ExecutionApprovalRead(
+            rows=[
+                {
+                    "tenant_id": "other-tenant",
+                    "execution_id": "exec-1",
+                    "approval_id": "approval-1",
+                    "decision_id": "decision-1",
+                    "action": "approve",
+                    "decided_by": "human-1",
+                    "decided_at": "2026-10-16T09:59:00+00:00",
+                    "is_override": False,
+                }
+            ],
+            available=True,
+            scope_known=True,
+        ),
+    )
+
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    linkage = interactions.content["approvalChainLinkage"]
+    assert linkage["state"] == "degraded"
+    assert linkage["joinedExecutionApprovals"] == []
+    assert linkage["scopeKnown"] is False
 
 
 async def test_canonical_tool_call_edge_joins_exact_execution_and_remains_partial() -> None:

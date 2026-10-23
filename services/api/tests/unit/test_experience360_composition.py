@@ -2077,3 +2077,249 @@ async def test_profile_value_summary_routes_exact_subject_to_economic360_after_p
         "summary",
     }
     assert "slot_partial_implementation" in slot.reasonCodes
+
+
+@pytest.mark.asyncio
+async def test_profile_relationships_routes_exact_entity_to_relationship360_after_policy():
+    events: list[tuple[str, str, str]] = []
+    entity_id = "profile-relationship-entity-1"
+    subject = ProjectionSubject(kind="entity", id=entity_id)
+    relationship_evidence = EvidenceRef(
+        id="profile-relationship-mutation-1",
+        type="relationship",
+        source="graph_mutation_ledger",
+        observedAt="2026-10-18T12:00:00Z",
+    )
+
+    class AllowPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            events.append(("policy", request.surfaceId, request.subject.id))
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-18T12:01:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "relationships": Experience360PolicyDisposition(state="allowed")
+                },
+            )
+
+    class Runtime:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str, tuple[str, ...]]] = []
+
+        async def execute_projection(self, projection_request, **_kwargs):
+            section_ids = tuple(sorted(projection_request.includeSections or []))
+            self.calls.append(
+                (
+                    projection_request.projectionId,
+                    projection_request.subject.id,
+                    section_ids,
+                )
+            )
+            events.append(
+                ("projection", projection_request.projectionId, projection_request.subject.id)
+            )
+            assert projection_request.tenantId == TENANT
+            assert projection_request.subject == subject
+            claim = ClaimEnvelope(
+                id="relationship360.graph-event.profile-relationship-1",
+                kind="relationship_graph_event",
+                subject=subject,
+                evidenceRefs=[relationship_evidence],
+                claims=["The canonical graph ledger records a relationship for this exact entity."],
+                domainSlotIds=["relationships"],
+            )
+            return ProjectionResult(
+                projectionId="relationship360",
+                tenantId=projection_request.tenantId,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[
+                    ProjectionSection(
+                        id=section_id,
+                        state="available",
+                        content={"subjectId": entity_id, "evidenceRefs": [relationship_evidence]},
+                        canonicalAuthorityRefs=["graph", "relationship_facts"],
+                    )
+                    for section_id in section_ids
+                ],
+                claims=[claim],
+                dependencyState=[],
+                generatedAt="2026-10-18T12:00:30Z",
+                degradedReasons=["ledger_replay_completeness_is_unknown"],
+            )
+
+    runtime = Runtime()
+    request = Experience360FrameRequest(
+        surfaceId="profile360",
+        tenantId=TENANT,
+        subject=subject,
+        requestedSlotIds=["relationships"],
+        includeEvidence=True,
+    )
+    frame = await build_experience360_frame(
+        request,
+        policy_evaluator=AllowPolicy(),
+        projection_runtime=runtime,
+        generated_at="2026-10-18T12:01:00Z",
+    )
+
+    assert events[0] == ("policy", "profile360", entity_id)
+    assert runtime.calls == [
+        ("relationship360", entity_id, ("evidence", "interactions", "summary"))
+    ]
+    assert events[1] == ("projection", "relationship360", entity_id)
+    slot = frame.slots[0]
+    assert slot.state == "degraded"
+    assert slot.content is not None
+    assert [claim.id for claim in slot.claims] == [
+        "relationship360.graph-event.profile-relationship-1"
+    ]
+    assert slot.evidenceRefs == [relationship_evidence]
+    assert {item.sectionId for item in slot.provenance if item.sourceKind == "section"} == {
+        "evidence",
+        "interactions",
+        "summary",
+    }
+    assert "slot_partial_implementation" in slot.reasonCodes
+
+
+@pytest.mark.asyncio
+async def test_profile_relationships_do_not_infer_entity_from_profile_alias():
+    profile_subject = ProjectionSubject(kind="profile", id="profile-alias-not-entity-1")
+
+    class AllowPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-18T12:01:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "relationships": Experience360PolicyDisposition(state="allowed")
+                },
+            )
+
+    class Runtime:
+        async def execute_projection(self, projection_request, **_kwargs):
+            raise AssertionError("profile alias must not be projected as an entity")
+
+    frame = await build_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="profile360",
+            tenantId=TENANT,
+            subject=profile_subject,
+            requestedSlotIds=["relationships"],
+        ),
+        policy_evaluator=AllowPolicy(),
+        projection_runtime=Runtime(),
+        generated_at="2026-10-18T12:01:00Z",
+    )
+
+    slot = frame.slots[0]
+    assert slot.state == "unknown"
+    assert slot.content is None
+    assert "projection_binding_subject_kind_unsupported" in slot.reasonCodes
+
+
+@pytest.mark.asyncio
+async def test_profile_location_temporal_routes_exact_entity_to_geographic360_after_policy():
+    events: list[tuple[str, str, str]] = []
+    entity_id = "profile-location-entity-1"
+    subject = ProjectionSubject(kind="entity", id=entity_id)
+    location_evidence = EvidenceRef(
+        id="location:profile-location-fact-1",
+        type="relationship",
+        source="location_facts",
+        observedAt="2026-10-18T12:00:00Z",
+    )
+
+    class AllowPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            events.append(("policy", request.surfaceId, request.subject.id))
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-18T12:01:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "location_temporal": Experience360PolicyDisposition(state="allowed")
+                },
+            )
+
+    class Runtime:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str, tuple[str, ...]]] = []
+
+        async def execute_projection(self, projection_request, **_kwargs):
+            section_ids = tuple(sorted(projection_request.includeSections or []))
+            self.calls.append(
+                (
+                    projection_request.projectionId,
+                    projection_request.subject.id,
+                    section_ids,
+                )
+            )
+            events.append(
+                ("projection", projection_request.projectionId, projection_request.subject.id)
+            )
+            assert projection_request.tenantId == TENANT
+            assert projection_request.subject == subject
+            claim = ClaimEnvelope(
+                id="profile_location_temporal.entity.profile-location-entity-1",
+                kind="profile_location_temporal_evidence",
+                subject=subject,
+                evidenceRefs=[location_evidence],
+                claims=[
+                    "Canonical location facts record a time-scoped observation for this exact subject; this is not a continuous physical trajectory."
+                ],
+                domainSlotIds=["location_temporal"],
+            )
+            return ProjectionResult(
+                projectionId="geographic360",
+                tenantId=projection_request.tenantId,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[
+                    ProjectionSection(
+                        id=section_id,
+                        state="available",
+                        content={"evidenceRefs": [location_evidence]},
+                        canonicalAuthorityRefs=["geo_observations", "temporal"],
+                    )
+                    for section_id in section_ids
+                ],
+                claims=[claim],
+                dependencyState=[],
+                generatedAt="2026-10-18T12:00:30Z",
+                degradedReasons=[],
+            )
+
+    runtime = Runtime()
+    frame = await build_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="profile360",
+            tenantId=TENANT,
+            subject=subject,
+            requestedSlotIds=["location_temporal"],
+            includeEvidence=True,
+        ),
+        policy_evaluator=AllowPolicy(),
+        projection_runtime=runtime,
+        generated_at="2026-10-18T12:01:00Z",
+    )
+
+    assert events[0] == ("policy", "profile360", entity_id)
+    assert runtime.calls == [("geographic360", entity_id, ("evidence", "timeline"))]
+    assert events[1] == ("projection", "geographic360", entity_id)
+    slot = frame.slots[0]
+    assert slot.state == "degraded"
+    assert slot.content is not None
+    assert [claim.id for claim in slot.claims] == [
+        "profile_location_temporal.entity.profile-location-entity-1"
+    ]
+    assert slot.evidenceRefs == [location_evidence]
+    assert {item.sectionId for item in slot.provenance if item.sourceKind == "section"} == {
+        "evidence",
+        "timeline",
+    }
+    assert "slot_partial_implementation" in slot.reasonCodes

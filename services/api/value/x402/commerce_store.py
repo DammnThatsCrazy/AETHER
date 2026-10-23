@@ -24,6 +24,7 @@ from repositories.repos import tenant_record_id
 
 from .commerce_models import (
     AccessGrant,
+    ApprovalDecision,
     ApprovalRequest,
     ApprovalStatus,
     Entitlement,
@@ -91,14 +92,39 @@ class TenantCollection:
                 return True
             return False
 
-    async def erase_subject_refs(self, tenant_id: str, refs: set[str]) -> int:
+    async def ids_referencing(
+        self, tenant_id: str, refs: set[str], fields: tuple[str, ...]
+    ) -> set[str]:
+        """Find this tenant's object IDs with exact references in selected fields."""
+        async with self._lock:
+            return {
+                str(key)
+                for key, obj in self._data.get(tenant_id, {}).items()
+                if any(str(getattr(obj, field, "") or "") in refs for field in fields)
+            }
+
+    async def erase_subject_refs(
+        self,
+        tenant_id: str,
+        refs: set[str],
+        *,
+        additional_refs: dict[str, set[str]] | None = None,
+    ) -> int:
         """Delete this tenant's records that directly name an erased subject."""
+        refs_by_field = {
+            field: set(refs)
+            for field in ("requester_id", "subject_id", "holder_id")
+        }
+        for field, field_refs in (additional_refs or {}).items():
+            refs_by_field.setdefault(field, set()).update(field_refs)
         async with self._lock:
             bucket = self._data.get(tenant_id, {})
             doomed = [
                 key for key, obj in bucket.items()
-                if any(str(getattr(obj, field, "")) in refs
-                       for field in ("requester_id", "subject_id", "holder_id"))
+                if any(
+                    str(getattr(obj, field, "") or "") in field_refs
+                    for field, field_refs in refs_by_field.items()
+                )
             ]
             for key in doomed:
                 del bucket[key]
@@ -164,6 +190,28 @@ class _RepoCollection:
         raws = await self._repo.find_many(filters=f, limit=1000)
         return [self._model_class.model_validate(r) for r in raws]
 
+    async def list_for_executions(
+        self, tenant_id: str, execution_ids: list[str], limit: int
+    ) -> list[Any]:
+        reader = getattr(self._repo, "list_for_executions", None)
+        if reader is None:
+            return []
+        raws = await reader(
+            tenant_id=tenant_id,
+            execution_ids=execution_ids,
+            limit=limit,
+        )
+        return [self._model_class.model_validate(row) for row in raws]
+
+    async def list_for_execution(
+        self, tenant_id: str, execution_id: str, limit: int
+    ) -> list[Any]:
+        reader = getattr(self._repo, "list_for_execution", None)
+        if reader is None:
+            return await self.list(tenant_id, execution_id=execution_id)
+        raws = await reader(tenant_id=tenant_id, execution_id=execution_id, limit=limit)
+        return [self._model_class.model_validate(row) for row in raws]
+
     async def delete(self, tenant_id: str, obj_id: str) -> bool:
         row_id, _ = await self._find(tenant_id, obj_id)
         if row_id is None:
@@ -171,8 +219,41 @@ class _RepoCollection:
         await self._repo.delete(row_id)
         return True
 
-    async def erase_subject_refs(self, tenant_id: str, refs: set[str]) -> int:
+    async def ids_referencing(
+        self, tenant_id: str, refs: set[str], fields: tuple[str, ...]
+    ) -> set[str]:
+        """Page this tenant's rows and return IDs with exact selected references."""
+        selected: set[str] = set()
+        offset = 0
+        while True:
+            rows = await self._repo.find_many(
+                filters={"tenant_id": tenant_id}, limit=500, offset=offset
+            )
+            selected.update(
+                str(row[self._id_field])
+                for row in rows
+                if any(str(row.get(field) or "") in refs for field in fields)
+                and row.get(self._id_field)
+            )
+            if len(rows) < 500:
+                break
+            offset += 500
+        return selected
+
+    async def erase_subject_refs(
+        self,
+        tenant_id: str,
+        refs: set[str],
+        *,
+        additional_refs: dict[str, set[str]] | None = None,
+    ) -> int:
         """Tenant-filter first, then remove only direct subject references."""
+        refs_by_field = {
+            field: set(refs)
+            for field in ("requester_id", "subject_id", "holder_id")
+        }
+        for field, field_refs in (additional_refs or {}).items():
+            refs_by_field.setdefault(field, set()).update(field_refs)
         removed = 0
         offset = 0
         while True:
@@ -183,8 +264,10 @@ class _RepoCollection:
                 break
             removed_page = 0
             for row in rows:
-                if any(str(row.get(field, "")) in refs
-                       for field in ("requester_id", "subject_id", "holder_id")):
+                if any(
+                    str(row.get(field) or "") in field_refs
+                    for field, field_refs in refs_by_field.items()
+                ):
                     count = int(await self.delete(tenant_id, str(row[self._id_field])))
                     removed += count
                     removed_page += count
@@ -230,6 +313,7 @@ class CommerceStore:
             self.requirements = TenantCollection("challenge_id")
             self.policy_decisions = TenantCollection("decision_id")
             self.approvals = TenantCollection("approval_id")
+            self.approval_decisions = TenantCollection("decision_id")
             self.authorizations = TenantCollection("authorization_id")
             self.receipts = TenantCollection("receipt_id")
             self.settlements = TenantCollection("settlement_id")
@@ -241,6 +325,7 @@ class CommerceStore:
             # Production mode: each collection delegates to a Postgres-backed repo
             from repositories.commerce_repos import (
                 AccessGrantsRepository,
+                ApprovalDecisionsRepository,
                 ApprovalsRepository,
                 AssetsRepository,
                 AuthorizationsRepository,
@@ -260,6 +345,9 @@ class CommerceStore:
             self.requirements = _RepoCollection(ChallengesRepository(), "challenge_id", PaymentRequirement)
             self.policy_decisions = _RepoCollection(PoliciesRepository(), "decision_id", PolicyDecision)
             self.approvals = _RepoCollection(ApprovalsRepository(), "approval_id", ApprovalRequest)
+            self.approval_decisions = _RepoCollection(
+                ApprovalDecisionsRepository(), "decision_id", ApprovalDecision
+            )
             self.authorizations = _RepoCollection(AuthorizationsRepository(), "authorization_id", PaymentAuthorization)
             self.receipts = _RepoCollection(ReceiptsRepository(), "receipt_id", PaymentReceipt)
             self.settlements = _RepoCollection(SettlementsRepository(), "settlement_id", Settlement)
@@ -292,15 +380,30 @@ class CommerceStore:
 
     async def erase_subject_refs(self, tenant_id: str, refs: set[str]) -> dict[str, int]:
         """Erase subject-linked x402 rows while preserving unrelated tenant state."""
+        approval_ids = await self.approvals.ids_referencing(
+            tenant_id,
+            refs,
+            ("requester_id", "subject_id", "holder_id"),
+        )
         counts: dict[str, int] = {}
         for name in (
             "requirements", "policy_decisions", "approvals", "authorizations",
-            "receipts", "settlements", "entitlements", "grants", "fulfillments",
-            "budget_policies",
+            "approval_decisions", "receipts", "settlements", "entitlements", "grants",
+            "fulfillments", "budget_policies",
         ):
             collection = getattr(self, name, None)
             if collection is not None and hasattr(collection, "erase_subject_refs"):
-                counts[name] = await collection.erase_subject_refs(tenant_id, refs)
+                if name == "approval_decisions":
+                    counts[name] = await collection.erase_subject_refs(
+                        tenant_id,
+                        refs,
+                        additional_refs={
+                            "decided_by": refs,
+                            "approval_id": approval_ids,
+                        },
+                    )
+                else:
+                    counts[name] = await collection.erase_subject_refs(tenant_id, refs)
         return counts
 
     # ── Resource registry ────────────────────────────────────────────
@@ -370,6 +473,48 @@ class CommerceStore:
         assigned_to: Optional[str] = None,
     ) -> list[ApprovalRequest]:
         return await self.approvals.list(tenant_id, status=status, assigned_to=assigned_to)
+
+    async def list_approvals_for_execution(
+        self, tenant_id: str, execution_id: str, limit: int = 100
+    ) -> list[ApprovalRequest]:
+        if hasattr(self.approvals, "list_for_execution"):
+            return await self.approvals.list_for_execution(
+                tenant_id, execution_id, max(0, min(int(limit), 500))
+            )
+        items = await self.approvals.list(tenant_id, execution_id=execution_id)
+        return items[: max(0, min(int(limit), 500))]
+
+    async def put_approval_decision(self, decision: ApprovalDecision) -> ApprovalDecision:
+        existing = await self.approval_decisions.get(decision.tenant_id, decision.decision_id)
+        if existing is not None:
+            if existing.model_dump(mode="json") != decision.model_dump(mode="json"):
+                raise ValueError("Approval decision IDs are immutable")
+            return existing
+        return await self.approval_decisions.put(decision.tenant_id, decision)
+
+    async def get_approval_decision(
+        self, tenant_id: str, decision_id: str
+    ) -> Optional[ApprovalDecision]:
+        return await self.approval_decisions.get(tenant_id, decision_id)
+
+    async def list_approval_decisions_for_executions(
+        self, tenant_id: str, execution_ids: list[str], limit: int = 1000
+    ) -> list[ApprovalDecision]:
+        bounded_limit = max(0, min(int(limit), 5000))
+        selected_ids = list(dict.fromkeys(value for value in execution_ids if value))[:500]
+        if not selected_ids or bounded_limit == 0:
+            return []
+        if hasattr(self.approval_decisions, "list_for_executions"):
+            return await self.approval_decisions.list_for_executions(
+                tenant_id, selected_ids, bounded_limit
+            )
+        rows = [
+            decision
+            for decision in await self.approval_decisions.list(tenant_id)
+            if decision.execution_id in selected_ids
+        ]
+        rows.sort(key=lambda row: row.decided_at)
+        return rows[:bounded_limit]
 
     # ── Authorizations / Receipts / Settlements ──────────────────────
 

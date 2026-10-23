@@ -1318,6 +1318,32 @@ class Geographic360Provider:
         evidence = {ref.id: ref for ref in _posture_evidence(posture)}
         primary = _primary_row(rows)
 
+        timed_rows = [row for row in rows if row.observed_at or row.valid_from]
+        timed_evidence = [
+            evidence[f"location:{row.location_id}"]
+            for row in timed_rows
+            if f"location:{row.location_id}" in evidence
+        ]
+        if timed_evidence:
+            claims.append(
+                ClaimEnvelope(
+                    id=f"profile_location_temporal.{subject.kind}.{subject.id}",
+                    kind="profile_location_temporal_evidence",
+                    subject=subject,
+                    evidenceRefs=timed_evidence,
+                    claims=[
+                        (
+                            f"Canonical location facts record {len(timed_evidence)} "
+                            "time-scoped observation(s) for this exact subject; recorded "
+                            "timestamps and validity bounds do not establish a continuous "
+                            "physical trajectory."
+                        )
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=["location_temporal"],
+                )
+            )
+
         if primary is not None:
             ref = evidence.get(f"location:{primary.location_id}")
             label = _label(primary)

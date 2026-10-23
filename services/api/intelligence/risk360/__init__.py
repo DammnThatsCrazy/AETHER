@@ -60,6 +60,8 @@ from .contracts import (
     RiskAssessment,
     RiskAssessmentRun,
     RiskComponent,
+    RiskPoisoningEvidence,
+    RiskPoisoningLifecycleEvent,
     RiskSignal,
     RiskVector,
 )
@@ -76,7 +78,14 @@ from .provider import (
     register_provider,
 )
 from .routes import create_router, router
-from .store import RiskAssessmentRepository, RiskSignalRepository
+from .store import (
+    RiskAssessmentRepository,
+    RiskPoisoningEvidenceConflict,
+    RiskPoisoningEvidenceRead,
+    RiskPoisoningEvidenceReadIncomplete,
+    RiskPoisoningEvidenceRepository,
+    RiskSignalRepository,
+)
 
 # Phase 5 — convergence + evaluation runtime.
 from .exposure import (
@@ -124,6 +133,8 @@ __all__ = [
     "ExposureAssessment",
     "RiskAssessment",
     "RiskAssessmentRun",
+    "RiskPoisoningEvidence",
+    "RiskPoisoningLifecycleEvent",
     # Dimension registry
     "RiskDimension",
     "RISK_DIMENSIONS",
@@ -132,6 +143,10 @@ __all__ = [
     # Storage
     "RiskSignalRepository",
     "RiskAssessmentRepository",
+    "RiskPoisoningEvidenceRepository",
+    "RiskPoisoningEvidenceRead",
+    "RiskPoisoningEvidenceConflict",
+    "RiskPoisoningEvidenceReadIncomplete",
     # Provider (Phase 4)
     "EXPLORE_CAPABILITY",
     "OUTPUT_SECTIONS",

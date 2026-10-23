@@ -34,8 +34,8 @@ by the sibling comparison domain set and the canonical
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -105,6 +105,154 @@ class RiskSignal(RiskContract):
             raise ValueError(
                 f"risk_dimension {self.risk_dimension!r} is not a registered Risk360 dimension"
             )
+        return self
+
+
+PoisoningType = Literal[
+    "schema_drift",
+    "volume_spike",
+    "identity_collision",
+    "attribution_manipulation",
+    "campaign_spoofing",
+    "agent_trace_tampering",
+    "communication_injection",
+    "value_distortion",
+    "relationship_graph_manipulation",
+]
+PoisoningEvidenceStatus = Literal[
+    "open", "acknowledged", "resolved", "dismissed", "superseded"
+]
+
+
+class RiskPoisoningLifecycleEvent(RiskContract):
+    """Auditable status or restatement transition for poisoning evidence."""
+
+    event_id: str
+    from_status: PoisoningEvidenceStatus
+    to_status: PoisoningEvidenceStatus
+    occurred_at: datetime
+    actor_id: str
+    reason: Optional[str] = None
+    evidence_refs: list[EvidenceRef] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _lifecycle_event_is_scoped(self) -> "RiskPoisoningLifecycleEvent":
+        if not self.event_id.strip() or not self.actor_id.strip():
+            raise ValueError("poisoning lifecycle event id and actor must not be empty")
+        if self.occurred_at.tzinfo is None or self.occurred_at.utcoffset() is None:
+            raise ValueError("poisoning lifecycle timestamps must include a timezone")
+        return self
+
+
+class RiskPoisoningEvidence(RiskContract):
+    """Canonical detector evidence for source poisoning or manipulation.
+
+    This is a risk-domain record, not a Risk360 projection snapshot. A detector
+    must persist both the exact tenant source and exact subject it evaluated;
+    readers never infer either binding from a graph neighbor or a payload.
+    Evidence and lifecycle revisions remain attributable through the canonical
+    ``EvidenceRef`` primitive and explicit supersession links.
+    """
+
+    evidence_id: str
+    tenant_id: str
+    source_id: str
+    subject_kind: str
+    subject_id: str
+    poisoning_type: PoisoningType
+    signal_strength: float = Field(ge=0, le=1)
+    confidence: Literal["low", "medium", "high", "verified"]
+    claim_state: EpistemicStatus = EpistemicStatus.INFERRED
+    detector_id: str
+    detector_version: str
+    source_record_id: str
+    evidence_refs: list[EvidenceRef] = Field(min_length=1)
+    first_seen_at: datetime
+    last_seen_at: datetime
+    recorded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    status: PoisoningEvidenceStatus = "open"
+    version: int = Field(default=1, ge=1)
+    supersedes_evidence_id: Optional[str] = None
+    superseded_by_evidence_id: Optional[str] = None
+    restatement_reason: Optional[str] = None
+    lifecycle_events: list[RiskPoisoningLifecycleEvent] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _evidence_is_exact_and_temporally_valid(self) -> "RiskPoisoningEvidence":
+        for label, value in (
+            ("evidence_id", self.evidence_id),
+            ("tenant_id", self.tenant_id),
+            ("source_id", self.source_id),
+            ("subject_kind", self.subject_kind),
+            ("subject_id", self.subject_id),
+            ("detector_id", self.detector_id),
+            ("detector_version", self.detector_version),
+            ("source_record_id", self.source_record_id),
+        ):
+            if not value.strip():
+                raise ValueError(f"poisoning evidence {label} must not be empty")
+        if any(
+            instant.tzinfo is None or instant.utcoffset() is None
+            for instant in (self.first_seen_at, self.last_seen_at, self.recorded_at)
+        ):
+            raise ValueError("poisoning evidence timestamps must include a timezone")
+        if self.last_seen_at < self.first_seen_at:
+            raise ValueError("last_seen_at must not precede first_seen_at")
+        if self.version == 1:
+            if self.supersedes_evidence_id is not None or self.restatement_reason is not None:
+                raise ValueError("initial poisoning evidence cannot declare a restatement")
+        elif (
+            not self.supersedes_evidence_id
+            or not self.restatement_reason
+            or not self.restatement_reason.strip()
+        ):
+            raise ValueError("restated evidence requires a predecessor and reason")
+        if self.status == "superseded" and not self.superseded_by_evidence_id:
+            raise ValueError("superseded evidence requires a successor id")
+        if self.status != "superseded" and self.superseded_by_evidence_id is not None:
+            raise ValueError("only superseded evidence may name a successor")
+        event_ids = [event.event_id for event in self.lifecycle_events]
+        if len(event_ids) != len(set(event_ids)):
+            raise ValueError("poisoning lifecycle event ids must be unique")
+        current_status: PoisoningEvidenceStatus = "open"
+        allowed_transitions: dict[str, frozenset[str]] = {
+            "open": frozenset({"acknowledged", "resolved", "dismissed", "superseded"}),
+            "acknowledged": frozenset({"open", "resolved", "dismissed", "superseded"}),
+            "resolved": frozenset({"superseded"}),
+            "dismissed": frozenset({"superseded"}),
+            "superseded": frozenset(),
+        }
+        previous_event_at: Optional[datetime] = None
+        for event in self.lifecycle_events:
+            if previous_event_at is not None and event.occurred_at < previous_event_at:
+                raise ValueError("poisoning lifecycle events must be chronological")
+            if event.from_status != current_status:
+                raise ValueError("poisoning lifecycle events must form a status chain")
+            if event.to_status not in allowed_transitions[current_status]:
+                raise ValueError("poisoning lifecycle event has an illegal status transition")
+            current_status = event.to_status
+            previous_event_at = event.occurred_at
+        if self.lifecycle_events and current_status != self.status:
+            raise ValueError("poisoning evidence status must match its lifecycle history")
+        if self.status == "superseded" and (
+            not self.lifecycle_events or self.lifecycle_events[-1].to_status != "superseded"
+        ):
+            raise ValueError("superseded poisoning evidence requires a lifecycle event")
+        if self.confidence == "verified" and self.claim_state not in {
+            EpistemicStatus.VERIFIED,
+            EpistemicStatus.CAUSALLY_SUPPORTED,
+        }:
+            raise ValueError("verified poisoning confidence requires factual claim state")
+        evidence_ids = [ref.id for ref in self.evidence_refs]
+        if any(not ref_id.strip() for ref_id in evidence_ids):
+            raise ValueError("poisoning evidence references must have ids")
+        if len(evidence_ids) != len(set(evidence_ids)):
+            raise ValueError("poisoning evidence references must be unique")
+        if any(not ref.source.strip() for ref in self.evidence_refs):
+            raise ValueError("poisoning evidence references must name their source")
+        for event in self.lifecycle_events:
+            if event.occurred_at < self.recorded_at:
+                raise ValueError("poisoning lifecycle event cannot predate the evidence record")
         return self
 
 
@@ -318,6 +466,10 @@ class RiskAssessmentRun(RiskContract):
 __all__ = [
     # Domain contracts
     "RiskSignal",
+    "RiskPoisoningEvidence",
+    "RiskPoisoningLifecycleEvent",
+    "PoisoningType",
+    "PoisoningEvidenceStatus",
     "RiskComponent",
     "RiskVector",
     "ExposureAssessment",

@@ -22,6 +22,11 @@ from actions.agent.agent360_provider import (  # noqa: E402
     OUTPUT_SECTIONS,
     RepositoryAgent360Source,
 )
+from actions.agentic_observability.provenance import (  # noqa: E402
+    AgenticProvenanceQuery,
+    build_agentic_provenance_record,
+)
+from ingestion.ingestion.validation import SCHEMA_VERSION  # noqa: E402
 from identity.identity.hashing import hash_value  # noqa: E402
 from identity.identity.models import IdentitySignalType  # noqa: E402
 from repositories.repos import EntityRepository  # noqa: E402
@@ -350,6 +355,10 @@ class FakeSource:
                 }
             ],
         )
+
+    async def agentic_provenance(self, tenant_id, agent_id, queries, limit):
+        rows = await self._rows("agentic_provenance", [])
+        return Agent360ReadBatch(rows=rows)
 
     async def communications(self, tenant_id, agent_id, limit):
         rows = await self._rows(
@@ -952,6 +961,109 @@ async def test_agent360_evidence_trace_requires_refs_and_obeys_frame_policy():
     assert suppressed.content is None
     assert suppressed.claims == []
     assert suppressed.evidenceRefs == []
+
+
+@pytest.mark.asyncio
+async def test_agent360_evidence_trace_joins_exact_bronze_lineage_and_keeps_unknowns():
+    class ExactProvenanceSource(FakeSource):
+        async def activities(self, tenant_id, agent_id, limit):
+            rows = await super().activities(tenant_id, agent_id, limit)
+            return [
+                {
+                    **row,
+                    "canonical_event_id": "bronze-activity-1",
+                    "canonical_event_schema_version": SCHEMA_VERSION,
+                }
+                for row in rows
+            ]
+
+        async def tools(self, tenant_id, agent_id, limit):
+            rows = await super().tools(tenant_id, agent_id, limit)
+            return [
+                {
+                    **row,
+                    "canonical_event_id": "bronze-tool-1",
+                    "canonical_event_schema_version": SCHEMA_VERSION,
+                }
+                for row in rows
+            ]
+
+        async def risk_signals(self, tenant_id, agent_id, limit):
+            rows = await super().risk_signals(tenant_id, agent_id, limit)
+            return [
+                {
+                    **row,
+                    "canonical_event_id": "bronze-risk-1",
+                    "canonical_event_schema_version": SCHEMA_VERSION,
+                }
+                for row in rows
+            ]
+
+        async def agentic_provenance(self, tenant_id, agent_id, queries, limit):
+            rows = []
+            for query in queries[:limit]:
+                record = build_agentic_provenance_record(
+                    tenant_id=tenant_id,
+                    bronze_event_id=query.bronze_event_id,
+                    bronze_schema_version=query.bronze_schema_version,
+                    bronze_event_type=query.evidence_ref.event_type,
+                    reference=query.evidence_ref,
+                    provider_claim="mcp",
+                    observed_at=query.evidence_ref.observed_at,
+                    received_at="2026-10-07T00:00:00Z",
+                    ingested_at="2026-10-07T00:00:00Z",
+                )
+                rows.append(
+                    {
+                        **record.model_dump(mode="json", by_alias=True),
+                        "source_row_id": f"bronze-row-{query.bronze_event_id}",
+                        "source_tag_claim": "mcp",
+                        "bronze_created_at": "2026-10-07T00:00:00Z",
+                    }
+                )
+            return Agent360ReadBatch(rows=rows)
+
+    result = await Agent360Provider(ExactProvenanceSource()).project(_request(), _context())
+    evidence = _sections(result)["evidence"].content
+    source_provenance = evidence["sourceProvenance"]
+
+    assert source_provenance["state"] == "partial"
+    assert source_provenance["lineageState"] == "verified"
+    assert source_provenance["exactBronzeLinks"] == 3
+    assert source_provenance["unresolvedLinks"] == 0
+    assert source_provenance["sourceIdentityState"] == "unresolved"
+    assert source_provenance["sourceTrust"] == "unknown"
+    assert source_provenance["freshness"] == {
+        "state": "not_assessed",
+        "slaSeconds": None,
+        "reason": "agentic_source_freshness_sla_not_configured",
+    }
+    assert {ref["id"] for ref in evidence["evidence"] if ref["source"] == "bronze_sdk_events"} == {
+        "bronze-activity-1",
+        "bronze-tool-1",
+        "bronze-risk-1",
+    }
+    assert all(record["source_id"] is None for record in source_provenance["records"])
+    assert all(
+        record["freshness_state"] == "not_assessed"
+        for record in source_provenance["records"]
+    )
+
+    denied = compose_experience360_frame(
+        Experience360FrameRequest(
+            surfaceId="agent360",
+            tenantId=TENANT,
+            subject=ProjectionSubject(kind="agent", id=AGENT),
+            requestedSlotIds=["evidence_trace"],
+            includeEvidence=True,
+        ),
+        [result],
+        frame_policy=Experience360PolicyDisposition(state="denied"),
+    )
+    assert denied.slots[0].state == "suppressed"
+    assert denied.slots[0].content is None
+    assert denied.slots[0].claims == []
+    assert denied.slots[0].evidenceRefs == []
 
 
 @pytest.mark.asyncio

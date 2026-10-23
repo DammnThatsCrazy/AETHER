@@ -69,6 +69,7 @@ SLOT_LATENCY_COST = "latency_cost"
 SLOT_INPUTS_OUTPUTS = "inputs_outputs"
 SLOT_FAILURES = "failures"
 SLOT_TOOL_CALLS = "tool_calls"
+SLOT_APPROVAL_CHAIN = "approval_chain"
 SLOT_RISK_EVENTS = "risk_events"
 
 _SERVER_FAILURE_STATUSES = frozenset({"failed", "revoked"})
@@ -77,6 +78,7 @@ _SOURCE_REPORTED_FAILURE_STATUSES = frozenset({"failed", "error", "denied", "rev
 _MAX_ROWS = 500
 _MAX_TOOL_EDGE_SCAN = 10_000
 _MAX_EXECUTION_RISK_SIGNAL_SCAN = 1000
+_MAX_EXECUTION_APPROVAL_DECISION_SCAN = 5000
 _SILVER_QUERY_LIMIT = 1000
 _MAX_EPISODE_AGENT_SCAN = 200
 _SILVER_SOURCE = "silver_agent_execution_facts"
@@ -145,6 +147,30 @@ class ExecutionRiskEventRead:
 
 
 @dataclass(frozen=True)
+class ExecutionApprovalRead:
+    """Exact tenant-scoped commerce approval decisions for admitted runs."""
+
+    rows: list[dict[str, Any]]
+    available: bool
+    scope_known: bool
+    truncated: bool = False
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class ExecutionApprovalContext:
+    """Evidence-backed x402 approval decisions linked to admitted executions."""
+
+    state: Literal["partial", "empty", "unknown", "degraded", "unavailable"]
+    decisions: tuple[dict[str, Any], ...] = ()
+    evidence_refs: tuple[EvidenceRef, ...] = ()
+    reason: Optional[str] = None
+    source_read_state: Literal["available", "unavailable", "not_read"] = "not_read"
+    scope_known: bool = False
+    truncated: bool = False
+
+
+@dataclass(frozen=True)
 class ExecutionRiskEventContext:
     """Validated, evidence-backed execution risk signals and coverage state."""
 
@@ -208,13 +234,25 @@ class Execution360Source(Protocol):
     ) -> ExecutionRiskEventRead:
         """Read canonical RiskSignals for admitted exact execution subjects."""
 
+    async def execution_approval_decisions(
+        self, *, tenant_id: str, execution_ids: tuple[str, ...], limit: int
+    ) -> ExecutionApprovalRead:
+        """Read x402 decisions by exact tenant and execution IDs."""
+
 
 class RepositoryExecution360Source:
     """Defensive adapter over existing agent repositories and Silver facts."""
 
-    def __init__(self, *, episode_store: Any = None, graph_client: Any = None) -> None:
+    def __init__(
+        self,
+        *,
+        episode_store: Any = None,
+        graph_client: Any = None,
+        commerce_store: Any = None,
+    ) -> None:
         self._episode_store = episode_store
         self._graph_client = graph_client
+        self._commerce_store = commerce_store
 
     async def server_executions(
         self, *, tenant_id: str, subject: ProjectionSubject, limit: int
@@ -867,6 +905,82 @@ class RepositoryExecution360Source:
                 "execution_risk_signal_scope_mismatch"
                 if mismatch
                 else "execution_risk_signal_read_truncated"
+                if truncated
+                else None
+            ),
+        )
+
+    async def execution_approval_decisions(
+        self, *, tenant_id: str, execution_ids: tuple[str, ...], limit: int
+    ) -> ExecutionApprovalRead:
+        """Read x402 decision history by exact tenant and admitted run IDs."""
+        admitted_ids = sorted(
+            {value for raw in execution_ids if (value := _safe_text(raw)) is not None}
+        )
+        if not admitted_ids:
+            return ExecutionApprovalRead(rows=[], available=True, scope_known=True)
+        if len(admitted_ids) > 500:
+            return ExecutionApprovalRead(
+                rows=[],
+                available=False,
+                scope_known=False,
+                truncated=True,
+                reason="execution_approval_execution_scope_truncated",
+            )
+        try:
+            if self._commerce_store is None:
+                from value.x402.commerce_store import get_commerce_store
+
+                store = get_commerce_store()
+            else:
+                store = self._commerce_store
+            scan_limit = min(
+                max(max(1, limit), len(admitted_ids) * 4),
+                _MAX_EXECUTION_APPROVAL_DECISION_SCAN,
+            )
+            decisions = await store.list_approval_decisions_for_executions(
+                tenant_id, admitted_ids, scan_limit + 1
+            )
+        except Exception:  # noqa: BLE001 - optional canonical source failure is isolated
+            return ExecutionApprovalRead(
+                rows=[],
+                available=False,
+                scope_known=False,
+                reason="execution_approval_decision_source_unavailable",
+            )
+        if not isinstance(decisions, list):
+            return ExecutionApprovalRead(
+                rows=[],
+                available=False,
+                scope_known=False,
+                reason="execution_approval_decision_read_invalid",
+            )
+        truncated = len(decisions) > scan_limit
+        rows = [
+            decision.model_dump(mode="json")
+            for decision in decisions[:scan_limit]
+            if hasattr(decision, "model_dump")
+        ]
+        mismatch = len(rows) != min(len(decisions), scan_limit) or any(
+            row.get("tenant_id") != tenant_id
+            or row.get("execution_id") not in admitted_ids
+            for row in rows
+        )
+        rows = [
+            row
+            for row in rows
+            if row.get("tenant_id") == tenant_id
+            and row.get("execution_id") in admitted_ids
+        ]
+        return ExecutionApprovalRead(
+            rows=rows,
+            available=True,
+            scope_known=not mismatch,
+            truncated=truncated,
+            reason=(
+                "execution_approval_decision_scope_mismatch"
+                if mismatch
+                else "execution_approval_decision_read_truncated"
                 if truncated
                 else None
             ),
@@ -1526,6 +1640,8 @@ def _internal_record(row: dict[str, Any]) -> dict[str, Any]:
         resolution_status = "unverified_join_metadata"
     return {
         "executionId": _safe_text(row.get("execution_id")),
+        "approvalId": _safe_text(row.get("approval_id")),
+        "approvalDecisionId": _safe_text(row.get("approval_decision_id")),
         "agentId": (
             _safe_text(row.get("canonical_agent_entity_id"))
             if row.get("canonical_agent_identity") is True
@@ -1958,6 +2074,27 @@ class Execution360Provider:
                 source_read_state="not_read",
             )
 
+        if admitted_execution_ids and not temporal_unavailable:
+            approval_read = await self._safe_execution_approval_read(
+                tenant_id,
+                tuple(sorted(admitted_execution_ids)),
+                limit,
+            )
+        else:
+            approval_read = ExecutionApprovalRead(
+                rows=[],
+                available=True,
+                scope_known=execution_inventory_complete,
+            )
+        approval_chain = _execution_approval_context(
+            approval_read,
+            tenant_id=tenant_id,
+            execution_ids=admitted_execution_ids,
+            internal=internal,
+            execution_inventory_complete=execution_inventory_complete,
+            temporal_unavailable=temporal_unavailable,
+        )
+
         reasons: list[str] = []
         if not server.available:
             reasons.append("server_execution_source_unavailable")
@@ -1981,12 +2118,14 @@ class Execution360Provider:
             reasons.append("task_decomposition_subtask_list_truncated")
         if risk_events.state in {"degraded", "unavailable"} and risk_events.reason:
             reasons.append(risk_events.reason)
+        if approval_chain.state in {"degraded", "unavailable"} and approval_chain.reason:
+            reasons.append(approval_chain.reason)
         if request.subject.kind == "episode" and episode_event_binding_mismatch:
             reasons.append("episode_execution_event_binding_conflict")
 
         state = _section_state(server, observed, internal, external, temporal_unavailable)
         evidence = self._all_evidence(
-            internal, external, plan_decompositions, tool_calls, risk_events
+            internal, external, plan_decompositions, tool_calls, risk_events, approval_chain
         )
         claims = (
             self._claims(
@@ -1996,6 +2135,7 @@ class Execution360Provider:
                 plan_decompositions,
                 tool_calls,
                 risk_events,
+                approval_chain,
             )
             if request.includeClaims is not False
             else []
@@ -2012,6 +2152,7 @@ class Execution360Provider:
             temporal_unavailable,
             tool_calls,
             risk_events,
+            approval_chain,
         )
 
         return ProjectionResult(
@@ -2077,6 +2218,32 @@ class Execution360Provider:
                 reason="execution_risk_event_source_unavailable",
             )
 
+    async def _safe_execution_approval_read(
+        self, tenant_id: str, execution_ids: tuple[str, ...], limit: int
+    ) -> ExecutionApprovalRead:
+        try:
+            reader = getattr(self._sources, "execution_approval_decisions")
+            result = await reader(
+                tenant_id=tenant_id,
+                execution_ids=execution_ids,
+                limit=limit,
+            )
+            if not isinstance(result, ExecutionApprovalRead):
+                return ExecutionApprovalRead(
+                    rows=[],
+                    available=False,
+                    scope_known=False,
+                    reason="execution_approval_decision_source_returned_invalid_contract",
+                )
+            return result
+        except Exception:  # noqa: BLE001 - fail-isolate optional canonical source
+            return ExecutionApprovalRead(
+                rows=[],
+                available=False,
+                scope_known=False,
+                reason="execution_approval_decision_source_unavailable",
+            )
+
     @staticmethod
     def _all_evidence(
         internal: list[dict[str, Any]],
@@ -2084,6 +2251,7 @@ class Execution360Provider:
         plan_decompositions: list[dict[str, Any]],
         tool_calls: ExecutionToolCallRead,
         risk_events: ExecutionRiskEventContext,
+        approval_chain: ExecutionApprovalContext,
     ) -> list[EvidenceRef]:
         refs: list[EvidenceRef] = []
         seen: set[tuple[str, str]] = set()
@@ -2115,6 +2283,11 @@ class Execution360Provider:
                     continue
                 seen.add((ref.id, ref.source))
                 refs.append(ref)
+        for ref in approval_chain.evidence_refs:
+            if (ref.id, ref.source) in seen:
+                continue
+            seen.add((ref.id, ref.source))
+            refs.append(ref)
         return refs
 
     @staticmethod
@@ -2125,6 +2298,7 @@ class Execution360Provider:
         plan_decompositions: list[dict[str, Any]],
         tool_calls: ExecutionToolCallRead,
         risk_events: ExecutionRiskEventContext,
+        approval_chain: ExecutionApprovalContext,
     ) -> list[ClaimEnvelope]:
         claims: list[ClaimEnvelope] = []
         for row in internal:
@@ -2413,6 +2587,24 @@ class Execution360Provider:
                     domainSlotIds=[SLOT_TOOL_CALLS, SLOT_EVIDENCE],
                 )
             )
+        for decision in approval_chain.decisions:
+            try:
+                evidence = EvidenceRef.model_validate(decision.get("evidenceRef"))
+            except Exception:  # noqa: BLE001 - invalid canonical evidence is omitted
+                continue
+            claims.append(
+                ClaimEnvelope(
+                    id=f"execution360:approval:{decision['decisionId']}",
+                    kind="canonically_linked_commerce_approval_decision",
+                    subject=subject,
+                    evidenceRefs=[evidence],
+                    claims=[
+                        f"The tenant-scoped x402 approval authority recorded {decision['action']} decision {decision['decisionId']} for approval {decision['approvalId']} linked to exact execution {decision['executionId']}; this records approval workflow evidence and does not prove an external action occurred."
+                    ],
+                    claimState=EpistemicStatus.RESOLVED,
+                    domainSlotIds=[SLOT_APPROVAL_CHAIN, SLOT_EVIDENCE],
+                )
+            )
         for signal in risk_events.signals:
             claims.append(
                 ClaimEnvelope(
@@ -2447,6 +2639,7 @@ class Execution360Provider:
         temporal_unavailable: bool,
         tool_calls: ExecutionToolCallRead,
         risk_events: ExecutionRiskEventContext,
+        approval_chain: ExecutionApprovalContext,
     ) -> list[ProjectionSection]:
         episode_context = server.episode_context or ExecutionEpisodeContextRead(
             "degraded" if not server.available else "unknown",
@@ -2635,11 +2828,17 @@ class Execution360Provider:
             ],
         }
         approval_chain_linkage = {
-            "state": "unknown",
-            "reason": "execution_approval_id_canonical_join_not_available",
-            "sourceReadState": "not_read",
-            "joinedExecutionApprovals": [],
-            "evidenceRefs": [],
+            "state": approval_chain.state,
+            "reason": approval_chain.reason,
+            "sourceReadState": approval_chain.source_read_state,
+            "completeness": "x402_commerce_decisions_only",
+            "scopeKnown": approval_chain.scope_known,
+            "truncated": approval_chain.truncated,
+            "joinedExecutionApprovals": list(approval_chain.decisions),
+            "evidenceRefs": [
+                ref.model_dump(mode="json", by_alias=True, exclude_none=True)
+                for ref in approval_chain.evidence_refs
+            ],
         }
         risk_event_linkage = {
             "state": risk_events.state,
@@ -2980,6 +3179,162 @@ def _execution_risk_event_context(
         source_read_state="available",
         truncated=read.truncated,
         scope_known=read.scope_known,
+    )
+
+
+def _execution_approval_context(
+    read: ExecutionApprovalRead,
+    *,
+    tenant_id: str,
+    execution_ids: set[str],
+    internal: list[dict[str, Any]],
+    execution_inventory_complete: bool,
+    temporal_unavailable: bool,
+) -> ExecutionApprovalContext:
+    """Validate commerce decisions against exact persisted run references."""
+    if temporal_unavailable:
+        return ExecutionApprovalContext(
+            state="unknown",
+            reason="historical_execution_approval_chain_not_supported",
+            source_read_state="not_read",
+        )
+    if not execution_ids:
+        return ExecutionApprovalContext(
+            state="unknown",
+            reason="no_admitted_execution_to_join_approval_chain",
+            source_read_state="not_read",
+            scope_known=execution_inventory_complete,
+        )
+    if not read.available:
+        return ExecutionApprovalContext(
+            state="unavailable",
+            reason=read.reason or "execution_approval_decision_source_unavailable",
+            source_read_state="unavailable",
+            truncated=read.truncated,
+            scope_known=False,
+        )
+
+    approval_refs: dict[str, tuple[str, str]] = {}
+    invalid_reference = False
+    for row in internal:
+        execution_id = _safe_text(row.get("executionId"))
+        approval_id = _safe_text(row.get("approvalId"))
+        decision_id = _safe_text(row.get("approvalDecisionId"))
+        if execution_id not in execution_ids:
+            continue
+        if approval_id is None and decision_id is None:
+            continue
+        if not approval_id or not decision_id or execution_id in approval_refs:
+            invalid_reference = True
+            continue
+        approval_refs[execution_id] = (approval_id, decision_id)
+
+    decisions: list[dict[str, Any]] = []
+    evidence_refs: list[EvidenceRef] = []
+    seen_ids: set[str] = set()
+    invalid_record = False
+    referenced_decisions_found: set[str] = set()
+    for raw in read.rows:
+        if not isinstance(raw, dict):
+            invalid_record = True
+            continue
+        execution_id = _safe_text(raw.get("execution_id"))
+        approval_id = _safe_text(raw.get("approval_id"))
+        decision_id = _safe_text(raw.get("decision_id"))
+        action = _safe_text(raw.get("action"))
+        decided_by = _safe_text(raw.get("decided_by"))
+        decided_at = _safe_text(raw.get("decided_at"))
+        if (
+            raw.get("tenant_id") != tenant_id
+            or execution_id not in execution_ids
+            or not approval_id
+            or not decision_id
+            or not action
+            or not decided_by
+            or _parse_aware_instant(decided_at) is None
+            or decision_id in seen_ids
+        ):
+            invalid_record = True
+            continue
+        expected_ref = approval_refs.get(execution_id)
+        if expected_ref is None or expected_ref[0] != approval_id:
+            invalid_record = True
+            continue
+        if decision_id == expected_ref[1]:
+            if action != "approve":
+                invalid_record = True
+                continue
+            referenced_decisions_found.add(decision_id)
+        evidence_ref = _evidence_ref(
+            evidence_id=decision_id,
+            source="commerce_approval_decisions",
+            observed_at=decided_at,
+            store="commerce_approval_decisions",
+        )
+        if evidence_ref is None:
+            invalid_record = True
+            continue
+        seen_ids.add(decision_id)
+        evidence_refs.append(evidence_ref)
+        decisions.append(
+            {
+                "executionId": execution_id,
+                "approvalId": approval_id,
+                "decisionId": decision_id,
+                "action": action,
+                "decidedBy": decided_by,
+                "decidedAt": decided_at,
+                "isOverride": raw.get("is_override") is True,
+                "authorizedExecutionDecision": decision_id == expected_ref[1],
+                "evidenceRef": evidence_ref.model_dump(
+                    mode="json", by_alias=True, exclude_none=True
+                ),
+            }
+        )
+
+    unresolved_refs = {
+        decision_id
+        for _, decision_id in approval_refs.values()
+        if decision_id not in referenced_decisions_found
+    }
+    truncated = read.truncated
+    scope_known = read.scope_known and not invalid_reference and not invalid_record
+    complete_read = (
+        scope_known
+        and not truncated
+        and execution_inventory_complete
+        and not unresolved_refs
+    )
+    if (
+        invalid_reference
+        or invalid_record
+        or unresolved_refs
+        or truncated
+        or not read.scope_known
+        or not execution_inventory_complete
+    ):
+        state: Literal["partial", "empty", "unknown", "degraded", "unavailable"] = "degraded"
+        reason = (
+            read.reason
+            or "execution_approval_link_conflict_or_incomplete_evidence"
+        )
+    elif decisions:
+        state = "partial"
+        reason = "commerce_approval_decisions_only_other_approval_authorities_not_joined"
+    else:
+        # No commerce decision is linked to these runs. The provider has no
+        # complete inventory of non-commerce approval authorities.
+        state = "unknown"
+        reason = "no_linked_commerce_approval_non_commerce_authority_coverage_unknown"
+    decisions.sort(key=lambda row: (row["executionId"], row["decidedAt"], row["decisionId"]))
+    return ExecutionApprovalContext(
+        state=state,
+        decisions=tuple(decisions),
+        evidence_refs=tuple(evidence_refs),
+        reason=reason,
+        source_read_state="available",
+        scope_known=complete_read,
+        truncated=truncated,
     )
 
 

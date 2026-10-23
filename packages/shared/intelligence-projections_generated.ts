@@ -222,7 +222,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/blueprints/agent360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['agent', 'entity'],
-    canonicalAuthorities: ['agent_access', 'agent_entities', 'agent_entity', 'agent_executions', 'economic_facts', 'evidence', 'graph', 'identity', 'observations', 'outcome_facts'],
+    canonicalAuthorities: ['agent_access', 'agent_entities', 'agent_entity', 'agent_executions', 'economic_facts', 'evidence', 'graph', 'identity', 'observations', 'outcome_facts', 'source_provenance'],
     hardDependencies: ['agentic_runtime_access', 'contract_spine', 'identity_resolution', 'temporal_kernel'],
     projectionDependencies: ['profile360'],
     optionalProjectionDependencies: ['economic360', 'outcome360'],
@@ -716,7 +716,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/blueprints/execution360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['agent', 'entity', 'episode', 'execution'],
-    canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'economic_facts', 'entity_registry', 'episode_facts', 'events', 'evidence', 'execution_facts', 'graph', 'identity', 'outcome_facts', 'resources', 'risk_signals', 'temporal_kernel', 'tools'],
+    canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'commerce', 'economic_facts', 'entity_registry', 'episode_facts', 'events', 'evidence', 'execution_facts', 'graph', 'identity', 'outcome_facts', 'resources', 'risk_signals', 'temporal_kernel', 'tools'],
     hardDependencies: ['agentic_runtime_access', 'temporal_kernel'],
     projectionDependencies: ['agent360', 'episode360', 'outcome360', 'temporal360'],
     optionalProjectionDependencies: [],
@@ -2213,11 +2213,11 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'optional'
       },
       {
-        authorityGapReason: 'exact_subject_authority_join_not_implemented',
         canonicalAuthorityRefs: ['evidence', 'source_provenance'],
         description: 'Required Agent 360 blueprint slot: evidence trace.',
         id: 'evidence_trace',
         implementationCrosswalk: ['source_evidence_lineage'],
+        partialImplementationReason: 'Canonical Bronze links are joined to exact tenant, agent, source-row, event, schema, and timestamp references. Registered Rights source identity, source trust, freshness SLA, complete lineage coverage, and unlinked historical rows remain unknown.',
         projectionBindings: [
           {
             projectionId: 'agent360',
@@ -2226,8 +2226,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             sectionIds: ['evidence']
           }
         ],
-        requirement: 'required',
-        unboundCanonicalAuthorityRefs: ['source_provenance']
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['agent_executions', 'execution_facts'],
@@ -3302,14 +3301,21 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        canonicalAuthorityRefs: ['agent_access', 'agent_entities', 'identity'],
-        description: 'Required Execution 360 blueprint slot: approval chain.',
+        canonicalAuthorityRefs: ['agent_access', 'agent_entities', 'commerce', 'identity'],
+        description: 'Exact tenant-scoped x402 commerce approval decisions linked to admitted agent execution records.',
         id: 'approval_chain',
         implementationCrosswalk: ['actor_and_delegation'],
-        projectionBindings: [],
+        partialImplementationReason: 'Execution360 joins immutable x402 commerce approval decisions to exact admitted run IDs and latest approval decision references. Other approval authorities, historical run linkage, and full authority-decision coverage remain unknown.',
+        projectionBindings: [
+          {
+            projectionId: 'execution360',
+            role: 'primary',
+            subjectKinds: ['agent', 'entity', 'episode', 'execution'],
+            sectionIds: ['interactions']
+          }
+        ],
         requiredFrameMetadata: ['slotActorAttribution', 'slotAuthorityDecision'],
-        requirement: 'required',
-        unboundReason: 'execution_approval_id_canonical_join_not_available'
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['agent_access', 'agent_entities', 'identity'],
@@ -3485,7 +3491,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       }
     ],
     sourceOfTruth: {
-      canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'ai_execution_facts', 'economic_facts', 'episode_facts', 'events', 'evidence', 'execution_facts', 'identity', 'outcome_facts', 'resources', 'risk_signals', 'source_provenance', 'temporal_kernel', 'tools'],
+      canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'economic_facts', 'episode_facts', 'events', 'evidence', 'execution_facts', 'identity', 'outcome_facts', 'resources', 'risk_signals', 'source_provenance', 'temporal_kernel', 'tools'],
       ownsCanonicalTruth: false,
       prohibitedOwnership: ['economic_facts', 'execution_facts', 'graph', 'identity', 'observations', 'risk_outputs', 'source_provenance']
     },
@@ -4362,7 +4368,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
   profile360: {
     backendCapabilities: {
       required: ['experience360.evidence.provenance', 'experience360.frame.compose', 'experience360.freshness.evaluate', 'experience360.policy.evaluate', 'experience360.tenant_scope.enforce'],
-      projectionCapabilityKeys: ['economic360.explore', 'economic360.read', 'outcome360.explore', 'outcome360.read', 'profile360.explore', 'profile360.read', 'relationship360.explore', 'relationship360.read', 'risk360.explore', 'risk360.read'],
+      projectionCapabilityKeys: ['economic360.explore', 'economic360.read', 'geographic360.explore', 'geographic360.read', 'outcome360.explore', 'outcome360.read', 'profile360.explore', 'profile360.read', 'relationship360.explore', 'relationship360.read', 'risk360.explore', 'risk360.read'],
       providerCapabilityStatus: 'registry_requirements_not_route_attestation'
     },
     blueprintContract: {
@@ -4522,11 +4528,18 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       },
       {
         canonicalAuthorityRefs: ['geo_observations', 'temporal'],
-        description: 'Time scoped location evidence for the exact profile.',
+        description: 'Tenant-scoped observed location facts and their recorded temporal bounds for the exact entity subject.',
         id: 'location_temporal',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'profile_location_temporal_join_not_available'
+        partialImplementationReason: 'The source reports recorded entity location facts only; profile alias resolution, continuous trajectory reconstruction, cross-surface completeness, historical point-in-time reconstruction, and Profile-specific freshness remain unknown.',
+        projectionBindings: [
+          {
+            projectionId: 'geographic360',
+            role: 'primary',
+            subjectKinds: ['entity'],
+            sectionIds: ['evidence', 'timeline']
+          }
+        ],
+        requirement: 'required'
       },
       {
         id: 'observed_state_and_activity',
@@ -4558,11 +4571,18 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       },
       {
         canonicalAuthorityRefs: ['graph', 'relationship_facts'],
-        description: 'Canonical relationship facts for the profile.',
+        description: 'Tenant-scoped canonical graph relationships observed for the exact entity subject; no profile, account-member, or alias identity is inferred.',
         id: 'relationships',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'profile_relationship_subject_mapping_not_proven'
+        partialImplementationReason: 'Relationship360 reads the exact tenant entity from the graph mutation ledger; profile/member alias resolution, a ledger completeness watermark, and Profile-specific freshness remain unknown.',
+        projectionBindings: [
+          {
+            projectionId: 'relationship360',
+            role: 'primary',
+            subjectKinds: ['entity'],
+            sectionIds: ['evidence', 'interactions', 'summary']
+          }
+        ],
+        requirement: 'required'
       },
       {
         id: 'risk_context',
@@ -4657,6 +4677,12 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
     projectionBindings: [
       {
         projectionId: 'economic360',
+        role: 'primary',
+        bindingStatus: 'catalog_only',
+        providerImplementationState: 'implemented'
+      },
+      {
+        projectionId: 'geographic360',
         role: 'primary',
         bindingStatus: 'catalog_only',
         providerImplementationState: 'implemented'
@@ -4829,11 +4855,18 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       },
       {
         canonicalAuthorityRefs: ['risk_outputs', 'source_provenance'],
-        description: 'Verified data poisoning evidence with source lineage.',
+        description: 'Tenant-scoped detector evidence for exact subjects, with versioned lifecycle and evidence references; detector completeness and source reputation remain unknown.',
         id: 'poisoning_evidence',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'data_poisoning_evidence_authority_not_connected'
+        partialImplementationReason: 'Risk360 reads explicitly stored detector evidence for exact tenant and subject bindings, with temporal anchors, lifecycle, restatement lineage, and evidence references. Detector coverage, independent source verification, population-wide completeness, and a source freshness SLA remain unknown.',
+        projectionBindings: [
+          {
+            projectionId: 'risk360',
+            role: 'primary',
+            subjectKinds: ['agent', 'cluster', 'contagion_path', 'entity', 'relationship', 'source'],
+            sectionIds: ['evidence', 'findings']
+          }
+        ],
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['model_governance', 'risk_outputs'],

@@ -74,9 +74,20 @@ from graph.operational_intelligence.models import EvidenceRef
 from shared.measurement.value_states import requires_value
 
 # Risk360 Phase-3 domain contracts + dimension registry + repositories.
-from intelligence.risk360.contracts import EpistemicStatus, RiskAssessment, RiskSignal
+from intelligence.risk360.contracts import (
+    EpistemicStatus,
+    RiskAssessment,
+    RiskPoisoningEvidence,
+    RiskSignal,
+)
 from intelligence.risk360.dimensions import RISK_DIMENSIONS
-from intelligence.risk360.store import RiskAssessmentRepository, RiskSignalRepository
+from intelligence.risk360.store import (
+    RiskAssessmentRepository,
+    RiskPoisoningEvidenceRead,
+    RiskPoisoningEvidenceRepository,
+    RiskPoisoningEvidenceReadIncomplete,
+    RiskSignalRepository,
+)
 
 PROJECTION_ID = "risk360"
 
@@ -103,6 +114,7 @@ SECTION_DEPENDENCIES: dict[str, str] = {
 _MAX_ASSESSMENT_SCAN = 50
 _MAX_SIGNAL_SCAN = 100
 _MAX_SOURCE_PROVENANCE_SCAN = 100
+_MAX_POISONING_EVIDENCE_SCAN = 100
 _MAX_FINANCIAL_PATH_NODES = 21
 _MAX_TRANSFERS_PER_PATH_EDGE = 2
 
@@ -292,6 +304,16 @@ class RiskSourceReader(Protocol):
         """
         ...
 
+    async def poisoning_evidence(
+        self,
+        *,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        as_of: Optional[datetime],
+    ) -> RiskPoisoningEvidenceRead:
+        """Bounded poisoning evidence for the exact tenant/subject binding."""
+        ...
+
     async def financial_flow_path(
         self,
         *,
@@ -313,6 +335,7 @@ class RepositoryRiskSourceReader:
     def __init__(self) -> None:
         self._assessments = RiskAssessmentRepository()
         self._signals = RiskSignalRepository()
+        self._poisoning_evidence = RiskPoisoningEvidenceRepository()
 
     async def latest_assessment(
         self,
@@ -490,6 +513,27 @@ class RepositoryRiskSourceReader:
                 }
             )
         return observations, truncated
+
+    async def poisoning_evidence(
+        self,
+        *,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        as_of: Optional[datetime],
+    ) -> RiskPoisoningEvidenceRead:
+        """Read only explicitly bound, tenant-owned detector evidence."""
+        if not tenant_id or not subject.kind or not subject.id:
+            raise RiskPoisoningEvidenceReadIncomplete(
+                "poisoning evidence requires exact tenant and subject scope"
+            )
+        return await self._poisoning_evidence.list_for_subject(
+            tenant_id,
+            subject.kind,
+            subject.id,
+            source_id=subject.id if subject.kind == "source" else None,
+            as_of=as_of,
+            limit=_MAX_POISONING_EVIDENCE_SCAN,
+        )
 
     async def financial_flow_path(
         self,
@@ -702,11 +746,31 @@ class Risk360Provider:
                 tenant_id, request.subject
             )
 
+        poisoning_as_of, poisoning_anchor_reason = self._poisoning_as_of(request, context)
+        if context.tenantId != tenant_id:
+            poisoning_evidence, poisoning_evidence_degraded = [], True
+            poisoning_evidence_reason = "poisoning_evidence_tenant_context_mismatch"
+        elif poisoning_anchor_reason is not None:
+            poisoning_evidence, poisoning_evidence_degraded = [], False
+            poisoning_evidence_reason = poisoning_anchor_reason
+        else:
+            (
+                poisoning_evidence,
+                poisoning_evidence_degraded,
+                poisoning_evidence_reason,
+            ) = await self._safe_poisoning_evidence(
+                tenant_id,
+                request.subject,
+                as_of=poisoning_as_of,
+            )
+
         financial_link, financial_link_degraded, financial_link_reason = (
             await self._safe_financial_contagion_link(request, context)
         )
 
-        evidence = self._collect_evidence(assessment, signals, source_provenance)
+        evidence = self._collect_evidence(
+            assessment, signals, source_provenance, poisoning_evidence
+        )
         if financial_link is not None:
             evidence = _dedupe_evidence([*evidence, *financial_link["evidence_refs"]])
 
@@ -716,7 +780,10 @@ class Risk360Provider:
             self._evidence_section(
                 evidence,
                 source_degraded=(
-                    assessment_degraded or signals_degraded or source_provenance_degraded
+                    assessment_degraded
+                    or signals_degraded
+                    or source_provenance_degraded
+                    or poisoning_evidence_degraded
                 ),
             ),
             self._findings_section(
@@ -728,6 +795,9 @@ class Risk360Provider:
                 source_provenance,
                 source_provenance_degraded,
                 source_provenance_reason,
+                poisoning_evidence,
+                poisoning_evidence_degraded,
+                poisoning_evidence_reason,
                 financial_link,
                 financial_link_degraded,
                 financial_link_reason,
@@ -741,10 +811,18 @@ class Risk360Provider:
                 source_provenance,
                 source_provenance_degraded,
                 source_provenance_reason,
+                poisoning_evidence,
+                poisoning_evidence_degraded,
+                poisoning_evidence_reason,
             ),
         ]
         claims = self._build_claims(
-            request, assessment, signals, source_provenance, financial_link
+            request,
+            assessment,
+            signals,
+            source_provenance,
+            poisoning_evidence,
+            financial_link,
         )
 
         return ProjectionResult(
@@ -963,6 +1041,9 @@ class Risk360Provider:
         source_provenance: list[dict[str, Any]],
         source_provenance_degraded: bool,
         source_provenance_reason: Optional[str],
+        poisoning_evidence: list[RiskPoisoningEvidence],
+        poisoning_evidence_degraded: bool,
+        poisoning_evidence_reason: Optional[str],
         financial_link: Optional[dict[str, Any]],
         financial_link_degraded: bool,
         financial_link_reason: Optional[str],
@@ -1000,6 +1081,11 @@ class Risk360Provider:
                 "subject": {"kind": request.subject.kind, "id": request.subject.id},
                 "assessmentId": (assessment.assessment_id if assessment is not None else None),
                 "findings": [],
+                "poisoningEvidence": self._poisoning_evidence_summary(
+                    poisoning_evidence,
+                    degraded=poisoning_evidence_degraded,
+                    reason=poisoning_evidence_reason,
+                ),
                 "requiredSlotCoverage": self._required_slot_coverage(
                     request,
                     assessment,
@@ -1009,6 +1095,9 @@ class Risk360Provider:
                     source_provenance_degraded,
                     source_provenance_reason,
                     assessment_degraded,
+                    poisoning_evidence,
+                    poisoning_evidence_degraded,
+                    poisoning_evidence_reason,
                     financial_link,
                     financial_link_degraded,
                     financial_link_reason,
@@ -1016,6 +1105,92 @@ class Risk360Provider:
             },
             warnings=warnings or None,
         )
+
+    @staticmethod
+    def _poisoning_evidence_summary(
+        records: list[RiskPoisoningEvidence],
+        *,
+        degraded: bool,
+        reason: Optional[str],
+    ) -> dict[str, Any]:
+        """Render safe detector metadata without payloads or negative inference."""
+        if degraded:
+            state = "degraded"
+        elif records:
+            state = "partial"
+        else:
+            # A successful empty query says nothing about detector coverage.
+            state = "unknown"
+        safe_records = [
+            {
+                "evidenceId": record.evidence_id,
+                "tenantId": record.tenant_id,
+                "sourceId": record.source_id,
+                "subject": {
+                    "kind": record.subject_kind,
+                    "id": record.subject_id,
+                },
+                "poisoningType": record.poisoning_type,
+                "signalStrength": record.signal_strength,
+                "confidence": record.confidence,
+                "claimState": record.claim_state.value,
+                "detectorId": record.detector_id,
+                "detectorVersion": record.detector_version,
+                "sourceRecordId": record.source_record_id,
+                "evidenceRefs": [
+                    ref.model_dump(mode="json") for ref in record.evidence_refs
+                ],
+                "firstSeenAt": record.first_seen_at.isoformat(),
+                "lastSeenAt": record.last_seen_at.isoformat(),
+                "recordedAt": record.recorded_at.isoformat(),
+                "status": record.status,
+                "version": record.version,
+                "supersedesEvidenceId": record.supersedes_evidence_id,
+                "supersededByEvidenceId": record.superseded_by_evidence_id,
+                "restatementReason": record.restatement_reason,
+                "lifecycle": [
+                    {
+                        "eventId": event.event_id,
+                        "fromStatus": event.from_status,
+                        "toStatus": event.to_status,
+                        "occurredAt": event.occurred_at.isoformat(),
+                        "actorId": event.actor_id,
+                        "reason": event.reason,
+                        "evidenceRefs": [
+                            ref.model_dump(mode="json") for ref in event.evidence_refs
+                        ],
+                    }
+                    for event in record.lifecycle_events
+                ],
+            }
+            for record in records
+        ]
+        latest_recorded_at = max(
+            (record.recorded_at.isoformat() for record in records),
+            default=None,
+        )
+        return {
+            "state": state,
+            "reason": reason
+            or ("poisoning_detector_coverage_not_attested" if not records else None),
+            "records": safe_records,
+            "coverage": {
+                "completeEvidenceScan": not degraded and reason is None,
+                "detectorCoverage": "unattested",
+                "negativeFindingInference": "prohibited",
+            },
+            "freshness": {
+                "state": "degraded" if degraded else "known" if records else "unknown",
+                "timestampedRecordCount": len(records),
+                "latestRecordedAt": latest_recorded_at,
+                "threshold": "unconfigured",
+            },
+            "policy": {
+                "scope": "tenant_read_gated",
+                "projection": "metadata_only",
+                "rawPayload": "excluded",
+            },
+        }
 
     @staticmethod
     def _required_slot_coverage(
@@ -1027,6 +1202,9 @@ class Risk360Provider:
         source_provenance_degraded: bool,
         source_provenance_reason: Optional[str],
         assessment_degraded: bool,
+        poisoning_evidence: list[RiskPoisoningEvidence],
+        poisoning_evidence_degraded: bool,
+        poisoning_evidence_reason: Optional[str],
         financial_link: Optional[dict[str, Any]],
         financial_link_degraded: bool,
         financial_link_reason: Optional[str],
@@ -1065,6 +1243,31 @@ class Risk360Provider:
                 "reason": "source_trust_classification_not_recorded",
             }
 
+        open_poisoning = any(
+            record.status in {"open", "acknowledged"} for record in poisoning_evidence
+        )
+        if open_poisoning:
+            source_trust_coverage = {
+                "state": "degraded",
+                "reason": "open_poisoning_evidence_requires_source_review",
+            }
+
+        if poisoning_evidence_degraded:
+            poisoning_coverage = {
+                "state": "degraded",
+                "reason": poisoning_evidence_reason or "poisoning_evidence_read_incomplete",
+            }
+        elif poisoning_evidence:
+            poisoning_coverage = {
+                "state": "partial",
+                "reason": "poisoning_detector_coverage_not_attested",
+            }
+        else:
+            poisoning_coverage = {
+                "state": "unknown",
+                "reason": poisoning_evidence_reason or "poisoning_detector_coverage_not_attested",
+            }
+
         supported: dict[str, dict[str, str]] = {
             "risk_summary": (
                 {"state": "available"}
@@ -1077,6 +1280,7 @@ class Risk360Provider:
                 }
             ),
             "source_trust": source_trust_coverage,
+            "poisoning_evidence": poisoning_coverage,
             "agent_amplification": (
                 {"state": "available"}
                 if agent_amplification
@@ -1091,7 +1295,6 @@ class Risk360Provider:
         unsupported_reasons = {
             "anomaly_events": "canonical_anomaly_event_authority_unavailable",
             "policy_flags": "evaluated_policy_flag_authority_unavailable",
-            "poisoning_evidence": "data_poisoning_evidence_authority_unavailable",
             "propagation_paths": "canonical_contagion_path_authority_unavailable",
             "financial_contagion": "financial_contagion_attribution_authority_unavailable",
             "social_contagion": "social_contagion_authority_unavailable",
@@ -1127,6 +1330,9 @@ class Risk360Provider:
         source_provenance: list[dict[str, Any]],
         source_provenance_degraded: bool,
         source_provenance_reason: Optional[str],
+        poisoning_evidence: list[RiskPoisoningEvidence],
+        poisoning_evidence_degraded: bool,
+        poisoning_evidence_reason: Optional[str],
     ) -> ProjectionSection:
         """health — detector/source freshness for the signals feeding the read.
 
@@ -1137,9 +1343,12 @@ class Risk360Provider:
         """
         state: str = "available"
         warnings: list[str] = []
-        if signals_degraded:
+        if signals_degraded or poisoning_evidence_degraded:
             state = "degraded"
-            warnings.append("risk signal source unavailable; health is degraded")
+            if signals_degraded:
+                warnings.append("risk signal source unavailable; health is degraded")
+            if poisoning_evidence_degraded:
+                warnings.append("poisoning evidence source unavailable or incomplete")
         elif not signals:
             state = "missing"
             warnings.append(
@@ -1201,6 +1410,11 @@ class Risk360Provider:
                 source_subject=request.subject.kind == "source",
                 source_provenance_reason=source_provenance_reason,
             ),
+            "poisoningEvidenceFreshness": self._poisoning_evidence_summary(
+                poisoning_evidence,
+                degraded=poisoning_evidence_degraded,
+                reason=poisoning_evidence_reason,
+            )["freshness"],
             "assessmentFreshness": (
                 None
                 if assessment is None or assessment.assessed_at is None
@@ -1265,6 +1479,11 @@ class Risk360Provider:
                         bool(row.get("observed_at")) for row in source_provenance
                     ),
                 },
+                "poisoningEvidence": self._poisoning_evidence_summary(
+                    poisoning_evidence,
+                    degraded=poisoning_evidence_degraded,
+                    reason=poisoning_evidence_reason,
+                )["freshness"],
             },
         }
         return ProjectionSection(
@@ -1335,6 +1554,7 @@ class Risk360Provider:
         assessment: Optional[RiskAssessment],
         signals: list[RiskSignal],
         source_provenance: list[dict[str, Any]],
+        poisoning_evidence: list[RiskPoisoningEvidence],
         financial_link: Optional[dict[str, Any]],
     ) -> list[ClaimEnvelope]:
         """Evidence-grounded claims (requiresEvidence: never an empty envelope)."""
@@ -1431,7 +1651,7 @@ class Risk360Provider:
 
         # The gateway-stamped value is an ingress credential classification,
         # not a source reputation score. Claim only that exact recorded fact;
-        # source reliability, poisoning, and trustworthiness remain unknown.
+        # source reliability and trustworthiness remain unresolved by it.
         for row in source_provenance:
             source_trust = row.get("source_trust")
             evidence_ref = row.get("evidence_ref")
@@ -1457,6 +1677,29 @@ class Risk360Provider:
                     confidence=None,
                     claimState=EpistemicStatus.OBSERVED,
                     domainSlotIds=["source_trust", "evidence_trace"],
+                )
+            )
+
+        for record in poisoning_evidence:
+            slots = ["poisoning_evidence", "evidence_trace"]
+            if request.subject.kind == "source":
+                slots.append("source_trust")
+            claims.append(
+                ClaimEnvelope(
+                    id=f"risk360.poisoning.{record.evidence_id}.v{record.version}",
+                    kind="source_poisoning_detector_evidence",
+                    subject=subject,
+                    evidenceRefs=list(record.evidence_refs),
+                    claims=[
+                        f"Detector {record.detector_id!r} v{record.detector_version} "
+                        f"recorded {record.status} {record.poisoning_type!r} evidence "
+                        f"for source {record.source_id!r} and exact subject "
+                        f"{record.subject_kind}:{record.subject_id}; this detector record "
+                        "does not by itself verify that the source was poisoned."
+                    ],
+                    confidence=None,
+                    claimState=record.claim_state,
+                    domainSlotIds=slots,
                 )
             )
 
@@ -1814,6 +2057,120 @@ class Risk360Provider:
             )
         return observations, degraded
 
+    @staticmethod
+    def _poisoning_as_of(
+        request: ProjectionRequest,
+        context: ProjectionContext,
+    ) -> tuple[Optional[datetime], Optional[str]]:
+        """Resolve a point-in-time anchor or explain unsupported temporal reads."""
+        if request.timeRange is not None or request.temporalMode in {
+            "window",
+            "compare",
+            "relative",
+        }:
+            return None, "poisoning_evidence_window_history_unavailable"
+
+        request_anchor = _aware_datetime(request.asOf) if request.asOf is not None else None
+        context_anchor = _aware_datetime(context.asOf) if context.asOf is not None else None
+        if request.asOf is not None and request_anchor is None:
+            return None, "poisoning_evidence_as_of_anchor_invalid"
+        if context.asOf is not None and context_anchor is None:
+            return None, "poisoning_evidence_context_anchor_invalid"
+        if request_anchor is not None and context_anchor is not None:
+            if request_anchor != context_anchor:
+                return None, "poisoning_evidence_as_of_anchor_mismatch"
+        anchor = request_anchor or context_anchor
+        if request.temporalMode == "as_of" and anchor is None:
+            return None, "poisoning_evidence_as_of_anchor_missing"
+        return anchor, None
+
+    async def _safe_poisoning_evidence(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        *,
+        as_of: Optional[datetime],
+    ) -> tuple[list[RiskPoisoningEvidence], bool, Optional[str]]:
+        """Read bounded evidence and revalidate exact source/subject bindings."""
+        reader = getattr(self._sources, "poisoning_evidence", None)
+        if not callable(reader):
+            return [], False, "data_poisoning_evidence_authority_unavailable"
+        try:
+            result = await reader(tenant_id=tenant_id, subject=subject, as_of=as_of)
+        except Exception:  # noqa: BLE001 - provider boundary returns safe typed absence
+            return [], True, "poisoning_evidence_read_incomplete"
+
+        raw_records = getattr(result, "records", None)
+        complete = getattr(result, "complete", None)
+        read_reason = getattr(result, "reason", None)
+        if not isinstance(raw_records, list) or not isinstance(complete, bool):
+            return [], True, "poisoning_evidence_read_contract_invalid"
+        if len(raw_records) > _MAX_POISONING_EVIDENCE_SCAN:
+            return [], True, "poisoning_evidence_scan_limit_exceeded"
+
+        records: list[RiskPoisoningEvidence] = []
+        seen_ids: set[str] = set()
+        reason = read_reason.strip() if isinstance(read_reason, str) and read_reason.strip() else None
+        degraded = not complete or reason is not None
+        if reason is None and not complete:
+            reason = "poisoning_evidence_scan_truncated"
+        for raw in raw_records:
+            try:
+                record = (
+                    raw
+                    if isinstance(raw, RiskPoisoningEvidence)
+                    else RiskPoisoningEvidence.model_validate(raw)
+                )
+            except Exception:  # noqa: BLE001 - malformed records cannot back a claim
+                degraded = True
+                reason = reason or "poisoning_evidence_contract_invalid"
+                continue
+            if (
+                record.tenant_id != tenant_id
+                or record.subject_kind != subject.kind
+                or record.subject_id != subject.id
+                or not record.source_id.strip()
+                or (subject.kind == "source" and record.source_id != subject.id)
+            ):
+                degraded = True
+                reason = reason or "poisoning_evidence_exact_binding_mismatch"
+                continue
+            if record.evidence_id in seen_ids:
+                degraded = True
+                reason = reason or "poisoning_evidence_duplicate_record"
+                continue
+            seen_ids.add(record.evidence_id)
+            if as_of is not None:
+                if record.recorded_at > as_of:
+                    degraded = True
+                    reason = reason or "poisoning_evidence_as_of_read_inconsistent"
+                    continue
+                events = [
+                    event
+                    for event in record.lifecycle_events
+                    if event.occurred_at <= as_of
+                ]
+                status = "open"
+                superseded_by = None
+                for event in events:
+                    status = event.to_status
+                    if status == "superseded":
+                        superseded_by = record.superseded_by_evidence_id
+                record = record.model_copy(
+                    update={
+                        "status": status,
+                        "superseded_by_evidence_id": superseded_by,
+                        "lifecycle_events": events,
+                    }
+                )
+            records.append(record)
+
+        records.sort(
+            key=lambda record: (record.recorded_at, record.evidence_id),
+            reverse=True,
+        )
+        return records, degraded, reason
+
     async def _safe_assessment(
         self,
         tenant_id: str,
@@ -1886,6 +2243,7 @@ class Risk360Provider:
         assessment: Optional[RiskAssessment],
         signals: list[RiskSignal],
         source_provenance: list[dict[str, Any]],
+        poisoning_evidence: list[RiskPoisoningEvidence],
     ) -> list[EvidenceRef]:
         """Every canonical EvidenceRef grounding this projection, deduped."""
         refs: list[EvidenceRef] = []
@@ -1897,6 +2255,10 @@ class Risk360Provider:
             ref = row.get("evidence_ref")
             if isinstance(ref, EvidenceRef):
                 refs.append(ref)
+        for record in poisoning_evidence:
+            refs.extend(record.evidence_refs)
+            for event in record.lifecycle_events:
+                refs.extend(event.evidence_refs)
         return _dedupe_evidence(refs)
 
 

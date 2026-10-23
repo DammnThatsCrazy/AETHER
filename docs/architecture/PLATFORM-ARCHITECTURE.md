@@ -601,6 +601,24 @@ Profile360's required `value_summary` slot now binds to Economic360's exact
 tenant-scoped entity and Agent summary/evidence; Outcome360 attribution to
 entity/profile subjects and Profile-specific freshness remain unresolved, so it
 also remains degraded.
+Profile360's required `relationships` slot now reads Relationship360 graph-ledger
+evidence for an exact tenant entity subject; profile/member alias resolution,
+ledger completeness, and Profile-specific freshness remain unknown, so the
+slot stays degraded.
+Profile360's required `location_temporal` slot now reads Geographic360's
+tenant-scoped location evidence and timeline for an exact entity subject. The
+provider marks recorded location observations explicitly; profile alias
+resolution, continuous trajectory, cross-surface completeness, historical
+point-in-time reconstruction, and Profile-specific freshness remain unknown,
+so the slot stays degraded.
+Agent360 now joins agentic compatibility evidence to canonical Bronze by exact
+tenant, agent, source-row, event, schema, and timestamp references; Rights
+source identity, source trust, freshness, and unlinked historical rows remain
+unknown. Execution360 joins current x402 approval-decision evidence to admitted
+run IDs, while non-commerce authorities and historical links remain unknown.
+Risk360 reads versioned poisoning-detector records for exact tenant subjects
+with lifecycle and evidence references; it does not independently verify
+poisoning, detector coverage, source reputation, or freshness.
 Additional partial paths include Identity360 device/session identifier-type
 metadata, Execution360 exact execution-linked RiskSignals, Social360
 propagation-eligible observed paths, and Episode360 exact episode-linked

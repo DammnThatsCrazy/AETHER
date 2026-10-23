@@ -7,15 +7,17 @@ audience: [architect, security, compliance, dev-senior]
 status: experimental
 since_version: 0.1.0
 canonical_owner: platform@aether
-source_files: [services/api/governance/consent/erasure_jobs.py, services/api/governance/consent/erasure_planes.py, services/api/governance/dsr_propagation/models.py, services/api/value/x402/commerce_store.py, services/api/graph/web3/registries.py, services/api/shared/storage/lifecycle.py, scripts/release/check_dsr_coverage.py]
+source_files: [services/api/governance/consent/erasure_jobs.py, services/api/governance/consent/erasure_planes.py, services/api/governance/dsr_propagation/models.py, services/api/value/x402/commerce_store.py, services/api/intelligence/risk360/store.py, services/api/graph/web3/registries.py, services/api/shared/storage/lifecycle.py, config/storage_policies.yaml, scripts/release/check_dsr_coverage.py]
 source_hashes:
+  "config/storage_policies.yaml": "sha256:06419ccb62b3edab79953a0db55bcade95ee3722ded30fecd38684080d4cefb2"
   "scripts/release/check_dsr_coverage.py": "sha256:90d75c47faaf4be6fb66522597490c30a588af6b131f89747284047889c21260"
   "services/api/governance/consent/erasure_jobs.py": "sha256:d325d7622fbdf0e5ceda1c08f77e5252e50641736c8599ca67e4d91969da4848"
   "services/api/governance/consent/erasure_planes.py": "sha256:d62cf1c9e9bbe0f7404790dd32011a025f3e340013653c0d9f401b5576d48ae6"
   "services/api/governance/dsr_propagation/models.py": "sha256:5152135c02f24854e6c6b1658792cb5478904694d54d678a3114b19f7292eaa9"
   "services/api/graph/web3/registries.py": "sha256:13f14a786f6da928db1526c5f01d553f21fd388805feb368c4f6c18493ebdffe"
+  "services/api/intelligence/risk360/store.py": "sha256:447475ba55bc70319c134fcd9f8886d37d9913c27d7a7ae406c721159618b2db"
   "services/api/shared/storage/lifecycle.py": "sha256:f5446beb697cab99031cf464d9dcdb95310ad83870036fe0e5f1baf09d16d712"
-  "services/api/value/x402/commerce_store.py": "sha256:b8ad52e6ef1587e0b9439787c7d6cbc0e15c66ab05f2434e80890dae5ba44835"
+  "services/api/value/x402/commerce_store.py": "sha256:9f6e098c5d2ad930d3d1cf090d10c9386e6bae0408ad39c5b21e22ff460c1a06"
 ---
 
 # DSR Erasure Coverage — Every Component, Every Store
@@ -84,8 +86,9 @@ every other plane succeeded in the same attempt; otherwise they are marked
 | `silver_facts` | every `silver_*` and projector fact table, via the Silver writer's introspected schemas (typed columns and lake JSONB `data`); semantic memory records are erased by the semantic handler | hard delete | rows deleted |
 | `bronze_events` | `bronze_sdk_events` (+ externalized objects), `event_outbox` | chain-preserving tombstone + re-pack; payload redaction | rows affected |
 | `web3_observations` | `web3_observations` | exact subject-ref match in tenant-owned structured fields / payload; hard delete, legal hold respected | rows deleted |
-| `x402_commerce` | commerce challenges, approvals, policies, authorizations, receipts, settlements, entitlements, grants, fulfillments, budget policies | hard delete rows whose requester/subject/holder id equals a subject ref; per-resource legal holds respected | rows deleted by store |
+| `x402_commerce` | commerce challenges, approvals, approval decisions, policies, authorizations, receipts, settlements, entitlements, grants, fulfillments, budget policies | hard delete subject-referenced rows; approval decisions are also deleted when their approval is erased or their authenticated `decided_by` is the subject; per-resource legal holds respected | rows deleted by store |
 | `journey_handoffs` | cross-device journey handoff rows (source and destination anonymous IDs, token hash only) | hard delete rows where the request `anonymous_id` is either end; a user-id-only request locates nothing, so those rows are bounded by the 90-day `journey_handoff_sweep` | rows deleted by store |
+| `risk_poisoning_evidence` | `risk_poisoning_evidence` | hard delete exact tenant rows whose subject or source ID equals a subject ref; legal holds respected | rows deleted |
 
 Matching in exports is exact-value (a short id never matches as a substring);
 an artifact that cannot be decoded is purged conservatively because it is a
@@ -148,3 +151,5 @@ relay never publishes it. The outbox chain still verifies.
   addresses and settlement proofs without a canonical subject reference remain
   governed by their existing transaction-retention and legal-hold policies;
   erasure does not infer identity from a wallet address.
+- Risk poisoning evidence erasure matches only exact tenant-scoped subject and
+  source IDs; linked evidence references are removed with the enclosing record.

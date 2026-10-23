@@ -1426,6 +1426,7 @@ applied because the action's graph mutations do not share a transaction.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/v1/x402/capture` | Ingest captured x402 payment |
+| POST | `/v1/x402/approval/request` | Request a commerce approval; optional `execution_action` binds it to a server-generated execution ID returned in the approval record |
 | GET | `/v1/x402/graph` | Economic graph snapshot |
 | GET | `/v1/x402/agent/{id}` | Agent x402 history |
 | POST | `/v1/x402/graph/snapshot` | Trigger graph snapshot rebuild |
@@ -1450,6 +1451,7 @@ Kyber operator review queue for the x402 commerce control plane. All endpoints r
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/v1/agent/register` | Register agent in the Intelligence Graph |
+| POST | `/v1/agents/{agent_id}/execute` | Record an agent run after delegation checks; optional `approval_id` requires a current tenant-scoped x402 approval whose agent, action, resource, amount, and latest immutable decision match exactly |
 | POST | `/v1/agent/tasks/{id}/lifecycle` | Update task lifecycle state |
 | POST | `/v1/agent/tasks/{id}/decision` | Record an agent decision |
 | POST | `/v1/agent/tasks/{id}/feedback` | Submit feedback on task outcome |
@@ -1918,6 +1920,30 @@ evidence only for exact tenant, subject-kind, and subject-ID matches on
 canonical entity and Agent subjects. Outcome360 does not yet support exact
 entity/profile subjects for attributed outcomes, and Profile-specific freshness
 remains unknown, so the slot stays degraded.
+Profile360's required `relationships` slot reads exact entity-subject graph
+ledger evidence through Relationship360 after slot policy evaluation. Profile
+aliases, account-member relationships, graph completeness, and Profile-specific
+freshness are not inferred, so that slot remains degraded or unknown.
+Profile360's required `location_temporal` slot reuses Geographic360 location
+evidence and timeline only for an exact tenant entity subject. Recorded
+timestamps and validity bounds are preserved without claiming a continuous
+physical trajectory; profile alias resolution, cross-surface completeness,
+historical point-in-time reconstruction, and Profile-specific freshness remain
+unknown, so the slot stays degraded.
+Agent360's `evidence_trace` joins agentic compatibility rows to canonical
+Bronze only when tenant, agent, source-row ID, event ID, schema version, event
+type, and timestamp match exactly. Historical rows without the reciprocal link
+remain unresolved; Rights source identity, source trust, and a freshness SLA
+remain unknown.
+Execution360's `approval_chain` joins immutable x402 approval decisions to
+admitted execution IDs and the approval's latest decision reference. It covers
+x402 commerce decisions only; other approval authorities and historical run
+links remain unknown.
+Risk360's `poisoning_evidence` reads versioned tenant-scoped detector records
+for the exact subject, including lifecycle and evidence references. It exposes
+metadata only and does not independently verify source poisoning; detector
+coverage, population completeness, source identity, and freshness remain
+unknown.
 Campaign360's `anomalies` slot includes exact campaign-scoped targeting-leakage
 findings with their targeting-observation and eligibility-snapshot evidence;
 general risk and source anomalies remain unresolved. Journey360's `stages` slot

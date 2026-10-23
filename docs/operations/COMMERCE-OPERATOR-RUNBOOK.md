@@ -9,6 +9,8 @@ since_version: "0.1.0"
 source_files:
   - services/api/value/x402/
   - services/api/value/x402/provenance.py
+  - services/api/actions/agent/user_agents.py
+  - services/api/alembic/versions/20261022_execution_approval_decisions.py
   - services/api/actions/agent/deployment_routes.py
   - services/api/actions/agent_marketplace/authority.py
   - services/api/actions/agent_marketplace/graph_state_check.py
@@ -23,8 +25,9 @@ source_hashes:
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
+  "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
-  "services/api/value/x402/": "sha256:49f3660ba1468f6481b067fcd46ad230199aee60d7e7316ba57b7c69c368c4a9"
+  "services/api/value/x402/": "sha256:a92283788ffc7dab83f99071da7dc9de7cd695eb5a46fb614afa5cbdbdadb708"
   "services/api/value/x402/provenance.py": "sha256:235c29fc3b743ea75c15902f8e9a2cb635c95d2b04b7aa82c28c96ae65769b18"
 ---
 # Commerce Operator Runbook
@@ -135,7 +138,18 @@ timeline shows a missing, unavailable, or unmatched economic record.
    unmatched. For graph evidence, use the independent Kyber state check in the
    Operations Runbook; it reports graph drift without repairing it.
 
-## 6. Override review
+## 6. Agent execution approval linkage
+
+For an approval request bound to an agent execution, inspect the exact agent,
+action, resource, and amount before deciding. The authenticated tenant user is
+recorded as the decision actor. After approval, provide that approval ID to the
+agent execution request; the backend checks the exact run binding and latest
+decision again. Revoked, mismatched, or already-used execution IDs are rejected.
+The decision history is retained in the tenant-scoped commerce decision store.
+This check covers the x402-linked run only; it does not establish that an
+external payment or business action took place.
+
+## 7. Override review
 
 **Symptom:** `COMMERCE_APPROVAL_OVERRIDE` audit entry surfaces.
 

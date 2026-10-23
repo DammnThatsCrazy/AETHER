@@ -314,6 +314,14 @@ async def test_entity_projection_is_a_valid_typed_result():
     assert any(c.id == "summary.primary_location" for c in claims)
     primary_claim = next(c for c in claims if c.id == "summary.primary_location")
     assert primary_claim.evidenceRefs and primary_claim.evidenceRefs[0].id == "location:loc-primary"
+    temporal_claim = next(
+        c for c in claims if c.kind == "profile_location_temporal_evidence"
+    )
+    assert temporal_claim.domainSlotIds == ["location_temporal"]
+    assert {ref.id for ref in temporal_claim.evidenceRefs} == {
+        "location:loc-primary",
+        "location:loc-egress",
+    }
 
     evidence = _sections(result)["evidence"]
     assert evidence.content["count"] == 2

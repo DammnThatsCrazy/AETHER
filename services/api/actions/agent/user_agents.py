@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Request
@@ -85,12 +86,63 @@ class AgentExecute(BaseModel):
     action: str = Field(..., min_length=1)
     resource: str = Field(..., min_length=1)
     amount: Optional[str] = None
+    approval_id: Optional[str] = Field(default=None, min_length=1, max_length=256)
     payload: dict[str, Any] = Field(default_factory=dict)
     triggered_by_event_id: Optional[str] = None
     # Optional: if the agent already produced reasoning/confidence at the
     # caller layer, pass it through so it lands on the execution record.
     reasoning: str = ""
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+async def _validate_execution_approval(
+    *, tenant_id: str, agent_id: str, body: AgentExecute
+) -> tuple[Optional[str], Optional[str]]:
+    """Resolve an exact current x402 approval before recording a linked run."""
+    if body.approval_id is None:
+        return None, None
+
+    from value.x402.commerce_models import ApprovalStatus
+    from value.x402.commerce_store import get_commerce_store
+
+    store = get_commerce_store()
+    approval = await store.get_approval(tenant_id, body.approval_id)
+    if (
+        approval is None
+        or approval.tenant_id != tenant_id
+        or approval.execution_id is None
+        or approval.execution_action != body.action
+        or approval.resource_id != body.resource
+        or approval.requester_type != "agent"
+        or approval.requester_id != agent_id
+        or approval.status != ApprovalStatus.APPROVED
+        or not approval.last_decision_id
+    ):
+        raise ForbiddenError("Approval is not valid for this exact agent execution")
+
+    try:
+        requested_amount = Decimal(body.amount) if body.amount is not None else None
+        approved_amount = Decimal(str(approval.amount_usd))
+    except (InvalidOperation, ValueError):
+        raise BadRequestError("A numeric amount matching the approval is required")
+    if requested_amount is None or not requested_amount.is_finite() or requested_amount != approved_amount:
+        raise ForbiddenError("Execution amount does not match the approved amount")
+
+    decision = await store.get_approval_decision(tenant_id, approval.last_decision_id)
+    if (
+        decision is None
+        or decision.tenant_id != tenant_id
+        or decision.approval_id != approval.approval_id
+        or decision.execution_id != approval.execution_id
+        or decision.action != "approve"
+        or decision.decision_id != approval.last_decision_id
+    ):
+        raise ForbiddenError("Canonical approval decision evidence is unavailable or conflicted")
+
+    existing = await _executions.find_by_id(approval.execution_id)
+    if existing is not None:
+        raise ConflictError("This approved execution ID has already been recorded")
+    return approval.execution_id, decision.decision_id
 
 
 class AgentExecutionOutcome(BaseModel):
@@ -198,6 +250,12 @@ async def execute(
     if config is None or config.get("tenant_id") != tenant.tenant_id:
         raise NotFoundError("Agent")
 
+    approval_execution_id, approval_decision_id = await _validate_execution_approval(
+        tenant_id=tenant.tenant_id,
+        agent_id=agent_id,
+        body=body,
+    )
+
     decision = await engine.evaluate(
         grantee_entity_id=agent_id,
         action=body.action,
@@ -206,7 +264,7 @@ async def execute(
     )
     if not decision.allowed:
         # Reject is recorded as a failed execution row so the timeline is complete.
-        rejected_id = str(uuid.uuid4())
+        rejected_id = approval_execution_id or str(uuid.uuid4())
         await _executions.record(
             execution_id=rejected_id,
             agent_id=agent_id,
@@ -227,6 +285,9 @@ async def execute(
                 "amount": body.amount,
             },
             error={"code": decision.reason},
+            approval_id=body.approval_id,
+            approval_decision_id=approval_decision_id,
+            create_only=approval_execution_id is not None,
         )
         await producer.publish(Event(
             topic=Topic.AGENT_EXECUTION_FAILED,
@@ -235,6 +296,8 @@ async def execute(
             payload={
                 "agent_id": agent_id,
                 "execution_id": rejected_id,
+                "approval_id": body.approval_id,
+                "approval_decision_id": approval_decision_id,
                 "reason": decision.reason,
                 "action": body.action,
                 "resource": body.resource,
@@ -245,7 +308,7 @@ async def execute(
             f"reason={decision.reason}"
         )
 
-    execution_id = str(uuid.uuid4())
+    execution_id = approval_execution_id or str(uuid.uuid4())
     started_at = datetime.now(timezone.utc).isoformat()
 
     # Execution started — emit event with v2 envelope so consumers see the full context.
@@ -256,6 +319,8 @@ async def execute(
         payload={
             "agent_id": agent_id,
             "execution_id": execution_id,
+            "approval_id": body.approval_id,
+            "approval_decision_id": approval_decision_id,
             "action": body.action,
             "resource": body.resource,
         },
@@ -275,8 +340,6 @@ async def execute(
         },
         causality={"triggered_by_event_id": body.triggered_by_event_id},
     ))
-    await producer.publish(started)
-
     # The actual execution runtime is out of scope for this layer — Profile 360
     # only owns the bookkeeping. Callers may follow up with `/executions/{id}`
     # PATCH-style updates as the runtime progresses; v1 here records the
@@ -303,7 +366,12 @@ async def execute(
             "payload": body.payload,
         },
         started_at=started_at,
+        approval_id=body.approval_id,
+        approval_decision_id=approval_decision_id,
+        create_only=approval_execution_id is not None,
     )
+
+    await producer.publish(started)
 
     try:
         await GraphMutationGateway(graph_client=graph).apply(edge_intent(

@@ -7,6 +7,7 @@ States: pending → assigned → (approved | rejected | escalated | expired | re
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -63,8 +64,12 @@ class ApprovalService:
         priority: ApprovalPriority = ApprovalPriority.NORMAL,
         reason: str = "",
         context: Optional[dict[str, Any]] = None,
+        execution_id: Optional[str] = None,
+        execution_action: Optional[str] = None,
     ) -> ApprovalRequest:
         """Create an approval request. Required for every spend class at GA."""
+        if execution_action is not None and execution_id is None:
+            execution_id = str(uuid.uuid4())
         expires = _now() + timedelta(seconds=SLA_SECONDS[priority])
         approval = ApprovalRequest(
             tenant_id=tenant_id,
@@ -72,6 +77,8 @@ class ApprovalService:
             resource_id=resource_id,
             requester_id=requester_id,
             requester_type=requester_type,
+            execution_id=execution_id,
+            execution_action=execution_action,
             amount_usd=amount_usd,
             asset_symbol=asset_symbol,
             chain=chain,
@@ -165,16 +172,18 @@ class ApprovalService:
         approval.decided_by = decided_by
         approval.decision_reason = reason
         approval.is_override = is_override
-        await self._store.put_approval(approval)
-
         decision = ApprovalDecision(
             approval_id=approval_id,
             tenant_id=tenant_id,
+            execution_id=approval.execution_id,
             action=action,
             decided_by=decided_by,
             reason=reason,
             is_override=is_override,
         )
+        approval.last_decision_id = decision.decision_id
+        await self._store.put_approval_decision(decision)
+        await self._store.put_approval(approval)
 
         await self._emit(
             topic,
@@ -183,6 +192,8 @@ class ApprovalService:
                 "approval_id": approval_id,
                 "challenge_id": approval.challenge_id,
                 "action": action,
+                "decision_id": decision.decision_id,
+                "execution_id": approval.execution_id,
                 "decided_by": decided_by,
                 "reason": reason,
                 "is_override": is_override,
@@ -206,11 +217,28 @@ class ApprovalService:
         approval.decided_at = _iso(_now())
         approval.decided_by = revoked_by
         approval.decision_reason = reason
+        decision = ApprovalDecision(
+            approval_id=approval_id,
+            tenant_id=tenant_id,
+            execution_id=approval.execution_id,
+            action="revoke",
+            decided_by=revoked_by,
+            reason=reason,
+            is_override=approval.is_override,
+        )
+        approval.last_decision_id = decision.decision_id
+        await self._store.put_approval_decision(decision)
         await self._store.put_approval(approval)
         await self._emit(
             Topic.COMMERCE_APPROVAL_REVOKED,
             tenant_id,
-            {"approval_id": approval_id, "revoked_by": revoked_by, "reason": reason},
+            {
+                "approval_id": approval_id,
+                "decision_id": decision.decision_id,
+                "execution_id": approval.execution_id,
+                "revoked_by": revoked_by,
+                "reason": reason,
+            },
         )
         return approval
 

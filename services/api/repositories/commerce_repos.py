@@ -109,11 +109,68 @@ class ApprovalsRepository(BaseRepository):
         )
         return [r for r in all_pending if r.get("expires_at", "9999") < now]
 
+    async def list_for_execution(
+        self, *, tenant_id: str, execution_id: str, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        """Return only commerce approvals explicitly bound to one exact run."""
+        return await self.find_many(
+            filters={"tenant_id": tenant_id, "execution_id": execution_id},
+            limit=max(0, min(int(limit), 500)),
+        )
+
     async def count_pending(self, tenant_id: str) -> int:
         records = await self.find_many(
             filters={"tenant_id": tenant_id, "status": "pending"}, limit=10000
         )
         return len(records)
+
+
+class ApprovalDecisionsRepository(BaseRepository):
+    """Append-only decision evidence for the canonical commerce approval owner."""
+
+    def __init__(self) -> None:
+        super().__init__("commerce_approval_decisions")
+
+    async def list_for_executions(
+        self, *, tenant_id: str, execution_ids: list[str], limit: int = 1000
+    ) -> list[dict[str, Any]]:
+        """Return decisions bound to exact execution IDs inside one tenant."""
+        selected_ids = list(dict.fromkeys(value for value in execution_ids if value))[:500]
+        bounded_limit = max(0, min(int(limit), 5000))
+        if not selected_ids or bounded_limit == 0:
+            return []
+
+        pool = await self._ensure_pool()
+        if pool is None:
+            rows = await self.find_many(filters={"tenant_id": tenant_id}, limit=10000)
+            selected = [
+                row
+                for row in rows
+                if row.get("tenant_id") == tenant_id
+                and row.get("execution_id") in selected_ids
+            ]
+            selected.sort(key=lambda row: str(row.get("decided_at") or ""))
+            return selected[:bounded_limit]
+
+        await self._ensure_table()
+        if not self._jsonb_mode:
+            raise RuntimeError("commerce_approval_decisions must use the JSONB repository schema")
+        records = await pool.fetch(
+            f"""
+            SELECT data
+            FROM {self.table_name}
+            WHERE tenant_id = $1
+              AND data->>'execution_id' = ANY($2::text[])
+            ORDER BY data->>'decided_at' ASC, id ASC
+            LIMIT $3
+            """,
+            tenant_id,
+            selected_ids,
+            bounded_limit,
+        )
+        import json
+
+        return [json.loads(row["data"]) for row in records]
 
 
 # ── Entitlements ──────────────────────────────────────────────────────────────

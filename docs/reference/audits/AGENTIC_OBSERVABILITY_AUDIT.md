@@ -6,10 +6,7 @@ visibility: I
 audience: [dev-senior, architect]
 status: experimental
 since_version: 0.1.0
-source_files: [services/api/value/x402/, services/api/actions/agent/, services/api/actions/agent_marketplace/, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/value/commerce/order_payment_reconciliation.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/shared/store.py, services/api/workers/runtime/specs.py, packages/sdk/server/src/agent-telemetry.ts, packages/shared/events.ts, packages/shared/contracts/event-registry.json, packages/shared/agentic-observability.ts]
-reviewed_source_commits:
-  - commit: "482948261"
-    reason: "Reviewed 482948261 (Codex findings on fleet hypotheses, bounded lineage reads and journey handoff): repositories/repos.py only gains the additive BaseRepository.insert_if_absent and replace_if_matches conditional-write primitives, deployment_routes.py reads lineage through a shared bounded reader that reports truncation, middleware.py lets site-bound publishable keys reach the two journey-handoff POSTs, and route_registry.yaml classifies the /sdk/journey-handoff prefix; nothing this doc describes changed behavior, so no body change was required."
+source_files: [services/api/value/x402/, services/api/actions/agent/, services/api/actions/agentic_observability/, services/api/actions/agent_marketplace/, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/alembic/versions/20261022_execution_approval_decisions.py, services/api/alembic/versions/20261022_risk_poisoning_evidence.py, services/api/value/commerce/order_payment_reconciliation.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/identity/profile/agent.py, services/api/intelligence/risk360/, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/shared/store.py, services/api/workers/runtime/specs.py, packages/sdk/server/src/agent-telemetry.ts, packages/shared/events.ts, packages/shared/contracts/event-registry.json, packages/shared/agentic-observability.ts]
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
@@ -17,8 +14,11 @@ source_hashes:
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:540f85292689337edc329c9b72b7c4f99487226a5e31aab6526c878e7ea36eeb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
+  "services/api/actions/agentic_observability/": "sha256:c5f968aeebb691afef24de255a4525c009ab1a6f6e7643de847ef8f1da406b60"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
+  "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
+  "services/api/alembic/versions/20261022_risk_poisoning_evidence.py": "sha256:d158801954e2c76f088f9a367cabc4e507f1d4b2e456e989b6e95c04a9db6237"
   "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:ac5c38e755dd2720a76fcca31bf7877d7e2e5d2e5ea19c3a37bc5344e495ecc4"
   "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:b6617b0dd888b02ede69696d3d4e46906120c5f0fca4bb4f5393145218d6200c"
   "services/api/identity/profile/agent.py": "sha256:f7aa0168d674cfe5241d169f6516478ef24c882e848dc097af98706f0aee576c"
@@ -204,6 +204,26 @@ No files in this bucket. The existing x402 and agent infrastructure is correctly
 | No Kyber module for external brokerage account observations |
 | No Kyber module for agent risk signals and drift detection |
 | Missing: `GET /v1/admin/kyber/agentic-observability/*` routes |
+
+## 2026-10-23 — Canonical evidence and authority joins
+
+The current backend now writes an exact reciprocal link between supported
+agent activity/tool/risk compatibility rows and their canonical Bronze event.
+Agent360 verifies tenant, agent, evidence table and row ID, Bronze event ID,
+schema, type, and timestamp before returning the provenance. It does not infer
+links by matching provider names or nearby timestamps. Provider identity and
+trust remain unresolved without a Rights `source_id`; freshness remains
+unassessed because no source SLA is configured. Historical compatibility rows
+without an explicit canonical link therefore remain degraded.
+
+Execution360 now joins AETHER-owned execution rows to typed x402 approval
+decisions by exact tenant and execution ID. This captures the latest decision
+pointer and retained decision history for supported x402-bound runs. Other
+approval systems and older runs remain outside this join. Risk360 can read
+typed, tenant-scoped poisoning evidence with lifecycle and restatement history,
+but no production detector currently writes those records. These additions
+close evidence-path pieces; they do not complete Agent360, Execution360,
+Risk360, or the full 18-surface contract.
 
 ## Bucket 6 — Profile360/graph gap
 
