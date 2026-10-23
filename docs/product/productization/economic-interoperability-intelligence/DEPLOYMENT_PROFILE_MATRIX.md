@@ -39,7 +39,7 @@ All flags default OFF; enabling is per-capability and per-domain.
 | Stablecoin finality (live chains) | fixture-driven only | needs RPC credentials | blocked |
 | Derivatives runtime + simulator | ✅ full conformance locally | Postgres via Alembic | blocked on venue adapters |
 | Derivatives streams | local asyncio transport | Kafka topics not provisioned | blocked |
-| Prediction-market normalization (Polymarket, Kalshi) | ✅ stateless normalize route (no persistence) | needs venue flags; no live validation | blocked |
+| Prediction-market observation (Polymarket, Kalshi) | ✅ normalize + store, in-memory | Postgres via Alembic; venue flags; submitted payloads only, no live polling | blocked |
 | Interop lifecycle/correlation | ✅ fixture-driven | Postgres via Alembic | blocked |
 | Public agent marketplace catalog | OFF by default; bounded parser tests | opt-in observer with durable store | opt-in observer with durable store |
 | LayerZero live scanning | ❌ (CREDENTIAL_GATED) | needs per-chain RPC | blocked |

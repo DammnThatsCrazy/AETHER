@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 source_hashes:
   "services/api/shared/certification/descriptor.py": "sha256:c7f2d05f4799b1a6d7a4ab1ca125117049180b595eafa0267e01c9d656df4ac7"
   "services/api/shared/certification/readiness.py": "sha256:313478219b358e356847b4468b6e174620950dd12b90eeb68ab03856556bda6d"
-  "services/api/shared/certification/registry.py": "sha256:f0d9c01a6f3b2341afca6901db34c4361a444742eb9e403593f669a493a67abc"
+  "services/api/shared/certification/registry.py": "sha256:fd03f0130f4b54e5a0f061b01c15f02050027faa794aff7c4b96326630bdf620"
 ---
 
 # Provider Capability Matrix Guide
@@ -94,11 +94,14 @@ absence, and certification gates fail on it.
 
 ## Current first-release scope (all `credential_waiting`)
 
-26 providers, none live: communications (braze, customerio, hubspot, iterable,
+28 providers, none live: communications (braze, customerio, hubspot, iterable,
 klaviyo, mailchimp, postmark, sendgrid), derivatives (drift, dydx, gmx,
 hyperliquid), interop (axelar, chainlink_ccip, debridge, hyperlane, ibc,
 layerzero, wormhole), payments (bridge, coinbase, moonpay, privy,
-stripe_onramp), stablecoin_chain (evm, svm). `credential_waiting` is **not**
+stripe_onramp), prediction_market (kalshi, polymarket), stablecoin_chain (evm,
+svm). The prediction_market entries are code-complete and flag-gated but take
+caller-submitted payloads only: `live_market_polling` and `order_execution` are
+declared unsupported. `credential_waiting` is **not**
 production-ready — see `CREDENTIAL_WAITING_PROMOTION_GUIDE.md`. Within
 communications, Klaviyo is the pull reference (campaign/flow/message sync,
 incremental pull, historical backfill, reconciliation); Braze, HubSpot, and

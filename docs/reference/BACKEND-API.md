@@ -37,7 +37,7 @@ source_hashes:
   "services/api/journeys/": "sha256:66a96995f33a660f7da0968c5762b76deb67b974d60c90b1104c4fa23e8f3aa4"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
-  "services/api/value/": "sha256:1626191c92bea173b1bd586811d48941fa6bf7cf6c6946784d692eebaf3873c0"
+  "services/api/value/": "sha256:c5a835de7e81e88d0313a3c09369f78e37c4aa9c154134b7b81a0c3e7ffcc634"
   "services/api/workers/": "sha256:62b80fbcf0fed7df62c169f9ec263635d26e65da656162f01f4fe70e65236ad4"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -4666,11 +4666,13 @@ enforcement is on.
 
 ## Prediction-market observation
 
-Mounted only when `AETHER_PREDICTION_MARKET_INGESTION_ENABLED` is set; each venue also needs its own flag (`AETHER_PROVIDER_POLYMARKET_ENABLED` / `AETHER_PROVIDER_KALSHI_ENABLED`). Observation-only: Aether never places orders.
+Mounted only when `AETHER_PREDICTION_MARKET_INGESTION_ENABLED` is set; each venue also needs its own flag (`AETHER_PROVIDER_POLYMARKET_ENABLED` / `AETHER_PROVIDER_KALSHI_ENABLED`). Observation-only: Aether never places orders. Callers submit venue payloads; Aether does not poll the venues, and a venue-reported resolution is stored as reported and is never evidence of settlement.
 
 | Method | Path | Permission | Summary |
 |---|---|---|---|
-| POST | `/v1/prediction-markets/observations/normalize` | `write` | Validate a Polymarket or Kalshi market payload and return the canonical observation (`Decimal` outcome prices in [0, 1], venue-reported resolution kept separate from settlement). Does not persist or publish (`persisted: false`). `404` when ingestion or the venue is disabled; `422` for an invalid payload |
+| POST | `/v1/prediction-markets/observations/normalize` | `write` | Validate a Polymarket or Kalshi market payload and return the canonical observation (`Decimal` outcome prices in [0, 1] as strings). Stores nothing (`persisted: false`). `404` when ingestion or the venue is disabled; `422` for an invalid payload |
+| POST | `/v1/prediction-markets/observations` | `write` | Normalize and store the observation, tenant-scoped and immutable. Identical content is idempotent (`created: false`); a changed quote is a new row |
+| GET | `/v1/prediction-markets/markets/{venue}/{market_ref}` | `read` | Latest stored observation for the tenant, with server-assigned `received_at`. Optional `as_of` (timezone-aware ISO-8601) returns the latest observation received at or before that instant. `404` when none exists |
 
 ## Retarget recommendations, stablecoin reconciliation, Kyber fleet aggregate
 
