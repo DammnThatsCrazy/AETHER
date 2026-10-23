@@ -31,6 +31,14 @@ APP = "shop-app"
 _seq = {"n": 0}
 
 
+async def _canonical_human(entity_id: str) -> None:
+    """A delegation grantor only becomes a person link if the canonical identity
+    authority knows it as a human."""
+    from identity.identity.repository import IdentityResolutionRepository
+
+    await IdentityResolutionRepository().create_subject(T, entity_id)
+
+
 @pytest.fixture(autouse=True)
 def _isolate(monkeypatch):
     reset_in_memory_stores()
@@ -137,6 +145,7 @@ async def test_scenario_a_mobile_to_web_orchestrator_with_two_subagents():
     assert handoffs["count"] == 1 and handoffs["items"][0]["link_basis"] == "explicit_handoff"
 
     # 5. A user's own small fleet is context, not a review item.
+    await _canonical_human("person-1")
     await DelegationRepository().grant(
         delegation_id="del-user", tenant_id=T, grantor_entity_id="person-1",
         grantee_entity_id="orch", scope={"type": "task"},
@@ -155,6 +164,7 @@ async def test_scenario_b_flagged_actor_fleet_is_a_reviewable_hypothesis():
 
     n_workers = 15
     workers = [f"scan-{i:02d}" for i in range(n_workers)]
+    await _canonical_human("person-9")
     await DelegationRepository().grant(
         delegation_id="del-ops", tenant_id=T, grantor_entity_id="person-9",
         grantee_entity_id="swarm-root", scope={"type": "task"},
