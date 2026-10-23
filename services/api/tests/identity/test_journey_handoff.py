@@ -109,6 +109,21 @@ async def test_journey_listing_shows_issued_and_redeemed_state():
     assert await list_handoffs("tenant-b", "jrn-1") == []
 
 
+@pytest.mark.asyncio
+async def test_sweep_and_dsr_erasure_remove_rows():
+    from datetime import timedelta
+
+    repo = repo_mod.get_journey_handoff_repository()
+    old = await _issue(session_id="old-sess", anonymous_id="anon-old")
+    repo_mod._MEM[hash_token(old["token"])]["created_at"] -= timedelta(days=120)
+    keep = await _issue(session_id="m2", anonymous_id="anon-keep")
+    await _redeem(keep["token"], anonymous_id="anon-erase")
+    assert await repo.sweep_expired() == 1
+    assert await repo.delete_by_anonymous_id("tenant-b", "anon-erase") == 0
+    assert await repo.delete_by_anonymous_id(T, "anon-erase") == 1
+    assert await list_handoffs(T, "jrn-1") == []
+
+
 def _request(site_ids=(APP,)):
     tenant = SimpleNamespace(
         tenant_id=T, site_ids=list(site_ids), require_permission=lambda _: None,
