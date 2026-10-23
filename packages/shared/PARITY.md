@@ -68,13 +68,16 @@ Every SDK that reports batch health surfaces these five counters. `accepted` /
 
 ## Manifest signature verification (§2.9)
 
-- **Algorithm**: HMAC-SHA256 over a deterministic canonical serialization of the
-  manifest (signature field excluded; top-level fields and feature keys sorted),
-  hex-encoded signature, constant-time comparison.
-- **Key source**: the tenant `SDK_CONFIG_SECRET`, provisioned out-of-band. On
-  web/server this is `signingSecret`; on iOS/Android it is
-  `AetherConfig.manifestVerificationKey`, forwarded to the health agent.
-- **Fail-closed**: when a verification key is configured, an unsigned or
-  invalid-signature manifest is rejected and the last-known-good manifest is
-  kept. When no key is configured, the manifest is applied unverified
-  (back-compat) — production tenants MUST configure a key.
+- **Algorithm**: ES256 — ECDSA P-256 / SHA-256 over the canonical JSON of the
+  manifest (signature field excluded), raw `r || s` signature, base64url. The
+  backend signs each manifest when it is delivered with a key derived from
+  `SDK_CONFIG_SECRET`; clients hold only the public key. Normative spec:
+  [`docs/reference/sdks/manifest-signing.md`](../../docs/reference/sdks/manifest-signing.md),
+  shared vectors: `tests/fixtures/sdk/manifest-signing-vectors.json`.
+- **Key source**: `python scripts/sdk_manifest_public_key.py` prints the public
+  key. On web it is `advanced.manifestPublicKey`; on iOS/Android it is
+  `AetherConfig.manifestPublicKey`, forwarded to the health agent.
+- **Fail-closed**: when a public key is configured, an unsigned, malformed,
+  tampered or wrongly signed manifest is rejected and the last-known-good
+  manifest is kept. When no key is configured, the manifest is applied
+  unverified — production apps MUST configure a key.

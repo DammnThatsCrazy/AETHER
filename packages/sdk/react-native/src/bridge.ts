@@ -461,7 +461,7 @@ const Aether = {
     // Per-batch ingestion health via the AetherBatchResult native event (§2.8).
     batchHealth: true,
     // Manifest signature verification (§2.9) is NOT available in React Native:
-    // the native iOS/Android SDKs verify only when given a manifestVerificationKey,
+    // the native iOS/Android SDKs verify only when given a manifestPublicKey,
     // which this bridge never sets, and the JS manifest path does not verify.
     manifestSignatureVerification: false,
   },

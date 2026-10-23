@@ -40,7 +40,7 @@ stable release; it is not a production-readiness claim.
   native `com.aether.sdk` core as a dependency, so consumers must add it
   themselves. Manifest signature verification is `unsupported` on React
   Native (`sdk-parity.json`): the native SDKs verify only when given a
-  `manifestVerificationKey`, which the React Native module never sets, and the JS
+  `manifestPublicKey`, which the React Native module never sets, and the JS
   `fetchAndApplyManifest()` path does not check the manifest `signature`. Do not
   treat remote manifests as verified on React Native.
 - The **server** SDK (`packages/sdk/server`) and the **Python** envelope builder

@@ -144,28 +144,31 @@
     },
     {
       "id": "manifest_signature_verify",
-      "title": "Manifest signature verification (fail-closed)",
+      "title": "Manifest signature verification (fail-closed when a public key is configured)",
       "spec": "2.9",
-      "algorithm": "HMAC-SHA256 over canonical manifest serialization, hex signature, constant-time compare",
+      "algorithm": "ES256: ECDSA P-256 / SHA-256 over canonical JSON of the manifest (signature excluded), raw r||s, base64url; spec docs/reference/sdks/manifest-signing.md, vectors tests/fixtures/sdk/manifest-signing-vectors.json",
       "matrix": {
         "web": {
           "status": "supported",
-          "evidence": "packages/sdk/web/src/health/sdk-health-agent.ts#verifyManifestSignature"
+          "evidence": "packages/sdk/web/src/health/manifest-signature.ts#verifyManifestSignature",
+          "note": "Config advanced.manifestPublicKey; fails closed when WebCrypto is unavailable."
         },
         "server": {
           "status": "not_applicable"
         },
         "react-native": {
           "status": "unsupported",
-          "note": "The React Native bridge neither exposes a manifest verification key nor verifies the manifest signature in JS; fetchAndApplyManifest() applies a fetched manifest unverified. The native iOS/Android SDKs verify only when given manifestVerificationKey, which the React Native module never sets."
+          "note": "The React Native bridge neither exposes manifestPublicKey nor verifies the manifest signature in JS; fetchAndApplyManifest() applies a fetched manifest unverified. The native iOS/Android SDKs verify only when given manifestPublicKey, which the React Native module never sets."
         },
         "ios": {
           "status": "supported",
-          "evidence": "packages/sdk/ios/Sources/AetherSDK/AetherHealthAgent.swift#verifyManifestSignature"
+          "evidence": "packages/sdk/ios/Sources/AetherSDK/ManifestSignature.swift#verify",
+          "note": "Config AetherConfig.manifestPublicKey."
         },
         "android": {
           "status": "supported",
-          "evidence": "packages/sdk/android/src/main/java/com/aether/sdk/AetherHealthAgent.kt#verifyManifestSignature"
+          "evidence": "packages/sdk/android/src/main/java/com/aether/sdk/Manifest.kt#verify",
+          "note": "Config AetherConfig.manifestPublicKey."
         },
         "python": {
           "status": "not_applicable"

@@ -783,6 +783,7 @@ class AetherSDK implements AetherSDKInterface {
         appVersion: this.config.appVersion ?? '',
         platform: 'web',
         customHeaders: this.config.advanced?.customHeaders ?? {},
+        manifestPublicKey: this.config.advanced?.manifestPublicKey ?? '',
         getDynamicState: () => ({
           authValid: true,
           consentValid: this.consentModule?.hasConsent('analytics') ?? true,
