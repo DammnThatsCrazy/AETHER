@@ -79,6 +79,7 @@ VALUE_SUMMARY_SLOT_ID = "value_summary"
 VALUE_CONVERSION_INVENTORY_SLOT_ID = "conversion_inventory"
 VALUE_ATTRIBUTION_CREDITS_SLOT_ID = "attribution_credits"
 VALUE_REVENUE_EVENTS_SLOT_ID = "revenue_events"
+VALUE_LTV_SLOT_ID = "ltv"
 VALUE_CONFIDENCE_SLOT_ID = "confidence"
 VALUE_EVIDENCE_TRACE_SLOT_ID = "evidence_trace"
 VALUE_RECONCILIATION_SLOT_ID = "reconciliation"
@@ -86,6 +87,15 @@ ACCOUNT_VALUE_SLOT_ID = "value"
 _MAX_CONVERSION_INVENTORY_ROWS = 500
 _MAX_ATTRIBUTION_CONVERSIONS = 100
 _MAX_ATTRIBUTION_TOUCHPOINT_READS = 500
+_LTV_JOIN_BASIS_BY_SUBJECT_KIND = {
+    "profile": "exact_canonical_profile_conversion_id",
+    "entity": "exact_canonical_profile_conversion_id",
+    "account": "exact_tenant_conversion_account_id",
+    "cluster": "exact_canonical_conversion_cluster_id",
+    "campaign": "canonical_campaign_touchpoint_or_attribution_conversion_join",
+    "journey": "current_tenant_journey_version_conversion_ids",
+    "agent": "validated_agent_identity_exact_conversion_agent_id",
+}
 
 
 def _economic_domain_slot_ids(subject: ProjectionSubject, primary_slot_id: str) -> list[str]:
@@ -799,6 +809,254 @@ def _inventory_evidence_refs(value: Any) -> list[EvidenceRef]:
             refs.append(ref)
             seen.add(key)
     return refs
+
+
+def _value_ltv_observation(
+    request: ProjectionRequest,
+    conversion_inventory: dict[str, Any],
+) -> dict[str, Any]:
+    """Summarize exact canonical net conversion values without currency guessing.
+
+    The measure is deliberately an observed net-value subtotal over the
+    requested occurred-at window (or the current canonical rows returned for
+    the subject). The repository cannot prove complete customer-lifecycle
+    coverage, so this function never emits a scalar LTV amount. Native values
+    stay partitioned by currency as supporting observations only.
+    """
+    inventory_state = conversion_inventory.get("state")
+    inventory_reason = conversion_inventory.get("reason")
+    inventory_completeness = conversion_inventory.get("completeness") or "unknown"
+    inventory_time_scope = conversion_inventory.get("timeScope")
+    time_range = request.timeRange
+    explicit_window = time_range is not None
+    time_scope = {
+        "mode": (
+            "explicit_occurred_at_window"
+            if explicit_window
+            else "all_current_canonical_conversion_rows"
+        ),
+        "boundarySemantics": "strictly_after_from_and_strictly_before_to",
+        "fromExclusive": time_range.from_ if time_range else None,
+        "toExclusive": time_range.to if time_range else None,
+        "historicalState": "unknown",
+        "lifetimeCompleteness": "unknown",
+        "observedAtFrom": None,
+        "observedAtTo": None,
+    }
+    if isinstance(inventory_time_scope, dict):
+        # Preserve the canonical reader's actual query bounds and temporal
+        # limitation while making the LTV slot's boundary semantics explicit.
+        time_scope["fromExclusive"] = (
+            time_range.from_
+            if time_range and time_range.from_ is not None
+            else inventory_time_scope.get("occurredAtFrom")
+        )
+        time_scope["toExclusive"] = (
+            time_range.to
+            if time_range and time_range.to is not None
+            else inventory_time_scope.get("occurredAtTo")
+        )
+        time_scope["historicalState"] = inventory_time_scope.get("historicalState", "unknown")
+
+    base: dict[str, Any] = {
+        "tenantId": request.tenantId,
+        "subject": request.subject.model_dump(),
+        "canonicalAuthority": "canonical_conversions",
+        "canonicalAuthorityRefs": ["canonical_conversions"],
+        "joinBasis": conversion_inventory.get("joinBasis"),
+        "freshness": conversion_inventory.get("freshness")
+        or {"state": "unknown", "reason": "conversion_freshness_threshold_not_configured"},
+        "state": "unknown",
+        "reason": None,
+        "measure": "observed_confirmed_adjusted_net_conversion_value",
+        "amount": None,
+        "currency": None,
+        "amountBasis": None,
+        "observedNetValueByCurrency": {},
+        "eligibleConversionCount": 0,
+        "excludedNonFinalCount": 0,
+        "missingNetValueCount": 0,
+        "undatedConversionCount": 0,
+        "outOfWindowConversionCount": 0,
+        "sourceCompleteness": inventory_completeness,
+        "completeness": "unknown",
+        "coverage": {"knownNetValueCount": 0, "eligibleConversionCount": 0, "ratio": None},
+        "timeScope": time_scope,
+        "evidenceRefs": [],
+        "limitations": [
+            "current_canonical_conversion_rows_are_not_bitemporal",
+            "lifetime_completeness_and_measurement_outcome_linkage_are_unknown",
+            "native_currency_totals_are_never_added_across_currencies",
+        ],
+    }
+    if request.subject.kind == "conversion":
+        return {**base, "reason": "ltv_requires_a_lifecycle_subject_not_a_single_conversion"}
+    if request.subject.kind not in {
+        "profile",
+        "entity",
+        "account",
+        "cluster",
+        "campaign",
+        "journey",
+        "agent",
+    }:
+        return {**base, "reason": "canonical_conversion_subject_join_unavailable_for_ltv"}
+
+    if inventory_state not in {"available", "degraded", "empty"}:
+        return {
+            **base,
+            "state": "missing" if inventory_state == "missing" else "unknown",
+            "reason": inventory_reason or "canonical_conversion_inventory_not_available_for_ltv",
+        }
+    expected_join_basis = _LTV_JOIN_BASIS_BY_SUBJECT_KIND.get(request.subject.kind)
+    if not expected_join_basis or conversion_inventory.get("joinBasis") != expected_join_basis:
+        return {
+            **base,
+            "state": "unknown",
+            "reason": "canonical_conversion_subject_join_unverified_for_ltv",
+        }
+
+    records = conversion_inventory.get("records")
+    if not isinstance(records, list):
+        return {**base, "state": "unknown", "reason": "canonical_conversion_inventory_result_invalid"}
+    if inventory_state == "empty" and not records:
+        return {
+            **base,
+            "state": "empty",
+            "reason": inventory_reason or "no_canonical_conversion_rows_for_exact_subject",
+            "completeness": "unknown",
+        }
+
+    evidence_by_id = {
+        ref.id: ref
+        for ref in _inventory_evidence_refs(conversion_inventory.get("evidenceRefs"))
+    }
+    totals: dict[str, Decimal] = {}
+    eligible_refs: list[EvidenceRef] = []
+    eligible_count = 0
+    excluded_non_final = 0
+    missing_net = 0
+    known_net_count = 0
+    malformed_rows = 0
+    undated_count = 0
+    out_of_window_count = 0
+    seen_ids: set[str] = set()
+    after, after_ok = _inventory_bound(time_range.from_ if time_range else None)
+    before, before_ok = _inventory_bound(time_range.to if time_range else None)
+    if not after_ok or not before_ok or (after is not None and before is not None and after >= before):
+        return {**base, "state": "unknown", "reason": "conversion_inventory_time_range_invalid"}
+    observed_times: list[datetime] = []
+
+    for row in records:
+        if not isinstance(row, dict):
+            malformed_rows += 1
+            continue
+        conversion_id = _inventory_text(row.get("conversionId"), limit=128)
+        if not conversion_id or conversion_id in seen_ids:
+            malformed_rows += 1
+            continue
+        seen_ids.add(conversion_id)
+        ref = evidence_by_id.get(conversion_id)
+        if ref is None:
+            malformed_rows += 1
+            continue
+        status = str(row.get("status") or "").strip().lower()
+        if status not in {"confirmed", "adjusted"}:
+            excluded_non_final += 1
+            continue
+        eligible_count += 1
+        occurred = coerce_utc_lenient(row.get("occurredAt"))
+        if occurred is None:
+            undated_count += 1
+            continue
+        occurred = occurred.astimezone(timezone.utc)
+        if (after is not None and occurred <= after) or (before is not None and occurred >= before):
+            out_of_window_count += 1
+            continue
+        observed_times.append(occurred)
+        record_refs = _inventory_evidence_refs(row.get("evidenceRefs"))
+        if not any(record_ref.id == conversion_id for record_ref in record_refs):
+            # The provider-level inventory validator normally guarantees this;
+            # retain a fail-closed check at the value calculation boundary.
+            malformed_rows += 1
+            continue
+        eligible_refs.append(ref)
+        amount = _inventory_amount(row.get("netValue"))
+        currency = _inventory_text(row.get("currency"), limit=16)
+        if amount is None or currency is None:
+            missing_net += 1
+            continue
+        currency = currency.upper()
+        totals[currency] = totals.get(currency, Decimal("0")) + Decimal(amount)
+        known_net_count += 1
+
+    native_totals = {currency: format(total, "f") for currency, total in sorted(totals.items())}
+    if observed_times:
+        time_scope["observedAtFrom"] = min(observed_times).isoformat()
+        time_scope["observedAtTo"] = max(observed_times).isoformat()
+    state = "available"
+    reason = None
+    source_read_partial = (
+        inventory_state != "available" or inventory_completeness != "complete"
+    )
+    if source_read_partial or malformed_rows or missing_net or undated_count or out_of_window_count:
+        state = "degraded"
+        reason = (
+            str(inventory_reason)
+            if source_read_partial and inventory_reason
+            else "canonical_ltv_conversion_inventory_partial"
+            if source_read_partial
+            else "canonical_ltv_conversion_coverage_partial"
+        )
+    elif eligible_count == 0:
+        state = "empty"
+        reason = "no_confirmed_or_adjusted_conversion_rows_for_ltv"
+    else:
+        # The exact conversion query proves row membership, but not that every
+        # source event in this subject's lifetime has reached the ledger.
+        state = "degraded"
+        reason = "canonical_ltv_lifecycle_coverage_not_proven"
+
+    completeness = (
+        "partial"
+        if state == "degraded"
+        else "unknown"
+        if state == "empty"
+        else inventory_completeness
+    )
+    unique_refs_by_key = {
+        (ref.id, ref.type, ref.source): ref
+        for ref in eligible_refs
+    }
+    unique_refs = list(unique_refs_by_key.values())
+    return {
+        **base,
+        "state": state,
+        "reason": reason,
+        # Current conversion value is evidence for LTV, not a full LTV result.
+        "amount": None,
+        "currency": None,
+        "amountBasis": None,
+        "observedNetValueByCurrency": native_totals,
+        "eligibleConversionCount": eligible_count,
+        "excludedNonFinalCount": excluded_non_final,
+        "missingNetValueCount": missing_net,
+        "undatedConversionCount": undated_count,
+        "outOfWindowConversionCount": out_of_window_count,
+        "sourceCompleteness": inventory_completeness,
+        "completeness": completeness,
+        "coverage": {
+            "knownNetValueCount": known_net_count,
+            "eligibleConversionCount": eligible_count,
+            "ratio": round(known_net_count / eligible_count, 4) if eligible_count else None,
+        },
+        "timeScope": time_scope,
+        "evidenceRefs": [ref.model_dump(mode="json") for ref in unique_refs],
+        "limitations": [
+            *base["limitations"],
+            *(["multiple_native_currencies_prevent_a_single_total"] if len(totals) > 1 else []),
+        ],
+    }
 
 
 def _attribution_evidence_refs(value: Any) -> list[EvidenceRef]:
@@ -2488,6 +2746,7 @@ class Economic360Provider:
             entity_profile_identity_state=entity_profile_identity_state,
         )
         conversion_inventory = await self._safe_conversion_inventory(request)
+        ltv_observation = _value_ltv_observation(request, conversion_inventory)
         attribution_credits = await self._safe_attribution_credits(
             request, conversion_inventory
         )
@@ -2545,6 +2804,7 @@ class Economic360Provider:
                 source_provenance=source_provenance,
                 source_incomplete_reasons=sorted(source_incomplete_reasons),
                 conversion_inventory=conversion_inventory,
+                ltv_observation=ltv_observation,
                 attribution_credits=attribution_credits,
                 value_reconciliation=value_reconciliation,
             ),
@@ -2560,6 +2820,7 @@ class Economic360Provider:
             operation_evidence=operation_evidence,
             entity_profile_verified=entity_profile_verified,
             conversion_inventory=conversion_inventory,
+            ltv_observation=ltv_observation,
             attribution_credits=attribution_credits,
             reconciliation_claims=reconciliation_claims,
         )
@@ -2861,6 +3122,7 @@ class Economic360Provider:
         source_provenance: Optional[list[dict[str, str]]] = None,
         source_incomplete_reasons: Optional[list[str]] = None,
         conversion_inventory: Optional[dict[str, Any]] = None,
+        ltv_observation: Optional[dict[str, Any]] = None,
         attribution_credits: Optional[dict[str, Any]] = None,
         value_reconciliation: Optional[dict[str, Any]] = None,
     ) -> ProjectionSection:
@@ -2887,6 +3149,9 @@ class Economic360Provider:
         conversion_inventory = conversion_inventory or {}
         if conversion_inventory:
             content["conversion_inventory"] = conversion_inventory
+        ltv_observation = ltv_observation or {}
+        if ltv_observation:
+            content["ltv"] = ltv_observation
         attribution_credits = attribution_credits or {}
         if attribution_credits:
             content["attribution_credits"] = attribution_credits
@@ -2905,6 +3170,10 @@ class Economic360Provider:
                     or "canonical_conversion_inventory_partial"
                 )
             )
+        if ltv_observation.get("state") in {"degraded", "missing", "unknown"}:
+            warnings.append(
+                str(ltv_observation.get("reason") or "canonical_ltv_measurement_partial")
+            )
         if attribution_credits.get("state") in {"degraded", "missing"}:
             warnings.append(
                 str(
@@ -2918,6 +3187,7 @@ class Economic360Provider:
                 "degraded"
                 if source_partial
                 or operation_evidence_partial
+                or ltv_observation.get("state") in {"degraded", "missing", "unknown"}
                 or attribution_credits.get("state") in {"degraded", "missing"}
                 else "available"
                 if evidence or operation_evidence
@@ -3112,6 +3382,7 @@ class Economic360Provider:
         operation_evidence: Optional[dict[str, Any]] = None,
         entity_profile_verified: bool = False,
         conversion_inventory: Optional[dict[str, Any]] = None,
+        ltv_observation: Optional[dict[str, Any]] = None,
         attribution_credits: Optional[dict[str, Any]] = None,
         reconciliation_claims: Optional[list[ClaimEnvelope]] = None,
     ) -> list[ClaimEnvelope]:
@@ -3282,6 +3553,47 @@ class Economic360Provider:
                     ],
                 )
             )
+
+        ltv = ltv_observation or {}
+        ltv_refs = _inventory_evidence_refs(ltv.get("evidenceRefs"))
+        observed_totals = ltv.get("observedNetValueByCurrency")
+        if ltv_refs and isinstance(observed_totals, dict) and observed_totals:
+            coverage = ltv.get("coverage") if isinstance(ltv.get("coverage"), dict) else {}
+            known_count = coverage.get("knownNetValueCount", 0)
+            eligible_count = coverage.get("eligibleConversionCount", 0)
+            description = ", ".join(
+                f"{value} {code}"
+                for code, value in sorted(observed_totals.items())
+                if _inventory_text(code, limit=16) and _inventory_amount(value) is not None
+            )
+            if description:
+                claims.append(
+                    ClaimEnvelope(
+                        id=(
+                            "value.ltv.evidence."
+                            + hashlib.sha256(
+                                (
+                                    f"{request.tenantId}:{subject.kind}:{subject.id}:"
+                                    f"{json.dumps(ltv.get('timeScope'), sort_keys=True, default=str)}"
+                                ).encode("utf-8")
+                            ).hexdigest()[:32]
+                        ),
+                        kind="ltv_evidence",
+                        subject=subject,
+                        evidenceRefs=ltv_refs,
+                        claims=[
+                            "observed confirmed/adjusted canonical conversion net values by native currency: "
+                            f"{description}; these are supporting observations, not an LTV amount; "
+                            f"known net-value coverage is {known_count}/{eligible_count} final rows "
+                            "and applies only to this observed subtotal; "
+                            f"conversion inventory completeness is {ltv.get('sourceCompleteness') or 'unknown'}",
+                            "the canonical conversion ledger does not prove complete subject lifecycle coverage; "
+                            "this is not a forecast and is not reported as complete lifetime value",
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=[VALUE_LTV_SLOT_ID, VALUE_EVIDENCE_TRACE_SLOT_ID],
+                    )
+                )
 
         attribution = attribution_credits or {}
         attribution_records = attribution.get("records")

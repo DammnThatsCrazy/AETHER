@@ -94,10 +94,30 @@ class FakeSource:
 
 
 class FakeConversionInventory:
-    def __init__(self, *, state: str, records: list[dict], evidence_refs: list[dict]) -> None:
+    _JOIN_BASIS_BY_SUBJECT_KIND = {
+        "profile": "exact_canonical_profile_conversion_id",
+        "entity": "exact_canonical_profile_conversion_id",
+        "account": "exact_tenant_conversion_account_id",
+        "cluster": "exact_canonical_conversion_cluster_id",
+        "campaign": "canonical_campaign_touchpoint_or_attribution_conversion_join",
+        "journey": "current_tenant_journey_version_conversion_ids",
+        "agent": "validated_agent_identity_exact_conversion_agent_id",
+    }
+
+    def __init__(
+        self,
+        *,
+        state: str,
+        records: list[dict],
+        evidence_refs: list[dict],
+        reason: str | None = None,
+        join_basis: str | None = None,
+    ) -> None:
         self.state = state
         self.records = records
         self.evidence_refs = evidence_refs
+        self.reason = reason
+        self.join_basis = join_basis
         self.calls = 0
 
     async def read(self, request: ProjectionRequest) -> dict:
@@ -107,8 +127,11 @@ class FakeConversionInventory:
             "subject": request.subject.model_dump(),
             "canonicalAuthority": "canonical_conversions",
             "state": self.state,
-            "reason": None,
-            "joinBasis": "exact_canonical_conversion_id",
+            "reason": self.reason,
+            "joinBasis": self.join_basis
+            or self._JOIN_BASIS_BY_SUBJECT_KIND.get(
+                request.subject.kind, "exact_canonical_conversion_id"
+            ),
             "completeness": "complete" if self.state == "available" else "partial",
             "records": self.records,
             "evidenceRefs": self.evidence_refs,
@@ -2380,8 +2403,249 @@ async def test_conversion_inventory_claim_is_exact_and_preserves_native_unknowns
     assert "conversion-1" in {ref.id for ref in claim.evidenceRefs}
 
 
+async def test_value_ltv_uses_exact_confirmed_rows_and_keeps_currency_partitions() -> None:
+    subject = ProjectionSubject(kind="profile", id="profile-1")
+    rows = []
+    refs = []
+    for conversion_id, status, amount, currency in [
+        ("conversion-usd", "confirmed", "18.50", "USD"),
+        ("conversion-eur", "adjusted", "7.25", "EUR"),
+        ("conversion-pending", "pending", "100.00", "USD"),
+    ]:
+        ref = EvidenceRef(
+            id=conversion_id,
+            type="transaction",
+            source="canonical_conversions",
+            uri=f"store://canonical_conversions/{conversion_id}",
+        )
+        refs.append(ref.model_dump(mode="json"))
+        rows.append(
+            {
+                "conversionId": conversion_id,
+                "conversionType": "purchase",
+                "status": status,
+                "occurredAt": "2026-10-19T09:00:00Z",
+                "netValue": amount,
+                "currency": currency,
+                "evidenceRefs": [ref.model_dump(mode="json")],
+            }
+        )
+    inventory = FakeConversionInventory(state="available", records=rows, evidence_refs=refs)
+    result = await Economic360Provider(
+        sources=FakeSource([]), conversion_inventory_reader=inventory
+    ).project(
+        _request(
+            subject=subject,
+            timeRange={"from": "2026-10-01T00:00:00Z", "to": "2026-11-01T00:00:00Z"},
+        ),
+        await _make_context(ProviderRegistry()),
+    )
+
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    ltv = evidence.content["ltv"]
+    claim = next(claim for claim in result.claims if claim.kind == "ltv_evidence")
+    assert ltv["tenantId"] == "tenant-a"
+    assert ltv["subject"] == subject.model_dump()
+    assert ltv["canonicalAuthorityRefs"] == ["canonical_conversions"]
+    assert ltv["state"] == "degraded"
+    assert ltv["amount"] is None
+    assert ltv["currency"] is None
+    assert ltv["amountBasis"] is None
+    assert ltv["observedNetValueByCurrency"] == {"EUR": "7.25", "USD": "18.50"}
+    assert ltv["reason"] == "canonical_ltv_lifecycle_coverage_not_proven"
+    assert ltv["sourceCompleteness"] == "complete"
+    assert ltv["completeness"] == "partial"
+    assert ltv["eligibleConversionCount"] == 2
+    assert ltv["excludedNonFinalCount"] == 1
+    assert ltv["coverage"] == {
+        "knownNetValueCount": 2,
+        "eligibleConversionCount": 2,
+        "ratio": 1.0,
+    }
+    assert ltv["timeScope"]["mode"] == "explicit_occurred_at_window"
+    assert ltv["timeScope"]["fromExclusive"] == "2026-10-01T00:00:00Z"
+    assert ltv["timeScope"]["toExclusive"] == "2026-11-01T00:00:00Z"
+    assert ltv["timeScope"]["lifetimeCompleteness"] == "unknown"
+    assert {ref.id for ref in claim.evidenceRefs} == {"conversion-usd", "conversion-eur"}
+    assert claim.domainSlotIds == ["ltv", "evidence_trace"]
+    assert "not reported as complete lifetime value" in claim.claims[1]
+    assert "not an LTV amount" in claim.claims[0]
+
+
+async def test_value_ltv_does_not_emit_partial_total_when_a_final_row_has_no_net_value() -> None:
+    subject = ProjectionSubject(kind="profile", id="profile-2")
+    evidence_refs = []
+    records = []
+    for conversion_id, net_value in [("known-net", "12.00"), ("unknown-net", None)]:
+        ref = EvidenceRef(
+            id=conversion_id,
+            type="transaction",
+            source="canonical_conversions",
+            uri=f"store://canonical_conversions/{conversion_id}",
+        )
+        evidence_refs.append(ref.model_dump(mode="json"))
+        records.append(
+            {
+                "conversionId": conversion_id,
+                "status": "confirmed",
+                "occurredAt": "2026-10-19T09:00:00Z",
+                "netValue": net_value,
+                "currency": "USD",
+                "evidenceRefs": [ref.model_dump(mode="json")],
+            }
+        )
+    inventory = FakeConversionInventory(
+        state="available", records=records, evidence_refs=evidence_refs
+    )
+    result = await Economic360Provider(
+        sources=FakeSource([]), conversion_inventory_reader=inventory
+    ).project(
+        _request(subject=subject),
+        await _make_context(ProviderRegistry()),
+    )
+
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    ltv = evidence.content["ltv"]
+    assert evidence.state == "degraded"
+    assert ltv["state"] == "degraded"
+    assert ltv["amount"] is None
+    assert ltv["currency"] is None
+    assert ltv["observedNetValueByCurrency"] == {"USD": "12.00"}
+    assert ltv["missingNetValueCount"] == 1
+    assert ltv["coverage"] == {
+        "knownNetValueCount": 1,
+        "eligibleConversionCount": 2,
+        "ratio": 0.5,
+    }
+    assert "canonical_ltv_conversion_coverage_partial" in evidence.warnings
+
+
+async def test_value_ltv_empty_inventory_preserves_absence_as_unknown_amount_not_zero() -> None:
+    subject = ProjectionSubject(kind="profile", id="profile-3")
+    inventory = FakeConversionInventory(state="empty", records=[], evidence_refs=[])
+    result = await Economic360Provider(
+        sources=FakeSource([]), conversion_inventory_reader=inventory
+    ).project(
+        _request(subject=subject),
+        await _make_context(ProviderRegistry()),
+    )
+
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    ltv = evidence.content["ltv"]
+    assert ltv["state"] == "empty"
+    assert ltv["amount"] is None
+    assert ltv["currency"] is None
+    assert ltv["observedNetValueByCurrency"] == {}
+    assert ltv["reason"] == "no_canonical_conversion_rows_for_exact_subject"
+    assert not any(claim.kind == "ltv_evidence" for claim in result.claims)
+
+
+async def test_value_ltv_missing_inventory_stays_missing_with_no_evidence_claim() -> None:
+    subject = ProjectionSubject(kind="profile", id="profile-missing")
+    inventory = FakeConversionInventory(state="missing", records=[], evidence_refs=[])
+    result = await Economic360Provider(
+        sources=FakeSource([]), conversion_inventory_reader=inventory
+    ).project(
+        _request(subject=subject),
+        await _make_context(ProviderRegistry()),
+    )
+
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    ltv = evidence.content["ltv"]
+    assert ltv["state"] == "missing"
+    assert ltv["amount"] is None
+    assert ltv["observedNetValueByCurrency"] == {}
+    assert ltv["evidenceRefs"] == []
+    assert not any(claim.kind == "ltv_evidence" for claim in result.claims)
+
+
+async def test_value_ltv_keeps_bounded_inventory_partial_and_suppresses_scalar() -> None:
+    subject = ProjectionSubject(kind="profile", id="profile-bounded")
+    ref = EvidenceRef(
+        id="conversion-first-page",
+        type="transaction",
+        source="canonical_conversions",
+        uri="store://canonical_conversions/conversion-first-page",
+    )
+    inventory = FakeConversionInventory(
+        state="degraded",
+        records=[
+            {
+                "conversionId": "conversion-first-page",
+                "status": "confirmed",
+                "occurredAt": "2026-10-19T09:00:00Z",
+                "netValue": "21.00",
+                "currency": "USD",
+                "evidenceRefs": [ref.model_dump(mode="json")],
+            }
+        ],
+        evidence_refs=[ref.model_dump(mode="json")],
+        reason="canonical_conversion_inventory_truncated",
+    )
+    result = await Economic360Provider(
+        sources=FakeSource([]), conversion_inventory_reader=inventory
+    ).project(
+        _request(subject=subject),
+        await _make_context(ProviderRegistry()),
+    )
+
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    ltv = evidence.content["ltv"]
+    claim = next(claim for claim in result.claims if claim.kind == "ltv_evidence")
+    assert ltv["state"] == "degraded"
+    assert ltv["reason"] == "canonical_conversion_inventory_truncated"
+    assert ltv["sourceCompleteness"] == "partial"
+    assert ltv["completeness"] == "partial"
+    assert ltv["amount"] is None
+    assert ltv["observedNetValueByCurrency"] == {"USD": "21.00"}
+    assert [evidence_ref["id"] for evidence_ref in ltv["evidenceRefs"]] == [
+        "conversion-first-page"
+    ]
+    assert "known net-value coverage is 1/1" in claim.claims[0]
+    assert "completeness is partial" in claim.claims[0]
+
+
+async def test_value_ltv_rejects_a_noncanonical_subject_join_basis() -> None:
+    subject = ProjectionSubject(kind="profile", id="profile-wrong-join")
+    ref = EvidenceRef(
+        id="conversion-wrong-join",
+        type="transaction",
+        source="canonical_conversions",
+        uri="store://canonical_conversions/conversion-wrong-join",
+    )
+    inventory = FakeConversionInventory(
+        state="available",
+        records=[
+            {
+                "conversionId": "conversion-wrong-join",
+                "status": "confirmed",
+                "occurredAt": "2026-10-19T09:00:00Z",
+                "netValue": "9.00",
+                "currency": "USD",
+                "evidenceRefs": [ref.model_dump(mode="json")],
+            }
+        ],
+        evidence_refs=[ref.model_dump(mode="json")],
+        join_basis="exact_canonical_conversion_id",
+    )
+    result = await Economic360Provider(
+        sources=FakeSource([]), conversion_inventory_reader=inventory
+    ).project(
+        _request(subject=subject),
+        await _make_context(ProviderRegistry()),
+    )
+
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    ltv = evidence.content["ltv"]
+    assert ltv["state"] == "unknown"
+    assert ltv["reason"] == "canonical_conversion_subject_join_unverified_for_ltv"
+    assert ltv["evidenceRefs"] == []
+    assert ltv["observedNetValueByCurrency"] == {}
+    assert not any(claim.kind == "ltv_evidence" for claim in result.claims)
+
+
 async def test_conversion_inventory_rejects_evidence_outside_canonical_conversion_authority() -> None:
-    subject = ProjectionSubject(kind="conversion", id="conversion-1")
+    subject = ProjectionSubject(kind="profile", id="profile-evidence-gate")
     foreign_ref = EvidenceRef(
         id="conversion-1",
         type="transaction",
@@ -2409,6 +2673,12 @@ async def test_conversion_inventory_rejects_evidence_outside_canonical_conversio
     assert payload["records"] == []
     assert payload["evidenceRefs"] == []
     assert not any(claim.kind == "canonical_conversion_inventory" for claim in result.claims)
+    ltv = evidence.content["ltv"]
+    assert ltv["state"] == "degraded"
+    assert ltv["amount"] is None
+    assert ltv["observedNetValueByCurrency"] == {}
+    assert ltv["evidenceRefs"] == []
+    assert not any(claim.kind == "ltv_evidence" for claim in result.claims)
 
 
 async def test_conversion_inventory_as_of_request_fails_closed_before_reader() -> None:

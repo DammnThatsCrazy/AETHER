@@ -2185,11 +2185,12 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "authorityGapReason": "exact_subject_authority_join_not_implemented",
+                "authorityGapReason": "agent360_nested_risk_read_fails_closed_until_frame_runtime_forwards_exact_slot_and_capability_authorization",
                 "canonicalAuthorityRefs": ("agent_entities", "identity", "relationship_facts", "risk_outputs", "social_observations"),
                 "description": "Required Agent 360 blueprint slot: risk summary.",
                 "id": "risk_summary",
                 "implementationCrosswalk": ("risk_and_contagion",),
+                "partialImplementationReason": "Canonical Risk360 evidence requires resolved Agent identity and an affirmative current analytics receipt. The nested Agent360 read remains suppressed until frame runtime forwards the risk_summary and risk360.read decisions; Agent-specific freshness, historical replay, and causal contagion remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "risk360",
@@ -3353,10 +3354,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             },
             {
                 "canonicalAuthorityRefs": ("agent_executions", "execution_facts", "risk_signals"),
-                "description": "Recorded Risk360 signals joined to exact tenant-scoped executions admitted by lifecycle; producer coverage and freshness threshold remain unknown.",
+                "description": "Current recorded RiskSignals joined to exact tenant-scoped executions admitted by lifecycle; producer coverage and assessment snapshots are not read.",
                 "id": "risk_events",
                 "implementationCrosswalk": ("execution_identity_and_state",),
-                "partialImplementationReason": "only_existing_execution_subject_risk_signals_joined_to_admitted_lifecycle_executions_producer_coverage_and_freshness_threshold_unknown",
+                "partialImplementationReason": "only_existing_execution_subject_risk_signals_joined_to_admitted_lifecycle_executions_producer_coverage_risk_assessments_and_freshness_threshold_unknown_signals_are_not_causal",
                 "projectionBindings": [
                     {
                         "projectionId": "execution360",
@@ -5880,12 +5881,19 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "unboundReason": "financial_risk_value_join_not_connected"
             },
             {
-                "canonicalAuthorityRefs": ("economic_facts", "outcome_facts"),
-                "description": "Lifetime value over a defined subject and temporal window.",
+                "canonicalAuthorityRefs": ("canonical_conversions", "evidence"),
+                "description": "Evidence-backed confirmed or adjusted canonical conversion net value over a defined subject and temporal scope; full lifetime coverage remains unknown and native currencies stay partitioned.",
                 "id": "ltv",
-                "projectionBindings": [],
-                "requirement": "required",
-                "unboundReason": "canonical_ltv_measurement_authority_not_available"
+                "partialImplementationReason": "Exact evidence-backed confirmed_or_adjusted conversion net values are reported only for the canonical rows returned; lifetime and historical completeness, outcome attribution, and freshness remain unknown, missing net values degrade the slot, and native currency totals are not combined.",
+                "projectionBindings": [
+                    {
+                        "projectionId": "economic360",
+                        "role": "primary",
+                        "subjectKinds": ("account", "agent", "campaign", "cluster", "entity", "journey", "profile"),
+                        "sectionIds": ("evidence",)
+                    }
+                ],
+                "requirement": "required"
             },
             {
                 "id": "measured_outcomes",

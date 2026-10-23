@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from types import SimpleNamespace
 from uuid import uuid4
 from pathlib import Path
 
@@ -38,10 +39,13 @@ from shared.intelligence_projections import (  # noqa: E402
     ProjectionSubject,
 )
 from shared.intelligence_projections.contracts import (  # noqa: E402
+    ClaimEnvelope,
     Experience360FrameRequest,
     Experience360PolicyDisposition,
     Experience360PolicyEvaluation,
+    ProjectionSection,
 )
+from graph.operational_intelligence.models import EvidenceRef  # noqa: E402
 from shared.intelligence_projections.composition import compose_experience360_frame  # noqa: E402
 from shared.intelligence_projections.frame_runtime import build_experience360_frame  # noqa: E402
 
@@ -95,6 +99,8 @@ class FakeSource:
         self.party_identity_subjects: list[set[str]] = []
         self.owner_relationship_subjects: list[tuple[str, str]] = []
         self.capability_subjects: list[str] = []
+        self.risk_summary_calls: list[tuple[str, str, str, int]] = []
+        self.risk_signal_calls = 0
 
     async def _rows(self, name: str, rows: list[dict]) -> list[dict]:
         self.calls += 1
@@ -353,6 +359,7 @@ class FakeSource:
         return Agent360ReadBatch(rows=rows)
 
     async def risk_signals(self, tenant_id, agent_id, limit):
+        self.risk_signal_calls += 1
         return await self._rows(
             "risks",
             [
@@ -366,6 +373,75 @@ class FakeSource:
                     "detected_at": "2026-10-05T00:00:00Z",
                 }
             ],
+        )
+
+    async def canonical_risk_summary(
+        self, tenant_id, agent_id, canonical_agent_entity_id, limit
+    ):
+        self.risk_summary_calls.append(
+            (tenant_id, agent_id, canonical_agent_entity_id, limit)
+        )
+        if self.empty:
+            return Agent360ReadBatch(rows=[])
+        return Agent360ReadBatch(
+            rows=[
+                {
+                    "tenant_id": tenant_id,
+                    "agent_id": agent_id,
+                    "canonical_agent_entity_id": canonical_agent_entity_id,
+                    "subject_kind": "agent",
+                    "subject_id": canonical_agent_entity_id,
+                    "state": "partial",
+                    "reason": "canonical_risk360_evidence_available_agent_freshness_unassessed",
+                    "summary": {
+                        "tenantId": tenant_id,
+                        "subject": {"kind": "agent", "id": canonical_agent_entity_id},
+                        "riskLevel": "medium",
+                    },
+                    "dimension_states": [{"dimension": "agentic", "state": "observed"}],
+                    "assessment_coverage": {"state": "available"},
+                    "assessment_section_state": "available",
+                    "risk_state_section_state": "available",
+                    "freshness": {"state": "not_assessed", "slaSeconds": None},
+                    "evidence_refs": [
+                        {
+                            "id": "canonical-risk-evidence-1",
+                            "type": "event",
+                            "source": "risk_assessments",
+                            "observedAt": "2026-10-05T00:00:00Z",
+                        }
+                    ],
+                    "consent_evidence_ref": {
+                        "id": "consent-receipt-1",
+                        "type": "event",
+                        "source": "governance.consent.authority",
+                        "observedAt": "2026-10-06T00:00:00Z",
+                        "uri": "store://consent_receipts/consent-receipt-1",
+                    },
+                    "claims": [
+                        ClaimEnvelope(
+                            id="risk-claim-1",
+                            kind="canonical_agent_risk_assessment",
+                            subject=ProjectionSubject(
+                                kind="agent", id=canonical_agent_entity_id
+                            ),
+                            evidenceRefs=[
+                                EvidenceRef(
+                                    id="canonical-risk-evidence-1",
+                                    type="event",
+                                    source="risk_assessments",
+                                )
+                            ],
+                            claims=["Canonical risk assessment evidence is available."],
+                            claimState=EpistemicStatus.OBSERVED,
+                            domainSlotIds=["risk_summary"],
+                        )
+                    ],
+                    "contagion_state": "unknown",
+                    "contagion_reason": "Risk360 does not establish causal social or financial contagion",
+                    "canonical_authorities": ["risk_assessments", "risk_signals"],
+                }
+            ]
         )
 
     async def agentic_provenance(self, tenant_id, agent_id, queries, limit):
@@ -405,6 +481,291 @@ class FakeSource:
 
 def _sections(result):
     return {section.id: section for section in result.sections}
+
+
+@pytest.mark.asyncio
+async def test_agent360_risk_summary_requires_exact_outer_slot_authority_before_read():
+    source = FakeSource()
+    authorization_calls = []
+
+    async def authorize(**kwargs):
+        authorization_calls.append(kwargs)
+        return True
+
+    result = await Agent360Provider(
+        source, risk_slot_authorizer=authorize
+    ).project(_request(), _context())
+    risk_dimension = next(
+        dimension
+        for dimension in _sections(result)["state"].content["dimensions"]
+        if dimension["id"] == "risk_and_contagion"
+    )
+    risk_summary = risk_dimension["content"]["riskAssessment"]
+
+    assert authorization_calls == [
+        {
+            "tenant_id": TENANT,
+            "request_subject": ProjectionSubject(kind="agent", id=AGENT),
+            "canonical_agent_entity_id": "canonical-agent-a",
+            "slot_id": "risk_summary",
+            "capability": "risk360.read",
+        }
+    ]
+    assert source.risk_summary_calls == [(TENANT, AGENT, "canonical-agent-a", 10)]
+    assert source.risk_signal_calls == 0
+    assert risk_summary["state"] == "partial"
+    assert risk_summary["subject"] == {"kind": "agent", "id": "canonical-agent-a"}
+    assert {
+        (ref["source"], ref["id"]) for ref in risk_summary["evidenceRefs"]
+    } >= {
+        ("risk_assessments", "canonical-risk-evidence-1"),
+        ("governance.consent.authority", "consent-receipt-1"),
+        ("agent_deployment_identity_bindings", "binding-agent-a"),
+    }
+    claim = next(
+        claim for claim in result.claims if claim.kind == "canonical_agent_risk_assessment"
+    )
+    assert claim.subject.id == "canonical-agent-a"
+    assert claim.domainSlotIds == ["risk_summary"]
+
+
+@pytest.mark.asyncio
+async def test_agent360_risk_summary_fails_closed_without_outer_slot_authority():
+    source = FakeSource()
+    result = await Agent360Provider(source).project(_request(), _context())
+    risk_dimension = next(
+        dimension
+        for dimension in _sections(result)["state"].content["dimensions"]
+        if dimension["id"] == "risk_and_contagion"
+    )
+
+    assert source.risk_summary_calls == []
+    assert source.risk_signal_calls == 0
+    assert risk_dimension["content"]["riskAssessment"]["state"] == "suppressed"
+    assert not any(claim.domainSlotIds == ["risk_summary"] for claim in result.claims)
+
+
+@pytest.mark.asyncio
+async def test_agent360_risk_summary_denial_prevents_nested_risk360_source_read():
+    source = FakeSource()
+    authorization_calls = []
+
+    async def deny(**kwargs):
+        authorization_calls.append(kwargs)
+        return False
+
+    result = await Agent360Provider(source, risk_slot_authorizer=deny).project(
+        _request(), _context()
+    )
+    risk_dimension = next(
+        dimension
+        for dimension in _sections(result)["state"].content["dimensions"]
+        if dimension["id"] == "risk_and_contagion"
+    )
+
+    assert len(authorization_calls) == 1
+    assert authorization_calls[0]["slot_id"] == "risk_summary"
+    assert authorization_calls[0]["capability"] == "risk360.read"
+    assert source.risk_summary_calls == []
+    assert source.risk_signal_calls == 0
+    assert risk_dimension["content"]["riskAssessment"]["state"] == "suppressed"
+
+
+@pytest.mark.asyncio
+async def test_agent360_risk_summary_skips_nested_read_when_identity_is_unresolved():
+    source = FakeSource(empty=True)
+    authorization_calls = []
+
+    async def authorize(**kwargs):
+        authorization_calls.append(kwargs)
+        return True
+
+    result = await Agent360Provider(
+        source, risk_slot_authorizer=authorize
+    ).project(_request(), _context())
+    risk_dimension = next(
+        dimension
+        for dimension in _sections(result)["state"].content["dimensions"]
+        if dimension["id"] == "risk_and_contagion"
+    )
+
+    assert authorization_calls == []
+    assert source.risk_summary_calls == []
+    assert source.risk_signal_calls == 0
+    assert risk_dimension["content"]["riskAssessment"]["state"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_agent360_risk_summary_rejects_cross_tenant_rows_and_claims():
+    class CrossTenantRiskSource(FakeSource):
+        async def canonical_risk_summary(
+            self, tenant_id, agent_id, canonical_agent_entity_id, limit
+        ):
+            batch = await super().canonical_risk_summary(
+                tenant_id, agent_id, canonical_agent_entity_id, limit
+            )
+            return Agent360ReadBatch(
+                rows=[{**batch.rows[0], "tenant_id": "other-tenant"}]
+            )
+
+    async def authorize(**kwargs):
+        return True
+
+    source = CrossTenantRiskSource()
+    result = await Agent360Provider(
+        source, risk_slot_authorizer=authorize
+    ).project(_request(), _context())
+    risk_dimension = next(
+        dimension
+        for dimension in _sections(result)["state"].content["dimensions"]
+        if dimension["id"] == "risk_and_contagion"
+    )
+
+    assert risk_dimension["content"]["riskAssessment"]["state"] == "degraded"
+    assert "risk_summary_scope_mismatch" in _sections(result)["summary"].warnings
+    assert not any(claim.domainSlotIds == ["risk_summary"] for claim in result.claims)
+
+
+@pytest.mark.asyncio
+async def test_repository_risk360_read_requires_current_consent_and_exact_canonical_subject():
+    class Consent:
+        allowed = True
+        receipt_id = "server-consent-9"
+
+    class RiskProvider:
+        def __init__(self):
+            self.calls = []
+
+        async def project(self, request, context):
+            self.calls.append((request, context))
+            evidence_ref = EvidenceRef(
+                id="risk-assessment-9",
+                type="event",
+                source="risk_assessments",
+                observedAt="2026-10-05T00:00:00Z",
+            )
+            claim = ClaimEnvelope(
+                id="risk-claim-9",
+                kind="canonical_agent_risk_assessment",
+                subject=ProjectionSubject(kind="agent", id="canonical-agent-a"),
+                evidenceRefs=[evidence_ref],
+                claims=["Canonical Risk360 assessment evidence is available."],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=["risk_summary"],
+            )
+            sections = [
+                ProjectionSection(
+                    id="summary",
+                    state="available",
+                    content={
+                        "tenantId": TENANT,
+                        "subject": {"kind": "agent", "id": "canonical-agent-a"},
+                        "riskLevel": "medium",
+                    },
+                ),
+                ProjectionSection(
+                    id="state",
+                    state="available",
+                    content={
+                        "tenantId": TENANT,
+                        "subject": {"kind": "agent", "id": "canonical-agent-a"},
+                        "dimensionStates": [{"dimension": "agentic", "state": "observed"}],
+                    },
+                ),
+                ProjectionSection(
+                    id="evidence",
+                    state="available",
+                    content={"tenantId": TENANT, "evidence": [evidence_ref.model_dump(mode="json")]},
+                ),
+                ProjectionSection(
+                    id="findings",
+                    state="available",
+                    content={
+                        "tenantId": TENANT,
+                        "subject": {"kind": "agent", "id": "canonical-agent-a"},
+                        "requiredSlotCoverage": {
+                            "risk_summary": {"state": "available"}
+                        },
+                    },
+                ),
+            ]
+            return SimpleNamespace(
+                projectionId="risk360",
+                tenantId=TENANT,
+                sections=sections,
+                claims=[claim],
+            )
+
+    consent_calls = []
+
+    async def consent_reader(**kwargs):
+        consent_calls.append(kwargs)
+        return Consent()
+
+    risk_provider = RiskProvider()
+    source = RepositoryAgent360Source.__new__(RepositoryAgent360Source)
+    source._risk_consent_reader = consent_reader
+    source._risk360_provider = risk_provider
+
+    batch = await source.canonical_risk_summary(
+        TENANT, AGENT, "canonical-agent-a", limit=999
+    )
+
+    assert consent_calls == [
+        {
+            "tenant_id": TENANT,
+            "subject_id": "canonical-agent-a",
+            "anonymous_id": None,
+            "purpose": "analytics",
+        }
+    ]
+    assert len(risk_provider.calls) == 1
+    request, context = risk_provider.calls[0]
+    assert request.projectionId == "risk360"
+    assert request.tenantId == TENANT
+    assert request.subject == ProjectionSubject(kind="agent", id="canonical-agent-a")
+    assert request.page.limit == 200
+    assert context.tenantId == TENANT
+    assert batch.rows[0]["state"] == "partial"
+    assert batch.rows[0]["consent_evidence_ref"]["id"] == "server-consent-9"
+    assert batch.rows[0]["claims"][0].subject.id == "canonical-agent-a"
+
+
+@pytest.mark.asyncio
+async def test_repository_risk360_read_does_not_run_when_consent_is_denied():
+    class ConsentDenied:
+        allowed = False
+        receipt_id = None
+
+    class RiskProvider:
+        async def project(self, request, context):
+            raise AssertionError("Risk360 must not run without affirmative consent")
+
+    consent_calls = []
+
+    async def consent_reader(**kwargs):
+        consent_calls.append(kwargs)
+        return ConsentDenied()
+
+    source = RepositoryAgent360Source.__new__(RepositoryAgent360Source)
+    source._risk_consent_reader = consent_reader
+    source._risk360_provider = RiskProvider()
+
+    batch = await source.canonical_risk_summary(
+        TENANT, AGENT, "canonical-agent-a", limit=10
+    )
+
+    assert consent_calls == [
+        {
+            "tenant_id": TENANT,
+            "subject_id": "canonical-agent-a",
+            "anonymous_id": None,
+            "purpose": "analytics",
+        }
+    ]
+    assert batch.rows[0]["state"] == "suppressed"
+    assert "consent_evidence_ref" not in batch.rows[0]
+    assert "claims" not in batch.rows[0]
 
 
 @pytest.mark.asyncio
@@ -1442,13 +1803,14 @@ async def test_agent360_evidence_trace_joins_exact_bronze_lineage_and_keeps_unkn
                 )
             return Agent360ReadBatch(rows=rows)
 
-    result = await Agent360Provider(ExactProvenanceSource()).project(_request(), _context())
+    source = ExactProvenanceSource()
+    result = await Agent360Provider(source).project(_request(), _context())
     evidence = _sections(result)["evidence"].content
     source_provenance = evidence["sourceProvenance"]
 
     assert source_provenance["state"] == "partial"
     assert source_provenance["lineageState"] == "verified"
-    assert source_provenance["exactBronzeLinks"] == 3
+    assert source_provenance["exactBronzeLinks"] == 2
     assert source_provenance["unresolvedLinks"] == 0
     assert source_provenance["sourceIdentityState"] == "unresolved"
     assert source_provenance["sourceTrust"] == "unknown"
@@ -1460,8 +1822,8 @@ async def test_agent360_evidence_trace_joins_exact_bronze_lineage_and_keeps_unkn
     assert {ref["id"] for ref in evidence["evidence"] if ref["source"] == "bronze_sdk_events"} == {
         "bronze-activity-1",
         "bronze-tool-1",
-        "bronze-risk-1",
     }
+    assert source.risk_signal_calls == 0
     assert all(record["source_id"] is None for record in source_provenance["records"])
     assert all(
         record["freshness_state"] == "not_assessed"
@@ -2183,7 +2545,7 @@ async def test_agent360_keeps_unobserved_agent_unknown_and_reports_real_empty_re
     assert sections["summary"].state == "unknown"
     assert sections["summary"].content["identity"]["state"] == "unknown"
     assert sections["summary"].content["counts"]["executions"] == 0
-    assert sections["summary"].content["counts"]["riskSignals"] == 0
+    assert sections["summary"].content["counts"]["riskSignals"] is None
     assert sections["summary"].content["counts"]["communicationMessages"] == 0
     assert sections["timeline"].state == "empty"
     assert sections["timeline"].content["count"] == 0

@@ -73,9 +73,9 @@ source_hashes:
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
-  "services/api/intelligence/risk360/provider.py": "sha256:cbeab3b7d18fca2a9f8f35ad40ebd620e9099b8e6285837ef069c20d6a6b40c5"
+  "services/api/intelligence/risk360/provider.py": "sha256:eba14f9c045f33546133544c86ba27f074b7970ee47a332a58a0da25c3a9732d"
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:1e7dd60cc1a3ea528d9738885f04d7c6712e200622d11c3db518f91e43ceb2d3"
-  "services/api/journeys/communication360/provider.py": "sha256:c29df50c2d8b96af3dc3546476c15e563046ff6c02a8b656af1565b565296fa6"
+  "services/api/journeys/communication360/provider.py": "sha256:916e154d60723d687221bc2e0183d5aee672ed9b62db755c5d4cc7c939dd0fe6"
   "services/api/main.py": "sha256:fa7455e5dd5a1e6b6b2ac25cc3ce6fc8a09d8bcf5b242b500feb0b797ab2d7b7"
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
@@ -84,6 +84,8 @@ source_hashes:
   "services/api/repositories/repos.py": "sha256:2deaf337debdc8fc0fa1585901e1a736e2a269b967d0091bba4d0d7d8369d19f"
   "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:95a0255a37d99b96243b2a51a6d9465a4740f072963fc5d6565b16a77d454a3d"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
+  "services/api/value/economic/economic360_provider.py": "sha256:5c2f451c5aca56f2e429fdd250d5723f8bf25919b52ff110cbc90eeb6f856639"
+  "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
 # Aether vNext — Architecture Guide
 
@@ -783,6 +785,22 @@ delegation path into typed edges only when both records and all party identities
 have exact evidence. This describes current observed records; it does not infer
 transitive authority or effective authorization. All these additions are
 partial slot paths and leave the 18-surface buildout incomplete.
+
+The latest provider slice adds three evidence-bounded paths. Agent360's
+`risk_summary` no longer reads raw `obs_agent_risk_signals`; its canonical
+Risk360 path checks exact Agent scope, current analytics consent with a receipt,
+and claim/evidence lineage. The product slot also has a separate Risk360
+projection binding evaluated through the frame slot gate. The Agent360
+provider's nested reader requires an explicit `risk_summary` and `risk360.read`
+authorization decision that the frame runtime does not yet pass, so that nested
+read remains suppressed by default. Agent-specific freshness, historical replay,
+and causal contagion remain unknown. Execution360's `risk_events` now declares
+producer and RiskAssessment coverage unknown because it joins current,
+execution-scoped RiskSignals rather than assessment snapshots; the signals do
+not prove causality. Value360's `ltv` slot exposes evidenced confirmed or
+adjusted conversion net-value observations by native currency for exact
+supported subjects and occurred-at scope. It does not emit an LTV amount while
+lifecycle completeness, outcome attribution, and freshness remain unknown.
 
 Exploration surfaces compose over the engine through projection-backed surface adapters
 

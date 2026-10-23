@@ -2097,6 +2097,24 @@ It does not infer transitive authority or an effective authorization decision.
 These provider joins add no new HTTP endpoints and do not complete their
 surfaces or the full 18-surface contract.
 
+The latest provider slice adds Agent360 `risk_summary`, Execution360
+`risk_events`, and Value360 `ltv` evidence without adding routes. Agent360 no
+longer reads raw `obs_agent_risk_signals`; its canonical Risk360 reader checks
+exact canonical Agent scope, current analytics consent with a receipt, and
+Risk360 claim/evidence scope. The product frame's separate Risk360 binding is
+subject to the normal slot gate. Agent360's nested reader also requires an
+explicit slot and `risk360.read` authorization decision that the runtime does
+not yet forward, so that nested provider path stays suppressed by default.
+Agent-specific freshness, historical replay, and contagion remain unknown.
+Execution360 now exposes producer coverage and RiskAssessment snapshot coverage
+as unknown because `risk_events` reads bounded, current RiskSignals joined to
+exact admitted execution IDs; it does not establish causality. Value360's `ltv`
+slot reports only evidenced confirmed/adjusted canonical conversion net-value
+observations by native currency and occurred-at scope. The scalar LTV amount
+stays null because lifetime completeness, outcome attribution, and freshness
+are unproved; missing net values degrade coverage and absent rows do not mean
+zero.
+
 ### Support case lifecycle evidence ingress
 
 `POST /v1/support/cases/ingest` accepts one allow-listed lifecycle event under

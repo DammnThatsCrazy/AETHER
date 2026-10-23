@@ -11,7 +11,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:e37a799f07e9f8d12c7b1642efcc065fc870a77c4b42cb35c46d1f4ceb8a8dbd"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:ea4a7487ff45ae4d994480036ee4319ea01e35b8ab20c84eaef5629d938f116b"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:540f85292689337edc329c9b72b7c4f99487226a5e31aab6526c878e7ea36eeb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -39,7 +39,7 @@ source_hashes:
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:eefcfa3b35c8ff888be7141bcf91d2bfe08399a17b986b09abb9cafac41566b8"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
-  "services/api/value/economic/economic360_provider.py": "sha256:88bb8a18737c9b7769dfc3fb52f455bea67f15bc613013be3ff44fed44140e86"
+  "services/api/value/economic/economic360_provider.py": "sha256:5c2f451c5aca56f2e429fdd250d5723f8bf25919b52ff110cbc90eeb6f856639"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
   "services/api/value/x402/": "sha256:49f3660ba1468f6481b067fcd46ad230199aee60d7e7316ba57b7c69c368c4a9"
   "services/api/workers/runtime/specs.py": "sha256:b86659249b2f805b3ba81631c57e71ca57be089de07278fedccbe25b576df64b"
@@ -117,8 +117,14 @@ request is authorized. Its
 `policy_boundary` section now carries historical, action-scoped server
 decisions when observed while keeping effective policy unknown; it does not
 expose a standing policy snapshot. Its `risk_summary` composes canonical
-Risk360 evidence with exact slot attribution and does not compute a local risk
-score. Its `spawned_agents` slot reads only outgoing `SPAWNED_SUBAGENT` graph
+Risk360 evidence under the product frame's risk-summary binding and does not
+compute a local risk score. Agent360 no longer reads raw `obs_agent_risk_signals`
+for this slot. Its provider-level nested Risk360 reader requires exact Agent
+identity, a current analytics-consent receipt, evidence lineage, and an
+explicit `risk_summary` plus `risk360.read` authorization decision; the frame
+runtime does not yet forward that decision, so this nested read remains
+suppressed by default. Agent-specific freshness, historical replay, and causal
+contagion remain unknown. Its `spawned_agents` slot reads only outgoing `SPAWNED_SUBAGENT` graph
 ledger evidence through Relationship360. No observed edge is unknown rather
 than empty, and any observed edge remains degraded because the ledger has no
 completeness watermark. Account360's `communications` slot can now consume
@@ -150,9 +156,10 @@ action authorization or delegation authority.
 Its `risk_events` slot now joins canonical RiskSignals only to exact execution
 IDs admitted by tenant server lifecycle records. Signal evidence is recorded
 risk context, not proof that the execution caused the signal or a complete risk
-assessment; producer coverage and freshness thresholds remain unknown. The
-agentic risk-signal compute/store producer described in Bucket 4 is still
-missing. Agentic fraud-network detections are separately persisted to Risk360
+assessment; explicit producer coverage and RiskAssessment snapshot coverage
+remain unknown, as do freshness thresholds. The agentic risk-signal
+compute/store producer described in Bucket 4 is still missing. Agentic
+fraud-network detections are separately persisted to Risk360
 only after a unique tenant-owned Agent binding is resolved and its valid,
 timezone-aware binding timestamp is no later than the detector observation;
 missing, conflicting, malformed, or future timestamps cause omission. This
@@ -262,6 +269,14 @@ does not. Agent360's typed two-edge delegation view requires one complete,
 continuous path with exact records and canonical party evidence. The view does
 not establish transitive authority, effective authorization, or permission to
 execute. These are partial backend paths and do not complete the 18 surfaces.
+
+The 2026-10-23 provider slice also adds Value360 `ltv` evidence over exact
+subject-linked canonical conversions. Only confirmed or adjusted rows with
+occurred-at values inside the requested strict window contribute to native
+currency subtotals; every row must retain canonical conversion evidence. The
+slot never reports a scalar LTV amount because lifetime completeness, outcome
+attribution, and freshness are unproved. Missing net values reduce reported
+coverage, and absent rows remain empty rather than being treated as zero.
 
 ## Bucket 1 — Correctly observation-only
 

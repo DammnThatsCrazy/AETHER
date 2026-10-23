@@ -1117,6 +1117,16 @@ async def test_tool_telemetry_remains_unlinked_from_server_execution_without_exa
         "sourceReadState": "available",
         "completeness": "recorded_execution_subject_signals_only",
         "scopeKnown": True,
+        "producerCoverage": {
+            "state": "unknown",
+            "reason": "execution_risk_signal_producer_inventory_not_connected",
+        },
+        "riskAssessmentCoverage": {
+            "state": "unknown",
+            "sourceReadState": "not_read",
+            "authority": "risk_assessments",
+            "reason": "execution_risk_events_slot_reads_risk_signals_not_assessment_snapshots",
+        },
         "joinedExecutionRiskEvents": [],
         "evidenceRefs": [],
         "freshness": {
@@ -2712,6 +2722,16 @@ async def test_execution_subject_joins_canonical_risk_signal_with_evidence() -> 
     linkage = interactions.content["riskEventLinkage"]
     assert linkage["state"] == "partial"
     assert linkage["completeness"] == "recorded_execution_subject_signals_only"
+    assert linkage["producerCoverage"] == {
+        "state": "unknown",
+        "reason": "execution_risk_signal_producer_inventory_not_connected",
+    }
+    assert linkage["riskAssessmentCoverage"] == {
+        "state": "unknown",
+        "sourceReadState": "not_read",
+        "authority": "risk_assessments",
+        "reason": "execution_risk_events_slot_reads_risk_signals_not_assessment_snapshots",
+    }
     assert linkage["joinedExecutionRiskEvents"] == [
         {
             "executionId": "exec-1",
@@ -2960,6 +2980,38 @@ async def test_repository_risk_reader_uses_exact_tenant_execution_subjects(
     assert all("id" not in row and "created_at" not in row for row in result.rows)
     assert result.truncated is False
     assert result.reason is None
+
+
+async def test_repository_risk_reader_bounds_execution_subject_fanout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from intelligence.risk360 import store as risk_store
+
+    calls: list[tuple[str, str, str, int]] = []
+
+    class RiskSignalRepo:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit):
+            calls.append((tenant_id, subject_kind, subject_id, limit))
+            return []
+
+    monkeypatch.setattr(risk_store, "RiskSignalRepository", RiskSignalRepo)
+    execution_ids = tuple(f"exec-{index}" for index in range(501))
+
+    result = await RepositoryExecution360Source().execution_risk_events(
+        tenant_id=TENANT,
+        execution_ids=execution_ids,
+        limit=50,
+    )
+
+    assert len(calls) == 500
+    assert [subject_id for _, _, subject_id, _ in calls] == sorted(execution_ids)[:500]
+    assert all(limit == 2 for _, _, _, limit in calls)
+    assert all(tenant_id == TENANT and kind == "execution" for tenant_id, kind, _, _ in calls)
+    assert result.available is True
+    assert result.scope_known is True
+    assert result.truncated is True
+    assert result.reason == "execution_risk_signal_read_truncated"
+    assert result.rows == []
 
 
 async def test_unavailable_sources_degrade_without_leaking_diagnostics() -> None:

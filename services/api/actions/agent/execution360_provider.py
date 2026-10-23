@@ -3643,6 +3643,16 @@ class Execution360Provider:
             "sourceReadState": risk_events.source_read_state,
             "completeness": "recorded_execution_subject_signals_only",
             "scopeKnown": risk_events.scope_known,
+            "producerCoverage": {
+                "state": "unknown",
+                "reason": "execution_risk_signal_producer_inventory_not_connected",
+            },
+            "riskAssessmentCoverage": {
+                "state": "unknown",
+                "sourceReadState": "not_read",
+                "authority": "risk_assessments",
+                "reason": "execution_risk_events_slot_reads_risk_signals_not_assessment_snapshots",
+            },
             "joinedExecutionRiskEvents": [
                 {
                     "executionId": signal.subject_id,

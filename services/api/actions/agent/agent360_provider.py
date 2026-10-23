@@ -142,6 +142,14 @@ class Agent360Source(Protocol):
         self, tenant_id: str, agent_id: str, limit: int
     ) -> list[dict[str, Any]]: ...
 
+    async def canonical_risk_summary(
+        self,
+        tenant_id: str,
+        agent_id: str,
+        canonical_agent_entity_id: str,
+        limit: int,
+    ) -> Agent360ReadBatch: ...
+
     async def agentic_provenance(
         self,
         tenant_id: str,
@@ -162,7 +170,7 @@ class RepositoryAgent360Source:
     not invoke graph mutation, policy evaluation, or agent runtime operations.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, risk_provider: Any = None, consent_reader: Any = None) -> None:
         # Imported here so importing the provider module itself stays light and
         # does not initialize repository clients or application services.
         from actions.agent.deployments import get_deployment_repository
@@ -195,6 +203,8 @@ class RepositoryAgent360Source:
         self._inboxes = AgentInboxRepository()
         self._messages = AgentMessageRepository()
         self._principal_identity_repository: Any = None
+        self._risk360_provider = risk_provider
+        self._risk_consent_reader = consent_reader
 
     async def agent_configs(self, tenant_id: str, agent_id: str) -> list[dict[str, Any]]:
         return await self._configs.find_many(
@@ -544,6 +554,184 @@ class RepositoryAgent360Source:
     async def risk_signals(self, tenant_id: str, agent_id: str, limit: int) -> list[dict[str, Any]]:
         return await self._risks.find_many(
             filters={"tenant_id": tenant_id, "agent_id": agent_id}, limit=limit + 1
+        )
+
+    async def canonical_risk_summary(
+        self,
+        tenant_id: str,
+        agent_id: str,
+        canonical_agent_entity_id: str,
+        limit: int,
+    ) -> Agent360ReadBatch:
+        """Read current Risk360 for one resolved Agent after affirmative consent.
+
+        Raw ``obs_agent_risk_signals`` are deliberately not used here. Risk
+        facts enter Agent360 only from the canonical tenant + typed-subject
+        Risk360 reader, and only after current analytics consent returns its
+        authoritative receipt for the same canonical Agent subject.
+        """
+        if not all(
+            isinstance(value, str) and value.strip()
+            for value in (tenant_id, agent_id, canonical_agent_entity_id)
+        ):
+            return Agent360ReadBatch(rows=[], scope_known=False)
+
+        consent_reader = self._risk_consent_reader
+        if consent_reader is None:
+            from governance.consent.authority import evaluate_consent_with_receipt
+
+            consent_reader = evaluate_consent_with_receipt
+            self._risk_consent_reader = consent_reader
+        consent = await consent_reader(
+            tenant_id=tenant_id,
+            subject_id=canonical_agent_entity_id,
+            anonymous_id=None,
+            purpose="analytics",
+        )
+        receipt_id = getattr(consent, "receipt_id", None)
+        if getattr(consent, "allowed", False) is not True or not (
+            isinstance(receipt_id, str)
+            and receipt_id.strip()
+            and receipt_id == receipt_id.strip()
+        ):
+            return Agent360ReadBatch(
+                rows=[
+                    {
+                        "tenant_id": tenant_id,
+                        "agent_id": agent_id,
+                        "canonical_agent_entity_id": canonical_agent_entity_id,
+                        "subject_kind": "agent",
+                        "subject_id": canonical_agent_entity_id,
+                        "state": "suppressed",
+                        "reason": "agent_analytics_consent_not_established",
+                    }
+                ]
+            )
+
+        from urllib.parse import quote
+
+        consent_ref = EvidenceRef(
+            id=receipt_id,
+            type="event",
+            source="governance.consent.authority",
+            observedAt=_utc_now_iso(),
+            uri=f"store://consent_receipts/{quote(receipt_id, safe='')}",
+        )
+        risk_provider = self._risk360_provider
+        if risk_provider is None:
+            from intelligence.risk360.provider import Risk360Provider
+
+            risk_provider = Risk360Provider()
+            self._risk360_provider = risk_provider
+        risk_request = ProjectionRequest(
+            projectionId="risk360",
+            tenantId=tenant_id,
+            subject=ProjectionSubject(kind="agent", id=canonical_agent_entity_id),
+            page={"limit": min(max(limit, 1), MAX_READ_LIMIT)},
+            includeSections=["summary", "state", "evidence", "findings"],
+            includeClaims=True,
+        )
+        risk_context = ProjectionContext(
+            projectionId="risk360",
+            tenantId=tenant_id,
+            registryState="in_flight",
+            dependencyState=[],
+            warnings=[],
+        )
+        result = await risk_provider.project(risk_request, risk_context)
+        if result.projectionId != "risk360" or result.tenantId != tenant_id:
+            return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+
+        sections = {section.id: section for section in result.sections}
+        if len(sections) != len(result.sections):
+            return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+        summary = sections.get("summary")
+        risk_state = sections.get("state")
+        evidence = sections.get("evidence")
+        findings = sections.get("findings")
+        expected_subject = {"kind": "agent", "id": canonical_agent_entity_id}
+        for section in (summary, risk_state, evidence, findings):
+            if section is None or not isinstance(section.content, dict):
+                return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+            if section.content.get("tenantId") != tenant_id:
+                return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+            if section.id != "evidence" and section.content.get("subject") != expected_subject:
+                return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+
+        risk_claims: list[ClaimEnvelope] = []
+        for claim in result.claims:
+            if "risk_summary" not in (claim.domainSlotIds or []):
+                continue
+            if claim.subject.kind != "agent" or claim.subject.id != canonical_agent_entity_id:
+                return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+            if not claim.evidenceRefs:
+                continue
+            if any(not ref.id.strip() or not ref.source.strip() for ref in claim.evidenceRefs):
+                return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+            risk_claims.append(claim)
+
+        raw_evidence = evidence.content.get("evidence")
+        if not isinstance(raw_evidence, list):
+            return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+        try:
+            evidence_refs = [EvidenceRef.model_validate(ref) for ref in raw_evidence]
+        except Exception:  # noqa: BLE001 - malformed canonical evidence fails closed
+            return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+        if any(not ref.id.strip() or not ref.source.strip() for ref in evidence_refs):
+            return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+
+        coverage = findings.content.get("requiredSlotCoverage")
+        coverage = coverage.get("risk_summary") if isinstance(coverage, dict) else None
+        coverage = coverage if isinstance(coverage, dict) else {"state": "unknown"}
+        if coverage.get("state") == "degraded":
+            state = "degraded"
+            reason = str(coverage.get("reason") or "canonical_risk_summary_read_incomplete")
+        elif risk_claims:
+            # Risk360 does not attest an Agent-specific freshness SLA, so its
+            # exact evidence is useful but never presented as full coverage.
+            state = "partial"
+            reason = "canonical_risk360_evidence_available_agent_freshness_unassessed"
+        else:
+            state = "unknown"
+            reason = str(
+                coverage.get("reason") or "canonical_risk_summary_evidence_unavailable"
+            )
+
+        summary_content = summary.content
+        state_content = risk_state.content
+        if not isinstance(state_content.get("dimensionStates", []), list):
+            return Agent360ReadBatch(rows=[], scope_mismatch=True, scope_known=False)
+        evidence_refs = _dedupe_refs(evidence_refs)
+        row = {
+            "tenant_id": tenant_id,
+            "agent_id": agent_id,
+            "canonical_agent_entity_id": canonical_agent_entity_id,
+            "subject_kind": "agent",
+            "subject_id": canonical_agent_entity_id,
+            "state": state,
+            "reason": reason,
+            "summary": summary_content,
+            "dimension_states": state_content.get("dimensionStates", []),
+            "assessment_coverage": coverage,
+            "assessment_section_state": summary.state,
+            "risk_state_section_state": risk_state.state,
+            "freshness": {
+                "state": "not_assessed",
+                "slaSeconds": None,
+                "reason": "agent_risk_freshness_sla_not_configured",
+            },
+            "evidence_refs": [ref.model_dump(mode="json") for ref in evidence_refs],
+            "consent_evidence_ref": consent_ref.model_dump(mode="json"),
+            "claims": risk_claims[: min(max(limit, 1), MAX_READ_LIMIT)],
+            "contagion_state": "unknown",
+            "contagion_reason": (
+                "Risk360 does not establish causal social or financial contagion"
+            ),
+            "canonical_authorities": ["risk_assessments", "risk_signals"],
+        }
+        return Agent360ReadBatch(
+            rows=[row],
+            truncated=len(risk_claims) > min(max(limit, 1), MAX_READ_LIMIT),
         )
 
     async def agentic_provenance(
@@ -963,8 +1151,17 @@ class Agent360Provider:
     contract_version = INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION
     graph_mutation_policy = "read_only"
 
-    def __init__(self, source: Optional[Agent360Source] = None) -> None:
+    def __init__(
+        self,
+        source: Optional[Agent360Source] = None,
+        *,
+        risk_slot_authorizer: Optional[Any] = None,
+    ) -> None:
         self._source = source if source is not None else RepositoryAgent360Source()
+        # ProjectionContext contains no outer slot-policy or capability
+        # decision. A nested Risk360 read therefore requires an explicit
+        # caller-supplied authorization seam and fails closed by default.
+        self._risk_slot_authorizer = risk_slot_authorizer
 
     async def project(
         self,
@@ -993,7 +1190,6 @@ class Agent360Provider:
             "activities",
             "tools",
             "capability_access_profile",
-            "risk_signals",
             "communications",
         )
         loaders = {
@@ -1014,7 +1210,6 @@ class Agent360Provider:
             "capability_access_profile": lambda: self._source.capability_access_profile(
                 tenant_id, agent_id, delegation_agent_id or ""
             ),
-            "risk_signals": lambda: self._source.risk_signals(tenant_id, agent_id, limit),
             "communications": lambda: self._source.communications(tenant_id, agent_id, limit),
         }
         # Resolve identity before delegation reads. Agent executions/configs
@@ -1100,6 +1295,66 @@ class Agent360Provider:
 
             loaders["capability_access_profile"] = unresolved_capability_profile
 
+        risk_summary_loader = getattr(self._source, "canonical_risk_summary", None)
+        risk_policy_allowed = (
+            await self._risk_slot_authorized(
+                tenant_id=tenant_id,
+                request_subject=request.subject,
+                canonical_agent_entity_id=delegation_agent_id,
+            )
+            if delegation_agent_id is not None
+            and request.asOf is None
+            and context.asOf is None
+            and request.timeRange is None
+            else False
+        )
+        if (
+            delegation_agent_id is not None
+            and request.asOf is None
+            and context.asOf is None
+            and request.timeRange is None
+            and risk_policy_allowed
+            and callable(risk_summary_loader)
+        ):
+            risk_summary_read = await self._safe_read(
+                "risk_summary",
+                lambda: risk_summary_loader(
+                    tenant_id,
+                    agent_id,
+                    delegation_agent_id,
+                    limit,
+                ),
+                1,
+            )
+        elif (
+            delegation_agent_id is None
+            or request.timeRange is not None
+            or request.asOf is not None
+            or context.asOf is not None
+        ):
+            # Do not join current risk to an unresolved identity or historical
+            # request. Risk360 does not expose bitemporal Agent replay.
+            risk_summary_read = _Read(rows=[], available=True, scope_known=False)
+        elif not risk_policy_allowed:
+            # No current slot-policy/capability decision is available in the
+            # projection request/context, so do not perform a nested read.
+            risk_summary_read = _Read(
+                rows=[
+                    {
+                        "tenant_id": tenant_id,
+                        "agent_id": agent_id,
+                        "canonical_agent_entity_id": delegation_agent_id,
+                        "subject_kind": "agent",
+                        "subject_id": delegation_agent_id,
+                        "state": "suppressed",
+                        "reason": "agent_risk_slot_policy_or_capability_not_established",
+                    }
+                ],
+                available=True,
+            )
+        else:
+            risk_summary_read = _Read(rows=None, available=False)
+
         names_to_read = tuple(name for name in names if name != "actor_identity")
         reads = await asyncio.gather(
             *(self._safe_read(name, loaders[name], limit) for name in names_to_read)
@@ -1107,6 +1362,11 @@ class Agent360Provider:
         data = dict(zip(names_to_read, reads))
         if identity_prefetched is not None:
             data["actor_identity"] = identity_prefetched
+        # Legacy raw observations are intentionally not read: they have no
+        # demonstrated canonical identity/evidence/policy join here. The
+        # canonical Risk360 read is the only risk content source.
+        data["risk_signals"] = _Read(rows=[], available=True)
+        data["risk_summary"] = risk_summary_read
         execution_rows_for_identity, _ = self._tenant_agent_rows(
             data["executions"], tenant_id, agent_id
         )
@@ -1169,6 +1429,105 @@ class Agent360Provider:
                 )
             )
         ]
+        risk_summary_rows, risk_summary_mismatch = self._tenant_agent_risk_summary(
+            data["risk_summary"],
+            tenant_id=tenant_id,
+            agent_id=agent_id,
+            canonical_agent_entity_id=resolved_canonical_actor,
+        )
+        if risk_summary_mismatch:
+            data["risk_summary"] = replace(data["risk_summary"], scope_mismatch=True)
+            risk_summary_rows = []
+        risk_summary_row = risk_summary_rows[0] if risk_summary_rows else None
+        if not data["risk_summary"].available:
+            risk_summary_state = "degraded"
+            risk_summary_reason = REASON_RISK_UNAVAILABLE
+        elif data["risk_summary"].scope_mismatch or risk_summary_mismatch:
+            risk_summary_state = "degraded"
+            risk_summary_reason = "agent_risk_summary_scope_mismatch"
+        elif data["risk_summary"].truncated:
+            risk_summary_state = "degraded"
+            risk_summary_reason = "agent_risk_summary_read_truncated"
+        elif risk_summary_row is not None:
+            risk_summary_state = risk_summary_row["state"]
+            risk_summary_reason = risk_summary_row["reason"]
+        elif not data["risk_summary"].scope_known:
+            risk_summary_state = "unknown"
+            risk_summary_reason = (
+                "agent_identity_or_current_risk_scope_unavailable"
+                if resolved_canonical_actor is None
+                else "agent_risk_historical_replay_unavailable"
+            )
+        else:
+            risk_summary_state = "unknown"
+            risk_summary_reason = "canonical_risk_summary_not_available"
+
+        canonical_risk_evidence: list[EvidenceRef] = []
+        canonical_risk_claims: list[ClaimEnvelope] = []
+        consent_evidence: Optional[EvidenceRef] = None
+        if risk_summary_row is not None and risk_summary_state == "partial":
+            canonical_risk_evidence = [
+                EvidenceRef.model_validate(ref)
+                for ref in risk_summary_row["evidence_refs"]
+            ]
+            consent_evidence = EvidenceRef.model_validate(
+                risk_summary_row["consent_evidence_ref"]
+            )
+            canonical_risk_claims = list(risk_summary_row["claims"])
+        risk_evidence_refs = _dedupe_refs(
+            [
+                *(EvidenceRef.model_validate(ref) for ref in actor_identity_refs),
+                *canonical_risk_evidence,
+                *([consent_evidence] if consent_evidence is not None else []),
+            ]
+        )
+        risk_summary_content: dict[str, Any] = {
+            "state": risk_summary_state,
+            "tenantId": tenant_id,
+            "subject": (
+                {"kind": "agent", "id": resolved_canonical_actor}
+                if resolved_canonical_actor is not None
+                else None
+            ),
+            "reason": risk_summary_reason,
+            "freshness": (
+                risk_summary_row.get("freshness")
+                if risk_summary_row is not None
+                else {
+                    "state": "unknown",
+                    "slaSeconds": None,
+                    "reason": "agent_risk_freshness_sla_not_configured",
+                }
+            ),
+            "evidenceRefs": [
+                ref.model_dump(mode="json") for ref in risk_evidence_refs
+            ],
+            "contagion": {
+                "state": "unknown",
+                "reason": (
+                    risk_summary_row.get("contagion_reason")
+                    if risk_summary_row is not None
+                    else "risk_slot_authority_not_available"
+                ),
+            },
+        }
+        if risk_summary_row is not None and risk_summary_state == "partial":
+            risk_summary_content.update(
+                {
+                    "summary": risk_summary_row["summary"],
+                    "dimensionStates": risk_summary_row["dimension_states"],
+                    "assessmentCoverage": risk_summary_row["assessment_coverage"],
+                    "assessmentSectionState": risk_summary_row[
+                        "assessment_section_state"
+                    ],
+                    "riskStateSectionState": risk_summary_row["risk_state_section_state"],
+                    "canonicalAuthorities": risk_summary_row["canonical_authorities"],
+                }
+            )
+        if risk_summary_row is not None and risk_summary_state == "suppressed":
+            # Denial metadata is generic and contains no risk result or receipt.
+            risk_summary_content["reason"] = "agent_risk_summary_access_not_authorized"
+
         execution_rows, execution_mismatch = self._tenant_agent_rows(
             data["executions"], tenant_id, agent_id
         )
@@ -1227,6 +1586,7 @@ class Agent360Provider:
             "activities": activity_mismatch,
             "tools": tool_mismatch,
             "risk_signals": risk_mismatch,
+            "risk_summary": risk_summary_mismatch,
             "communications": communication_mismatch,
             "incoming_delegations": incoming_mismatch,
             "outgoing_delegations": outgoing_mismatch,
@@ -1595,6 +1955,7 @@ class Agent360Provider:
             principal_identities=principal_identity_rows,
         )
         evidence_refs = _dedupe_refs([*evidence_refs, *owner_relationship_refs])
+        evidence_refs = _dedupe_refs([*evidence_refs, *risk_evidence_refs])
         if historical_unavailable or invalid_window:
             claim_evidence_refs: list[EvidenceRef] = []
         elif request.timeRange is not None:
@@ -1681,7 +2042,15 @@ class Agent360Provider:
             ),
         }
 
-        source_states = {name: self._read_state(read) for name, read in data.items()}
+        source_states = {
+            name: self._read_state(read)
+            for name, read in data.items()
+            if name != "risk_signals"
+        }
+        # Raw agent risk observations are omitted. Their lack of a verified
+        # canonical identity/evidence/policy join is not a zero-risk result.
+        source_states["risk_signals"] = "unknown"
+        source_states["risk_summary"] = risk_summary_state
         identity_state = (
             "conflicted"
             if config_conflict or actor_identity_conflict
@@ -2121,7 +2490,8 @@ class Agent360Provider:
                     ),
                     "activities": self._count(data["activities"], activity_rows),
                     "toolInvocations": self._count(data["tools"], tool_rows),
-                    "riskSignals": self._count(data["risk_signals"], risk_rows),
+                    "riskSignals": None,
+                    "riskSummary": risk_summary_state,
                     "communicationMessages": self._count(
                         data["communications"], communication_rows
                     ),
@@ -2167,14 +2537,16 @@ class Agent360Provider:
                     },
                     {
                         "id": "risk_and_contagion",
-                        "state": self._aggregate_read_state(
-                            [data["risk_signals"]], has_rows=bool(risk_rows)
-                        ),
+                        "state": risk_summary_state,
                         "content": {
-                            "riskSignals": risk_items,
-                            "riskAssessment": "not_computed",
+                            "riskSignals": {
+                                "state": "unknown",
+                                "signals": [],
+                                "reason": "raw obs_agent_risk_signals are omitted without exact canonical identity, evidence, and policy joins",
+                            },
+                            "riskAssessment": risk_summary_content,
                             "contagionState": "unknown",
-                            "reason": "contagion requires risk/social/relationship authority projections",
+                            "reason": risk_summary_reason,
                         },
                     },
                 ],
@@ -2424,6 +2796,8 @@ class Agent360Provider:
                 communication_rows=timeline_communications.rows,
             )
         )
+        if not invalid_window:
+            claims.extend(canonical_risk_claims)
         if claim_evidence_refs:
             claims.append(
                 ClaimEnvelope(
@@ -2575,6 +2949,38 @@ class Agent360Provider:
         except Exception:  # fail-isolate with a content-free source state
             return _Read(rows=None, available=False)
 
+    async def _risk_slot_authorized(
+        self,
+        *,
+        tenant_id: str,
+        request_subject: ProjectionSubject,
+        canonical_agent_entity_id: str,
+    ) -> bool:
+        """Require the outer slot and capability decision before nested reads.
+
+        ProjectionContext does not carry the frame runtime's evaluated slot
+        policy or capability decision. Callers that run Agent360 inside a
+        frame must therefore supply a gate that answers for this exact tenant,
+        requested subject, resolved canonical Agent, slot, and capability.
+        Unknown, malformed, or failing decisions deny the Risk360 read.
+        """
+        gate = self._risk_slot_authorizer
+        if not callable(gate):
+            return False
+        try:
+            decision = gate(
+                tenant_id=tenant_id,
+                request_subject=request_subject,
+                canonical_agent_entity_id=canonical_agent_entity_id,
+                slot_id="risk_summary",
+                capability="risk360.read",
+            )
+            if hasattr(decision, "__await__"):
+                decision = await decision
+            return decision is True
+        except Exception:  # noqa: BLE001 - authorization failures deny by default
+            return False
+
     @staticmethod
     def _reason_for(name: str) -> str:
         return {
@@ -2590,6 +2996,7 @@ class Agent360Provider:
             "tools": REASON_TOOL_UNAVAILABLE,
             "capability_access_profile": "agent_capability_access_profile_unavailable",
             "risk_signals": REASON_RISK_UNAVAILABLE,
+            "risk_summary": REASON_RISK_UNAVAILABLE,
             "communications": REASON_COMMUNICATION_UNAVAILABLE,
         }.get(name, "agent_source_unavailable")
 
@@ -2612,6 +3019,120 @@ class Agent360Provider:
                 continue
             rows.append(row)
         return rows, mismatch
+
+    @staticmethod
+    def _tenant_agent_risk_summary(
+        read: _Read,
+        *,
+        tenant_id: str,
+        agent_id: str,
+        canonical_agent_entity_id: Optional[str],
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Admit only a consented, evidence-backed Risk360 row for this Agent."""
+        if not read.available or read.rows is None:
+            return [], read.scope_mismatch
+        mismatch = read.scope_mismatch
+        if not canonical_agent_entity_id:
+            return [], mismatch or bool(read.rows)
+        if len(read.rows) > 1:
+            return [], True
+        if not read.rows:
+            return [], mismatch
+
+        row = read.rows[0]
+        if (
+            row.get("tenant_id") != tenant_id
+            or row.get("agent_id") != agent_id
+            or row.get("canonical_agent_entity_id") != canonical_agent_entity_id
+            or row.get("subject_kind") != "agent"
+            or row.get("subject_id") != canonical_agent_entity_id
+        ):
+            return [], True
+
+        state = row.get("state")
+        allowed_states = {"suppressed", "unknown", "partial", "degraded"}
+        reason = row.get("reason")
+        if state not in allowed_states or not isinstance(reason, str) or not reason.strip():
+            return [], True
+
+        claims = row.get("claims", [])
+        if not isinstance(claims, list):
+            return [], True
+        if state != "partial" and claims:
+            # No claim may survive an unknown, denied, or degraded assessment.
+            return [], True
+        if state == "partial" and not claims:
+            return [], True
+
+        normalized_claims: list[ClaimEnvelope] = []
+        for claim_value in claims:
+            try:
+                claim = (
+                    claim_value
+                    if isinstance(claim_value, ClaimEnvelope)
+                    else ClaimEnvelope.model_validate(claim_value)
+                )
+            except Exception:  # noqa: BLE001 - malformed claims fail closed
+                return [], True
+            if (
+                claim.subject.kind != "agent"
+                or claim.subject.id != canonical_agent_entity_id
+                or "risk_summary" not in (claim.domainSlotIds or [])
+                or not claim.evidenceRefs
+                or any(not ref.id.strip() or not ref.source.strip() for ref in claim.evidenceRefs)
+            ):
+                return [], True
+            normalized_claims.append(claim)
+
+        if state == "partial":
+            summary = row.get("summary")
+            if (
+                not isinstance(summary, dict)
+                or summary.get("tenantId") != tenant_id
+                or summary.get("subject")
+                != {"kind": "agent", "id": canonical_agent_entity_id}
+                or not isinstance(row.get("dimension_states"), list)
+                or not isinstance(row.get("assessment_coverage"), dict)
+                or not isinstance(row.get("canonical_authorities"), list)
+            ):
+                return [], True
+            try:
+                evidence_refs = [
+                    EvidenceRef.model_validate(ref) for ref in row.get("evidence_refs", [])
+                ]
+                consent_ref = EvidenceRef.model_validate(row.get("consent_evidence_ref"))
+            except Exception:  # noqa: BLE001 - invalid evidence fails closed
+                return [], True
+            if (
+                not evidence_refs
+                or any(not ref.id.strip() or not ref.source.strip() for ref in evidence_refs)
+                or consent_ref.type != "event"
+                or consent_ref.source != "governance.consent.authority"
+                or not consent_ref.id.strip()
+            ):
+                return [], True
+            evidence_keys = {(ref.source, ref.id) for ref in evidence_refs}
+            if any(
+                (ref.source, ref.id) not in evidence_keys
+                for claim in normalized_claims
+                for ref in claim.evidenceRefs
+            ):
+                return [], True
+            # Consent receipt URIs are generated from the actual authoritative
+            # receipt id and must bind back to it exactly.
+            from urllib.parse import quote
+
+            if consent_ref.uri != f"store://consent_receipts/{quote(consent_ref.id, safe='')}":
+                return [], True
+            row = {
+                **row,
+                "evidence_refs": [ref.model_dump(mode="json") for ref in _dedupe_refs(evidence_refs)],
+                "consent_evidence_ref": consent_ref.model_dump(mode="json"),
+                "claims": normalized_claims,
+            }
+        else:
+            row = {**row, "claims": []}
+        return [row], mismatch
 
     @staticmethod
     def _tenant_agent_identity(
@@ -4477,7 +4998,7 @@ class Agent360Provider:
             {
                 "slot": "risk_summary",
                 "state": "partial",
-                "reason": "risk, social, and relationship assessments are composed by their canonical projections; this provider's stored signals are observations, not a composite score",
+                "reason": "current canonical Risk360 summaries require an explicit outer risk_summary policy and risk360.read capability decision, resolved Agent identity, and affirmative analytics consent; freshness and causal contagion remain unknown",
             },
             {
                 "slot": "spawned_agents",
