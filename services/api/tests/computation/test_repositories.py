@@ -3,6 +3,8 @@ supersession, restatement chain, tenant scoping."""
 
 from __future__ import annotations
 
+from datetime import datetime
+
 import pytest
 
 from intelligence.computation.repositories import (
@@ -156,3 +158,99 @@ async def test_run_roundtrip(repo):
     got = await repo.get_run("t1", run["run_id"])
     assert got["status"] == "completed"
     assert await repo.get_run("other", run["run_id"]) is None
+
+
+async def test_list_runs_for_subject_scopes_before_limit_and_as_of(repo):
+    base = {
+        "definition_version": "1",
+        "status": "completed",
+        "data": {
+            "subject_kind": "entity",
+            "subject_id": "entity-a",
+            "assessment_id": "assessment-a",
+        },
+    }
+    await repo.insert_run(
+        {
+            **base,
+            "tenant_id": "t1",
+            "definition_id": "risk360.standard",
+            "started_at": "2026-10-20T12:00:00+00:00",
+        }
+    )
+    await repo.insert_run(
+        {
+            **base,
+            "tenant_id": "t1",
+            "definition_id": "campaign.ctr",
+            "started_at": "2026-10-20T11:00:00+00:00",
+        }
+    )
+    await repo.insert_run(
+        {
+            **base,
+            "tenant_id": "t2",
+            "definition_id": "risk360.standard",
+            "started_at": "2026-10-20T10:00:00+00:00",
+        }
+    )
+    await repo.insert_run(
+        {
+            **base,
+            "tenant_id": "t1",
+            "definition_id": "risk360.standard",
+            "started_at": "2026-10-22T12:00:00+00:00",
+        }
+    )
+
+    rows = await repo.list_runs_for_subject(
+        "t1",
+        "entity",
+        "entity-a",
+        definition_prefix="risk360.",
+        limit=10,
+        as_of=datetime.fromisoformat("2026-10-21T00:00:00+00:00"),
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["tenant_id"] == "t1"
+    assert rows[0]["definition_id"] == "risk360.standard"
+    assert rows[0]["data"]["subject_id"] == "entity-a"
+
+
+async def test_postgres_list_runs_for_subject_scopes_before_limit(monkeypatch):
+    import json
+
+    from intelligence.computation import repositories
+
+    class FakePool:
+        query = ""
+        args = ()
+
+        async def execute(self, _query):
+            return "OK"
+
+        async def fetch(self, query, *args):
+            self.query = query
+            self.args = args
+            return [{"data": json.dumps({"run_id": "run-a"})}]
+
+    pool = FakePool()
+
+    async def get_pool():
+        return pool
+
+    monkeypatch.setattr(repositories, "get_pool", get_pool)
+    as_of = datetime.fromisoformat("2026-10-21T00:00:00+00:00")
+    rows = await ComputedResultsRepository().list_runs_for_subject(
+        "t1", "entity", "entity-a", definition_prefix="risk360.", limit=101, as_of=as_of
+    )
+
+    assert rows == [{"run_id": "run-a"}]
+    assert "tenant_id=$1" in pool.query
+    assert "definition_id LIKE $2" in pool.query
+    assert "data->'data'->>'subject_kind'=$3" in pool.query
+    assert "data->'data'->>'subject_id'=$4" in pool.query
+    assert "started_at <= $5" in pool.query
+    assert pool.query.index("subject_id'=$4") < pool.query.index("LIMIT $6")
+    assert pool.args == ("t1", "risk360.%", "entity", "entity-a", as_of, 101)

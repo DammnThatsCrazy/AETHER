@@ -426,6 +426,70 @@ async def test_canonical_support_case_subject_reads_exact_case_summary_with_evid
 
 
 @pytest.mark.asyncio
+async def test_support_case_history_keeps_only_exact_event_evidence_on_each_entry() -> None:
+    from datetime import datetime, timezone
+
+    reset_local_support_case_store()
+    repository = SupportCaseRepository()
+    event_at = datetime(2026, 10, 17, 12, tzinfo=timezone.utc)
+    record = await repository.ingest_event(
+        tenant_id=TENANT_A,
+        connection_id="support-connection-event-evidence",
+        provider_identity="support-desk",
+        connection_verified_at="2026-10-17T10:00:00Z",
+        event=SupportCaseEventInput(
+            source_case_id="source-case-event-evidence",
+            source_event_id="support-case-created-event-evidence",
+            event_type=SupportCaseEventType.CREATED,
+            occurred_at=event_at,
+        ),
+        observed_at=event_at,
+    )
+
+    class RepositoryWithUnrelatedEvidence:
+        async def get_case(self, tenant_id: str, case_id: str, *, limit: int):
+            read = await repository.get_case(tenant_id, case_id, limit=limit)
+            events = [dict(event) for event in read.events]
+            events[0]["evidence_refs"] = [
+                *events[0]["evidence_refs"],
+                EvidenceRef(
+                    id="unrelated-event",
+                    type="event",
+                    source="untrusted_source",
+                    uri="https://example.test/unrelated-event",
+                ),
+            ]
+            return SupportCaseAuthorityRead(
+                read.record,
+                events,
+                read.available,
+                read.complete,
+                expired=read.expired,
+                reason=read.reason,
+            )
+
+    request = _request("support_case", record["case_id"])
+    result = await Support360Provider(
+        FakeSource(SupportFactsRead(rows=[], available=True)),
+        case_repository=RepositoryWithUnrelatedEvidence(),
+    ).project(request, _context(request))
+
+    sections = _sections(result)
+    timeline_entry = sections["timeline"].content["entries"][0]
+    assert {reference.id for reference in timeline_entry["evidenceRefs"]} == {
+        "support-case-created-event-evidence",
+        "support-connection-event-evidence",
+    }
+    all_evidence = sections["evidence"].content["evidenceRefs"]
+    assert "unrelated-event" not in {reference.id for reference in all_evidence}
+    assert {reference.id for reference in result.claims[0].evidenceRefs} == {
+        "support-case-created-event-evidence",
+        "support-connection-event-evidence",
+    }
+    reset_local_support_case_store()
+
+
+@pytest.mark.asyncio
 async def test_support_case_resolution_joins_exact_applied_lifecycle_event_evidence() -> None:
     from datetime import datetime, timezone
 

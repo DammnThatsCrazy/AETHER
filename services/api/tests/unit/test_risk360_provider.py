@@ -360,6 +360,9 @@ class _FakeReader:
         financial_flow_path: dict | None = None,
         agent_policy_flags: list[dict] | None = None,
         raise_agent_policy_flags: bool = False,
+        assessment_history_rows: list[dict] | None = None,
+        assessment_history_complete: bool = True,
+        raise_assessment_history: bool = False,
     ) -> None:
         self._assessment = assessment
         self._signals = list(signals or [])
@@ -381,6 +384,10 @@ class _FakeReader:
         self._agent_policy_flags = list(agent_policy_flags or [])
         self._raise_agent_policy_flags = raise_agent_policy_flags
         self.agent_policy_flag_calls: list[tuple[str, str]] = []
+        self._assessment_history_rows = list(assessment_history_rows or [])
+        self._assessment_history_complete = assessment_history_complete
+        self._raise_assessment_history = raise_assessment_history
+        self.assessment_history_calls: list[tuple[str, str, datetime | None]] = []
 
     async def latest_assessment(self, *, tenant_id: str, subject: object) -> dict | None:
         if self._raise_assessment:
@@ -388,6 +395,18 @@ class _FakeReader:
         if self._assessments_by_subject is not None:
             return self._assessments_by_subject.get((subject.kind, subject.id))
         return self._assessment
+
+    async def assessment_history(
+        self,
+        *,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        as_of: datetime | None,
+    ) -> tuple[list[dict], bool]:
+        self.assessment_history_calls.append((tenant_id, subject.id, as_of))
+        if self._raise_assessment_history:
+            raise RuntimeError("boom: secret-detail")
+        return list(self._assessment_history_rows), self._assessment_history_complete
 
     async def signals(self, *, tenant_id: str, subject: object) -> list[dict]:
         if self._raise_signals:
@@ -990,6 +1009,84 @@ async def test_risk_policy_flags_are_partial_exact_agent_reports_with_evidence()
         for row in evidence.content["evidence"]
     )
     assert reader.agent_policy_flag_calls == [(TENANT_A, "agent-1")]
+
+
+@pytest.mark.asyncio
+async def test_assessment_run_history_is_exact_partial_audit_evidence() -> None:
+    as_of = datetime(2026, 10, 21, tzinfo=timezone.utc)
+    run = {
+        "tenant_id": TENANT_A,
+        "subject_kind": "entity",
+        "subject_id": "usr_1",
+        "run_id": "run_risk_2",
+        "assessment_id": "assessment_risk_2",
+        "definition_id": "risk360.standard",
+        "definition_version": "1",
+        "context_hash": "a" * 64,
+        "status": "completed",
+        "started_at": "2026-10-20T12:00:00+00:00",
+        "completed_at": "2026-10-20T12:00:01+00:00",
+        "supersedes_run_id": "run_risk_1",
+        "claim_state": "derived",
+        "dimensions": ["payment"],
+    }
+    reader = _FakeReader(
+        assessment=_assessment().model_dump(mode="json"),
+        assessment_history_rows=[run],
+    )
+    request = _request(temporalMode="as_of", asOf=as_of.isoformat())
+    registry = _available_registry()
+    result = await Risk360Provider(sources=reader).project(
+        request,
+        await registry.build_context("risk360", request),
+    )
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    history = findings.content["auditHistory"]
+    assert history["state"] == "partial"
+    assert history["assessmentRuns"][0]["runId"] == "run_risk_2"
+    assert history["assessmentRuns"][0]["supersedesRunId"] == "run_risk_1"
+    assert history["interventions"] == {
+        "state": "unknown",
+        "reason": "risk_intervention_authority_unavailable",
+    }
+    assert findings.content["requiredSlotCoverage"]["audit_history"]["state"] == "partial"
+    assert reader.assessment_history_calls == [(TENANT_A, "usr_1", as_of)]
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert any(
+        item["id"] == "run_risk_2" and item["source"] == "computation_runs"
+        for item in evidence.content["evidence"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_assessment_run_history_rejects_cross_subject_rows() -> None:
+    reader = _FakeReader(
+        assessment_history_rows=[
+            {
+                "tenant_id": TENANT_A,
+                "subject_kind": "entity",
+                "subject_id": "different-entity",
+                "run_id": "run_wrong_subject",
+                "assessment_id": "assessment_wrong_subject",
+                "definition_id": "risk360.standard",
+                "started_at": "2026-10-20T12:00:00+00:00",
+                "dimensions": [],
+            }
+        ]
+    )
+    result = await Risk360Provider(sources=reader).project(
+        _request(),
+        await _context(_available_registry()),
+    )
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    assert findings.content["auditHistory"]["state"] == "degraded"
+    assert findings.content["auditHistory"]["assessmentRuns"] == []
+    assert findings.content["requiredSlotCoverage"]["audit_history"] == {
+        "state": "degraded",
+        "reason": "risk_assessment_history_exact_binding_mismatch",
+    }
 
 
 @pytest.mark.asyncio

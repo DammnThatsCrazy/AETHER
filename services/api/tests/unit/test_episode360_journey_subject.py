@@ -878,10 +878,15 @@ async def test_invalid_or_cross_tenant_episode_page_stays_unknown() -> None:
 
 async def test_journey_subject_projects_tenant_version_and_evidenced_steps() -> None:
     source = FakeJourneySource(
+        journey=_journey(agent_activity_ids=["activity-step-1"]),
         steps=[
-            _step(agent_id=AGENT_ID, actor_type="agent"),
+            _step(
+                agent_id=AGENT_ID,
+                actor_type="agent",
+                activity_family="agent",
+            ),
             _step(step_id="step-2", position=2),
-        ]
+        ],
     )
     result = await Episode360Provider(
         journey_source=source,
@@ -956,7 +961,21 @@ async def test_journey_subject_projects_tenant_version_and_evidenced_steps() -> 
     )
     assert slot_coverage["touchpoints"]["state"] == "unknown"
     assert slot_coverage["agent_interventions"]["state"] == "degraded"
-    assert slot_coverage["agent_interventions"]["evidenceRefs"][0]["id"] == "step-1"
+    assert slot_coverage["agent_interventions"]["coverage"] == (
+        "exact_activity_id_references_resolved"
+    )
+    assert slot_coverage["agent_interventions"]["recordedActivityIds"] == ["activity-step-1"]
+    assert slot_coverage["agent_interventions"]["resolvedActivityIds"] == ["activity-step-1"]
+    assert {ref["id"] for ref in slot_coverage["agent_interventions"]["evidenceRefs"]} == {
+        VERSION_ID,
+        "step-1",
+    }
+    agent_claims = [
+        claim for claim in result.claims if claim.kind == "journey_agent_activity_reference"
+    ]
+    assert len(agent_claims) == 1
+    assert agent_claims[0].domainSlotIds == ["agent_interventions"]
+    assert {ref.id for ref in agent_claims[0].evidenceRefs} == {VERSION_ID, "step-1"}
     assert slot_coverage["communications"]["state"] == "unknown"
     assert slot_coverage["dropoffs"]["state"] == "unknown"
     assert slot_coverage["conversions"]["state"] == "unknown"
@@ -1006,6 +1025,89 @@ async def test_journey_subject_projects_tenant_version_and_evidenced_steps() -> 
     } == {slot_id for claim in result.claims for slot_id in claim.domainSlotIds}
     serialized = json.dumps(result.model_dump(mode="json"))
     assert "must-not-appear" not in serialized
+
+
+async def test_journey_agent_label_requires_exact_reference() -> None:
+    source = FakeJourneySource(
+        steps=[_step(agent_id=AGENT_ID, actor_type="agent", activity_family="agent")]
+    )
+    result = await Episode360Provider(
+        journey_source=source,
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+    ).project(_request(), _context())
+
+    slot = _section(result, "summary").content["requiredSlotCoverage"]["agent_interventions"]
+    assert slot["state"] == "unknown"
+    assert slot["reason"] == "journey_version_agent_activity_reference_list_unavailable"
+    assert slot["evidenceRefs"] == []
+    assert _section(result, "interactions").content["agentActivities"] == []
+    assert not [
+        claim for claim in result.claims if claim.kind == "journey_agent_activity_reference"
+    ]
+
+
+async def test_journey_agent_activity_reference_rejects_non_agent_and_restricted_steps() -> None:
+    source = FakeJourneySource(
+        journey=_journey(agent_activity_ids=["activity-step-1", "activity-step-2"]),
+        steps=[
+            _step(
+                agent_id=AGENT_ID,
+                actor_type="agent",
+                activity_family="web",
+            ),
+            _step(
+                step_id="step-2",
+                position=2,
+                agent_id=AGENT_ID,
+                actor_type="agent",
+                activity_family="agent",
+                activity_status="consent_restricted",
+            ),
+        ],
+    )
+    result = await Episode360Provider(
+        journey_source=source,
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+    ).project(_request(), _context())
+
+    slot = _section(result, "summary").content["requiredSlotCoverage"]["agent_interventions"]
+    assert slot["state"] == "unknown"
+    assert slot["resolvedActivityIds"] == []
+    assert slot["unresolvedActivityIds"] == ["activity-step-1", "activity-step-2"]
+    assert "journey_agent_activity_step_family_mismatch" in result.degradedReasons
+    assert "journey_agent_activity_step_restricted" in result.degradedReasons
+    assert _section(result, "interactions").content["agentActivities"] == []
+
+
+async def test_journey_agent_activity_reference_in_time_window_stays_partial() -> None:
+    source = FakeJourneySource(
+        journey=_journey(agent_activity_ids=["activity-step-1"]),
+        steps=[
+            _step(
+                agent_id=AGENT_ID,
+                actor_type="agent",
+                activity_family="agent",
+            )
+        ],
+    )
+    result = await Episode360Provider(
+        journey_source=source,
+        touchpoint_source=FakeJourneyTouchpointSource({}),
+    ).project(
+        _request(
+            timeRange={
+                "from": "2026-10-16T09:00:00+00:00",
+                "to": "2026-10-16T10:00:00+00:00",
+            }
+        ),
+        _context(),
+    )
+
+    slot = _section(result, "summary").content["requiredSlotCoverage"]["agent_interventions"]
+    assert slot["state"] == "degraded"
+    assert slot["coverage"] == "partial_exact_activity_id_references_resolved"
+    assert slot["resolvedActivityIds"] == ["activity-step-1"]
+    assert "journey_agent_activity_step_inventory_incomplete" in result.degradedReasons
 
 
 @pytest.mark.parametrize("is_current", [False, None])

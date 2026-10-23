@@ -137,6 +137,7 @@ _MAX_JOURNEY_LINK_READS = 50
 _MAX_RISK_SIGNAL_READS = 100
 _MAX_RECIPIENT_RISK_IDENTITY_READS = 50
 _MAX_CONSENT_POLICY_READS = 100
+_MAX_PROFILE_LINK_READS = 50
 
 # Section-level limitation note for subjects without a message-spine join.
 _SCOPE_NOTES: dict[str, str] = {
@@ -291,6 +292,62 @@ class EntityIdentityReader(Protocol):
 
 
 @dataclass(frozen=True)
+class ProfileLinkRead:
+    """Exact tenant profile identity read for one typed communication reference."""
+
+    state: str
+    profile_id: Optional[str] = None
+    evidence: tuple[EvidenceRef, ...] = ()
+    reason: Optional[str] = None
+
+
+class ProfileLinkReader(Protocol):
+    async def resolve(self, tenant_id: str, profile_id: str) -> ProfileLinkRead:
+        """Verify one direct profile ID in the canonical tenant profile store."""
+        ...
+
+
+class RepositoryProfileLinkReader:
+    """Verify exact tenant/profile identity using the existing profile authority."""
+
+    async def resolve(self, tenant_id: str, profile_id: str) -> ProfileLinkRead:
+        if not tenant_id or not profile_id:
+            return ProfileLinkRead(state="unknown", reason="profile_link_scope_invalid")
+        try:
+            from dependencies.providers import get_cache, get_graph
+            from repositories.repos import IdentityRepository, tenant_record_id
+
+            row = await IdentityRepository(get_graph(), get_cache()).get_profile(
+                tenant_id, profile_id
+            )
+        except Exception:  # noqa: BLE001 - identity outage stays unknown
+            return ProfileLinkRead(
+                state="degraded", reason="profile_identity_authority_unavailable"
+            )
+        if row is None:
+            return ProfileLinkRead(state="unresolved", reason="profile_identity_not_found")
+        if (
+            not isinstance(row, dict)
+            or row.get("tenant_id") != tenant_id
+            or str(row.get("user_id") or "") != profile_id
+        ):
+            return ProfileLinkRead(state="ambiguous", reason="profile_identity_scope_mismatch")
+        observed_at = row.get("updated_at") or row.get("created_at")
+        if isinstance(observed_at, datetime):
+            observed_at = observed_at.isoformat()
+        evidence = EvidenceRef(
+            id=profile_id,
+            type="entity",
+            source="identity.profiles",
+            observedAt=observed_at if isinstance(observed_at, str) and observed_at else None,
+            uri=f"store://profiles/{quote(tenant_record_id(tenant_id, profile_id), safe='')}",
+        )
+        return ProfileLinkRead(
+            state="resolved", profile_id=profile_id, evidence=(evidence,)
+        )
+
+
+@dataclass(frozen=True)
 class RecipientIdentityRead:
     """Tenant-scoped exact resolution of one communication recipient binding."""
 
@@ -423,6 +480,16 @@ class JourneyLinkRead:
     reason: str
     evidence_refs: tuple[EvidenceRef, ...] = ()
     links: tuple[tuple[str, EvidenceRef, EvidenceRef], ...] = ()
+
+
+@dataclass(frozen=True)
+class ProfileLinksRead:
+    """Bounded joins from typed communication profile IDs to tenant profiles."""
+
+    state: str
+    reason: str
+    evidence_refs: tuple[EvidenceRef, ...] = ()
+    links: tuple[dict[str, Any], ...] = ()
 
 
 class RiskSignalReader(Protocol):
@@ -900,6 +967,7 @@ def _communication_required_slot_coverage(
     canonical_up: bool,
     canonical_truncated: bool,
     journey_links: JourneyLinkRead,
+    profile_links: ProfileLinksRead,
     risk_flags: RiskFlagRead,
     policy_state: ConsentPolicyRead,
 ) -> dict[str, dict[str, Any]]:
@@ -974,16 +1042,6 @@ def _communication_required_slot_coverage(
             for ref in message.evidence_refs
             if isinstance(ref, EvidenceRef)
         ]
-    )
-    profile_rows = [
-        row
-        for row in fact_rows
-        if _has_typed_reference(
-            {"row": row, "payload": _payload_of(row)}, frozenset({"profile_id", "profile_ids"})
-        )
-    ]
-    profile_refs = _dedupe_refs(
-        [ref for row in profile_rows if (ref := _row_evidence(row)) is not None]
     )
     response_rows = [
         row
@@ -1143,11 +1201,22 @@ def _communication_required_slot_coverage(
         "message_inventory": message_slot,
         "participants": participant_slot,
         "campaign_links": campaign_slot,
-        "profile_links": (
-            slot("degraded", "partial", "typed_profile_reference_observed_without_profile_resolution", profile_refs)
-            if profile_refs
-            else slot("unknown", "unknown", "communication_profile_link_not_observed")
-        ),
+        "profile_links": {
+            **slot(
+                profile_links.state,
+                "partial" if profile_links.links else "unknown",
+                profile_links.reason,
+                list(profile_links.evidence_refs),
+            ),
+            "links": list(profile_links.links),
+            # The profile record read is exact and tenant-scoped, but the
+            # authority does not provide historical identity or a freshness
+            # watermark for the communication-to-profile relationship.
+            "temporalState": "unknown",
+            "temporalReason": "profile_identity_history_not_joined",
+            "freshnessState": "unknown",
+            "freshnessReason": "profile_identity_authority_has_no_projection_watermark",
+        },
         "journey_links": journey_slot,
         "response_events": response_slot,
         "agent_authorship": author_slot,
@@ -1476,6 +1545,7 @@ class Communication360Provider:
         *,
         agent_identity_reader: Optional[AgentIdentityReader] = None,
         entity_identity_reader: Optional[EntityIdentityReader] = None,
+        profile_link_reader: Optional[ProfileLinkReader] = None,
         recipient_identity_reader: Optional[RecipientIdentityReader] = None,
         source_subject_scope_reader: Optional[SourceSubjectScopeReader] = None,
         journey_reader: Optional[CurrentJourneyReader] = None,
@@ -1512,6 +1582,7 @@ class Communication360Provider:
             if entity_identity_reader is not None
             else RepositoryEntityIdentityReader()
         )
+        self._profile_links = profile_link_reader or RepositoryProfileLinkReader()
         self._recipient_identity = (
             recipient_identity_reader
             if recipient_identity_reader is not None
@@ -1630,6 +1701,13 @@ class Communication360Provider:
             canonical_up=canonical_up,
             canonical_truncated=canonical_truncated,
         )
+        profile_links = await self._read_profile_links(
+            tenant_id,
+            in_scope_rows,
+            noncurrent_scope=_projection_requests_noncurrent_scope(request),
+            canonical_up=canonical_up,
+            canonical_truncated=canonical_truncated,
+        )
 
         # Read the message spine only when the subject binds to it.
         messages: list[CommunicationMessage] = []
@@ -1680,6 +1758,7 @@ class Communication360Provider:
                 canonical_truncated,
                 context,
                 journey_links,
+                profile_links,
                 risk_flags,
                 policy_state,
             ),
@@ -2606,6 +2685,194 @@ class Communication360Provider:
             tuple(links),
         )
 
+    async def _read_profile_links(
+        self,
+        tenant_id: str,
+        rows: list[dict[str, Any]],
+        *,
+        noncurrent_scope: bool,
+        canonical_up: bool,
+        canonical_truncated: bool,
+    ) -> ProfileLinksRead:
+        """Resolve direct profile IDs only when their communication fact has evidence."""
+        refs_by_id: dict[str, list[EvidenceRef]] = {}
+        ungrounded_ids: set[str] = set()
+        overflow = False
+        for row in rows:
+            raw_ids = _row_reference_values(row, "profile_id", "profile_ids")
+            if not raw_ids:
+                continue
+            fact_ref = _row_evidence(row)
+            for profile_id in raw_ids:
+                if profile_id not in refs_by_id and profile_id not in ungrounded_ids:
+                    if len(refs_by_id) + len(ungrounded_ids) >= _MAX_PROFILE_LINK_READS:
+                        overflow = True
+                        continue
+                if fact_ref is None:
+                    ungrounded_ids.add(profile_id)
+                    continue
+                ungrounded_ids.discard(profile_id)
+                refs = refs_by_id.setdefault(profile_id, [])
+                if all(existing.id != fact_ref.id for existing in refs):
+                    refs.append(fact_ref)
+
+        source_refs = _dedupe_refs([ref for refs in refs_by_id.values() for ref in refs])
+        if not canonical_up:
+            return ProfileLinksRead(
+                "degraded",
+                "communication_profile_reference_authority_unavailable",
+                tuple(source_refs),
+            )
+
+        missing_evidence_count = len(ungrounded_ids - set(refs_by_id))
+        reference_ids = sorted(refs_by_id)
+        if not reference_ids:
+            if missing_evidence_count:
+                return ProfileLinksRead(
+                    "degraded", "profile_reference_evidence_missing", tuple(source_refs)
+                )
+            if canonical_truncated:
+                return ProfileLinksRead(
+                    "degraded", REASON_SOURCE_READ_TRUNCATED, tuple(source_refs)
+                )
+            return ProfileLinksRead(
+                "unknown", "communication_profile_link_not_observed", tuple(source_refs)
+            )
+
+        if noncurrent_scope:
+            links = tuple(
+                {
+                    "profileId": profile_id,
+                    "resolutionState": "unknown",
+                    "reason": "historical_profile_identity_lookup_unavailable",
+                    "communicationEvidenceRefs": [
+                        ref.model_dump(mode="json", exclude_none=True)
+                        for ref in refs_by_id.get(profile_id, [])
+                    ],
+                    "identityEvidenceRefs": [],
+                    "evidenceRefs": [
+                        ref.model_dump(mode="json", exclude_none=True)
+                        for ref in refs_by_id.get(profile_id, [])
+                    ],
+                    "temporalState": "unknown",
+                    "freshnessState": "unknown",
+                }
+                for profile_id in reference_ids
+            )
+            incomplete = overflow or canonical_truncated or bool(missing_evidence_count)
+            return ProfileLinksRead(
+                "degraded" if incomplete else "unknown",
+                REASON_SOURCE_READ_TRUNCATED
+                if overflow or canonical_truncated
+                else "profile_reference_evidence_missing"
+                if missing_evidence_count
+                else "historical_profile_identity_lookup_unavailable",
+                tuple(source_refs),
+                links,
+            )
+
+        read_ids = [profile_id for profile_id in reference_ids if profile_id in refs_by_id]
+        read_ids = read_ids[:_MAX_PROFILE_LINK_READS]
+        semaphore = asyncio.Semaphore(8)
+
+        async def read_one(profile_id: str) -> tuple[str, ProfileLinkRead]:
+            async with semaphore:
+                try:
+                    result = await self._profile_links.resolve(tenant_id, profile_id)
+                except Exception:  # noqa: BLE001 - profile identity details stay private
+                    result = ProfileLinkRead(
+                        "degraded", reason="profile_identity_authority_unavailable"
+                    )
+            if not isinstance(result, ProfileLinkRead):
+                result = ProfileLinkRead(
+                    "degraded", reason="profile_identity_authority_invalid_response"
+                )
+            return profile_id, result
+
+        results = await asyncio.gather(*(read_one(profile_id) for profile_id in read_ids))
+        results_by_id = dict(results)
+        links: list[dict[str, Any]] = []
+        profile_refs: list[EvidenceRef] = []
+        unresolved = False
+        degraded = overflow or canonical_truncated or bool(missing_evidence_count)
+        authority_unavailable = False
+
+        for profile_id in reference_ids:
+            communication_refs = refs_by_id.get(profile_id, [])
+            read = results_by_id.get(profile_id)
+            profile_evidence = [
+                ref
+                for ref in (read.evidence if read is not None else ())
+                if read is not None
+                and read.state == "resolved"
+                and read.profile_id == profile_id
+                and isinstance(ref, EvidenceRef)
+                and ref.id == profile_id
+                and ref.type == "entity"
+                and ref.source == "identity.profiles"
+            ]
+            resolved = bool(
+                read is not None
+                and read.state == "resolved"
+                and read.profile_id == profile_id
+                and profile_evidence
+            )
+            reason = (
+                "exact_tenant_profile_record_joined_to_typed_communication_reference"
+                if resolved
+                else read.reason
+                if read is not None and isinstance(read.reason, str) and read.reason
+                else "profile_identity_authority_read_limit_exceeded"
+                if profile_id in refs_by_id and read is None
+                else "profile_identity_reference_not_resolved"
+            )
+            if read is not None and read.state in {"degraded", "ambiguous"}:
+                degraded = True
+                authority_unavailable = authority_unavailable or read.state == "degraded"
+            if not resolved:
+                unresolved = True
+            else:
+                profile_refs.extend(profile_evidence)
+            links.append(
+                {
+                    "profileId": profile_id,
+                    "resolutionState": "resolved" if resolved else "unknown",
+                    "reason": reason,
+                    "communicationEvidenceRefs": [
+                        ref.model_dump(mode="json", exclude_none=True)
+                        for ref in communication_refs
+                    ],
+                    "identityEvidenceRefs": [
+                        ref.model_dump(mode="json", exclude_none=True)
+                        for ref in profile_evidence
+                    ],
+                    "evidenceRefs": [
+                        ref.model_dump(mode="json", exclude_none=True)
+                        for ref in _dedupe_refs([*communication_refs, *profile_evidence])
+                    ],
+                    "temporalState": "unknown",
+                    "freshnessState": "unknown",
+                }
+            )
+
+        all_refs = _dedupe_refs([*source_refs, *profile_refs])
+        all_resolved = not unresolved and not degraded
+        state = "available" if all_resolved else "degraded" if degraded else "unknown"
+        reason = (
+            "exact_tenant_profile_records_joined_to_evidence_backed_communication_references"
+            if all_resolved
+            else REASON_SOURCE_READ_TRUNCATED
+            if canonical_truncated or overflow
+            else "profile_reference_evidence_missing"
+            if missing_evidence_count
+            else "profile_identity_authority_unavailable"
+            if authority_unavailable
+            else "one_or_more_profile_references_lack_joinable_identity_evidence"
+            if unresolved
+            else "profile_identity_authority_unavailable"
+        )
+        return ProfileLinksRead(state, reason, tuple(all_refs), tuple(links))
+
     def _journey_link_claims(
         self, request: ProjectionRequest, read: JourneyLinkRead
     ) -> list[ClaimEnvelope]:
@@ -2675,6 +2942,7 @@ class Communication360Provider:
         canonical_truncated: bool,
         context: ProjectionContext,
         journey_links: JourneyLinkRead,
+        profile_links: ProfileLinksRead,
         risk_flags: RiskFlagRead,
         policy_state: ConsentPolicyRead,
     ) -> ProjectionSection:
@@ -2772,6 +3040,7 @@ class Communication360Provider:
                     canonical_up=canonical_up,
                     canonical_truncated=canonical_truncated,
                     journey_links=journey_links,
+                    profile_links=profile_links,
                     risk_flags=risk_flags,
                     policy_state=policy_state,
                 ),

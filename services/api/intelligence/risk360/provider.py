@@ -117,6 +117,7 @@ _MAX_SIGNAL_SCAN = 100
 _MAX_AGENT_POLICY_FLAG_SCAN = 100
 _MAX_SOURCE_PROVENANCE_SCAN = 100
 _MAX_POISONING_EVIDENCE_SCAN = 100
+_MAX_ASSESSMENT_HISTORY_SCAN = 100
 _MAX_FINANCIAL_PATH_NODES = 21
 _MAX_TRANSFERS_PER_PATH_EDGE = 2
 _MAX_SOCIAL_PROPAGATION_PATHS = 50
@@ -285,6 +286,16 @@ class RiskSourceReader(Protocol):
         """The tenant's latest RiskAssessment record for ``subject``, or None."""
         ...
 
+    async def assessment_history(
+        self,
+        *,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        as_of: Optional[datetime],
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Bounded computation-run lineage for exact-subject risk assessments."""
+        ...
+
     async def signals(
         self,
         *,
@@ -354,6 +365,9 @@ class RepositoryRiskSourceReader:
         self._assessments = RiskAssessmentRepository()
         self._signals = RiskSignalRepository()
         self._poisoning_evidence = RiskPoisoningEvidenceRepository()
+        from intelligence.computation.repositories import get_computation_repository
+
+        self._runs = get_computation_repository()
 
     async def latest_assessment(
         self,
@@ -388,6 +402,77 @@ class RepositoryRiskSourceReader:
             return None
         rows.sort(key=lambda r: str(r.get("assessed_at") or ""), reverse=True)
         return rows[0]
+
+    async def assessment_history(
+        self,
+        *,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        as_of: Optional[datetime],
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Read exact-subject risk assessment run lineage from the substrate."""
+        rows = await self._runs.list_runs_for_subject(
+            tenant_id,
+            subject.kind,
+            subject.id,
+            definition_prefix="risk360.",
+            limit=_MAX_ASSESSMENT_HISTORY_SCAN + 1,
+            as_of=as_of,
+        )
+        if not isinstance(rows, list):
+            raise RiskSourceReadIncomplete("risk assessment history contract is invalid")
+        complete = len(rows) <= _MAX_ASSESSMENT_HISTORY_SCAN
+        history: list[dict[str, Any]] = []
+        for row in rows[:_MAX_ASSESSMENT_HISTORY_SCAN]:
+            if not isinstance(row, dict):
+                raise RiskSourceReadIncomplete("risk assessment history row is invalid")
+            data = _decode_mapping(row.get("data"))
+            run_id = row.get("run_id")
+            assessment_id = data.get("assessment_id")
+            started_at = row.get("started_at")
+            if (
+                str(row.get("tenant_id", "")) != tenant_id
+                or not str(row.get("definition_id", "")).startswith("risk360.")
+                or data.get("subject_kind") != subject.kind
+                or data.get("subject_id") != subject.id
+                or not isinstance(run_id, str)
+                or not run_id.strip()
+                or not isinstance(assessment_id, str)
+                or not assessment_id.strip()
+            ):
+                raise RiskSourceReadIncomplete("risk assessment history exact binding is invalid")
+            if not isinstance(started_at, (str, datetime)) or _aware_datetime(started_at) is None:
+                complete = False
+                continue
+            started = _aware_datetime(started_at)
+            if as_of is not None and started is not None and started > as_of:
+                raise RiskSourceReadIncomplete("risk assessment history exceeds as_of anchor")
+            history.append(
+                {
+                    "tenant_id": tenant_id,
+                    "subject_kind": subject.kind,
+                    "subject_id": subject.id,
+                    "run_id": run_id,
+                    "assessment_id": assessment_id,
+                    "definition_id": str(row.get("definition_id", "")),
+                    "definition_version": row.get("definition_version"),
+                    "context_hash": row.get("context_hash"),
+                    "status": row.get("status"),
+                    "started_at": started.isoformat() if started is not None else None,
+                    "completed_at": (
+                        _aware_datetime(row.get("completed_at")).isoformat()
+                        if _aware_datetime(row.get("completed_at")) is not None
+                        else None
+                    ),
+                    "supersedes_run_id": data.get("supersedes_run_id"),
+                    "claim_state": data.get("claim_state"),
+                    "dimensions": data.get("dimensions")
+                    if isinstance(data.get("dimensions"), list)
+                    else [],
+                }
+            )
+        history.sort(key=lambda row: (row["started_at"] or "", row["run_id"]), reverse=True)
+        return history, complete
 
     async def signals(
         self,
@@ -825,6 +910,26 @@ class Risk360Provider:
                 as_of=poisoning_as_of,
             )
 
+        assessment_history_as_of, history_anchor_reason = self._assessment_history_as_of(
+            request, context
+        )
+        if context.tenantId != tenant_id:
+            assessment_history, assessment_history_degraded = [], True
+            assessment_history_reason = "risk_assessment_history_tenant_context_mismatch"
+        elif history_anchor_reason is not None:
+            assessment_history, assessment_history_degraded = [], False
+            assessment_history_reason = history_anchor_reason
+        else:
+            (
+                assessment_history,
+                assessment_history_degraded,
+                assessment_history_reason,
+            ) = await self._safe_assessment_history(
+                tenant_id,
+                request.subject,
+                as_of=assessment_history_as_of,
+            )
+
         financial_link, financial_link_degraded, financial_link_reason = (
             await self._safe_financial_contagion_link(request, context)
         )
@@ -842,6 +947,8 @@ class Risk360Provider:
         if financial_link is not None:
             evidence = _dedupe_evidence([*evidence, *financial_link["evidence_refs"]])
         evidence = _dedupe_evidence([*evidence, *social_propagation["evidence_refs"]])
+        history_evidence = self._assessment_history_evidence(assessment_history)
+        evidence = _dedupe_evidence([*evidence, *history_evidence])
 
         sections = [
             self._summary_section(request, assessment, assessment_degraded, dep_state),
@@ -853,6 +960,7 @@ class Risk360Provider:
                     or signals_degraded
                     or source_provenance_degraded
                     or poisoning_evidence_degraded
+                    or assessment_history_degraded
                     or social_propagation["state"] == "degraded"
                 ),
             ),
@@ -875,6 +983,9 @@ class Risk360Provider:
                 agent_policy_flags,
                 agent_policy_flags_degraded,
                 agent_policy_flags_reason,
+                assessment_history,
+                assessment_history_degraded,
+                assessment_history_reason,
             ),
             self._health_section(
                 request,
@@ -1127,6 +1238,9 @@ class Risk360Provider:
         agent_policy_flags: list[dict[str, Any]],
         agent_policy_flags_degraded: bool,
         agent_policy_flags_reason: Optional[str],
+        assessment_history: list[dict[str, Any]],
+        assessment_history_degraded: bool,
+        assessment_history_reason: Optional[str],
     ) -> ProjectionSection:
         """findings — NO risk findings are asserted before materiality exists.
 
@@ -1199,6 +1313,11 @@ class Risk360Provider:
                     for key, value in social_propagation.items()
                     if key != "evidence_refs"
                 },
+                "auditHistory": self._assessment_history_summary(
+                    assessment_history,
+                    degraded=assessment_history_degraded,
+                    reason=assessment_history_reason,
+                ),
                 "requiredSlotCoverage": self._required_slot_coverage(
                     request,
                     assessment,
@@ -1218,10 +1337,18 @@ class Risk360Provider:
                     agent_policy_flags,
                     agent_policy_flags_degraded,
                     agent_policy_flags_reason,
+                    assessment_history,
+                    assessment_history_degraded,
+                    assessment_history_reason,
                 ),
             },
             warnings=warnings or None,
-            canonicalAuthorityRefs=["graph", "relationship_facts"],
+            canonicalAuthorityRefs=[
+                "computation_runs",
+                "graph",
+                "relationship_facts",
+                "risk_assessments",
+            ],
         )
 
     @staticmethod
@@ -1330,6 +1457,9 @@ class Risk360Provider:
         agent_policy_flags: list[dict[str, Any]],
         agent_policy_flags_degraded: bool,
         agent_policy_flags_reason: Optional[str],
+        assessment_history: list[dict[str, Any]],
+        assessment_history_degraded: bool,
+        assessment_history_reason: Optional[str],
     ) -> dict[str, dict[str, str]]:
         """Expose exact 360 slot coverage without converting absence into a claim."""
         agent_amplification = any(
@@ -1435,11 +1565,27 @@ class Risk360Provider:
             "financial_contagion": "financial_contagion_attribution_authority_unavailable",
             "social_contagion": "social_contagion_causal_evidence_authority_unavailable",
             "interventions": "risk_intervention_authority_unavailable",
-            "audit_history": "risk_audit_history_authority_unavailable",
         }
         for slot_id, reason in unsupported_reasons.items():
             supported[slot_id] = {"state": "unknown", "reason": reason}
         supported["policy_flags"] = policy_flags_coverage
+        if assessment_history_degraded:
+            supported["audit_history"] = {
+                "state": "degraded",
+                "reason": assessment_history_reason
+                or "risk_assessment_run_history_read_incomplete",
+            }
+        elif assessment_history:
+            supported["audit_history"] = {
+                "state": "partial",
+                "reason": "assessment_run_history_available_intervention_audit_and_full_restatement_lineage_unavailable",
+            }
+        else:
+            supported["audit_history"] = {
+                "state": "unknown",
+                "reason": assessment_history_reason
+                or "risk_assessment_run_history_unavailable",
+            }
         propagation_state = social_propagation.get("state")
         propagation_reason = social_propagation.get("reason")
         if propagation_state in {"partial", "degraded", "unknown"}:
@@ -2672,6 +2818,182 @@ class Risk360Provider:
         if request.temporalMode == "as_of" and anchor is None:
             return None, "poisoning_evidence_as_of_anchor_missing"
         return anchor, None
+
+    @staticmethod
+    def _assessment_history_as_of(
+        request: ProjectionRequest,
+        context: ProjectionContext,
+    ) -> tuple[Optional[datetime], Optional[str]]:
+        """Resolve a system-time history anchor without guessing for ranges."""
+        if request.timeRange is not None or request.temporalMode in {"compare", "relative"}:
+            return None, "risk_assessment_history_window_anchor_unavailable"
+        request_anchor = _aware_datetime(request.asOf) if request.asOf is not None else None
+        context_anchor = _aware_datetime(context.asOf) if context.asOf is not None else None
+        if request.asOf is not None and request_anchor is None:
+            return None, "risk_assessment_history_as_of_anchor_invalid"
+        if context.asOf is not None and context_anchor is None:
+            return None, "risk_assessment_history_context_anchor_invalid"
+        if request_anchor is not None and context_anchor is not None:
+            if request_anchor != context_anchor:
+                return None, "risk_assessment_history_as_of_anchor_mismatch"
+        anchor = request_anchor or context_anchor
+        if request.temporalMode == "as_of" and anchor is None:
+            return None, "risk_assessment_history_as_of_anchor_missing"
+        return anchor, None
+
+    async def _safe_assessment_history(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        *,
+        as_of: Optional[datetime],
+    ) -> tuple[list[dict[str, Any]], bool, Optional[str]]:
+        """Read and revalidate bounded exact-subject computation run history."""
+        reader = getattr(self._sources, "assessment_history", None)
+        if not callable(reader):
+            return [], False, "risk_assessment_history_authority_unavailable"
+        try:
+            result = await reader(tenant_id=tenant_id, subject=subject, as_of=as_of)
+        except Exception:  # noqa: BLE001 - provider boundary degrades safely
+            return [], True, "risk_assessment_run_history_read_incomplete"
+        if (
+            not isinstance(result, tuple)
+            or len(result) != 2
+            or not isinstance(result[0], list)
+            or not isinstance(result[1], bool)
+        ):
+            return [], True, "risk_assessment_history_read_contract_invalid"
+
+        raw_rows, complete = result
+        if len(raw_rows) > _MAX_ASSESSMENT_HISTORY_SCAN:
+            return [], True, "risk_assessment_run_history_scan_limit_exceeded"
+        rows: list[dict[str, Any]] = []
+        degraded = not complete
+        reason = None if complete else "risk_assessment_run_history_scan_truncated"
+        for raw in raw_rows:
+            if not isinstance(raw, dict):
+                degraded = True
+                reason = reason or "risk_assessment_history_row_invalid"
+                continue
+            started_at = _aware_datetime(raw.get("started_at"))
+            if (
+                str(raw.get("tenant_id", "")) != tenant_id
+                or raw.get("subject_kind") != subject.kind
+                or raw.get("subject_id") != subject.id
+                or not isinstance(raw.get("run_id"), str)
+                or not raw["run_id"].strip()
+                or not isinstance(raw.get("assessment_id"), str)
+                or not raw["assessment_id"].strip()
+                or not isinstance(raw.get("definition_id"), str)
+                or not raw["definition_id"].startswith("risk360.")
+            ):
+                degraded = True
+                reason = reason or "risk_assessment_history_exact_binding_mismatch"
+                continue
+            if started_at is None:
+                degraded = True
+                reason = reason or "risk_assessment_history_timestamp_invalid"
+                continue
+            if as_of is not None and started_at > as_of:
+                degraded = True
+                reason = reason or "risk_assessment_history_as_of_read_inconsistent"
+                continue
+            dimensions = raw.get("dimensions")
+            if not isinstance(dimensions, list) or any(
+                not isinstance(dimension, str) for dimension in dimensions
+            ):
+                degraded = True
+                reason = reason or "risk_assessment_history_dimensions_invalid"
+                dimensions = []
+            rows.append(
+                {
+                    **raw,
+                    "started_at": started_at.isoformat(),
+                    "completed_at": (
+                        _aware_datetime(raw.get("completed_at")).isoformat()
+                        if _aware_datetime(raw.get("completed_at")) is not None
+                        else None
+                    ),
+                    "dimensions": dimensions,
+                }
+            )
+        rows.sort(
+            key=lambda row: (row["started_at"], row["run_id"]),
+            reverse=True,
+        )
+        return rows, degraded, reason
+
+    @staticmethod
+    def _assessment_history_evidence(rows: list[dict[str, Any]]) -> list[EvidenceRef]:
+        """Make each exact run-history record traceable to its substrate row."""
+        evidence: list[EvidenceRef] = []
+        for row in rows:
+            run_id = row.get("run_id")
+            started_at = row.get("started_at")
+            if not isinstance(run_id, str) or not isinstance(started_at, str):
+                continue
+            evidence.append(
+                EvidenceRef(
+                    id=run_id,
+                    type="model_output",
+                    source="computation_runs",
+                    observedAt=started_at,
+                    uri=f"store://computation_runs/{run_id}",
+                )
+            )
+        return evidence
+
+    @staticmethod
+    def _assessment_history_summary(
+        rows: list[dict[str, Any]],
+        *,
+        degraded: bool,
+        reason: Optional[str],
+    ) -> dict[str, Any]:
+        """Render assessment-run history while preserving uncovered audit areas."""
+        state = "degraded" if degraded else "partial" if rows else "unknown"
+        if degraded:
+            resolved_reason = reason or "risk_assessment_run_history_read_incomplete"
+        elif rows:
+            resolved_reason = (
+                "assessment_run_history_available_intervention_audit_and_full_restatement_lineage_unavailable"
+            )
+        else:
+            resolved_reason = reason or "risk_assessment_run_history_unavailable"
+        records = [
+            {
+                "runId": row["run_id"],
+                "assessmentId": row["assessment_id"],
+                "definitionId": row["definition_id"],
+                "definitionVersion": row.get("definition_version"),
+                "contextHash": row.get("context_hash"),
+                "status": row.get("status"),
+                "startedAt": row["started_at"],
+                "completedAt": row.get("completed_at"),
+                "supersedesRunId": row.get("supersedes_run_id"),
+                "claimState": row.get("claim_state"),
+                "dimensions": list(row.get("dimensions") or []),
+                "evidenceRef": Risk360Provider._assessment_history_evidence([row])[0].model_dump(
+                    mode="json"
+                ),
+            }
+            for row in rows
+        ]
+        return {
+            "state": state,
+            "reason": resolved_reason,
+            "assessmentRuns": records,
+            "interventions": {
+                "state": "unknown",
+                "reason": "risk_intervention_authority_unavailable",
+            },
+            "coverage": {
+                "completeRunScan": not degraded and reason is None,
+                "assessmentVersionLineage": "partial",
+                "interventionAuditLineage": "unavailable",
+                "rawRunPayload": "excluded",
+            },
+        }
 
     async def _safe_poisoning_evidence(
         self,

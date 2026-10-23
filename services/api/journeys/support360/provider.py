@@ -960,30 +960,26 @@ class Support360Provider(IntelligenceProjectionProvider):
         events = [event for event in read.events if isinstance(event, dict)]
         evidence_refs: list[EvidenceRef] = []
         timeline_entries: list[dict[str, Any]] = []
+        case_record_for_evidence = {
+            "source_connection_id": record.get("source_connection_id"),
+            "source_provider_identity": record.get("source_provider_identity"),
+        }
+        event_evidence_incomplete = False
         for event in events:
-            raw_refs = event.get("evidence_refs")
-            if isinstance(raw_refs, str):
-                try:
-                    raw_refs = json.loads(raw_refs)
-                except json.JSONDecodeError:
-                    raw_refs = None
-            if isinstance(raw_refs, (list, tuple)):
-                for raw_ref in raw_refs:
-                    try:
-                        reference = (
-                            raw_ref
-                            if isinstance(raw_ref, EvidenceRef)
-                            else EvidenceRef.model_validate(raw_ref)
-                        )
-                    except (TypeError, ValueError):
-                        continue
-                    evidence_refs.append(reference)
+            event_evidence_refs = _case_event_evidence_refs(
+                case_record_for_evidence,
+                event,
+            )
+            if not event_evidence_refs:
+                event_evidence_incomplete = True
+            evidence_refs.extend(event_evidence_refs)
             timeline_entries.append(
                 {
                     "eventType": _safe_reference(_text(event.get("event_type"))),
                     "occurredAt": _safe_reference(_text(event.get("source_occurred_at"))),
                     "receivedAt": _safe_reference(_text(event.get("received_at"))),
                     "lifecycleApplied": event.get("lifecycle_applied") is True,
+                    "evidenceRefs": event_evidence_refs,
                 }
             )
         evidence_refs = _dedupe_evidence_refs(evidence_refs)
@@ -991,6 +987,8 @@ class Support360Provider(IntelligenceProjectionProvider):
             return self._unknown_result(request, context, _REASON_CASE_EVIDENCE_UNAVAILABLE)
 
         partial_reasons = [_REASON_CASE_HISTORY_PARTIAL]
+        if event_evidence_incomplete:
+            partial_reasons.append("support_case_event_evidence_unverifiable")
         if not read.complete:
             partial_reasons.append("support_case_event_history_truncated")
         lifecycle_state = _safe_reference(_text(record.get("lifecycle_state")))
@@ -1291,9 +1289,6 @@ def _case_resolution_slot(
     if resolution_at is None or connection_id is None or provider_identity is None:
         return None
 
-    expected_connection_uri = (
-        f"store://provider_connections/{quote(connection_id, safe='')}"
-    )
     exact_evidence: list[EvidenceRef] = []
     for event in events:
         source_event_id = _safe_reference(_text(event.get("source_event_id")))
@@ -1305,48 +1300,7 @@ def _case_resolution_slot(
             or event_at != resolution_at
         ):
             continue
-
-        raw_refs = event.get("evidence_refs")
-        if isinstance(raw_refs, str):
-            try:
-                raw_refs = json.loads(raw_refs)
-            except json.JSONDecodeError:
-                continue
-        if not isinstance(raw_refs, (list, tuple)):
-            continue
-
-        event_ref: Optional[EvidenceRef] = None
-        connection_ref: Optional[EvidenceRef] = None
-        for raw_ref in raw_refs:
-            try:
-                reference = (
-                    raw_ref
-                    if isinstance(raw_ref, EvidenceRef)
-                    else EvidenceRef.model_validate(raw_ref)
-                )
-            except (TypeError, ValueError):
-                continue
-            if (
-                reference.id == source_event_id
-                and reference.type == "event"
-                and reference.source == provider_identity
-                and reference.uri
-                == (
-                    "provider-event://"
-                    f"{quote(connection_id, safe='')}/{quote(source_event_id, safe='')}"
-                )
-                and _utc_timestamp(reference.observedAt) == event_at
-            ):
-                event_ref = reference
-            elif (
-                reference.id == connection_id
-                and reference.type == "entity"
-                and reference.source == "provider_connections"
-                and reference.uri == expected_connection_uri
-            ):
-                connection_ref = reference
-        if event_ref is not None and connection_ref is not None:
-            exact_evidence.extend((event_ref, connection_ref))
+        exact_evidence.extend(_case_event_evidence_refs(record, event))
 
     evidence_refs = _dedupe_evidence_refs(exact_evidence)
     if not evidence_refs:
@@ -1359,6 +1313,68 @@ def _case_resolution_slot(
         "evidenceRefs": evidence_refs,
         "reasonCode": _REASON_SUPPORT_BUSINESS_OUTCOME_MISSING,
     }
+
+
+def _case_event_evidence_refs(
+    record: dict[str, Any],
+    event: dict[str, Any],
+) -> list[EvidenceRef]:
+    """Return only the exact provider-event and connection refs for one case event."""
+    source_event_id = _safe_reference(_text(event.get("source_event_id")))
+    connection_id = _safe_reference(_text(record.get("source_connection_id")))
+    provider_identity = _safe_reference(_text(record.get("source_provider_identity")))
+    event_at = _utc_timestamp(event.get("source_occurred_at"))
+    if (
+        source_event_id is None
+        or connection_id is None
+        or provider_identity is None
+        or event_at is None
+    ):
+        return []
+
+    raw_refs = event.get("evidence_refs")
+    if isinstance(raw_refs, str):
+        try:
+            raw_refs = json.loads(raw_refs)
+        except json.JSONDecodeError:
+            return []
+    if not isinstance(raw_refs, (list, tuple)):
+        return []
+
+    expected_event_uri = (
+        "provider-event://"
+        f"{quote(connection_id, safe='')}/{quote(source_event_id, safe='')}"
+    )
+    expected_connection_uri = f"store://provider_connections/{quote(connection_id, safe='')}"
+    event_ref: Optional[EvidenceRef] = None
+    connection_ref: Optional[EvidenceRef] = None
+    for raw_ref in raw_refs:
+        try:
+            reference = (
+                raw_ref
+                if isinstance(raw_ref, EvidenceRef)
+                else EvidenceRef.model_validate(raw_ref)
+            )
+        except (TypeError, ValueError):
+            continue
+        if (
+            reference.id == source_event_id
+            and reference.type == "event"
+            and reference.source == provider_identity
+            and reference.uri == expected_event_uri
+            and _utc_timestamp(reference.observedAt) == event_at
+        ):
+            event_ref = reference
+        elif (
+            reference.id == connection_id
+            and reference.type == "entity"
+            and reference.source == "provider_connections"
+            and reference.uri == expected_connection_uri
+        ):
+            connection_ref = reference
+    if event_ref is None or connection_ref is None:
+        return []
+    return [event_ref, connection_ref]
 
 
 def _utc_timestamp(value: Any) -> Optional[datetime]:

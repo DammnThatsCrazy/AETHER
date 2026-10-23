@@ -55,6 +55,7 @@ def test_unbound_surface_slot_must_name_its_implementation_gap() -> None:
         slot for slot in campaign["domainSlots"] if slot["id"] == "signal_sources"
     )
     slot["projectionBindings"] = []
+    slot.pop("partialImplementationReason", None)
     slot["unboundReason"] = "canonical_signal_source_provider_not_connected"
 
     assert validate_product_surface_catalog(registry) == []

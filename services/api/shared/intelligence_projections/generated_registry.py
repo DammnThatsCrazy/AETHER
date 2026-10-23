@@ -1173,7 +1173,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationBlueprint": "docs/architecture/blueprints/risk360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("agent", "cluster", "contagion_path", "entity", "population", "relationship", "source"),
-        "canonicalAuthorities": ("cluster_membership", "consent_policy_decisions", "economic_facts", "entity_graph", "evidence", "flow_trace_paths", "flow_traces", "graph", "model_governance", "relationship_facts", "risk_assessments", "risk_outputs", "risk_signals", "source_provenance", "transfers"),
+        "canonicalAuthorities": ("cluster_membership", "computation", "consent_policy_decisions", "economic_facts", "entity_graph", "evidence", "flow_trace_paths", "flow_traces", "graph", "model_governance", "relationship_facts", "risk_assessments", "risk_outputs", "risk_signals", "source_provenance", "transfers"),
         "hardDependencies": ("computation_substrate", "evidence_provenance", "model_governance"),
         "projectionDependencies": ("cluster360", "economic360", "profile360"),
         "optionalProjectionDependencies": [],
@@ -2854,12 +2854,19 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("communication_facts", "identity"),
-                "description": "Required communications360 slot: profile links.",
+                "canonicalAuthorityRefs": ("communication_facts", "evidence", "identity"),
+                "description": "Explicit profile identifiers on evidence-backed communication facts resolved against exact tenant profile records.",
                 "id": "profile_links",
-                "projectionBindings": [],
-                "requirement": "required",
-                "unboundReason": "typed_profile_message_link_authority_not_joined"
+                "partialImplementationReason": "Explicit profile references are joined to exact tenant profile records only when the communication fact carries evidence. Current profile identity is not a historical identity snapshot; unresolved links, temporal validity, and freshness remain unknown.",
+                "projectionBindings": [
+                    {
+                        "projectionId": "communication360",
+                        "role": "primary",
+                        "subjectKinds": ("agent", "campaign", "episode", "journey", "source"),
+                        "sectionIds": ("evidence", "summary")
+                    }
+                ],
+                "requirement": "required"
             },
             {
                 "id": "response_events",
@@ -2880,7 +2887,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "canonicalAuthorityRefs": ("communication_facts", "consent_policy_decisions", "evidence", "identity", "risk_outputs", "risk_signals"),
                 "description": "Exact-subject canonical RiskSignal records for resolved agents and sources and mapped recipient entities; source and recipient reads are consent-gated, and message-edge propagation is never inferred.",
                 "id": "risk_flags",
-                "partialImplementationReason": "Source and recipient RiskSignal reads require current analytics consent; recipient reads also require exact tenant identity mappings and evidence. Resolved-agent risk reads remain identity-linked without an explicit current-consent gate. Message-edge risk transfer, composite Risk360 output, complete identity/source coverage, and freshness remain unknown.",
+                "partialImplementationReason": "Source, recipient, and resolved-agent RiskSignal reads require current analytics consent; recipient reads also require exact tenant identity mappings and evidence. Message-edge risk transfer, composite Risk360 output, complete identity/source coverage, and freshness remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "communication360",
@@ -3653,10 +3660,10 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
         "displayName": "Journey 360",
         "domainSlots": [
             {
+                "canonicalAuthorityRefs": ("evidence", "journeys"),
+                "description": "Explicit current-journey references to agent-family JourneySteps, with exact step evidence; actor identity, authority, and intervention outcome remain unjoined.",
                 "id": "agent_interventions",
-                "requirement": "required",
-                "description": "Typed JourneyStep agent IDs with step evidence; actor and authority joins pending.",
-                "canonicalAuthorityRefs": ("journeys",),
+                "partialImplementationReason": "Only current journey version activity IDs join to unique, current tenant-scoped agent-family journey steps with version and step evidence. Canonical agent identity, delegated authority, intervention outcome, and full step-inventory completeness remain unknown.",
                 "projectionBindings": [
                     {
                         "projectionId": "episode360",
@@ -3664,7 +3671,8 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                         "subjectKinds": ("journey",),
                         "sectionIds": ("interactions",)
                     }
-                ]
+                ],
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("attribution_credits",),
@@ -4705,12 +4713,19 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "unboundReason": "canonical_anomaly_event_authority_not_connected"
             },
             {
-                "canonicalAuthorityRefs": ("evidence", "mutation_history"),
+                "canonicalAuthorityRefs": ("computation", "evidence", "risk_assessments"),
                 "description": "Versioned risk assessment and intervention audit lineage.",
                 "id": "audit_history",
-                "projectionBindings": [],
-                "requirement": "required",
-                "unboundReason": "risk_audit_history_authority_not_connected"
+                "partialImplementationReason": "assessment_run_history_available_intervention_audit_and_full_restatement_lineage_unavailable",
+                "projectionBindings": [
+                    {
+                        "projectionId": "risk360",
+                        "role": "primary",
+                        "subjectKinds": ("agent", "cluster", "contagion_path", "entity", "relationship", "source"),
+                        "sectionIds": ("evidence", "findings")
+                    }
+                ],
+                "requirement": "required"
             },
             {
                 "id": "economic_exposure",
@@ -4989,7 +5004,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("actions", "ai_execution_facts", "consent_policy_decisions", "economic_facts", "entity_graph", "evidence", "execution_facts", "flow_trace_paths", "flow_traces", "fraud_synthesis", "graph", "graph_motifs", "model_governance", "mutation_history", "observations", "relationship_facts", "risk_assessments", "risk_outputs", "risk_signals", "social_observations", "source_provenance", "transfers"),
+            "canonicalAuthorities": ("actions", "ai_execution_facts", "computation", "consent_policy_decisions", "economic_facts", "entity_graph", "evidence", "execution_facts", "flow_trace_paths", "flow_traces", "fraud_synthesis", "graph", "graph_motifs", "model_governance", "observations", "relationship_facts", "risk_assessments", "risk_outputs", "risk_signals", "social_observations", "source_provenance", "transfers"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },

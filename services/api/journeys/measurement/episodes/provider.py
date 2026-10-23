@@ -77,6 +77,7 @@ _EPISODE_AGENT_HANDOFF_GAP_REASON = (
 _JOURNEY_STEP_CAP = 200
 _JOURNEY_TOUCHPOINT_CAP = 200
 _JOURNEY_CONVERSION_CAP = 100
+_JOURNEY_AGENT_ACTIVITY_CAP = 200
 _JOURNEY_TOUCHPOINT_READ_CONCURRENCY = 8
 _EPISODE_PAGE_DEFAULT = 50
 _EPISODE_SUBJECT_RELATIONSHIP_CAP = 100
@@ -1130,6 +1131,16 @@ class Episode360Provider:
             and before is None
         )
 
+        agent_interventions = _journey_agent_intervention_context(
+            journey=journey,
+            steps=rendered_steps,
+            journey_ref=journey_ref,
+            steps_available=steps_available,
+            step_inventory_complete=step_inventory_complete,
+            scope_mismatch=scope_mismatch,
+        )
+        warnings.extend(agent_interventions["warnings"])
+
         journey_episodes = _journey_episode_context(request)
         warnings.extend(journey_episodes["warnings"])
         journey_touchpoints = _journey_touchpoint_context(
@@ -1151,6 +1162,7 @@ class Episode360Provider:
             step_inventory_complete=step_inventory_complete,
             truncated=truncated,
             warnings=warnings,
+            agent_interventions=agent_interventions,
             episode_context=journey_episodes,
             touchpoint_context=journey_touchpoints,
             conversion_context=journey_conversions,
@@ -1166,6 +1178,7 @@ class Episode360Provider:
                 journey_ref,
                 journey_touchpoints["claims"],
                 journey_conversions["claims"],
+                agent_interventions["claims"],
             )
             if request.includeClaims is not False and steps_available and not scope_mismatch
             else []
@@ -1818,6 +1831,196 @@ def _journey_episode_context(
     }
 
 
+def _journey_agent_intervention_context(
+    *,
+    journey: dict[str, Any],
+    steps: list[dict[str, Any]],
+    journey_ref: EvidenceRef,
+    steps_available: bool,
+    step_inventory_complete: bool,
+    scope_mismatch: bool,
+) -> dict[str, Any]:
+    """Resolve only agent activity IDs explicitly recorded on this journey version.
+
+    Journey compiler versions carry ``agent_activity_ids`` from canonical
+    activity rows. A returned step contributes only when its exact
+    ``activity_id`` matches one of those IDs and the persisted step classifies
+    it as the ``agent`` activity family. Actor labels and nearby metadata do
+    not create a join or prove agent identity/authority.
+    """
+    raw_ids = journey.get("agent_activity_ids")
+    if not isinstance(raw_ids, (list, tuple)):
+        return {
+            "state": "unknown",
+            "coverage": "unknown",
+            "reason": "journey_version_agent_activity_reference_list_unavailable",
+            "recordedActivityIds": [],
+            "resolvedActivityIds": [],
+            "unresolvedActivityIds": [],
+            "evidenceRefs": [],
+            "activities": [],
+            "claims": [],
+            "warnings": ["journey_agent_activity_reference_list_unavailable"],
+        }
+
+    recorded_ids: list[str] = []
+    malformed_reference = False
+    duplicate_reference = False
+    seen_ids: set[str] = set()
+    for value in raw_ids:
+        if not isinstance(value, (str, UUID)):
+            malformed_reference = True
+            continue
+        activity_id = _journey_text(value)
+        if activity_id is None:
+            malformed_reference = True
+            continue
+        if activity_id in seen_ids:
+            duplicate_reference = True
+            continue
+        seen_ids.add(activity_id)
+        recorded_ids.append(activity_id)
+
+    truncated = len(recorded_ids) > _JOURNEY_AGENT_ACTIVITY_CAP
+    bounded_ids = recorded_ids[:_JOURNEY_AGENT_ACTIVITY_CAP]
+    requested = set(bounded_ids)
+    rows_by_activity_id: dict[str, list[dict[str, Any]]] = {}
+    for row in steps:
+        activity_id = _journey_text(row.get("activity_id"))
+        if activity_id in requested:
+            rows_by_activity_id.setdefault(activity_id, []).append(row)
+
+    warnings: list[str] = []
+    if malformed_reference:
+        warnings.append("journey_agent_activity_reference_invalid")
+    if duplicate_reference:
+        warnings.append("journey_agent_activity_reference_duplicated")
+    if truncated:
+        warnings.append("journey_agent_activity_references_truncated")
+    if not steps_available:
+        warnings.append("journey_step_authority_unavailable")
+    if scope_mismatch:
+        warnings.append("unscoped_journey_step_rows_dropped")
+    if bounded_ids and not step_inventory_complete:
+        warnings.append("journey_agent_activity_step_inventory_incomplete")
+
+    activities: list[dict[str, Any]] = []
+    claims: list[tuple[str, EvidenceRef]] = []
+    resolved_ids: list[str] = []
+    unresolved_ids: list[str] = list(recorded_ids[_JOURNEY_AGENT_ACTIVITY_CAP:])
+    ambiguous = False
+    family_mismatch = False
+    restricted = False
+    for activity_id in bounded_ids:
+        matches = rows_by_activity_id.get(activity_id, [])
+        if len(matches) != 1:
+            if len(matches) > 1:
+                ambiguous = True
+            unresolved_ids.append(activity_id)
+            continue
+        row = matches[0]
+        if _journey_text(row.get("activity_family")) != "agent":
+            family_mismatch = True
+            unresolved_ids.append(activity_id)
+            continue
+        if _journey_text(row.get("activity_status")) in {
+            "tombstoned",
+            "deleted",
+            "consent_restricted",
+        }:
+            restricted = True
+            unresolved_ids.append(activity_id)
+            continue
+        step_evidence = _journey_step_ref(row)
+        if step_evidence is None:
+            unresolved_ids.append(activity_id)
+            continue
+
+        resolved_ids.append(activity_id)
+        claims.append((activity_id, step_evidence))
+        activities.append(
+            {
+                "activity": {
+                    "stepId": _journey_text(row.get("step_id")),
+                    "agentId": _journey_text(row.get("agent_id")),
+                    "actorType": _journey_text(row.get("actor_type")),
+                    "activityId": activity_id,
+                    "activityType": _journey_text(row.get("activity_type")),
+                    "occurredAt": _journey_timestamp(row.get("occurred_at")),
+                    "evidenceRefs": [step_evidence.model_dump(mode="json", exclude_none=True)],
+                },
+                "evidenceRefs": [step_evidence.model_dump(mode="json", exclude_none=True)],
+            }
+        )
+
+    if ambiguous:
+        warnings.append("journey_agent_activity_step_reference_ambiguous")
+    if family_mismatch:
+        warnings.append("journey_agent_activity_step_family_mismatch")
+    if restricted:
+        warnings.append("journey_agent_activity_step_restricted")
+    if unresolved_ids and not any(
+        warning in warnings
+        for warning in (
+            "journey_agent_activity_reference_invalid",
+            "journey_agent_activity_reference_duplicated",
+            "journey_agent_activity_references_truncated",
+            "journey_agent_activity_step_reference_ambiguous",
+            "journey_agent_activity_step_family_mismatch",
+            "journey_agent_activity_step_restricted",
+            "journey_agent_activity_step_inventory_incomplete",
+            "journey_step_authority_unavailable",
+            "unscoped_journey_step_rows_dropped",
+        )
+    ):
+        warnings.append("journey_agent_activity_step_reference_unresolved")
+
+    evidence_refs: list[EvidenceRef] = [journey_ref]
+    for _, evidence in claims:
+        if all(
+            existing.id != evidence.id or existing.source != evidence.source
+            for existing in evidence_refs
+        ):
+            evidence_refs.append(evidence)
+
+    if not recorded_ids and step_inventory_complete and not warnings:
+        state = "empty"
+        coverage = "explicit_current_version_reference_set_empty"
+        reason = "current_journey_version_records_no_agent_activity_references"
+        evidence_refs = [journey_ref]
+    elif resolved_ids:
+        state = "degraded"
+        coverage = (
+            "exact_activity_id_references_resolved"
+            if not unresolved_ids and not warnings
+            else "partial_exact_activity_id_references_resolved"
+        )
+        reason = "exact_journey_agent_activity_references_resolved_actor_authority_not_joined"
+    else:
+        state = "unknown"
+        coverage = "unknown"
+        reason = (
+            warnings[0]
+            if warnings
+            else "journey_agent_activity_references_not_resolved_in_current_step_page"
+            if recorded_ids
+            else "journey_step_inventory_incomplete_for_agent_activity"
+        )
+
+    return {
+        "state": state,
+        "coverage": coverage,
+        "reason": reason,
+        "recordedActivityIds": recorded_ids,
+        "resolvedActivityIds": resolved_ids,
+        "unresolvedActivityIds": list(dict.fromkeys(unresolved_ids)),
+        "evidenceRefs": [ref.model_dump(mode="json", exclude_none=True) for ref in evidence_refs],
+        "activities": activities,
+        "claims": claims,
+        "warnings": warnings,
+    }
+
+
 def _journey_touchpoint_context(read: JourneyTouchpointRead) -> dict[str, Any]:
     touchpoints = [
         _journey_touchpoint_view(row)
@@ -1969,6 +2172,7 @@ def _build_journey_sections(
     step_inventory_complete: bool,
     truncated: bool,
     warnings: list[str],
+    agent_interventions: dict[str, Any],
     episode_context: dict[str, Any],
     touchpoint_context: dict[str, Any],
     conversion_context: dict[str, Any],
@@ -2010,6 +2214,7 @@ def _build_journey_sections(
         steps_available=steps_available,
         step_inventory_complete=step_inventory_complete,
         stage_context=stage_context,
+        agent_interventions=agent_interventions,
         touchpoint_context=touchpoint_context,
         conversion_context=conversion_context,
     )
@@ -2143,25 +2348,14 @@ def _build_journey_sections(
                         for row in steps
                     ],
                     "agentActivities": [
-                        {
-                            "stepId": _journey_text(row.get("step_id")),
-                            "agentId": _journey_text(row.get("agent_id")),
-                            "actorType": _journey_text(row.get("actor_type")),
-                            "activityId": _journey_text(row.get("activity_id")),
-                            "activityType": _journey_text(row.get("activity_type")),
-                            "occurredAt": _journey_timestamp(row.get("occurred_at")),
-                            "evidenceRefs": [ref.model_dump(mode="json")]
-                            if (ref := _journey_step_ref(row)) is not None
-                            else [],
-                        }
-                        for row in steps
-                        if _journey_text(row.get("agent_id")) is not None
+                        item["activity"] for item in agent_interventions["activities"]
                     ],
-                    "agentActivityCoverage": (
-                        "observed_in_returned_steps"
-                        if step_state in {"available", "empty"}
-                        else "partial"
-                    ),
+                    "agentActivityCoverage": agent_interventions["coverage"],
+                    "agentInterventionReferences": {
+                        key: value
+                        for key, value in agent_interventions.items()
+                        if key not in {"activities", "claims", "warnings"}
+                    },
                     "evidenceRefs": step_evidence,
                 }
                 if steps_available
@@ -2326,6 +2520,7 @@ def _journey_required_slot_coverage(
     steps_available: bool,
     step_inventory_complete: bool,
     stage_context: dict[str, Any],
+    agent_interventions: dict[str, Any],
     touchpoint_context: dict[str, Any],
     conversion_context: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
@@ -2344,35 +2539,6 @@ def _journey_required_slot_coverage(
         ref for ref in conversion_context.get("evidenceRefs", []) if isinstance(ref, dict)
     ]
     all_evidence = version_evidence + step_evidence + touchpoint_evidence + conversion_evidence
-
-    agent_steps = [
-        row
-        for row in steps
-        if _journey_text(row.get("agent_id")) is not None
-        or _journey_text(row.get("actor_type")) == "agent"
-    ]
-    agent_step_evidence = [
-        ref.model_dump(mode="json", exclude_none=True)
-        for row in agent_steps
-        if (ref := _journey_step_ref(row)) is not None
-    ]
-    if agent_steps:
-        agent_state = "degraded"
-        agent_coverage = "partial"
-        agent_reason = "journey_steps_record_agent_activity_without_actor_authority_join"
-    elif step_inventory_complete:
-        agent_state = "empty"
-        agent_coverage = "complete"
-        agent_reason = "complete_current_journey_step_inventory_has_no_agent_activity"
-        agent_step_evidence = step_evidence
-    elif not steps_available:
-        agent_state = "unknown"
-        agent_coverage = "unknown"
-        agent_reason = "journey_step_authority_unavailable"
-    else:
-        agent_state = "unknown"
-        agent_coverage = "partial"
-        agent_reason = "journey_step_inventory_incomplete_for_agent_activity"
 
     touchpoint_state = touchpoint_context.get("state")
     if touchpoint_state == "available":
@@ -2432,10 +2598,13 @@ def _journey_required_slot_coverage(
         },
         "touchpoints": touchpoint_slot,
         "agent_interventions": {
-            "state": agent_state,
-            "coverage": agent_coverage,
-            "reason": agent_reason,
-            "evidenceRefs": agent_step_evidence,
+            "state": agent_interventions["state"],
+            "coverage": agent_interventions["coverage"],
+            "reason": agent_interventions["reason"],
+            "recordedActivityIds": agent_interventions["recordedActivityIds"],
+            "resolvedActivityIds": agent_interventions["resolvedActivityIds"],
+            "unresolvedActivityIds": agent_interventions["unresolvedActivityIds"],
+            "evidenceRefs": agent_interventions["evidenceRefs"],
         },
         "communications": {
             "state": "unknown",
@@ -2478,6 +2647,7 @@ def _build_journey_claims(
     journey_ref: EvidenceRef,
     touchpoint_claims: list[tuple[str, EvidenceRef]],
     conversion_claims: list[tuple[str, EvidenceRef]],
+    agent_intervention_claims: list[tuple[str, EvidenceRef]],
 ) -> list[ClaimEnvelope]:
     journey_id = _journey_text(journey.get("journey_id")) or request.subject.id
     version_id = _journey_text(journey.get("journey_version_id")) or journey_id
@@ -2514,6 +2684,24 @@ def _build_journey_claims(
         )
         if len(claims) >= 101:
             break
+    for activity_id, step_evidence in agent_intervention_claims:
+        if len(claims) >= 301:
+            break
+        claims.append(
+            ClaimEnvelope(
+                id=f"episode360:{journey_id}:{version_id}:agent-activity:{activity_id}",
+                kind="journey_agent_activity_reference",
+                subject=request.subject,
+                evidenceRefs=[journey_ref, step_evidence],
+                claims=[
+                    f"Current journey version explicitly references agent activity {activity_id!r}.",
+                    "An exact current-version journey step records that activity in the agent family.",
+                    "Agent identity, authority, and intervention outcome are not evaluated by this reference join.",
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=["agent_interventions"],
+            )
+        )
     if stage_slots:
         for row in steps:
             if len(claims) >= 201:

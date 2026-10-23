@@ -47,11 +47,13 @@ from journeys.communication360.provider import (  # noqa: E402
     AgentIdentityRead,
     EntityIdentityRead,
     OUTPUT_SECTIONS,
+    ProfileLinkRead,
     RecipientIdentityRead,
     REASON_CANONICAL_SOURCE_UNAVAILABLE,
     REASON_SILVER_SOURCE_UNAVAILABLE,
     REASON_SOURCE_READ_TRUNCATED,
     Communication360Provider,
+    RepositoryProfileLinkReader,
     register_provider,
 )
 from journeys.communication360.reader import to_message  # noqa: E402
@@ -252,6 +254,39 @@ class FakeEntityIdentityReader:
                     id=self.canonical_entity_id,
                     type="entity",
                     source="entity_registry",
+                    observedAt="2026-10-22T12:00:00Z",
+                ),
+            ),
+        )
+
+
+class FakeProfileLinkReader:
+    """Exact tenant/profile read double for typed communication link tests."""
+
+    def __init__(
+        self,
+        *,
+        responses: dict[str, ProfileLinkRead] | None = None,
+        raises: bool = False,
+    ) -> None:
+        self.responses = dict(responses or {})
+        self.raises = raises
+        self.calls: list[tuple[str, str]] = []
+
+    async def resolve(self, tenant_id: str, profile_id: str) -> ProfileLinkRead:
+        self.calls.append((tenant_id, profile_id))
+        if self.raises:
+            raise RuntimeError("profile identity read failed: private backend detail")
+        if profile_id in self.responses:
+            return self.responses[profile_id]
+        return ProfileLinkRead(
+            state="resolved",
+            profile_id=profile_id,
+            evidence=(
+                EvidenceRef(
+                    id=profile_id,
+                    type="entity",
+                    source="identity.profiles",
                     observedAt="2026-10-22T12:00:00Z",
                 ),
             ),
@@ -1825,8 +1860,10 @@ async def test_communications_ssot_slots_report_supported_evidence_and_unknown_a
             },
         ),
     ]
+    profile_reader = FakeProfileLinkReader()
     provider = Communication360Provider(
-        sources=FakeSource(messages=[message], facts=facts)
+        sources=FakeSource(messages=[message], facts=facts),
+        profile_link_reader=profile_reader,
     )
     request, context = await _make_context(ProviderRegistry())
 
@@ -1854,7 +1891,19 @@ async def test_communications_ssot_slots_report_supported_evidence_and_unknown_a
     assert coverage["message_inventory"]["evidenceRefs"][0]["id"] == "ev-message-coverage"
     assert coverage["participants"]["state"] == "degraded"
     assert coverage["campaign_links"]["state"] == "available"
-    assert coverage["profile_links"]["state"] == "degraded"
+    assert coverage["profile_links"]["state"] == "available"
+    assert coverage["profile_links"]["coverage"] == "partial"
+    assert coverage["profile_links"]["freshnessState"] == "unknown"
+    assert coverage["profile_links"]["temporalState"] == "unknown"
+    assert coverage["profile_links"]["links"][0]["profileId"] == "profile-1"
+    assert coverage["profile_links"]["links"][0]["resolutionState"] == "resolved"
+    assert coverage["profile_links"]["links"][0]["communicationEvidenceRefs"][0]["id"] == (
+        "conversation-coverage"
+    )
+    assert coverage["profile_links"]["links"][0]["identityEvidenceRefs"][0]["source"] == (
+        "identity.profiles"
+    )
+    assert profile_reader.calls == [(TENANT_A, "profile-1")]
     assert coverage["journey_links"]["state"] == "degraded"
     assert coverage["response_events"]["state"] == "degraded"
     assert coverage["agent_authorship"]["state"] == "degraded"
@@ -1894,6 +1943,165 @@ async def test_communications_unsupported_slots_stay_unknown_without_exact_evide
     assert coverage["journey_links"]["state"] == "unknown"
     assert coverage["policy_state"]["state"] == "unknown"
     assert coverage["risk_flags"]["state"] == "unknown"
+
+
+async def test_communication360_profile_link_does_not_accept_mismatched_profile_identity() -> None:
+    fact = _fact(
+        TENANT_A,
+        "profile-link-mismatch-fact",
+        kind="conversation",
+        payload={"campaign_id": "camp_1", "profile_id": "profile-expected"},
+    )
+    profile_reader = FakeProfileLinkReader(
+        responses={
+            "profile-expected": ProfileLinkRead(
+                state="resolved",
+                profile_id="profile-other",
+                evidence=(
+                    EvidenceRef(
+                        id="profile-expected",
+                        type="entity",
+                        source="identity.profiles",
+                    ),
+                ),
+            )
+        }
+    )
+    provider = Communication360Provider(
+        sources=FakeSource(facts=[fact]), profile_link_reader=profile_reader
+    )
+    request, context = await _make_context(ProviderRegistry())
+
+    result = await provider.project(request, context)
+
+    coverage = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]
+    profile_slot = coverage["profile_links"]
+    assert profile_slot["state"] == "unknown"
+    assert profile_slot["links"][0]["resolutionState"] == "unknown"
+    assert profile_slot["links"][0]["identityEvidenceRefs"] == []
+    assert {ref["id"] for ref in profile_slot["evidenceRefs"]} == {
+        "profile-link-mismatch-fact"
+    }
+    assert profile_reader.calls == [(TENANT_A, "profile-expected")]
+
+
+async def test_communication360_profile_link_skips_current_identity_read_for_historical_frame() -> None:
+    fact = _fact(
+        TENANT_A,
+        "profile-link-historical-fact",
+        kind="conversation",
+        payload={"campaign_id": "camp_1", "profile_id": "profile-historical"},
+    )
+    profile_reader = FakeProfileLinkReader()
+    provider = Communication360Provider(
+        sources=FakeSource(facts=[fact]), profile_link_reader=profile_reader
+    )
+    request, context = await _make_context(
+        ProviderRegistry(), asOf="2026-10-01T00:00:00Z"
+    )
+
+    result = await provider.project(request, context)
+
+    coverage = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]
+    profile_slot = coverage["profile_links"]
+    assert profile_slot["state"] == "unknown"
+    assert profile_slot["reason"] == "historical_profile_identity_lookup_unavailable"
+    assert profile_slot["links"][0]["resolutionState"] == "unknown"
+    assert profile_reader.calls == []
+
+
+async def test_communication360_profile_link_does_not_resolve_reference_without_fact_evidence() -> None:
+    fact = {
+        "tenant_id": TENANT_A,
+        "kind": "conversation",
+        "payload": {"campaign_id": "camp_1", "profile_id": "profile-unproven"},
+    }
+    profile_reader = FakeProfileLinkReader()
+    provider = Communication360Provider(
+        sources=FakeSource(facts=[fact]), profile_link_reader=profile_reader
+    )
+    request, context = await _make_context(ProviderRegistry())
+
+    result = await provider.project(request, context)
+
+    coverage = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]
+    profile_slot = coverage["profile_links"]
+    assert profile_slot["state"] == "degraded"
+    assert profile_slot["reason"] == "profile_reference_evidence_missing"
+    assert profile_slot["links"] == []
+    assert profile_slot["evidenceRefs"] == []
+    assert profile_reader.calls == []
+
+
+async def test_communication360_profile_link_degrades_on_identity_authority_failure() -> None:
+    fact = _fact(
+        TENANT_A,
+        "profile-link-unavailable-fact",
+        kind="conversation",
+        payload={"campaign_id": "camp_1", "profile_id": "profile-unavailable"},
+    )
+    profile_reader = FakeProfileLinkReader(raises=True)
+    provider = Communication360Provider(
+        sources=FakeSource(facts=[fact]), profile_link_reader=profile_reader
+    )
+    request, context = await _make_context(ProviderRegistry())
+
+    result = await provider.project(request, context)
+
+    coverage = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]
+    profile_slot = coverage["profile_links"]
+    assert profile_slot["state"] == "degraded"
+    assert profile_slot["reason"] == "profile_identity_authority_unavailable"
+    assert profile_slot["links"][0]["resolutionState"] == "unknown"
+    assert profile_slot["links"][0]["identityEvidenceRefs"] == []
+    assert {ref["id"] for ref in profile_slot["evidenceRefs"]} == {
+        "profile-link-unavailable-fact"
+    }
+
+
+async def test_repository_profile_link_reader_requires_exact_tenant_and_profile(monkeypatch) -> None:
+    from dependencies import providers
+    from repositories import repos
+
+    class StubIdentityRepository:
+        record = {"tenant_id": TENANT_A, "user_id": "profile-1", "updated_at": "2026-10-22T12:00:00Z"}
+        calls: list[tuple[str, str]] = []
+
+        def __init__(self, graph, cache) -> None:
+            self.graph = graph
+            self.cache = cache
+
+        async def get_profile(self, tenant_id: str, profile_id: str):
+            self.calls.append((tenant_id, profile_id))
+            return self.record
+
+    monkeypatch.setattr(providers, "get_graph", lambda: "graph")
+    monkeypatch.setattr(providers, "get_cache", lambda: "cache")
+    monkeypatch.setattr(repos, "IdentityRepository", StubIdentityRepository)
+    reader = RepositoryProfileLinkReader()
+
+    resolved = await reader.resolve(TENANT_A, "profile-1")
+
+    assert resolved.state == "resolved"
+    assert resolved.profile_id == "profile-1"
+    assert resolved.evidence[0].source == "identity.profiles"
+    assert resolved.evidence[0].uri == "store://profiles/tenant-a%3Aprofile-1"
+    assert StubIdentityRepository.calls == [(TENANT_A, "profile-1")]
+
+    StubIdentityRepository.record = {"tenant_id": TENANT_B, "user_id": "profile-1"}
+    mismatched = await reader.resolve(TENANT_A, "profile-1")
+
+    assert mismatched.state == "ambiguous"
+    assert mismatched.evidence == ()
+    assert StubIdentityRepository.calls == [(TENANT_A, "profile-1")] * 2
 
 
 def _message_with_consent_lineage(

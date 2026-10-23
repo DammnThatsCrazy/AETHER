@@ -56,9 +56,9 @@ source-level consent, purpose, and field-redaction decisions; it does not
 replace them.
 
 This is an implementation foundation, not a claim that all surfaces are live.
-The product catalog is reconstructed and marked
-`reconstructed_pending_source_alignment`; the original SSOT is unavailable in
-the current checkout. Technical projection provider availability still varies.
+The 18 product surfaces are source-aligned to the checked-in backend SSOT and
+remain distinct from the technical projection providers that serve them.
+Provider availability still varies.
 Agent and Execution 360 require explicit slot actor attribution and
 authority-decision metadata before their corresponding slots can be reported
 as available. A surface is complete only when every required slot is backed by
