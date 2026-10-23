@@ -12,7 +12,7 @@ source_hashes:
   "docs/reference/source-of-truth/PLATFORM_PARITY.md": "sha256:abb0660e91963d129b1f5d4a5b472c24bfb55001cd336952b709fdf9dbf13771"
   "packages/sdk/web/src/core/event-queue.ts": "sha256:839b25762ec01f03c4f5faa12c73fbfd31d41551dde584fa32c46b7305c6c8c1"
   "packages/sdk/web/src/health/sdk-health-agent.ts": "sha256:b2f66953e7f1975c22fd64fca62834321c5c83d5602ddbd5dbb9c4cab30bdf03"
-  "packages/sdk/web/src/index.ts": "sha256:7b69124d8a03c32d31cb5d2a7b2ae0b640635a01735f9f985b93589f70bae363"
+  "packages/sdk/web/src/index.ts": "sha256:1ea4b4df56cacf5fd355f5f6edca6dca9eeafac7b5ab4a2341abd7ca18bc152a"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
@@ -239,7 +239,7 @@ Source: `docs/reference/source-of-truth/PLATFORM_PARITY.md` (annotated with this
 ### 3.5 Journey Lifecycle API
 
 **Evidence:**
-- `packages/sdk/web/src/index.ts`: `startJourney()`, `pauseJourney()`, `resumeJourney()`, `continueJourney()`, `completeJourney()`, `abandonJourney()`, `checkpointJourney()`, `getCurrentJourney()`
+- `packages/sdk/web/src/index.ts`: `startJourney()`, `pauseJourney()`, `resumeJourney()`, `continueJourney()`, `completeJourney()`, `abandonJourney()`, `checkpointJourney()`, `getCurrentJourney()`, and the explicit cross-device handoff pair `createJourneyHandoff()` / `redeemJourneyHandoff()` (server-issued single-use token; an `explicit_handoff` link that never merges identities; no native unit tests yet on iOS/Android)
 - All emit canonical `JourneyLifecycleEventType` values
 
 **Test:**

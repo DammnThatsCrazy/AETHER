@@ -11,7 +11,7 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 9
 toc_depth: 3
 source_hashes:
-  "packages/sdk/react-native/src/bridge.ts": "sha256:5a926c354e845458f531c277778c4f5d9cb2b5272f139ea503d6d65511e9511e"
+  "packages/sdk/react-native/src/bridge.ts": "sha256:c2c2fd02cc736db5105bfda3a4013ac8e38259ec4d22a6647181488c1a4e8730"
   "packages/sdk/react-native/src/index.tsx": "sha256:f4d26aa7381b2af26066e5c995a6486e3a59f7529d0698305dbc0d61e8fbc91e"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
@@ -325,6 +325,15 @@ Aether.feedback.submitResponse('survey-123', {
   answers: { q1: 9, q2: 'Great experience!' }
 });
 ```
+
+## Journey handoff
+
+`Aether.createJourneyHandoff({ ttlSeconds? })` resolves `{ token, handoffId, expiresAt }` for the current
+journey (or `null`); pass the token to another device as `aether_handoff=<token>`.
+`Aether.redeemJourneyHandoff(token)` continues a journey from one and resolves a `JourneyHandoffLink`
+(or `null`). The HTTP call is made by the native module. Every failure resolves `null` without saying
+why; a redemption is an `explicit_handoff` link and never merges identities. Requires backend
+`JOURNEY_HANDOFF_ENABLED` and identity-link consent at both ends.
 
 ## Deep Links & Acquisition Attribution
 

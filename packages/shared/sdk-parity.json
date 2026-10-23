@@ -270,6 +270,39 @@
           "status": "not_applicable"
         }
       }
+    },
+    {
+      "id": "journey_handoff",
+      "title": "Cross-device journey handoff (server-issued single-use token)",
+      "spec": "2.6",
+      "matrix": {
+        "web": {
+          "status": "supported",
+          "evidence": "packages/sdk/web/src/index.ts#createJourneyHandoff",
+          "note": "createJourneyHandoff / redeemJourneyHandoff / redeemJourneyHandoffFromUrl; exercised by test/journey-handoff.test.ts. A redemption is an explicit_handoff link and never merges identities."
+        },
+        "server": {
+          "status": "not_applicable"
+        },
+        "react-native": {
+          "status": "delegated_native",
+          "evidence": "packages/sdk/react-native/src/bridge.ts#createJourneyHandoff",
+          "note": "JS bridge exercised by AetherBridge.test.ts; the HTTP call is made by the native module."
+        },
+        "ios": {
+          "status": "partial",
+          "evidence": "packages/sdk/ios/Sources/AetherSDK/Aether.swift#createJourneyHandoff",
+          "note": "Implemented (create + redeem); no native unit test yet."
+        },
+        "android": {
+          "status": "partial",
+          "evidence": "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt#createJourneyHandoff",
+          "note": "Implemented (create + redeem); no native unit test yet."
+        },
+        "python": {
+          "status": "not_applicable"
+        }
+      }
     }
   ]
 }

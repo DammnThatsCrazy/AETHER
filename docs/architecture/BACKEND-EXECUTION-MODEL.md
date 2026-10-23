@@ -22,9 +22,9 @@ source_hashes:
   "services/api/config/settings.py": "sha256:fe581665da73af478c3da53600fb0fdd4994d801f408e56f6d2796fbd00748bf"
   "services/api/main.py": "sha256:fa7455e5dd5a1e6b6b2ac25cc3ce6fc8a09d8bcf5b242b500feb0b797ab2d7b7"
   "services/api/workers/runtime/consumer_specs.py": "sha256:c78159537971b6e5eeb0ef86cd982118f47f34f82349e86f5f4536872137c5d5"
-  "services/api/workers/runtime/roles.py": "sha256:061fee9712dee6e5354ba7bc8162eeb06a909e526e6ed45d1dee9a4afe9c63b2"
+  "services/api/workers/runtime/roles.py": "sha256:177a03032ec77edbb35748aa4ca71521f8cc26e50c0ee9f6ecc0bcb9d864b9a8"
   "services/api/workers/runtime/run_role.py": "sha256:787c2388526da3d9bf77aa4d138e35fddf15afeb4aafef0d06f2501834785354"
-  "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
+  "services/api/workers/runtime/specs.py": "sha256:b86659249b2f805b3ba81631c57e71ca57be089de07278fedccbe25b576df64b"
 ---
 
 # Backend Execution Model
@@ -245,6 +245,10 @@ depending on an operator manually draining a queue:
   depth as a gauge; replay stays an explicit operator action.
 - **`credential_expiry_sweep`** (`maintenance`) — tombstones expired PREVIOUS
   credential versions across tenants once their rotation-overlap window closes.
+- **`journey_handoff_sweep`** (`maintenance`) — hard-deletes cross-device
+  journey handoff rows older than 90 days (they hold anonymous IDs). Runs even
+  when `JOURNEY_HANDOFF_ENABLED` is off so disabling the feature never strands
+  rows.
 
 Every loop is cancellation-safe and isolates a failing tick (one bad tick logs
 and continues rather than killing the supervised loop). The `/v1/ready`

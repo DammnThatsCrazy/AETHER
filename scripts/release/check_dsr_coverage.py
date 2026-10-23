@@ -53,6 +53,11 @@ MOBILE_DSR_COVERAGE: dict[str, dict[str, object]] = {
         "repo": "repositories/continuation_repo.py",
         "tables": ["continuations", "continuation_selections"],
     },
+    "journey_handoffs": {
+        "repo": "repositories/journey_handoff_repo.py",
+        "hook": "delete_by_anonymous_id",
+        "tables": ["journey_handoffs"],
+    },
     "mobile_installations": {
         "repo": "repositories/installation_repo.py",
         "tables": ["mobile_installations", "push_subscriptions"],
