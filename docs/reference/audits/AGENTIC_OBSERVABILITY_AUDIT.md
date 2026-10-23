@@ -6,12 +6,12 @@ visibility: I
 audience: [dev-senior, architect]
 status: experimental
 since_version: 0.1.0
-source_files: [services/api/value/x402/, services/api/actions/agent/, services/api/actions/agentic_observability/, services/api/actions/agent_marketplace/, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/alembic/versions/20261022_execution_approval_decisions.py, services/api/alembic/versions/20261022_risk_poisoning_evidence.py, services/api/value/commerce/order_payment_reconciliation.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/value/economic/economic360_provider.py, services/api/journeys/communication360/provider.py, services/api/intelligence/fraud_networks/risk360_projection.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/identity/profile/agent.py, services/api/intelligence/risk360/, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/shared/store.py, services/api/workers/runtime/specs.py, packages/sdk/server/src/agent-telemetry.ts, packages/shared/events.ts, packages/shared/contracts/event-registry.json, packages/shared/contracts/intelligence-projection-registry.json, packages/shared/agentic-observability.ts]
+source_files: [services/api/value/x402/, services/api/actions/agent/, services/api/actions/agentic_observability/, services/api/actions/agent_marketplace/, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/alembic/versions/20261022_execution_approval_decisions.py, services/api/alembic/versions/20261022_risk_poisoning_evidence.py, services/api/value/commerce/order_payment_reconciliation.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/value/economic/economic360_provider.py, services/api/value/economic/ai_aggregation.py, services/api/journeys/communication360/provider.py, services/api/intelligence/workflow/workflow360_provider.py, services/api/identity/account360_provider.py, services/api/shared/intelligence_projections/frame_runtime.py, services/api/repositories/repos.py, services/api/intelligence/fraud_networks/risk360_projection.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/identity/profile/agent.py, services/api/intelligence/risk360/, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/shared/store.py, services/api/workers/runtime/specs.py, packages/sdk/server/src/agent-telemetry.ts, packages/shared/events.ts, packages/shared/contracts/event-registry.json, packages/shared/contracts/intelligence-projection-registry.json, packages/shared/agentic-observability.ts]
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:59bd6f6c6450a41ef845fc5117d15d9fed8d4239e0bf4e4199d36f50aca6b290"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:d6eedbc542f4d11de166c32c30b3ccf3c549d04748c86b97713499c5ed97b36d"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:540f85292689337edc329c9b72b7c4f99487226a5e31aab6526c878e7ea36eeb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -22,6 +22,7 @@ source_hashes:
   "services/api/alembic/versions/20261022_risk_poisoning_evidence.py": "sha256:d158801954e2c76f088f9a367cabc4e507f1d4b2e456e989b6e95c04a9db6237"
   "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:ac5c38e755dd2720a76fcca31bf7877d7e2e5d2e5ea19c3a37bc5344e495ecc4"
   "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:b6617b0dd888b02ede69696d3d4e46906120c5f0fca4bb4f5393145218d6200c"
+  "services/api/identity/account360_provider.py": "sha256:fdc82d330bcb8ada37abeda8f9e2e4fcd2ff6ed065b5b6733a9c9719dc289408"
   "services/api/identity/profile/agent.py": "sha256:f7aa0168d674cfe5241d169f6516478ef24c882e848dc097af98706f0aee576c"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
@@ -31,8 +32,12 @@ source_hashes:
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
   "services/api/intelligence/risk360/": "sha256:595590d43ef5d1be824ad90e31c30018c023a431667a8165aaa4b008959220dc"
   "services/api/journeys/communication360/provider.py": "sha256:103203807abc92ff1c262e358335e9697873c24706ab42d81a512af3c0cf1efc"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:1e7dd60cc1a3ea528d9738885f04d7c6712e200622d11c3db518f91e43ceb2d3"
+  "services/api/repositories/repos.py": "sha256:2deaf337debdc8fc0fa1585901e1a736e2a269b967d0091bba4d0d7d8369d19f"
+  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:95a0255a37d99b96243b2a51a6d9465a4740f072963fc5d6565b16a77d454a3d"
   "services/api/shared/store.py": "sha256:ff4198cf285ac4c250481ef0ae476037c26b1f4d1fa00751964638ff1f91fa8c"
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:eefcfa3b35c8ff888be7141bcf91d2bfe08399a17b986b09abb9cafac41566b8"
+  "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
   "services/api/value/economic/economic360_provider.py": "sha256:c53dc4f182204f1ebffd2a4d5e07d559123e0a8e696d4fa5ff74d18fd9fd1b94"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
@@ -183,15 +188,26 @@ evaluate current consent or policy. These joins are partial slot capabilities,
 not surface completion or authority to execute actions.
 
 A follow-up provider slice adds partial Signals360 `classification` evidence
-for one exact tenant SDK event after gateway acceptance and canonical event
-registry validation. It does not join tenant source attribution, semantic
-classification, policy, or freshness. Workflow360 `agent_steps` now reads only
-AgentExecution rows with the exact tenant and `workflow_run_id`, but the
-canonical AgentExecution writer does not populate that field, so production
-step records are not yet connected; workflow definition and complete step
-coverage remain unknown. Episode360 `agent_handoffs` remains unknown because
-episode records and observations do not reference a canonical execution or
-handoff ID. Event labels and agent metadata do not establish that relationship.
+for exact tenant SDK event types and families after gateway acceptance and
+canonical event registry validation. It does not join tenant source attribution,
+semantic classification, policy, or freshness. Workflow360 resolves human
+execution initiators and approval deciders through unique active tenant
+USER_ID aliases and joins exact x402 approvals referenced by run-linked
+AgentExecutions. The writer stores workflow and invocation references only when
+a unique tenant-scoped AI invocation has `action_id` equal to the stable
+execution ID; Workflow360 rechecks tenant, run, agent, and action equality.
+Workflow definitions, complete actor and step coverage, workflow-wide approval
+authority, policy, and freshness remain unknown. Account360 adds bounded member
+Risk360 frames from exact tenant-owned `MEMBER_OF` edges after account-slot and
+per-member policy checks, but roster completeness, temporal reads, related
+account aggregation, and freshness remain unknown. Communications360 reads
+exact-subject RiskSignals for mapped recipients and resolved sources under
+current analytics consent; the resolved-agent risk path lacks an explicit
+current-consent gate. Composite Risk360 output, message-edge transfer, complete
+identity coverage, and freshness remain unknown. Episode360 `agent_handoffs`
+remains unknown because episode records and observations do not reference a
+canonical execution or handoff ID. Event labels and agent metadata do not
+establish that relationship.
 
 The next provider slice adds bounded Communications360 `policy_state`, Risk360
 `propagation_paths`, and Value360 `reconciliation` evidence. Communications360

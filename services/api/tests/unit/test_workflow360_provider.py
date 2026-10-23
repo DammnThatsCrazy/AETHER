@@ -22,7 +22,9 @@ from intelligence.workflow.workflow360_provider import (  # noqa: E402
     RepositoryWorkflow360Source,
     WorkflowAgentExecutionRead,
     WorkflowAgentIdentityRead,
+    WorkflowApprovalRead,
     Workflow360Provider,
+    WorkflowPrincipalIdentityRead,
     WorkflowRunInvocationRead,
     register_provider,
 )
@@ -44,15 +46,22 @@ class FakeWorkflowSource:
         read: WorkflowRunInvocationRead,
         identities: WorkflowAgentIdentityRead | None = None,
         agent_executions: WorkflowAgentExecutionRead | None = None,
+        principal_identities: WorkflowPrincipalIdentityRead | None = None,
+        approvals: WorkflowApprovalRead | None = None,
     ) -> None:
         self.read = read
         self.identities = identities or WorkflowAgentIdentityRead((), True, True)
         self.agent_execution_read = agent_executions or WorkflowAgentExecutionRead(
             (), True, True
         )
+        self.principal_identity_read = principal_identities or WorkflowPrincipalIdentityRead(
+            (), True, True
+        )
+        self.approval_read = approvals or WorkflowApprovalRead((), True, True)
         self.calls: list[tuple[str, str, int]] = []
         self.identity_calls: list[tuple[str, set[str], int]] = []
         self.agent_execution_calls: list[tuple[str, str, int]] = []
+        self.principal_identity_calls: list[tuple[str, set[str], int]] = []
 
     async def run_invocations(
         self, *, tenant_id: str, workflow_run_id: str, limit: int
@@ -72,12 +81,30 @@ class FakeWorkflowSource:
         self.identity_calls.append((tenant_id, set(agent_ids), limit))
         return self.identities
 
+    async def principal_identities(
+        self, *, tenant_id: str, principal_user_ids: set[str], limit: int
+    ) -> WorkflowPrincipalIdentityRead:
+        self.principal_identity_calls.append((tenant_id, set(principal_user_ids), limit))
+        return self.principal_identity_read
+
+    async def run_execution_approvals(
+        self,
+        *,
+        tenant_id: str,
+        workflow_run_id: str,
+        execution_rows: tuple[dict[str, Any], ...],
+        limit: int,
+    ) -> WorkflowApprovalRead:
+        return self.approval_read
+
 
 def _row(
     invocation_id: str,
     *,
     tenant_id: str = TENANT_A,
     workflow_run_id: str = RUN_ID,
+    agent_id: str = "unresolved-agent-claim",
+    action_id: str | None = None,
     status: str = "succeeded",
     task_type: str = "summarize",
     observed_at: str = "2026-10-18T10:00:00Z",
@@ -96,7 +123,8 @@ def _row(
         "prompt_text": "private prompt",
         "completion_text": "private completion",
         "error_code": "private-provider-error",
-        "agent_id": "unresolved-agent-claim",
+        "agent_id": agent_id,
+        "action_id": action_id,
         "outcome_id": "unverified-outcome-ref",
     }
 
@@ -112,6 +140,7 @@ def _agent_execution_row(
         "agent_id": "canonical-agent-a",
         "tenant_id": tenant_id,
         "workflow_run_id": workflow_run_id,
+        "workflow_run_invocation_ids": ["invocation-a"],
         "status": "completed",
         "started_at": "2026-10-18T10:00:00Z",
         "ended_at": "2026-10-18T10:00:02Z",
@@ -384,11 +413,283 @@ async def test_workflow360_does_not_infer_human_actors_from_unjoined_ids() -> No
         assert raw_reference not in serialized
 
 
+def _principal_identity(
+    principal_user_id: str,
+    canonical_human_entity_id: str = "canonical-human-a",
+    *,
+    tenant_id: str = TENANT_A,
+) -> dict[str, Any]:
+    return {
+        "tenant_id": tenant_id,
+        "principal_user_id": principal_user_id,
+        "canonical_human_entity_id": canonical_human_entity_id,
+        "identity_evidence_refs": [
+            {"id": "user-id-alias-a", "type": "entity", "source": "identity_aliases"},
+            {"id": "active-human-subject-a", "type": "entity", "source": "identity_subjects"},
+        ],
+    }
+
+
+@pytest.mark.asyncio
+async def test_workflow360_resolves_exact_execution_initiator_to_canonical_human() -> None:
+    execution = _agent_execution_row()
+    execution["initiating_principal_user_id"] = "authenticated-user-a"
+    source = FakeWorkflowSource(
+        WorkflowRunInvocationRead(
+            (
+                _row(
+                    "invocation-a",
+                    agent_id="canonical-agent-a",
+                    action_id="agent-execution-a",
+                ),
+            ),
+            True,
+            True,
+        ),
+        agent_executions=WorkflowAgentExecutionRead((execution,), True, True),
+        principal_identities=WorkflowPrincipalIdentityRead(
+            (_principal_identity("authenticated-user-a"),), True, True
+        ),
+    )
+
+    result = await Workflow360Provider(source=source).project(_request(), _context())
+
+    actors = _sections(result)["actors"]
+    assert actors.state == "degraded"
+    assert actors.content["principalIdentityResolutionCompleteForReportedRefs"] is True
+    human_actor = next(
+        actor
+        for actor in actors.content["actors"]
+        if actor.get("canonicalHumanEntityId") == "canonical-human-a"
+    )
+    assert human_actor["actorKind"] == "human"
+    assert human_actor["roles"] == ["initiating_principal"]
+    assert human_actor["executionIds"] == ["agent-execution-a"]
+    assert {ref["source"] for ref in human_actor["identityEvidenceRefs"]} == {
+        "identity_aliases",
+        "identity_subjects",
+    }
+    assert source.principal_identity_calls == [
+        (TENANT_A, {"authenticated-user-a"}, 200)
+    ]
+    human_claim = next(
+        claim for claim in result.claims if claim.kind == "tenant_canonical_human_linked_to_workflow_execution"
+    )
+    assert human_claim.claimState == EpistemicStatus.RESOLVED
+    assert {ref.source for ref in human_claim.evidenceRefs} == {
+        "agent_executions",
+        "identity_aliases",
+        "identity_subjects",
+    }
+    assert "authenticated-user-a" not in str(actors.content)
+
+
+@pytest.mark.asyncio
+async def test_workflow360_keeps_ambiguous_principal_identity_unknown() -> None:
+    execution = _agent_execution_row()
+    execution["initiating_principal_user_id"] = "ambiguous-user-a"
+    source = FakeWorkflowSource(
+        WorkflowRunInvocationRead(
+            (
+                _row(
+                    "invocation-a",
+                    agent_id="canonical-agent-a",
+                    action_id="agent-execution-a",
+                ),
+            ),
+            True,
+            True,
+        ),
+        agent_executions=WorkflowAgentExecutionRead((execution,), True, True),
+        principal_identities=WorkflowPrincipalIdentityRead(
+            (
+                _principal_identity("ambiguous-user-a", "canonical-human-a"),
+                _principal_identity("ambiguous-user-a", "canonical-human-b"),
+            ),
+            True,
+            True,
+        ),
+    )
+
+    result = await Workflow360Provider(source=source).project(_request(), _context())
+
+    actors = _sections(result)["actors"]
+    assert actors.content["principalIdentityResolutionCompleteForReportedRefs"] is False
+    assert not any(
+        "canonicalHumanEntityId" in actor for actor in actors.content["actors"]
+    )
+    assert "ambiguous-user-a" not in str(actors.content)
+    assert not any(
+        claim.kind == "tenant_canonical_human_linked_to_workflow_execution"
+        for claim in result.claims
+    )
+
+
+@pytest.mark.asyncio
+async def test_workflow360_joins_exact_approval_decider_to_human_actor() -> None:
+    execution = _agent_execution_row()
+    execution.update(
+        {
+            "initiating_principal_user_id": "initiator-user-a",
+            "approval_id": "approval-a",
+            "approval_decision_id": "decision-a",
+        }
+    )
+    source = FakeWorkflowSource(
+        WorkflowRunInvocationRead(
+            (
+                _row(
+                    "invocation-a",
+                    agent_id="canonical-agent-a",
+                    action_id="agent-execution-a",
+                ),
+            ),
+            True,
+            True,
+        ),
+        agent_executions=WorkflowAgentExecutionRead((execution,), True, True),
+        principal_identities=WorkflowPrincipalIdentityRead(
+            (
+                _principal_identity("initiator-user-a", "canonical-initiator-a"),
+                _principal_identity("approver-user-a", "canonical-approver-a"),
+            ),
+            True,
+            True,
+        ),
+        approvals=WorkflowApprovalRead(
+            (
+                {
+                    "tenant_id": TENANT_A,
+                    "workflow_run_id": RUN_ID,
+                    "execution_id": "agent-execution-a",
+                    "approval_id": "approval-a",
+                    "decision_id": "decision-a",
+                    "action": "approve",
+                    "decided_by": "approver-user-a",
+                    "decided_at": "2026-10-18T10:00:01Z",
+                },
+            ),
+            True,
+            True,
+        ),
+    )
+
+    result = await Workflow360Provider(source=source).project(_request(), _context())
+
+    sections = _sections(result)
+    approvals = sections["approvals"]
+    assert approvals.state == "degraded"
+    assert approvals.content["sourceReadCompleteForExactLinks"] is True
+    assert approvals.content["workflowApprovalAuthorityState"] == "unknown"
+    assert approvals.content["approvals"][0]["decidedByCanonicalHumanEntityId"] == (
+        "canonical-approver-a"
+    )
+    actors = sections["actors"]
+    approver = next(
+        actor
+        for actor in actors.content["actors"]
+        if actor.get("canonicalHumanEntityId") == "canonical-approver-a"
+    )
+    assert approver["roles"] == ["approver"]
+    assert approver["approvalIds"] == ["approval-a"]
+    assert "approver-user-a" not in str(actors.content) + str(approvals.content)
+
+
+@pytest.mark.asyncio
+async def test_workflow360_keeps_exact_approval_when_decider_identity_is_unresolved() -> None:
+    execution = _agent_execution_row()
+    execution.update(
+        {
+            "approval_id": "approval-unresolved-a",
+            "approval_decision_id": "decision-unresolved-a",
+        }
+    )
+    source = FakeWorkflowSource(
+        WorkflowRunInvocationRead(
+            (
+                _row(
+                    "invocation-a",
+                    agent_id="canonical-agent-a",
+                    action_id="agent-execution-a",
+                ),
+            ),
+            True,
+            True,
+        ),
+        agent_executions=WorkflowAgentExecutionRead((execution,), True, True),
+        approvals=WorkflowApprovalRead(
+            (
+                {
+                    "tenant_id": TENANT_A,
+                    "workflow_run_id": RUN_ID,
+                    "execution_id": "agent-execution-a",
+                    "approval_id": "approval-unresolved-a",
+                    "decision_id": "decision-unresolved-a",
+                    "action": "approve",
+                    "decided_by": "unresolved-approver-user",
+                    "decided_at": "2026-10-18T10:00:01Z",
+                },
+            ),
+            True,
+            True,
+        ),
+    )
+
+    result = await Workflow360Provider(source=source).project(_request(), _context())
+
+    approvals = _sections(result)["approvals"]
+    assert approvals.content["sourceReadCompleteForExactLinks"] is True
+    assert approvals.content["decisionActorIdentityResolutionCompleteForReportedRefs"] is False
+    assert approvals.content["approvals"][0]["decisionActorIdentityState"] == "unresolved"
+    assert "decidedByCanonicalHumanEntityId" not in approvals.content["approvals"][0]
+    assert "unresolved-approver-user" not in str(approvals.content)
+    assert approvals.content["workflowApprovalAuthorityState"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_workflow360_rejects_execution_when_invocation_action_link_differs() -> None:
+    source = FakeWorkflowSource(
+        WorkflowRunInvocationRead(
+            (
+                _row(
+                    "invocation-a",
+                    agent_id="canonical-agent-a",
+                    action_id="some-other-action",
+                ),
+            ),
+            True,
+            True,
+        ),
+        agent_executions=WorkflowAgentExecutionRead(
+            (_agent_execution_row(),), True, True
+        ),
+    )
+
+    result = await Workflow360Provider(source=source).project(_request(), _context())
+
+    steps = _sections(result)["agent_steps"]
+    assert steps.state == "unknown"
+    assert steps.content["steps"] == []
+    assert steps.content["reasonCode"] == "unscoped_or_invalid_agent_execution_rows_dropped"
+    actors = _sections(result)["actors"]
+    assert actors.content["actors"] == []
+
+
 @pytest.mark.asyncio
 async def test_workflow360_projects_only_exact_tenant_run_linked_agent_executions() -> None:
     valid = _agent_execution_row()
     source = FakeWorkflowSource(
-        WorkflowRunInvocationRead((_row("invocation-a"),), True, True),
+        WorkflowRunInvocationRead(
+            (
+                _row(
+                    "invocation-a",
+                    agent_id="canonical-agent-a",
+                    action_id="agent-execution-a",
+                ),
+            ),
+            True,
+            True,
+        ),
         agent_executions=WorkflowAgentExecutionRead(
             rows=(
                 valid,
@@ -629,3 +930,125 @@ async def test_repository_source_reads_only_exact_run_linked_agent_executions(
     assert read.available is True
     assert read.complete is True
     assert read.rows == (_agent_execution_row(),)
+
+
+@pytest.mark.parametrize("action", ["approve", "reject", "escalate", "revoke"])
+@pytest.mark.asyncio
+async def test_repository_source_reads_only_exact_execution_approval_references(
+    monkeypatch, action: str
+) -> None:
+    from value.x402 import commerce_store as commerce_store_module
+    from value.x402.commerce_models import ApprovalDecision, ApprovalRequest
+    from value.x402.commerce_store import CommerceStore
+
+    store = CommerceStore()
+    execution = _agent_execution_row()
+    execution.update(
+        {"approval_id": "approval-source-a", "approval_decision_id": "decision-source-a"}
+    )
+    approval = ApprovalRequest(
+        approval_id="approval-source-a",
+        tenant_id=TENANT_A,
+        challenge_id="challenge-source-a",
+        resource_id="resource-source-a",
+        requester_id="canonical-agent-a",
+        execution_id="agent-execution-a",
+        execution_action="pay",
+        amount_usd=1,
+        asset_symbol="USDC",
+        chain="eip155:8453",
+    )
+    decision = ApprovalDecision(
+        decision_id="decision-source-a",
+        approval_id=approval.approval_id,
+        tenant_id=TENANT_A,
+        execution_id="agent-execution-a",
+        action=action,
+        decided_by="approval-user-a",
+        reason="approved",
+    )
+    await store.put_approval(approval)
+    await store.put_approval_decision(decision)
+    monkeypatch.setattr(commerce_store_module, "get_commerce_store", lambda: store)
+
+    read = await RepositoryWorkflow360Source().run_execution_approvals(
+        tenant_id=TENANT_A,
+        workflow_run_id=RUN_ID,
+        execution_rows=(execution,),
+        limit=20,
+    )
+
+    assert read.available is True
+    assert read.complete is True
+    assert read.rows == (
+        {
+            "tenant_id": TENANT_A,
+            "workflow_run_id": RUN_ID,
+            "execution_id": "agent-execution-a",
+            "approval_id": "approval-source-a",
+            "decision_id": "decision-source-a",
+            "action": action,
+            "decided_by": "approval-user-a",
+            "decided_at": decision.decided_at,
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_repository_source_resolves_principal_through_tenant_user_alias() -> None:
+    from identity.identity.hashing import hash_value
+    from identity.identity.models import IdentitySignalType
+
+    class IdentityRepository:
+        async def find_aliases_by_signal(
+            self, tenant_id: str, signal_type: Any, alias_hash: str, *, limit: int
+        ) -> list[dict[str, Any]]:
+            assert tenant_id == TENANT_A
+            assert signal_type == IdentitySignalType.USER_ID
+            assert alias_hash == hash_value("authenticated-user-a", scope=f"user:{TENANT_A}")
+            assert limit == 101
+            return [
+                {
+                    "id": "user-alias-a",
+                    "tenant_id": TENANT_A,
+                    "alias_type": IdentitySignalType.USER_ID.value,
+                    "alias_value_hash": alias_hash,
+                    "canonical_entity_id": "human-entity-a",
+                    "confidence_tier": "deterministic",
+                }
+            ]
+
+        async def resolve_surviving_canonical_entity_id(
+            self, tenant_id: str, canonical_entity_id: str
+        ) -> str:
+            assert tenant_id == TENANT_A
+            assert canonical_entity_id == "human-entity-a"
+            return canonical_entity_id
+
+        async def get_subject_by_canonical_entity_id(
+            self, tenant_id: str, canonical_entity_id: str
+        ) -> dict[str, Any]:
+            return {
+                "id": "human-subject-a",
+                "tenant_id": tenant_id,
+                "canonical_entity_id": canonical_entity_id,
+                "entity_type": "human",
+                "status": "active",
+            }
+
+    read = await RepositoryWorkflow360Source(
+        principal_identity_repository=IdentityRepository()
+    ).principal_identities(
+        tenant_id=TENANT_A,
+        principal_user_ids={"authenticated-user-a"},
+        limit=20,
+    )
+
+    assert read.available is True
+    assert read.complete is True
+    assert read.rows[0]["canonical_human_entity_id"] == "human-entity-a"
+    refs = read.rows[0]["identity_evidence_refs"]
+    assert {ref["source"] for ref in refs} == {
+        "identity_aliases",
+        "identity_subjects",
+    }

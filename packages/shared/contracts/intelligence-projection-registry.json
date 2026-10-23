@@ -719,6 +719,7 @@
         "outcomes",
         "evidence",
         "journeys",
+        "identity",
         "risk_signals"
       ],
       "hardDependencies": [
@@ -2710,6 +2711,7 @@
         "ai_execution_facts",
         "agent_entities",
         "agent_executions",
+        "commerce",
         "identity"
       ],
       "hardDependencies": [
@@ -5936,8 +5938,12 @@
         {
           "id": "risk_flags",
           "requirement": "required",
-          "description": "Exact current risk-signal records for direct source or identity-resolved agent communication subjects.",
+          "description": "Exact-subject canonical RiskSignal records for resolved agents and sources and mapped recipient entities; source and recipient reads are consent-gated, and message-edge propagation is never inferred.",
           "canonicalAuthorityRefs": [
+            "communication_facts",
+            "consent_policy_decisions",
+            "evidence",
+            "identity",
             "risk_outputs",
             "risk_signals"
           ],
@@ -5959,7 +5965,7 @@
             "risk_outputs"
           ],
           "authorityGapReason": "message_scoped_composite_risk_output_not_joined",
-          "partialImplementationReason": "agent_and_source_current_risk_signals_only"
+          "partialImplementationReason": "Source and recipient RiskSignal reads require current analytics consent; recipient reads also require exact tenant identity mappings and evidence. Resolved-agent risk reads remain identity-linked without an explicit current-consent gate. Message-edge risk transfer, composite Risk360 output, complete identity/source coverage, and freshness remain unknown."
         },
         {
           "id": "evidence_trace",
@@ -8588,12 +8594,14 @@
         {
           "id": "risk",
           "requirement": "required",
-          "description": "Exact resolved account-entity Risk360 outputs backed by canonical evidence; related-account coverage remains partial.",
+          "description": "Direct account-entity risk plus bounded evidence-backed risk frames for exact tenant-scoped members; roster and risk coverage remain partial.",
           "canonicalAuthorityRefs": [
+            "graph",
+            "entity_registry",
             "risk_outputs"
           ],
           "projectionBindings": [],
-          "partialImplementationReason": "Direct account-entity risk evidence is available; member and related-entity aggregation and a freshness SLA remain unimplemented."
+          "partialImplementationReason": "Direct account risk remains separate; bounded exact MEMBER_OF member contexts are included only after the account risk slot and each member Risk360 risk_summary policy allow. Roster completeness, related-account aggregation, temporal member-risk reads, and freshness remain unknown."
         },
         {
           "id": "agents",
@@ -9389,10 +9397,12 @@
         {
           "id": "actors",
           "requirement": "required",
-          "description": "Agent references on exact workflow-run AI invocations resolved to tenant canonical Agent identity; human and approval actors remain unknown.",
+          "description": "Exact run-linked AI invocation agents plus human initiator and approver identities resolved through active tenant USER_ID aliases; full actor coverage and workflow authority remain unknown.",
           "canonicalAuthorityRefs": [
             "ai_execution_facts",
             "agent_entities",
+            "agent_executions",
+            "commerce",
             "identity"
           ],
           "projectionBindings": [
@@ -9408,22 +9418,40 @@
               ]
             }
           ],
-          "partialImplementationReason": "ai_invocation_agent_actors_only_no_human_initiator_approver_or_authority"
+          "partialImplementationReason": "Exact execution initiator and approval decider references resolve through unique active tenant USER_ID aliases; workflow-wide actor coverage and authority remain unknown."
         },
         {
           "id": "approvals",
           "requirement": "required",
-          "description": "Required Workflow 360 slot: approvals.",
+          "description": "Exact x402 approval requests and decisions referenced by tenant and run-linked AgentExecutions; workflow-wide approval coverage and authorization policy remain unknown.",
           "canonicalAuthorityRefs": [
+            "agent_access",
+            "agent_executions",
+            "commerce"
+          ],
+          "projectionBindings": [
+            {
+              "projectionId": "workflow360",
+              "role": "primary",
+              "sectionIds": [
+                "approvals"
+              ],
+              "subjectKinds": [
+                "run",
+                "workflow_run"
+              ]
+            }
+          ],
+          "unboundCanonicalAuthorityRefs": [
             "agent_access"
           ],
-          "projectionBindings": [],
-          "unboundReason": "canonical_workflow_approval_authority_not_available"
+          "authorityGapReason": "canonical_workflow_approval_authority_not_joined",
+          "partialImplementationReason": "Only exact x402 approval decisions referenced by admitted run-linked AgentExecutions are joined; workflow-level approval coverage and authorization remain unknown."
         },
         {
           "id": "agent_steps",
           "requirement": "required",
-          "description": "Required Workflow 360 slot: agent steps.",
+          "description": "Exact tenant and run-linked AgentExecution records admitted only when stored invocation IDs match run-linked AI facts and the stable action/execution ID; complete workflow step coverage remains unknown.",
           "canonicalAuthorityRefs": [
             "agent_executions"
           ],
@@ -9440,7 +9468,7 @@
               ]
             }
           ],
-          "partialImplementationReason": "An exact tenant and workflow_run_id AgentExecution read exists, but the canonical AgentExecution writer does not persist workflow_run_id; workflow definition, complete step coverage, policy, and freshness remain unknown."
+          "partialImplementationReason": "The canonical AgentExecution writer persists workflow_run_id and exact invocation IDs when a unique tenant-scoped AI invocation has action_id equal to the stable execution ID. Workflow definition, complete step coverage, policy, and freshness remain unknown."
         },
         {
           "id": "actions",
@@ -9534,6 +9562,7 @@
           "ai_execution_facts",
           "events",
           "execution_facts",
+          "commerce",
           "identity",
           "outcome_facts",
           "resources",

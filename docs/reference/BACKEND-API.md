@@ -2006,10 +2006,15 @@ changes add no HTTP routes and do not complete any surface.
 
 A follow-up slice adds partial Signals360 `classification` evidence for exact
 gateway-accepted SDK event types and registry families; source attribution,
-semantic classification, policy, and freshness remain unknown. Workflow360
-`agent_steps` reads only canonical AgentExecution rows carrying the exact tenant
-and workflow run ID, but no current AgentExecution writer stores that run ID, so
-production step rows are still unjoined. Episode360 `agent_handoffs` remains
+semantic classification, policy, and freshness remain unknown. Workflow360 now
+resolves execution initiator and approval decider identities only through
+unique active tenant USER_ID aliases, and joins exact x402 approval records
+referenced by admitted run-linked AgentExecutions. AgentExecution stores the
+workflow run and invocation references only when a unique tenant-scoped AI
+invocation has `action_id` equal to the stable execution ID; the provider checks
+the exact tenant, run, action, and agent links before admitting a step. Workflow
+definitions, complete actor and step coverage, workflow-wide approval authority,
+policy, and freshness remain unknown. Episode360 `agent_handoffs` remains
 unknown because episode records and observations have no canonical execution or
 handoff reference. The frame route preserves these slot limitations and adds
 no new endpoint.

@@ -43,6 +43,29 @@ class TestCurrencySeparation:
 
 
 class TestWorkflowEconomics:
+    async def test_exact_action_filter_returns_canonical_invocation_links(self):
+        tenant, run_id = new_tenant(), f"wf-{uuid.uuid4().hex[:8]}"
+        action_id = f"execution-{uuid.uuid4().hex[:8]}"
+        await _seed_fact(
+            tenant,
+            workflow_run_id=run_id,
+            action_id=action_id,
+            agent_id="agent-exact",
+        )
+        await _seed_fact(
+            tenant,
+            workflow_run_id="another-run",
+            action_id="other-action",
+            agent_id="agent-exact",
+        )
+
+        rows = await ai_aggregation.list_facts(tenant, action_id=action_id)
+
+        assert len(rows) == 1
+        assert rows[0]["tenant_id"] == tenant
+        assert rows[0]["workflow_run_id"] == run_id
+        assert rows[0]["action_id"] == action_id
+
     async def test_facts_without_workflow_id_never_fabricated(self):
         tenant = new_tenant()
         await _seed_fact(tenant, billed_cost=1.0)  # no workflow_run_id

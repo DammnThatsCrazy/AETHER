@@ -11,6 +11,9 @@ source_files:
   - services/api/repositories/tenant_row_keys.py
   - services/api/repositories/lake.py
   - services/api/repositories/commerce_repos.py
+  - services/api/actions/agent/user_agents.py
+  - services/api/value/economic/ai_aggregation.py
+  - services/api/intelligence/workflow/workflow360_provider.py
   - services/api/value/x402/commerce_store.py
   - services/api/intelligence/risk360/store.py
   - services/api/actions/agent_marketplace/identity_binding.py
@@ -25,16 +28,19 @@ reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; repository and database behavior remain unchanged.'}
   - {'commit': '30d10ccb6', 'reason': 'Reviewed CSV import rights-lineage persistence. The body now documents the additive Bronze metadata and silver_import_facts JSONB refs/record IDs; other repository and database dispatch behavior is unchanged.'}
 source_hashes:
+  "services/api/actions/agent/user_agents.py": "sha256:e00d936cb05ab3ba530c9208a98932e45dec4b1175330d8d24aa8d87a13cc81c"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
   "services/api/alembic/versions/20261022_risk_poisoning_evidence.py": "sha256:d158801954e2c76f088f9a367cabc4e507f1d4b2e456e989b6e95c04a9db6237"
   "services/api/intelligence/risk360/store.py": "sha256:447475ba55bc70319c134fcd9f8886d37d9913c27d7a7ae406c721159618b2db"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:1e7dd60cc1a3ea528d9738885f04d7c6712e200622d11c3db518f91e43ceb2d3"
   "services/api/repositories/commerce_repos.py": "sha256:4402087f991786d8c2e67663f215fc3793694e2f0956bfba6fbe197386c7e518"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
   "services/api/repositories/repos.py": "sha256:1784df01b61c04f087c80397c3eab3b7167aef930bf199b7a82da4bfdc18dbf4"
   "services/api/repositories/tenant_row_keys.py": "sha256:e2da7b934edd8738e078817b9f01d52040624242f0f2d78c113bf76dc7fcf4e0"
+  "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
   "services/api/value/x402/commerce_store.py": "sha256:9f6e098c5d2ad930d3d1cf090d10c9386e6bae0408ad39c5b21e22ff460c1a06"
 ---
 
@@ -138,7 +144,7 @@ table and caches it. Writes and filters are then bound to the migrated types:
 | `operator_actions` | `OperatorActionRepository` | Operator approve/suppress/escalate/annotate audit |
 | `user_notification_channels` | `UserNotificationChannelRepository` | End-user Slack/Discord/Telegram/Webhook registrations |
 | `slack_oauth_states` | `SlackOAuthStateRepository` | Slack OAuth 2.0 CSRF state nonces (10-min TTL) |
-| `agent_executions` | `AgentExecutionRepository` | Per-execution reasoning log, confidence, policy log, task decomposition |
+| `agent_executions` | `AgentExecutionRepository` | Per-execution reasoning log, confidence, policy log, task decomposition, and optional exact workflow-run/invocation references |
 | `commerce_approval_decisions` | `ApprovalDecisionsRepository` | Append-only tenant-scoped x402 decision history with exact execution references |
 | `risk_poisoning_evidence` | `RiskPoisoningEvidenceRepository` | Typed tenant-scoped risk evidence and append-only lifecycle/restatement history |
 | `delegations` | `DelegationRepository` | Scoped, time-bound, revocable entity-to-entity delegations (hot-path Redis-cached) |
@@ -174,7 +180,12 @@ by the requested tenant and exact canonical entity IDs; duplicate or
 truncated results are not selected as canonical. `AgentExecutionRepository`
 also retains the initiating principal ID supplied by the authenticated
 server-side execution path so it remains distinct from the agent and source
-actor claims.
+actor claims. It persists `workflow_run_id` and `workflow_run_invocation_ids`
+when canonical tenant-scoped invocation facts with the same agent and an exact
+`action_id` equal to the stable execution ID resolve to one unambiguous run.
+Workflow360 revalidates the tenant, run, agent, action, and invocation IDs
+before exposing an execution as a workflow step; absent or ambiguous links stay
+unknown. These fields use the existing JSONB record and require no migration.
 
 ### Analytics event store
 

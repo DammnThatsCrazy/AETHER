@@ -63,6 +63,28 @@ async def test_denied_execute_persists_decision_and_requested_scope(monkeypatch)
 
     monkeypatch.setattr(user_agents, "_configs", ConfigRepository())
     monkeypatch.setattr(user_agents, "_executions", ExecutionRepository())
+    settings_module = __import__("config.settings", fromlist=["settings"])
+    ai_aggregation = __import__("value.economic.ai_aggregation", fromlist=["list_facts"])
+    monkeypatch.setattr(
+        settings_module,
+        "settings",
+        SimpleNamespace(ai_economics=SimpleNamespace(execution_facts_enabled=True)),
+    )
+
+    async def list_facts(requested_tenant: str, **filters: Any) -> list[dict[str, Any]]:
+        assert requested_tenant == tenant_id
+        assert filters == {"action_id": "execution-id-a", "limit": 201}
+        return [
+            {
+                "tenant_id": tenant_id,
+                "agent_id": agent_id,
+                "action_id": "execution-id-a",
+                "workflow_run_id": "workflow-run-a",
+                "invocation_id": "invocation-a",
+            }
+        ]
+
+    monkeypatch.setattr(ai_aggregation, "list_facts", list_facts)
     request = SimpleNamespace(
         state=SimpleNamespace(
             tenant=SimpleNamespace(
@@ -76,6 +98,7 @@ async def test_denied_execute_persists_decision_and_requested_scope(monkeypatch)
         action="transfer",
         resource="account:4",
         amount="25",
+        execution_id="execution-id-a",
         triggered_by_event_id="trigger-1",
     )
 
@@ -91,6 +114,8 @@ async def test_denied_execute_persists_decision_and_requested_scope(monkeypatch)
 
     assert recorded["tenant_id"] == tenant_id
     assert recorded["initiating_principal_user_id"] == "authenticated-human-1"
+    assert recorded["workflow_run_id"] == "workflow-run-a"
+    assert recorded["workflow_run_invocation_ids"] == ["invocation-a"]
     assert recorded["delegation_id"] is None
     assert recorded["policy_log"]["delegation_check"] == {
         "allowed": False,

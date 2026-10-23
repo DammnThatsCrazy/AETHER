@@ -462,7 +462,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/architecture/blueprints/communication360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['agent', 'campaign', 'entity', 'episode', 'journey', 'source'],
-    canonicalAuthorities: ['campaign_touchpoints', 'communication_facts', 'consent_policy_decisions', 'entities', 'evidence', 'journeys', 'outcomes', 'risk_signals'],
+    canonicalAuthorities: ['campaign_touchpoints', 'communication_facts', 'consent_policy_decisions', 'entities', 'evidence', 'identity', 'journeys', 'outcomes', 'risk_signals'],
     hardDependencies: ['contract_spine', 'temporal_kernel'],
     projectionDependencies: ['episode360', 'outcome360', 'profile360', 'relationship360'],
     optionalProjectionDependencies: [],
@@ -1616,7 +1616,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['automation', 'run', 'trigger', 'workflow', 'workflow_run'],
-    canonicalAuthorities: ['agent_entities', 'agent_executions', 'ai_execution_facts', 'identity'],
+    canonicalAuthorities: ['agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'identity'],
     hardDependencies: ['contract_spine'],
     projectionDependencies: [],
     optionalProjectionDependencies: [],
@@ -2006,10 +2006,10 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
-        canonicalAuthorityRefs: ['risk_outputs'],
-        description: 'Exact resolved account-entity Risk360 outputs backed by canonical evidence; related-account coverage remains partial.',
+        canonicalAuthorityRefs: ['entity_registry', 'graph', 'risk_outputs'],
+        description: 'Direct account-entity risk plus bounded evidence-backed risk frames for exact tenant-scoped members; roster and risk coverage remain partial.',
         id: 'risk',
-        partialImplementationReason: 'Direct account-entity risk evidence is available; member and related-entity aggregation and a freshness SLA remain unimplemented.',
+        partialImplementationReason: 'Direct account risk remains separate; bounded exact MEMBER_OF member contexts are included only after the account risk slot and each member Risk360 risk_summary policy allow. Roster completeness, related-account aggregation, temporal member-risk reads, and freshness remain unknown.',
         projectionBindings: [],
         requirement: 'required'
       },
@@ -2997,10 +2997,10 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       },
       {
         authorityGapReason: 'message_scoped_composite_risk_output_not_joined',
-        canonicalAuthorityRefs: ['risk_outputs', 'risk_signals'],
-        description: 'Exact current risk-signal records for direct source or identity-resolved agent communication subjects.',
+        canonicalAuthorityRefs: ['communication_facts', 'consent_policy_decisions', 'evidence', 'identity', 'risk_outputs', 'risk_signals'],
+        description: 'Exact-subject canonical RiskSignal records for resolved agents and sources and mapped recipient entities; source and recipient reads are consent-gated, and message-edge propagation is never inferred.',
         id: 'risk_flags',
-        partialImplementationReason: 'agent_and_source_current_risk_signals_only',
+        partialImplementationReason: 'Source and recipient RiskSignal reads require current analytics consent; recipient reads also require exact tenant identity mappings and evidence. Resolved-agent risk reads remain identity-linked without an explicit current-consent gate. Message-edge risk transfer, composite Risk360 output, complete identity/source coverage, and freshness remain unknown.',
         projectionBindings: [
           {
             projectionId: 'communication360',
@@ -6155,10 +6155,10 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         unboundReason: 'canonical_workflow_action_authority_not_joined'
       },
       {
-        canonicalAuthorityRefs: ['agent_entities', 'ai_execution_facts', 'identity'],
-        description: 'Agent references on exact workflow-run AI invocations resolved to tenant canonical Agent identity; human and approval actors remain unknown.',
+        canonicalAuthorityRefs: ['agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'identity'],
+        description: 'Exact run-linked AI invocation agents plus human initiator and approver identities resolved through active tenant USER_ID aliases; full actor coverage and workflow authority remain unknown.',
         id: 'actors',
-        partialImplementationReason: 'ai_invocation_agent_actors_only_no_human_initiator_approver_or_authority',
+        partialImplementationReason: 'Exact execution initiator and approval decider references resolve through unique active tenant USER_ID aliases; workflow-wide actor coverage and authority remain unknown.',
         projectionBindings: [
           {
             projectionId: 'workflow360',
@@ -6171,9 +6171,9 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       },
       {
         canonicalAuthorityRefs: ['agent_executions'],
-        description: 'Required Workflow 360 slot: agent steps.',
+        description: 'Exact tenant and run-linked AgentExecution records admitted only when stored invocation IDs match run-linked AI facts and the stable action/execution ID; complete workflow step coverage remains unknown.',
         id: 'agent_steps',
-        partialImplementationReason: 'An exact tenant and workflow_run_id AgentExecution read exists, but the canonical AgentExecution writer does not persist workflow_run_id; workflow definition, complete step coverage, policy, and freshness remain unknown.',
+        partialImplementationReason: 'The canonical AgentExecution writer persists workflow_run_id and exact invocation IDs when a unique tenant-scoped AI invocation has action_id equal to the stable execution ID. Workflow definition, complete step coverage, policy, and freshness remain unknown.',
         projectionBindings: [
           {
             projectionId: 'workflow360',
@@ -6185,12 +6185,21 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         requirement: 'required'
       },
       {
-        canonicalAuthorityRefs: ['agent_access'],
-        description: 'Required Workflow 360 slot: approvals.',
+        authorityGapReason: 'canonical_workflow_approval_authority_not_joined',
+        canonicalAuthorityRefs: ['agent_access', 'agent_executions', 'commerce'],
+        description: 'Exact x402 approval requests and decisions referenced by tenant and run-linked AgentExecutions; workflow-wide approval coverage and authorization policy remain unknown.',
         id: 'approvals',
-        projectionBindings: [],
+        partialImplementationReason: 'Only exact x402 approval decisions referenced by admitted run-linked AgentExecutions are joined; workflow-level approval coverage and authorization remain unknown.',
+        projectionBindings: [
+          {
+            projectionId: 'workflow360',
+            role: 'primary',
+            subjectKinds: ['run', 'workflow_run'],
+            sectionIds: ['approvals']
+          }
+        ],
         requirement: 'required',
-        unboundReason: 'canonical_workflow_approval_authority_not_available'
+        unboundCanonicalAuthorityRefs: ['agent_access']
       },
       {
         id: 'evidence_trace',
@@ -6298,7 +6307,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       }
     ],
     sourceOfTruth: {
-      canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'ai_execution_facts', 'events', 'execution_facts', 'identity', 'outcome_facts', 'resources', 'risk_outputs', 'tools'],
+      canonicalAuthorities: ['actions', 'agent_access', 'agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'events', 'execution_facts', 'identity', 'outcome_facts', 'resources', 'risk_outputs', 'tools'],
       ownsCanonicalTruth: false,
       prohibitedOwnership: ['economic_facts', 'execution_facts', 'graph', 'identity', 'observations', 'risk_outputs', 'source_provenance']
     },

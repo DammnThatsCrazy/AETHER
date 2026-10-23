@@ -15,9 +15,15 @@ source_files:
   - services/api/shared/events/events.py
   - packages/shared/
   - services/api/actions/agent/execution360_provider.py
+  - services/api/actions/agent/user_agents.py
+  - services/api/identity/account360_provider.py
+  - services/api/intelligence/workflow/workflow360_provider.py
   - services/api/intelligence/fraud_networks/risk360_projection.py
   - services/api/journeys/communication360/provider.py
+  - services/api/repositories/repos.py
+  - services/api/shared/intelligence_projections/frame_runtime.py
   - services/api/value/economic/economic360_provider.py
+  - services/api/value/economic/ai_aggregation.py
   - services/api/actions/agent/deployment_routes.py
   - services/api/actions/agent_marketplace/catalog.py
   - services/api/actions/agent_marketplace/authority.py
@@ -51,6 +57,7 @@ source_hashes:
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
   "services/api/actions/agent/execution360_provider.py": "sha256:bca794ec4a2011f58ef0f452e37c32f0e16152fbe772ed1bc44a07c06e284f7d"
+  "services/api/actions/agent/user_agents.py": "sha256:e00d936cb05ab3ba530c9208a98932e45dec4b1175330d8d24aa8d87a13cc81c"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
@@ -60,16 +67,21 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/config/settings.py": "sha256:fe581665da73af478c3da53600fb0fdd4994d801f408e56f6d2796fbd00748bf"
+  "services/api/identity/account360_provider.py": "sha256:fdc82d330bcb8ada37abeda8f9e2e4fcd2ff6ed065b5b6733a9c9719dc289408"
   "services/api/ingestion/ingestion/replay.py": "sha256:65f898480787b71d14c8f687351844fdf5585cd67664ff5c32699328594b24ce"
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
-  "services/api/journeys/communication360/provider.py": "sha256:3d62c71b8f51ed7b4230f6a6f6f630ad746c6757bcff893eac76391c489c61f5"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:1e7dd60cc1a3ea528d9738885f04d7c6712e200622d11c3db518f91e43ceb2d3"
+  "services/api/journeys/communication360/provider.py": "sha256:d4c3668290eaa8c74480db29cbb265bc98cddf1c0ae436d816d058f762d3b266"
   "services/api/main.py": "sha256:fa7455e5dd5a1e6b6b2ac25cc3ce6fc8a09d8bcf5b242b500feb0b797ab2d7b7"
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
   "services/api/workers/runtime/specs.py": "sha256:b86659249b2f805b3ba81631c57e71ca57be089de07278fedccbe25b576df64b"
   "services/api/value/economic/economic360_provider.py": "sha256:feefe5903f7faa2fee321e31f11c2e89d344353ad9b0f585325ebd0d349cc57f"
+  "services/api/repositories/repos.py": "sha256:2deaf337debdc8fc0fa1585901e1a736e2a269b967d0091bba4d0d7d8369d19f"
+  "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:95a0255a37d99b96243b2a51a6d9465a4740f072963fc5d6565b16a77d454a3d"
+  "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
 ---
 # Aether vNext — Architecture Guide
 
@@ -666,16 +678,27 @@ dimensions, event coverage, and freshness remain unknown; Memory360 current
 consent and policy remain unevaluated. These are partial slot implementations,
 not completed 360 surfaces.
 
-A follow-up slice adds two more partial bindings. Signals360 `classification`
-validates the exact gateway-accepted SDK event type and family against the
-canonical registry; source attribution, semantic classification, policy, and
-freshness remain unknown. Workflow360 `agent_steps` reads only tenant-scoped
-AgentExecution rows carrying the exact workflow run ID, but the canonical
-writer does not yet persist that ID, so production step rows remain unjoined;
-workflow definition and complete step coverage remain unknown. Episode360
-`agent_handoffs` also remains unknown because episode records and observations
-do not reference a canonical execution or handoff ID. Event labels and agent
-metadata are not used to invent those links.
+A follow-up slice adds partial Signals360 `classification` evidence for exact
+gateway-accepted SDK event types and registry families; source attribution,
+semantic classification, policy, and freshness remain unknown. Workflow360 now
+resolves exact execution initiator and approval decider identities through
+unique active tenant USER_ID aliases, and joins only x402 approval decisions
+referenced by admitted run-linked AgentExecutions. AgentExecution stores
+workflow and invocation references only when a unique tenant AI invocation has
+`action_id` equal to the stable execution ID; the provider verifies tenant, run,
+agent, and action equality before exposing the step. Workflow definitions,
+complete actor and step coverage, workflow-wide approval authority, policy, and
+freshness remain unknown. Account360 adds bounded member Risk360 frames from
+exact tenant-owned `MEMBER_OF` edges after account-slot and per-member policy
+checks; roster completeness, temporal reads, related-account aggregation, and
+freshness remain unknown. Communications360 reads exact-subject RiskSignals for
+resolved agents and sources and mapped recipient entities. Source and recipient
+reads require current analytics consent, while the agent path lacks an explicit
+current-consent gate; message-edge transfer, complete coverage, composite
+Risk360 output, and freshness remain unknown. Episode360 `agent_handoffs` also
+remains unknown because episode records and observations do not reference a
+canonical execution or handoff ID. Event labels and agent metadata are not used
+to invent those links.
 The current agentic/support slice adds three partial paths: Agent360
 `owner_delegator` resolves the configured owner reference only through an exact
 tenant entity lookup, without asserting legal or effective ownership; Execution360

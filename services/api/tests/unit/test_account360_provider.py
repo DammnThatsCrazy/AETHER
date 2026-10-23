@@ -31,9 +31,11 @@ from identity.account360_provider import (  # noqa: E402
 )
 from shared.intelligence_projections.composition import (  # noqa: E402
     PRODUCT_360_SURFACE_DEFINITIONS,
+    compose_experience360_frame,
 )
 from shared.intelligence_projections.contracts import (  # noqa: E402
     ClaimEnvelope,
+    Experience360Frame,
     Experience360FrameRequest,
     Experience360PolicyDisposition,
     ProjectionResult,
@@ -106,9 +108,10 @@ def _risk_result(
     tenant_id: str = TENANT_ID,
     subject: ProjectionSubject = SUBJECT,
     with_evidence: bool = True,
+    risk_id: str = "risk-assessment-1",
 ) -> ProjectionResult:
     risk_evidence = EvidenceRef(
-        id="risk-assessment-1",
+        id=risk_id,
         type="model_output",
         source="risk_assessments",
         observedAt="2026-10-17T09:55:00Z",
@@ -125,7 +128,7 @@ def _risk_result(
                     "tenantId": tenant_id,
                     "subject": {"kind": subject.kind, "id": subject.id},
                     "assessment": {
-                        "assessmentId": "risk-assessment-1",
+                        "assessmentId": risk_id,
                         "evidenceRefs": (
                             [risk_evidence.model_dump(mode="json", by_alias=True)]
                             if with_evidence
@@ -149,7 +152,7 @@ def _risk_result(
         claims=(
             [
                 ClaimEnvelope(
-                    id="risk360.assessment.risk-assessment-1",
+                    id=f"risk360.assessment.{risk_id}",
                     kind="risk_assessment",
                     subject=subject,
                     evidenceRefs=[risk_evidence],
@@ -164,6 +167,33 @@ def _risk_result(
         dependencyState=[],
         generatedAt="2026-10-17T10:01:00Z",
         degradedReasons=[],
+    )
+
+
+def _member_risk_frame(
+    member: AccountMember,
+    *,
+    tenant_id: str = TENANT_ID,
+    policy_state: str = "allowed",
+    frame_policy_state: str = "allowed",
+) -> Experience360Frame:
+    subject = ProjectionSubject(
+        kind="agent" if member.entity_type == "agent" else "entity",
+        id=member.entity_id,
+    )
+    request = Experience360FrameRequest(
+        surfaceId="risk360",
+        tenantId=tenant_id,
+        subject=subject,
+        includeEvidence=True,
+        requestedSlotIds=["risk_summary"],
+    )
+    disposition = Experience360PolicyDisposition(state=policy_state)
+    return compose_experience360_frame(
+        request,
+        [_risk_result(tenant_id=tenant_id, subject=subject, risk_id=f"risk-{member.entity_id}")],
+        frame_policy=Experience360PolicyDisposition(state=frame_policy_state),
+        policy_by_slot={"risk_summary": disposition},
     )
 
 
@@ -563,8 +593,15 @@ async def test_members_slot_does_not_read_when_slot_policy_is_denied(
     policy[ACCOUNT_PROFILES_SLOT] = Experience360PolicyDisposition(state="denied")
 
     frame = await Account360Provider(source).compose(
-        _request(),
-        _results(),
+        _request(
+            requested_slot_ids=[
+                ACCOUNT_MEMBERS_SLOT,
+                ACCOUNT_AGENTS_SLOT,
+                ACCOUNT_PROFILES_SLOT,
+                ACCOUNT_IDENTITY_SLOT,
+            ]
+        ),
+        [],
         frame_policy=Experience360PolicyDisposition(state="allowed"),
         policy_by_slot=policy,
     )
@@ -1302,6 +1339,115 @@ async def test_account_risk_reuses_exact_entity_risk_provider_under_slot_policy(
     )
     assert slot.freshness.state == "unknown"
     assert "account_risk_freshness_sla_unconfigured" in slot.reasonCodes
+
+
+@pytest.mark.asyncio
+async def test_account_risk_composes_exact_member_risk_only_after_member_policy_allows():
+    allowed_member = _account_member("member-risk-allowed", "human", "edge-risk-allowed")
+    denied_member = _account_member("member-risk-denied", "agent", "edge-risk-denied")
+    source = _MembersSource(
+        AccountIdentityRead(
+            "resolved",
+            evidence_refs=(IDENTITY_EVIDENCE,),
+            entity_type="organization",
+        ),
+        AccountMembersRead(
+            "degraded",
+            TENANT_ID,
+            SUBJECT.id,
+            members=(allowed_member, denied_member),
+            reason_codes=("account_member_edge_completeness_unproven",),
+            source_as_of="2026-10-17T09:50:00Z",
+        ),
+    )
+    risk_provider = _RiskProvider(_risk_result())
+    member_reader_calls: list[str] = []
+
+    async def read_member_risk(member, _request):
+        member_reader_calls.append(member.entity_id)
+        return _member_risk_frame(
+            member,
+            policy_state=("allowed" if member.entity_id == allowed_member.entity_id else "denied"),
+        )
+
+    frame = await Account360Provider(
+        source,
+        risk_provider=risk_provider,
+    ).compose(
+        _request(requested_slot_ids=[ACCOUNT_RISK_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=_allowed_slots(),
+        member_risk_reader=read_member_risk,
+    )
+
+    assert source.member_calls == [(TENANT_ID, SUBJECT.id)]
+    assert member_reader_calls == ["member-risk-allowed", "member-risk-denied"]
+    slot = next(item for item in frame.slots if item.id == ACCOUNT_RISK_SLOT)
+    entries = slot.content["memberRiskContext"]
+    assert [entry["member"]["id"] for entry in entries] == ["member-risk-allowed"]
+    nested_frame = entries[0]["riskFrame"]
+    assert nested_frame["surfaceId"] == "risk360"
+    assert nested_frame["tenantId"] == TENANT_ID
+    assert nested_frame["subject"] == {"kind": "entity", "id": "member-risk-allowed"}
+    assert nested_frame["policyDisposition"]["state"] == "allowed"
+    assert {ref.id for ref in slot.evidenceRefs} == {
+        "risk-assessment-1",
+        "risk-member-risk-allowed",
+        "edge-risk-allowed",
+        "member-risk-allowed",
+    }
+    assert any(
+        provenance.canonicalAuthorityRefs == ["graph", "entity_registry"]
+        and any(ref.id == "edge-risk-allowed" for ref in provenance.evidenceRefs)
+        for provenance in slot.provenance
+    )
+    assert "account_risk_member_roster_completeness_unknown" in slot.reasonCodes
+    assert "account_risk_member_freshness_sla_unconfigured" in slot.reasonCodes
+    assert slot.content["memberCoverage"]["state"] == "unknown"
+    assert slot.freshness.state == "unknown"
+    assert "member-risk-denied" not in str(entries)
+
+
+@pytest.mark.asyncio
+async def test_account_member_risk_fanout_deduplicates_and_obeys_local_cap(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from identity import account360_provider as account360_provider_module
+
+    monkeypatch.setattr(
+        account360_provider_module, "_MAX_ACCOUNT_MEMBER_RISK_FRAMES", 2
+    )
+    first = _account_member("member-risk-a", "human", "edge-risk-a")
+    second = _account_member("member-risk-b", "human", "edge-risk-b")
+    third = _account_member("member-risk-c", "human", "edge-risk-c")
+    members_read = AccountMembersRead(
+        "degraded",
+        TENANT_ID,
+        SUBJECT.id,
+        members=(first, first, second, third),
+        source_as_of="2026-10-17T09:50:00Z",
+    )
+    calls: list[str] = []
+
+    async def read_member_risk(member, _request):
+        calls.append(member.entity_id)
+        return _member_risk_frame(member)
+
+    result = await Account360Provider._read_member_risks(
+        _request(requested_slot_ids=[ACCOUNT_RISK_SLOT]),
+        members_read,
+        member_risk_reader=read_member_risk,
+    )
+
+    assert result.state == "degraded"
+    assert calls == ["member-risk-a", "member-risk-b"]
+    assert len(result.risks) == 2
+    assert result.truncated is True
+    assert "account_member_risk_duplicate_members_deduplicated" in result.reason_codes
+    assert "account_member_risk_fanout_truncated" in result.reason_codes
+    assert len({ref.id for ref in result.evidence_refs}) == len(result.evidence_refs)
+    assert result.source_as_of == "2026-10-17T09:50:00Z"
 
 
 @pytest.mark.asyncio

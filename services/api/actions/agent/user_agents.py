@@ -87,12 +87,67 @@ class AgentExecute(BaseModel):
     resource: str = Field(..., min_length=1)
     amount: Optional[str] = None
     approval_id: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    # Optional stable execution ID. A workflow link is accepted only when the
+    # canonical AI invocation fact explicitly carries this value as action_id.
+    execution_id: Optional[str] = Field(default=None, min_length=1, max_length=256)
     payload: dict[str, Any] = Field(default_factory=dict)
     triggered_by_event_id: Optional[str] = None
     # Optional: if the agent already produced reasoning/confidence at the
     # caller layer, pass it through so it lands on the execution record.
     reasoning: str = ""
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+async def _canonical_workflow_run_link(
+    *, tenant_id: str, agent_id: str, execution_id: str
+) -> tuple[Optional[str], list[str]]:
+    """Resolve only an explicit canonical invocation action_id → execution ID link.
+
+    The caller-provided execution ID is only a lookup key. It is never used as
+    workflow evidence by itself. Every returned invocation must match the exact
+    tenant, agent, action ID and one unambiguous workflow run.
+    """
+    if not tenant_id or not agent_id or not execution_id:
+        return None, []
+    try:
+        from config.settings import settings
+        from value.economic.ai_aggregation import list_facts
+
+        if not settings.ai_economics.execution_facts_enabled:
+            return None, []
+        facts = await list_facts(tenant_id, action_id=execution_id, limit=201)
+    except Exception:  # noqa: BLE001 - optional telemetry cannot block execution
+        logger.debug("workflow execution linkage unavailable", exc_info=True)
+        return None, []
+
+    if not isinstance(facts, list) or len(facts) > 200:
+        return None, []
+    workflow_run_ids: set[str] = set()
+    invocation_ids: set[str] = set()
+    for fact in facts:
+        if (
+            not isinstance(fact, dict)
+            or fact.get("tenant_id") != tenant_id
+            or fact.get("action_id") != execution_id
+            or fact.get("agent_id") != agent_id
+        ):
+            return None, []
+        workflow_run_id = fact.get("workflow_run_id")
+        invocation_id = fact.get("invocation_id")
+        if (
+            not isinstance(workflow_run_id, str)
+            or not workflow_run_id.strip()
+            or len(workflow_run_id) > 256
+            or not isinstance(invocation_id, str)
+            or not invocation_id.strip()
+            or len(invocation_id) > 256
+        ):
+            return None, []
+        workflow_run_ids.add(workflow_run_id)
+        invocation_ids.add(invocation_id)
+    if not facts or len(workflow_run_ids) != 1 or not invocation_ids:
+        return None, []
+    return next(iter(workflow_run_ids)), sorted(invocation_ids)
 
 
 async def _validate_execution_approval(
@@ -255,6 +310,18 @@ async def execute(
         agent_id=agent_id,
         body=body,
     )
+    if (
+        approval_execution_id is not None
+        and body.execution_id is not None
+        and body.execution_id != approval_execution_id
+    ):
+        raise BadRequestError("Execution ID does not match the approved execution")
+    execution_id = approval_execution_id or body.execution_id or str(uuid.uuid4())
+    workflow_run_id, workflow_run_invocation_ids = await _canonical_workflow_run_link(
+        tenant_id=tenant.tenant_id,
+        agent_id=agent_id,
+        execution_id=execution_id,
+    )
 
     decision = await engine.evaluate(
         grantee_entity_id=agent_id,
@@ -264,12 +331,14 @@ async def execute(
     )
     if not decision.allowed:
         # Reject is recorded as a failed execution row so the timeline is complete.
-        rejected_id = approval_execution_id or str(uuid.uuid4())
+        rejected_id = execution_id
         await _executions.record(
             execution_id=rejected_id,
             agent_id=agent_id,
             tenant_id=tenant.tenant_id,
             initiating_principal_user_id=getattr(tenant, "user_id", None),
+            workflow_run_id=workflow_run_id,
+            workflow_run_invocation_ids=workflow_run_invocation_ids,
             delegation_id=decision.delegation_id,
             triggered_by_event_id=body.triggered_by_event_id,
             status="revoked",
@@ -287,7 +356,7 @@ async def execute(
             error={"code": decision.reason},
             approval_id=body.approval_id,
             approval_decision_id=approval_decision_id,
-            create_only=approval_execution_id is not None,
+            create_only=approval_execution_id is not None or body.execution_id is not None,
         )
         await producer.publish(Event(
             topic=Topic.AGENT_EXECUTION_FAILED,
@@ -308,7 +377,6 @@ async def execute(
             f"reason={decision.reason}"
         )
 
-    execution_id = approval_execution_id or str(uuid.uuid4())
     started_at = datetime.now(timezone.utc).isoformat()
 
     # Execution started — emit event with v2 envelope so consumers see the full context.
@@ -350,6 +418,8 @@ async def execute(
         agent_id=agent_id,
         tenant_id=tenant.tenant_id,
         initiating_principal_user_id=getattr(tenant, "user_id", None),
+        workflow_run_id=workflow_run_id,
+        workflow_run_invocation_ids=workflow_run_invocation_ids,
         delegation_id=decision.delegation_id,
         triggered_by_event_id=body.triggered_by_event_id,
         status="running",
@@ -368,7 +438,7 @@ async def execute(
         started_at=started_at,
         approval_id=body.approval_id,
         approval_decision_id=approval_decision_id,
-        create_only=approval_execution_id is not None,
+        create_only=approval_execution_id is not None or body.execution_id is not None,
     )
 
     await producer.publish(started)

@@ -371,6 +371,51 @@ async def build_experience360_frame(
                 max_concurrency=1,
             )
 
+        async def read_account_member_risk(
+            member: Any, account_request: Experience360FrameRequest
+        ) -> Experience360Frame:
+            """Build each member's Risk360 frame through its own policy gate."""
+
+            risk_surface = PRODUCT_360_SURFACE_DEFINITIONS.get("risk360", {})
+            risk_lens_contract = risk_surface.get("lensContract", {})
+            risk_lens_ids = risk_lens_contract.get("lensIds", [])
+            if account_request.lensIds is None:
+                risk_lens_ids_for_request = None
+            else:
+                allowed_risk_lenses = {
+                    lens_id for lens_id in risk_lens_ids if isinstance(lens_id, str)
+                }
+                risk_lens_ids_for_request = [
+                    lens_id
+                    for lens_id in account_request.lensIds
+                    if lens_id in allowed_risk_lenses
+                ] or None
+
+            risk_request = Experience360FrameRequest(
+                surfaceId="risk360",
+                tenantId=account_request.tenantId,
+                subject=ProjectionSubject(
+                    kind="agent" if member.entity_type == "agent" else "entity",
+                    id=member.entity_id,
+                ),
+                asOf=account_request.asOf,
+                timeRange=account_request.timeRange,
+                includeEvidence=account_request.includeEvidence,
+                lensIds=risk_lens_ids_for_request,
+                requestedSlotIds=["risk_summary"],
+                requestedBy=account_request.requestedBy,
+                purpose=account_request.purpose,
+                authorizationContextRef=account_request.authorizationContextRef,
+            )
+            return await build_experience360_frame(
+                risk_request,
+                policy_evaluator=evaluator,
+                projection_runtime=runner,
+                actor_attribution=actor_attribution,
+                generated_at=generated_timestamp,
+                max_concurrency=1,
+            )
+
         return await account_provider.compose(
             request,
             results,
@@ -382,6 +427,7 @@ async def build_experience360_frame(
             actor_attribution=actor_attribution,
             actor_attribution_by_slot=resolved_actor_metadata,
             member_profile_reader=read_account_member_profile,
+            member_risk_reader=read_account_member_risk,
             generated_at=generated_timestamp,
         )
     frame = compose_experience360_frame(

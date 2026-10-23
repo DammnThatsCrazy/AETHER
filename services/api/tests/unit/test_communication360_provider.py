@@ -47,6 +47,7 @@ from journeys.communication360.provider import (  # noqa: E402
     AgentIdentityRead,
     EntityIdentityRead,
     OUTPUT_SECTIONS,
+    RecipientIdentityRead,
     REASON_CANONICAL_SOURCE_UNAVAILABLE,
     REASON_SILVER_SOURCE_UNAVAILABLE,
     REASON_SOURCE_READ_TRUNCATED,
@@ -56,6 +57,7 @@ from journeys.communication360.provider import (  # noqa: E402
 from journeys.communication360.reader import to_message  # noqa: E402
 from journeys.comms.contracts import CommunicationState, MessageCategory  # noqa: E402
 from graph.operational_intelligence.models import EvidenceRef  # noqa: E402
+from identity.identity.source_subject_scope import SourceSubjectScopeRead  # noqa: E402
 from shared.contracts_models.epistemic import EpistemicStatus  # noqa: E402
 from shared.intelligence_projections.composition import (  # noqa: E402
     compose_experience360_frame,
@@ -230,6 +232,68 @@ class FakeEntityIdentityReader:
                     observedAt="2026-10-22T12:00:00Z",
                 ),
             ),
+        )
+
+
+class FakeRecipientIdentityReader:
+    """Exact tenant/provider-recipient identity mapping test double."""
+
+    def __init__(self, *, canonical_entity_id: str = "profile-1", state: str = "resolved") -> None:
+        self.canonical_entity_id = canonical_entity_id
+        self.state = state
+        self.calls: list[tuple[str, str, str]] = []
+
+    async def resolve(
+        self, tenant_id: str, identity_binding_id: str, expected_entity_id: str
+    ) -> RecipientIdentityRead:
+        self.calls.append((tenant_id, identity_binding_id, expected_entity_id))
+        if self.state != "resolved":
+            return RecipientIdentityRead(
+                state=self.state, reason="recipient_identity_binding_unresolved"
+            )
+        return RecipientIdentityRead(
+            state="resolved",
+            canonical_entity_id=self.canonical_entity_id,
+            evidence=(
+                EvidenceRef(
+                    id=identity_binding_id,
+                    type="entity",
+                    source="comms_provider_identities",
+                    uri=f"store://comms_provider_identities/{identity_binding_id}",
+                    observedAt="2026-10-22T12:00:00Z",
+                ),
+            ),
+        )
+
+
+class FakeSourceSubjectScopeReader:
+    """Exact tenant/source identity resolver used by risk integration tests."""
+
+    def __init__(
+        self, *, canonical_entity_id: str = "profile-source", state: str = "available"
+    ) -> None:
+        self.canonical_entity_id = canonical_entity_id
+        self.state = state
+        self.calls: list[tuple[str, str]] = []
+
+    async def resolve(self, tenant_id: str, source_identity_id: str) -> SourceSubjectScopeRead:
+        self.calls.append((tenant_id, source_identity_id))
+        return SourceSubjectScopeRead(
+            tenant_id=tenant_id,
+            source_identity_id=source_identity_id,
+            state=self.state,
+            canonical_entity_id=(self.canonical_entity_id if self.state == "available" else None),
+            evidence_refs=(
+                EvidenceRef(
+                    id=f"identity-binding-{source_identity_id}",
+                    type="entity",
+                    source="identity360/source_subject_scope",
+                    observedAt="2026-10-22T12:00:00Z",
+                ),
+            )
+            if self.state == "available"
+            else (),
+            reason=None if self.state == "available" else "source_identity_binding_unresolved",
         )
 
 
@@ -2099,8 +2163,17 @@ async def test_communication360_reads_risk_flags_only_for_exact_source_subject()
         },
     ]
     reader = FakeRiskSignalReader(risk_rows)
+    source_identity_reader = FakeSourceSubjectScopeReader(
+        canonical_entity_id="canonical-source-owner"
+    )
+    consent_reader = FakeConsentPolicyReader(
+        {"allowed": True, "reason_code": None, "receipt_id": "source-analytics-receipt"}
+    )
     provider = Communication360Provider(
-        sources=FakeSource(), risk_signal_reader=reader
+        sources=FakeSource(),
+        source_subject_scope_reader=source_identity_reader,
+        consent_policy_reader=consent_reader,
+        risk_signal_reader=reader,
     )
     request, context = await _make_context(
         ProviderRegistry(),
@@ -2114,6 +2187,8 @@ async def test_communication360_reads_risk_flags_only_for_exact_source_subject()
     ]
     risk_slot = coverage["risk_flags"]
     assert risk_slot["state"] == "available"
+    assert risk_slot["coverage"] == "partial"
+    assert risk_slot["freshnessState"] == "unknown"
     assert risk_slot["reason"] == "tenant_scoped_risk_signals_observed_for_exact_subject"
     risk_evidence = {ref["id"]: ref for ref in risk_slot["evidenceRefs"]}
     assert risk_evidence["source-risk-evidence-a"]["observedAt"] == "2026-10-20T12:30:00Z"
@@ -2121,20 +2196,34 @@ async def test_communication360_reads_risk_flags_only_for_exact_source_subject()
     assert len(risk_claims) == 1
     assert risk_claims[0].claimState == EpistemicStatus.INFERRED
     assert risk_claims[0].domainSlotIds == ["risk_flags"]
-    assert {ref.id for ref in risk_claims[0].evidenceRefs} == {"source-risk-evidence-a"}
+    assert {ref.id for ref in risk_claims[0].evidenceRefs} >= {
+        "source-risk-a",
+        "source-risk-evidence-a",
+        "identity-binding-source-a",
+        "source-analytics-receipt",
+    }
     assert reader.calls == [(TENANT_A, "source", "source-a", 101)]
+    assert source_identity_reader.calls == [(TENANT_A, "source-a")]
+    assert consent_reader.calls == [(TENANT_A, "canonical-source-owner", "analytics")]
 
     foreign = {
         **risk_rows[0],
         "signal_id": "source-risk-b",
         "tenant_id": TENANT_B,
-        "evidence_refs": [
-            {**risk_rows[0]["evidence_refs"][0], "id": "source-risk-evidence-b"}
-        ],
+        "evidence_refs": [{**risk_rows[0]["evidence_refs"][0], "id": "source-risk-evidence-b"}],
     }
     leaking_reader = FakeRiskSignalReader([risk_rows[0], foreign])
+    leaking_source_identity_reader = FakeSourceSubjectScopeReader(
+        canonical_entity_id="canonical-source-owner"
+    )
+    leaking_consent_reader = FakeConsentPolicyReader(
+        {"allowed": True, "reason_code": None, "receipt_id": "source-analytics-receipt"}
+    )
     provider = Communication360Provider(
-        sources=FakeSource(), risk_signal_reader=leaking_reader
+        sources=FakeSource(),
+        source_subject_scope_reader=leaking_source_identity_reader,
+        consent_policy_reader=leaking_consent_reader,
+        risk_signal_reader=leaking_reader,
     )
     result = await provider.project(request, context)
     coverage = next(section for section in result.sections if section.id == "summary").content[
@@ -2142,7 +2231,10 @@ async def test_communication360_reads_risk_flags_only_for_exact_source_subject()
     ]
     assert coverage["risk_flags"]["state"] == "degraded"
     assert {ref["id"] for ref in coverage["risk_flags"]["evidenceRefs"]} == {
-        "source-risk-evidence-a"
+        "source-risk-a",
+        "source-risk-evidence-a",
+        "identity-binding-source-a",
+        "source-analytics-receipt",
     }
     assert not any(
         ref.id == "source-risk-evidence-b"
@@ -2150,6 +2242,116 @@ async def test_communication360_reads_risk_flags_only_for_exact_source_subject()
         for ref in claim.evidenceRefs
     )
     assert leaking_reader.calls == [(TENANT_A, "source", "source-a", 101)]
+
+
+async def test_communication360_joins_exact_recipient_risk_with_current_consent() -> None:
+    entity_id = "profile-risk-recipient"
+    binding_id = "recipient-risk-binding"
+    message = _entity_bound_message(
+        TENANT_A,
+        "message-risk-recipient",
+        entity_id,
+        side="recipient",
+        binding_id=binding_id,
+    )
+    risk_row = {
+        "signal_id": "recipient-risk-signal",
+        "tenant_id": TENANT_A,
+        "subject_kind": "entity",
+        "subject_id": entity_id,
+        "risk_dimension": "data_quality",
+        "claim_state": "inferred",
+        "confidence": 0.7,
+        "evidence_refs": [
+            {
+                "id": "recipient-risk-evidence",
+                "type": "event",
+                "source": "risk360/recipient_detector",
+                "observedAt": "2026-10-21T12:30:00Z",
+            }
+        ],
+        "source": "recipient_detector",
+        "observed_at": "2026-10-21T12:30:00Z",
+    }
+    risk_reader = FakeRiskSignalReader([risk_row])
+    recipient_identity_reader = FakeRecipientIdentityReader(canonical_entity_id=entity_id)
+    entity_identity_reader = FakeEntityIdentityReader(canonical_entity_id=entity_id)
+    consent_reader = FakeConsentPolicyReader(
+        {"allowed": True, "reason_code": None, "receipt_id": "recipient-analytics-receipt"}
+    )
+    provider = Communication360Provider(
+        sources=FakeSource(messages=[message]),
+        entity_identity_reader=entity_identity_reader,
+        recipient_identity_reader=recipient_identity_reader,
+        consent_policy_reader=consent_reader,
+        risk_signal_reader=risk_reader,
+    )
+    request, context = await _make_context(
+        ProviderRegistry(), subject=ProjectionSubject(kind="entity", id=entity_id)
+    )
+
+    result = await provider.project(request, context)
+
+    coverage = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]
+    risk_slot = coverage["risk_flags"]
+    assert risk_slot["state"] == "available"
+    assert risk_slot["coverage"] == "partial"
+    assert risk_slot["freshnessState"] == "unknown"
+    assert risk_slot["reason"] == (
+        "exact_recipient_risk_signal_observed_under_current_analytics_consent"
+    )
+    assert recipient_identity_reader.calls == [(TENANT_A, binding_id, entity_id)]
+    assert consent_reader.calls == [(TENANT_A, entity_id, "analytics")]
+    assert risk_reader.calls == [(TENANT_A, "entity", entity_id, 101)]
+    risk_claims = [
+        claim for claim in result.claims if claim.kind == "communication_risk_signal_record"
+    ]
+    assert len(risk_claims) == 1
+    assert risk_claims[0].subject.kind == "entity"
+    assert risk_claims[0].subject.id == entity_id
+    assert {ref.id for ref in risk_claims[0].evidenceRefs} >= {
+        entity_id,
+        binding_id,
+        "recipient-analytics-receipt",
+        "recipient-risk-signal",
+        "recipient-risk-evidence",
+    }
+
+
+async def test_communication360_suppresses_recipient_risk_without_analytics_consent() -> None:
+    entity_id = "profile-risk-denied"
+    binding_id = "recipient-risk-denied-binding"
+    message = _entity_bound_message(
+        TENANT_A,
+        "message-risk-denied",
+        entity_id,
+        side="recipient",
+        binding_id=binding_id,
+    )
+    risk_reader = FakeRiskSignalReader()
+    provider = Communication360Provider(
+        sources=FakeSource(messages=[message]),
+        entity_identity_reader=FakeEntityIdentityReader(canonical_entity_id=entity_id),
+        recipient_identity_reader=FakeRecipientIdentityReader(canonical_entity_id=entity_id),
+        consent_policy_reader=FakeConsentPolicyReader({"allowed": False}),
+        risk_signal_reader=risk_reader,
+    )
+    request, context = await _make_context(
+        ProviderRegistry(), subject=ProjectionSubject(kind="entity", id=entity_id)
+    )
+
+    result = await provider.project(request, context)
+
+    coverage = next(section for section in result.sections if section.id == "summary").content[
+        "requiredSlotCoverage"
+    ]
+    assert coverage["risk_flags"]["state"] == "suppressed"
+    assert coverage["risk_flags"]["reason"] == "recipient_analytics_consent_not_established"
+    assert coverage["risk_flags"]["freshnessState"] == "unknown"
+    assert risk_reader.calls == []
+    assert not [claim for claim in result.claims if claim.kind == "communication_risk_signal_record"]
 
 
 async def test_communication360_keeps_risk_flags_unknown_for_unsupported_subject_and_degrades_on_outage() -> None:
@@ -2166,7 +2368,16 @@ async def test_communication360_keeps_risk_flags_unknown_for_unsupported_subject
     assert unsupported_reader.calls == []
 
     reader = FakeRiskSignalReader(raises=True)
-    provider = Communication360Provider(sources=FakeSource(), risk_signal_reader=reader)
+    provider = Communication360Provider(
+        sources=FakeSource(),
+        source_subject_scope_reader=FakeSourceSubjectScopeReader(
+            canonical_entity_id="canonical-source-owner"
+        ),
+        consent_policy_reader=FakeConsentPolicyReader(
+            {"allowed": True, "receipt_id": "source-analytics-receipt"}
+        ),
+        risk_signal_reader=reader,
+    )
     request, context = await _make_context(
         ProviderRegistry(), subject=ProjectionSubject(kind="source", id="source-a")
     )

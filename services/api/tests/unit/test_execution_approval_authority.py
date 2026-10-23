@@ -171,6 +171,27 @@ async def test_approved_execution_id_is_claimed_once_under_concurrent_replay() -
     assert sum(isinstance(result, ConflictError) for result in results) == 1
 
 
+async def test_agent_execution_persists_exact_workflow_invocation_lineage() -> None:
+    repository = AgentExecutionRepository()
+    execution_id = f"workflow-linked-{uuid.uuid4()}"
+    row = await repository.record(
+        execution_id=execution_id,
+        agent_id=AGENT,
+        tenant_id=TENANT,
+        delegation_id=None,
+        triggered_by_event_id=None,
+        status="running",
+        workflow_run_id="workflow-run-authority",
+        workflow_run_invocation_ids=["invocation-authority-a", "invocation-authority-b"],
+    )
+
+    assert row["workflow_run_id"] == "workflow-run-authority"
+    assert row["workflow_run_invocation_ids"] == [
+        "invocation-authority-a",
+        "invocation-authority-b",
+    ]
+
+
 async def test_commerce_erasure_removes_subject_approval_decisions_without_cross_tenant_leak() -> None:
     store = CommerceStore()
     subject_approval = ApprovalRequest(

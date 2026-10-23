@@ -28,7 +28,7 @@ AI_EXECUTION_FACTS_STORE = "ai_execution_facts"
 AI_WORKFLOW_ECONOMICS_STORE = "ai_workflow_economics"
 
 _FILTERABLE_FIELDS = (
-    "workflow_run_id", "provider", "model", "task_type", "status",
+    "workflow_run_id", "action_id", "provider", "model", "task_type", "status",
     "cost_basis", "agent_id", "campaign_id", "entity_id",
 )
 

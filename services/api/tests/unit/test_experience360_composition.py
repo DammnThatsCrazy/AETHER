@@ -1970,6 +1970,232 @@ async def test_account360_member_profiles_use_exact_per_member_profile_policy() 
 
 
 @pytest.mark.asyncio
+async def test_account360_member_risk_runtime_applies_per_member_policy_before_projection() -> None:
+    events: list[tuple[str, str, str]] = []
+    account_id = "account-risk-member-parent"
+    allowed_member_id = "member-risk-allowed"
+    denied_member_id = "member-risk-denied"
+    allowed_risk_evidence = EvidenceRef(
+        id="risk-member-allowed-evidence",
+        type="model_output",
+        source="risk_assessments",
+        observedAt="2026-10-18T12:00:00Z",
+    )
+    direct_risk_evidence = EvidenceRef(
+        id="risk-account-direct-evidence",
+        type="model_output",
+        source="risk_assessments",
+        observedAt="2026-10-18T12:00:00Z",
+    )
+
+    def member(entity_id: str, edge_id: str, entity_type: str = "human") -> AccountMember:
+        return AccountMember(
+            tenant_id=TENANT,
+            organization_entity_id=account_id,
+            entity_id=entity_id,
+            entity_type=entity_type,
+            role=None,
+            membership_evidence_ref=EvidenceRef(
+                id=edge_id,
+                type="relationship",
+                source="graph",
+                observedAt="2026-10-18T12:00:00Z",
+            ),
+            entity_evidence_ref=EvidenceRef(
+                id=entity_id,
+                type="entity",
+                source="entity_registry",
+                observedAt="2026-10-18T12:00:00Z",
+            ),
+        )
+
+    class AccountSource:
+        async def canonical_entity(self, tenant_id: str, entity_id: str):
+            assert (tenant_id, entity_id) == (TENANT, account_id)
+            return AccountIdentityRead(
+                "resolved",
+                evidence_refs=(
+                    EvidenceRef(
+                        id=entity_id,
+                        type="entity",
+                        source="entity_registry",
+                        observedAt="2026-10-18T12:00:00Z",
+                    ),
+                ),
+                entity_type="organization",
+                tenant_id=tenant_id,
+                entity_id=entity_id,
+            )
+
+        async def account_members(self, tenant_id: str, organization_entity_id: str):
+            assert (tenant_id, organization_entity_id) == (TENANT, account_id)
+            events.append(("membership", "account360", organization_entity_id))
+            return AccountMembersRead(
+                "degraded",
+                TENANT,
+                account_id,
+                members=(
+                    member(allowed_member_id, "edge-member-risk-allowed"),
+                    member(denied_member_id, "edge-member-risk-denied", "agent"),
+                ),
+                reason_codes=("account_member_edge_completeness_unproven",),
+                source_as_of="2026-10-18T12:00:00Z",
+            )
+
+    class RiskProvider:
+        async def project(self, request, _context):
+            subject = ProjectionSubject(kind="entity", id=account_id)
+            claim = ClaimEnvelope(
+                id="risk360.account-direct",
+                kind="risk_assessment",
+                subject=subject,
+                evidenceRefs=[direct_risk_evidence],
+                claims=["A direct account risk assessment is observed."],
+                domainSlotIds=["risk_summary"],
+            )
+            assert request.subject == subject
+            return ProjectionResult(
+                projectionId="risk360",
+                tenantId=TENANT,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[
+                    ProjectionSection(
+                        id=section_id,
+                        state="available",
+                        content={
+                            "tenantId": TENANT,
+                            "subject": {"kind": subject.kind, "id": subject.id},
+                            "evidenceRefs": [direct_risk_evidence],
+                        },
+                    )
+                    for section_id in ("summary", "state")
+                ],
+                claims=[claim],
+                dependencyState=[],
+                generatedAt="2026-10-18T12:00:30Z",
+                degradedReasons=[],
+            )
+
+    class Policy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            events.append(("policy", request.surfaceId, request.subject.id))
+            if request.surfaceId == "account360":
+                return Experience360PolicyEvaluation(
+                    surfaceId=request.surfaceId,
+                    tenantId=request.tenantId,
+                    evaluatedAt="2026-10-18T12:30:00Z",
+                    frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                    slotDispositions={
+                        "risk": Experience360PolicyDisposition(state="allowed")
+                    },
+                )
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-18T12:30:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "risk_summary": Experience360PolicyDisposition(
+                        state=(
+                            "allowed"
+                            if request.subject.id == allowed_member_id
+                            else "denied"
+                        )
+                    )
+                },
+            )
+
+    class Runtime:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str, str, tuple[str, ...]]] = []
+
+        async def execute_projection(self, request, **_kwargs):
+            sections = tuple(sorted(request.includeSections or ()))
+            self.calls.append(
+                (request.projectionId, request.tenantId, request.subject.id, sections)
+            )
+            events.append(("projection", request.projectionId, request.subject.id))
+            subject = request.subject
+            evidence = allowed_risk_evidence
+            claim = ClaimEnvelope(
+                id=f"risk360.{subject.id}",
+                kind="risk_assessment",
+                subject=subject,
+                evidenceRefs=[evidence],
+                claims=["A policy-permitted exact member assessment is observed."],
+                domainSlotIds=["risk_summary"],
+            )
+            return ProjectionResult(
+                projectionId="risk360",
+                tenantId=request.tenantId,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[
+                    ProjectionSection(
+                        id=section_id,
+                        state="available",
+                        content={
+                            "tenantId": request.tenantId,
+                            "subject": {"kind": subject.kind, "id": subject.id},
+                            "evidenceRefs": [evidence],
+                        },
+                    )
+                    for section_id in sections
+                ],
+                claims=[claim],
+                dependencyState=[],
+                generatedAt="2026-10-18T12:30:00Z",
+                degradedReasons=[],
+            )
+
+    runtime = Runtime()
+    request = Experience360FrameRequest(
+        surfaceId="account360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="entity", id=account_id),
+        requestedSlotIds=["risk"],
+        includeEvidence=True,
+    )
+    frame = await build_experience360_frame(
+        request,
+        policy_evaluator=Policy(),
+        projection_runtime=runtime,
+        account360_provider=Account360Provider(
+            AccountSource(), risk_provider=RiskProvider()
+        ),
+        generated_at="2026-10-18T12:30:00Z",
+    )
+
+    account_policy_index = events.index(("policy", "account360", account_id))
+    membership_index = events.index(("membership", "account360", account_id))
+    allowed_policy_index = events.index(("policy", "risk360", allowed_member_id))
+    allowed_projection_index = events.index(("projection", "risk360", allowed_member_id))
+    denied_policy_index = events.index(("policy", "risk360", denied_member_id))
+    assert account_policy_index < membership_index < allowed_policy_index
+    assert allowed_policy_index < allowed_projection_index
+    assert denied_policy_index < allowed_projection_index
+    assert runtime.calls == [
+        (
+            "risk360",
+            TENANT,
+            allowed_member_id,
+            ("evidence", "findings", "state", "summary"),
+        )
+    ]
+
+    risk_slot = next(slot for slot in frame.slots if slot.id == "risk")
+    member_entries = risk_slot.content["memberRiskContext"]
+    assert [entry["member"]["id"] for entry in member_entries] == [allowed_member_id]
+    assert denied_member_id not in str(risk_slot.content)
+    assert allowed_risk_evidence in risk_slot.evidenceRefs
+    assert any(
+        item.canonicalAuthorityRefs == ["graph", "entity_registry"]
+        for item in risk_slot.provenance
+    )
+    assert risk_slot.freshness.state == "unknown"
+    assert "account_risk_member_roster_completeness_unknown" in risk_slot.reasonCodes
+
+
+@pytest.mark.asyncio
 async def test_profile_risk_summary_routes_exact_entity_to_risk360_after_policy():
     events: list[tuple[str, str, str]] = []
     entity_id = "profile-risk-entity-1"
