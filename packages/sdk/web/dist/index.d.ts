@@ -1,4 +1,4 @@
-import type { AetherConfig, AetherSDKInterface, AetherPlugin, IdentityData, Identity, ResolvedIdentity, WalletInterface, ConsentInterface, CommerceInterface, AgentInterface, X402Interface, CurrentJourney, JourneyPayload } from './types';
+import type { AetherConfig, AetherSDKInterface, AetherPlugin, IdentityData, Identity, ResolvedIdentity, JourneyHandoffToken, JourneyHandoffLink, WalletInterface, ConsentInterface, CommerceInterface, AgentInterface, X402Interface, CurrentJourney, JourneyPayload } from './types';
 import type { Diagnostics } from './health';
 import { EcommerceModule } from './modules/ecommerce';
 import { FormAnalyticsModule } from './modules/form-analytics';
@@ -74,6 +74,28 @@ declare class AetherSDK implements AetherSDKInterface {
     pauseJourney(reason?: string, properties?: JourneyPayload): void;
     resumeJourney(reason?: string, properties?: JourneyPayload): void;
     continueJourney(stepIdOrName: string, properties?: JourneyPayload): void;
+    /**
+     * Ask the backend for a single-use handoff token for the current journey so another
+     * device (for example the web app after a mobile session) can continue it. Returns
+     * null when there is no active journey/session or the server refuses (consent,
+     * flag off, unauthorised app). The token is shown once; hand it over out of band
+     * (link, QR code, deep link) as `aether_handoff=<token>`.
+     */
+    createJourneyHandoff(opts?: {
+        ttlSeconds?: number;
+    }): Promise<JourneyHandoffToken | null>;
+    /**
+     * Redeem a handoff token on this device. On success the source journey continues here
+     * (`journey_resumed` with `linkBasis: 'explicit_handoff'`) and the verified link is
+     * returned. Any failure (unknown, expired, already used, wrong app/tenant, no consent)
+     * returns null; the server deliberately does not say which.
+     */
+    redeemJourneyHandoff(token: string): Promise<JourneyHandoffLink | null>;
+    /**
+     * Convenience for landing pages: if the URL carries `aether_handoff=<token>`, remove it
+     * from the address bar (so it is not copied or bookmarked) and redeem it.
+     */
+    redeemJourneyHandoffFromUrl(): Promise<JourneyHandoffLink | null>;
     completeJourney(reason?: string, properties?: JourneyPayload): void;
     abandonJourney(reason?: string, properties?: JourneyPayload): void;
     checkpointJourney(stepIdOrName: string, properties?: JourneyPayload): void;

@@ -151,6 +151,29 @@ data class CanonicalConsentReceipt(
 // IDENTITY
 // =============================================================================
 
+/** Single-use, short-lived token another device redeems to continue a journey. */
+data class JourneyHandoffToken(
+    val token: String,
+    val handoffId: String,
+    val expiresAt: String,
+)
+
+/**
+ * Server-verified link between two sessions. [linkBasis] is always `explicit_handoff` and
+ * the link never merges identities ([identityMerge] is `not_performed`).
+ */
+data class JourneyHandoffLink(
+    val handoffId: String,
+    val journeyId: String,
+    val linkBasis: String,
+    val identityMerge: String,
+    val fromSessionId: String,
+    val fromPlatform: String,
+    val toSessionId: String,
+    val toPlatform: String,
+    val redeemedAt: String,
+)
+
 data class WalletEntry(
     val address: String,
     val vm: String = "evm",       // evm | svm | bitcoin | movevm | near | tvm | cosmos
@@ -907,6 +930,100 @@ object Aether : DefaultLifecycleObserver {
     }
 
     fun getCurrentJourney(): Map<String, Any?>? = currentJourneyId?.let { mapOf("journeyId" to it, "journeyName" to currentJourneyName) }
+
+    /**
+     * Ask the backend for a single-use handoff token for the current journey so another device
+     * (for example the web app) can continue it. Returns null when there is no active journey or
+     * the server refuses (consent, flag off, unauthorised app, offline). Hand the token over out of
+     * band (link, QR code, deep link) as `aether_handoff=<token>`; it is shown once.
+     */
+    suspend fun createJourneyHandoff(ttlSeconds: Int? = null): JourneyHandoffToken? {
+        val journeyId = currentJourneyId ?: return null
+        val body = JSONObject().apply {
+            put("journey_id", journeyId)
+            put("session_id", sessionId)
+            put("anonymous_id", anonymousId)
+            put("platform", "android")
+            if (ttlSeconds != null) put("ttl_seconds", ttlSeconds)
+        }
+        val data = postJourneyHandoff("/sdk/journey-handoff", body) ?: return null
+        val token = data.optString("token")
+        val handoffId = data.optString("handoff_id")
+        if (token.isBlank() || handoffId.isBlank()) return null
+        return JourneyHandoffToken(token, handoffId, data.optString("expires_at"))
+    }
+
+    /**
+     * Redeem a handoff token on this device. On success the source journey continues here
+     * (`journey_resumed` with `linkBasis = explicit_handoff`) and the verified link is returned. Every
+     * failure (unknown, expired, already used, wrong app/tenant, no consent) returns null; the server
+     * deliberately does not say which.
+     */
+    suspend fun redeemJourneyHandoff(token: String): JourneyHandoffLink? {
+        if (token.isBlank()) return null
+        val body = JSONObject().apply {
+            put("token", token)
+            put("session_id", sessionId)
+            put("anonymous_id", anonymousId)
+            put("platform", "android")
+        }
+        val data = postJourneyHandoff("/sdk/journey-handoff/redeem", body) ?: return null
+        if (data.optString("link_basis") != "explicit_handoff") return null
+        val journeyId = data.optString("journey_id")
+        if (journeyId.isBlank()) return null
+        val from = data.optJSONObject("from")
+        val to = data.optJSONObject("to")
+        val link = JourneyHandoffLink(
+            handoffId = data.optString("handoff_id"),
+            journeyId = journeyId,
+            linkBasis = "explicit_handoff",
+            identityMerge = "not_performed",
+            fromSessionId = from?.optString("session_id") ?: "",
+            fromPlatform = from?.optString("platform") ?: "",
+            toSessionId = to?.optString("session_id") ?: "",
+            toPlatform = to?.optString("platform") ?: "",
+            redeemedAt = data.optString("redeemed_at"),
+        )
+        currentJourneyId = journeyId
+        resumeJourney(
+            "handoff",
+            mapOf(
+                "journeyId" to journeyId,
+                "handoffId" to link.handoffId,
+                "linkBasis" to link.linkBasis,
+                "handoffFromPlatform" to link.fromPlatform,
+            ),
+        )
+        return link
+    }
+
+    /** POST to a journey-handoff route and return the `data` object, or null on any failure. */
+    private suspend fun postJourneyHandoff(path: String, body: JSONObject): JSONObject? {
+        val cfg = config ?: return null
+        return withContext(Dispatchers.IO) {
+            try {
+                val connection = URL("${cfg.endpoint.trimEnd('/')}$path")
+                    .openConnection() as HttpURLConnection
+                try {
+                    connection.requestMethod = "POST"
+                    connection.doOutput = true
+                    connection.connectTimeout = 10000
+                    connection.readTimeout = 10000
+                    connection.setRequestProperty("Authorization", "Bearer ${cfg.apiKey}")
+                    connection.setRequestProperty("Content-Type", "application/json")
+                    connection.setRequestProperty("X-Aether-SDK", "android")
+                    connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+                    if (connection.responseCode !in 200..299) return@withContext null
+                    val text = connection.inputStream.bufferedReader().use { it.readText() }
+                    JSONObject(text).optJSONObject("data")
+                } finally {
+                    connection.disconnect()
+                }
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
 
     fun screenView(screenName: String, properties: Map<String, Any?> = emptyMap()) {
         screenCount++

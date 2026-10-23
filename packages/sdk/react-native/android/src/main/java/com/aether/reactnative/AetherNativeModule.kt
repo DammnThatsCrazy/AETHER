@@ -250,6 +250,55 @@ class AetherNativeModule(private val reactContext: ReactApplicationContext) :
         promise.resolve(null)
     }
 
+    /** Resolves a `{ token, handoffId, expiresAt }` map, or null when no handoff could be created. */
+    @ReactMethod
+    fun createJourneyHandoff(ttlSeconds: Double, promise: Promise) {
+        Thread {
+            try {
+                val ttl = if (ttlSeconds > 0) ttlSeconds.toInt() else null
+                val result = kotlinx.coroutines.runBlocking { Aether.createJourneyHandoff(ttl) }
+                if (result == null) {
+                    promise.resolve(null)
+                } else {
+                    promise.resolve(Arguments.createMap().apply {
+                        putString("token", result.token)
+                        putString("handoffId", result.handoffId)
+                        putString("expiresAt", result.expiresAt)
+                    })
+                }
+            } catch (e: Exception) {
+                promise.resolve(null)
+            }
+        }.start()
+    }
+
+    /** Resolves the verified `explicit_handoff` link, or null for every failure. */
+    @ReactMethod
+    fun redeemJourneyHandoff(token: String, promise: Promise) {
+        Thread {
+            try {
+                val link = kotlinx.coroutines.runBlocking { Aether.redeemJourneyHandoff(token) }
+                if (link == null) {
+                    promise.resolve(null)
+                } else {
+                    promise.resolve(Arguments.createMap().apply {
+                        putString("handoffId", link.handoffId)
+                        putString("journeyId", link.journeyId)
+                        putString("linkBasis", link.linkBasis)
+                        putString("identityMerge", link.identityMerge)
+                        putString("fromSessionId", link.fromSessionId)
+                        putString("fromPlatform", link.fromPlatform)
+                        putString("toSessionId", link.toSessionId)
+                        putString("toPlatform", link.toPlatform)
+                        putString("redeemedAt", link.redeemedAt)
+                    })
+                }
+            } catch (e: Exception) {
+                promise.resolve(null)
+            }
+        }.start()
+    }
+
     @ReactMethod
     fun trackPushOpened(data: ReadableMap) {
         Aether.trackPushOpened(data.toHashMap().mapValues { it.value?.toString() ?: "" })

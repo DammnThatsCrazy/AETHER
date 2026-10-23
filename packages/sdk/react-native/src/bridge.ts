@@ -50,6 +50,29 @@ let activeConfig: AetherRNConfig | null = null;
 // TYPES
 // =============================================================================
 
+/** Single-use, short-lived token another device redeems to continue a journey. */
+export interface JourneyHandoffToken {
+  token: string;
+  handoffId: string;
+  expiresAt: string;
+}
+
+/**
+ * Server-verified link between two sessions. `linkBasis` is always `explicit_handoff`; the link
+ * never merges identities (`identityMerge` is `not_performed`).
+ */
+export interface JourneyHandoffLink {
+  handoffId: string;
+  journeyId: string;
+  linkBasis: 'explicit_handoff';
+  identityMerge: 'not_performed';
+  fromSessionId: string;
+  fromPlatform: string;
+  toSessionId: string;
+  toPlatform: string;
+  redeemedAt: string;
+}
+
 export interface ResolvedIdentity {
   userId?: string;
   anonymousId?: string;
@@ -265,6 +288,50 @@ const Aether = {
 
   checkpointJourney(stepIdOrName: string, properties?: Record<string, unknown>): void {
     AetherNative?.checkpointJourney(stepIdOrName, properties ?? {});
+  },
+
+  /**
+   * Ask the backend for a single-use handoff token for the current journey so another device
+   * (for example the web app) can continue it. Resolves null when there is no active journey or the
+   * server refuses (consent, flag off, unauthorised app, offline). Hand the token over out of band
+   * (link, QR code, deep link) as `aether_handoff=<token>`; it is shown once.
+   */
+  async createJourneyHandoff(opts?: { ttlSeconds?: number }): Promise<JourneyHandoffToken | null> {
+    try {
+      const r = (await AetherNative?.createJourneyHandoff?.(opts?.ttlSeconds ?? 0)) as
+        Partial<JourneyHandoffToken> | null | undefined;
+      if (!r?.token || !r.handoffId) return null;
+      return { token: r.token, handoffId: r.handoffId, expiresAt: r.expiresAt ?? '' };
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Redeem a handoff token on this device. On success the source journey continues here and the
+   * verified link is returned. Every failure (unknown, expired, already used, wrong app/tenant, no
+   * consent) resolves null; the server deliberately does not say which.
+   */
+  async redeemJourneyHandoff(token: string): Promise<JourneyHandoffLink | null> {
+    if (!token) return null;
+    try {
+      const r = (await AetherNative?.redeemJourneyHandoff?.(token)) as
+        Partial<JourneyHandoffLink> | null | undefined;
+      if (!r || r.linkBasis !== 'explicit_handoff' || !r.journeyId) return null;
+      return {
+        handoffId: r.handoffId ?? '',
+        journeyId: r.journeyId,
+        linkBasis: 'explicit_handoff',
+        identityMerge: 'not_performed',
+        fromSessionId: r.fromSessionId ?? '',
+        fromPlatform: r.fromPlatform ?? '',
+        toSessionId: r.toSessionId ?? '',
+        toPlatform: r.toPlatform ?? '',
+        redeemedAt: r.redeemedAt ?? '',
+      };
+    } catch {
+      return null;
+    }
   },
 
   async getCurrentJourney(): Promise<Record<string, unknown> | null> {

@@ -257,6 +257,41 @@ class AetherNativeModule: RCTEventEmitter {
         }
     }
 
+    /// Resolves `{ token, handoffId, expiresAt }`, or NSNull when no handoff could be created.
+    @objc
+    func createJourneyHandoff(_ ttlSeconds: NSNumber, resolve: @escaping RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
+        let ttl = ttlSeconds.intValue > 0 ? ttlSeconds.intValue : nil
+        Aether.shared.createJourneyHandoff(ttlSeconds: ttl) { token in
+            guard let token = token else {
+                resolve(NSNull())
+                return
+            }
+            resolve(["token": token.token, "handoffId": token.handoffId, "expiresAt": token.expiresAt])
+        }
+    }
+
+    /// Resolves the verified `explicit_handoff` link, or NSNull for every failure.
+    @objc
+    func redeemJourneyHandoff(_ token: String, resolve: @escaping RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
+        Aether.shared.redeemJourneyHandoff(token) { link in
+            guard let link = link else {
+                resolve(NSNull())
+                return
+            }
+            resolve([
+                "handoffId": link.handoffId,
+                "journeyId": link.journeyId,
+                "linkBasis": link.linkBasis,
+                "identityMerge": link.identityMerge,
+                "fromSessionId": link.fromSessionId,
+                "fromPlatform": link.fromPlatform,
+                "toSessionId": link.toSessionId,
+                "toPlatform": link.toPlatform,
+                "redeemedAt": link.redeemedAt,
+            ])
+        }
+    }
+
     @objc
     func trackPushOpened(_ data: NSDictionary) {
         Aether.shared.trackPushOpened(userInfo: data as! [AnyHashable: Any])

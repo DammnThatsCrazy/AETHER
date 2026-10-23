@@ -14,7 +14,7 @@ reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the Android sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:337a04f16d08fa0eae27f98b57081830f1b0b58bb0f458ea985051b3febc6440"
+  "packages/sdk/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:34861c102093d8d86446051343f020f21df62a5d2674f3c43534568468f85f27"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
@@ -558,6 +558,12 @@ Journey lifecycle parity with the web SDK: `startJourney`, `pauseJourney`,
 `resumeJourney`, `continueJourney`, `checkpointJourney`, `completeJourney`,
 `abandonJourney`, `getCurrentJourney`. The active journey snapshot is stamped
 on every event's context.
+
+`createJourneyHandoff(ttlSeconds?)` (suspend) returns a single-use `JourneyHandoffToken` for the
+current journey, to be handed to another device as `aether_handoff=<token>`;
+`redeemJourneyHandoff(token)` continues a journey from one. Both return `null` on any failure
+and a redemption is an `explicit_handoff` link that never merges identities. Requires the
+backend flag `JOURNEY_HANDOFF_ENABLED` and identity-link consent.
 
 ## Reward Event Types (A6)
 

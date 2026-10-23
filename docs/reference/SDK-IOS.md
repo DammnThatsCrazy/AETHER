@@ -14,7 +14,7 @@ reviewed_source_commits:
   - commit: "181af52f4"
     reason: "Reviewed the iOS sender's shared batch-envelope builder and fixture-backed contract check. Both legacy and durable-ack send modes retain the same POST /v1/batch payload; the fixture is local contract evidence, not device proof."
 source_hashes:
-  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:c64114012efe12b67aaba53f73609413750bbf4c9186149c349d3c2b11dcf0c1"
+  "packages/sdk/ios/Sources/AetherSDK/Aether.swift": "sha256:d6f2bf4881fa0742e6039590c084b1e9ef490bd71e252175966e43c679f511b2"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
@@ -255,6 +255,15 @@ if Aether.shared.isFeatureEnabled("dark-mode") {
 // Get value with default
 let limit = Aether.shared.getFeatureValue("upload-limit", default: 10)
 ```
+
+## Journey handoff
+
+`createJourneyHandoff(ttlSeconds:completion:)` completes with a single-use `JourneyHandoffToken` for the
+current journey (or `nil`); pass it to another device as `aether_handoff=<token>`.
+`redeemJourneyHandoff(_:completion:)` continues a journey from one and completes with a
+`JourneyHandoffLink` (or `nil`). Every failure completes `nil` without saying why. A redemption is an
+`explicit_handoff` link and never merges identities. Requires backend `JOURNEY_HANDOFF_ENABLED` and
+identity-link consent at both ends.
 
 ## Deep Link Attribution
 
