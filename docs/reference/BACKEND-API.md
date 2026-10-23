@@ -25,7 +25,7 @@ reviewed_source_commits:
   - {'commit': 'af851e21c', 'reason': 'Reviewed CSV import graph-ledger durability and retry recovery. The API surface is unchanged; this reference now records the behavior of the canonical import commit endpoint.'}
   - {'commit': '40af67902', 'reason': 'Reviewed accepted-observation consent receipt references in the batch response and audit metadata. Only durable receipt IDs used for admitted observations are returned; no authorization or billing receipt is fabricated.'}
 source_hashes:
-  "services/api/actions/": "sha256:e248893a00ec959cece229e46bd3850da69ccaf5bf6a53441417f0f2ba63df0e"
+  "services/api/actions/": "sha256:c76d4605ad4b2a3c96fdee6d73b17cdc825577e507b7f48f0ff50a8a87af2832"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/billing/": "sha256:7e7e449e35382421734dd3a546685625d31cf8004024da3f9e0b92937935e1ae"
   "services/api/connectors/": "sha256:8d3cf4489ee6a8ec59d84a8466f2f2e505b4715283de72970242997a43e3b2f6"
@@ -33,11 +33,11 @@ source_hashes:
   "services/api/graph/": "sha256:c4a96fb8c0a9d00c7f87f6fb72fac95e589710253f059c71c36c279c49e658da"
   "services/api/identity/": "sha256:5fa73eaa767b2f8a34eb4eb12e226e6267b2659e8f87124707be9cffbb0515bc"
   "services/api/ingestion/": "sha256:9a84a8c185865fecbf450f8a10e7f83a023d7be79679638006f44435cfa96c42"
-  "services/api/intelligence/": "sha256:e5091bf7ad81014542ce82b4afb85b33f9a221fdf323b9b91366effe2ac3cf24"
-  "services/api/journeys/": "sha256:2b760b186cbf858c5750df1d0653d8919ae21ee88cb6df207c98f630968c3ee8"
+  "services/api/intelligence/": "sha256:4a15df4a8c40fa1b7b6eaa4bb59b740234c77be8efd65359dce8db4caa3a6f20"
+  "services/api/journeys/": "sha256:4642ebb6ce077181b6ebde22aa32fe136d7965a2f387c200e3281b76a9b12ea9"
   "services/api/replay/": "sha256:4b0c52c2af533b644f146864bd01e4ab175540cb41a3f1393c8765a48780cb8e"
   "services/api/tenancy/": "sha256:bb13a10ee18a920e788b77b1df4dca8d0cd68205d9dea9f7255cd85c0d5faeaf"
-  "services/api/value/": "sha256:1626191c92bea173b1bd586811d48941fa6bf7cf6c6946784d692eebaf3873c0"
+  "services/api/value/": "sha256:c5a835de7e81e88d0313a3c09369f78e37c4aa9c154134b7b81a0c3e7ffcc634"
   "services/api/workers/": "sha256:a11cd6bc5393aa14ebaa11cc37b3eb1180f0425f1eb072adb78daefff01324d1"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
@@ -3275,13 +3275,13 @@ Run-explanation evidence separates `delegation_resolution` (canonical record/par
 
 ### Agent spawn lineage
 
-- `GET /v1/agent/agents/{root_agent_ref}/lineage?max_depth=8` — `agent:manage`. Orchestrator to sub-agent tree from `agent_subagent_spawned` facts with run, tool-call and outcome rollups. Source-reported, tenant-scoped, bounded (`truncated` lists applied bounds); it never identifies a controlling person.
+- `GET /v1/agent/agents/{root_agent_ref}/lineage?max_depth=8` — `agent:manage`. Orchestrator to sub-agent tree from `agent_subagent_spawned` facts with run, tool-call and outcome rollups. Source-reported, tenant-scoped, bounded (`truncated` lists applied bounds); it never identifies a controlling person. The spawn and per-agent activity reads are capped (1,000 spawn facts, 200 facts per agent); when a cap bites, `source_truncation` says so and `source_status` is `incomplete` rather than `empty`.
 
 ### Journey handoff (flag `JOURNEY_HANDOFF_ENABLED`)
 
-- `POST /sdk/journey-handoff` — SDK key. Issues a single-use handoff token for a journey/session; requires identity-link consent for the anonymous ID.
-- `POST /sdk/journey-handoff/redeem` — SDK key. Redeems it from the destination session and returns an `explicit_handoff` link; never merges identities. Every failure returns the same 404.
-- `GET /sdk/journey-handoff/journeys/{journey_id}` — `read`. Handoffs recorded for one journey.
+- `POST /sdk/journey-handoff` — SDK key (a site-bound publishable key may call it). Issues a single-use handoff token for a journey/session; requires identity-link consent for the anonymous ID. Identifiers are trimmed; blank ones are a 422.
+- `POST /sdk/journey-handoff/redeem` — SDK key (a site-bound publishable key may call it). Redeems it from the destination session and returns an `explicit_handoff` link; never merges identities. Consent is checked for the destination and re-checked for the token's source subject; every failure, including a revoked source, returns the same 404 and leaves the token unspent.
+- `GET /sdk/journey-handoff/journeys/{journey_id}` — `read`; not reachable with a publishable key. Handoffs recorded for one journey; an unredeemed token past `expires_at` reads as `expired`.
 
 `GET /v1/journeys/{id}/transitions` now also returns `link_basis` counts (`explicit_handoff` vs `inferred`) for cross-device hops.
 
@@ -3291,7 +3291,7 @@ Handoff rows hold both anonymous IDs: they are retained 90 days (`journey_handof
 
 - `POST /v1/fraud/fleet-hypotheses/build` — `fraud:evaluate`. Builds an evidence-graded common-operator hypothesis for an orchestrator; with `AETHER_FRAUD360_ENABLED` it also mirrors it into Fraud360 (response `fraud360`).
 - `GET /v1/fraud/fleet-hypotheses` and `GET /v1/fraud/fleet-hypotheses/{id}` — `fraud:read`.
-- `POST /v1/fraud/fleet-hypotheses/{id}/review` — `fraud:evaluate`. Human `confirm`/`reject` with a reason; the only path to a confirmed status.
+- `POST /v1/fraud/fleet-hypotheses/{id}/review` — `fraud:evaluate`. Human `confirm`/`reject` with a reason; the only path to a confirmed status. Written atomically against the record's `revision`, so concurrent reviews are all kept in `review_history`.
 
 ## Agentic Observability Layer
 
@@ -4670,11 +4670,13 @@ enforcement is on.
 
 ## Prediction-market observation
 
-Mounted only when `AETHER_PREDICTION_MARKET_INGESTION_ENABLED` is set; each venue also needs its own flag (`AETHER_PROVIDER_POLYMARKET_ENABLED` / `AETHER_PROVIDER_KALSHI_ENABLED`). Observation-only: Aether never places orders.
+Mounted only when `AETHER_PREDICTION_MARKET_INGESTION_ENABLED` is set; each venue also needs its own flag (`AETHER_PROVIDER_POLYMARKET_ENABLED` / `AETHER_PROVIDER_KALSHI_ENABLED`). Observation-only: Aether never places orders. Callers submit venue payloads; Aether does not poll the venues, and a venue-reported resolution is stored as reported and is never evidence of settlement.
 
 | Method | Path | Permission | Summary |
 |---|---|---|---|
-| POST | `/v1/prediction-markets/observations/normalize` | `write` | Validate a Polymarket or Kalshi market payload and return the canonical observation (`Decimal` outcome prices in [0, 1], venue-reported resolution kept separate from settlement). Does not persist or publish (`persisted: false`). `404` when ingestion or the venue is disabled; `422` for an invalid payload |
+| POST | `/v1/prediction-markets/observations/normalize` | `write` | Validate a Polymarket or Kalshi market payload and return the canonical observation (`Decimal` outcome prices in [0, 1] as strings). Stores nothing (`persisted: false`). `404` when ingestion or the venue is disabled; `422` for an invalid payload |
+| POST | `/v1/prediction-markets/observations` | `write` | Normalize and store the observation, tenant-scoped and immutable. Identical content is idempotent (`created: false`); a changed quote is a new row |
+| GET | `/v1/prediction-markets/markets/{venue}/{market_ref}` | `read` | Latest stored observation for the tenant, with server-assigned `received_at`. Optional `as_of` (timezone-aware ISO-8601) returns the latest observation received at or before that instant. `404` when none exists |
 
 ## Retarget recommendations, stablecoin reconciliation, Kyber fleet aggregate
 

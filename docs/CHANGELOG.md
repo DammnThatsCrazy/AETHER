@@ -12,7 +12,7 @@ canonical_owner: release@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "CHANGELOG.md": "sha256:44a0ed0834e3b4d548272ca333c77ca7a11f5e0005e5b91d73842c5e037869ec"
+  "CHANGELOG.md": "sha256:5f1596569c3412a17f2ad09477153ba524832e4d8bb08e46d90ea2aec36fe1c9"
 ---
 # Changelog
 
@@ -31,6 +31,7 @@ source_hashes:
 - Root-layout gate (`scripts/validate_root_layout.py`) and deprecated-language gate (`scripts/check_deprecated_language.py`), both run by `make repo-doctor` and `make docs-check`.
 - Legacy-tag and blueprint-adaptation notes in `docs/operations/releases/tag-policy.md` and `docs/reference/source-of-truth/repo-truth.md`.
 - Reconciled Control Plane seam: a site install is observed as a managed integration and admitted through the §16 lifecycle, so an install the loader could not bring up reconciles as drift instead of as nothing to reconcile.
+- Scale-readiness verification: concurrency proofs on the real SDK ingestion handler (`services/api/tests/scale`) show tenant isolation, exactly-once acceptance of duplicate and overlapping batches, claim release so retries are accepted after a bus failure, and the declared claim-store-outage degradation. `scale-readiness` moves to `VERIFIED` (activation stays `INFRASTRUCTURE_WAITING`: staging is not provisioned and no staging load baseline is recorded).
 
 ### Changed
 

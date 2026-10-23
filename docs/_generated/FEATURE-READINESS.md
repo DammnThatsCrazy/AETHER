@@ -32,7 +32,7 @@ Each feature is measured across independent dimensions. Implementation completio
 | Profile 360 | profile-360-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | HIGH |
 | Provider Certification Plane | provider-certification-plane-v1 v1 | 100% | 100% | CREDENTIAL_TURNKEY | ✅ | LIVE_DATA_WAITING | MODERATE |
 | Push Notification Delivery | push-notification-delivery-v1 v1 | 100% | 100% | CREDENTIAL_TURNKEY | ✅ | CREDENTIAL_WAITING | MODERATE |
-| Scale Readiness | scale-readiness-v1 v1 | 80% | 50% | RUNTIME_INTEGRATED | ✅ | INFRASTRUCTURE_WAITING | LOW |
+| Scale Readiness | scale-readiness-v1 v1 | 100% | 100% | VERIFIED | ✅ | INFRASTRUCTURE_WAITING | MODERATE |
 | Client SDKs | sdks-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
 | Security & Compliance | security-compliance-v1 v1 | 100% | 100% | VERIFIED | ✅ | NO_EXTERNAL_BLOCKER | MODERATE |
 | Semantic Intelligence | semantic-intelligence-v1 v1 | 60% | 25% | CODE_COMPLETE | ✅ | CREDENTIAL_WAITING | LOW |
@@ -355,14 +355,14 @@ Each feature is measured across independent dimensions. Implementation completio
 ## Scale Readiness (`scale-readiness`)
 
 - **Scope:** scale-readiness-v1 v1 — founding-tenant-production
-- **Implementation:** RUNTIME_INTEGRATED · 80% of in-scope repository controls (migration-derived)
-- **Productionization:** 50% of in-scope productionization controls (migration-derived)
-- **Repository ceiling:** RUNTIME_INTEGRATED (achieved: yes)
+- **Implementation:** VERIFIED · 100% of in-scope repository controls (migration-derived)
+- **Productionization:** 100% of in-scope productionization controls (migration-derived)
+- **Repository ceiling:** VERIFIED (achieved: yes)
 - **Activation:** INFRASTRUCTURE_WAITING
-- **Remaining repository work:** complete repository-controlled verification + hardening
-- **Confidence:** LOW — gap: credentialed environment execution not yet performed
+- **Remaining repository work:** None
+- **Confidence:** MODERATE — gap: credentialed environment execution not yet performed
 - **Environment evidence:** local=VERIFIED, ci=NOT_ATTEMPTED, staging=BLOCKED_EXTERNAL, production=NOT_ATTEMPTED, scale=NOT_ATTEMPTED
-- **Release-profile dispositions:** local=BLOCKED_BY_CODE, staging=BLOCKED_BY_CODE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
+- **Release-profile dispositions:** local=TECHNICALLY_RELEASE_ELIGIBLE, staging=READY_TO_ACTIVATE, pilot=BLOCKED_BY_CODE, production=BLOCKED_BY_CODE, production-scale=BLOCKED_BY_CODE
 
 ## Client SDKs (`sdks`)
 

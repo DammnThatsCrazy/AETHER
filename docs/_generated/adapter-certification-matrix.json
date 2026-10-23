@@ -657,6 +657,52 @@
       "streaming_model": "webhook",
       "unsupported": []
     },
+    "prediction_market:kalshi": {
+      "adapter": "normalize_kalshi_market",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "as_of_read",
+        "market_payload_normalization",
+        "observation_persistence"
+      ],
+      "domain": "prediction_market",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "kalshi",
+      "required_credentials": [],
+      "required_endpoints": [],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "unsupported": [
+        "live_market_polling",
+        "order_execution"
+      ]
+    },
+    "prediction_market:polymarket": {
+      "adapter": "normalize_polymarket_market",
+      "adapter_version": "0.1.0",
+      "capabilities": [
+        "as_of_read",
+        "market_payload_normalization",
+        "observation_persistence"
+      ],
+      "domain": "prediction_market",
+      "first_release": true,
+      "pagination_model": "none",
+      "provider": "polymarket",
+      "required_credentials": [],
+      "required_endpoints": [],
+      "secret_ref_names": [],
+      "state": "credential_waiting",
+      "state_rank": 20,
+      "streaming_model": "none",
+      "unsupported": [
+        "live_market_polling",
+        "order_execution"
+      ]
+    },
     "stablecoin_chain:evm": {
       "adapter": "StablecoinEVMReceiptVerifier",
       "adapter_version": "0.1.0",
@@ -706,14 +752,15 @@
       "derivatives": 4,
       "interop": 7,
       "payments": 5,
+      "prediction_market": 2,
       "stablecoin_chain": 2
     },
     "by_state": {
-      "credential_waiting": 26
+      "credential_waiting": 28
     },
-    "first_release": 26,
+    "first_release": 28,
     "import_errors": {},
-    "total": 26
+    "total": 28
   },
   "version": "0.1.0-alpha.0"
 }

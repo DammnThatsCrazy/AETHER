@@ -208,3 +208,67 @@ async def test_routes_are_off_by_default_and_hide_failure_reason(monkeypatch):
             ),
             _request(),
         )
+
+
+@pytest.mark.asyncio
+async def test_redeem_rechecks_source_consent_and_does_not_consume(monkeypatch, enabled):
+    from governance.consent import authority
+    from shared.common.common import NotFoundError
+
+    granted = {"anon-mobile", "anon-web"}
+
+    async def evaluate(tenant_id, anonymous_id):
+        return (anonymous_id in granted, "identity_link_consent_required", {})
+
+    monkeypatch.setattr(authority, "evaluate_identity_link_consent", evaluate)
+    issued = (await handoff_routes.issue(
+        handoff_routes.IssueRequest(
+            journey_id="jrn-1", session_id="mob-sess", anonymous_id="anon-mobile", platform="ios"
+        ), _request(),
+    ))["data"]
+    body = handoff_routes.RedeemRequest(
+        token=issued["token"], session_id="web-sess", anonymous_id="anon-web", platform="web"
+    )
+
+    granted.discard("anon-mobile")  # source revokes after issuance
+    with pytest.raises(NotFoundError):  # indistinguishable from an unknown token
+        await handoff_routes.redeem(body, _request())
+    assert repo_mod._MEM[hash_token(issued["token"])]["state"] == "issued"
+
+    granted.add("anon-mobile")
+    out = await handoff_routes.redeem(body, _request())
+    assert out["data"]["link_basis"] == "explicit_handoff"
+
+
+def test_blank_identifiers_are_rejected_by_validation_not_the_service():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        handoff_routes.IssueRequest(journey_id=" ", session_id="s", anonymous_id="a")
+    with pytest.raises(ValidationError):
+        handoff_routes.IssueRequest(journey_id="j", session_id="s", anonymous_id="  ")
+    with pytest.raises(ValidationError):
+        handoff_routes.RedeemRequest(token="hnd_12345678", session_id=" ", anonymous_id="a")
+    assert handoff_routes.IssueRequest(
+        journey_id=" j ", session_id="s", anonymous_id="a"
+    ).journey_id == "j"
+
+
+@pytest.mark.asyncio
+async def test_expired_unredeemed_handoffs_read_as_expired():
+    issued = await _issue()
+    await _issue(session_id="mob-2")
+    repo_mod._MEM[hash_token(issued["token"])]["expires_at"] = repo_mod.utc_now().replace(year=2020)
+    states = sorted(i["state"] for i in await list_handoffs(T, "jrn-1"))
+    assert states == ["expired", "issued"]
+    assert all(i["expires_at"] for i in await list_handoffs(T, "jrn-1"))
+
+
+def test_handoff_prefix_is_classified_and_publishable_keys_reach_only_the_sdk_posts():
+    from governance.security.route_registry import classify
+    from middleware.middleware import _SDK_HANDOFF_PATHS
+
+    assert classify("/sdk/journey-handoff") is not None
+    assert classify("/sdk/journey-handoff/redeem") is not None
+    assert _SDK_HANDOFF_PATHS == {"/sdk/journey-handoff", "/sdk/journey-handoff/redeem"}
+    assert "/sdk/journey-handoff/journeys/jrn-1" not in _SDK_HANDOFF_PATHS
