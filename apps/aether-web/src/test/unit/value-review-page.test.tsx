@@ -364,6 +364,14 @@ describe('Aether Value page', () => {
       expect(screen.queryByTestId('value-previous-series')).toBeNull();
     });
 
+    it('never compares money between an unspecified and an explicit currency', async () => {
+      answer(current, { items: [{ ...ev('p1', 1000, 40), currency: null }], truncated: false });
+      renderPage('/value-review?compare=1');
+      expect(await within(await screen.findByTestId('value-tile-value')).findByText('No comparison: the previous period is in an unspecified currency, this one in USD')).toBeInTheDocument();
+      expect(within(screen.getByTestId('value-tile-events')).getByText('↑100% vs previous 30 days')).toBeInTheDocument();
+      expect(screen.queryByTestId('value-previous-series')).toBeNull();
+    });
+
     it('draws no money baseline when the previous period has no amounts', async () => {
       answer(current, { items: [ev('p1', null, 40)], truncated: false });
       renderPage('/value-review?compare=1');

@@ -168,8 +168,12 @@ export function OverviewTab({
               : { kind: 'ready', read: prevRead, series: prevSeries };
   const prevHead = prev.kind === 'ready' ? headline(prev.read) : null;
   // The currency rule holds across periods too: money is compared only within one currency.
-  const currencyClash = prev.kind === 'ready' && prev.read.currency !== null && cur.currency !== null && prev.read.currency !== cur.currency
-    ? `the previous period is in ${prev.read.currency}, this one in ${cur.currency}`
+  // An unspecified currency is not the same unit as an explicit one, so it never compares with one.
+  const priced = (events: readonly { amount: number | null }[]) => events.some(e => e.amount !== null);
+  const prevPriced = prev.kind === 'ready' && priced(prev.read.events);
+  const currencyName = (c: string | null) => c ?? 'an unspecified currency';
+  const currencyClash = prev.kind === 'ready' && prevPriced && priced(cur.events) && prev.read.currency !== cur.currency
+    ? `the previous period is in ${currencyName(prev.read.currency)}, this one in ${currencyName(cur.currency)}`
     : null;
 
   const deltaFor = (pick: (h: ReturnType<typeof headline>) => number | null, money: boolean) => {
@@ -206,7 +210,7 @@ export function OverviewTab({
     : [];
 
   // A money baseline needs priced events in the previous period; missing amounts are never drawn as $0.
-  const prevUnpriced = prev.kind === 'ready' && anyAmount && !prev.read.events.some(e => e.amount !== null)
+  const prevUnpriced = prev.kind === 'ready' && anyAmount && !prevPriced
     ? 'the previous period has no amounts'
     : null;
   const chartCompare = prev.kind === 'ready' && !(anyAmount && currencyClash) && !prevUnpriced
