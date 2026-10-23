@@ -565,6 +565,15 @@ handoffs for a journey. Rows hold both anonymous IDs, so they are retained 90
 days (`journey_handoff_sweep`, maintenance role, runs even when the flag is off)
 and erased by anonymous ID through the `journey_handoffs` DSR component.
 
+**Journey projection.** When the measurement compiler builds a journey it looks up
+redeemed handoffs for the sessions involved. A step whose previous and current
+session are exactly a redeemed (source, destination) pair gets
+`transition_evidence.link_basis = "explicit_handoff"` (with the `handoff_id` and
+`identity_merge: "not_performed"`); every other cross-device or platform-change hop
+is labelled `"inferred"`. `GET /v1/journeys/{id}/transitions` returns the counts as
+`link_basis`. The label appears the next time the journey is compiled; redeeming a
+handoff does not itself trigger a rebuild. A failed lookup leaves hops inferred.
+
 ## Agent Identity Resolution
 
 v8.0 extends the identity graph to autonomous AI agents and smart contracts.

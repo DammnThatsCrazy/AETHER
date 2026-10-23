@@ -20,7 +20,7 @@ reviewed_source_commits:
 source_hashes:
   "packages/shared/graph-contract.ts": "sha256:662e10a7d4737ba53c673173105344ccf1720ac7e62497d36346734898575087"
   "services/api/graph/risk_overlay/": "sha256:0e4fa40ecad53abcac06d3d843d1044efff9226aa78ccef901ea0af44684a9a3"
-  "services/api/intelligence/fraud_networks/": "sha256:304c0ee785afebf3a1d7a59596fc4b0e4d6f04446bfd20a985d87b7e405ab580"
+  "services/api/intelligence/fraud_networks/": "sha256:810cb68de320c88dcfd1ec45b9e2185e981e297b634e8a6adbe3a043c6031cce"
   "services/api/repositories/repos.py": "sha256:d09d752ef63f4b6eb1c46fe1b1e3f8c00399f40d1a6e86fb15ebad9685459568"
   "services/api/value/flow_trace/": "sha256:e91b3edfb7d6e7a8a0f89951a87f01491a52a155fe5fca8911abc7b5aa94279f"
 ---

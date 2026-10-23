@@ -184,6 +184,30 @@ class JourneyHandoffRepository:
         )
         return [_public(dict(r)) for r in rows]
 
+    async def redeemed_for_sessions(
+        self, tenant_id: str, session_ids: list[str], limit: int = 500
+    ) -> list[dict[str, Any]]:
+        """Redeemed handoffs where either end is one of ``session_ids`` (tenant-scoped)."""
+        wanted = {s for s in session_ids if s}
+        if not wanted:
+            return []
+        pool = await self._backend()
+        if pool is None:
+            async with _mem_lock():
+                rows = [
+                    _public(r) for r in _MEM.values()
+                    if r["tenant_id"] == tenant_id and r["state"] == "redeemed"
+                    and (r["source_session_id"] in wanted or r.get("redeemed_session_id") in wanted)
+                ]
+            return rows[:limit]
+        rows = await pool.fetch(
+            "SELECT * FROM journey_handoffs WHERE tenant_id=$1 AND state='redeemed' AND "
+            "(source_session_id = ANY($2::text[]) OR redeemed_session_id = ANY($2::text[])) "
+            "LIMIT $3",
+            tenant_id, sorted(wanted), limit,
+        )
+        return [_public(dict(r)) for r in rows]
+
     async def sweep_expired(self, retain_days: int = RETAIN_DAYS) -> int:
         """Delete rows created more than ``retain_days`` ago (redeemed or not)."""
         cutoff = utc_now() - timedelta(days=retain_days)

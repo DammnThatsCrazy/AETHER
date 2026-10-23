@@ -15,7 +15,7 @@ reviewed_source_commits:
   - commit: "f63d631"
     reason: "Reviewed f63d631 (DSR completeness): repositories/repos.py only gains the additive BaseRepository.delete_for_tenant_where DSR-erasure primitive used by the consent.erasure job; no repository this doc describes changed behavior, so no body change was required."
 source_hashes:
-  "services/api/intelligence/fraud_networks/": "sha256:304c0ee785afebf3a1d7a59596fc4b0e4d6f04446bfd20a985d87b7e405ab580"
+  "services/api/intelligence/fraud_networks/": "sha256:810cb68de320c88dcfd1ec45b9e2185e981e297b634e8a6adbe3a043c6031cce"
   "services/api/repositories/repos.py": "sha256:d09d752ef63f4b6eb1c46fe1b1e3f8c00399f40d1a6e86fb15ebad9685459568"
 ---
 
@@ -201,7 +201,18 @@ are separate from the eight detectors above and do not create a fraud network.
 - Routes (under `FEATURE_FRAUD_NETWORKS`): `POST /v1/fraud/fleet-hypotheses/build`
   (`fraud:evaluate`), `GET /v1/fraud/fleet-hypotheses[/{id}]` (`fraud:read`),
   `POST /v1/fraud/fleet-hypotheses/{id}/review` (`fraud:evaluate`).
-- Not done: Risk360 projection of a hypothesis, and egress/IP evidence (Silver
+- **Fraud360 projection** (flag `AETHER_FRAUD360_ENABLED`; `fleet_fraud360.py`).
+  Build and review mirror the hypothesis into a Fraud360 `FraudHypothesis`
+  (`agent_abuse` pattern) on the *canonical* Agent entity; an unresolved or
+  ambiguous identity writes nothing. `claim_state` is `attributed` with a
+  delegation-backed person link, otherwise `inferred`. States move through
+  `FraudHypothesisStateMachine`: unconfirmed -> candidate, needs_review ->
+  under_evaluation, reviewer-confirmed -> investigating, reviewer-rejected ->
+  rejected (grounded in the review record). A reviewer confirming "common
+  operator" is not confirmation of fraud, so the projection never reaches
+  Fraud360 `confirmed`. A record an analyst has moved elsewhere is left alone
+  (`state_diverged`). The response carries `fraud360` with the projection status.
+- Not done: a Risk360 assessment for a hypothesis, and egress/IP evidence (Silver
   agent facts carry no source address; MCP endpoint host is the only
   infrastructure signal).
 
