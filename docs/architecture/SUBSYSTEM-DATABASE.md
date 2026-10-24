@@ -35,7 +35,7 @@ source_hashes:
   "services/api/alembic/versions/20261022_execution_approval_decisions.py": "sha256:6f3c2ff0235a78fd144f0b26bb76a36556c23a1bc5a8285e58588608e9fa7fb6"
   "services/api/alembic/versions/20261022_risk_poisoning_evidence.py": "sha256:d158801954e2c76f088f9a367cabc4e507f1d4b2e456e989b6e95c04a9db6237"
   "services/api/intelligence/risk360/store.py": "sha256:447475ba55bc70319c134fcd9f8886d37d9913c27d7a7ae406c721159618b2db"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:5a338c0e96e8af181e6e0cdbab061c7ded7333535bec55706cd8908de20bcbc9"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:f14b6b827c18be01cc0a2cb45c6c42730e25d93b65050f3e287ebe1a056bd4f6"
   "services/api/repositories/commerce_repos.py": "sha256:4402087f991786d8c2e67663f215fc3793694e2f0956bfba6fbe197386c7e518"
   "services/api/repositories/lake.py": "sha256:ba4cb42e94ad7934f9063111efbe670be93c48181deaed45f058fc3343fe0109"
   "services/api/repositories/repos.py": "sha256:1784df01b61c04f087c80397c3eab3b7167aef930bf199b7a82da4bfdc18dbf4"
@@ -188,8 +188,10 @@ before exposing an execution as a workflow step; absent or ambiguous links stay
 unknown. It also resolves a stored `triggered_by_event_id` only when the exact
 tenant-scoped analytics event exists. This exposes the recorded reference with
 event and execution evidence; it does not establish event-to-run causality or
-complete trigger coverage. These fields use the existing JSONB record and
-require no migration. Workflow360 additionally follows only `outcome_id`
+complete trigger coverage. If the event reader reports unavailable or not-read,
+rows supplied alongside that state are ignored and the slot stays degraded or
+unknown. These fields use the existing JSONB record and require no migration.
+Workflow360 additionally follows only `outcome_id`
 references on the exact tenant/run invocation facts to
 `OutcomeTruthStore.get(tenant_id, outcome_id)`. It validates the canonical
 outcome scope and evidence, carries the invocation IDs as association lineage,

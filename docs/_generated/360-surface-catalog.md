@@ -29,7 +29,7 @@ Declared binding counts are registry coverage, not proof that a slot or surface 
 
 | Product surface | Contract status | Subject kinds | Required slots | Declared required bindings | Explicit partial required slots | Unbound required slots | Optional slots | Projection providers | Direct surface providers |
 |---|---|---|---:|---:|---:|---:|---:|---|---|
-| [Account 360](#account-360) | source_aligned | `account`, `entity`, `workspace` | 11 | 9/11 | 3 | 2 | 4 | `communication360`, `economic360`, `profile360`, `relationship360` | `Account360Provider` (runtime_wired) |
+| [Account 360](#account-360) | source_aligned | `account`, `entity`, `workspace` | 11 | 9/11 | 4 | 2 | 4 | `communication360`, `economic360`, `profile360`, `relationship360` | `Account360Provider` (runtime_wired) |
 | [Agent 360](#agent-360) | source_aligned | `agent`, `entity` | 11 | 11/11 | 6 | 0 | 4 | `agent360`, `communication360`, `economic360`, `execution360`, `outcome360`, `relationship360`, `risk360` | — |
 | [Campaign 360](#campaign-360) | source_aligned | `campaign` | 11 | 10/11 | 3 | 1 | 0 | `campaign360`, `communication360`, `economic360`, `outcome360` | — |
 | [Commerce 360](#commerce-360) | source_aligned | `entity`, `campaign`, `journey`, `commerce`, `product`, `offer`, `sku`, `checkout` | 11 | 7/11 | 3 | 4 | 0 | `commerce360` | — |
@@ -46,7 +46,7 @@ Declared binding counts are registry coverage, not proof that a slot or surface 
 | [Social 360](#social-360) | source_aligned | `entity`, `profile`, `relationship`, `community`, `syndicate`, `source`, `population` | 10 | 7/10 | 4 | 3 | 5 | `geographic360`, `population360`, `relationship360`, `social360`, `source360` | — |
 | [Support 360](#support-360) | source_aligned | `support_case`, `callback`, `conversation`, `ticket`, `entity`, `agent`, `episode`, `source` | 10 | 5/10 | 5 | 5 | 6 | `agent360`, `episode360`, `outcome360`, `profile360`, `risk360`, `source360`, `support360` | — |
 | [Value 360](#value-360) | source_aligned | `value`, `profile`, `account`, `conversion`, `cluster`, `campaign`, `episode`, `journey`, `entity`, `agent`, `source` | 11 | 8/11 | 6 | 3 | 5 | `campaign360`, `economic360`, `outcome360`, `temporal360` | — |
-| [Workflow 360](#workflow-360) | source_aligned | `workflow`, `automation`, `trigger`, `run`, `workflow_run` | 11 | 7/11 | 4 | 4 | 0 | `workflow360` | — |
+| [Workflow 360](#workflow-360) | source_aligned | `workflow`, `automation`, `trigger`, `run`, `workflow_run` | 11 | 8/11 | 5 | 3 | 0 | `workflow360` | — |
 
 ## Account 360
 
@@ -70,7 +70,7 @@ Governed account-level view composed from canonical entity, relationship, econom
 | `evidence_and_limitations` | optional |  | `evidence` | `profile360` (primary): subjects `entity`; `evidence`, `findings` | — | — | Evidence and coverage for account context. |
 | `evidence_trace` | required |  | `evidence` | `profile360` (primary): subjects `entity`; `evidence`, `findings` | — | — | Evidence and limits for the account entity only, not a complete member aggregate. |
 | `journeys` | required |  | `journeys` | — | — | Unbound: `account_journey_membership_authority_not_joined` | Journeys directly linked to the account by a canonical relationship. |
-| `members` | required |  | `entity_registry`, `graph` | — | `Account360Provider` (runtime_wired) | — | Known current organization MEMBER_OF edges validated against canonical member entities; roster completeness unknown. |
+| `members` | required |  | `entity_registry`, `graph` | — | `Account360Provider` (runtime_wired) | Partial: `Positive current membership requires a live tenant-scoped MEMBER_OF edge whose exact aggregate replay agrees with the graph candidate and whose member resolves to a tenant entity; the bounded ledger and graph scans do not establish complete roster coverage, historical membership, or freshness.` | Current tenant MEMBER_OF graph edges are candidates only; each positive membership requires an exact live graph mutation-ledger aggregate and canonical member entity. |
 | `profiles` | required |  | `identity`, `entity_registry`, `graph` | — | `Account360Provider` (runtime_wired) | Partial: `Bounded exact-member Profile360 frames now run under per-member policy; roster completeness and a profile freshness SLA remain unknown.` | Profile views for validated account members with each profile policy independently applied. |
 | `relationships` | required |  | `relationship_facts`, `graph` | `relationship360` (primary): subjects `entity`; `summary`, `interactions`, `evidence` | — | — | Entity scoped relationship evidence for the exact account identity. |
 | `risk` | required |  | `graph`, `entity_registry`, `risk_outputs` | — | `Account360Provider` (runtime_wired) | Partial: `Direct account risk remains separate; bounded exact MEMBER_OF member contexts are included only after the account risk slot and each member Risk360 risk_summary policy allow. Roster completeness, related-account aggregation, temporal member-risk reads, and freshness remain unknown.` | Direct account-entity risk plus bounded evidence-backed risk frames for exact tenant-scoped members; roster and risk coverage remain partial. |
@@ -1043,7 +1043,7 @@ Governed operational view of agent executions, actions and tools, integration li
 | `outcomes` | required |  | `ai_execution_facts`, `outcome_facts`, `evidence` | `workflow360` (primary): subjects `run`, `workflow_run`; `outcomes` | — | Partial: `Only canonical outcome IDs explicitly referenced by tenant/run invocation facts are joined with invocation and outcome evidence; this association does not establish workflow causality or complete outcome coverage, and policy and freshness remain unknown.` | Canonical outcomes explicitly referenced by tenant-scoped invocation facts for an exact workflow run. |
 | `risk` | required |  | `risk_outputs` | — | — | Unbound: `canonical_workflow_risk_policy_join_not_available` | Required Workflow 360 slot: risk. |
 | `runs` | required |  | `ai_execution_facts` | `workflow360` (primary): subjects `run`, `workflow_run`; `runs` | — | — | AI invocation facts explicitly linked to a workflow run ID; run state is partial. |
-| `triggers` | required |  | `events` | — | — | Unbound: `canonical_workflow_trigger_authority_not_available` | Required Workflow 360 slot: triggers. |
+| `triggers` | required |  | `agent_executions`, `events` | `workflow360` (primary): subjects `run`, `workflow_run`; `triggers` | — | Partial: `Only exact tenant/run-linked AgentExecution records and their stored trigger event references are joined; trigger definitions, workflow causality, complete coverage, policy authority, and freshness remain unknown.` | Exact run-linked event references stored on admitted AgentExecution records; does not establish workflow trigger causality or coverage. |
 | `workflow_summary` | required |  | `execution_facts` | — | — | Unbound: `canonical_workflow_definition_authority_not_available` | Required Workflow 360 slot: workflow summary. |
 
 ### Projection provider bindings

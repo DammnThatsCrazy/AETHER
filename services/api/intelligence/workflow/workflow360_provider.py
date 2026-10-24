@@ -2483,6 +2483,9 @@ def _triggers_section(
         )
     )
 
+    source_readable = bool(
+        read.available and read.source_read_state == "available"
+    )
     invalid_read = not isinstance(read.rows, (tuple, list))
     invalid_record = invalid_execution_reference or invalid_read
     seen_event_ids: set[str] = set()
@@ -2490,7 +2493,14 @@ def _triggers_section(
     records: list[dict[str, Any]] = []
     claims: list[ClaimEnvelope] = []
     all_refs: list[EvidenceRef] = []
-    rows = read.rows if isinstance(read.rows, (tuple, list)) else ()
+    # Fail closed if the adapter reports that the event authority was not read
+    # or is unavailable. A stale/inconsistent adapter result must not turn
+    # payload rows into canonical event evidence.
+    rows = (
+        read.rows
+        if source_readable and isinstance(read.rows, (tuple, list))
+        else ()
+    )
     for raw in rows:
         event_id = _safe_identifier(raw.get("event_id")) if isinstance(raw, dict) else None
         execution_ids_raw = raw.get("execution_ids") if isinstance(raw, dict) else None
@@ -2566,7 +2576,7 @@ def _triggers_section(
         )
 
     exact_source_complete = (
-        read.available
+        source_readable
         and read.complete
         and not read.scope_mismatch
         and not invalid_record
@@ -2588,7 +2598,7 @@ def _triggers_section(
     elif read.source_read_state == "not_read":
         state = "unknown"
         reason_code = _safe_reason(read.reason) or "workflow_trigger_event_source_not_read"
-    elif not read.available:
+    elif not source_readable:
         state = "degraded"
         reason_code = _safe_reason(read.reason) or "workflow_trigger_event_source_unavailable"
     elif filtered_outside_time_range:
@@ -2641,7 +2651,7 @@ def _triggers_section(
             ],
             canonicalAuthorityRefs=(
                 [_AGENT_EXECUTION_SOURCE, "events"]
-                if read.source_read_state == "available"
+                if source_readable
                 else None
             ),
         ),

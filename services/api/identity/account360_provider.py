@@ -60,6 +60,7 @@ ACCOUNT_PROFILES_SLOT = "profiles"
 ACCOUNT_RISK_SLOT = "risk"
 _RISK_CONTEXT_PROJECTION_ID = "risk360"
 _MAX_ACCOUNT_MEMBER_EDGES = 10_000
+_MAX_ACCOUNT_MEMBER_LEDGER_ROWS = 100_000
 _MAX_ACCOUNT_MEMBER_PROFILE_FRAMES = 100
 _MAX_ACCOUNT_MEMBER_PROFILE_CONCURRENCY = 4
 _MAX_ACCOUNT_MEMBER_RISK_FRAMES = 100
@@ -107,6 +108,134 @@ class AccountMembersRead:
     members: tuple[AccountMember, ...] = ()
     reason_codes: tuple[str, ...] = ()
     source_as_of: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class _AccountMemberLedgerRead:
+    """Exact current membership evidence reconstructed from the graph ledger."""
+
+    state: str
+    role: Optional[str] = None
+    evidence_ref: Optional[EvidenceRef] = None
+    reason_code: Optional[str] = None
+
+
+def _read_current_account_member_edge(
+    tenant_id: str,
+    member_id: str,
+    organization_entity_id: str,
+    graph_edge: object,
+    rows: Sequence[dict[str, Any]],
+) -> _AccountMemberLedgerRead:
+    """Require one exact live MEMBER_OF edge in tenant mutation history."""
+
+    from shared.graph.graph import EdgeType
+
+    aggregate_id = f"{EdgeType.MEMBER_OF}:{member_id}:{organization_entity_id}"
+    offsets = [row.get("ledger_offset") for row in rows]
+    if any(
+        not isinstance(offset, int) or isinstance(offset, bool) or offset <= 0
+        for offset in offsets
+    ) or len(
+        set(offsets)
+    ) != len(offsets):
+        return _AccountMemberLedgerRead(
+            "unknown", reason_code="account_member_graph_ledger_order_invalid"
+        )
+    ordered_rows = sorted(rows, key=lambda row: row["ledger_offset"])
+
+    edge_is_live = False
+    latest_add: Optional[dict[str, Any]] = None
+    for row in ordered_rows:
+        payload = row.get("payload")
+        if (
+            row.get("tenant_id") != tenant_id
+            or row.get("aggregate_type") != "edge"
+            or row.get("aggregate_id") != aggregate_id
+            or not isinstance(payload, dict)
+            or payload.get("kind") not in {"edge", "edge_revocation"}
+            or payload.get("edge_type") != EdgeType.MEMBER_OF
+            or payload.get("from_vertex_id") != member_id
+            or payload.get("to_vertex_id") != organization_entity_id
+        ):
+            return _AccountMemberLedgerRead(
+                "unknown", reason_code="account_member_graph_ledger_scope_mismatch"
+            )
+        if payload.get("kind") == "edge_revocation":
+            edge_is_live = False
+            latest_add = None
+            continue
+
+        properties = payload.get("properties")
+        if not isinstance(properties, dict) or properties.get("tenant_id") != tenant_id:
+            return _AccountMemberLedgerRead(
+                "unknown", reason_code="account_member_graph_ledger_edge_tenant_mismatch"
+            )
+        if edge_is_live:
+            return _AccountMemberLedgerRead(
+                "unknown", reason_code="account_member_graph_ledger_live_edge_ambiguous"
+            )
+        edge_is_live = True
+        latest_add = row
+
+    if not edge_is_live or latest_add is None:
+        return _AccountMemberLedgerRead(
+            "unknown", reason_code="account_member_graph_ledger_membership_not_live"
+        )
+
+    latest_properties = latest_add["payload"].get("properties")
+    assert isinstance(latest_properties, dict)
+    graph_properties = (
+        graph_edge.properties if isinstance(getattr(graph_edge, "properties", None), dict) else {}
+    )
+    ledger_idempotency_key = latest_properties.get("idempotency_key")
+    graph_idempotency_key = graph_properties.get("idempotency_key")
+    if (
+        graph_idempotency_key not in (None, "")
+        and ledger_idempotency_key not in (None, "")
+        and graph_idempotency_key != ledger_idempotency_key
+    ):
+        return _AccountMemberLedgerRead(
+            "unknown", reason_code="account_member_graph_ledger_projection_mismatch"
+        )
+    membership_state = latest_properties.get("membership_state")
+    if membership_state is not None and (
+        not isinstance(membership_state, str)
+        or membership_state.strip().lower() not in {"active", ""}
+    ):
+        return _AccountMemberLedgerRead(
+            "unknown", reason_code="account_member_ledger_membership_inactive"
+        )
+    if (
+        latest_properties.get("valid_to") not in (None, "")
+        or latest_add.get("valid_to") not in (None, "")
+    ):
+        return _AccountMemberLedgerRead(
+            "unknown", reason_code="account_member_edge_valid_time_not_evaluated"
+        )
+
+    mutation_id = latest_add.get("mutation_id")
+    if not isinstance(mutation_id, str) or not mutation_id.strip():
+        return _AccountMemberLedgerRead(
+            "unknown", reason_code="account_member_graph_ledger_evidence_missing"
+        )
+    role = _safe_member_role(latest_properties.get("role"))
+    recorded_at = latest_add.get("recorded_at")
+    return _AccountMemberLedgerRead(
+        "resolved",
+        role=role,
+        evidence_ref=EvidenceRef(
+            id=mutation_id,
+            type="relationship",
+            source="graph_mutation_ledger",
+            observedAt=recorded_at if isinstance(recorded_at, str) else None,
+        ),
+        reason_code=(
+            "account_member_role_unavailable"
+            if latest_properties.get("role") not in (None, "") and role is None
+            else None
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -171,8 +300,14 @@ class Account360Source(Protocol):
 class RepositoryAccount360Source:
     """Tenant-filtered adapter over the canonical entities repository."""
 
-    def __init__(self, graph: Optional[object] = None) -> None:
+    def __init__(
+        self,
+        graph: Optional[object] = None,
+        *,
+        ledger: Optional[object] = None,
+    ) -> None:
         self._graph = graph
+        self._ledger = ledger
 
     async def canonical_entity(
         self, tenant_id: str, entity_id: str
@@ -283,8 +418,7 @@ class RepositoryAccount360Source:
         if scan_truncated:
             reasons.add("account_member_tenant_edge_scan_truncated")
 
-        edge_rows: list[tuple[str, Optional[str], EvidenceRef]] = []
-        edge_ids: set[str] = set()
+        candidate_edges: dict[str, list[object]] = {}
         for edge in edges:
             if (
                 not hasattr(edge, "properties")
@@ -321,33 +455,148 @@ class RepositoryAccount360Source:
                 # Current graph edge reads do not evaluate bitemporal validity.
                 reasons.add("account_member_edge_valid_time_not_evaluated")
                 continue
-            idempotency_key = props.get("idempotency_key")
-            if not isinstance(idempotency_key, str) or not idempotency_key.strip():
-                reasons.add("account_member_edge_evidence_missing")
-                continue
-            observed_at = (
-                props.get("recorded_at")
-                or props.get("valid_from")
-                or getattr(edge, "created_at", None)
-            )
-            evidence = EvidenceRef(
-                id=idempotency_key,
-                type="relationship",
-                source="graph",
-                observedAt=(observed_at if isinstance(observed_at, str) else None),
-                uri=f"graph://edges/{idempotency_key}",
-            )
-            role = _safe_member_role(props.get("role"))
-            if props.get("role") not in (None, "") and role is None:
-                reasons.add("account_member_role_unavailable")
-            edge_rows.append((member_id, role, evidence))
-            edge_ids.add(member_id)
+            candidate_edges.setdefault(member_id, []).append(edge)
 
-        if not edge_ids:
+        if not candidate_edges:
             if scan_truncated:
                 reasons.add("account_member_edges_not_observed_in_truncated_scan")
             else:
                 reasons.add("account_member_edges_not_observed_completeness_unknown")
+            return AccountMembersRead(
+                "unknown",
+                tenant_id,
+                organization_entity_id,
+                reason_codes=tuple(sorted(reasons)),
+            )
+
+        # Graph rows are a bounded candidate index only. A positive current
+        # membership also needs the exact tenant + MEMBER_OF aggregate to be
+        # live in the append-only mutation ledger. This prevents stale graph
+        # projections or idempotency keys from asserting a membership after
+        # revocation.
+        try:
+            from repositories.graph_mutation_ledger import GraphMutationLedgerRepository
+
+            ledger = self._ledger or GraphMutationLedgerRepository()
+            ledger_rows = await ledger.list_records(
+                tenant_id,
+                limit=_MAX_ACCOUNT_MEMBER_LEDGER_ROWS + 1,
+            )
+        except Exception:  # noqa: BLE001 - fail closed at the canonical authority
+            return AccountMembersRead(
+                "unavailable",
+                tenant_id,
+                organization_entity_id,
+                reason_codes=("account_member_graph_ledger_unavailable",),
+            )
+        if not isinstance(ledger_rows, list):
+            return AccountMembersRead(
+                "unknown",
+                tenant_id,
+                organization_entity_id,
+                reason_codes=("account_member_graph_ledger_invalid_response",),
+            )
+        if len(ledger_rows) > _MAX_ACCOUNT_MEMBER_LEDGER_ROWS:
+            return AccountMembersRead(
+                "truncated",
+                tenant_id,
+                organization_entity_id,
+                reason_codes=(
+                    "account_member_graph_ledger_scan_truncated",
+                    "account_member_edge_completeness_unproven",
+                ),
+            )
+        if any(
+            not isinstance(row, dict) or row.get("tenant_id") != tenant_id
+            for row in ledger_rows
+        ):
+            return AccountMembersRead(
+                "unknown",
+                tenant_id,
+                organization_entity_id,
+                reason_codes=("account_member_graph_ledger_scope_mismatch",),
+            )
+
+        from shared.graph.graph import EdgeType
+
+        aggregate_to_member = {
+            f"{EdgeType.MEMBER_OF}:{member_id}:{organization_entity_id}": member_id
+            for member_id in candidate_edges
+        }
+        ledger_rows_by_aggregate: dict[str, list[dict[str, Any]]] = {
+            aggregate_id: [] for aggregate_id in aggregate_to_member
+        }
+        invalid_ledger_members: set[str] = set()
+        for row in ledger_rows:
+            aggregate_id = row.get("aggregate_id")
+            payload = row.get("payload")
+            member_id = (
+                aggregate_to_member.get(aggregate_id)
+                if isinstance(aggregate_id, str)
+                else None
+            )
+            payload_member_id = (
+                payload.get("from_vertex_id")
+                if isinstance(payload, dict)
+                and payload.get("edge_type") == EdgeType.MEMBER_OF
+                and payload.get("to_vertex_id") == organization_entity_id
+                else None
+            )
+            candidate_id = member_id or (
+                payload_member_id
+                if isinstance(payload_member_id, str)
+                and payload_member_id in candidate_edges
+                else None
+            )
+            if candidate_id is None:
+                continue
+            if (
+                not isinstance(aggregate_id, str)
+                or aggregate_id not in aggregate_to_member
+                or row.get("aggregate_type") != "edge"
+                or not isinstance(payload, dict)
+                or payload.get("kind") not in {"edge", "edge_revocation"}
+                or payload.get("edge_type") != EdgeType.MEMBER_OF
+                or payload.get("from_vertex_id") != candidate_id
+                or payload.get("to_vertex_id") != organization_entity_id
+            ):
+                reasons.add("account_member_graph_ledger_scope_mismatch")
+                invalid_ledger_members.add(candidate_id)
+                continue
+            if payload.get("kind") == "edge":
+                properties = payload.get("properties")
+                if not isinstance(properties, dict) or properties.get("tenant_id") != tenant_id:
+                    reasons.add("account_member_graph_ledger_edge_tenant_mismatch")
+                    invalid_ledger_members.add(candidate_id)
+                    continue
+            ledger_rows_by_aggregate[aggregate_id].append(row)
+
+        edge_rows: list[tuple[str, Optional[str], EvidenceRef]] = []
+        for member_id, candidate_rows in candidate_edges.items():
+            if member_id in invalid_ledger_members:
+                continue
+            if len(candidate_rows) != 1:
+                reasons.add("account_member_graph_edge_ambiguous")
+                continue
+            aggregate_id = f"{EdgeType.MEMBER_OF}:{member_id}:{organization_entity_id}"
+            member_ledger = _read_current_account_member_edge(
+                tenant_id,
+                member_id,
+                organization_entity_id,
+                candidate_rows[0],
+                ledger_rows_by_aggregate.get(aggregate_id, []),
+            )
+            if member_ledger.reason_code:
+                reasons.add(member_ledger.reason_code)
+            if member_ledger.state != "resolved" or member_ledger.evidence_ref is None:
+                continue
+            edge_rows.append(
+                (member_id, member_ledger.role, member_ledger.evidence_ref)
+            )
+
+        edge_ids = {member_id for member_id, _, _ in edge_rows}
+        if not edge_ids:
+            reasons.add("account_member_rows_not_resolved")
             return AccountMembersRead(
                 "unknown",
                 tenant_id,
@@ -875,7 +1124,7 @@ class Account360Provider:
                 or member.entity_id in seen_member_ids
                 or not isinstance(member.membership_evidence_ref, EvidenceRef)
                 or member.membership_evidence_ref.type != "relationship"
-                or member.membership_evidence_ref.source != "graph"
+                or member.membership_evidence_ref.source != "graph_mutation_ledger"
                 or not member.membership_evidence_ref.id.strip()
                 or not isinstance(member.entity_evidence_ref, EvidenceRef)
                 or member.entity_evidence_ref.type != "entity"

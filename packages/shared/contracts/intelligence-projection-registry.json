@@ -2730,7 +2730,8 @@
         "commerce",
         "identity",
         "outcome_facts",
-        "evidence"
+        "evidence",
+        "events"
       ],
       "hardDependencies": [
         "contract_spine"
@@ -8673,7 +8674,8 @@
         {
           "id": "members",
           "requirement": "required",
-          "description": "Known current organization MEMBER_OF edges validated against canonical member entities; roster completeness unknown.",
+          "description": "Current tenant MEMBER_OF graph edges are candidates only; each positive membership requires an exact live graph mutation-ledger aggregate and canonical member entity.",
+          "partialImplementationReason": "Positive current membership requires a live tenant-scoped MEMBER_OF edge whose exact aggregate replay agrees with the graph candidate and whose member resolves to a tenant entity; the bounded ledger and graph scans do not establish complete roster coverage, historical membership, or freshness.",
           "canonicalAuthorityRefs": [
             "entity_registry",
             "graph"
@@ -9544,12 +9546,25 @@
         {
           "id": "triggers",
           "requirement": "required",
-          "description": "Required Workflow 360 slot: triggers.",
+          "description": "Exact run-linked event references stored on admitted AgentExecution records; does not establish workflow trigger causality or coverage.",
           "canonicalAuthorityRefs": [
+            "agent_executions",
             "events"
           ],
-          "projectionBindings": [],
-          "unboundReason": "canonical_workflow_trigger_authority_not_available"
+          "projectionBindings": [
+            {
+              "projectionId": "workflow360",
+              "role": "primary",
+              "sectionIds": [
+                "triggers"
+              ],
+              "subjectKinds": [
+                "run",
+                "workflow_run"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Only exact tenant/run-linked AgentExecution records and their stored trigger event references are joined; trigger definitions, workflow causality, complete coverage, policy authority, and freshness remain unknown."
         },
         {
           "id": "runs",

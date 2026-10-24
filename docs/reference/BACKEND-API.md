@@ -1906,7 +1906,11 @@ The registry contains 24 technical projections; 9 are marked `implemented` and
 does not promote implementation status.
 
 The current provider paths add bounded evidence to required surface slots
-without claiming surface completion. Account360's `profiles` slot follows
+without claiming surface completion. Account360's `members` slot treats
+tenant-scoped `MEMBER_OF` graph edges as candidates, requires exact live
+graph-mutation-ledger evidence, and joins the exact tenant member entity; the
+bounded scans do not establish complete roster coverage or freshness.
+Account360's `profiles` slot follows
 tenant-scoped `MEMBER_OF` edges to exact entity-registry members and requests
 each member's Profile360 frame under that member's own policy; incomplete
 membership coverage remains degraded, and denied profile slots are omitted.
@@ -2043,7 +2047,11 @@ workflow run and invocation references only when a unique tenant-scoped AI
 invocation has `action_id` equal to the stable execution ID; the provider checks
 the exact tenant, run, action, and agent links before admitting a step. Workflow
 definitions, complete actor and step coverage, workflow-wide approval authority,
-policy, and freshness remain unknown. Episode360 `agent_handoffs` remains
+policy, and freshness remain unknown. Workflow360 `triggers` exposes allowlisted
+event metadata only for exact tenant analytics events referenced by admitted
+run-linked AgentExecutions; event rows returned with an unavailable or unread
+source state are suppressed. The stored reference does not prove event
+causality or complete trigger coverage. Episode360 `agent_handoffs` remains
 unknown because episode records and observations have no canonical execution or
 handoff reference. The frame route preserves these slot limitations and adds
 no new endpoint.

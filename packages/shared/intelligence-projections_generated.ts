@@ -1616,7 +1616,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['automation', 'run', 'trigger', 'workflow', 'workflow_run'],
-    canonicalAuthorities: ['agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'evidence', 'identity', 'outcome_facts'],
+    canonicalAuthorities: ['agent_entities', 'agent_executions', 'ai_execution_facts', 'commerce', 'events', 'evidence', 'identity', 'outcome_facts'],
     hardDependencies: ['contract_spine'],
     projectionDependencies: [],
     optionalProjectionDependencies: [],
@@ -1977,11 +1977,12 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         unboundReason: 'account_journey_membership_authority_not_joined'
       },
       {
-        id: 'members',
-        requirement: 'required',
-        description: 'Known current organization MEMBER_OF edges validated against canonical member entities; roster completeness unknown.',
         canonicalAuthorityRefs: ['entity_registry', 'graph'],
-        projectionBindings: []
+        description: 'Current tenant MEMBER_OF graph edges are candidates only; each positive membership requires an exact live graph mutation-ledger aggregate and canonical member entity.',
+        id: 'members',
+        partialImplementationReason: 'Positive current membership requires a live tenant-scoped MEMBER_OF edge whose exact aggregate replay agrees with the graph candidate and whose member resolves to a tenant entity; the bounded ledger and graph scans do not establish complete roster coverage, historical membership, or freshness.',
+        projectionBindings: [],
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['entity_registry', 'graph', 'identity'],
@@ -6347,12 +6348,19 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
-        canonicalAuthorityRefs: ['events'],
-        description: 'Required Workflow 360 slot: triggers.',
+        canonicalAuthorityRefs: ['agent_executions', 'events'],
+        description: 'Exact run-linked event references stored on admitted AgentExecution records; does not establish workflow trigger causality or coverage.',
         id: 'triggers',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'canonical_workflow_trigger_authority_not_available'
+        partialImplementationReason: 'Only exact tenant/run-linked AgentExecution records and their stored trigger event references are joined; trigger definitions, workflow causality, complete coverage, policy authority, and freshness remain unknown.',
+        projectionBindings: [
+          {
+            projectionId: 'workflow360',
+            role: 'primary',
+            subjectKinds: ['run', 'workflow_run'],
+            sectionIds: ['triggers']
+          }
+        ],
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['execution_facts'],

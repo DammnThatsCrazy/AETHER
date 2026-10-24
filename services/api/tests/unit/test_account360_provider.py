@@ -363,9 +363,8 @@ def _account_member(
         membership_evidence_ref=EvidenceRef(
             id=edge_id,
             type="relationship",
-            source="graph",
+            source="graph_mutation_ledger",
             observedAt="2026-10-17T09:50:00Z",
-            uri=f"graph://edges/{edge_id}",
         ),
         entity_evidence_ref=EvidenceRef(
             id=entity_id,
@@ -374,6 +373,41 @@ def _account_member(
             observedAt="2026-10-17T09:45:00Z",
         ),
     )
+
+
+def _member_edge_ledger_row(
+    member_id: str,
+    *,
+    mutation_id: str,
+    ledger_offset: int,
+    role: str | None,
+    idempotency_key: str,
+    kind: str = "edge",
+) -> dict:
+    from shared.graph.graph import EdgeType
+
+    row = {
+        "tenant_id": TENANT_ID,
+        "aggregate_type": "edge",
+        "aggregate_id": f"{EdgeType.MEMBER_OF}:{member_id}:{SUBJECT.id}",
+        "mutation_id": mutation_id,
+        "ledger_offset": ledger_offset,
+        "recorded_at": f"2026-10-17T09:{50 + ledger_offset % 10:02d}:00Z",
+        "idempotency_key": idempotency_key,
+        "payload": {
+            "kind": kind,
+            "edge_type": EdgeType.MEMBER_OF,
+            "from_vertex_id": member_id,
+            "to_vertex_id": SUBJECT.id,
+        },
+    }
+    if kind == "edge":
+        row["payload"]["properties"] = {
+            "tenant_id": TENANT_ID,
+            "role": role,
+            "idempotency_key": idempotency_key,
+        }
+    return row
 
 
 @pytest.mark.asyncio
@@ -493,11 +527,10 @@ async def test_members_slot_projects_only_evidenced_tenant_member_of_facts(
 ):
     _ensure_members_slot(monkeypatch)
     member_edge = EvidenceRef(
-        id="member-edge-key",
+        id="member-mutation-id",
         type="relationship",
-        source="graph",
+        source="graph_mutation_ledger",
         observedAt="2026-10-17T09:50:00Z",
-        uri="graph://edges/member-edge-key",
     )
     member_entity = EvidenceRef(
         id="human-member-1",
@@ -553,7 +586,7 @@ async def test_members_slot_projects_only_evidenced_tenant_member_of_facts(
                     "entityType": "human",
                 },
                 "role": "billing_admin",
-                "evidenceRefIds": ["member-edge-key", "human-member-1"],
+                "evidenceRefIds": ["member-mutation-id", "human-member-1"],
             }
         ],
         "coverage": {
@@ -892,6 +925,32 @@ async def test_repository_member_read_uses_tenant_edges_and_exact_entity_joins(
             ], False
 
     graph = _Graph()
+
+    class _Ledger:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, int]] = []
+            self.rows = [
+                _member_edge_ledger_row(
+                    "human-member-1",
+                    mutation_id="member-mutation-id",
+                    ledger_offset=11,
+                    role="billing_admin",
+                    idempotency_key="member-edge-key",
+                ),
+                _member_edge_ledger_row(
+                    "agent-member-1",
+                    mutation_id="agent-mutation-id",
+                    ledger_offset=12,
+                    role="operator",
+                    idempotency_key="agent-edge-key",
+                ),
+            ]
+
+        async def list_records(self, tenant_id, aggregate_id=None, limit=1000):
+            self.calls.append((tenant_id, limit))
+            return self.rows
+
+    ledger = _Ledger()
     entity_calls: list[tuple[str, set[str]]] = []
 
     async def find_many_for_tenant_entity_ids(self, tenant_id, entity_ids):
@@ -919,12 +978,13 @@ async def test_repository_member_read_uses_tenant_edges_and_exact_entity_joins(
         "find_many_for_tenant_entity_ids",
         find_many_for_tenant_entity_ids,
     )
-    result = await RepositoryAccount360Source(graph=graph).account_members(
+    result = await RepositoryAccount360Source(graph=graph, ledger=ledger).account_members(
         TENANT_ID,
         SUBJECT.id,
     )
 
     assert graph.calls == [(TENANT_ID, 10_000, [EdgeType.MEMBER_OF])]
+    assert ledger.calls == [(TENANT_ID, 100_001)]
     assert entity_calls == [(TENANT_ID, {"human-member-1", "agent-member-1"})]
     assert result.state == "degraded"
     assert len(result.members) == 2
@@ -933,17 +993,118 @@ async def test_repository_member_read_uses_tenant_edges_and_exact_entity_joins(
     assert member.entity_id == "human-member-1"
     assert member.entity_type == "human"
     assert member.role == "billing_admin"
-    assert member.membership_evidence_ref.id == "member-edge-key"
+    assert member.membership_evidence_ref.id == "member-mutation-id"
+    assert member.membership_evidence_ref.source == "graph_mutation_ledger"
     assert member.entity_evidence_ref.id == "human-member-1"
     agent_member = members_by_id["agent-member-1"]
     assert agent_member.entity_type == "agent"
     assert agent_member.role == "operator"
-    assert agent_member.membership_evidence_ref.id == "agent-edge-key"
+    assert agent_member.membership_evidence_ref.id == "agent-mutation-id"
     assert agent_member.entity_evidence_ref.id == "agent-member-1"
     assert "account_member_graph_scope_mismatch" in result.reason_codes
     assert "Private member name" not in str(member)
     assert "Private agent name" not in str(agent_member)
     assert "private@example.test" not in str(member)
+
+
+@pytest.mark.asyncio
+async def test_repository_member_read_rejects_graph_edge_after_ledger_revocation(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from repositories.repos import EntityRepository
+    from shared.graph.graph import Edge, EdgeType
+
+    class _Graph:
+        async def get_edges_for_tenant(self, tenant_id, *, limit, edge_types):
+            return [
+                Edge(
+                    EdgeType.MEMBER_OF,
+                    "revoked-member",
+                    SUBJECT.id,
+                    {
+                        "tenant_id": TENANT_ID,
+                        "idempotency_key": "revoked-member-edge",
+                    },
+                )
+            ], False
+
+    class _Ledger:
+        async def list_records(self, tenant_id, aggregate_id=None, limit=1000):
+            return [
+                _member_edge_ledger_row(
+                    "revoked-member",
+                    mutation_id="member-add-mutation",
+                    ledger_offset=21,
+                    role="owner",
+                    idempotency_key="revoked-member-edge",
+                ),
+                _member_edge_ledger_row(
+                    "revoked-member",
+                    mutation_id="member-revoke-mutation",
+                    ledger_offset=22,
+                    role=None,
+                    idempotency_key="revoked-member-edge",
+                    kind="edge_revocation",
+                ),
+            ]
+
+    async def entity_lookup_must_not_run(self, tenant_id, entity_ids):
+        raise AssertionError("revoked membership must not join a member entity")
+
+    monkeypatch.setattr(
+        EntityRepository,
+        "find_many_for_tenant_entity_ids",
+        entity_lookup_must_not_run,
+    )
+    result = await RepositoryAccount360Source(graph=_Graph(), ledger=_Ledger()).account_members(
+        TENANT_ID,
+        SUBJECT.id,
+    )
+
+    assert result.state == "unknown"
+    assert result.members == ()
+    assert "account_member_graph_ledger_membership_not_live" in result.reason_codes
+
+
+@pytest.mark.asyncio
+async def test_repository_member_read_withholds_members_when_ledger_window_is_truncated(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from repositories.repos import EntityRepository
+    from shared.graph.graph import Edge, EdgeType
+
+    class _Graph:
+        async def get_edges_for_tenant(self, tenant_id, *, limit, edge_types):
+            return [
+                Edge(
+                    EdgeType.MEMBER_OF,
+                    "member-in-large-tenant",
+                    SUBJECT.id,
+                    {"tenant_id": TENANT_ID, "idempotency_key": "membership-edge"},
+                )
+            ], False
+
+    class _Ledger:
+        async def list_records(self, tenant_id, aggregate_id=None, limit=1000):
+            assert limit == 100_001
+            return [{}] * limit
+
+    async def entity_lookup_must_not_run(self, tenant_id, entity_ids):
+        raise AssertionError("truncated ledger state cannot establish membership")
+
+    monkeypatch.setattr(
+        EntityRepository,
+        "find_many_for_tenant_entity_ids",
+        entity_lookup_must_not_run,
+    )
+    result = await RepositoryAccount360Source(graph=_Graph(), ledger=_Ledger()).account_members(
+        TENANT_ID,
+        SUBJECT.id,
+    )
+
+    assert result.state == "truncated"
+    assert result.members == ()
+    assert "account_member_graph_ledger_scan_truncated" in result.reason_codes
 
 
 @pytest.mark.asyncio

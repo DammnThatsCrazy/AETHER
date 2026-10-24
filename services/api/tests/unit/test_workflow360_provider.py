@@ -746,6 +746,65 @@ async def test_workflow360_does_not_read_current_trigger_links_for_historical_re
     assert "journey_started" not in str(triggers.content)
 
 
+@pytest.mark.parametrize(
+    ("available", "source_read_state", "expected_state"),
+    [
+        (False, "unavailable", "degraded"),
+        (True, "not_read", "unknown"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_workflow360_never_projects_trigger_rows_when_event_authority_was_not_read(
+    available: bool, source_read_state: str, expected_state: str
+) -> None:
+    execution = _agent_execution_row()
+    source = FakeWorkflowSource(
+        WorkflowRunInvocationRead(
+            (
+                _row(
+                    "invocation-a",
+                    agent_id="canonical-agent-a",
+                    action_id="agent-execution-a",
+                ),
+            ),
+            True,
+            True,
+        ),
+        agent_executions=WorkflowAgentExecutionRead((execution,), True, True),
+        # This deliberately inconsistent adapter result guards the projection
+        # boundary: rows alone are not evidence if the event source was not read.
+        trigger_events=WorkflowTriggerRead(
+            (
+                {
+                    "tenant_id": TENANT_A,
+                    "workflow_run_id": RUN_ID,
+                    "event_id": "event-a",
+                    "event_type": "journey_started",
+                    "occurred_at": "2026-10-18T09:59:59Z",
+                    "execution_ids": ["agent-execution-a"],
+                },
+            ),
+            available,
+            True,
+            reason="workflow_trigger_event_source_unavailable",
+            source_read_state=source_read_state,
+        ),
+    )
+
+    result = await Workflow360Provider(source=source).project(_request(), _context())
+
+    triggers = _sections(result)["triggers"]
+    assert triggers.state == expected_state
+    assert triggers.content["triggers"] == []
+    assert triggers.content["evidenceRefs"] == []
+    assert triggers.content["sourceReadCompleteForExactEventReferences"] is False
+    assert not any(
+        claim.kind == "tenant_event_referenced_by_workflow_run_execution"
+        for claim in result.claims
+    )
+    assert "journey_started" not in str(triggers.content)
+
+
 @pytest.mark.asyncio
 async def test_workflow360_bounds_trigger_events_to_requested_time_range() -> None:
     execution = _agent_execution_row()

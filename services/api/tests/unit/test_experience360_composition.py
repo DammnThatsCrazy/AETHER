@@ -2029,7 +2029,7 @@ async def test_account360_member_profiles_use_exact_per_member_profile_policy() 
             membership_evidence_ref=EvidenceRef(
                 id=edge_id,
                 type="relationship",
-                source="graph",
+                source="graph_mutation_ledger",
                 observedAt="2026-10-18T12:00:00Z",
             ),
             entity_evidence_ref=EvidenceRef(
@@ -2195,7 +2195,7 @@ async def test_account360_member_risk_runtime_applies_per_member_policy_before_p
             membership_evidence_ref=EvidenceRef(
                 id=edge_id,
                 type="relationship",
-                source="graph",
+                source="graph_mutation_ledger",
                 observedAt="2026-10-18T12:00:00Z",
             ),
             entity_evidence_ref=EvidenceRef(

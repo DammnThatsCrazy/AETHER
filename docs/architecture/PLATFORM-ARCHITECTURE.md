@@ -68,13 +68,13 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/config/settings.py": "sha256:fe581665da73af478c3da53600fb0fdd4994d801f408e56f6d2796fbd00748bf"
-  "services/api/identity/account360_provider.py": "sha256:fdc82d330bcb8ada37abeda8f9e2e4fcd2ff6ed065b5b6733a9c9719dc289408"
+  "services/api/identity/account360_provider.py": "sha256:73ebc9abdcdbd45ce00561cf36dc01d1668afc26a7899a27165d1834c6c2e8a0"
   "services/api/ingestion/ingestion/replay.py": "sha256:65f898480787b71d14c8f687351844fdf5585cd67664ff5c32699328594b24ce"
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
   "services/api/intelligence/risk360/provider.py": "sha256:44c0d5e17044082c86225e1bd424a23a94060897d9c5d0f8b9fbb98da4a52249"
-  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:5a338c0e96e8af181e6e0cdbab061c7ded7333535bec55706cd8908de20bcbc9"
+  "services/api/intelligence/workflow/workflow360_provider.py": "sha256:f14b6b827c18be01cc0a2cb45c6c42730e25d93b65050f3e287ebe1a056bd4f6"
   "services/api/journeys/communication360/provider.py": "sha256:916e154d60723d687221bc2e0183d5aee672ed9b62db755c5d4cc7c939dd0fe6"
   "services/api/main.py": "sha256:fa7455e5dd5a1e6b6b2ac25cc3ce6fc8a09d8bcf5b242b500feb0b797ab2d7b7"
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
@@ -618,6 +618,10 @@ policy behavior, freshness, API reachability, or surface-level verification.
 Recent backend slices bind Account360 profiles through exact tenant membership
 and policy-scoped Profile360 reads, Campaign360 targeting-leakage findings,
 Journey360 explicit role markers, and Location360 source/evidence lineage.
+Account360 `members` accepts a graph membership edge only when its exact tenant
+graph-mutation-ledger aggregate proves the edge is live and the member resolves
+to a canonical tenant entity; the bounded scans do not establish full roster
+coverage or freshness.
 Profile360's required `risk_summary` slot now binds to Risk360 assessments and
 evidence for exact tenant-scoped entity and Agent subjects; it remains degraded
 while a Profile-specific freshness threshold is unknown.
@@ -823,10 +827,11 @@ matches the exact graph edge's relationship-fact evidence. Completeness,
 freshness, actual influence, trust, and causal contagion remain unknown; the
 `social_contagion`, `trust_edges`, and `risk_edges` slots remain unbound.
 Workflow360 `triggers` now resolves only exact tenant events referenced by
-run-linked AgentExecution `triggered_by_event_id` values. The stored reference
-does not prove that an event caused the workflow run or establish complete
-trigger coverage. Both are partial projection paths; the 18-surface contract
-remains incomplete.
+run-linked AgentExecution `triggered_by_event_id` values when the event
+authority reports an available read. Rows returned alongside an unavailable
+or unread source are suppressed. The stored reference does not prove that an
+event caused the workflow run or establish complete trigger coverage. Both are
+partial projection paths; the 18-surface contract remains incomplete.
 
 The latest provider wave binds Identity360 `namespace_map` to an exact
 `source_system_id` lookup in the already loaded provider runtime registry,

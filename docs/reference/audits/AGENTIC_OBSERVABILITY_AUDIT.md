@@ -11,7 +11,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:b88f9d7ce62e7a6f50534a00dbf5470401de384e9627ef5146fc48000eebfe06"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:7109b8f871fa5ddf4e2a8761dc54935f748b5be987067de29900af27c4d6b850"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:540f85292689337edc329c9b72b7c4f99487226a5e31aab6526c878e7ea36eeb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -22,7 +22,7 @@ source_hashes:
   "services/api/alembic/versions/20261022_risk_poisoning_evidence.py": "sha256:d158801954e2c76f088f9a367cabc4e507f1d4b2e456e989b6e95c04a9db6237"
   "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:ac5c38e755dd2720a76fcca31bf7877d7e2e5d2e5ea19c3a37bc5344e495ecc4"
   "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:b6617b0dd888b02ede69696d3d4e46906120c5f0fca4bb4f5393145218d6200c"
-  "services/api/identity/account360_provider.py": "sha256:fdc82d330bcb8ada37abeda8f9e2e4fcd2ff6ed065b5b6733a9c9719dc289408"
+  "services/api/identity/account360_provider.py": "sha256:73ebc9abdcdbd45ce00561cf36dc01d1668afc26a7899a27165d1834c6c2e8a0"
   "services/api/identity/profile/agent.py": "sha256:f7aa0168d674cfe5241d169f6516478ef24c882e848dc097af98706f0aee576c"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
@@ -218,12 +218,15 @@ execution ID; Workflow360 rechecks tenant, run, agent, and action equality.
 Workflow definitions, complete actor and step coverage, workflow-wide approval
 authority, policy, and freshness remain unknown. Workflow360 `triggers` now
 resolves allowlisted metadata only for exact tenant analytics events named by
-run-linked AgentExecution `triggered_by_event_id` references. The output proves
-the stored reference, not event causation or complete trigger coverage; temporal
-requests suppress this current-state read. Account360 adds bounded member
-Risk360 frames from exact tenant-owned `MEMBER_OF` edges after account-slot and
-per-member policy checks, but roster completeness, temporal reads, related
-account aggregation, and freshness remain unknown. Communications360 reads
+run-linked AgentExecution `triggered_by_event_id` references when the event
+source reports an available read. It suppresses any supplied rows when the
+source reports unavailable or not-read. The output proves the stored reference,
+not event causation or complete trigger coverage; temporal requests suppress
+this current-state read. Account360 adds bounded member
+Risk360 frames only after the `MEMBER_OF` candidate resolves to a live exact
+tenant graph-mutation-ledger aggregate and canonical tenant entity, followed by
+account-slot and per-member policy checks. Roster completeness, temporal reads,
+related-account aggregation, and freshness remain unknown. Communications360 reads
 exact-subject RiskSignals for mapped recipients and resolved sources under
 current analytics consent; the resolved-agent path now also requires an exact
 canonical identity and current analytics-consent receipt before reading
