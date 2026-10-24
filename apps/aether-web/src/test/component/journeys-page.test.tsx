@@ -5,7 +5,8 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { ThemeProvider } from '@aether/ui';
 import { JourneyDetailPage, JourneysPage } from '@aether-app/pages/journeys';
 import type { UserRow } from '@aether-app/features/users/use-users';
-import { parseProfileJourney } from '@aether-app/features/journeys/journey-model';
+import { journeyListState, parseProfileJourney } from '@aether-app/features/journeys/journey-model';
+import { shortUSD } from '@aether-app/pages/journeys/journeys-page';
 import { FIXTURE_NOW, journeyPayload } from './journeys-fixture';
 import { SWIMLANE_LABEL_GUTTER } from '@aether-app/components/ae-journeys-ui';
 
@@ -29,6 +30,18 @@ vi.mock('@aether-app/features/users/use-user-profile', () => ({
 vi.mock('@aether-app/features/journeys/use-profile-journey', () => ({
   JOURNEY_STEP_LIMIT: 200,
   useProfileJourney: () => s.journey,
+}));
+const fan = vi.hoisted(() => ({
+  read: null as null | ((ids: readonly string[]) => { data: unknown; isLoading: boolean; error: string | null; refetch: () => void }),
+  ids: [] as string[],
+  refetch: vi.fn(),
+}));
+vi.mock('@aether-app/features/journeys/use-journey-fanout', () => ({
+  JOURNEY_FANOUT_CAP: 3,
+  useJourneyFanout: (ids: readonly string[]) => {
+    fan.ids = [...ids];
+    return fan.read ? fan.read(ids) : { data: null, isLoading: false, error: null, refetch: fan.refetch };
+  },
 }));
 
 function LocationProbe() {
@@ -62,7 +75,21 @@ beforeEach(() => {
   s.isLoading = false;
   s.error = null;
   s.journey = settled(parseProfileJourney(journeyPayload()));
+  fan.refetch = vi.fn();
+  fan.read = ids => settled(ids.map(id => (JOURNEYS[id]
+    ? { id, status: 'ok', journey: JOURNEYS[id]!() }
+    : { id, status: 'ok', journey: parseProfileJourney({ steps: [], meta: { journey_id: '', journey_version_id: '', step_count: 0, compiler_version: null, quality_status: 'not_provisioned' } }) })));
 });
+
+/** u-1 converted ($120), u-2 open with a step 10 minutes ago and no revenue. */
+const JOURNEYS: Record<string, () => ReturnType<typeof parseProfileJourney>> = {
+  'u-1': () => parseProfileJourney(journeyPayload()),
+  'u-2': () => parseProfileJourney(journeyPayload({
+    entity_id: 'u-2',
+    steps: (journeyPayload().steps as Array<{ step_id: string }>).filter(x => x.step_id !== 's4'),
+    summary: { journey_id: 'j-2', journey_state: 'open', step_count: 4, started_at: null, ended_at: new Date(FIXTURE_NOW - 10 * 60_000).toISOString(), converted_at: null },
+  })),
+};
 
 afterEach(() => {
   vi.useRealTimers();
@@ -85,40 +112,129 @@ describe('Journeys list', () => {
     s.error = null;
     s.users = [];
     renderAt('/journeys');
-    expect(screen.getByText('No journeys match')).toBeInTheDocument();
+    expect(screen.getByText('No journeys yet')).toBeInTheDocument();
   });
 
-  it('lists journeys by profile, previews the compiled journey and opens it', async () => {
+  it('shows a distinct reading state while the profile journeys load', () => {
+    fan.read = () => ({ data: null, isLoading: true, error: null, refetch: vi.fn() });
+    renderAt('/journeys');
+    expect(screen.getByTestId('journeys-reading')).toHaveTextContent('Reading 2 profile journeys');
+    expect(screen.queryByTestId('journeys-list')).not.toBeInTheDocument();
+  });
+
+  it('renders a card grid with state, facts, steps and value from each compiled journey', async () => {
     const user = userEvent.setup();
     renderAt('/journeys');
-    expect(screen.getByText(/tenant-wide journey list/)).toBeInTheDocument();
     const list = screen.getByTestId('journeys-list');
-    expect(within(list).getByText('Ada Lovelace')).toBeInTheDocument();
-    expect(within(list).getByText('Grace Hopper')).toBeInTheDocument();
+    const cards = list.querySelectorAll('[data-journey-card]');
+    // Most recent activity first.
+    expect([...cards].map(c => c.getAttribute('data-journey-card'))).toEqual(['u-1', 'u-2']);
 
-    await user.click(within(list).getByText('Ada Lovelace'));
-    expect(screen.getByTestId('location')).toHaveTextContent('/journeys?profile=u-1');
-    const preview = screen.getByTestId('journey-preview');
-    expect(within(preview).getByText('converted')).toBeInTheDocument();
-    expect(within(preview).getByText('Landing visit')).toBeInTheDocument();
+    const ada = within(list.querySelector('[data-journey-card="u-1"]') as HTMLElement);
+    expect(ada.getByText('Converted')).toBeInTheDocument();
+    expect(ada.getByTestId('journey-facts')).toHaveTextContent('5 steps');
+    expect(ada.getByTestId('journey-facts')).toHaveTextContent('1 agent');
+    expect(ada.getByText('Landing visit')).toBeInTheDocument();
+    expect(ada.getByTestId('journey-value')).toHaveTextContent('$120');
 
-    await user.click(within(preview).getByTestId('open-journey'));
+    const grace = within(list.querySelector('[data-journey-card="u-2"]') as HTMLElement);
+    expect(grace.getByText('Active')).toBeInTheDocument();
+    expect(grace.getByLabelText('No attributed revenue reported')).toBeInTheDocument();
+
+    expect(screen.getByTestId('journeys-active-now')).toHaveTextContent('1 active in the last 24 h · of 2 journeys read');
+
+    await user.click(ada.getByText('Open in Graph →'));
+    expect(screen.getByTestId('location')).toHaveTextContent('/explore?entity=u-1');
+  });
+
+  it('opens a card on the existing journey detail route', async () => {
+    const user = userEvent.setup();
+    renderAt('/journeys');
+    const ada = within(screen.getByTestId('journeys-list').querySelector('[data-journey-card="u-1"]') as HTMLElement);
+    await user.click(ada.getByTestId('open-journey'));
     expect(screen.getByTestId('location')).toHaveTextContent('/journeys/u-1');
   });
 
-  it('marks an unavailable journey preview as unavailable', async () => {
+  it('keeps tabs and the state filter in the URL', async () => {
     const user = userEvent.setup();
-    s.journey = { data: null, isLoading: false, error: 'profile offline', refetch: vi.fn() };
-    renderAt('/journeys?profile=u-1');
-    expect(screen.getByText('This journey is unavailable right now.')).toBeInTheDocument();
-    await user.click(screen.getByText('Open in Graph →'));
-    expect(screen.getByTestId('location')).toHaveTextContent('/explore?entity=u-1');
+    renderAt('/journeys');
+    await user.click(screen.getByRole('tab', { name: 'Active' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/journeys?tab=active');
+    let ids = [...screen.getByTestId('journeys-list').querySelectorAll('[data-journey-card]')].map(c => c.getAttribute('data-journey-card'));
+    expect(ids).toEqual(['u-2']);
+
+    await user.click(screen.getByRole('tab', { name: 'Converting' }));
+    ids = [...screen.getByTestId('journeys-list').querySelectorAll('[data-journey-card]')].map(c => c.getAttribute('data-journey-card'));
+    expect(ids).toEqual(['u-1']);
+
+    await user.click(screen.getByRole('tab', { name: 'Recent' }));
+    await user.click(within(screen.getByTestId('journey-state-chips')).getByRole('button', { name: /Converted · 1/ }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/journeys?state=converted');
+    ids = [...screen.getByTestId('journeys-list').querySelectorAll('[data-journey-card]')].map(c => c.getAttribute('data-journey-card'));
+    expect(ids).toEqual(['u-1']);
+
+    await user.click(within(screen.getByTestId('journey-state-chips')).getByRole('button', { name: /Open · idle · 0/ }));
+    expect(screen.getByTestId('journeys-tab-empty')).toBeInTheDocument();
+  });
+
+  it('says interruption is not reported instead of deriving it', async () => {
+    const user = userEvent.setup();
+    renderAt('/journeys?tab=interrupted');
+    expect(screen.getByTestId('interrupted-unavailable')).toHaveTextContent('does not guess');
+    expect(screen.queryByTestId('journeys-list')).not.toBeInTheDocument();
+    await user.click(screen.getByText('Show idle journeys'));
+    expect(screen.getByTestId('location')).toHaveTextContent('/journeys?state=idle');
+  });
+
+  it('caps the fan-out, discloses it, and still reads a deep-linked profile', () => {
+    s.users = ['u-1', 'u-2', 'u-3', 'u-4', 'u-5'].map(id => ({ id, displayName: id }));
+    renderAt('/journeys?profile=u-5');
+    expect(fan.ids).toEqual(['u-1', 'u-2', 'u-3', 'u-5']);
+    expect(screen.getByTestId('journeys-capped')).toHaveTextContent('first 3 of 5 listed profiles');
+    expect(screen.getByTestId('journeys-not-compiled')).toHaveTextContent('2 profiles: u-3, u-5');
+  });
+
+  it('highlights the card for ?profile=', () => {
+    renderAt('/journeys?profile=u-2');
+    const card = screen.getByTestId('journeys-list').querySelector('[data-journey-card="u-2"]') as HTMLElement;
+    expect(card.style.borderColor).toBe('var(--ae-blue)');
+  });
+
+  it('discloses failed reads with a retry, and is unavailable when every read fails', async () => {
+    const user = userEvent.setup();
+    fan.read = ids => ({
+      data: ids.map(id => (id === 'u-2' ? { id, status: 'error', error: 'offline' } : { id, status: 'ok', journey: JOURNEYS[id]!() })),
+      isLoading: false, error: null, refetch: fan.refetch,
+    });
+    const a = renderAt('/journeys');
+    expect(screen.getByTestId('journeys-failed')).toHaveTextContent('1 journey could not be read: Grace Hopper');
+    await user.click(within(screen.getByTestId('journeys-failed')).getByText('Retry'));
+    expect(fan.refetch).toHaveBeenCalled();
+    a.unmount();
+
+    fan.read = ids => ({ data: ids.map(id => ({ id, status: 'error', error: 'offline' })), isLoading: false, error: null, refetch: fan.refetch });
+    renderAt('/journeys');
+    expect(screen.getByText('Journeys are unavailable right now')).toBeInTheDocument();
+    expect(screen.queryByTestId('journeys-list')).not.toBeInTheDocument();
+  });
+
+  it('formats card values as the frame does', () => {
+    expect(shortUSD(418)).toBe('$418');
+    expect(shortUSD(24_000)).toBe('$24K');
+    expect(shortUSD(12.5)).toBe('$12.50');
+  });
+
+  it('derives list state only from the compiled journey', () => {
+    expect(journeyListState(JOURNEYS['u-1']!(), FIXTURE_NOW)).toBe('converted');
+    expect(journeyListState(JOURNEYS['u-2']!(), FIXTURE_NOW)).toBe('active');
+    expect(journeyListState(JOURNEYS['u-2']!(), FIXTURE_NOW + 2 * 86_400_000)).toBe('idle');
+    expect(journeyListState(parseProfileJourney({ steps: [] }), FIXTURE_NOW)).toBe('empty');
   });
 
   it('says aggregate paths are unavailable instead of estimating them', async () => {
     const user = userEvent.setup();
     renderAt('/journeys');
-    await user.click(screen.getByRole('tab', { name: 'Aggregate paths' }));
+    await user.click(screen.getByRole('tab', { name: 'Aggregate Paths' }));
     expect(screen.getByTestId('location')).toHaveTextContent('/journeys?view=paths');
     expect(screen.getByTestId('aggregate-paths-unavailable')).toHaveTextContent('not available yet');
     await user.click(screen.getByText('Browse journeys'));

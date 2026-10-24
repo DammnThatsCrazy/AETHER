@@ -65,6 +65,28 @@ const wrap = <T extends z.ZodType>(dataSchema: T) =>
 
 const unknownSchema = z.unknown();
 
+/** Mirrors services/api/value/economic/routes.py TenantEconomicOverviewResponse. */
+const economicAmountSchema = z.object({
+  usd_amount: z.number().nullish(),
+  native_amount: z.number().nullish(),
+  native_currency: z.string().nullish(),
+}).passthrough();
+
+const tenantEconomicOverviewSchema = z.object({
+  tenant_id: z.string(),
+  total_value_observed: economicAmountSchema.nullish(),
+  web2_revenue: economicAmountSchema.nullish(),
+  campaign_spend: economicAmountSchema.nullish(),
+  attributed_revenue: economicAmountSchema.nullish(),
+  agent_spend: economicAmountSchema.nullish(),
+  entity_count: z.number().nullish(),
+  warnings: z.array(z.object({ code: z.string(), message: z.string(), severity: z.string() }).passthrough()).nullish(),
+  computed_at: z.string().nullish(),
+}).passthrough();
+
+export type TenantEconomicOverview = z.infer<typeof tenantEconomicOverviewSchema>;
+export type EconomicWindow = '24h' | '7d' | '30d' | '90d';
+
 const campaignListSchema = z.object({
   data: z.array(z.unknown()),
   pagination: z.object({
@@ -484,6 +506,12 @@ export const api = {
     recommendations: () => restClient.get('/v1/value-review/recommendations', wrap(unknownSchema)).then(r => r.data),
     playbooks: () => restClient.get('/v1/value-review/playbooks', wrap(unknownSchema)).then(r => r.data),
     nextSteps: () => restClient.get('/v1/value-review/next-steps', wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── Tenant economic overview (attributed revenue + campaign spend) ────────
+  economic: {
+    overview: (window: EconomicWindow = '7d') =>
+      restClient.get(`/v1/economic/overview${buildQS({ window })}`, wrap(tenantEconomicOverviewSchema)).then(r => r.data),
   },
 
   economicOperations: {

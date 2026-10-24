@@ -45,7 +45,7 @@ reviewed_source_commits:
   - commit: "453f71f9a"
     reason: "Reviewed the Access Kit webhook delivery-history type correction in the Aether settings UI. It reuses the API response type; the documented frontend structure and runtime behavior remain accurate."
 source_hashes:
-  "apps/aether-web/src/": "sha256:b012087699bdb81ca0a48b46931119f9fc2c4bdc0186f3fdc97e52669d549dd5"
+  "apps/aether-web/src/": "sha256:9a4b12346928dc4482103e9af6d102f837e2c79b8d29994de681a9bc433f9d17"
   "apps/kyber-web/src/": "sha256:df447130af2090e329c0620134a1b1dee8caf8597ac360b30f6862e74f3e6781"
   "packages/ui/core/src/": "sha256:01c95e007bc50d0b7378c5cb5274fd5e5d60b51f9575e5c28bf8549ab9cefde1"
 ---
@@ -322,6 +322,9 @@ The intelligence graph is the primary analysis surface. Entity profiles are avai
 ```
 /explore                         → primary Aether graph workspace
 /explore?focus={entity_id}       → graph workspace centered on entity + 1-hop neighbors
+/explore?entity={entity_id}      → network view scoped to an object (hops 1–4 or all)
+/explore?view=trace              → journey-scoped trace: flow, globe and replay
+/explore?view=advanced           → the full graph explorer (canvas, lenses, query builder, snapshots)
 /graph[?query]                   → legacy redirect to /explore, preserving query and hash
 /profile/{entity_id}             → full-screen Profile360 for selected entity
 /profile/{entity_id}/{tab}       → Profile360 at a specific tab
@@ -385,32 +388,50 @@ rather than in progress. The previous guided page remains at
 `/activation/guided`, and the operator implementation checklist at
 `/onboarding/implementation`.
 
-Home (`pages/home/home-page.tsx`) shows 24-hour event, people and session
-counts, imported campaigns, connection health with brand marks, the graph
-readiness stages, the event-type mix, and attention items derived from the
-activation record, failing syncs and failed readiness checks. Each section shows
-an explicit empty or unavailable state rather than illustrative data. Campaign
-rows name the provider (the matched integration's display name) rather than its
-raw token. The outcome ledger, decision intelligence feed, playbooks and model
-routing panels are not on Home; they live in Value's "Loop and decisions"
-section.
-Explore (Graph) composes the shared context bar, time rail, and collapsed Noesis
-context strip around the existing server-backed graph canvas, loading/error/empty
-states, table/path modes, and inspector. Above the explorer, the design's
-workspace draws GraphPage's own graph read (passed up through `onGraphData`, no
-second request) as a left-to-right flow (sources → people and devices → agents
-and wallets → organizations, top objects per lane with the remainder counted)
-and a globe dot map of located objects; objects without a location are counted
-as not reported, never placed. Value, Activity, Authority, Risk and Time lenses
-and the replay scrubber enable only when the read carries the fields they need
-(value, relationships, delegation/approval links, risk scores, timestamps) and
-otherwise say what is missing. The lens dock reports availability from the
-generated lens/projection registries; it remains non-executing until the graph
-query seam accepts canonical lens identifiers, so a visible lens never implies a
-filter was applied. Selecting a real graph node synchronizes the shared
-GraphContext focus and URL, and entity nodes can open the existing Profile360
-route. The Noesis strip links to the existing Noesis surface rather than
-synthesizing recommendations.
+Home (`pages/home/home-page.tsx`) follows the Aether Home frame's section
+order: a Lens / Time / Perspective / Scope bar (only Time is live; it sets the
+economic window), a query bar that is disabled and says query interpretation is
+not available, a "since you last visited" line (the last visit is kept per
+workspace in the browser), six KPI tiles, the insight card, the campaign table,
+a Relationships / Risk / Needs attention story row, three collapsible rollups
+and four domain tiles. Revenue and blended ROAS come from
+`GET /v1/economic/overview?window=` (ROAS only when spend is above zero); Orders,
+New users, Average order and Repeat purchase are marked not reported, and no tile
+shows a prior-period change because the route has none. The insight card shows
+graph readiness stages, the event-type mix, current graph totals and an
+activity timeline built from real timestamps; growth series and representative
+journeys are empty-stated because no workspace-level read exists. Campaign rows
+name the provider and show spend and ROAS only when a row carries them. The
+Relationships card reads the capability-graph summary, the Risk card capability
+risk findings. Each section shows an explicit empty or unavailable state rather
+than illustrative data. The outcome ledger, decision intelligence feed,
+playbooks and model routing panels are not on Home; they live in Value's "Loop
+and decisions" section.
+Explore (Graph) opens on the Explore frame's network view, built from one graph
+read (the same hook and request key GraphPage uses): a toolbar with search, an
+object scope (`?entity=`), All / Human / Agent, hops (1–4 or all, active when
+scoped) and per-type count chips; a grid of principal cards listing the agents,
+wallets, applications and handles each owns or uses, with links between cards
+labelled by relation (an amount appears only when the edge reports one); an
+inspector with the selected object's direct connections; and a path strip from
+the scope to the selection. `?view=trace` keeps the flow, globe (with arcs
+between linked places) and replay, scoped to two hops around `?entity=`.
+`?view=advanced` holds the full explorer: the shared context bar, time rail and
+collapsed Noesis context strip around the server-backed graph canvas,
+table/path modes and inspector. In the trace view, the left-to-right flow
+(sources → people and devices → agents and wallets → organizations, top objects
+per lane with the remainder counted) and the globe dot map draw only located
+objects; objects without a location are counted as not reported, never placed.
+Value, Activity, Authority, Risk and Time lenses and the replay scrubber enable
+only when the read carries the fields they need (value, relationships,
+delegation/approval links, risk scores, timestamps) and otherwise say what is
+missing. The lens dock reports availability from the generated lens/projection
+registries; it remains non-executing until the graph query seam accepts
+canonical lens identifiers, so a visible lens never implies a filter was
+applied. Selecting a real graph node synchronizes the shared GraphContext focus
+and URL, and entity nodes can open the existing Profile360 route. The Noesis
+strip links to the existing Noesis surface rather than synthesizing
+recommendations.
 
 The remaining nav pages follow the same design rules as Home: every figure comes
 from an existing read, loading, empty and unavailable states are distinct, and
@@ -493,8 +514,14 @@ empty and unavailable states) are built only on reads that already exist:
   conversions, which the backend reports per campaign.
 - **Journeys** (`/journeys[/:profileId]`) and **Episodes**
   (`/episodes[/:profileId/:episodeId]`) read the compiled per-profile journey;
-  there is no tenant-wide journey list or aggregate-paths read yet, so journeys
-  are listed by profile and Aggregate Paths is empty-stated. Episodes are
+  there is no tenant-wide journey list or aggregate-paths read yet, so the
+  Journeys index reads the journeys of the first 24 listed profiles (six at a
+  time, sharing the detail page's cache, and says when it is capped or a read
+  failed) and shows them as a card grid. Recent / Active / Converting /
+  Interrupted tabs (`?tab=`) and state chips (`?state=`) use only states the
+  journey reports (open, converted) plus "active" for an open journey with a
+  step in the last 24 hours; interruption is not reported yet, and the tab says
+  so. Aggregate Paths is empty-stated. Episodes are
   derived on the page (a gap of 30 minutes starts a new one), which both pages
   state.
 
