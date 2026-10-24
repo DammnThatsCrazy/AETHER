@@ -8,8 +8,12 @@ authority. Exact product/offer catalog records contribute lifecycle evidence to
 the availability/price slot, but do not establish inventory availability or
 offer price. Explicit intent declarations are read from their own append-only,
 tenant-scoped authority and joined only to canonical product and offer IDs.
-Exposure, cart/checkout, and risk slots stay explicitly unknown until their
-canonical authorities and exact subject joins exist.
+Exposure and cart/checkout slots stay explicitly unknown until their canonical
+authorities and exact subject joins exist. Risk360 signals and assessments can
+be joined for current product/offer subjects only after an exact tenant-scoped
+catalog record resolves; other commerce subject kinds, historical risk reads,
+complete risk history, policy disposition, freshness, and causal validity remain
+unknown.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ import hashlib
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional, Protocol
+from urllib.parse import quote
 
 from shared.contracts_models.epistemic import EpistemicStatus
 from shared.intelligence_projections.contracts import (
@@ -69,7 +74,7 @@ _UNKNOWN_SLOT_REASONS: dict[str, str] = {
     "intent": "commerce_intent_subject_join_unavailable",
     "cart_checkout": "commerce_cart_checkout_authority_unavailable",
     "availability_price": "commerce_availability_price_authority_unavailable",
-    "risk": "commerce_risk_subject_join_unavailable",
+    "risk": "commerce_risk_exact_catalog_subject_join_unavailable",
 }
 
 _JOIN_BASIS_BY_SUBJECT_KIND: dict[str, str] = {
@@ -90,6 +95,16 @@ _MAX_PAYMENT_FACTS = 500
 _MAX_CAMPAIGN_ASSOCIATIONS = 500
 _MAX_OPERATION_LINKS = 500
 _MAX_CATALOG_OFFERS = 500
+_MAX_COMMERCE_RISK_SIGNALS = 100
+_MAX_COMMERCE_RISK_ASSESSMENTS = 50
+_RISK_JOIN_BASIS = "exact_tenant_scoped_catalog_subject_to_risk360_subject"
+_RISK_PARTIAL_REASON = (
+    "exact_product_or_offer_risk_records_observed_but_freshness_history_and_causality_unresolved"
+)
+_RISK_HISTORICAL_UNKNOWN = "commerce_risk_historical_snapshot_unavailable"
+_RISK_WINDOW_UNKNOWN = "commerce_risk_requested_temporal_window_unavailable"
+_RISK_SOURCE_COMPLETENESS_UNKNOWN = "commerce_risk_history_coverage_not_established"
+_RISK_FRESHNESS_UNKNOWN = "commerce_risk_freshness_threshold_not_configured"
 
 _CATALOG_JOIN_BASIS_BY_SUBJECT_KIND: dict[str, str] = {
     "product": "tenant_scoped_canonical_product_id",
@@ -142,6 +157,85 @@ class CommerceIntentEvidenceSource(Protocol):
         as_of: Optional[str],
     ) -> dict[str, Any]:
         """Return intent records for exactly one tenant and canonical subject."""
+
+
+class CommerceRiskEvidenceSource(Protocol):
+    """Bounded exact-subject reader for canonical Risk360 outputs."""
+
+    async def read(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        *,
+        signal_limit: int,
+        assessment_limit: int,
+    ) -> dict[str, Any]:
+        """Return risk records for exactly one tenant and typed subject."""
+
+
+class RepositoryCommerceRiskEvidenceSource:
+    """Read current Risk360 records by exact tenant, subject kind, and ID."""
+
+    async def read(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        *,
+        signal_limit: int,
+        assessment_limit: int,
+    ) -> dict[str, Any]:
+        signals, assessments = await _read_commerce_risk_repositories(
+            tenant_id,
+            subject,
+            signal_limit=signal_limit,
+            assessment_limit=assessment_limit,
+        )
+        return {
+            "_scope": {
+                "tenantId": tenant_id,
+                "subjectKind": subject.kind,
+                "subjectId": subject.id,
+            },
+            "join_basis": "exact_tenant_scoped_catalog_subject_to_risk360_subject",
+            "sourceState": "available",
+            "signals": signals,
+            "assessments": assessments,
+            "truncated": (len(signals) > signal_limit or len(assessments) > assessment_limit),
+            "authorityRefs": [
+                "commerce_product_offer_graph",
+                "risk_outputs",
+                "risk_signals",
+                "risk_assessments",
+                "source_provenance",
+            ],
+        }
+
+
+async def _read_commerce_risk_repositories(
+    tenant_id: str,
+    subject: ProjectionSubject,
+    *,
+    signal_limit: int,
+    assessment_limit: int,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Keep repository calls in a seam that can be asserted in focused tests."""
+    from intelligence.risk360.store import RiskAssessmentRepository, RiskSignalRepository
+
+    signals = await RiskSignalRepository().list_by_subject(
+        tenant_id,
+        subject.kind,
+        subject.id,
+        limit=signal_limit,
+        offset=0,
+    )
+    assessments = await RiskAssessmentRepository().list_by_subject(
+        tenant_id,
+        subject.kind,
+        subject.id,
+        limit=assessment_limit,
+        offset=0,
+    )
+    return signals, assessments
 
 
 class RepositoryCommerceProductOfferCatalogEvidenceSource:
@@ -644,12 +738,14 @@ class Commerce360Provider:
         source: Optional[CommerceOperationEvidenceSource] = None,
         catalog_source: Optional[CommerceProductOfferCatalogEvidenceSource] = None,
         intent_source: Optional[CommerceIntentEvidenceSource] = None,
+        risk_source: Optional[CommerceRiskEvidenceSource] = None,
     ) -> None:
         self._source = source if source is not None else RepositoryCommerceOperationEvidenceSource()
         self._catalog_source = catalog_source
         if self._catalog_source is None and source is None:
             self._catalog_source = RepositoryCommerceProductOfferCatalogEvidenceSource()
         self._intent_source = intent_source or RepositoryCommerceIntentEvidenceSource()
+        self._risk_source = risk_source or RepositoryCommerceRiskEvidenceSource()
 
     async def project(
         self,
@@ -739,18 +835,75 @@ class Commerce360Provider:
         if intents.get("records") and section_states.get("evidence_trace") in {"empty", "unknown"}:
             section_states["evidence_trace"] = "available"
 
+        risk_requested = request.includeSections is None or "risk" in request.includeSections
+        has_canonical_risk_subject = self._catalog_subject_is_canonical(
+            request.subject.kind,
+            request.subject.id,
+            catalog,
+        )
+        risk_raw: dict[str, Any]
+        if not risk_requested:
+            risk_raw = self._unknown_risk_result(
+                request,
+                reason="commerce_risk_slot_not_requested",
+            )
+        elif (
+            request.asOf is not None or context.asOf is not None or request.temporalMode == "as_of"
+        ):
+            # The risk stores expose current tenant/subject rows and do not
+            # reconstruct prior assessment/signal revisions. Never present a
+            # current read as a historical point-in-time answer.
+            risk_raw = self._unknown_risk_result(request, reason=_RISK_HISTORICAL_UNKNOWN)
+        elif request.timeRange is not None or request.temporalMode in {"compare", "relative"}:
+            # Risk repositories do not support temporal window filtering.
+            risk_raw = self._unknown_risk_result(request, reason=_RISK_WINDOW_UNKNOWN)
+        elif not scope_valid:
+            risk_raw = self._unknown_risk_result(
+                request,
+                reason="commerce_projection_context_scope_mismatch",
+            )
+        elif not has_canonical_risk_subject:
+            risk_raw = self._unknown_risk_result(
+                request,
+                reason="commerce_risk_requires_exact_canonical_product_or_offer_record",
+            )
+        else:
+            try:
+                risk_raw = await self._risk_source.read(
+                    request.tenantId,
+                    request.subject,
+                    signal_limit=_MAX_COMMERCE_RISK_SIGNALS + 1,
+                    assessment_limit=_MAX_COMMERCE_RISK_ASSESSMENTS + 1,
+                )
+            except Exception:  # noqa: BLE001 - risk outage remains isolated to its slot
+                risk_raw = self._unknown_risk_result(
+                    request,
+                    reason="commerce_risk_authority_unavailable",
+                )
+        risk = self._validate_risk_result(
+            risk_raw,
+            request,
+            as_of=requested_as_of,
+            has_canonical_subject=has_canonical_risk_subject,
+        )
+        section_states["risk"] = risk.get("sourceState", "unknown")
+
         sections = self._build_sections(
             request,
             evidence,
             catalog,
             intents,
+            risk,
             section_states,
             as_of=requested_as_of,
         )
-        claims = self._build_claims(request, evidence, catalog, intents, section_states)
+        claims = self._build_claims(request, evidence, catalog, intents, risk, section_states)
         if request.includeSections is not None:
             include = set(request.includeSections)
             sections = [section for section in sections if section.id in include]
+            claims = [
+                claim for claim in claims if set(claim.domainSlotIds or []).intersection(include)
+            ]
         if request.includeClaims is False:
             claims = []
 
@@ -765,6 +918,30 @@ class Commerce360Provider:
             generatedAt=_utc_now_iso(),
             degradedReasons=[],
         )
+
+    @staticmethod
+    def _catalog_subject_is_canonical(
+        subject_kind: str,
+        subject_id: str,
+        catalog: dict[str, Any],
+    ) -> bool:
+        """Require a persisted product/offer row before using its ID as a risk join."""
+        if subject_kind == "product":
+            product = catalog.get("product")
+            return bool(
+                catalog.get("sourceState") in {"available", "degraded"}
+                and isinstance(product, CommerceProductRecord)
+                and product.product_id == subject_id
+            )
+        if subject_kind == "offer":
+            return bool(
+                catalog.get("sourceState") in {"available", "degraded"}
+                and any(
+                    isinstance(offer, CommerceOfferRecord) and offer.offer_id == subject_id
+                    for offer in catalog.get("offers", [])
+                )
+            )
+        return False
 
     @staticmethod
     def _unknown_catalog_result(
@@ -814,6 +991,259 @@ class Commerce360Provider:
                 "commerce_product_offer_graph",
                 "source_provenance",
             ],
+        }
+
+    @staticmethod
+    def _unknown_risk_result(
+        request: ProjectionRequest,
+        *,
+        reason: str,
+    ) -> dict[str, Any]:
+        return {
+            "_scope": {
+                "tenantId": request.tenantId,
+                "subjectKind": request.subject.kind,
+                "subjectId": request.subject.id,
+            },
+            "join_basis": _RISK_JOIN_BASIS,
+            "sourceState": "unknown",
+            "reason": reason,
+            "signals": [],
+            "assessments": [],
+            "truncated": False,
+            "authorityRefs": [
+                "commerce_product_offer_graph",
+                "risk_outputs",
+                "risk_signals",
+                "risk_assessments",
+                "source_provenance",
+            ],
+        }
+
+    def _validate_risk_result(
+        self,
+        raw: Any,
+        request: ProjectionRequest,
+        *,
+        as_of: Optional[str],
+        has_canonical_subject: bool,
+    ) -> dict[str, Any]:
+        """Validate exact risk records without upgrading their epistemic state."""
+        empty: dict[str, Any] = {
+            "sourceState": "unknown",
+            "reason": "commerce_risk_source_scope_mismatch",
+            "signals": [],
+            "assessments": [],
+            "evidence": [],
+            "truncated": False,
+            "sourceCompleteness": "unknown",
+            "join_basis": _RISK_JOIN_BASIS,
+            "authorityRefs": [
+                "commerce_product_offer_graph",
+                "risk_outputs",
+                "risk_signals",
+                "risk_assessments",
+                "source_provenance",
+            ],
+        }
+        expected_scope = {
+            "tenantId": request.tenantId,
+            "subjectKind": request.subject.kind,
+            "subjectId": request.subject.id,
+        }
+        if not has_canonical_subject:
+            return {
+                **empty,
+                "reason": (
+                    _safe_text(raw.get("reason"), limit=96) if isinstance(raw, dict) else None
+                )
+                or "commerce_risk_requires_exact_canonical_product_or_offer_record",
+            }
+        if (
+            not isinstance(raw, dict)
+            or raw.get("_scope") != expected_scope
+            or raw.get("join_basis") != _RISK_JOIN_BASIS
+        ):
+            return empty
+
+        authority_refs = raw.get("authorityRefs")
+        required_authorities = {
+            "commerce_product_offer_graph",
+            "risk_outputs",
+            "risk_signals",
+            "risk_assessments",
+            "source_provenance",
+        }
+        if (
+            not isinstance(authority_refs, list)
+            or not all(isinstance(ref, str) and ref for ref in authority_refs)
+            or not required_authorities.issubset(set(authority_refs))
+        ):
+            return {**empty, "reason": "commerce_risk_authority_references_missing"}
+        state = raw.get("sourceState")
+        if state not in {"available", "empty", "missing", "unknown", "degraded"}:
+            return {**empty, "reason": "commerce_risk_source_state_invalid"}
+        if "truncated" in raw and not isinstance(raw.get("truncated"), bool):
+            return {**empty, "reason": "commerce_risk_truncation_state_invalid"}
+
+        anchor = _parse_catalog_anchor(as_of)
+        if anchor is None:
+            return {**empty, "reason": "commerce_risk_effective_anchor_invalid"}
+
+        from intelligence.risk360.contracts import RiskAssessment, RiskSignal
+
+        invalid_records = 0
+        signals: list[dict[str, Any]] = []
+        assessments: list[dict[str, Any]] = []
+        evidence: list[EvidenceRef] = []
+        raw_signals = raw.get("signals")
+        raw_assessments = raw.get("assessments")
+        if not isinstance(raw_signals, list):
+            raw_signals = []
+            invalid_records += 1
+        if not isinstance(raw_assessments, list):
+            raw_assessments = []
+            invalid_records += 1
+        source_capped = (
+            len(raw_signals) > _MAX_COMMERCE_RISK_SIGNALS
+            or len(raw_assessments) > _MAX_COMMERCE_RISK_ASSESSMENTS
+        )
+        seen_signal_ids: set[str] = set()
+        seen_assessment_ids: set[str] = set()
+
+        for row in raw_signals[:_MAX_COMMERCE_RISK_SIGNALS]:
+            try:
+                signal = RiskSignal.model_validate(row)
+            except Exception:  # noqa: BLE001 - invalid canonical row fails closed
+                invalid_records += 1
+                continue
+            if (
+                signal.tenant_id != request.tenantId
+                or signal.subject_kind != request.subject.kind
+                or signal.subject_id != request.subject.id
+                or signal.signal_id in seen_signal_ids
+                or not signal.evidence_refs
+                or (signal.observed_at is not None and signal.observed_at > anchor)
+            ):
+                invalid_records += 1
+                continue
+            seen_signal_ids.add(signal.signal_id)
+            signal_refs = _parse_evidence_refs(
+                [ref.model_dump(mode="json", exclude_none=True) for ref in signal.evidence_refs]
+            )
+            if not signal_refs:
+                invalid_records += 1
+                continue
+            record_ref = EvidenceRef(
+                id=signal.signal_id,
+                type="event",
+                source="risk360/risk_signals",
+                observedAt=signal.observed_at.isoformat() if signal.observed_at else None,
+                uri=f"store://risk_signals/{quote(signal.signal_id, safe='')}",
+            )
+            evidence.extend([record_ref, *signal_refs])
+            signals.append(
+                {
+                    "signalId": signal.signal_id,
+                    "subject": {"kind": signal.subject_kind, "id": signal.subject_id},
+                    "riskDimension": signal.risk_dimension,
+                    "claimState": getattr(signal.claim_state, "value", signal.claim_state),
+                    "confidence": signal.confidence,
+                    "score": signal.score,
+                    "value": signal.value,
+                    "source": signal.source,
+                    "detectorVersion": signal.detector_version,
+                    "observedAt": signal.observed_at.isoformat() if signal.observed_at else None,
+                    "evidenceRefs": [
+                        ref.model_dump(mode="json", exclude_none=True)
+                        for ref in [record_ref, *signal_refs]
+                    ],
+                }
+            )
+
+        for row in raw_assessments[:_MAX_COMMERCE_RISK_ASSESSMENTS]:
+            try:
+                assessment = RiskAssessment.model_validate(row)
+            except Exception:  # noqa: BLE001 - invalid canonical row fails closed
+                invalid_records += 1
+                continue
+            if (
+                assessment.tenant_id != request.tenantId
+                or assessment.subject_kind != request.subject.kind
+                or assessment.subject_id != request.subject.id
+                or assessment.assessment_id in seen_assessment_ids
+                or not assessment.evidence_refs
+                or (assessment.assessed_at is not None and assessment.assessed_at > anchor)
+                or (
+                    assessment.exposure is not None
+                    and (
+                        assessment.exposure.tenant_id != request.tenantId
+                        or assessment.exposure.subject_kind != request.subject.kind
+                        or assessment.exposure.subject_id != request.subject.id
+                    )
+                )
+            ):
+                invalid_records += 1
+                continue
+            seen_assessment_ids.add(assessment.assessment_id)
+            assessment_refs = _parse_evidence_refs(
+                [ref.model_dump(mode="json", exclude_none=True) for ref in assessment.evidence_refs]
+            )
+            if not assessment_refs:
+                invalid_records += 1
+                continue
+            record_ref = EvidenceRef(
+                id=assessment.assessment_id,
+                type="document",
+                source="risk360/risk_assessments",
+                observedAt=assessment.assessed_at.isoformat() if assessment.assessed_at else None,
+                uri=f"store://risk_assessments/{quote(assessment.assessment_id, safe='')}",
+            )
+            evidence.extend([record_ref, *assessment_refs])
+            assessment_payload = assessment.model_dump(mode="json", exclude_none=True)
+            assessment_payload["evidence_refs"] = [
+                record_ref.model_dump(mode="json", exclude_none=True),
+                *[ref.model_dump(mode="json", exclude_none=True) for ref in assessment_refs],
+            ]
+            assessments.append(assessment_payload)
+
+        deduped_evidence = _parse_evidence_refs(
+            [ref.model_dump(mode="json", exclude_none=True) for ref in evidence]
+        )
+        truncated = raw.get("truncated") is True or source_capped
+        reason = _safe_text(raw.get("reason"), limit=96)
+        if state in {"missing", "empty"} and (signals or assessments):
+            return {**empty, "reason": "commerce_risk_empty_state_contains_records"}
+        if state == "unknown":
+            signals = []
+            assessments = []
+            deduped_evidence = []
+        if signals or assessments:
+            state = "degraded"
+            reason = reason or _RISK_PARTIAL_REASON
+        elif invalid_records or truncated or state == "degraded":
+            state = "degraded"
+            reason = reason or "commerce_risk_read_incomplete_or_contains_no_evidenced_record"
+        else:
+            # An empty exact-subject query does not establish the absence of risk.
+            state = "unknown"
+            reason = (
+                reason or "no_exact_product_or_offer_risk_record_observed_absence_not_established"
+            )
+
+        if invalid_records or truncated:
+            state = "degraded"
+            reason = reason or "commerce_risk_records_invalid_or_truncated"
+        return {
+            "sourceState": state,
+            "reason": reason,
+            "signals": signals,
+            "assessments": assessments,
+            "evidence": deduped_evidence,
+            "truncated": truncated,
+            "sourceCompleteness": "partial" if truncated or invalid_records else "unknown",
+            "join_basis": _RISK_JOIN_BASIS,
+            "authorityRefs": list(authority_refs),
         }
 
     def _validate_intent_result(
@@ -1431,6 +1861,7 @@ class Commerce360Provider:
         evidence: dict[str, Any],
         catalog: dict[str, Any],
         intents: dict[str, Any],
+        risk: dict[str, Any],
         states: dict[str, str],
         *,
         as_of: Optional[str],
@@ -1699,6 +2130,55 @@ class Commerce360Provider:
                     ),
                     policy=policy,
                 )
+            elif section_id == "risk":
+                authorities = risk.get(
+                    "authorityRefs",
+                    [
+                        "commerce_product_offer_graph",
+                        "risk_outputs",
+                        "risk_signals",
+                        "risk_assessments",
+                        "source_provenance",
+                    ],
+                )
+                risk_reason = risk.get("reason") or _UNKNOWN_SLOT_REASONS[section_id]
+                if state in {"unknown", "missing", "degraded"}:
+                    reason_codes.append(str(risk_reason))
+                if risk.get("signals") or risk.get("assessments"):
+                    reason_codes.append(_RISK_PARTIAL_REASON)
+                content = _slot_content(
+                    state=state,
+                    request=request,
+                    reason_codes=reason_codes,
+                    as_of=as_of,
+                    joinBasis=risk.get("join_basis"),
+                    signals=risk.get("signals", []),
+                    assessments=risk.get("assessments", []),
+                    evidence=[
+                        ref.model_dump(mode="json", exclude_none=True)
+                        for ref in risk.get("evidence", [])
+                    ],
+                    sourceCompleteness=risk.get("sourceCompleteness", "unknown"),
+                    truncated=risk.get("truncated", False),
+                    historyCoverage={
+                        "state": "unknown",
+                        "reasonCode": _RISK_SOURCE_COMPLETENESS_UNKNOWN,
+                    },
+                    causalValidity={
+                        "state": "unknown",
+                        "reasonCode": "commerce_risk_causality_not_established",
+                    },
+                    freshness={
+                        "state": "unknown",
+                        "reasonCode": _RISK_FRESHNESS_UNKNOWN,
+                        "assessmentTimestampsPreserved": True,
+                    },
+                    policy={
+                        "evaluationOwner": _POLICY_OWNER,
+                        "disclosureGate": "experience360_frame_runtime",
+                        "riskPolicyReferencesPreserved": True,
+                    },
+                )
             else:
                 reason_code = _UNKNOWN_SLOT_REASONS[section_id]
                 content = _slot_content(
@@ -1725,6 +2205,8 @@ class Commerce360Provider:
             if state in {"unknown", "missing", "degraded"}:
                 if section_id == "intent":
                     reason = intents.get("reason") or _UNKNOWN_SLOT_REASONS["intent"]
+                elif section_id == "risk":
+                    reason = risk.get("reason") or _UNKNOWN_SLOT_REASONS["risk"]
                 else:
                     reason = evidence.get("reason") or (
                         "commerce_projection_context_scope_mismatch"
@@ -1752,6 +2234,7 @@ class Commerce360Provider:
         evidence: dict[str, Any],
         catalog: dict[str, Any],
         intents: dict[str, Any],
+        risk: dict[str, Any],
         states: dict[str, str],
     ) -> list[ClaimEnvelope]:
         claims: list[ClaimEnvelope] = []
@@ -1929,6 +2412,52 @@ class Commerce360Provider:
                     )
                 )
 
+        if states.get("risk") == "degraded":
+            for signal in risk.get("signals", []):
+                signal_id = signal.get("signalId")
+                refs = _parse_evidence_refs(signal.get("evidenceRefs"))
+                if not signal_id or not refs:
+                    continue
+                claim_state = signal.get("claimState") or EpistemicStatus.UNKNOWN
+                claims.append(
+                    ClaimEnvelope(
+                        id=_stable_id("commerce.risk_signal", str(signal_id)),
+                        kind="commerce_risk_signal_reference",
+                        subject=request.subject,
+                        evidenceRefs=refs,
+                        claims=[
+                            f"RiskSignal {signal_id} records risk dimension "
+                            f"{signal.get('riskDimension') or 'unknown'} for the exact subject; "
+                            f"claim state: {claim_state}"
+                        ],
+                        claimState=claim_state,
+                        domainSlotIds=["risk"],
+                    )
+                )
+            for assessment in risk.get("assessments", []):
+                assessment_id = assessment.get("assessment_id")
+                refs = _parse_evidence_refs(
+                    assessment.get("evidence_refs") if isinstance(assessment, dict) else None
+                )
+                if not assessment_id or not refs:
+                    continue
+                claim_state = assessment.get("claim_state") or EpistemicStatus.UNKNOWN
+                claims.append(
+                    ClaimEnvelope(
+                        id=_stable_id("commerce.risk_assessment", str(assessment_id)),
+                        kind="commerce_risk_assessment_reference",
+                        subject=request.subject,
+                        evidenceRefs=refs,
+                        claims=[
+                            f"RiskAssessment {assessment_id} is recorded for the exact "
+                            f"subject; policy {assessment.get('policy_id') or 'unknown'} "
+                            "and history coverage are not evaluated by Commerce360"
+                        ],
+                        claimState=claim_state,
+                        domainSlotIds=["risk"],
+                    )
+                )
+
         if request.subject.kind == "campaign" and states.get("campaign_links") in {
             "available",
             "degraded",
@@ -1976,10 +2505,12 @@ def register_provider(registry: ProviderRegistry) -> None:
 
 
 __all__ = [
+    "CommerceRiskEvidenceSource",
     "Commerce360Provider",
     "CommerceOperationEvidenceSource",
     "OUTPUT_SECTIONS",
     "PROJECTION_ID",
     "RepositoryCommerceOperationEvidenceSource",
+    "RepositoryCommerceRiskEvidenceSource",
     "register_provider",
 ]

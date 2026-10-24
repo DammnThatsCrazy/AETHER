@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -17,7 +17,8 @@ if str(BACKEND_ROOT) not in sys.path:
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "test-secret")
 
-from graph.operational_intelligence.models import EvidenceRef  # noqa: E402
+from graph.operational_intelligence.models import EvidenceRef, TimeRangeFilter  # noqa: E402
+from shared.contracts_models.epistemic import EpistemicStatus  # noqa: E402
 from shared.intelligence_projections import (  # noqa: E402
     INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
     ProjectionContext,
@@ -32,7 +33,13 @@ from value.commerce.commerce360_provider import (  # noqa: E402
     OUTPUT_SECTIONS,
     Commerce360Provider,
     RepositoryCommerceProductOfferCatalogEvidenceSource,
+    RepositoryCommerceRiskEvidenceSource,
     register_provider,
+)
+from intelligence.risk360.contracts import (  # noqa: E402
+    RiskAssessment,
+    RiskSignal,
+    RiskVector,
 )
 from value.commerce.product_offer_catalog import (  # noqa: E402
     CommerceOfferRecord,
@@ -586,6 +593,94 @@ class FakeCatalogSource:
         return self.result
 
 
+class FakeRiskSource:
+    def __init__(self, result: Optional[dict[str, Any]] = None, *, fail: bool = False) -> None:
+        self.result = result
+        self.fail = fail
+        self.calls: list[tuple[str, str, str, int, int]] = []
+
+    async def read(
+        self,
+        tenant_id,
+        subject,
+        *,
+        signal_limit,
+        assessment_limit,
+    ):
+        self.calls.append((tenant_id, subject.kind, subject.id, signal_limit, assessment_limit))
+        if self.fail:
+            raise RuntimeError("private risk storage detail")
+        if self.result is not None:
+            return self.result
+        return _risk_result(tenant_id, subject.kind, subject.id)
+
+
+def _risk_result(
+    tenant_id: str,
+    subject_kind: str,
+    subject_id: str,
+    *,
+    signals: Optional[list[dict[str, Any]]] = None,
+    assessments: Optional[list[dict[str, Any]]] = None,
+) -> dict[str, Any]:
+    return {
+        "_scope": {
+            "tenantId": tenant_id,
+            "subjectKind": subject_kind,
+            "subjectId": subject_id,
+        },
+        "join_basis": "exact_tenant_scoped_catalog_subject_to_risk360_subject",
+        "sourceState": "available",
+        "signals": signals or [],
+        "assessments": assessments or [],
+        "truncated": False,
+        "authorityRefs": [
+            "commerce_product_offer_graph",
+            "risk_outputs",
+            "risk_signals",
+            "risk_assessments",
+            "source_provenance",
+        ],
+    }
+
+
+def _risk_records(subject_kind: str, subject_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    observed_at = datetime.now(timezone.utc) - timedelta(minutes=3)
+    evidence_ref = EvidenceRef(
+        id="risk-input-1",
+        type="event",
+        source="commerce-risk-detector",
+        observedAt=observed_at.isoformat(),
+    )
+    signal = RiskSignal(
+        signal_id="risk-signal-1",
+        tenant_id=TENANT,
+        subject_kind=subject_kind,
+        subject_id=subject_id,
+        risk_dimension="behavioral",
+        claim_state=EpistemicStatus.INFERRED,
+        confidence=0.7,
+        evidence_refs=[evidence_ref],
+        source="commerce-risk-detector",
+        detector_version="1",
+        observed_at=observed_at,
+        score=0.4,
+    )
+    assessment = RiskAssessment(
+        assessment_id="risk-assessment-1",
+        tenant_id=TENANT,
+        subject_kind=subject_kind,
+        subject_id=subject_id,
+        policy_id="commerce-risk-policy",
+        policy_version="2",
+        vector=RiskVector(),
+        claim_state=EpistemicStatus.DERIVED,
+        evidence_refs=[evidence_ref],
+        assessed_at=observed_at,
+    )
+    return signal.model_dump(mode="json"), assessment.model_dump(mode="json")
+
+
 @pytest.mark.asyncio
 async def test_catalog_offer_product_mismatch_and_as_of_mismatch_fail_closed() -> None:
     request = _request(subject_kind="offer", subject_id="offer-1", projectionId="commerce360")
@@ -716,3 +811,241 @@ async def test_catalog_truncation_degrades_completeness_and_caps_exposed_records
     )
     assert sections["product_offer_summary"].content["sourceCompleteness"] == "partial"
     assert len(sections["product_offer_summary"].content["offers"]) == 500
+
+
+async def _catalog_with_product() -> RepositoryCommerceProductOfferCatalogEvidenceSource:
+    repository = CommerceProductOfferCatalogRepository()
+    repository._local_products.clear()
+    repository._local_offers.clear()
+    await repository.record_product(_product_record())
+    return RepositoryCommerceProductOfferCatalogEvidenceSource(repository)
+
+
+@pytest.mark.asyncio
+async def test_risk_slot_joins_exact_catalog_subject_and_preserves_risk_limits() -> None:
+    catalog = await _catalog_with_product()
+    signal, assessment = _risk_records("product", "prod-1")
+    risk_source = FakeRiskSource(
+        _risk_result(TENANT, "product", "prod-1", signals=[signal], assessments=[assessment])
+    )
+    request = _request(
+        subject_kind="product",
+        subject_id="prod-1",
+        asOf=None,
+        includeSections=["risk"],
+    )
+
+    result = await Commerce360Provider(
+        FakeCommerceSource(), catalog, risk_source=risk_source
+    ).project(request, _context(request))
+
+    risk = result.sections[0]
+    assert risk.id == "risk"
+    assert risk.state == "degraded"
+    assert risk.canonicalAuthorityRefs == [
+        "commerce_product_offer_graph",
+        "risk_outputs",
+        "risk_signals",
+        "risk_assessments",
+        "source_provenance",
+    ]
+    assert risk.content["joinBasis"] == "exact_tenant_scoped_catalog_subject_to_risk360_subject"
+    assert risk.content["signals"][0]["subject"] == {"kind": "product", "id": "prod-1"}
+    assert risk.content["signals"][0]["claimState"] == "inferred"
+    assert risk.content["assessments"][0]["policy_id"] == "commerce-risk-policy"
+    assert risk.content["assessments"][0]["vector"]["components"] == []
+    assert risk.content["historyCoverage"]["state"] == "unknown"
+    assert risk.content["freshness"]["state"] == "unknown"
+    assert risk.content["causalValidity"]["state"] == "unknown"
+    assert risk.content["policy"]["evaluationOwner"] == "experience360_frame_runtime"
+    assert risk.content["policy"]["disclosureGate"] == "experience360_frame_runtime"
+    assert {ref["source"] for ref in risk.content["evidence"]} >= {
+        "risk360/risk_signals",
+        "risk360/risk_assessments",
+        "commerce-risk-detector",
+    }
+    assert len(result.sections) == 1
+    assert result.claims
+    assert all(claim.domainSlotIds == ["risk"] for claim in result.claims)
+    assert all(claim.evidenceRefs for claim in result.claims)
+    assert risk_source.calls == [(TENANT, "product", "prod-1", 101, 51)]
+
+
+@pytest.mark.asyncio
+async def test_risk_slot_does_not_use_current_records_for_historical_frames() -> None:
+    catalog = await _catalog_with_product()
+    signal, assessment = _risk_records("product", "prod-1")
+    risk_source = FakeRiskSource(
+        _risk_result(TENANT, "product", "prod-1", signals=[signal], assessments=[assessment])
+    )
+    request = _request(
+        subject_kind="product",
+        subject_id="prod-1",
+        asOf="2026-10-20T12:00:00+00:00",
+        includeSections=["risk"],
+    )
+
+    result = await Commerce360Provider(
+        FakeCommerceSource(), catalog, risk_source=risk_source
+    ).project(request, _context(request))
+
+    assert risk_source.calls == []
+    assert result.sections[0].state == "unknown"
+    assert (
+        "commerce_risk_historical_snapshot_unavailable" in result.sections[0].content["reasonCodes"]
+    )
+    assert result.sections[0].content["signals"] == []
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_risk_slot_does_not_read_current_records_for_time_windows_or_unrequested_slots() -> (
+    None
+):
+    catalog = await _catalog_with_product()
+    risk_source = FakeRiskSource()
+    provider = Commerce360Provider(FakeCommerceSource(), catalog, risk_source=risk_source)
+    window_request = _request(
+        subject_kind="product",
+        subject_id="prod-1",
+        asOf=None,
+        timeRange=TimeRangeFilter(
+            from_="2026-10-20T00:00:00+00:00",
+            to="2026-10-21T00:00:00+00:00",
+        ),
+        includeSections=["risk"],
+    )
+
+    window_result = await provider.project(window_request, _context(window_request))
+    assert risk_source.calls == []
+    assert window_result.sections[0].state == "unknown"
+    assert (
+        "commerce_risk_requested_temporal_window_unavailable"
+        in window_result.sections[0].content["reasonCodes"]
+    )
+
+    unrequested_request = _request(
+        subject_kind="product",
+        subject_id="prod-1",
+        asOf=None,
+        includeSections=["purchase"],
+    )
+    unrequested_result = await provider.project(unrequested_request, _context(unrequested_request))
+    assert risk_source.calls == []
+    assert [section.id for section in unrequested_result.sections] == ["purchase"]
+    assert not any("risk" in (claim.domainSlotIds or []) for claim in unrequested_result.claims)
+
+
+@pytest.mark.asyncio
+async def test_repository_risk_adapter_uses_exact_tenant_subject_and_bounded_queries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from intelligence.risk360 import store as risk_store
+
+    calls: list[tuple[Any, ...]] = []
+
+    class SignalRepository:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit, offset):
+            calls.append(("signals", tenant_id, subject_kind, subject_id, limit, offset))
+            return []
+
+    class AssessmentRepository:
+        async def list_by_subject(self, tenant_id, subject_kind, subject_id, *, limit, offset):
+            calls.append(("assessments", tenant_id, subject_kind, subject_id, limit, offset))
+            return []
+
+    monkeypatch.setattr(risk_store, "RiskSignalRepository", SignalRepository)
+    monkeypatch.setattr(risk_store, "RiskAssessmentRepository", AssessmentRepository)
+    read = await RepositoryCommerceRiskEvidenceSource().read(
+        TENANT,
+        ProjectionSubject(kind="product", id="prod-1"),
+        signal_limit=101,
+        assessment_limit=51,
+    )
+
+    assert calls == [
+        ("signals", TENANT, "product", "prod-1", 101, 0),
+        ("assessments", TENANT, "product", "prod-1", 51, 0),
+    ]
+    assert read["_scope"] == {
+        "tenantId": TENANT,
+        "subjectKind": "product",
+        "subjectId": "prod-1",
+    }
+    assert read["sourceState"] == "available"
+    assert read["signals"] == []
+    assert read["assessments"] == []
+
+
+@pytest.mark.asyncio
+async def test_risk_slot_requires_exact_canonical_catalog_record_before_risk_read() -> None:
+    repository = CommerceProductOfferCatalogRepository()
+    repository._local_products.clear()
+    repository._local_offers.clear()
+    catalog = RepositoryCommerceProductOfferCatalogEvidenceSource(repository)
+    risk_source = FakeRiskSource()
+    request = _request(
+        subject_kind="product",
+        subject_id="unregistered-product",
+        asOf=None,
+        includeSections=["risk"],
+    )
+
+    result = await Commerce360Provider(
+        FakeCommerceSource(), catalog, risk_source=risk_source
+    ).project(request, _context(request))
+
+    assert risk_source.calls == []
+    assert result.sections[0].state == "unknown"
+    assert (
+        "commerce_risk_requires_exact_canonical_product_or_offer_record"
+        in result.sections[0].content["reasonCodes"]
+    )
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_risk_slot_rejects_cross_tenant_records_and_caps_current_reads() -> None:
+    catalog = await _catalog_with_product()
+    foreign_signal, _ = _risk_records("product", "prod-1")
+    foreign_signal["tenant_id"] = "tenant-b"
+    risk_source = FakeRiskSource(
+        _risk_result(TENANT, "product", "prod-1", signals=[foreign_signal])
+    )
+    request = _request(
+        subject_kind="product",
+        subject_id="prod-1",
+        asOf=None,
+        includeSections=["risk"],
+    )
+
+    result = await Commerce360Provider(
+        FakeCommerceSource(), catalog, risk_source=risk_source
+    ).project(request, _context(request))
+
+    assert result.sections[0].state == "degraded"
+    assert result.sections[0].content["signals"] == []
+    assert result.claims == []
+
+    signals = [
+        RiskSignal(
+            signal_id=f"risk-{index}",
+            tenant_id=TENANT,
+            subject_kind="product",
+            subject_id="prod-1",
+            risk_dimension="behavioral",
+            evidence_refs=[
+                EvidenceRef(id=f"risk-input-{index}", type="event", source="commerce-risk")
+            ],
+            source="commerce-risk",
+        ).model_dump(mode="json")
+        for index in range(101)
+    ]
+    capped_source = FakeRiskSource(_risk_result(TENANT, "product", "prod-1", signals=signals))
+    capped = await Commerce360Provider(
+        FakeCommerceSource(), catalog, risk_source=capped_source
+    ).project(request, _context(request))
+    capped_risk = capped.sections[0]
+    assert capped_risk.state == "degraded"
+    assert capped_risk.content["truncated"] is True
+    assert len(capped_risk.content["signals"]) == 100

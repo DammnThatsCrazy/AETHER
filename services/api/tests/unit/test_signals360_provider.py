@@ -24,6 +24,7 @@ from intelligence.signals.signals360_provider import (  # noqa: E402
     LinkedEntitiesRead,
     LinkedEntity,
     ObservationQualityRead,
+    RiskFlagsRead,
     RepositorySignal360Source,
     SignalCampaignLink,
     SignalSummaryRead,
@@ -226,6 +227,52 @@ def _row(
     }
 
 
+def _risk_signal(
+    signal_id: str,
+    *,
+    tenant_id: str = TENANT_A,
+    subject_kind: str = "event",
+    subject_id: str = "event-signals-risk-a",
+    evidence_refs: list[dict[str, Any]] | None = None,
+    observed_at: str = "2026-10-18T10:01:00Z",
+) -> dict[str, Any]:
+    return {
+        "signal_id": signal_id,
+        "tenant_id": tenant_id,
+        "subject_kind": subject_kind,
+        "subject_id": subject_id,
+        "risk_dimension": "identity",
+        "claim_state": "inferred",
+        "confidence": 0.7,
+        "evidence_refs": evidence_refs
+        if evidence_refs is not None
+        else [
+            {
+                "id": f"evidence-{signal_id}",
+                "type": "event",
+                "source": "fraud.signals",
+                "observedAt": observed_at,
+            }
+        ],
+        "source": "fraud.signals",
+        "detector_version": "fraud-v3",
+        "observed_at": observed_at,
+        "score": 0.61,
+    }
+
+
+class FakeRiskFlagsSource:
+    def __init__(self, read: RiskFlagsRead) -> None:
+        self.read = read
+        self.calls: list[tuple[str, str, str, int]] = []
+
+    async def risk_signals_for_subject(
+        self, *, tenant_id: str, subject_kind: str, subject_id: str, limit: int
+    ) -> RiskFlagsRead:
+        self.calls.append((tenant_id, subject_kind, subject_id, limit))
+        return self.read
+
+
 def _request(*, subject_kind: str = "entity", subject_id: str = ENTITY_ID) -> ProjectionRequest:
     return ProjectionRequest(
         projectionId=PROJECTION_ID,
@@ -248,6 +295,286 @@ def _context() -> ProjectionContext:
 
 def _sections(result) -> dict[str, Any]:
     return {section.id: section for section in result.sections}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "subject_kind", ["event", "observation", "source", "stream", "signal"]
+)
+async def test_signals360_projects_exact_subject_risk_signal_records(
+    subject_kind: str,
+) -> None:
+    subject_id = "event-signals-risk-a"
+    read = RiskFlagsRead(
+        tenant_id=TENANT_A,
+        subject_kind=subject_kind,
+        subject_id=subject_id,
+        records=(
+            _risk_signal(
+                "risk-signal-exact",
+                subject_kind=subject_kind,
+                subject_id=subject_id,
+            ),
+        ),
+        available=True,
+        complete=True,
+    )
+    source = FakeRiskFlagsSource(read)
+    request = _request(subject_kind=subject_kind, subject_id=subject_id).model_copy(
+        update={"includeSections": ["risk_flags"]}
+    )
+
+    result = await Signals360Provider(source=source).project(request, _context())
+
+    assert source.calls == [(TENANT_A, subject_kind, subject_id, 100)]
+    section = _sections(result)["risk_flags"]
+    assert section.state == "degraded"
+    assert section.canonicalAuthorityRefs == ["risk_outputs"]
+    assert section.content["coverage"] == "exact_tenant_typed_subject_risk_signal_records"
+    signal = section.content["signals"][0]
+    assert signal["signalId"] == "risk-signal-exact"
+    assert signal["subject"] == {"kind": subject_kind, "id": subject_id}
+    assert signal["riskDimension"] == "identity"
+    assert signal["claimState"] == "inferred"
+    assert signal["source"] == "fraud.signals"
+    assert signal["detectorVersion"] == "fraud-v3"
+    assert signal["observedAt"] == "2026-10-18T10:01:00+00:00"
+    assert signal["evidenceRefs"][0]["id"] == "evidence-risk-signal-exact"
+    assert signal["evidenceRefs"][0]["source"] == "fraud.signals"
+    assert signal["causalAttribution"] == "not_established"
+    assert section.content["assessmentState"] == "not_joined"
+    assert section.content["producerCoverageState"] == "unknown"
+    assert section.content["riskHistoryState"] == "unknown"
+    assert section.content["policyState"] == "not_evaluated_by_signals360_risk_read"
+    assert section.content["freshnessState"] == "unknown"
+    assert section.content["freshnessThresholdSeconds"] is None
+    assert section.content["causalAttributionState"] == "not_established"
+    assert len(result.claims) == 1
+    assert result.claims[0].domainSlotIds == ["risk_flags"]
+    assert result.claims[0].claimState == EpistemicStatus.INFERRED
+    assert "does not establish event causality" in result.claims[0].claims[0]
+
+
+@pytest.mark.asyncio
+async def test_signals360_empty_risk_read_stays_unknown_not_risk_free() -> None:
+    source = FakeRiskFlagsSource(
+        RiskFlagsRead(
+            tenant_id=TENANT_A,
+            subject_kind="event",
+            subject_id="event-signals-risk-empty",
+            records=(),
+            available=True,
+            complete=True,
+        )
+    )
+    request = _request(
+        subject_kind="event", subject_id="event-signals-risk-empty"
+    ).model_copy(update={"includeSections": ["risk_flags"]})
+
+    result = await Signals360Provider(source=source).project(request, _context())
+
+    section = _sections(result)["risk_flags"]
+    assert section.state == "unknown"
+    assert section.content["signals"] == []
+    assert section.content["reasonCode"] == "no_exact_subject_risk_signals_observed"
+    assert section.content["producerCoverageState"] == "unknown"
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_signals360_does_not_read_current_risk_for_historical_request() -> None:
+    subject_id = "event-signals-risk-asof"
+    source = FakeRiskFlagsSource(
+        RiskFlagsRead(
+            tenant_id=TENANT_A,
+            subject_kind="event",
+            subject_id=subject_id,
+            records=(_risk_signal("risk-signal-asof", subject_id=subject_id),),
+            available=True,
+            complete=True,
+        )
+    )
+    request = _request(subject_kind="event", subject_id=subject_id).model_copy(
+        update={
+            "includeSections": ["risk_flags"],
+            "asOf": "2026-10-17T10:00:00Z",
+        }
+    )
+
+    result = await Signals360Provider(source=source).project(request, _context())
+
+    assert source.calls == []
+    section = _sections(result)["risk_flags"]
+    assert section.state == "unknown"
+    assert section.content["reasonCode"] == "risk_signal_temporal_filter_not_supported"
+    assert section.content["signals"] == []
+
+
+@pytest.mark.asyncio
+async def test_signals360_does_not_read_risk_when_slot_is_not_requested() -> None:
+    subject_id = "event-signals-risk-not-requested"
+    source = FakeRiskFlagsSource(
+        RiskFlagsRead(
+            tenant_id=TENANT_A,
+            subject_kind="event",
+            subject_id=subject_id,
+            records=(_risk_signal("risk-signal-not-requested", subject_id=subject_id),),
+            available=True,
+            complete=True,
+        )
+    )
+    request = _request(subject_kind="event", subject_id=subject_id).model_copy(
+        update={"includeSections": ["classification"]}
+    )
+
+    result = await Signals360Provider(source=source).project(request, _context())
+
+    assert source.calls == []
+    section = _sections(result)["risk_flags"]
+    assert section.state == "unknown"
+    assert section.canonicalAuthorityRefs == []
+    assert section.content["signals"] == []
+
+
+@pytest.mark.asyncio
+async def test_signals360_risk_read_rejects_mismatched_tenant_or_subject() -> None:
+    subject_id = "event-signals-risk-mismatch"
+    source = FakeRiskFlagsSource(
+        RiskFlagsRead(
+            tenant_id="tenant-signals-other",
+            subject_kind="event",
+            subject_id=subject_id,
+            records=(_risk_signal("risk-signal-mismatch", subject_id=subject_id),),
+            available=True,
+            complete=True,
+        )
+    )
+    request = _request(subject_kind="event", subject_id=subject_id).model_copy(
+        update={"includeSections": ["risk_flags"]}
+    )
+
+    result = await Signals360Provider(source=source).project(request, _context())
+
+    section = _sections(result)["risk_flags"]
+    assert section.state == "degraded"
+    assert section.content["signals"] == []
+    assert section.content["authorityReadAvailable"] is False
+    assert section.content["reasonCode"] == "risk_signal_read_scope_mismatch"
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_signals360_risk_read_drops_record_for_different_typed_subject() -> None:
+    subject_id = "event-signals-risk-mismatch-record"
+    source = FakeRiskFlagsSource(
+        RiskFlagsRead(
+            tenant_id=TENANT_A,
+            subject_kind="event",
+            subject_id=subject_id,
+            records=(
+                _risk_signal(
+                    "risk-signal-other-subject",
+                    subject_kind="observation",
+                    subject_id=subject_id,
+                ),
+            ),
+            available=True,
+            complete=True,
+        )
+    )
+    request = _request(subject_kind="event", subject_id=subject_id).model_copy(
+        update={"includeSections": ["risk_flags"]}
+    )
+
+    result = await Signals360Provider(source=source).project(request, _context())
+
+    section = _sections(result)["risk_flags"]
+    assert section.state == "degraded"
+    assert section.content["signals"] == []
+    assert section.content["reasonCode"] == "risk_signal_rows_invalid_or_missing_evidence"
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_signals360_risk_read_is_bounded_and_marks_truncation() -> None:
+    subject_id = "event-signals-risk-truncated"
+    records = tuple(
+        _risk_signal(f"risk-signal-{index:03}", subject_id=subject_id)
+        for index in range(101)
+    )
+    source = FakeRiskFlagsSource(
+        RiskFlagsRead(
+            tenant_id=TENANT_A,
+            subject_kind="event",
+            subject_id=subject_id,
+            records=records,
+            available=True,
+            complete=True,
+        )
+    )
+    request = _request(subject_kind="event", subject_id=subject_id).model_copy(
+        update={"includeSections": ["risk_flags"]}
+    )
+
+    result = await Signals360Provider(source=source).project(request, _context())
+
+    section = _sections(result)["risk_flags"]
+    assert len(section.content["signals"]) == 100
+    assert section.state == "degraded"
+    assert section.content["readTruncated"] is True
+    assert section.content["authorityReadComplete"] is False
+
+
+@pytest.mark.asyncio
+async def test_repository_signals360_risk_read_is_exact_tenant_and_typed_subject(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    subject_id = "source-signals-risk-exact"
+    matching = _risk_signal(
+        "risk-signal-repository-match",
+        subject_kind="source",
+        subject_id=subject_id,
+    )
+    repository_calls: list[tuple[str, str, str, int]] = []
+
+    class FakeRiskSignalRepository:
+        async def list_by_subject(
+            self,
+            tenant_id: str,
+            subject_kind: str,
+            exact_subject_id: str,
+            *,
+            limit: int,
+        ) -> list[dict[str, Any]]:
+            repository_calls.append(
+                (tenant_id, subject_kind, exact_subject_id, limit)
+            )
+            return [
+                matching,
+                _risk_signal(
+                    "risk-signal-cross-tenant",
+                    tenant_id="tenant-signals-other",
+                    subject_kind="source",
+                    subject_id=subject_id,
+                ),
+            ]
+
+    monkeypatch.setattr(
+        "intelligence.risk360.store.RiskSignalRepository", FakeRiskSignalRepository
+    )
+
+    read = await RepositorySignal360Source().risk_signals_for_subject(
+        tenant_id=TENANT_A,
+        subject_kind="source",
+        subject_id=subject_id,
+        limit=100,
+    )
+
+    assert repository_calls == [(TENANT_A, "source", subject_id, 101)]
+    assert read.records == (matching,)
+    assert read.available is True
+    assert read.complete is False
+    assert read.reason == "risk_signal_subject_scope_mismatch"
 
 
 def test_signals360_registers_through_provider_registry() -> None:

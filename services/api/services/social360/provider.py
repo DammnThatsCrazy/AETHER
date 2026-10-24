@@ -30,6 +30,7 @@ from shared.intelligence_projections.generated_registry import (
 from shared.intelligence_projections.provider import IntelligenceProjectionProvider
 from shared.intelligence_projections.registry import ProviderRegistry
 from graph.operational_intelligence.models import EvidenceRef
+from shared.graph.graph import Edge
 from governance.consent.authority import evaluate_consent
 from identity.population360.scope import (
     PopulationScopeRead,
@@ -51,6 +52,7 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
     "interactions",
     "paths",
     "propagation",
+    "risk_edges",
     "state",
     "summary",
     "syndicates",
@@ -93,7 +95,10 @@ _SOCIAL_SYNDICATE_AUTHORITIES = [
     "graph",
     "population_definitions",
 ]
+_SOCIAL_RISK_EDGE_AUTHORITIES = ["graph", "relationship_facts", "risk_outputs"]
 _MAX_SYNDICATE_MEMBERSHIPS = 100
+_MAX_SOCIAL_RISK_EDGES = 100
+_MAX_SOCIAL_RISK_SIGNALS_PER_ENTITY = 100
 _SYNDICATE_POPULATION_TYPES = frozenset(
     {
         "segment",
@@ -439,6 +444,303 @@ class SocialSyndicateMembershipReader(Protocol):
     async def read(
         self, tenant_id: str, entity_id: str, *, limit: int
     ) -> SocialSyndicateMembershipRead: ...
+
+
+@dataclass(frozen=True)
+class SocialRiskContextEdge:
+    """One active registered shared-risk-context graph edge and its evidence."""
+
+    tenant_id: str
+    source_entity_id: str
+    target_entity_id: str
+    idempotency_key: str
+    evidence_refs: tuple[EvidenceRef, ...]
+    observed_at: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class SocialRiskContextEdgeRead:
+    """Bounded current read of registered risk-context edges for one subject."""
+
+    tenant_id: str
+    subject_id: str
+    edges: tuple[SocialRiskContextEdge, ...]
+    available: bool
+    truncated: bool = False
+    reason_codes: tuple[str, ...] = ()
+
+
+class SocialRiskContextEdgeReader(Protocol):
+    """Read exact tenant graph relationships registered as shared risk context."""
+
+    async def read_edges(
+        self, tenant_id: str, subject: ProjectionSubject
+    ) -> SocialRiskContextEdgeRead: ...
+
+
+class RepositorySocialRiskContextEdgeReader:
+    """Read registered ``SHARES_RISK_CONTEXT_WITH`` edges from the graph ledger."""
+
+    def __init__(self, *, graph_client: Any = None) -> None:
+        self._graph_client = graph_client
+
+    async def read_edges(
+        self, tenant_id: str, subject: ProjectionSubject
+    ) -> SocialRiskContextEdgeRead:
+        from shared.graph.graph import get_graph_client, tenant_of
+        from shared.relationship_spine.relationship_registry import (
+            live_graph_edge_type,
+            predicate_entry,
+        )
+
+        if subject.kind not in {"entity", "relationship"}:
+            return SocialRiskContextEdgeRead(
+                tenant_id,
+                subject.id,
+                (),
+                available=True,
+                reason_codes=("social_risk_edge_entity_or_relationship_subject_required",),
+            )
+        endpoints = _subject_endpoints(subject)
+        if endpoints is None:
+            return SocialRiskContextEdgeRead(
+                tenant_id,
+                subject.id,
+                (),
+                available=True,
+                reason_codes=("social_risk_edge_relationship_pair_invalid",),
+            )
+
+        entry = predicate_entry("SHARES_RISK_CONTEXT_WITH")
+        edge_type = live_graph_edge_type("SHARES_RISK_CONTEXT_WITH")
+        if (
+            not entry
+            or entry.get("family") != "RISK_CONTEXT"
+            or entry.get("graphRegistrationState") != "REGISTERED"
+            or entry.get("graphEdgeType") != edge_type
+            or "INFERENTIAL_ONLY" not in entry.get("transitivityClasses", [])
+            or edge_type is None
+        ):
+            return SocialRiskContextEdgeRead(
+                tenant_id,
+                subject.id,
+                (),
+                available=False,
+                reason_codes=("registered_risk_context_edge_authority_unavailable",),
+            )
+
+        client = self._graph_client or get_graph_client()
+        try:
+            for endpoint in endpoints:
+                vertex = await client.get_vertex_for_tenant(tenant_id, endpoint)
+                if vertex is None or tenant_of(vertex.properties) != tenant_id:
+                    return SocialRiskContextEdgeRead(
+                        tenant_id,
+                        subject.id,
+                        (),
+                        available=True,
+                        reason_codes=("canonical_risk_edge_subject_unresolved",),
+                    )
+            edge_page = await client.get_edges_for_tenant(
+                tenant_id,
+                limit=_MAX_SOCIAL_RISK_EDGES,
+                edge_types=[edge_type],
+                include_revoked=False,
+            )
+        except Exception:  # noqa: BLE001 - canonical graph reads fail closed
+            return SocialRiskContextEdgeRead(
+                tenant_id,
+                subject.id,
+                (),
+                available=False,
+                reason_codes=("canonical_social_risk_edge_graph_unavailable",),
+            )
+
+        if (
+            not isinstance(edge_page, tuple)
+            or len(edge_page) != 2
+            or not isinstance(edge_page[0], list)
+            or not isinstance(edge_page[1], bool)
+        ):
+            return SocialRiskContextEdgeRead(
+                tenant_id,
+                subject.id,
+                (),
+                available=False,
+                reason_codes=("invalid_canonical_risk_edge_graph_read_contract",),
+            )
+
+        tenant_edges, truncated = edge_page
+        endpoint_ids = set(endpoints)
+        reasons: set[str] = set()
+        result: list[SocialRiskContextEdge] = []
+        now = datetime.now(timezone.utc)
+        for edge in tenant_edges:
+            if not isinstance(edge, Edge):
+                reasons.add("canonical_risk_edge_graph_contract_invalid")
+                continue
+            props = edge.properties if isinstance(edge.properties, dict) else {}
+            if (
+                edge.edge_type != edge_type
+                or props.get("relationship_predicate") != "SHARES_RISK_CONTEXT_WITH"
+            ):
+                continue
+            if tenant_of(props) != tenant_id:
+                reasons.add("canonical_risk_edge_scope_mismatch")
+                continue
+            source_id = _text(edge.from_vertex_id)
+            target_id = _text(edge.to_vertex_id)
+            if (
+                source_id is None
+                or target_id is None
+                or source_id == target_id
+                or not endpoint_ids.intersection({source_id, target_id})
+            ):
+                continue
+            if subject.kind == "relationship" and {source_id, target_id} != endpoint_ids:
+                continue
+            if _truthy_marker(props.get("revoked")) or bool(props.get("revoked_at")):
+                continue
+            endpoint_scope_valid = True
+            for endpoint_id in (source_id, target_id):
+                if endpoint_id in endpoint_ids:
+                    continue
+                try:
+                    vertex = await client.get_vertex_for_tenant(tenant_id, endpoint_id)
+                except Exception:  # noqa: BLE001 - tenant endpoint reads fail closed
+                    endpoint_scope_valid = False
+                    reasons.add("canonical_risk_edge_endpoint_authority_unavailable")
+                    break
+                if vertex is None or tenant_of(vertex.properties) != tenant_id:
+                    endpoint_scope_valid = False
+                    reasons.add("canonical_risk_edge_endpoint_scope_unverified")
+                    break
+            if not endpoint_scope_valid:
+                continue
+
+            valid_from_value = props.get("valid_from")
+            valid_to_value = props.get("valid_to")
+            valid_from = _parse_graph_time(valid_from_value) if valid_from_value else None
+            valid_to = _parse_graph_time(valid_to_value) if valid_to_value else None
+            if (valid_from_value and valid_from is None) or (valid_to_value and valid_to is None):
+                reasons.add("canonical_risk_edge_validity_unknown")
+                continue
+            if valid_from is not None and valid_from > now:
+                continue
+            if valid_to is not None and valid_to <= now:
+                continue
+
+            idempotency_key = _text(props.get("idempotency_key"))
+            evidence_ids = _graph_evidence_ids(props.get("evidence_refs"))
+            if idempotency_key is None or not evidence_ids:
+                reasons.add("canonical_risk_edge_evidence_unavailable")
+                continue
+            observed_at_value = _text(props.get("observed_at"))
+            observed_at = _parse_graph_time(observed_at_value) if observed_at_value else None
+            if observed_at_value and observed_at is None:
+                reasons.add("canonical_risk_edge_observed_time_invalid")
+                continue
+            if observed_at is not None and observed_at > now:
+                reasons.add("canonical_risk_edge_observed_time_in_future")
+                continue
+
+            evidence_refs = (
+                EvidenceRef(
+                    id=idempotency_key,
+                    type="relationship",
+                    source="entity_graph",
+                    observedAt=(valid_from.isoformat() if valid_from is not None else None),
+                ),
+                *(
+                    EvidenceRef(
+                        id=evidence_id,
+                        type="event",
+                        source="relationship_facts",
+                    )
+                    for evidence_id in evidence_ids
+                ),
+            )
+            result.append(
+                SocialRiskContextEdge(
+                    tenant_id=tenant_id,
+                    source_entity_id=source_id,
+                    target_entity_id=target_id,
+                    idempotency_key=idempotency_key,
+                    evidence_refs=tuple(evidence_refs),
+                    observed_at=observed_at.isoformat() if observed_at is not None else None,
+                )
+            )
+        result.sort(
+            key=lambda item: (item.source_entity_id, item.target_entity_id, item.idempotency_key)
+        )
+        if truncated:
+            reasons.add("canonical_risk_edge_scan_capped")
+        return SocialRiskContextEdgeRead(
+            tenant_id=tenant_id,
+            subject_id=subject.id,
+            edges=tuple(result[:_MAX_SOCIAL_RISK_EDGES]),
+            available=True,
+            truncated=truncated or len(result) > _MAX_SOCIAL_RISK_EDGES,
+            reason_codes=tuple(sorted(reasons)),
+        )
+
+
+@dataclass(frozen=True)
+class SocialRiskSignalRead:
+    """Bounded exact-entity RiskSignal repository response."""
+
+    tenant_id: str
+    entity_id: str
+    rows: tuple[dict[str, Any], ...]
+    available: bool
+    truncated: bool = False
+    reason: Optional[str] = None
+
+
+class SocialRiskSignalReader(Protocol):
+    """Read RiskSignals for one exact entity in one tenant."""
+
+    async def read(self, tenant_id: str, entity_id: str) -> SocialRiskSignalRead: ...
+
+
+class RepositorySocialRiskSignalReader:
+    """Adapter over the canonical tenant-scoped RiskSignal repository."""
+
+    async def read(self, tenant_id: str, entity_id: str) -> SocialRiskSignalRead:
+        try:
+            from intelligence.risk360.store import RiskSignalRepository
+
+            rows = await RiskSignalRepository().list_by_subject(
+                tenant_id,
+                "entity",
+                entity_id,
+                limit=_MAX_SOCIAL_RISK_SIGNALS_PER_ENTITY + 1,
+            )
+        except Exception:  # noqa: BLE001 - canonical risk reads fail closed
+            return SocialRiskSignalRead(
+                tenant_id,
+                entity_id,
+                (),
+                available=False,
+                reason="canonical_risk_signal_authority_unavailable",
+            )
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            return SocialRiskSignalRead(
+                tenant_id,
+                entity_id,
+                (),
+                available=False,
+                reason="invalid_canonical_risk_signal_read_contract",
+            )
+        truncated = len(rows) > _MAX_SOCIAL_RISK_SIGNALS_PER_ENTITY
+        return SocialRiskSignalRead(
+            tenant_id=tenant_id,
+            entity_id=entity_id,
+            rows=tuple(rows[:_MAX_SOCIAL_RISK_SIGNALS_PER_ENTITY]),
+            available=True,
+            truncated=truncated,
+            reason="canonical_risk_signal_read_bounded" if truncated else None,
+        )
 
 
 class RepositorySocialSyndicateMembershipReader:
@@ -857,6 +1159,8 @@ class Social360Provider(IntelligenceProjectionProvider):
         social_graph_path_reader: Optional[SocialGraphPathReader] = None,
         relationship_fidelity_reader: Optional[SocialRelationshipFidelityReader] = None,
         syndicate_membership_reader: Optional[SocialSyndicateMembershipReader] = None,
+        risk_context_edge_reader: Optional[SocialRiskContextEdgeReader] = None,
+        risk_signal_reader: Optional[SocialRiskSignalReader] = None,
     ) -> None:
         self._source = source if source is not None else RepositorySocial360Source()
         self._consent_reader = consent_reader or evaluate_consent
@@ -889,6 +1193,16 @@ class Social360Provider(IntelligenceProjectionProvider):
             syndicate_membership_reader
             if syndicate_membership_reader is not None
             else RepositorySocialSyndicateMembershipReader()
+        )
+        self._risk_context_edges = (
+            risk_context_edge_reader
+            if risk_context_edge_reader is not None
+            else RepositorySocialRiskContextEdgeReader()
+        )
+        self._risk_signals = (
+            risk_signal_reader
+            if risk_signal_reader is not None
+            else RepositorySocialRiskSignalReader()
         )
 
     async def project(
@@ -1118,6 +1432,8 @@ class Social360Provider(IntelligenceProjectionProvider):
             )
             or (request.temporalMode or "window") in {"as_of", "relative"}
         )
+        risk_edges_section: Optional[ProjectionSection] = None
+        risk_edge_claims: list[ClaimEnvelope] = []
         syndicate_read: Optional[SocialSyndicateMembershipRead] = None
         if "syndicates" in include:
             if request.subject.kind != "entity":
@@ -1146,6 +1462,13 @@ class Social360Provider(IntelligenceProjectionProvider):
             endpoint: _consent_allowed(consent)
             for endpoint, consent in zip(endpoints, consent_results)
         }
+        if "risk_edges" in include:
+            risk_edges_section, risk_edge_claims = await self._risk_edges_section_and_claims(
+                request,
+                endpoints=endpoints,
+                consent_by_endpoint=consent_by_endpoint,
+                temporal_filter_requested=temporal_filter_requested,
+            )
         if "paths" in include:
             if request.subject.kind == "entity" and temporal_filter_requested:
                 path_read = SocialGraphPathRead(
@@ -1692,6 +2015,8 @@ class Social360Provider(IntelligenceProjectionProvider):
         )
         if "syndicates" in include:
             sections.append(syndicates_section)
+        if risk_edges_section is not None:
+            sections.append(risk_edges_section)
 
         claims = self._claims(request.subject, rows_by_family, refs_by_family)
         claims.extend(path_claims)
@@ -1701,6 +2026,7 @@ class Social360Provider(IntelligenceProjectionProvider):
             claims.extend(influence_claims)
         if "syndicates" in include:
             claims.extend(syndicates_claims)
+        claims.extend(risk_edge_claims)
         degraded_reasons = sorted(
             {
                 read.reason or f"{family}_source_unavailable"
@@ -1748,6 +2074,353 @@ class Social360Provider(IntelligenceProjectionProvider):
                 start_entity_id,
                 available=False,
                 reason_codes=("canonical_social_path_scope_mismatch",),
+            )
+        return result
+
+    async def _risk_edges_section_and_claims(
+        self,
+        request: ProjectionRequest,
+        *,
+        endpoints: tuple[str, ...],
+        consent_by_endpoint: dict[str, bool],
+        temporal_filter_requested: bool,
+    ) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+        """Join risk signals to exact registered risk-context edge evidence.
+
+        This is an observed/correlated association only. It is not a risk score
+        for the edge, trust, propagation, contagion, or causal attribution.
+        """
+
+        def unknown(reason: str, *, state: str = "unknown") -> ProjectionSection:
+            return ProjectionSection(
+                id="risk_edges",
+                state=state,
+                title="Evidence-linked risk-context associations",
+                content={
+                    "edges": [],
+                    "coverage": "bounded_current_evidence_linked_only",
+                    "riskPolicyEvaluation": "unknown",
+                    "freshness": "unknown",
+                    "causalRiskPropagationEstablished": False,
+                    "socialContagionEstablished": False,
+                    "trustEstablished": False,
+                },
+                warnings=[reason],
+                canonicalAuthorityRefs=list(_SOCIAL_RISK_EDGE_AUTHORITIES),
+            )
+
+        if temporal_filter_requested:
+            return unknown("social_risk_edge_historical_read_unavailable"), []
+        if request.subject.kind not in {"entity", "relationship"}:
+            return unknown("social_risk_edge_entity_or_relationship_subject_required"), []
+
+        edge_read = await self._read_social_risk_context_edges(request.tenantId, request.subject)
+        if not edge_read.available:
+            return unknown("canonical_social_risk_edge_authority_unavailable", state="degraded"), []
+        if edge_read.tenant_id != request.tenantId or edge_read.subject_id != request.subject.id:
+            return unknown("canonical_social_risk_edge_scope_mismatch", state="degraded"), []
+
+        reasons = set(edge_read.reason_codes)
+        if edge_read.truncated:
+            reasons.add("canonical_social_risk_edge_scan_capped")
+        signal_cache: dict[str, SocialRiskSignalRead] = {}
+        output_edges: list[dict[str, Any]] = []
+        claims: list[ClaimEnvelope] = []
+        now = datetime.now(timezone.utc)
+        if len(edge_read.edges) > _MAX_SOCIAL_RISK_EDGES:
+            reasons.add("canonical_social_risk_edge_read_limit_exceeded")
+
+        for edge in edge_read.edges[:_MAX_SOCIAL_RISK_EDGES]:
+            if (
+                not isinstance(edge, SocialRiskContextEdge)
+                or edge.tenant_id != request.tenantId
+                or not _text(edge.source_entity_id)
+                or not _text(edge.target_entity_id)
+                or edge.source_entity_id == edge.target_entity_id
+                or not _text(edge.idempotency_key)
+                or not edge.evidence_refs
+                or not all(
+                    isinstance(ref, EvidenceRef) and _text(ref.id) for ref in edge.evidence_refs
+                )
+            ):
+                reasons.add("social_risk_edge_contract_or_scope_invalid")
+                continue
+
+            edge_endpoints = (edge.source_entity_id, edge.target_entity_id)
+            if not set(endpoints).intersection(edge_endpoints):
+                reasons.add("social_risk_edge_endpoint_not_bound_to_subject")
+                continue
+            if request.subject.kind == "relationship" and set(endpoints) != set(edge_endpoints):
+                continue
+
+            edge_consent_allowed = True
+            for endpoint_id in edge_endpoints:
+                if consent_by_endpoint.get(endpoint_id) is True:
+                    continue
+                try:
+                    consent = await self._consent_reader(
+                        request.tenantId, endpoint_id, None, "analytics"
+                    )
+                except Exception:  # noqa: BLE001 - consent is a fail-closed read gate
+                    edge_consent_allowed = False
+                    reasons.add("social_risk_edge_endpoint_consent_unavailable")
+                    continue
+                if not _consent_allowed(consent):
+                    edge_consent_allowed = False
+                    reasons.add("social_risk_edge_endpoint_consent_restricted")
+            if not edge_consent_allowed:
+                continue
+
+            edge_fact_ids = {
+                ref.id
+                for ref in edge.evidence_refs
+                if isinstance(ref, EvidenceRef)
+                and ref.source == "relationship_facts"
+                and _text(ref.id)
+            }
+            if not edge_fact_ids:
+                reasons.add("social_risk_edge_relationship_evidence_unavailable")
+                continue
+
+            support: list[dict[str, Any]] = []
+            claim_refs = list(edge.evidence_refs)
+            for endpoint_id in edge_endpoints:
+                signal_read = signal_cache.get(endpoint_id)
+                if signal_read is None:
+                    signal_read = await self._read_social_risk_signals(
+                        request.tenantId, endpoint_id
+                    )
+                    signal_cache[endpoint_id] = signal_read
+                if (
+                    not signal_read.available
+                    or signal_read.tenant_id != request.tenantId
+                    or signal_read.entity_id != endpoint_id
+                ):
+                    reasons.add(signal_read.reason or "canonical_risk_signal_scope_invalid")
+                    continue
+                if signal_read.truncated:
+                    reasons.add(signal_read.reason or "canonical_risk_signal_read_bounded")
+
+                for raw_signal in signal_read.rows:
+                    try:
+                        from intelligence.risk360.contracts import RiskSignal
+
+                        signal = RiskSignal.model_validate(raw_signal)
+                    except Exception:  # noqa: BLE001 - persisted risk rows are untrusted input
+                        reasons.add("canonical_risk_signal_contract_invalid")
+                        continue
+                    if (
+                        signal.tenant_id != request.tenantId
+                        or signal.subject_kind != "entity"
+                        or signal.subject_id != endpoint_id
+                        or not _text(signal.signal_id)
+                        or not _text(signal.source)
+                    ):
+                        reasons.add("canonical_risk_signal_scope_mismatch")
+                        continue
+                    observed_at = (
+                        signal.observed_at.astimezone(timezone.utc)
+                        if signal.observed_at is not None and signal.observed_at.tzinfo is not None
+                        else None
+                    )
+                    if signal.observed_at is not None and observed_at is None:
+                        reasons.add("canonical_risk_signal_observed_time_invalid")
+                        continue
+                    if observed_at is not None and observed_at > now:
+                        reasons.add("canonical_risk_signal_observed_time_in_future")
+                        continue
+                    matching_refs = [
+                        ref
+                        for ref in signal.evidence_refs
+                        if ref.id in edge_fact_ids and ref.type == "event"
+                    ]
+                    if not matching_refs:
+                        continue
+
+                    matched_signal_ref = EvidenceRef(
+                        id=signal.signal_id,
+                        type="model_output",
+                        source=f"risk_signals:{signal.source}",
+                        observedAt=observed_at.isoformat() if observed_at is not None else None,
+                    )
+                    scoped_signal_refs = _dedupe_refs([*matching_refs, matched_signal_ref])
+                    support.append(
+                        {
+                            "subjectEntityId": endpoint_id,
+                            "signalId": signal.signal_id,
+                            "riskDimension": signal.risk_dimension,
+                            "claimState": signal.claim_state.value,
+                            "observedAt": observed_at.isoformat()
+                            if observed_at is not None
+                            else None,
+                            "evidenceRefs": scoped_signal_refs,
+                        }
+                    )
+                    claim_refs.extend(scoped_signal_refs)
+
+            if not support:
+                continue
+            claim_refs = _dedupe_refs(claim_refs)
+            output_edges.append(
+                {
+                    "sourceEntityId": edge.source_entity_id,
+                    "targetEntityId": edge.target_entity_id,
+                    "predicate": "SHARES_RISK_CONTEXT_WITH",
+                    "associationState": "correlated_risk_context",
+                    "riskSignalSupport": support,
+                    "evidenceRefs": claim_refs,
+                    "riskScore": None,
+                    "riskPolicyEvaluation": "unknown",
+                    "freshness": "unknown",
+                    "causalRiskPropagationEstablished": False,
+                    "socialContagionEstablished": False,
+                    "trustEstablished": False,
+                }
+            )
+            digest = hashlib.sha256(
+                "\x1f".join(
+                    [
+                        request.tenantId,
+                        edge.source_entity_id,
+                        edge.target_entity_id,
+                        edge.idempotency_key,
+                        *(ref.id for ref in claim_refs),
+                    ]
+                ).encode("utf-8")
+            ).hexdigest()[:24]
+            claims.append(
+                ClaimEnvelope(
+                    id=f"social360.risk-edge.{digest}",
+                    kind="social_risk_context_edge_association",
+                    subject=request.subject,
+                    evidenceRefs=claim_refs,
+                    claims=[
+                        "A registered SHARES_RISK_CONTEXT_WITH graph edge and an exact tenant-scoped risk signal share canonical evidence. This is correlated context only; it does not establish edge risk, trust, propagation, contagion, causation, or loss."
+                    ],
+                    claimState=EpistemicStatus.CORRELATED,
+                    domainSlotIds=["risk_edges", "evidence_trace"],
+                )
+            )
+
+        if not output_edges:
+            reason = (
+                sorted(reasons)[0]
+                if reasons
+                else "no_risk_signal_evidence_linked_to_registered_risk_context_edge"
+            )
+            return unknown(reason, state="degraded" if reasons else "unknown"), []
+
+        state = "degraded" if reasons else "available"
+        section = ProjectionSection(
+            id="risk_edges",
+            state=state,
+            title="Evidence-linked risk-context associations",
+            content={
+                "edges": output_edges,
+                "coverage": "bounded_current_evidence_linked_only",
+                "riskPolicyEvaluation": "unknown",
+                "freshness": "unknown",
+                "causalRiskPropagationEstablished": False,
+                "socialContagionEstablished": False,
+                "trustEstablished": False,
+            },
+            warnings=sorted(reasons) or None,
+            canonicalAuthorityRefs=list(_SOCIAL_RISK_EDGE_AUTHORITIES),
+        )
+        return section, claims
+
+    async def _read_social_risk_context_edges(
+        self, tenant_id: str, subject: ProjectionSubject
+    ) -> SocialRiskContextEdgeRead:
+        try:
+            result = await self._risk_context_edges.read_edges(tenant_id, subject)
+        except Exception:  # noqa: BLE001 - canonical graph authority fails closed
+            return SocialRiskContextEdgeRead(
+                tenant_id,
+                subject.id,
+                (),
+                available=False,
+                reason_codes=("canonical_social_risk_edge_authority_unavailable",),
+            )
+        if not isinstance(result, SocialRiskContextEdgeRead):
+            return SocialRiskContextEdgeRead(
+                tenant_id,
+                subject.id,
+                (),
+                available=False,
+                reason_codes=("invalid_social_risk_edge_source_contract",),
+            )
+        if result.tenant_id != tenant_id or result.subject_id != subject.id:
+            return SocialRiskContextEdgeRead(
+                tenant_id,
+                subject.id,
+                (),
+                available=False,
+                reason_codes=("canonical_social_risk_edge_scope_mismatch",),
+            )
+        if len(result.edges) > _MAX_SOCIAL_RISK_EDGES:
+            return SocialRiskContextEdgeRead(
+                tenant_id,
+                subject.id,
+                result.edges[:_MAX_SOCIAL_RISK_EDGES],
+                available=result.available,
+                truncated=True,
+                reason_codes=tuple(
+                    sorted(
+                        set(result.reason_codes)
+                        | {"canonical_social_risk_edge_read_limit_exceeded"}
+                    )
+                ),
+            )
+        return result
+
+    async def _read_social_risk_signals(
+        self, tenant_id: str, entity_id: str
+    ) -> SocialRiskSignalRead:
+        try:
+            result = await self._risk_signals.read(tenant_id, entity_id)
+        except Exception:  # noqa: BLE001 - canonical risk authority fails closed
+            return SocialRiskSignalRead(
+                tenant_id,
+                entity_id,
+                (),
+                available=False,
+                reason="canonical_risk_signal_authority_unavailable",
+            )
+        if not isinstance(result, SocialRiskSignalRead):
+            return SocialRiskSignalRead(
+                tenant_id,
+                entity_id,
+                (),
+                available=False,
+                reason="invalid_social_risk_signal_source_contract",
+            )
+        if result.tenant_id != tenant_id or result.entity_id != entity_id:
+            return SocialRiskSignalRead(
+                tenant_id,
+                entity_id,
+                (),
+                available=False,
+                reason="canonical_risk_signal_scope_mismatch",
+            )
+        if not isinstance(result.rows, (list, tuple)) or any(
+            not isinstance(row, dict) for row in result.rows
+        ):
+            return SocialRiskSignalRead(
+                tenant_id,
+                entity_id,
+                (),
+                available=False,
+                reason="invalid_social_risk_signal_rows",
+            )
+        if len(result.rows) > _MAX_SOCIAL_RISK_SIGNALS_PER_ENTITY:
+            return SocialRiskSignalRead(
+                tenant_id,
+                entity_id,
+                result.rows[:_MAX_SOCIAL_RISK_SIGNALS_PER_ENTITY],
+                available=result.available,
+                truncated=True,
+                reason="canonical_risk_signal_read_limit_exceeded",
             )
         return result
 
@@ -2724,6 +3397,17 @@ class Social360Provider(IntelligenceProjectionProvider):
                     )
                 )
                 continue
+            if section_id == "risk_edges":
+                sections.append(
+                    ProjectionSection(
+                        id="risk_edges",
+                        state="unknown",
+                        title="Evidence-linked risk-context associations",
+                        warnings=["empty_population_has_no_risk_edge_scope"],
+                        canonicalAuthorityRefs=list(_SOCIAL_RISK_EDGE_AUTHORITIES),
+                    )
+                )
+                continue
             sections.append(
                 ProjectionSection(
                     id=section_id,
@@ -2766,6 +3450,8 @@ class Social360Provider(IntelligenceProjectionProvider):
                     if section_id == "propagation"
                     else list(_SOCIAL_SYNDICATE_AUTHORITIES)
                     if section_id == "syndicates"
+                    else list(_SOCIAL_RISK_EDGE_AUTHORITIES)
+                    if section_id == "risk_edges"
                     else None
                 ),
             )
@@ -2805,6 +3491,8 @@ class Social360Provider(IntelligenceProjectionProvider):
                     if section_id == "propagation"
                     else list(_SOCIAL_SYNDICATE_AUTHORITIES)
                     if section_id == "syndicates"
+                    else list(_SOCIAL_RISK_EDGE_AUTHORITIES)
+                    if section_id == "risk_edges"
                     else None
                 ),
             )

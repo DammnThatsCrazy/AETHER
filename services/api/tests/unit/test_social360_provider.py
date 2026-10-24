@@ -42,6 +42,10 @@ from services.social360.provider import (  # noqa: E402
     RepositorySocialSyndicateMembershipReader,
     SocialSyndicateMembership,
     SocialSyndicateMembershipRead,
+    RepositorySocialRiskContextEdgeReader,
+    SocialRiskContextEdge,
+    SocialRiskContextEdgeRead,
+    SocialRiskSignalRead,
     _domain_slot_ids,
 )
 
@@ -138,6 +142,29 @@ class FakeSocialSyndicateMembershipReader:
     async def read(self, tenant_id: str, entity_id: str, *, limit: int):
         self.calls.append((tenant_id, entity_id, limit))
         return self.result
+
+
+class FakeSocialRiskContextEdgeReader:
+    def __init__(self, result: SocialRiskContextEdgeRead) -> None:
+        self.result = result
+        self.calls: list[tuple[str, str, str]] = []
+
+    async def read_edges(self, tenant_id: str, subject: ProjectionSubject):
+        self.calls.append((tenant_id, subject.kind, subject.id))
+        return self.result
+
+
+class FakeSocialRiskSignalReader:
+    def __init__(self, reads: dict[str, SocialRiskSignalRead]) -> None:
+        self.reads = reads
+        self.calls: list[tuple[str, str]] = []
+
+    async def read(self, tenant_id: str, entity_id: str):
+        self.calls.append((tenant_id, entity_id))
+        return self.reads.get(
+            entity_id,
+            SocialRiskSignalRead(tenant_id, entity_id, (), available=True),
+        )
 
 
 def _population_scope(
@@ -941,11 +968,14 @@ async def test_population_truncation_empty_membership_and_historical_scope_are_e
     assert {
         section.state
         for section in empty.sections
-        if section.id not in {"paths", "propagation", "influence", "syndicates"}
+        if section.id not in {"paths", "propagation", "influence", "syndicates", "risk_edges"}
     } == {"empty"}
     assert next(section for section in empty.sections if section.id == "paths").state == "unknown"
     assert next(section for section in empty.sections if section.id == "influence").state == "unknown"
     assert next(section for section in empty.sections if section.id == "propagation").state == "unknown"
+    assert (
+        next(section for section in empty.sections if section.id == "risk_edges").state == "unknown"
+    )
 
     temporal_source = FakeSocialSource()
     temporal_scope = FakePopulationScopeReader(_population_scope())
@@ -1905,3 +1935,273 @@ async def test_repository_social_fidelity_reader_uses_exact_tenant_directed_pair
     assert result.vector["interaction_frequency"] == 0.8
     assert [ref.id for ref in result.vector_evidence_refs] == ["observation-ab"]
     assert result.run_evidence_ref.id == "run-fidelity-ab"
+
+
+def _risk_context_edge(
+    *, tenant_id: str = TENANT, source: str = "entity-a", target: str = "entity-b"
+) -> SocialRiskContextEdge:
+    return SocialRiskContextEdge(
+        tenant_id=tenant_id,
+        source_entity_id=source,
+        target_entity_id=target,
+        idempotency_key="risk-context-edge-a-b",
+        evidence_refs=(
+            EvidenceRef(
+                id="risk-context-edge-a-b",
+                type="relationship",
+                source="entity_graph",
+            ),
+            EvidenceRef(
+                id="risk-context-evidence-1",
+                type="event",
+                source="relationship_facts",
+            ),
+        ),
+        observed_at="2026-10-22T10:00:00Z",
+    )
+
+
+def _risk_signal_row(
+    *, tenant_id: str = TENANT, subject_id: str = "entity-a", evidence_id: str = "risk-context-evidence-1"
+) -> dict:
+    return {
+        "signal_id": "risk-signal-1",
+        "tenant_id": tenant_id,
+        "subject_kind": "entity",
+        "subject_id": subject_id,
+        "risk_dimension": "relationship",
+        "claim_state": "inferred",
+        "confidence": 0.7,
+        "evidence_refs": [
+            EvidenceRef(
+                id=evidence_id,
+                type="event",
+                source="fraud.detector.relationship",
+            ).model_dump(mode="json")
+        ],
+        "source": "fraud.detector.relationship",
+        "observed_at": "2026-10-22T10:00:00Z",
+        "score": 0.95,
+    }
+
+
+@pytest.mark.asyncio
+async def test_risk_edges_require_exact_shared_risk_context_and_signal_evidence():
+    edge_reader = FakeSocialRiskContextEdgeReader(
+        SocialRiskContextEdgeRead(TENANT, "entity-a", (_risk_context_edge(),), available=True)
+    )
+    signal_reader = FakeSocialRiskSignalReader(
+        {
+            "entity-a": SocialRiskSignalRead(
+                TENANT, "entity-a", (_risk_signal_row(),), available=True
+            )
+        }
+    )
+
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        risk_context_edge_reader=edge_reader,
+        risk_signal_reader=signal_reader,
+    ).project(_request(include_sections=["risk_edges"]), _context())
+
+    section = result.sections[0]
+    assert section.id == "risk_edges"
+    assert section.state == "available"
+    edge = section.content["edges"][0]
+    assert (edge["sourceEntityId"], edge["targetEntityId"]) == ("entity-a", "entity-b")
+    assert edge["associationState"] == "correlated_risk_context"
+    assert edge["riskSignalSupport"][0]["riskDimension"] == "relationship"
+    assert edge["riskSignalSupport"][0]["claimState"] == "inferred"
+    assert edge["riskScore"] is None
+    assert edge["riskPolicyEvaluation"] == "unknown"
+    assert edge["freshness"] == "unknown"
+    assert edge["causalRiskPropagationEstablished"] is False
+    assert edge["socialContagionEstablished"] is False
+    assert edge["trustEstablished"] is False
+    evidence_ids = {ref.id for ref in edge["evidenceRefs"]}
+    assert {"risk-context-edge-a-b", "risk-context-evidence-1", "risk-signal-1"} <= evidence_ids
+    assert len(result.claims) == 1
+    assert result.claims[0].claimState == EpistemicStatus.CORRELATED
+    assert "does not establish" in result.claims[0].claims[0]
+    assert signal_reader.calls == [(TENANT, "entity-a"), (TENANT, "entity-b")]
+
+
+@pytest.mark.asyncio
+async def test_risk_edges_do_not_join_unrelated_risk_signal_evidence():
+    edge_reader = FakeSocialRiskContextEdgeReader(
+        SocialRiskContextEdgeRead(TENANT, "entity-a", (_risk_context_edge(),), available=True)
+    )
+    signal_reader = FakeSocialRiskSignalReader(
+        {
+            "entity-a": SocialRiskSignalRead(
+                TENANT,
+                "entity-a",
+                (_risk_signal_row(evidence_id="other-risk-evidence"),),
+                available=True,
+            )
+        }
+    )
+
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        risk_context_edge_reader=edge_reader,
+        risk_signal_reader=signal_reader,
+    ).project(_request(include_sections=["risk_edges"]), _context())
+
+    section = result.sections[0]
+    assert section.state == "unknown"
+    assert section.content["edges"] == []
+    assert section.warnings == ["no_risk_signal_evidence_linked_to_registered_risk_context_edge"]
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_risk_edges_reject_cross_tenant_signal_even_when_evidence_matches():
+    edge_reader = FakeSocialRiskContextEdgeReader(
+        SocialRiskContextEdgeRead(TENANT, "entity-a", (_risk_context_edge(),), available=True)
+    )
+    signal_reader = FakeSocialRiskSignalReader(
+        {
+            "entity-a": SocialRiskSignalRead(
+                "tenant-other",
+                "entity-a",
+                (_risk_signal_row(tenant_id="tenant-other"),),
+                available=True,
+            )
+        }
+    )
+
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        risk_context_edge_reader=edge_reader,
+        risk_signal_reader=signal_reader,
+    ).project(_request(include_sections=["risk_edges"]), _context())
+
+    section = result.sections[0]
+    assert section.state == "degraded"
+    assert section.content["edges"] == []
+    assert "canonical_risk_signal_scope_mismatch" in section.warnings
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_risk_edges_are_not_read_when_slot_is_not_requested():
+    edge_reader = FakeSocialRiskContextEdgeReader(
+        SocialRiskContextEdgeRead(TENANT, "entity-a", (_risk_context_edge(),), available=True)
+    )
+    signal_reader = FakeSocialRiskSignalReader({})
+
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=_allow_consent,
+        risk_context_edge_reader=edge_reader,
+        risk_signal_reader=signal_reader,
+    ).project(_request(include_sections=["findings"]), _context())
+
+    assert [section.id for section in result.sections] == ["findings"]
+    assert edge_reader.calls == []
+    assert signal_reader.calls == []
+
+
+@pytest.mark.asyncio
+async def test_risk_edges_require_consent_for_neighbor_before_risk_read():
+    edge_reader = FakeSocialRiskContextEdgeReader(
+        SocialRiskContextEdgeRead(TENANT, "entity-a", (_risk_context_edge(),), available=True)
+    )
+    signal_reader = FakeSocialRiskSignalReader({})
+
+    async def deny_neighbor(tenant_id: str, subject_id: str, anonymous_id, purpose: str):
+        return subject_id != "entity-b", "consent_receipt_missing"
+
+    result = await Social360Provider(
+        source=FakeSocialSource(),
+        consent_reader=deny_neighbor,
+        risk_context_edge_reader=edge_reader,
+        risk_signal_reader=signal_reader,
+    ).project(_request(include_sections=["risk_edges"]), _context())
+
+    section = result.sections[0]
+    assert section.state == "degraded"
+    assert section.content["edges"] == []
+    assert section.warnings == ["social_risk_edge_endpoint_consent_restricted"]
+    assert signal_reader.calls == []
+    assert result.claims == []
+
+
+@pytest.mark.asyncio
+async def test_repository_social_risk_edge_reader_filters_tenant_and_requires_graph_evidence():
+    from shared.graph.graph import Edge, Vertex
+
+    class Graph:
+        async def get_vertex_for_tenant(self, tenant_id: str, vertex_id: str):
+            assert tenant_id == TENANT
+            return Vertex(
+                "ENTITY",
+                vertex_id,
+                {"tenant_id": "tenant-other" if vertex_id == "entity-d" else TENANT},
+            )
+
+        async def get_edges_for_tenant(
+            self, tenant_id: str, *, limit: int, edge_types: list[str], include_revoked: bool
+        ):
+            assert tenant_id == TENANT
+            assert limit == 100
+            assert edge_types == ["SHARES_RISK_CONTEXT_WITH"]
+            assert include_revoked is False
+            return [
+                Edge(
+                    "SHARES_RISK_CONTEXT_WITH",
+                    "entity-a",
+                    "entity-b",
+                    {
+                        "tenant_id": TENANT,
+                        "relationship_predicate": "SHARES_RISK_CONTEXT_WITH",
+                        "idempotency_key": "risk-context-edge-a-b",
+                        "evidence_refs": ["risk-context-evidence-1"],
+                        "observed_at": "2026-10-22T10:00:00Z",
+                    },
+                ),
+                Edge(
+                    "SHARES_RISK_CONTEXT_WITH",
+                    "entity-a",
+                    "entity-c",
+                    {
+                        "tenant_id": "tenant-other",
+                        "relationship_predicate": "SHARES_RISK_CONTEXT_WITH",
+                        "idempotency_key": "foreign-edge",
+                        "evidence_refs": ["foreign-evidence"],
+                    },
+                ),
+                Edge(
+                    "SHARES_RISK_CONTEXT_WITH",
+                    "entity-a",
+                    "entity-d",
+                    {
+                        "tenant_id": TENANT,
+                        "relationship_predicate": "SHARES_RISK_CONTEXT_WITH",
+                        "idempotency_key": "foreign-endpoint-edge",
+                        "evidence_refs": ["foreign-endpoint-evidence"],
+                    },
+                ),
+            ], False
+
+    result = await RepositorySocialRiskContextEdgeReader(graph_client=Graph()).read_edges(
+        TENANT, ProjectionSubject(kind="entity", id="entity-a")
+    )
+
+    assert result.available is True
+    assert len(result.edges) == 1
+    assert result.edges[0].tenant_id == TENANT
+    assert result.edges[0].source_entity_id == "entity-a"
+    assert result.edges[0].target_entity_id == "entity-b"
+    assert {ref.id for ref in result.edges[0].evidence_refs} == {
+        "risk-context-edge-a-b",
+        "risk-context-evidence-1",
+    }
+    assert result.reason_codes == (
+        "canonical_risk_edge_endpoint_scope_unverified",
+        "canonical_risk_edge_scope_mismatch",
+    )

@@ -402,7 +402,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['campaign', 'checkout', 'commerce', 'entity', 'journey', 'offer', 'product', 'sku'],
-    canonicalAuthorities: ['campaign_facts', 'commerce', 'commerce_intent_authority', 'commerce_product_offer_graph', 'payments', 'source_provenance'],
+    canonicalAuthorities: ['campaign_facts', 'commerce', 'commerce_intent_authority', 'commerce_product_offer_graph', 'payments', 'risk_outputs', 'source_provenance'],
     hardDependencies: ['contract_spine'],
     projectionDependencies: [],
     optionalProjectionDependencies: [],
@@ -1316,7 +1316,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['entity', 'event', 'observation', 'signal', 'source', 'stream'],
-    canonicalAuthorities: ['behavioral_signals', 'campaign_facts', 'campaign_touchpoints', 'events', 'identity', 'observations', 'source_provenance'],
+    canonicalAuthorities: ['behavioral_signals', 'campaign_facts', 'campaign_touchpoints', 'events', 'identity', 'observations', 'risk_outputs', 'source_provenance'],
     hardDependencies: ['contract_spine'],
     projectionDependencies: [],
     optionalProjectionDependencies: [],
@@ -1376,12 +1376,12 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/architecture/blueprints/social360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['agent', 'entity', 'population', 'relationship', 'source'],
-    canonicalAuthorities: ['agent_entities', 'cohort_membership', 'computation', 'evidence', 'graph', 'identity', 'influence_propagation', 'population_definitions', 'relationship_facts', 'relationship_fidelity', 'relationship_predicate_registry', 'social_observations', 'source_facts'],
+    canonicalAuthorities: ['agent_entities', 'cohort_membership', 'computation', 'evidence', 'graph', 'identity', 'influence_propagation', 'population_definitions', 'relationship_facts', 'relationship_fidelity', 'relationship_predicate_registry', 'risk_outputs', 'social_observations', 'source_facts'],
     hardDependencies: ['relationship_fidelity', 'temporal_kernel', 'upr'],
     projectionDependencies: ['profile360', 'relationship360'],
     optionalProjectionDependencies: [],
     inputRefs: ['EntityRef', 'EvidenceRef', 'GraphSnapshotRef', 'PageRequest', 'RelationshipRef', 'TimeRangeFilter'],
-    outputSections: ['evidence', 'findings', 'influence', 'interactions', 'paths', 'propagation', 'state', 'summary', 'syndicates', 'timeline'],
+    outputSections: ['evidence', 'findings', 'influence', 'interactions', 'paths', 'propagation', 'risk_edges', 'state', 'summary', 'syndicates', 'timeline'],
     supportedTemporalModes: ['as_of', 'relative', 'window'],
     surfaceIds: ['profile360', 'social360'],
     capabilityKeys: ['social360.explore', 'social360.read'],
@@ -1850,8 +1850,8 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
     directProviderBindings: [
       {
         bindingStatus: 'runtime_wired',
-        canonicalAuthorityRefs: ['entities', 'entity_registry', 'graph', 'identity', 'risk_outputs'],
-        domainSlotIds: ['account_summary', 'agents', 'members', 'profiles', 'risk'],
+        canonicalAuthorityRefs: ['entities', 'entity_registry', 'graph', 'identity', 'journeys', 'risk_outputs'],
+        domainSlotIds: ['account_summary', 'agents', 'journeys', 'members', 'profiles', 'risk'],
         implementationRef: 'services/api/identity/account360_provider.py',
         providerClass: 'Account360Provider',
         providerKind: 'surface_frame_provider',
@@ -1969,12 +1969,12 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
-        canonicalAuthorityRefs: ['journeys'],
-        description: 'Journeys directly linked to the account by a canonical relationship.',
+        canonicalAuthorityRefs: ['entity_registry', 'graph', 'journeys'],
+        description: 'Current human member journey participation joined through exact MEMBER_OF graph evidence and independently policy-approved Profile360 journey slots.',
         id: 'journeys',
+        partialImplementationReason: 'Current journey participation is joined through exact observed human membership and per-member Profile360 policy; historical membership, roster completeness, direct account journey ownership, and a freshness SLA remain unknown.',
         projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'account_journey_membership_authority_not_joined'
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['entity_registry', 'graph'],
@@ -2806,9 +2806,16 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         canonicalAuthorityRefs: ['risk_outputs'],
         description: 'Required commerce360 slot: risk.',
         id: 'risk',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'commerce_risk_subject_join_not_available'
+        partialImplementationReason: 'Current RiskSignal and RiskAssessment rows join only after exact tenant-scoped canonical product or offer resolution; historical coverage, freshness, policy, and causality remain unknown.',
+        projectionBindings: [
+          {
+            projectionId: 'commerce360',
+            role: 'primary',
+            subjectKinds: ['offer', 'product'],
+            sectionIds: ['risk']
+          }
+        ],
+        requirement: 'required'
       },
       {
         id: 'value',
@@ -5300,9 +5307,16 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         canonicalAuthorityRefs: ['risk_outputs'],
         description: 'Required signals360 slot: risk flags.',
         id: 'risk_flags',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'canonical_signal_risk_join_not_available'
+        partialImplementationReason: 'Exact tenant and typed-subject RiskSignal records are projected as partial observations; producer coverage, assessment history, policy, freshness, and causality remain unknown.',
+        projectionBindings: [
+          {
+            projectionId: 'signals360',
+            role: 'primary',
+            subjectKinds: ['event', 'observation', 'signal', 'source', 'stream'],
+            sectionIds: ['risk_flags']
+          }
+        ],
+        requirement: 'required'
       },
       {
         id: 'signal_summary',
@@ -5542,12 +5556,19 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
-        canonicalAuthorityRefs: ['graph', 'risk_outputs'],
+        canonicalAuthorityRefs: ['graph', 'relationship_facts', 'risk_outputs'],
         description: 'Policy governed risk relationship edges.',
         id: 'risk_edges',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'social_risk_edge_derivation_not_connected'
+        partialImplementationReason: 'Only evidence-linked current SHARES_RISK_CONTEXT_WITH edges are projected as correlated context; policy, freshness, trust, propagation, contagion, and causality remain unestablished.',
+        projectionBindings: [
+          {
+            projectionId: 'social360',
+            role: 'primary',
+            subjectKinds: ['entity', 'relationship'],
+            sectionIds: ['risk_edges']
+          }
+        ],
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['risk_outputs', 'social_observations'],

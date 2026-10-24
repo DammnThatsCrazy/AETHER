@@ -485,7 +485,8 @@
         "relationship_fidelity",
         "relationship_predicate_registry",
         "social_observations",
-        "source_facts"
+        "source_facts",
+        "risk_outputs"
       ],
       "hardDependencies": [
         "upr",
@@ -515,7 +516,8 @@
         "paths",
         "influence",
         "propagation",
-        "syndicates"
+        "syndicates",
+        "risk_edges"
       ],
       "supportedTemporalModes": [
         "window",
@@ -2427,7 +2429,8 @@
         "events",
         "identity",
         "observations",
-        "source_provenance"
+        "source_provenance",
+        "risk_outputs"
       ],
       "hardDependencies": [
         "contract_spine"
@@ -2636,7 +2639,8 @@
         "campaign_facts",
         "source_provenance",
         "commerce_product_offer_graph",
-        "commerce_intent_authority"
+        "commerce_intent_authority",
+        "risk_outputs"
       ],
       "hardDependencies": [
         "contract_spine"
@@ -7701,11 +7705,24 @@
           "requirement": "required",
           "description": "Policy governed risk relationship edges.",
           "canonicalAuthorityRefs": [
-            "risk_outputs",
-            "graph"
+            "graph",
+            "relationship_facts",
+            "risk_outputs"
           ],
-          "projectionBindings": [],
-          "unboundReason": "social_risk_edge_derivation_not_connected"
+          "projectionBindings": [
+            {
+              "projectionId": "social360",
+              "role": "primary",
+              "subjectKinds": [
+                "entity",
+                "relationship"
+              ],
+              "sectionIds": [
+                "risk_edges"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Only evidence-linked current SHARES_RISK_CONTEXT_WITH edges are projected as correlated context; policy, freshness, trust, propagation, contagion, and causality remain unestablished."
         },
         {
           "id": "evidence_trace",
@@ -8629,8 +8646,23 @@
           "canonicalAuthorityRefs": [
             "risk_outputs"
           ],
-          "projectionBindings": [],
-          "unboundReason": "canonical_signal_risk_join_not_available"
+          "projectionBindings": [
+            {
+              "projectionId": "signals360",
+              "role": "primary",
+              "subjectKinds": [
+                "event",
+                "observation",
+                "signal",
+                "source",
+                "stream"
+              ],
+              "sectionIds": [
+                "risk_flags"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Exact tenant and typed-subject RiskSignal records are projected as partial observations; producer coverage, assessment history, policy, freshness, and causality remain unknown."
         },
         {
           "id": "freshness",
@@ -8853,12 +8885,14 @@
         {
           "id": "journeys",
           "requirement": "required",
-          "description": "Journeys directly linked to the account by a canonical relationship.",
+          "description": "Current human member journey participation joined through exact MEMBER_OF graph evidence and independently policy-approved Profile360 journey slots.",
           "canonicalAuthorityRefs": [
+            "graph",
+            "entity_registry",
             "journeys"
           ],
           "projectionBindings": [],
-          "unboundReason": "account_journey_membership_authority_not_joined"
+          "partialImplementationReason": "Current journey participation is joined through exact observed human membership and per-member Profile360 policy; historical membership, roster completeness, direct account journey ownership, and a freshness SLA remain unknown."
         },
         {
           "id": "communications",
@@ -9086,7 +9120,8 @@
             "members",
             "agents",
             "profiles",
-            "risk"
+            "risk",
+            "journeys"
           ],
           "implementationRef": "services/api/identity/account360_provider.py",
           "runtimeBindingRef": "services/api/shared/intelligence_projections/frame_runtime.py",
@@ -9095,7 +9130,8 @@
             "entity_registry",
             "graph",
             "identity",
-            "risk_outputs"
+            "risk_outputs",
+            "journeys"
           ]
         }
       ],
@@ -10531,8 +10567,20 @@
           "canonicalAuthorityRefs": [
             "risk_outputs"
           ],
-          "projectionBindings": [],
-          "unboundReason": "commerce_risk_subject_join_not_available"
+          "projectionBindings": [
+            {
+              "projectionId": "commerce360",
+              "role": "primary",
+              "subjectKinds": [
+                "product",
+                "offer"
+              ],
+              "sectionIds": [
+                "risk"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Current RiskSignal and RiskAssessment rows join only after exact tenant-scoped canonical product or offer resolution; historical coverage, freshness, policy, and causality remain unknown."
         },
         {
           "id": "evidence_trace",

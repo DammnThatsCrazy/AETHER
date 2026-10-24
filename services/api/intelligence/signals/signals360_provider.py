@@ -1,11 +1,12 @@
-"""Read-only Signals360 projection over the tenant's derived signal records.
+"""Read-only Signals360 projection over exact tenant-scoped authorities.
 
 The current ``behavioral_signals`` repository stores translator-produced
 behavior-profile signals, not the canonical event/observation stream described
-by the Signals360 blueprint. This provider therefore projects only the exact
-entity-scoped signal summary that repository can prove. The other SSOT slots
-are returned explicitly as unknown until their canonical intake authorities
-and exact-scope joins are wired.
+by the Signals360 blueprint. This provider keeps that entity summary separate
+from exact SDK observation metadata, identity/campaign links, and typed
+RiskSignal records joined on their own canonical tenant and subject keys. The
+remaining SSOT slots stay unknown until their intake authorities and exact-
+scope joins are available.
 
 Signal explanations and raw evidence-reference strings are intentionally
 omitted: existing translators use those fields for model features as well as
@@ -53,7 +54,9 @@ OUTPUT_SECTIONS: tuple[str, ...] = (
 
 _MAX_SIGNAL_RECORDS = 100
 _MAX_SIGNAL_CAMPAIGN_TOUCHPOINTS = 100
+_MAX_RISK_SIGNALS = 100
 _SUMMARY_SOURCE = "repositories.repos.SignalRepository:behavioral_signals"
+_RISK_SUBJECT_KINDS = frozenset({"event", "observation", "signal", "source", "stream"})
 
 
 @dataclass(frozen=True)
@@ -119,6 +122,19 @@ class CampaignLinksRead:
     reason: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class RiskFlagsRead:
+    """Bounded exact-subject read of canonical RiskSignal records."""
+
+    tenant_id: str
+    subject_kind: str
+    subject_id: str
+    records: tuple[dict[str, Any], ...]
+    available: bool
+    complete: bool
+    reason: Optional[str] = None
+
+
 def _linked_read(
     tenant_id: str,
     subject_kind: str,
@@ -179,6 +195,10 @@ class Signal360Source(Protocol):
     async def campaign_links(
         self, *, tenant_id: str, subject_kind: str, subject_id: str
     ) -> CampaignLinksRead: ...
+
+    async def risk_signals_for_subject(
+        self, *, tenant_id: str, subject_kind: str, subject_id: str, limit: int
+    ) -> RiskFlagsRead: ...
 
 
 class RepositorySignal360Source:
@@ -523,6 +543,92 @@ class RepositorySignal360Source:
             available=True,
             complete=complete,
             reason=reason,
+        )
+
+    async def risk_signals_for_subject(
+        self, *, tenant_id: str, subject_kind: str, subject_id: str, limit: int
+    ) -> RiskFlagsRead:
+        """Read only RiskSignals whose persisted tenant and typed subject match.
+
+        RiskSignals are observations, not a complete risk assessment. This
+        adapter deliberately does not follow identity aliases, evidence IDs,
+        or neighboring graph subjects to find related risk records.
+        """
+        if (
+            not _safe_identifier(tenant_id)
+            or not _safe_identifier(subject_id)
+            or subject_kind not in _RISK_SUBJECT_KINDS
+        ):
+            return RiskFlagsRead(
+                tenant_id,
+                subject_kind,
+                subject_id,
+                (),
+                False,
+                False,
+                "exact_risk_subject_scope_required",
+            )
+        bounded_limit = min(max(int(limit), 1), _MAX_RISK_SIGNALS)
+        try:
+            from intelligence.risk360.store import RiskSignalRepository
+
+            rows = await RiskSignalRepository().list_by_subject(
+                tenant_id,
+                subject_kind,
+                subject_id,
+                limit=bounded_limit + 1,
+            )
+        except Exception:  # noqa: BLE001 - authority diagnostics stay private
+            return RiskFlagsRead(
+                tenant_id,
+                subject_kind,
+                subject_id,
+                (),
+                False,
+                False,
+                "risk_signal_repository_unavailable",
+            )
+
+        if not isinstance(rows, list):
+            return RiskFlagsRead(
+                tenant_id,
+                subject_kind,
+                subject_id,
+                (),
+                False,
+                False,
+                "risk_signal_read_invalid",
+            )
+        complete = len(rows) <= bounded_limit
+        scoped: list[dict[str, Any]] = []
+        invalid_scope = False
+        for row in rows[:bounded_limit]:
+            if (
+                not isinstance(row, dict)
+                or row.get("tenant_id") != tenant_id
+                or row.get("subject_kind") != subject_kind
+                or row.get("subject_id") != subject_id
+            ):
+                invalid_scope = True
+                continue
+            scoped.append(row)
+        if invalid_scope:
+            complete = False
+        reason = (
+            "risk_signal_read_truncated"
+            if len(rows) > bounded_limit
+            else "risk_signal_subject_scope_mismatch"
+            if invalid_scope
+            else None
+        )
+        return RiskFlagsRead(
+            tenant_id,
+            subject_kind,
+            subject_id,
+            tuple(scoped),
+            True,
+            complete,
+            reason,
         )
 
     async def _linked_signal_entity(
@@ -923,6 +1029,53 @@ class Signals360Provider(IntelligenceProjectionProvider):
                         reason="campaign_touchpoint_authority_unavailable",
                     )
 
+        risk_flags_read: Optional[RiskFlagsRead] = None
+        risk_flags_skip_reason: Optional[str] = (
+            None
+            if "risk_flags" in requested_sections
+            else "risk_flags_slot_not_requested"
+        )
+        if "risk_flags" in requested_sections:
+            if request.asOf is not None or request.timeRange is not None:
+                # RiskSignal has an observed_at field, but this repository read
+                # is not a complete bitemporal history or bounded time-window
+                # query. Never apply current risk records to a historical frame.
+                risk_flags_skip_reason = "risk_signal_temporal_filter_not_supported"
+            elif request.subject.kind not in _RISK_SUBJECT_KINDS:
+                risk_flags_skip_reason = "risk_subject_kind_not_supported"
+            else:
+                reader = getattr(self._source, "risk_signals_for_subject", None)
+                if callable(reader):
+                    try:
+                        risk_flags_read = await reader(
+                            tenant_id=tenant_id,
+                            subject_kind=request.subject.kind,
+                            subject_id=request.subject.id,
+                            limit=_MAX_RISK_SIGNALS,
+                        )
+                        if not isinstance(risk_flags_read, RiskFlagsRead):
+                            risk_flags_read = RiskFlagsRead(
+                                tenant_id,
+                                request.subject.kind,
+                                request.subject.id,
+                                (),
+                                False,
+                                False,
+                                "risk_signal_read_invalid",
+                            )
+                    except Exception:  # noqa: BLE001 - authority diagnostics stay private
+                        risk_flags_read = RiskFlagsRead(
+                            tenant_id,
+                            request.subject.kind,
+                            request.subject.id,
+                            (),
+                            False,
+                            False,
+                            "risk_signal_repository_unavailable",
+                        )
+                else:
+                    risk_flags_skip_reason = "canonical_signal_risk_join_not_available"
+
         rows, scope_mismatch = _scoped_rows(
             read.rows if read is not None else (),
             tenant_id=tenant_id,
@@ -1044,6 +1197,15 @@ class Signals360Provider(IntelligenceProjectionProvider):
                 )
                 sections.append(campaign_section)
                 claims.extend(campaign_claims)
+            elif slot_id == "risk_flags":
+                risk_section, risk_claims = _risk_flags_section(
+                    request.subject,
+                    tenant_id=tenant_id,
+                    read=risk_flags_read,
+                    skip_reason=risk_flags_skip_reason,
+                )
+                sections.append(risk_section)
+                claims.extend(risk_claims)
             else:
                 sections.append(_unknown_section(slot_id))
         sections.extend(
@@ -1098,6 +1260,207 @@ def _unknown_section(slot_id: str) -> ProjectionSection:
         # intake authority, so do not advertise the blueprint owner as a live
         # source for the unknown result.
     )
+
+
+def _risk_flags_section(
+    subject: ProjectionSubject,
+    *,
+    tenant_id: str,
+    read: Optional[RiskFlagsRead],
+    skip_reason: Optional[str],
+) -> tuple[ProjectionSection, list[ClaimEnvelope]]:
+    """Render exact-subject canonical RiskSignals without inferring coverage.
+
+    RiskSignals are atomic detector records. This section does not join the
+    Risk360 aggregate assessment, infer that the source event caused a risk,
+    or treat an empty subject query as evidence that the subject is risk-free.
+    """
+    scope_mismatch = bool(
+        read is not None
+        and (
+            read.tenant_id != tenant_id
+            or read.subject_kind != subject.kind
+            or read.subject_id != subject.id
+        )
+    )
+    records = (
+        read.records
+        if read is not None and isinstance(read.records, (tuple, list))
+        else ()
+    )
+    invalid_read_shape = read is not None and not isinstance(read.records, (tuple, list))
+    read_truncated = len(records) > _MAX_RISK_SIGNALS
+    read_complete = bool(
+        read is not None and read.complete and not read_truncated and not invalid_read_shape
+    )
+    reason = (
+        "risk_signal_read_scope_mismatch"
+        if scope_mismatch
+        else "risk_signal_read_invalid"
+        if invalid_read_shape
+        else _safe_reason_code(read.reason)
+        if read is not None
+        else _safe_reason_code(skip_reason)
+        if skip_reason is not None
+        else "canonical_signal_risk_join_not_available"
+    )
+    parsed_signals: list[Any] = []
+    signal_rows: list[dict[str, Any]] = []
+    invalid_record = False
+    if read is not None and not scope_mismatch and not invalid_read_shape:
+        # Import lazily so Signals360 keeps the risk authority as a read
+        # dependency and does not create a module-level provider cycle.
+        from intelligence.risk360.contracts import RiskSignal
+
+        for raw in records[:_MAX_RISK_SIGNALS]:
+            try:
+                signal = RiskSignal.model_validate(raw)
+            except Exception:  # noqa: BLE001 - malformed source rows fail closed
+                invalid_record = True
+                continue
+            if (
+                signal.tenant_id != tenant_id
+                or signal.subject_kind != subject.kind
+                or signal.subject_id != subject.id
+                or not signal.evidence_refs
+                or not _safe_identifier(signal.source)
+            ):
+                invalid_record = True
+                continue
+            evidence_refs = [
+                ref for ref in signal.evidence_refs if isinstance(ref, EvidenceRef)
+            ]
+            if not evidence_refs:
+                invalid_record = True
+                continue
+            signal_id = _safe_identifier(signal.signal_id)
+            if signal_id is None:
+                invalid_record = True
+                continue
+            parsed_signals.append(signal)
+            signal_rows.append(
+                {
+                    "signalId": signal_id,
+                    "subject": {
+                        "kind": signal.subject_kind,
+                        "id": signal.subject_id,
+                    },
+                    "riskDimension": signal.risk_dimension,
+                    "claimState": signal.claim_state.value,
+                    "confidence": signal.confidence,
+                    "score": signal.score,
+                    "source": signal.source,
+                    "detectorVersion": signal.detector_version,
+                    "observedAt": _safe_timestamp(signal.observed_at),
+                    "evidenceRefs": [
+                        ref.model_dump(mode="json") for ref in evidence_refs
+                    ],
+                    "causalAttribution": "not_established",
+                }
+            )
+
+    parsed_signals.sort(
+        key=lambda signal: (
+            _safe_timestamp(signal.observed_at) or "",
+            signal.signal_id,
+        )
+    )
+    signal_rows.sort(key=lambda row: (row["observedAt"] or "", row["signalId"]))
+    if read_truncated:
+        reason = reason or "risk_signal_read_truncated"
+    if invalid_record:
+        reason = "risk_signal_rows_invalid_or_missing_evidence"
+    if read is not None and not read.available:
+        reason = reason or "risk_signal_authority_unavailable"
+    elif read is not None and not read_complete:
+        reason = reason or "risk_signal_read_incomplete"
+    if invalid_record:
+        read_complete = False
+    if read is None:
+        state = "unknown"
+    elif scope_mismatch or not read.available or not read_complete or invalid_record:
+        state = "degraded"
+    elif not signal_rows:
+        # No risk producer coverage contract exists for Signals360, so a
+        # complete exact query with no rows cannot prove risk absence.
+        state = "unknown"
+        reason = "no_exact_subject_risk_signals_observed"
+    else:
+        # The linked records are usable, but the lack of producer coverage,
+        # policy, history and freshness still makes the posture partial.
+        state = "degraded"
+
+    claims = [
+        ClaimEnvelope(
+            id=f"signals360.risk_signal.{subject.kind}.{subject.id}.{signal.signal_id}",
+            kind="exact_subject_risk_signal_record",
+            subject=subject,
+            evidenceRefs=list(signal.evidence_refs),
+            claims=[
+                f"Canonical RiskSignal {signal.signal_id} is recorded for this exact tenant-scoped {subject.kind} subject; this records subject association only and does not establish event causality or a complete risk assessment."
+            ],
+            confidence=signal.confidence,
+            claimState=signal.claim_state,
+            domainSlotIds=["risk_flags"],
+        )
+        for signal in parsed_signals
+    ]
+    content: dict[str, Any] = {
+        "tenantId": tenant_id,
+        "subject": {"kind": subject.kind, "id": subject.id},
+        "authority": "intelligence.risk360.store.RiskSignalRepository",
+        "coverage": "exact_tenant_typed_subject_risk_signal_records",
+        "signals": signal_rows,
+        "producerCoverageState": "unknown",
+        "riskHistoryState": "unknown",
+        "assessmentState": "not_joined",
+        "policyState": "not_evaluated_by_signals360_risk_read",
+        "freshnessState": "unknown",
+        "freshnessThresholdSeconds": None,
+        "causalAttributionState": "not_established",
+        "authorityReadAvailable": bool(
+            read is not None
+            and read.available
+            and not scope_mismatch
+            and not invalid_read_shape
+        ),
+        "authorityReadComplete": bool(
+            read is not None
+            and read.available
+            and read_complete
+            and not scope_mismatch
+            and not invalid_record
+        ),
+        "readTruncated": read_truncated,
+        "reasonCode": reason or "exact_subject_risk_signals_observed_with_partial_coverage",
+        "evidenceRefs": [
+            ref.model_dump(mode="json")
+            for signal in parsed_signals
+            for ref in signal.evidence_refs
+        ],
+    }
+    if read is not None and read.available and not scope_mismatch:
+        content["returnedSignalCount"] = len(signal_rows)
+    section = ProjectionSection(
+        id="risk_flags",
+        state=state,
+        title="Exact-subject RiskSignal observations",
+        content=content,
+        warnings=(
+            []
+            if state == "available"
+            else [
+                reason
+                or "risk signals are partial observations; coverage, history, policy, freshness, and causality are unknown"
+            ]
+        )
+        + [
+            "Recorded RiskSignals do not establish complete subject risk coverage or that the subject caused a signal.",
+            "Risk policy and freshness are not evaluated by this exact-record read.",
+        ],
+        canonicalAuthorityRefs=["risk_outputs"] if read is not None else [],
+    )
+    return section, claims
 
 
 def _classification_section(
@@ -2001,6 +2364,13 @@ def _safe_reason(value: Any) -> Optional[str]:
     return _safe_token(value)
 
 
+def _safe_reason_code(value: Any) -> Optional[str]:
+    token = _safe_identifier(value)
+    if token is None or len(token) > 128:
+        return None
+    return token if all(char.isalnum() or char in "._:-_" for char in token) else None
+
+
 def _confidence(value: Any) -> Optional[float]:
     if isinstance(value, bool):
         return None
@@ -2041,6 +2411,7 @@ def register_provider(registry: ProviderRegistry) -> None:
 __all__ = [
     "OUTPUT_SECTIONS",
     "PROJECTION_ID",
+    "RiskFlagsRead",
     "RepositorySignal360Source",
     "Signals360Provider",
     "Signal360Source",

@@ -18,6 +18,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 from graph.operational_intelligence.models import EvidenceRef  # noqa: E402
 from identity.account360_provider import (  # noqa: E402
     ACCOUNT_AGENTS_SLOT,
+    ACCOUNT_JOURNEYS_SLOT,
     ACCOUNT_MEMBERS_SLOT,
     ACCOUNT_PROFILES_SLOT,
     ACCOUNT_RISK_SLOT,
@@ -194,6 +195,77 @@ def _member_risk_frame(
         [_risk_result(tenant_id=tenant_id, subject=subject, risk_id=f"risk-{member.entity_id}")],
         frame_policy=Experience360PolicyDisposition(state=frame_policy_state),
         policy_by_slot={"risk_summary": disposition},
+    )
+
+
+def _member_journey_frame(
+    member: AccountMember,
+    *,
+    tenant_id: str = TENANT_ID,
+    policy_state: str = "allowed",
+) -> Experience360Frame:
+    evidence = EvidenceRef(
+        id=f"journey-version-{member.entity_id}",
+        type="document",
+        source="journey_versions",
+        observedAt="2026-10-17T09:40:00Z",
+    )
+    subject = ProjectionSubject(kind="entity", id=member.entity_id)
+    request = Experience360FrameRequest(
+        surfaceId="profile360",
+        tenantId=tenant_id,
+        subject=subject,
+        includeEvidence=True,
+        requestedSlotIds=["journey_participation"],
+    )
+    result = ProjectionResult(
+        projectionId="profile360",
+        tenantId=tenant_id,
+        contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+        sections=[
+            ProjectionSection(
+                id="journeys",
+                state="available",
+                content={
+                    "currentOnly": True,
+                    "complete": True,
+                    "count": 1,
+                    "items": [
+                        {
+                            "journeyId": f"journey-{member.entity_id}",
+                            "versionId": evidence.id,
+                            "journeyState": "open",
+                            "computedAt": evidence.observedAt,
+                            "evidenceRef": evidence.model_dump(
+                                mode="json", by_alias=True
+                            ),
+                        }
+                    ],
+                },
+                canonicalAuthorityRefs=["journeys"],
+            )
+        ],
+        claims=[
+            ClaimEnvelope(
+                id=f"profile360.journey.{evidence.id}",
+                kind="current_profile_journey_version",
+                subject=subject,
+                evidenceRefs=[evidence],
+                claims=["A current tenant-scoped journey version records this exact profile ID."],
+                claimState="observed",
+                domainSlotIds=["journey_participation"],
+            )
+        ],
+        dependencyState=[],
+        generatedAt="2026-10-17T10:01:00Z",
+        degradedReasons=[],
+    )
+    disposition = Experience360PolicyDisposition(state=policy_state)
+    return compose_experience360_frame(
+        request,
+        [result],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot={"journey_participation": disposition},
     )
 
 
@@ -1711,3 +1783,119 @@ async def test_account_risk_result_without_evidenced_claims_remains_unknown():
     assert slot.content is None
     assert slot.evidenceRefs == []
     assert "account_risk_evidence_missing" in slot.reasonCodes
+
+
+@pytest.mark.asyncio
+async def test_account_journeys_join_exact_human_member_frames_with_graph_evidence():
+    human = _account_member("member-journey-human", "human", "membership-human")
+    agent = _account_member("member-journey-agent", "agent", "membership-agent")
+    source = _MembersSource(
+        AccountIdentityRead(
+            "resolved",
+            evidence_refs=(IDENTITY_EVIDENCE,),
+            entity_type="organization",
+            tenant_id=TENANT_ID,
+            entity_id=SUBJECT.id,
+        ),
+        AccountMembersRead(
+            "degraded",
+            TENANT_ID,
+            SUBJECT.id,
+            members=(human, agent),
+            reason_codes=("account_member_edge_completeness_unproven",),
+            source_as_of="2026-10-17T09:50:00Z",
+        ),
+    )
+    reader_calls: list[str] = []
+
+    async def read_member_journey(member, _request):
+        reader_calls.append(member.entity_id)
+        return _member_journey_frame(member)
+
+    frame = await Account360Provider(source).compose(
+        _request(requested_slot_ids=[ACCOUNT_JOURNEYS_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=_allowed_slots(),
+        member_journey_reader=read_member_journey,
+    )
+
+    slot = next(item for item in frame.slots if item.id == ACCOUNT_JOURNEYS_SLOT)
+    assert source.member_calls == [(TENANT_ID, SUBJECT.id)]
+    assert reader_calls == [human.entity_id]
+    assert slot.state == "degraded"
+    assert slot.content["association"] == "current_member_to_current_journey_participation"
+    assert [item["member"]["id"] for item in slot.content["journeys"]] == [human.entity_id]
+    assert slot.content["journeys"][0]["journeys"][0]["journeyId"] == "journey-member-journey-human"
+    assert {ref.id for ref in slot.evidenceRefs} == {
+        "membership-human",
+        human.entity_id,
+        f"journey-version-{human.entity_id}",
+    }
+    assert "account_member_journey_membership_temporal_scope_unproven" in slot.reasonCodes
+    assert "account_member_journey_roster_completeness_unknown" in slot.reasonCodes
+    assert slot.freshness.state == "unknown"
+    assert "member-journey-agent" not in str(slot.content)
+
+
+@pytest.mark.asyncio
+async def test_account_journeys_withheld_when_nested_profile_policy_denies():
+    member = _account_member("member-journey-denied", "human", "membership-denied")
+    source = _MembersSource(
+        AccountIdentityRead(
+            "resolved",
+            evidence_refs=(IDENTITY_EVIDENCE,),
+            entity_type="organization",
+        ),
+        AccountMembersRead("degraded", TENANT_ID, SUBJECT.id, members=(member,)),
+    )
+
+    async def read_member_journey(member, _request):
+        return _member_journey_frame(member, policy_state="denied")
+
+    frame = await Account360Provider(source).compose(
+        _request(requested_slot_ids=[ACCOUNT_JOURNEYS_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=_allowed_slots(),
+        member_journey_reader=read_member_journey,
+    )
+
+    slot = next(item for item in frame.slots if item.id == ACCOUNT_JOURNEYS_SLOT)
+    assert slot.state == "unknown"
+    assert slot.content is None
+    assert slot.evidenceRefs == []
+    assert "account_member_journey_profile_policy_withheld_or_unknown" in slot.reasonCodes
+
+
+@pytest.mark.asyncio
+async def test_account_journeys_policy_denial_skips_membership_and_member_reads():
+    source = _MembersSource(
+        AccountIdentityRead(
+            "resolved",
+            evidence_refs=(IDENTITY_EVIDENCE,),
+            entity_type="organization",
+        ),
+        AccountMembersRead("degraded", TENANT_ID, SUBJECT.id),
+    )
+    reader_calls: list[str] = []
+
+    async def read_member_journey(member, _request):
+        reader_calls.append(member.entity_id)
+        raise AssertionError("denied Account360 journeys slot must not read members")
+
+    policy = _allowed_slots()
+    policy[ACCOUNT_JOURNEYS_SLOT] = Experience360PolicyDisposition(state="denied")
+    frame = await Account360Provider(source).compose(
+        _request(requested_slot_ids=[ACCOUNT_JOURNEYS_SLOT]),
+        [],
+        frame_policy=Experience360PolicyDisposition(state="allowed"),
+        policy_by_slot=policy,
+        member_journey_reader=read_member_journey,
+    )
+
+    slot = next(item for item in frame.slots if item.id == ACCOUNT_JOURNEYS_SLOT)
+    assert source.member_calls == []
+    assert reader_calls == []
+    assert slot.policyDisposition.state == "denied"
+    assert slot.content is None

@@ -58,11 +58,14 @@ ACCOUNT_MEMBERS_SLOT = "members"
 ACCOUNT_AGENTS_SLOT = "agents"
 ACCOUNT_PROFILES_SLOT = "profiles"
 ACCOUNT_RISK_SLOT = "risk"
+ACCOUNT_JOURNEYS_SLOT = "journeys"
 _RISK_CONTEXT_PROJECTION_ID = "risk360"
 _MAX_ACCOUNT_MEMBER_EDGES = 10_000
 _MAX_ACCOUNT_MEMBER_LEDGER_ROWS = 100_000
 _MAX_ACCOUNT_MEMBER_PROFILE_FRAMES = 100
 _MAX_ACCOUNT_MEMBER_PROFILE_CONCURRENCY = 4
+_MAX_ACCOUNT_MEMBER_JOURNEY_FRAMES = 100
+_MAX_ACCOUNT_MEMBER_JOURNEY_CONCURRENCY = 4
 _MAX_ACCOUNT_MEMBER_RISK_FRAMES = 100
 _MAX_ACCOUNT_MEMBER_RISK_CONCURRENCY = 4
 # The canonical identity model distinguishes ``account`` from ``organization``;
@@ -261,6 +264,19 @@ class AccountMemberProfilesRead:
 
 
 @dataclass(frozen=True)
+class AccountMemberJourneysRead:
+    """Bounded current journey participation for policy-approved human members."""
+
+    state: str
+    journeys: tuple[dict[str, Any], ...] = ()
+    evidence_refs: tuple[EvidenceRef, ...] = ()
+    provenance: tuple[Experience360ProjectionProvenance, ...] = ()
+    reason_codes: tuple[str, ...] = ()
+    source_as_of: Optional[str] = None
+    truncated: bool = False
+
+
+@dataclass(frozen=True)
 class AccountMemberRisksRead:
     """Bounded, per-member policy-evaluated Risk360 frames."""
 
@@ -274,6 +290,9 @@ class AccountMemberRisksRead:
 
 
 AccountMemberProfileReader = Callable[
+    [AccountMember, Experience360FrameRequest], Awaitable[Experience360Frame]
+]
+AccountMemberJourneyReader = Callable[
     [AccountMember, Experience360FrameRequest], Awaitable[Experience360Frame]
 ]
 AccountMemberRiskReader = Callable[
@@ -739,6 +758,7 @@ class Account360Provider:
             Mapping[str, Experience360ActorAttribution]
         ] = None,
         member_profile_reader: Optional[AccountMemberProfileReader] = None,
+        member_journey_reader: Optional[AccountMemberJourneyReader] = None,
         member_risk_reader: Optional[AccountMemberRiskReader] = None,
         generated_at: Optional[str] = None,
     ) -> Experience360Frame:
@@ -855,6 +875,7 @@ class Account360Provider:
             ACCOUNT_MEMBERS_SLOT,
             ACCOUNT_AGENTS_SLOT,
             ACCOUNT_PROFILES_SLOT,
+            ACCOUNT_JOURNEYS_SLOT,
         } & set(requested_slot_ids)
         risk_policy_allows_members = (
             ACCOUNT_RISK_SLOT in requested_slot_ids
@@ -912,6 +933,34 @@ class Account360Provider:
                     member_profile_reader=member_profile_reader,
                 )
 
+        member_journeys_read: Optional[AccountMemberJourneysRead] = None
+        if (
+            ACCOUNT_JOURNEYS_SLOT in requested_slot_ids
+            and effective_slot_policy[ACCOUNT_JOURNEYS_SLOT].state
+            in {"allowed", "not_applicable"}
+        ):
+            if not request.includeEvidence:
+                member_journeys_read = AccountMemberJourneysRead(
+                    "unknown",
+                    reason_codes=("account_member_journeys_evidence_not_requested",),
+                )
+            elif members_read is None:
+                member_journeys_read = AccountMemberJourneysRead(
+                    "unknown",
+                    reason_codes=("account_member_journey_membership_unavailable",),
+                )
+            elif identity.entity_type != "organization":
+                member_journeys_read = AccountMemberJourneysRead(
+                    "unknown",
+                    reason_codes=("account_member_journey_organization_subject_required",),
+                )
+            else:
+                member_journeys_read = await self._read_member_journeys(
+                    request,
+                    members_read,
+                    member_journey_reader=member_journey_reader,
+                )
+
         risk_read: Optional[AccountRiskRead] = None
         member_risks_read: Optional[AccountMemberRisksRead] = None
         if ACCOUNT_RISK_SLOT in requested_slot_ids:
@@ -963,6 +1012,12 @@ class Account360Provider:
         frame = self._attach_member_profiles_context(
             frame,
             member_profiles_read,
+            include_evidence=request.includeEvidence,
+            requested_slot_ids=requested_slot_ids,
+        )
+        frame = self._attach_member_journeys_context(
+            frame,
+            member_journeys_read,
             include_evidence=request.includeEvidence,
             requested_slot_ids=requested_slot_ids,
         )
@@ -1315,6 +1370,248 @@ class Account360Provider:
         return AccountMemberProfilesRead(
             "degraded",
             profiles=tuple(profile_entries),
+            evidence_refs=tuple(_unique_evidence_refs(evidence_refs)),
+            provenance=tuple(_unique_provenance(provenance)),
+            reason_codes=tuple(sorted(reasons)),
+            source_as_of=members_read.source_as_of,
+            truncated=fanout_truncated,
+        )
+
+    @staticmethod
+    async def _read_member_journeys(
+        request: Experience360FrameRequest,
+        members_read: AccountMembersRead,
+        *,
+        member_journey_reader: Optional[AccountMemberJourneyReader],
+    ) -> AccountMemberJourneysRead:
+        """Join current member journeys through independently governed Profile360.
+
+        This is a bounded path over exact current MEMBER_OF evidence and exact
+        human Profile360 journey-participation frames. It does not assert that
+        the member belonged to the account when an older journey occurred, and
+        it never expands journeys for agents or other entity kinds.
+        """
+
+        if request.asOf is not None or request.timeRange is not None:
+            return AccountMemberJourneysRead(
+                "unknown",
+                reason_codes=("account_member_journey_valid_time_unavailable",),
+                source_as_of=members_read.source_as_of,
+            )
+        if member_journey_reader is None:
+            return AccountMemberJourneysRead(
+                "unknown",
+                reason_codes=("account_member_journey_reader_unavailable",),
+                source_as_of=members_read.source_as_of,
+            )
+        if members_read.state not in {"degraded", "truncated"}:
+            state = (
+                members_read.state
+                if members_read.state in {"unavailable", "conflicted", "truncated"}
+                else "unknown"
+            )
+            return AccountMemberJourneysRead(
+                state,
+                reason_codes=(
+                    *members_read.reason_codes,
+                    "account_member_journey_membership_scope_not_usable",
+                ),
+                source_as_of=members_read.source_as_of,
+            )
+
+        human_members = sorted(
+            (member for member in members_read.members if member.entity_type == "human"),
+            key=lambda item: item.entity_id,
+        )
+        if not human_members:
+            return AccountMemberJourneysRead(
+                "unknown",
+                reason_codes=(
+                    *members_read.reason_codes,
+                    "account_member_journey_human_members_not_observed",
+                ),
+                source_as_of=members_read.source_as_of,
+            )
+
+        selected_members = human_members[:_MAX_ACCOUNT_MEMBER_JOURNEY_FRAMES]
+        fanout_truncated = len(human_members) > len(selected_members)
+        semaphore = asyncio.Semaphore(_MAX_ACCOUNT_MEMBER_JOURNEY_CONCURRENCY)
+
+        async def read_one(
+            member: AccountMember,
+        ) -> tuple[
+            Optional[dict[str, Any]],
+            tuple[EvidenceRef, ...],
+            tuple[Experience360ProjectionProvenance, ...],
+            Optional[str],
+        ]:
+            async with semaphore:
+                try:
+                    profile_frame = await member_journey_reader(member, request)
+                except Exception:  # noqa: BLE001 - member policy/provider failures are opaque
+                    return None, (), (), "account_member_journey_read_unavailable"
+
+            if (
+                not isinstance(profile_frame, Experience360Frame)
+                or profile_frame.surfaceId != "profile360"
+                or profile_frame.tenantId != request.tenantId
+                or profile_frame.subject.kind != "entity"
+                or profile_frame.subject.id != member.entity_id
+                or profile_frame.contractVersion
+                != INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION
+            ):
+                return None, (), (), "account_member_journey_frame_scope_or_contract_invalid"
+
+            journey_slots = [
+                slot for slot in profile_frame.slots if slot.id == "journey_participation"
+            ]
+            if len(journey_slots) != 1:
+                return None, (), (), "account_member_journey_profile_slot_missing_or_ambiguous"
+            journey_slot = journey_slots[0]
+            if journey_slot.policyDisposition.state not in {"allowed", "not_applicable"}:
+                return None, (), (), "account_member_journey_profile_policy_withheld_or_unknown"
+            slot_content = journey_slot.content
+            section_entries = (
+                slot_content.get("sections") if isinstance(slot_content, dict) else None
+            )
+            journey_sections = [
+                section
+                for section in section_entries or []
+                if isinstance(section, dict)
+                and section.get("projectionId") == "profile360"
+                and section.get("sectionId") == "journeys"
+            ]
+            if len(journey_sections) != 1:
+                return None, (), (), "account_member_journey_profile_section_missing_or_ambiguous"
+            content = journey_sections[0].get("content")
+            if (
+                not isinstance(content, dict)
+                or content.get("currentOnly") is not True
+                or not isinstance(content.get("items"), list)
+            ):
+                return None, (), (), "account_member_journey_profile_content_invalid"
+
+            raw_items = content["items"]
+            if not raw_items:
+                return None, (), (), "account_member_journey_profile_items_not_observed"
+            if len(raw_items) > 100:
+                return None, (), (), "account_member_journey_profile_item_limit_exceeded"
+
+            slot_evidence = {
+                ref.id: ref
+                for ref in [
+                    *journey_slot.evidenceRefs,
+                    *(
+                        evidence_ref
+                        for provenance_line in journey_slot.provenance
+                        for evidence_ref in provenance_line.evidenceRefs
+                    ),
+                ]
+                if isinstance(ref, EvidenceRef)
+            }
+            validated_items: list[dict[str, Any]] = []
+            journey_evidence: list[EvidenceRef] = []
+            for item in raw_items:
+                if not isinstance(item, dict):
+                    return None, (), (), "account_member_journey_profile_item_invalid"
+                journey_id = item.get("journeyId")
+                version_id = item.get("versionId")
+                if (
+                    not isinstance(journey_id, str)
+                    or not journey_id.strip()
+                    or not isinstance(version_id, str)
+                    or not version_id.strip()
+                ):
+                    return None, (), (), "account_member_journey_identity_incomplete"
+                evidence_ref = slot_evidence.get(version_id)
+                if (
+                    evidence_ref is None
+                    or evidence_ref.type != "document"
+                    or evidence_ref.source != "journey_versions"
+                ):
+                    return None, (), (), "account_member_journey_evidence_missing_or_unscoped"
+                journey_evidence.append(evidence_ref)
+                validated_items.append(
+                    {
+                        "journeyId": journey_id,
+                        "versionId": version_id,
+                        "journeyState": (
+                            item.get("journeyState")
+                            if isinstance(item.get("journeyState"), str)
+                            else None
+                        ),
+                        "computedAt": (
+                            item.get("computedAt")
+                            if isinstance(item.get("computedAt"), str)
+                            else None
+                        ),
+                        "evidenceRefId": evidence_ref.id,
+                    }
+                )
+
+            membership_refs = _unique_evidence_refs(
+                [member.membership_evidence_ref, member.entity_evidence_ref]
+            )
+            profile_refs = _unique_evidence_refs(journey_evidence)
+            combined_refs = _unique_evidence_refs([*membership_refs, *profile_refs])
+            if not combined_refs:
+                return None, (), (), "account_member_journey_evidence_missing_or_unscoped"
+            membership_provenance = Experience360ProjectionProvenance(
+                tenantId=request.tenantId,
+                sourceState="degraded",
+                generatedAt=profile_frame.generatedAt,
+                sourceKind="authority",
+                claimOrigin="canonical_authority",
+                evidenceRefs=membership_refs,
+                canonicalAuthorityRefs=["graph", "entity_registry"],
+            )
+            journey_provenance = [
+                line
+                for line in journey_slot.provenance
+                if line.evidenceRefs
+                and any(ref.id in {item.id for item in profile_refs} for ref in line.evidenceRefs)
+            ]
+            return (
+                {
+                    "member": {"kind": "entity", "id": member.entity_id},
+                    "membershipEvidenceRefIds": [ref.id for ref in membership_refs],
+                    "journeys": validated_items,
+                },
+                combined_refs,
+                tuple([membership_provenance, *journey_provenance]),
+                None,
+            )
+
+        results = await asyncio.gather(*(read_one(member) for member in selected_members))
+        journeys: list[dict[str, Any]] = []
+        evidence_refs: list[EvidenceRef] = []
+        provenance: list[Experience360ProjectionProvenance] = []
+        reasons = set(members_read.reason_codes)
+        reasons.add("account_member_journey_membership_temporal_scope_unproven")
+        reasons.add("account_member_journey_roster_completeness_unknown")
+        if fanout_truncated:
+            reasons.add("account_member_journey_fanout_truncated")
+
+        for result, refs, lines, reason in results:
+            if reason is not None:
+                reasons.add(reason)
+                continue
+            if result is None:
+                continue
+            journeys.append(result)
+            evidence_refs.extend(refs)
+            provenance.extend(lines)
+
+        if not journeys:
+            return AccountMemberJourneysRead(
+                "unknown",
+                reason_codes=tuple(sorted(reasons)),
+                source_as_of=members_read.source_as_of,
+                truncated=fanout_truncated,
+            )
+        return AccountMemberJourneysRead(
+            "degraded",
+            journeys=tuple(journeys),
             evidence_refs=tuple(_unique_evidence_refs(evidence_refs)),
             provenance=tuple(_unique_provenance(provenance)),
             reason_codes=tuple(sorted(reasons)),
@@ -1883,6 +2180,122 @@ class Account360Provider:
                 ),
                 "limitations": sorted(set([*slot.limitations, *reasons])),
                 "reasonCodes": sorted(set([*slot.reasonCodes, *reasons])),
+            }
+        )
+        return frame.model_copy(update={"slots": slots})
+
+    @staticmethod
+    def _attach_member_journeys_context(
+        frame: Experience360Frame,
+        journeys_read: Optional[AccountMemberJourneysRead],
+        *,
+        include_evidence: bool,
+        requested_slot_ids: Sequence[str],
+    ) -> Experience360Frame:
+        """Attach current member journey facts without implying account ownership."""
+
+        if ACCOUNT_JOURNEYS_SLOT not in requested_slot_ids:
+            return frame
+        slots = list(frame.slots)
+        journeys_index = next(
+            (index for index, slot in enumerate(slots) if slot.id == ACCOUNT_JOURNEYS_SLOT),
+            None,
+        )
+        if journeys_index is None:
+            return frame
+        slot = slots[journeys_index]
+        if slot.policyDisposition.state not in {"allowed", "not_applicable"}:
+            return frame
+
+        reasons = set(journeys_read.reason_codes if journeys_read is not None else ())
+        if not include_evidence:
+            reasons.add("account_member_journeys_evidence_not_requested")
+        if journeys_read is None:
+            reasons.add("account_member_journey_read_not_requested")
+        if (
+            not include_evidence
+            or journeys_read is None
+            or journeys_read.state != "degraded"
+            or not journeys_read.journeys
+            or not journeys_read.evidence_refs
+            or not journeys_read.provenance
+        ):
+            state = (
+                journeys_read.state
+                if journeys_read is not None
+                and journeys_read.state in {"unavailable", "conflicted", "truncated"}
+                else "unknown"
+            )
+            slots[journeys_index] = slot.model_copy(
+                update={
+                    "state": state,
+                    "content": None,
+                    "claims": [],
+                    "provenance": [],
+                    "evidenceRefs": [],
+                    "freshness": Experience360Freshness(
+                        state="unknown",
+                        sourceAsOf=(journeys_read.source_as_of if journeys_read else None),
+                    ),
+                    "quality": Experience360Quality(
+                        state="unknown", reasonCodes=sorted(reasons)
+                    ),
+                    "limitations": sorted(set([*slot.limitations, *reasons])),
+                    "reasonCodes": sorted(set([*slot.reasonCodes, *reasons])),
+                }
+            )
+            return frame.model_copy(update={"slots": slots})
+
+        evidence_refs = _unique_evidence_refs(
+            [*slot.evidenceRefs, *journeys_read.evidence_refs]
+        )
+        provenance = list(slot.provenance)
+        for item in journeys_read.provenance:
+            if item not in provenance:
+                provenance.append(item)
+        reasons.update(
+            {
+                "account_member_journey_membership_temporal_scope_unproven",
+                "account_member_journey_roster_completeness_unknown",
+                "account_member_journeys_freshness_sla_unconfigured",
+            }
+        )
+        existing_reasons = set(slot.reasonCodes) - {
+            "account_journey_membership_authority_not_joined",
+            "slot_provider_not_connected",
+        }
+        existing_limitations = set(slot.limitations) - {
+            "account_journey_membership_authority_not_joined",
+            "slot_provider_not_connected",
+        }
+        content = {
+            "subject": {"kind": frame.subject.kind, "id": frame.subject.id},
+            "association": "current_member_to_current_journey_participation",
+            "journeys": list(journeys_read.journeys),
+            "coverage": {
+                "state": "partial",
+                "membersReturned": len(journeys_read.journeys),
+                "reason": "account_member_journey_roster_completeness_unknown",
+            },
+        }
+        slots[journeys_index] = slot.model_copy(
+            update={
+                "state": "degraded",
+                "content": content,
+                "claims": [],
+                "provenance": provenance,
+                "evidenceRefs": evidence_refs,
+                "freshness": Experience360Freshness(
+                    state="unknown",
+                    sourceAsOf=journeys_read.source_as_of,
+                ),
+                "quality": Experience360Quality(
+                    state="partial",
+                    evidenceRefs=evidence_refs,
+                    reasonCodes=sorted(reasons),
+                ),
+                "limitations": sorted(existing_limitations | reasons),
+                "reasonCodes": sorted(existing_reasons | reasons),
             }
         )
         return frame.model_copy(update={"slots": slots})
