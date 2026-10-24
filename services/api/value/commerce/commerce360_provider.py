@@ -6,8 +6,10 @@ to an exact campaign activity, profile activity, or journey step reference.
 Product and offer records are read from the durable tenant-scoped catalog
 authority. Exact product/offer catalog records contribute lifecycle evidence to
 the availability/price slot, but do not establish inventory availability or
-offer price. Exposure, intent, cart/checkout, and risk slots stay explicitly
-unknown until their canonical authorities and exact subject joins exist.
+offer price. Explicit intent declarations are read from their own append-only,
+tenant-scoped authority and joined only to canonical product and offer IDs.
+Exposure, cart/checkout, and risk slots stay explicitly unknown until their
+canonical authorities and exact subject joins exist.
 """
 
 from __future__ import annotations
@@ -35,6 +37,10 @@ from value.commerce.product_offer_catalog import (
     CommerceOfferRecord,
     CommerceProductOfferCatalogRepository,
     CommerceProductRecord,
+)
+from value.commerce.commerce_intents import (
+    CommerceIntentRecord,
+    CommerceIntentRepository,
 )
 
 
@@ -89,9 +95,14 @@ _CATALOG_JOIN_BASIS_BY_SUBJECT_KIND: dict[str, str] = {
     "product": "tenant_scoped_canonical_product_id",
     "offer": "tenant_scoped_canonical_offer_product_id",
 }
+_INTENT_JOIN_BASIS_BY_SUBJECT_KIND: dict[str, str] = {
+    "product": "explicit_tenant_scoped_product_intent_reference",
+    "offer": "explicit_tenant_scoped_offer_intent_reference",
+}
 _AVAILABILITY_UNKNOWN = "commerce_inventory_authority_not_connected"
 _OFFER_PRICE_UNKNOWN = "commerce_offer_price_authority_not_connected"
 _AVAILABILITY_PRICE_PARTIAL = "commerce_availability_price_authority_not_connected"
+_MAX_INTENT_RECORDS = 500
 
 
 class CommerceOperationEvidenceSource(Protocol):
@@ -118,6 +129,19 @@ class CommerceProductOfferCatalogEvidenceSource(Protocol):
         as_of: Optional[str],
     ) -> dict[str, Any]:
         """Return catalog evidence for exactly one tenant and subject."""
+
+
+class CommerceIntentEvidenceSource(Protocol):
+    """Narrow read seam for explicit commerce intent declarations."""
+
+    async def read(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        *,
+        as_of: Optional[str],
+    ) -> dict[str, Any]:
+        """Return intent records for exactly one tenant and canonical subject."""
 
 
 class RepositoryCommerceProductOfferCatalogEvidenceSource:
@@ -149,6 +173,7 @@ class RepositoryCommerceProductOfferCatalogEvidenceSource:
                 "sourceState": "unknown",
                 "reason": "commerce_catalog_subject_kind_not_supported",
             }
+
         anchor = _parse_catalog_anchor(as_of)
         if as_of is not None and anchor is None:
             return {
@@ -231,6 +256,131 @@ class RepositoryCommerceProductOfferCatalogEvidenceSource:
                 "product": None,
                 "offers": [],
                 "asOf": as_of,
+            }
+
+
+class RepositoryCommerceIntentEvidenceSource:
+    """Read complete, bounded intent revisions for exact product/offer IDs."""
+
+    def __init__(
+        self,
+        repository: Optional[CommerceIntentRepository] = None,
+        catalog: Optional[CommerceProductOfferCatalogRepository] = None,
+    ) -> None:
+        self._repository = repository or CommerceIntentRepository(catalog=catalog)
+        self._catalog = catalog or CommerceProductOfferCatalogRepository()
+
+    async def read(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+        *,
+        as_of: Optional[str],
+    ) -> dict[str, Any]:
+        scope = {
+            "tenantId": tenant_id,
+            "subjectKind": subject.kind,
+            "subjectId": subject.id,
+        }
+        join_basis = _INTENT_JOIN_BASIS_BY_SUBJECT_KIND.get(subject.kind)
+        if join_basis is None:
+            return {
+                "_scope": scope,
+                "join_basis": "unsupported_intent_subject_kind",
+                "sourceState": "unknown",
+                "reason": "commerce_intent_subject_kind_not_supported",
+                "records": [],
+                "truncated": False,
+                "asOf": as_of,
+                "sourceCompleteness": "unknown",
+                "authorityRefs": [
+                    "commerce_intent_authority",
+                    "commerce_product_offer_graph",
+                    "source_provenance",
+                ],
+            }
+
+        anchor = _parse_catalog_anchor(as_of)
+        if as_of is not None and anchor is None:
+            return {
+                "_scope": scope,
+                "join_basis": join_basis,
+                "sourceState": "unknown",
+                "reason": "commerce_intent_as_of_invalid",
+                "records": [],
+                "truncated": False,
+                "asOf": as_of,
+                "sourceCompleteness": "unknown",
+                "authorityRefs": [
+                    "commerce_intent_authority",
+                    "commerce_product_offer_graph",
+                    "source_provenance",
+                ],
+            }
+
+        try:
+            if subject.kind == "product":
+                canonical_subject = await self._catalog.get_product(
+                    tenant_id, subject.id, as_of=anchor
+                )
+            else:
+                canonical_subject = await self._catalog.get_offer(
+                    tenant_id, subject.id, as_of=anchor
+                )
+            if canonical_subject is None:
+                return {
+                    "_scope": scope,
+                    "join_basis": join_basis,
+                    "sourceState": "missing",
+                    "reason": "commerce_intent_canonical_subject_not_found",
+                    "records": [],
+                    "truncated": False,
+                    "asOf": as_of,
+                    "sourceCompleteness": "complete",
+                    "authorityRefs": [
+                        "commerce_intent_authority",
+                        "commerce_product_offer_graph",
+                        "source_provenance",
+                    ],
+                }
+            records, truncated = await self._repository.list_for_subject(
+                tenant_id,
+                subject.kind,  # type: ignore[arg-type] - guarded by the join-basis map
+                subject.id,
+                as_of=anchor,
+                limit=_MAX_INTENT_RECORDS,
+            )
+            state = "degraded" if truncated else "available" if records else "empty"
+            return {
+                "_scope": scope,
+                "join_basis": join_basis,
+                "sourceState": state,
+                "reason": "commerce_intent_record_list_truncated" if truncated else None,
+                "records": [record.model_dump(mode="json") for record in records],
+                "truncated": truncated,
+                "asOf": as_of,
+                "sourceCompleteness": "partial" if truncated else "complete",
+                "authorityRefs": [
+                    "commerce_intent_authority",
+                    "commerce_product_offer_graph",
+                    "source_provenance",
+                ],
+            }
+        except Exception:  # noqa: BLE001 - a failed authority read is explicit unknown
+            return {
+                "_scope": scope,
+                "join_basis": join_basis,
+                "sourceState": "unknown",
+                "reason": "commerce_intent_authority_unavailable",
+                "records": [],
+                "truncated": False,
+                "asOf": as_of,
+                "sourceCompleteness": "unknown",
+                "authorityRefs": [
+                    "commerce_intent_authority",
+                    "commerce_product_offer_graph",
+                    "source_provenance",
+                ],
             }
 
 
@@ -415,6 +565,24 @@ def _catalog_record_output(
     return output
 
 
+def _intent_record_output(record: CommerceIntentRecord) -> dict[str, Any]:
+    """Render an explicit declaration with actor, time, and exact evidence."""
+    return {
+        "intentId": record.intent_id,
+        "subjectKind": record.subject_kind,
+        "subjectId": record.subject_id,
+        "intentKind": record.intent_kind,
+        "state": record.state,
+        "actor": {"kind": record.actor_kind, "id": record.actor_id},
+        "effectiveAt": record.effective_at.isoformat(),
+        "observedAt": record.observed_at.isoformat(),
+        "sourceProvider": record.source_provider,
+        "sourceRecordId": record.source_record_id,
+        "sourceRevisionId": record.source_revision_id,
+        "evidenceRefs": [ref.model_dump(mode="json") for ref in record.evidence_refs],
+    }
+
+
 def _availability_catalog_record_output(
     record: CommerceProductRecord | CommerceOfferRecord,
     *,
@@ -475,11 +643,13 @@ class Commerce360Provider:
         self,
         source: Optional[CommerceOperationEvidenceSource] = None,
         catalog_source: Optional[CommerceProductOfferCatalogEvidenceSource] = None,
+        intent_source: Optional[CommerceIntentEvidenceSource] = None,
     ) -> None:
         self._source = source if source is not None else RepositoryCommerceOperationEvidenceSource()
         self._catalog_source = catalog_source
         if self._catalog_source is None and source is None:
             self._catalog_source = RepositoryCommerceProductOfferCatalogEvidenceSource()
+        self._intent_source = intent_source or RepositoryCommerceIntentEvidenceSource()
 
     async def project(
         self,
@@ -523,6 +693,7 @@ class Commerce360Provider:
 
         evidence = self._validate_source_result(raw, request)
         section_states = self._section_states(evidence, request.subject.kind, scope_valid)
+
         catalog_raw: dict[str, Any]
         if scope_valid and self._catalog_source is not None:
             try:
@@ -547,14 +718,36 @@ class Commerce360Provider:
             )
         catalog = self._validate_catalog_result(catalog_raw, request, as_of=requested_as_of)
         section_states.update(self._catalog_section_states(catalog, request.subject.kind))
+
+        if scope_valid:
+            try:
+                intent_raw = await self._intent_source.read(
+                    request.tenantId,
+                    request.subject,
+                    as_of=requested_as_of,
+                )
+            except Exception:  # noqa: BLE001 - intent authority outage is explicit unknown
+                intent_raw = self._unknown_intent_result(
+                    request, reason="commerce_intent_authority_unavailable"
+                )
+        else:
+            intent_raw = self._unknown_intent_result(
+                request, reason="commerce_projection_context_scope_mismatch"
+            )
+        intents = self._validate_intent_result(intent_raw, request, as_of=requested_as_of)
+        section_states["intent"] = intents.get("sourceState", "unknown")
+        if intents.get("records") and section_states.get("evidence_trace") in {"empty", "unknown"}:
+            section_states["evidence_trace"] = "available"
+
         sections = self._build_sections(
             request,
             evidence,
             catalog,
+            intents,
             section_states,
             as_of=requested_as_of,
         )
-        claims = self._build_claims(request, evidence, catalog, section_states)
+        claims = self._build_claims(request, evidence, catalog, intents, section_states)
         if request.includeSections is not None:
             include = set(request.includeSections)
             sections = [section for section in sections if section.id in include]
@@ -593,6 +786,169 @@ class Commerce360Provider:
             "reason": reason,
             "product": None,
             "offers": [],
+        }
+
+    @staticmethod
+    def _unknown_intent_result(
+        request: ProjectionRequest,
+        *,
+        reason: str,
+    ) -> dict[str, Any]:
+        return {
+            "_scope": {
+                "tenantId": request.tenantId,
+                "subjectKind": request.subject.kind,
+                "subjectId": request.subject.id,
+            },
+            "join_basis": _INTENT_JOIN_BASIS_BY_SUBJECT_KIND.get(
+                request.subject.kind, "unsupported_intent_subject_kind"
+            ),
+            "sourceState": "unknown",
+            "reason": reason,
+            "records": [],
+            "truncated": False,
+            "asOf": None,
+            "sourceCompleteness": "unknown",
+            "authorityRefs": [
+                "commerce_intent_authority",
+                "commerce_product_offer_graph",
+                "source_provenance",
+            ],
+        }
+
+    def _validate_intent_result(
+        self,
+        raw: Any,
+        request: ProjectionRequest,
+        *,
+        as_of: Optional[str],
+    ) -> dict[str, Any]:
+        expected_scope = {
+            "tenantId": request.tenantId,
+            "subjectKind": request.subject.kind,
+            "subjectId": request.subject.id,
+        }
+        expected_join_basis = _INTENT_JOIN_BASIS_BY_SUBJECT_KIND.get(request.subject.kind)
+        empty: dict[str, Any] = {
+            "sourceState": "unknown",
+            "reason": "commerce_intent_source_scope_mismatch",
+            "records": [],
+            "truncated": False,
+            "sourceCompleteness": "unknown",
+            "authorityRefs": [
+                "commerce_intent_authority",
+                "commerce_product_offer_graph",
+                "source_provenance",
+            ],
+        }
+        if (
+            not isinstance(raw, dict)
+            or raw.get("_scope") != expected_scope
+            or expected_join_basis is None
+            or raw.get("join_basis") != expected_join_basis
+        ):
+            return empty
+
+        state = raw.get("sourceState")
+        if state not in {"available", "empty", "missing", "unknown", "degraded"}:
+            return {**empty, "reason": "commerce_intent_source_state_invalid"}
+        reason = _safe_text(raw.get("reason"), limit=96)
+        raw_records = raw.get("records")
+        invalid_records = 0
+        if not isinstance(raw_records, list):
+            raw_records = []
+            invalid_records += 1
+        source_capped = len(raw_records) > _MAX_INTENT_RECORDS
+        records: list[CommerceIntentRecord] = []
+        seen_intent_ids: set[str] = set()
+        for row in raw_records[:_MAX_INTENT_RECORDS]:
+            try:
+                record = CommerceIntentRecord.model_validate(row)
+            except Exception:  # noqa: BLE001 - malformed provenance fails closed
+                invalid_records += 1
+                continue
+            if (
+                record.tenant_id != request.tenantId
+                or record.subject_kind != request.subject.kind
+                or record.subject_id != request.subject.id
+                or record.intent_id in seen_intent_ids
+            ):
+                invalid_records += 1
+                continue
+            refs = _parse_evidence_refs(
+                [ref.model_dump(mode="json") for ref in record.evidence_refs]
+            )
+            if not any(
+                ref.source == record.source_provider and ref.id == record.source_record_id
+                for ref in refs
+            ):
+                invalid_records += 1
+                continue
+            anchor = _parse_catalog_anchor(as_of)
+            if anchor is None or record.effective_at > anchor or record.observed_at > anchor:
+                invalid_records += 1
+                continue
+            seen_intent_ids.add(record.intent_id)
+            records.append(record)
+
+        if "truncated" in raw and not isinstance(raw.get("truncated"), bool):
+            return {**empty, "reason": "commerce_intent_truncation_state_invalid"}
+        truncated = raw.get("truncated") is True or source_capped
+        if state == "missing" and records:
+            return {**empty, "reason": "commerce_intent_missing_state_contains_records"}
+        if state == "empty" and records:
+            return {**empty, "reason": "commerce_intent_empty_state_contains_records"}
+        if invalid_records or truncated:
+            if state in {"available", "empty", "missing"}:
+                state = "degraded"
+            reason = reason or "commerce_intent_records_invalid_or_truncated"
+        elif state == "available" and not records:
+            state = "empty"
+
+        anchor = _parse_catalog_anchor(as_of)
+        raw_as_of = raw.get("asOf")
+        if state in {"available", "empty", "missing", "degraded"}:
+            source_anchor = _parse_catalog_anchor(raw_as_of)
+            if anchor is None or source_anchor is None or source_anchor != anchor:
+                return {**empty, "reason": "commerce_intent_as_of_scope_mismatch"}
+
+        source_completeness = raw.get("sourceCompleteness")
+        if source_completeness not in {"complete", "partial", "unknown"}:
+            source_completeness = "unknown"
+        if truncated or invalid_records:
+            source_completeness = "partial"
+        elif source_completeness == "partial" and state in {"available", "empty"}:
+            state = "degraded"
+            reason = reason or "commerce_intent_source_completeness_partial"
+        elif (
+            state in {"available", "empty", "missing", "degraded"}
+            and source_completeness == "unknown"
+        ):
+            return {**empty, "reason": "commerce_intent_completeness_not_established"}
+
+        authority_refs = raw.get("authorityRefs")
+        if not isinstance(authority_refs, list) or not all(
+            isinstance(ref, str) and ref for ref in authority_refs
+        ):
+            return {**empty, "reason": "commerce_intent_authority_references_missing"}
+        required_authorities = {
+            "commerce_intent_authority",
+            "commerce_product_offer_graph",
+            "source_provenance",
+        }
+        if not required_authorities.issubset(set(authority_refs)):
+            return {**empty, "reason": "commerce_intent_authority_references_missing"}
+        if state == "unknown":
+            records = []
+        return {
+            "sourceState": state,
+            "reason": reason,
+            "records": records,
+            "truncated": truncated,
+            "sourceCompleteness": source_completeness,
+            "join_basis": expected_join_basis,
+            "asOf": _safe_text(raw_as_of, limit=96),
+            "authorityRefs": authority_refs,
         }
 
     def _validate_catalog_result(
@@ -1074,6 +1430,7 @@ class Commerce360Provider:
         request: ProjectionRequest,
         evidence: dict[str, Any],
         catalog: dict[str, Any],
+        intents: dict[str, Any],
         states: dict[str, str],
         *,
         as_of: Optional[str],
@@ -1221,6 +1578,33 @@ class Commerce360Provider:
                     )
                 )
                 continue
+            elif section_id == "intent":
+                authorities = intents.get(
+                    "authorityRefs",
+                    [
+                        "commerce_intent_authority",
+                        "commerce_product_offer_graph",
+                        "source_provenance",
+                    ],
+                )
+                content = _slot_content(
+                    state=state,
+                    request=request,
+                    reason_codes=reason_codes,
+                    as_of=as_of,
+                    joinBasis=intents.get("join_basis"),
+                    intents=[
+                        _intent_record_output(record) for record in intents.get("records", [])
+                    ],
+                    sourceCompleteness=intents.get("sourceCompleteness", "unknown"),
+                    truncated=intents.get("truncated", False),
+                    freshness={
+                        "state": "unknown",
+                        "reasonCode": _SOURCE_FRESHNESS_UNKNOWN,
+                        "sourceTimestampsPreserved": True,
+                    },
+                    policy=policy,
+                )
             elif section_id == "purchase":
                 authorities = ["commerce", "payments", "source_provenance"]
                 if not facts and state == "empty":
@@ -1285,16 +1669,34 @@ class Commerce360Provider:
                     policy=policy,
                 )
             elif section_id == "evidence_trace":
-                authorities = ["commerce", "payments", "source_provenance"]
-                if not evidence.get("evidence") and state == "empty":
+                authorities = [
+                    "commerce",
+                    "payments",
+                    "commerce_intent_authority",
+                    "source_provenance",
+                ]
+                intent_evidence = [
+                    ref for record in intents.get("records", []) for ref in record.evidence_refs
+                ]
+                merged_evidence = _parse_evidence_refs(
+                    [
+                        *[ref.model_dump(mode="json") for ref in evidence.get("evidence", [])],
+                        *[ref.model_dump(mode="json") for ref in intent_evidence],
+                    ]
+                )
+                if not merged_evidence and state == "empty":
                     reason_codes.append("no_explicit_commerce_source_evidence")
                 content = _slot_content(
                     state=state,
                     request=request,
                     reason_codes=reason_codes,
                     as_of=as_of,
-                    evidence=[ref.model_dump(mode="json") for ref in evidence.get("evidence", [])],
-                    sourceCompleteness=evidence.get("sourceCompleteness", "unknown"),
+                    evidence=[ref.model_dump(mode="json") for ref in merged_evidence],
+                    sourceCompleteness=(
+                        intents.get("sourceCompleteness", "unknown")
+                        if intent_evidence and not evidence.get("evidence")
+                        else evidence.get("sourceCompleteness", "unknown")
+                    ),
                     policy=policy,
                 )
             else:
@@ -1321,11 +1723,14 @@ class Commerce360Provider:
                 continue
 
             if state in {"unknown", "missing", "degraded"}:
-                reason = evidence.get("reason") or (
-                    "commerce_projection_context_scope_mismatch"
-                    if not request.tenantId.strip()
-                    else "commerce_operation_evidence_unavailable"
-                )
+                if section_id == "intent":
+                    reason = intents.get("reason") or _UNKNOWN_SLOT_REASONS["intent"]
+                else:
+                    reason = evidence.get("reason") or (
+                        "commerce_projection_context_scope_mismatch"
+                        if not request.tenantId.strip()
+                        else "commerce_operation_evidence_unavailable"
+                    )
                 reason_codes.append(str(reason))
                 content["reasonCodes"] = reason_codes
             warnings = reason_codes or None
@@ -1346,9 +1751,35 @@ class Commerce360Provider:
         request: ProjectionRequest,
         evidence: dict[str, Any],
         catalog: dict[str, Any],
+        intents: dict[str, Any],
         states: dict[str, str],
     ) -> list[ClaimEnvelope]:
         claims: list[ClaimEnvelope] = []
+        if states.get("intent") in {"available", "degraded"}:
+            for record in intents.get("records", []):
+                refs = _parse_evidence_refs(
+                    [ref.model_dump(mode="json") for ref in record.evidence_refs]
+                )
+                if not refs:
+                    continue
+                claims.append(
+                    ClaimEnvelope(
+                        id=_stable_id(
+                            "commerce.intent",
+                            f"{record.tenant_id}:{record.intent_id}:{record.source_revision_id}",
+                        ),
+                        kind="commerce_intent_declaration",
+                        subject=request.subject,
+                        evidenceRefs=refs,
+                        claims=[
+                            f"actor {record.actor_kind}:{record.actor_id} explicitly declared "
+                            f"{record.intent_kind} intent for canonical {record.subject_kind} "
+                            f"{record.subject_id}; state: {record.state}"
+                        ],
+                        claimState=EpistemicStatus.OBSERVED,
+                        domainSlotIds=["intent", "evidence_trace"],
+                    )
+                )
         if states.get("purchase") in {"available", "degraded"}:
             for fact in evidence.get("facts", []):
                 refs = _parse_evidence_refs(fact.get("evidence"), required_type="transaction")

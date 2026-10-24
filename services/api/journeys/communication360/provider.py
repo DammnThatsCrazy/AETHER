@@ -1015,7 +1015,14 @@ def _communication_required_slot_coverage(
 
     participant_rows = [row for row in fact_rows if row.get("kind") == "participant_binding"]
     participant_refs = _dedupe_refs(
-        [ref for row in participant_rows if (ref := _row_evidence(row)) is not None]
+        [
+            ref
+            for row in participant_rows
+            for ref in [
+                *([_row_evidence(row)] if _row_evidence(row) is not None else []),
+                *_trusted_participant_source_evidence(row),
+            ]
+        ]
     )
     message_endpoint_refs = [
         ref
@@ -1069,7 +1076,14 @@ def _communication_required_slot_coverage(
         )
     ]
     author_refs = _dedupe_refs(
-        [ref for row in author_rows if (ref := _row_evidence(row)) is not None]
+        [
+            ref
+            for row in author_rows
+            for ref in [
+                *([_row_evidence(row)] if _row_evidence(row) is not None else []),
+                *_trusted_participant_source_evidence(row),
+            ]
+        ]
     )
     if scope.kind == "agent" and scope.identity_resolution_state == "resolved":
         agent_message_refs = [
@@ -1129,7 +1143,38 @@ def _communication_required_slot_coverage(
             fact_refs if message_ids_exist else None,
         )
 
-    if participant_evidence:
+    trusted_roster_rows = [
+        row for row in participant_rows if _trusted_participant_source_evidence(row)
+    ]
+    source_complete_rosters = [
+        row
+        for row in trusted_roster_rows
+        if _payload_of(row).get("roster_completeness_state") == "complete"
+        and _payload_of(row).get("roster_expected_binding_count")
+        == _payload_of(row).get("roster_binding_count")
+    ]
+    source_incomplete_rosters = [
+        row
+        for row in trusted_roster_rows
+        if _payload_of(row).get("roster_completeness_state") != "complete"
+        or _payload_of(row).get("roster_expected_binding_count")
+        != _payload_of(row).get("roster_binding_count")
+    ]
+    if participant_evidence and source_complete_rosters:
+        participant_slot = slot(
+            "degraded",
+            "partial",
+            "complete_provider_roster_observed_but_provider_conversation_to_canonical_conversation_membership_is_unresolved",
+            participant_evidence,
+        )
+    elif participant_evidence and source_incomplete_rosters:
+        participant_slot = slot(
+            "degraded",
+            "partial",
+            "provider_participant_roster_is_explicitly_partial_or_has_uncovered_bindings",
+            participant_evidence,
+        )
+    elif participant_evidence:
         participant_slot = slot(
             "degraded",
             "partial",
@@ -1509,6 +1554,108 @@ def _row_evidence(row: dict[str, Any]) -> Optional[EvidenceRef]:
         source=_FACT_REF_SOURCE,
         observedAt=observed_at,
         uri=f"store://communication360_facts/{ref_id}",
+    )
+
+
+def _trusted_participant_source_evidence(row: dict[str, Any]) -> list[EvidenceRef]:
+    """Read source role/completeness evidence only from writer-shaped facts.
+
+    Generic participant rows remain readable as observed facts, but their
+    arbitrary payload evidence is not promoted into trusted provenance.
+    """
+    payload = _payload_of(row)
+    provenance = payload.get("source_provenance")
+    authentication = provenance.get("authentication") if isinstance(provenance, dict) else None
+    identity = payload.get("source_identity")
+    actor = payload.get("actor_attribution")
+    policy = payload.get("policy")
+    provider = payload.get("provider")
+    if not (
+        isinstance(provenance, dict)
+        and isinstance(authentication, dict)
+        and authentication.get("method") == "tenant_webhook_hmac"
+        and authentication.get("verified") is True
+        and isinstance(provider, str)
+        and provider
+        and provenance.get("namespace") == provider
+        and provenance.get("provider_account_id") == payload.get("provider_account_id")
+        and provenance.get("event_id") == row.get("source_event_id")
+        and payload.get("communication_scope_kind") == "provider_conversation"
+        and payload.get("provider_conversation_id") == payload.get("communication_scope")
+        and isinstance(payload.get("roster_id"), str)
+        and payload.get("roster_id")
+        and isinstance(payload.get("binding_id"), str)
+        and payload.get("binding_id")
+        and isinstance(payload.get("role"), str)
+        and payload.get("claim_state") == "observed"
+        and isinstance(identity, dict)
+        and identity.get("resolution_status") == "resolved"
+        and isinstance(identity.get("identity_binding_id"), str)
+        and identity.get("identity_binding_id")
+        and isinstance(payload.get("entity_id"), str)
+        and payload.get("entity_id")
+        and isinstance(actor, dict)
+        and actor.get("actor_id") == row.get("actor_id")
+        and isinstance(policy, dict)
+        and policy.get("ingress_consent_outcome") == "allowed"
+        and policy.get("sensitive_message_fields_redacted") is True
+    ):
+        return []
+
+    parsed_refs: dict[str, list[EvidenceRef]] = {
+        "role_evidence_refs": [],
+        "roster_completeness_evidence_refs": [],
+    }
+    for key in parsed_refs:
+        candidates = payload.get(key)
+        if not isinstance(candidates, list):
+            continue
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            if (
+                candidate.get("source") != provider
+                or candidate.get("uri") is not None
+                or not isinstance(candidate.get("id"), str)
+                or not candidate["id"].strip()
+                or "@" in candidate["id"]
+                or any(ch.isspace() for ch in candidate["id"].strip())
+                or not isinstance(candidate.get("observedAt"), str)
+                or not candidate["observedAt"].strip()
+            ):
+                continue
+            try:
+                observed_at = datetime.fromisoformat(
+                    candidate["observedAt"].strip().replace("Z", "+00:00")
+                )
+                if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+                    continue
+                parsed_refs[key].append(EvidenceRef.model_validate(candidate))
+            except Exception:  # noqa: BLE001 - invalid source evidence remains untrusted
+                continue
+    roster_state = payload.get("roster_completeness_state")
+    expected_count = payload.get("roster_expected_binding_count")
+    binding_count = payload.get("roster_binding_count")
+    if not parsed_refs["role_evidence_refs"]:
+        return []
+    if roster_state in {"complete", "partial"} and not parsed_refs[
+        "roster_completeness_evidence_refs"
+    ]:
+        return []
+    if roster_state == "complete" and (
+        not isinstance(expected_count, int)
+        or isinstance(expected_count, bool)
+        or expected_count < 1
+        or expected_count != binding_count
+    ):
+        return []
+    if roster_state not in {"complete", "partial", "unknown"}:
+        return []
+    return _dedupe_refs(
+        [
+            *parsed_refs["role_evidence_refs"],
+            *parsed_refs["roster_completeness_evidence_refs"],
+        ]
     )
 
 
@@ -3575,10 +3722,26 @@ class Communication360Provider:
             base["messageId"] = payload.get("message_id")
             base["conversationId"] = payload.get("conversation_id")
         elif kind == "participant_binding":
+            binding_evidence_refs = _trusted_participant_source_evidence(row)
+            if binding_evidence_refs:
+                base["evidenceRefIds"] = [
+                    ref.id
+                    for ref in _dedupe_refs(
+                    [
+                        *([evidence] if evidence is not None else []),
+                        *binding_evidence_refs,
+                    ]
+                    )
+                ]
+                base["sourceRosterState"] = payload.get("roster_completeness_state")
+                base["sourceProvider"] = payload.get("provider")
+                base["sourceProviderAccountId"] = payload.get("provider_account_id")
+                base["providerConversationId"] = payload.get("provider_conversation_id")
             base["role"] = payload.get("role")
             base["entityId"] = payload.get("entity_id") or row.get("actor_id")
             base["entityType"] = payload.get("entity_type")
             base["communicationScope"] = payload.get("communication_scope")
+            base["communicationScopeKind"] = payload.get("communication_scope_kind")
             base["principalEntityId"] = payload.get("principal_entity_id")
             base["delegationGrantId"] = payload.get("delegation_grant_id")
             base["validFrom"] = payload.get("valid_from")
@@ -3829,6 +3992,10 @@ class Communication360Provider:
                 claim_text.append(f"canonical {fact_kind} record {fact_id} observed")
             if fact_kind == "participant_binding":
                 claim_text.append("canonical communication participant binding observed")
+                if _trusted_participant_source_evidence(row):
+                    claim_text.append(
+                        "provider-authenticated participant role assertion and source evidence observed"
+                    )
                 is_agent_author = (
                     request.subject.kind == "agent"
                     and str(payload.get("role") or "").strip().lower() == "author"
@@ -3853,7 +4020,17 @@ class Communication360Provider:
                     id=f"canonical_fact.{fact_id}",
                     kind="communication_fact_observation",
                     subject=subject,
-                    evidenceRefs=_dedupe_refs([*scope.identity_evidence, evidence]),
+                    evidenceRefs=_dedupe_refs(
+                        [
+                            *scope.identity_evidence,
+                            evidence,
+                            *(
+                                _trusted_participant_source_evidence(row)
+                                if fact_kind == "participant_binding"
+                                else []
+                            ),
+                        ]
+                    ),
                     claims=claim_text,
                     confidence=1.0,
                     claimState=EpistemicStatus.OBSERVED,

@@ -92,6 +92,7 @@ def _agent_decision(
         "delegationId": "delegation-1",
         "action": "read_record",
         "resource": "customer:123",
+        "decisionAt": "2026-10-17T10:00:30Z",
         "evidenceRef": evidence.model_dump(mode="json"),
     }
 
@@ -151,6 +152,7 @@ def test_agent360_action_scoped_decision_is_included_with_exact_evidence() -> No
     assert metadata.authorityDecision.delegationRefs == ["delegation-1"]
     assert metadata.authorityDecision.executionRefs == ["execution-1"]
     assert metadata.authorityDecision.evidenceRefs == [claim.evidenceRefs[0]]
+    assert metadata.authorityDecision.decidedAt == "2026-10-17T10:00:30+00:00"
     assert metadata.authorityDecision.reasonCodes == [
         "recorded_execution_scoped_decision_not_standing_authority"
     ]
@@ -628,6 +630,26 @@ def test_conflicting_agent360_action_decisions_remain_unknown() -> None:
     ]
 
 
+def test_agent360_multiple_matching_decisions_do_not_claim_one_timestamp() -> None:
+    decisions = [
+        _agent_decision(execution_id="execution-1"),
+        _agent_decision(execution_id="execution-2"),
+    ]
+    claims = [
+        _agent_decision_claim(execution_id="execution-1"),
+        _agent_decision_claim(execution_id="execution-2"),
+    ]
+
+    metadata = _derive_agent_actor_metadata(
+        _agent_decision_request(),
+        [_agent_decision_result(decisions, claims)],
+    )["authority_envelope"]
+
+    assert metadata.authorityDecision is not None
+    assert metadata.authorityDecision.outcome == "allow"
+    assert metadata.authorityDecision.decidedAt is None
+
+
 @pytest.mark.parametrize(
     ("surface_id", "slot_id", "projection_ids"),
     [
@@ -640,11 +662,11 @@ def test_unknown_actor_and_authority_metadata_remains_explicit_on_available_slot
     slot_id: str,
     projection_ids: list[str],
 ) -> None:
-    """Available describes evidenced slot content; metadata stays explicitly unknown.
+    """Unknown metadata must not erase content backed by explicit evidence.
 
-    The reconstructed product catalog requires these metadata objects, but does
-    not specify that actor resolution or an action-scoped decision must be
-    known before evidence-backed slot content is available.
+    The catalog requires the metadata objects, not positive resolutions. The
+    Execution360 authority slot is globally partial, so its content can remain
+    present in a degraded slot while actor and decision resolution are unknown.
     """
     request = Experience360FrameRequest(
         surfaceId=surface_id,
@@ -719,7 +741,7 @@ def test_unknown_actor_and_authority_metadata_remains_explicit_on_available_slot
     )
 
     slot = frame.slots[0]
-    assert slot.state == "available"
+    assert slot.state == ("degraded" if surface_id == "execution360" else "available")
     assert slot.content is not None
     assert slot.evidenceRefs
     assert slot.provenance

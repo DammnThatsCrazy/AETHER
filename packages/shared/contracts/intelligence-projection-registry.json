@@ -2211,14 +2211,17 @@
       "ownsCanonicalTruth": false,
       "subjectKinds": [
         "entity",
-        "support_case"
+        "support_case",
+        "callback"
       ],
       "canonicalAuthorities": [
         "communication_facts",
         "evidence",
         "provider_connections",
         "support_cases",
-        "support_case_events"
+        "support_case_events",
+        "support_callbacks",
+        "support_callback_events"
       ],
       "hardDependencies": [
         "contract_spine",
@@ -2627,7 +2630,8 @@
         "payments",
         "campaign_facts",
         "source_provenance",
-        "commerce_product_offer_graph"
+        "commerce_product_offer_graph",
+        "commerce_intent_authority"
       ],
       "hardDependencies": [
         "contract_spine"
@@ -3644,6 +3648,7 @@
           "id": "authority_check",
           "requirement": "required",
           "description": "Required Execution 360 blueprint slot: authority check.",
+          "partialImplementationReason": "New delegation-engine decisions persist an evaluation timestamp in the exact tenant-scoped agent_executions policy log and Execution360 verifies it against execution-record creation time; legacy rows without that timestamp remain unknown. This is request-time application evidence only and does not establish current or standing authority, policy input replay, other authority sources, or freshness.",
           "canonicalAuthorityRefs": [
             "agent_access",
             "agent_entities",
@@ -5875,10 +5880,12 @@
         {
           "id": "participants",
           "requirement": "required",
-          "description": "Participant binding rows and endpoint metadata; full role resolution is pending.",
+          "description": "Typed, source-authenticated participant role bindings joined through exact tenant-owned provider identity mappings; canonical conversation membership remains unresolved.",
           "canonicalAuthorityRefs": [
             "communication_facts",
-            "entities"
+            "entities",
+            "identity",
+            "evidence"
           ],
           "projectionBindings": [
             {
@@ -5892,7 +5899,8 @@
                 "campaign"
               ]
             }
-          ]
+          ],
+          "partialImplementationReason": "participant_roles_are_observed_from_signed_provider_rosters_and_exact_tenant_identity_mappings_but_canonical_conversation_membership_and_full_message_coverage_are_unresolved; provider_delegation_refs_are_not_canonical_grants"
         },
         {
           "id": "campaign_links",
@@ -10348,12 +10356,26 @@
         {
           "id": "intent",
           "requirement": "required",
-          "description": "Required commerce360 slot: intent.",
+          "description": "Explicit tenant-owned intent records joined to an exact product or offer subject, with actor, source revision, timestamps, and evidence.",
+          "partialImplementationReason": "explicit_intent_subject_join_is_implemented_for_product_and_offer_only; commerce_sku_and_checkout_authorities_are_not_connected; freshness_threshold_is_unconfigured",
           "canonicalAuthorityRefs": [
-            "commerce"
+            "commerce_intent_authority",
+            "commerce_product_offer_graph",
+            "source_provenance"
           ],
-          "projectionBindings": [],
-          "unboundReason": "commerce_intent_subject_join_not_available"
+          "projectionBindings": [
+            {
+              "projectionId": "commerce360",
+              "role": "primary",
+              "sectionIds": [
+                "intent"
+              ],
+              "subjectKinds": [
+                "offer",
+                "product"
+              ]
+            }
+          ]
         },
         {
           "id": "cart_checkout",
@@ -10505,6 +10527,7 @@
           "campaign_facts",
           "commerce",
           "commerce_product_offer_graph",
+          "commerce_intent_authority",
           "payments",
           "risk_outputs",
           "source_provenance"
@@ -10671,12 +10694,31 @@
         {
           "id": "callbacks",
           "requirement": "required",
-          "description": "Canonical callback schedule and execution records.",
+          "description": "Canonical callback schedule and execution records joined to the exact tenant, support case, provider connection, and retained callback events.",
+          "partialImplementationReason": "callback_schedule_and_execution_authority_is_tenant_case_connection_scoped_but_upstream_provider_origin_and_actor_attribution_are_unverified; source_history_completeness_and_freshness_remain_unknown",
           "canonicalAuthorityRefs": [
-            "communication_facts"
+            "support_callbacks",
+            "support_callback_events",
+            "support_cases",
+            "support_case_events",
+            "provider_connections",
+            "evidence"
           ],
-          "projectionBindings": [],
-          "unboundReason": "canonical_support_callback_authority_unavailable"
+          "projectionBindings": [
+            {
+              "projectionId": "support360",
+              "role": "primary",
+              "sectionIds": [
+                "state",
+                "timeline",
+                "evidence"
+              ],
+              "subjectKinds": [
+                "support_case",
+                "callback"
+              ]
+            }
+          ]
         },
         {
           "id": "participants",
@@ -11015,6 +11057,8 @@
           "provider_connections",
           "risk_outputs",
           "risk_signals",
+          "support_callbacks",
+          "support_callback_events",
           "support_cases",
           "support_case_events",
           "source_coverage",

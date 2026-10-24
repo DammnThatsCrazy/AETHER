@@ -6,11 +6,14 @@ visibility: I
 audience: [ops, dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [services/api/connectors/integrations/connectors/klaviyo.py, services/api/journeys/comms/ingest.py, services/api/alembic/versions/20260703_comms_intelligence.py]
+source_files: [services/api/connectors/integrations/connectors/klaviyo.py, services/api/journeys/comms/ingest.py, services/api/journeys/communication360/participant_writer.py, services/api/journeys/communication360/contracts.py, services/api/journeys/communication360/repository.py, services/api/alembic/versions/20260703_comms_intelligence.py]
 source_hashes:
   "services/api/alembic/versions/20260703_comms_intelligence.py": "sha256:651ee8f17a6e86e00d49d09cdbc0041d525682817851af1368576984c27fec76"
   "services/api/connectors/integrations/connectors/klaviyo.py": "sha256:4255adaf7e0669b8e7d75a632a331fd85ce16696ccfbc8511dba1c37d8539aea"
-  "services/api/journeys/comms/ingest.py": "sha256:ec0bcf7c4e6b9fe903ca9f85cc08bf6b07feb40ff762cd7bad0e72aedcb27892"
+  "services/api/journeys/comms/ingest.py": "sha256:e5b199aaff506d136758b1a89c12a36c3622da3c224e5c39732cc4b428ed22a5"
+  "services/api/journeys/communication360/contracts.py": "sha256:f826cef4a2425cd8b8ad5beafb914794cbb45bd6db9e1dab3bc7d19fb9befa9f"
+  "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
+  "services/api/journeys/communication360/repository.py": "sha256:2b8546b419505d92d74098f6167dc6bf0d9da3cd94f7bb68278e179986beb01a"
 ---
 
 # Communications Backfill & Replay Runbook
@@ -73,6 +76,17 @@ When a connector-originated event is replayed, the server-owned identity and
 consent bridge remains authoritative. Provider-supplied canonical entity IDs
 and consent fields are not restored as authority; missing or non-matching
 bindings remain unresolved or unknown after replay.
+
+Typed participant-role rosters are currently accepted on
+`POST /v1/comms/webhook` only when the tenant has a configured webhook secret
+and the request HMAC verifies. Ingestion stores the signed assertion in Bronze,
+then writes role facts only after every participant resolves through an exact
+tenant/provider/account identity mapping. A Bronze-to-Silver replay does not
+replace that identity-bound roster writer. If roster authoring fails after the
+Bronze write, resolve the mapping issue and retry the same signed event; the
+roster facts are idempotent. Provider conversation IDs remain source claims,
+so this path does not establish canonical Conversation membership or complete
+message coverage.
 
 ## Rollback
 

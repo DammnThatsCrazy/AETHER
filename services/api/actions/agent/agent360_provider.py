@@ -2276,6 +2276,11 @@ class Agent360Provider:
             )
             is not None
         ]
+        if any(
+            decision.get("decisionTimestampState") == "invalid"
+            for decision in action_scoped_decisions
+        ):
+            degraded_reasons.append("agent_execution_decision_timestamp_invalid")
         authority_state = self._aggregate_read_state(
             [
                 data["incoming_delegations"],
@@ -4339,6 +4344,34 @@ class Agent360Provider:
         execution_id = _first(row, "execution_id", "id")
         if evidence is None or execution_id is None:
             return None
+        raw_decision_at = decision.get("evaluated_at")
+        parsed_decision_at, decision_at_error = (
+            try_parse_instant(raw_decision_at)
+            if isinstance(raw_decision_at, str)
+            else (None, "timestamp_invalid")
+        )
+        record_created_at = _first(row, "created_at")
+        parsed_record_created_at, _ = (
+            try_parse_instant(record_created_at)
+            if record_created_at is not None
+            else (None, "timestamp_invalid")
+        )
+        if raw_decision_at is None:
+            decision_at = None
+            decision_timestamp_state = "unknown"
+        elif (
+            decision_at_error is not None
+            or parsed_decision_at is None
+            or (
+                parsed_record_created_at is not None
+                and parsed_decision_at > parsed_record_created_at
+            )
+        ):
+            decision_at = None
+            decision_timestamp_state = "invalid"
+        else:
+            decision_at = parsed_decision_at.isoformat()
+            decision_timestamp_state = "recorded"
         snapshot = row.get("input_snapshot")
         snapshot = snapshot if isinstance(snapshot, dict) else {}
         asserted_delegation_id = _first(row, "delegation_id")
@@ -4384,7 +4417,8 @@ class Agent360Provider:
             "action": _first(snapshot, "action"),
             "resource": _first(snapshot, "resource"),
             "reason": _first(decision, "reason"),
-            "decisionAt": _first(row, "started_at", "created_at"),
+            "decisionAt": decision_at,
+            "decisionTimestampState": decision_timestamp_state,
             "scope": "action_scoped_request_time_only",
             "evidenceRef": evidence.model_dump(mode="json"),
         }

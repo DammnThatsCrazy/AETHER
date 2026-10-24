@@ -44,7 +44,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Literal, Optional
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from shared.contracts_models.epistemic import EpistemicStatus
 from journeys.comms.contracts import CommunicationState, MessageCategory
@@ -452,6 +452,139 @@ class ParticipantBinding(CommunicationContract):
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
 
 
+class ParticipantSourceIdentity(CommunicationContract):
+    """Provider-native identity keys used to resolve a participant exactly.
+
+    These are source identifiers, not canonical entity identifiers. Ingress
+    resolves them through the tenant-scoped ProviderIdentity authority and
+    persists the resulting ``identity_binding_id`` separately from the
+    provider keys. Email addresses, display names, and message endpoint values
+    are intentionally not accepted as identity keys.
+    """
+
+    provider_recipient_id: Optional[str] = None
+    provider_profile_id: Optional[str] = None
+
+    @field_validator("provider_recipient_id", "provider_profile_id")
+    @classmethod
+    def source_ids_are_opaque(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value or len(value) > 256 or any(ch.isspace() for ch in value) or "@" in value:
+            raise ValueError("participant source identity must be an opaque provider ID")
+        return value
+
+    @model_validator(mode="after")
+    def requires_exact_provider_key(self) -> "ParticipantSourceIdentity":
+        if not (self.provider_recipient_id or self.provider_profile_id):
+            raise ValueError(
+                "participant source identity requires provider_recipient_id or provider_profile_id"
+            )
+        return self
+
+
+class ParticipantBindingAssertion(CommunicationContract):
+    """Source-authenticated role assertion before canonical identity resolution.
+
+    The caller provides a role, provider identity key, time validity, and
+    evidence. It cannot provide a canonical ``entity_id``; the ingress writer
+    fills that only after an exact tenant-owned provider identity mapping is
+    resolved.
+    """
+
+    binding_id: str = Field(min_length=1, max_length=256)
+    source_identity: ParticipantSourceIdentity
+    role: CommunicationParticipantRole
+    valid_from: Optional[str] = None
+    valid_to: Optional[str] = None
+    principal_source_identity: Optional[ParticipantSourceIdentity] = None
+    # A provider's grant identifier is only a source claim. It must not be
+    # populated into ParticipantBinding.delegation_grant_id until the
+    # canonical delegation authority resolves it.
+    provider_delegation_ref: Optional[str] = Field(default=None, max_length=256)
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    evidence_refs: list[EvidenceRef] = Field(default_factory=list, min_length=1, max_length=20)
+
+    @field_validator("binding_id", "provider_delegation_ref")
+    @classmethod
+    def relationship_ids_are_opaque(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value or len(value) > 256 or any(ch.isspace() for ch in value):
+            raise ValueError("participant relationship identifiers must be opaque IDs")
+        return value
+
+    @model_validator(mode="after")
+    def evidence_is_metadata_only(self) -> "ParticipantBindingAssertion":
+        if any(
+            not ref.id.strip()
+            or not ref.source.strip()
+            or ref.uri is not None
+            or not ref.observedAt
+            or "@" in ref.id
+            or any(ch.isspace() for ch in ref.id.strip())
+            or any(ch.isspace() for ch in ref.source.strip())
+            for ref in self.evidence_refs
+        ):
+            raise ValueError(
+                "participant evidence must use opaque IDs and omit content or URL references"
+            )
+        return self
+
+
+class ParticipantRosterAssertion(CommunicationContract):
+    """One provider-authenticated, conversation-scoped participant roster."""
+
+    conversation_id: str = Field(min_length=1, max_length=256)
+    provider_account_id: str = Field(min_length=1, max_length=256)
+    completeness_state: Literal["complete", "partial", "unknown"]
+    expected_binding_count: Optional[int] = Field(default=None, ge=1, le=500)
+    completeness_evidence_refs: list[EvidenceRef] = Field(default_factory=list, max_length=20)
+    bindings: list[ParticipantBindingAssertion] = Field(min_length=1, max_length=500)
+
+    @field_validator("conversation_id", "provider_account_id")
+    @classmethod
+    def scope_ids_are_opaque(cls, value: str) -> str:
+        value = value.strip()
+        if not value or any(ch.isspace() for ch in value) or "@" in value:
+            raise ValueError("participant roster scope identifiers must be opaque IDs")
+        return value
+
+    @model_validator(mode="after")
+    def roster_completeness_is_explicit_and_evidenced(self) -> "ParticipantRosterAssertion":
+        binding_ids = [binding.binding_id for binding in self.bindings]
+        if len(binding_ids) != len(set(binding_ids)):
+            raise ValueError("participant roster binding_id values must be unique")
+        if self.completeness_state == "complete":
+            if self.expected_binding_count != len(self.bindings):
+                raise ValueError(
+                    "complete participant roster requires expected_binding_count to match bindings"
+                )
+            if not self.completeness_evidence_refs:
+                raise ValueError("complete participant roster requires completeness evidence")
+            if any(
+                binding.valid_from is None or not binding.valid_from.strip()
+                for binding in self.bindings
+            ):
+                raise ValueError("complete participant roster requires valid_from for each role")
+        if any(
+            not ref.id.strip()
+            or not ref.source.strip()
+            or ref.uri is not None
+            or not ref.observedAt
+            or "@" in ref.id
+            or any(ch.isspace() for ch in ref.id.strip())
+            or any(ch.isspace() for ch in ref.source.strip())
+            for ref in self.completeness_evidence_refs
+        ):
+            raise ValueError(
+                "roster completeness evidence must use opaque IDs and omit content or URL references"
+            )
+        return self
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Knowledge / interpretation / context (R4) — delivery is not knowledge
 # ─────────────────────────────────────────────────────────────────────────────
@@ -598,6 +731,9 @@ __all__ = [
     "ResponseExpectation",
     # participants (R3)
     "ParticipantBinding",
+    "ParticipantSourceIdentity",
+    "ParticipantBindingAssertion",
+    "ParticipantRosterAssertion",
     # knowledge (R4)
     "ContextInclusionRecord",
     "InterpretationRecord",

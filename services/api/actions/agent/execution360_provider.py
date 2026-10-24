@@ -233,6 +233,9 @@ class ExecutionAuthorityContext:
     truncated: bool = False
     ambiguous_execution_ids: tuple[str, ...] = ()
     temporal_selection: str = "execution_lifecycle_rows"
+    decision_timestamp_coverage: Literal["persisted", "partial", "not_persisted"] = (
+        "not_persisted"
+    )
 
 
 @dataclass(frozen=True)
@@ -2522,6 +2525,7 @@ def _internal_record(row: dict[str, Any]) -> dict[str, Any]:
         "recordedDelegationDecision": (
             decision.get("allowed") if isinstance(decision.get("allowed"), bool) else None
         ),
+        "recordedDelegationDecisionEvaluatedAt": _safe_text(decision.get("evaluated_at")),
         "delegationDecisionReason": _safe_text(decision.get("reason")),
         "delegationResolutionStatus": resolution_status,
         "outcomeEventId": _safe_text(row.get("outcome_event_id")),
@@ -2581,6 +2585,7 @@ def _execution_authority_context(
     invalid_record = bool(ambiguous_ids)
     decisions: list[dict[str, Any]] = []
     evidence_refs: list[EvidenceRef] = []
+    decision_timestamps: list[str] = []
 
     for row in internal:
         execution_id = _safe_text(row.get("executionId"))
@@ -2605,6 +2610,36 @@ def _execution_authority_context(
             invalid_record = True
             continue
 
+        raw_decision_time = row.get("recordedDelegationDecisionEvaluatedAt")
+        parsed_decision_time = _parse_aware_instant(raw_decision_time)
+        if raw_decision_time is None:
+            decision_time: dict[str, Any] = {
+                "state": "unknown",
+                "reason": "delegation_decision_timestamp_not_persisted",
+            }
+        elif parsed_decision_time is None:
+            invalid_record = True
+            decision_time = {
+                "state": "unknown",
+                "reason": "delegation_decision_timestamp_invalid",
+            }
+        else:
+            record_created_at = _parse_aware_instant(row.get("recordCreatedAt"))
+            if record_created_at is not None and parsed_decision_time > record_created_at:
+                invalid_record = True
+                decision_time = {
+                    "state": "unknown",
+                    "reason": "delegation_decision_timestamp_after_execution_record",
+                }
+            else:
+                evaluated_at = parsed_decision_time.isoformat()
+                decision_timestamps.append(evaluated_at)
+                decision_time = {
+                    "state": "recorded",
+                    "evaluatedAt": evaluated_at,
+                    "source": "agent_executions.policy_log.delegation_check.evaluated_at",
+                }
+
         serialized_evidence = evidence.model_dump(
             mode="json", by_alias=True, exclude_none=True
         )
@@ -2625,8 +2660,7 @@ def _execution_authority_context(
                     "recordCreatedAt": row.get("recordCreatedAt"),
                 },
                 "decisionTime": {
-                    "state": "unknown",
-                    "reason": "delegation_decision_timestamp_not_persisted",
+                    **decision_time,
                 },
                 "evidenceRef": serialized_evidence,
             }
@@ -2653,6 +2687,14 @@ def _execution_authority_context(
         state = "unknown"
         reason = "no_exact_recorded_delegation_decision_for_admitted_execution_scope"
 
+    decision_timestamp_coverage = (
+        "persisted"
+        if decisions and len(decision_timestamps) == len(decisions)
+        else "partial"
+        if decision_timestamps
+        else "not_persisted"
+    )
+
     return ExecutionAuthorityContext(
         state=state,
         decisions=tuple(decisions),
@@ -2665,6 +2707,7 @@ def _execution_authority_context(
         temporal_selection=(
             "execution_lifecycle_time_window" if time_range else "execution_lifecycle_rows"
         ),
+        decision_timestamp_coverage=decision_timestamp_coverage,
     )
 
 
@@ -4314,8 +4357,15 @@ class Execution360Provider:
             },
             "temporalScope": {
                 "selection": authority_check.temporal_selection,
-                "decisionTimestamp": "not_persisted",
-                "limitation": "lifecycle timestamps bound the parent execution record and do not prove when the policy check occurred",
+                "decisionTimestamp": authority_check.decision_timestamp_coverage,
+                "limitation": (
+                    "the timestamp is recorded in the application execution policy log; "
+                    "the decision remains request-time evidence and does not establish "
+                    "current or standing authority"
+                    if authority_check.decision_timestamp_coverage == "persisted"
+                    else "legacy policy logs without an evaluation timestamp are bounded "
+                    "only by the parent execution lifecycle timestamps"
+                ),
             },
             "otherAuthorityCoverage": {
                 "state": "unknown",

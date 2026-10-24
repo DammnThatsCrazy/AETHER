@@ -1363,6 +1363,7 @@ Three service groups are available when Intelligence Graph feature flags are ena
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| POST | `/v1/commerce/intents` | Record an explicit declaration against an exact tenant-owned product or offer; requires `commerce:write` and an authenticated human principal; immutable/idempotent revisions retain actor, effective/observed time, and evidence |
 | POST | `/v1/commerce/payments` | Record payment + create `PAYS` edge in graph |
 | POST | `/v1/commerce/hires` | Record agent hire + create `HIRED` edge |
 | GET | `/v1/commerce/fees/report` | Fee elimination report over the caller's tenant's payments only |
@@ -2231,6 +2232,16 @@ The caller must send one of `support_case_created`, `support_case_updated`,
 `support_case_escalated`, `support_case_resolved`, `support_case_reopened`, or
 `support_case_closed`. The source case and event identifiers remain scoped to
 the verified connection; they are not canonical customer or account identity.
+
+`POST /v1/support/cases/callbacks/ingest` records one typed callback schedule
+or lifecycle event for an exact canonical support case. It requires tenant
+`write` permission, a verified provider connection bound to the case, a
+connection-scoped callback ID, an idempotent source event ID, and timezone-aware
+timestamps. The lifecycle is limited to scheduled, rescheduled, attempted,
+completed, failed, and cancelled; stale events are retained without regressing
+current state. The endpoint does not verify a provider signature or establish
+writer actor identity. Support360 reads bounded case callback/event evidence;
+source-history completeness and freshness remain unknown.
 
 
 ---
@@ -3971,6 +3982,13 @@ Comms webhook endpoint management (tenant-admin; ADR-C11):
 
 Communications tenant surface (`/v1/comms/*`):
 
+- `POST /v1/comms/webhook` — accepts tenant-scoped communication events. A
+  typed optional `participant_roster` is accepted only with a configured,
+  verified tenant webhook HMAC; the server supplies authoring context and the
+  writer requires exact tenant/provider/account identity mappings plus
+  source-role evidence. HMAC authenticates the source, not participant identity
+  or role. Provider conversation IDs remain source claims until canonical
+  Conversation membership and message coverage are joined.
 - `GET /v1/comms/entitlement` — the tenant's comms plan entitlement, current
   connection usage, and quota state (`allowed` / `quota_approaching` /
   `quota_reached` / `upgrade_required`).

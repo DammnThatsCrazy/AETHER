@@ -14,6 +14,8 @@ source_files:
   - services/api/ingestion/ingestion/replay_routes.py
   - services/api/shared/events/events.py
   - packages/shared/
+  - services/api/actions/delegation/engine.py
+  - services/api/actions/agent/agent360_provider.py
   - services/api/actions/agent/execution360_provider.py
   - services/api/actions/agent/user_agents.py
   - services/api/identity/account360_provider.py
@@ -21,11 +23,18 @@ source_files:
   - services/api/intelligence/fraud_networks/risk360_projection.py
   - services/api/intelligence/risk360/provider.py
   - services/api/journeys/communication360/provider.py
+  - services/api/journeys/communication360/participant_writer.py
+  - services/api/journeys/support360/
   - services/api/repositories/repos.py
   - services/api/shared/intelligence_projections/frame_runtime.py
   - services/api/value/economic/economic360_provider.py
   - services/api/value/economic/journey_operation_evidence.py
   - services/api/value/commerce/order_payment_reconciliation.py
+  - services/api/value/commerce/commerce360_provider.py
+  - services/api/value/commerce/commerce_intents.py
+  - services/api/value/commerce/routes.py
+  - services/api/alembic/versions/20261023_commerce_intent_authority.py
+  - services/api/alembic/versions/20261023_support_callback_authority.py
   - services/api/connectors/integrations/providers/payment_rails/service.py
   - services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py
   - services/api/value/economic/ai_aggregation.py
@@ -62,6 +71,7 @@ source_hashes:
   "scripts/generate_feature_surface_manifest.py": "sha256:cd1c01ef58e827b0869699346952840b25702b00f765f5c16f4c7178610fd210"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
   "services/api/actions/agent/execution360_provider.py": "sha256:bca794ec4a2011f58ef0f452e37c32f0e16152fbe772ed1bc44a07c06e284f7d"
+  "services/api/actions/agent/agent360_provider.py": "sha256:7c744e3f2715bba3d69dcc290a982a463988b79620524ae4757c603bcbe4df02"
   "services/api/actions/agent/user_agents.py": "sha256:e00d936cb05ab3ba530c9208a98932e45dec4b1175330d8d24aa8d87a13cc81c"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/catalog.py": "sha256:b80db998c39a966ff19a25a64487b005b049bba96f6ca51cba18c15554cdce82"
@@ -69,8 +79,11 @@ source_hashes:
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/actions/agent_marketplace/lineage.py": "sha256:bfe247f42c3360f30b3f4fa92b1f39e95f654be0862303d6f74b9fb2363e6566"
   "services/api/actions/agent_marketplace/projection.py": "sha256:92a5f5e457beebde9d161bf26f40ccb39fc5b76bc8ae4abfccc3e572b3c29de0"
+  "services/api/actions/delegation/engine.py": "sha256:5b4face159fb5bd3f9d3e8be5a793d1a8f2f363316cf092b6e5a1593ecc59798"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
+  "services/api/alembic/versions/20261023_commerce_intent_authority.py": "sha256:81dbf80e8646034fe5f2b51e616ee71c4c758b6a4380b3ee44ff5ce114156e38"
+  "services/api/alembic/versions/20261023_support_callback_authority.py": "sha256:33278fd0ba6103d8a3f37c87db66c8209d953555669d72647047674425a1bede"
   "services/api/config/settings.py": "sha256:fe581665da73af478c3da53600fb0fdd4994d801f408e56f6d2796fbd00748bf"
   "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:8e681a79980dae410a82b15215fbc26fd73f55bdeefb5ded42b57675694ffa80"
   "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:740b01479ca0ea5104850140eb269cfef35b9c60b4b848d0b0bd0ad7eecb3905"
@@ -81,7 +94,9 @@ source_hashes:
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
   "services/api/intelligence/risk360/provider.py": "sha256:661d1479056cfc749540dbcdc0374c71bd254215005a8e61a59ae32beca2a1d3"
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:f14b6b827c18be01cc0a2cb45c6c42730e25d93b65050f3e287ebe1a056bd4f6"
-  "services/api/journeys/communication360/provider.py": "sha256:916e154d60723d687221bc2e0183d5aee672ed9b62db755c5d4cc7c939dd0fe6"
+  "services/api/journeys/communication360/participant_writer.py": "sha256:3569154a47bf54feb898d7a19e043aba100dc06998411afc1983017afb480cd3"
+  "services/api/journeys/communication360/provider.py": "sha256:5659a6509c0ba76e3d32c7a0fe37908c69020bd7b9266093fce1c3b2149890a3"
+  "services/api/journeys/support360/": "sha256:439c78c22d137cbadd7bf0f529999004c8b48f4312e54939469bd1c968ce4d2b"
   "services/api/main.py": "sha256:fa7455e5dd5a1e6b6b2ac25cc3ce6fc8a09d8bcf5b242b500feb0b797ab2d7b7"
   "services/api/middleware/middleware.py": "sha256:f32fb04affbf87df4bbfbb6c1294ae9405765ccd22d5cc1bcaf1b60bfaf4c98a"
   "services/api/shared/events/events.py": "sha256:92a17e02a32de87e1744f75bf5c665d0482400efe0b734602abb37eda4dbdb1b"
@@ -89,7 +104,10 @@ source_hashes:
   "services/api/value/economic/economic360_provider.py": "sha256:feefe5903f7faa2fee321e31f11c2e89d344353ad9b0f585325ebd0d349cc57f"
   "services/api/repositories/repos.py": "sha256:2deaf337debdc8fc0fa1585901e1a736e2a269b967d0091bba4d0d7d8369d19f"
   "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:95a0255a37d99b96243b2a51a6d9465a4740f072963fc5d6565b16a77d454a3d"
+  "services/api/value/commerce/commerce360_provider.py": "sha256:bb77ea7c74362403844037708a3191a70bbf4317905971ecec47e90ecc1b307c"
+  "services/api/value/commerce/commerce_intents.py": "sha256:c452c03579bc73e3df33a817ee97edea530d5954450c8d3a25635904120ba1d0"
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:92772b96ea6a009414e531c9cc57897d36042e79fd28998af1d3e154a2385c9a"
+  "services/api/value/commerce/routes.py": "sha256:9b68c0d975d7b81b530ff8eb91e95ee6c37e10034498dbf248f1889f026c5897"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
   "services/api/value/economic/economic360_provider.py": "sha256:f2d453f576196d2092802eec18f6d67bb6f8e4b9a91cdff113ae24d1d019a980"
   "services/api/value/economic/journey_operation_evidence.py": "sha256:7228e2c59ef3514877744e8f12e4c0fe91d2c139684b8a709e2691c34a06f3fd"
@@ -901,9 +919,27 @@ authority suppresses those reads. Case risk-history completeness, signal
 coverage, freshness, business outcome, and contagion authority remain unknown.
 Execution360 exposes only the action/resource-scoped delegation-engine result
 stored in the same tenant-owned AgentExecution row as its lifecycle evidence.
-The decision has no independent timestamp and does not establish current or
-standing authority; malformed or ambiguous joins remain degraded. Neither
-path completes its product surface or changes technical provider readiness.
+The delegation engine now records a timezone-aware evaluation timestamp, and
+Agent360/Execution360 consume only that exact decision-log timestamp after
+checking it against the execution record time. Missing legacy timestamps stay
+unknown; malformed or later-than-execution values degrade. This records when
+the action/resource-scoped evaluation was observed and does not establish
+current or standing authority.
+
+Commerce360 `intent` now reads explicit human declarations against exact
+tenant-owned product or offer records, preserving actor, effective/observed
+time, revision, idempotency, and evidence. It does not infer intent from views,
+carts, checkout, or payments; agent declarations and freshness remain
+unsupported. Support360 `callbacks` now reads typed schedule and lifecycle
+events tied to an exact case and verified provider connection, with idempotent
+source events and stale-event protection. Provider origin, writer identity,
+history completeness, and freshness remain unknown. Communication360 accepts
+typed participant-role rosters through the signed tenant webhook, resolves
+provider identities only through exact tenant/provider/account mappings, and
+preserves source evidence and explicit coverage. A provider conversation ID is
+still not canonical Conversation membership, and a provider delegation
+reference is not canonical authority. These paths remain partial and do not
+complete the 18 surfaces.
 
 Exploration surfaces compose over the engine through projection-backed surface adapters
 

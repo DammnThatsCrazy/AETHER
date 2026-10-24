@@ -48,6 +48,7 @@ from shared.intelligence_projections.generated_registry import (
 )
 from shared.projection_engine.runtime import ProjectionRuntime, runtime as default_runtime
 from shared.projection_engine.temporal_modes import TemporalMode
+from shared.temporal.instant import try_parse_instant
 
 
 class Experience360PolicyEvaluator(Protocol):
@@ -572,7 +573,17 @@ def _derive_agent_actor_metadata(
     server_execution_ids: set[str] = set()
     server_execution_row_count = 0
     all_server_rows_have_principal_evidence = True
-    decisions: list[tuple[str, Optional[str], Optional[str], Optional[str], str, EvidenceRef]] = []
+    decisions: list[
+        tuple[
+            str,
+            Optional[str],
+            Optional[str],
+            Optional[str],
+            str,
+            EvidenceRef,
+            Optional[str],
+        ]
+    ] = []
     interaction_content: dict[str, Any] = {}
     server_lifecycle_complete = False
     source_telemetry_complete = False
@@ -584,6 +595,19 @@ def _derive_agent_actor_metadata(
     agent_subject_identity_ids: set[str] = set()
     execution_principal_canonical_identity: Optional[Experience360ActorParty] = None
     execution_principal_identity_evidence: dict[tuple[str, str], EvidenceRef] = {}
+
+    def recorded_decision_time(value: Any, record_created_at: Any = None) -> Optional[str]:
+        if not isinstance(value, str):
+            return None
+        parsed, error = try_parse_instant(value)
+        if error is not None or parsed is None:
+            return None
+        if isinstance(record_created_at, str):
+            created, _ = try_parse_instant(record_created_at)
+            if created is not None and parsed > created:
+                return None
+        return parsed.isoformat()
+
     if execution_result is not None and execution_result.tenantId == request.tenantId:
         sections = {section.id: section for section in execution_result.sections}
         state = sections.get("state")
@@ -687,6 +711,10 @@ def _derive_agent_actor_metadata(
                             else None,
                             execution_id,
                             evidence,
+                            recorded_decision_time(
+                                row.get("recordedDelegationDecisionEvaluatedAt"),
+                                row.get("recordCreatedAt"),
+                            ),
                         )
                     )
 
@@ -817,6 +845,7 @@ def _derive_agent_actor_metadata(
                             else None,
                             execution_id.strip(),
                             decision_evidence,
+                            recorded_decision_time(decision.get("decisionAt")),
                         )
                     )
 
@@ -1154,18 +1183,29 @@ def _derive_agent_actor_metadata(
 
     unique_decisions = {
         (outcome, delegation_id, action_ref, resource_ref)
-        for outcome, delegation_id, action_ref, resource_ref, _, _ in decisions
+        for outcome, delegation_id, action_ref, resource_ref, _, _, _ in decisions
     }
     decision_refs = {
-        (evidence.source, evidence.id): evidence for _, _, _, _, _, evidence in decisions
+        (evidence.source, evidence.id): evidence
+        for _, _, _, _, _, evidence, _ in decisions
     }
     decision_action_refs = sorted(
-        {action_ref for _, _, action_ref, _, _, _ in decisions if action_ref is not None}
+        {
+            action_ref
+            for _, _, action_ref, _, _, _, _ in decisions
+            if action_ref is not None
+        }
     )
     decision_resource_refs = sorted(
-        {resource_ref for _, _, _, resource_ref, _, _ in decisions if resource_ref is not None}
+        {
+            resource_ref
+            for _, _, _, resource_ref, _, _, _ in decisions
+            if resource_ref is not None
+        }
     )
-    decision_execution_refs = sorted({execution_id for _, _, _, _, execution_id, _ in decisions})
+    decision_execution_refs = sorted(
+        {execution_id for _, _, _, _, execution_id, _, _ in decisions}
+    )
     if len(unique_decisions) == 1:
         outcome, delegation_id, action_ref, resource_ref = next(iter(unique_decisions))
         action_scope_known = action_ref is not None
@@ -1173,6 +1213,7 @@ def _derive_agent_actor_metadata(
             tenantId=request.tenantId,
             outcome=outcome if action_scope_known else "unknown",
             authorityRef="aether.agent_delegation_engine" if action_scope_known else None,
+            decidedAt=decisions[0][6] if action_scope_known and len(decisions) == 1 else None,
             delegationRefs=[delegation_id] if delegation_id is not None else [],
             actionRefs=[action_ref] if action_ref is not None else [],
             resourceRefs=[resource_ref] if resource_ref is not None else [],
@@ -1193,7 +1234,7 @@ def _derive_agent_actor_metadata(
             delegationRefs=sorted(
                 {
                     delegation_id
-                    for _, delegation_id, _, _, _, _ in decisions
+                    for _, delegation_id, _, _, _, _, _ in decisions
                     if delegation_id is not None
                 }
             ),

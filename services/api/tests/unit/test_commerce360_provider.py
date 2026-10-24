@@ -340,7 +340,18 @@ async def test_product_offer_and_checkout_subjects_keep_all_slots_unknown_withou
             }
         )
         result = await Commerce360Provider(source).project(request, _context(request))
-        assert all(section.state == "unknown" for section in result.sections)
+        sections = {section.id: section for section in result.sections}
+        if subject_kind in {"product", "offer"}:
+            # The intent authority distinguishes a missing canonical catalog
+            # subject from an unavailable join. It still emits no intent data.
+            assert sections["intent"].state == "missing"
+            assert all(
+                section.state == "unknown"
+                for section_id, section in sections.items()
+                if section_id != "intent"
+            )
+        else:
+            assert all(section.state == "unknown" for section in sections.values())
         assert result.claims == []
 
 

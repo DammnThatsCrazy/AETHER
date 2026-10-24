@@ -402,7 +402,7 @@ export const intelligenceProjectionDefinitions: Record<
     implementationBlueprint: 'docs/reference/source-of-truth/AETHER_360_BACKEND_SINGLE_SOURCE_OF_TRUTH.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['campaign', 'checkout', 'commerce', 'entity', 'journey', 'offer', 'product', 'sku'],
-    canonicalAuthorities: ['campaign_facts', 'commerce', 'commerce_product_offer_graph', 'payments', 'source_provenance'],
+    canonicalAuthorities: ['campaign_facts', 'commerce', 'commerce_intent_authority', 'commerce_product_offer_graph', 'payments', 'source_provenance'],
     hardDependencies: ['contract_spine'],
     projectionDependencies: [],
     optionalProjectionDependencies: [],
@@ -1495,8 +1495,8 @@ export const intelligenceProjectionDefinitions: Record<
     implementationState: 'in_flight',
     implementationBlueprint: 'docs/architecture/blueprints/support360.md',
     ownsCanonicalTruth: false,
-    subjectKinds: ['entity', 'support_case'],
-    canonicalAuthorities: ['communication_facts', 'evidence', 'provider_connections', 'support_case_events', 'support_cases'],
+    subjectKinds: ['callback', 'entity', 'support_case'],
+    canonicalAuthorities: ['communication_facts', 'evidence', 'provider_connections', 'support_callback_events', 'support_callbacks', 'support_case_events', 'support_cases'],
     hardDependencies: ['contract_spine', 'temporal_kernel'],
     projectionDependencies: [],
     optionalProjectionDependencies: [],
@@ -2759,12 +2759,19 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         unboundReason: 'commerce_exposure_subject_join_not_available'
       },
       {
-        canonicalAuthorityRefs: ['commerce'],
-        description: 'Required commerce360 slot: intent.',
+        canonicalAuthorityRefs: ['commerce_intent_authority', 'commerce_product_offer_graph', 'source_provenance'],
+        description: 'Explicit tenant-owned intent records joined to an exact product or offer subject, with actor, source revision, timestamps, and evidence.',
         id: 'intent',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'commerce_intent_subject_join_not_available'
+        partialImplementationReason: 'explicit_intent_subject_join_is_implemented_for_product_and_offer_only; commerce_sku_and_checkout_authorities_are_not_connected; freshness_threshold_is_unconfigured',
+        projectionBindings: [
+          {
+            projectionId: 'commerce360',
+            role: 'primary',
+            subjectKinds: ['offer', 'product'],
+            sectionIds: ['intent']
+          }
+        ],
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['commerce_product_offer_graph', 'source_provenance'],
@@ -2849,7 +2856,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       }
     ],
     sourceOfTruth: {
-      canonicalAuthorities: ['campaign_facts', 'commerce', 'commerce_product_offer_graph', 'payments', 'risk_outputs', 'source_provenance'],
+      canonicalAuthorities: ['campaign_facts', 'commerce', 'commerce_intent_authority', 'commerce_product_offer_graph', 'payments', 'risk_outputs', 'source_provenance'],
       ownsCanonicalTruth: false,
       prohibitedOwnership: ['economic_facts', 'execution_facts', 'graph', 'identity', 'observations', 'risk_outputs', 'source_provenance']
     },
@@ -2946,10 +2953,10 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         ]
       },
       {
+        canonicalAuthorityRefs: ['communication_facts', 'entities', 'evidence', 'identity'],
+        description: 'Typed, source-authenticated participant role bindings joined through exact tenant-owned provider identity mappings; canonical conversation membership remains unresolved.',
         id: 'participants',
-        requirement: 'required',
-        description: 'Participant binding rows and endpoint metadata; full role resolution is pending.',
-        canonicalAuthorityRefs: ['communication_facts', 'entities'],
+        partialImplementationReason: 'participant_roles_are_observed_from_signed_provider_rosters_and_exact_tenant_identity_mappings_but_canonical_conversation_membership_and_full_message_coverage_are_unresolved; provider_delegation_refs_are_not_canonical_grants',
         projectionBindings: [
           {
             projectionId: 'communication360',
@@ -2957,7 +2964,8 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
             subjectKinds: ['agent', 'campaign'],
             sectionIds: ['interactions']
           }
-        ]
+        ],
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['communication_facts', 'consent_policy_decisions', 'evidence'],
@@ -3383,6 +3391,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         description: 'Required Execution 360 blueprint slot: authority check.',
         id: 'authority_check',
         implementationCrosswalk: ['actor_and_delegation'],
+        partialImplementationReason: 'New delegation-engine decisions persist an evaluation timestamp in the exact tenant-scoped agent_executions policy log and Execution360 verifies it against execution-record creation time; legacy rows without that timestamp remain unknown. This is request-time application evidence only and does not establish current or standing authority, policy input replay, other authority sources, or freshness.',
         projectionBindings: [
           {
             projectionId: 'execution360',
@@ -5661,12 +5670,19 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         unboundReason: 'canonical_support_case_agent_assignment_unavailable'
       },
       {
-        canonicalAuthorityRefs: ['communication_facts'],
-        description: 'Canonical callback schedule and execution records.',
+        canonicalAuthorityRefs: ['evidence', 'provider_connections', 'support_callback_events', 'support_callbacks', 'support_case_events', 'support_cases'],
+        description: 'Canonical callback schedule and execution records joined to the exact tenant, support case, provider connection, and retained callback events.',
         id: 'callbacks',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'canonical_support_callback_authority_unavailable'
+        partialImplementationReason: 'callback_schedule_and_execution_authority_is_tenant_case_connection_scoped_but_upstream_provider_origin_and_actor_attribution_are_unverified; source_history_completeness_and_freshness_remain_unknown',
+        projectionBindings: [
+          {
+            projectionId: 'support360',
+            role: 'primary',
+            subjectKinds: ['callback', 'support_case'],
+            sectionIds: ['evidence', 'state', 'timeline']
+          }
+        ],
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['evidence', 'provider_connections', 'support_case_events', 'support_cases'],
@@ -5926,7 +5942,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       }
     ],
     sourceOfTruth: {
-      canonicalAuthorities: ['agent_entities', 'agent_entity', 'communication_facts', 'episode_facts', 'events', 'evidence', 'identity', 'journeys', 'measurement_contract', 'outcome_facts', 'provider_connections', 'risk_outputs', 'risk_signals', 'source_coverage', 'source_provenance', 'support_case_events', 'support_cases'],
+      canonicalAuthorities: ['agent_entities', 'agent_entity', 'communication_facts', 'episode_facts', 'events', 'evidence', 'identity', 'journeys', 'measurement_contract', 'outcome_facts', 'provider_connections', 'risk_outputs', 'risk_signals', 'source_coverage', 'source_provenance', 'support_callback_events', 'support_callbacks', 'support_case_events', 'support_cases'],
       ownsCanonicalTruth: false,
       prohibitedOwnership: ['economic_facts', 'execution_facts', 'graph', 'identity', 'observations', 'risk_outputs', 'source_provenance']
     },

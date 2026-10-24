@@ -35,6 +35,7 @@ from shared.intelligence_projections.contracts import (
     ProjectionRequest,
     ProjectionResult,
     ProjectionSection,
+    ProjectionSubject,
 )
 from shared.intelligence_projections.errors import ProjectionError
 from shared.intelligence_projections.generated_registry import (
@@ -43,6 +44,11 @@ from shared.intelligence_projections.generated_registry import (
 from shared.intelligence_projections.provider import IntelligenceProjectionProvider
 from shared.intelligence_projections.registry import ProviderRegistry
 from journeys.support360.cases import SupportCaseAuthorityRead, SupportCaseRepository
+from journeys.support360.callbacks import (
+    SupportCallbackRead,
+    SupportCallbackRepository,
+    SupportCallbacksRead,
+)
 
 PROJECTION_ID = "support360"
 OUTPUT_SECTIONS: tuple[str, ...] = (
@@ -87,6 +93,13 @@ _REASON_CASE_COMMUNICATION_HISTORY_UNVERIFIED = (
 _REASON_JOURNEY_JOIN_MISSING = "canonical_support_case_journey_join_unavailable"
 _REASON_OUTCOME_JOIN_MISSING = "canonical_support_outcome_join_unavailable"
 _REASON_CALLBACK_AUTHORITY_MISSING = "canonical_support_callback_authority_unavailable"
+_REASON_CALLBACK_AUTHORITY_UNAVAILABLE = "support_callback_authority_unavailable"
+_REASON_CALLBACK_NOT_FOUND = "support_callback_not_found_for_tenant"
+_REASON_CALLBACK_SCOPE_MISMATCH = "support_callback_tenant_case_provider_scope_mismatch"
+_REASON_CALLBACK_EVIDENCE_UNAVAILABLE = "support_callback_event_evidence_unavailable"
+_REASON_CALLBACK_HISTORY_PARTIAL = "support_callback_event_history_truncated"
+_REASON_CALLBACK_SOURCE_HISTORY_UNVERIFIED = "support_callback_source_history_coverage_unverified"
+_REASON_CALLBACK_FRESHNESS_UNKNOWN = "support_callback_freshness_sla_unavailable"
 _REASON_PARTICIPANT_AUTHORITY_MISSING = "canonical_support_case_participants_unavailable"
 _REASON_SLA_AUTHORITY_MISSING = "canonical_support_sla_authority_unavailable"
 _REASON_AGENT_ASSIGNMENT_MISSING = "canonical_support_case_agent_assignment_unavailable"
@@ -121,8 +134,6 @@ _SAFE_SUPPORT_READ_REASONS = frozenset(
     }
 )
 _CANONICAL_SUBJECT_AUTHORITY_REASONS = {
-    "support_case": _REASON_CASE_AUTHORITY_MISSING,
-    "callback": _REASON_CALLBACK_AUTHORITY_MISSING,
     "conversation": _REASON_CONVERSATION_AUTHORITY_MISSING,
     "ticket": _REASON_TICKET_CASE_JOIN_MISSING,
 }
@@ -639,6 +650,7 @@ class Support360Provider(IntelligenceProjectionProvider):
         *,
         agent_identity_reader: Optional[SupportAgentIdentityReader] = None,
         case_repository: Optional[SupportCaseRepository] = None,
+        callback_repository: Optional[SupportCallbackRepository] = None,
     ) -> None:
         self._source = source if source is not None else RepositorySupport360Source()
         self._agent_identity = (
@@ -648,6 +660,11 @@ class Support360Provider(IntelligenceProjectionProvider):
         )
         self._case_repository = (
             case_repository if case_repository is not None else SupportCaseRepository()
+        )
+        self._callback_repository = (
+            callback_repository
+            if callback_repository is not None
+            else SupportCallbackRepository()
         )
 
     async def project(
@@ -661,11 +678,17 @@ class Support360Provider(IntelligenceProjectionProvider):
                 projection_id=request.projectionId,
             )
 
-        if request.subject.kind not in {"entity", "agent", "episode", "source", "support_case"}:
-            # These are valid SSOT subject identifiers, but the repository
-            # currently has no canonical case/callback/conversation/ticket
-            # authority to resolve them. Preserve them as typed unknowns
-            # instead of labeling a supported contract subject as invalid.
+        if request.subject.kind not in {
+            "entity",
+            "agent",
+            "episode",
+            "source",
+            "support_case",
+            "callback",
+        }:
+            # Remaining valid SSOT subject identifiers do not all have a
+            # canonical authority. Preserve them as typed unknowns instead of
+            # labeling a supported contract subject as invalid.
             subject_authority_reason = _CANONICAL_SUBJECT_AUTHORITY_REASONS.get(
                 request.subject.kind
             )
@@ -715,6 +738,8 @@ class Support360Provider(IntelligenceProjectionProvider):
             max(request.page.limit if request.page is not None else _DEFAULT_LIMIT, 1),
             _MAX_LIMIT,
         )
+        if request.subject.kind == "callback":
+            return await self._project_callback(request, context, limit=limit)
         if request.subject.kind == "support_case":
             return await self._project_case(
                 request,
@@ -1057,6 +1082,22 @@ class Support360Provider(IntelligenceProjectionProvider):
         if record.get("tenant_id") != request.tenantId or record.get("case_id") != request.subject.id:
             return self._unknown_result(request, context, "support_case_tenant_scope_mismatch")
 
+        try:
+            callback_read = await self._callback_repository.list_for_case(
+                request.tenantId,
+                request.subject.id,
+                limit=limit,
+                after=after,
+                before=before,
+            )
+        except Exception:  # noqa: BLE001 - callback authority failure is a typed unknown slot
+            callback_read = SupportCallbacksRead([], False, False, reason=_REASON_CALLBACK_AUTHORITY_UNAVAILABLE)
+        callback_slot, callback_evidence_refs, callback_reasons = _validated_callback_slot(
+            callback_read,
+            tenant_id=request.tenantId,
+            case_record=record,
+        )
+
         events = [event for event in read.events if isinstance(event, dict)]
         case_record_evidence_ref = _support_case_record_evidence(record)
         evidence_refs: list[EvidenceRef] = (
@@ -1089,6 +1130,7 @@ class Support360Provider(IntelligenceProjectionProvider):
         if not evidence_refs or not timeline_entries:
             return self._unknown_result(request, context, _REASON_CASE_EVIDENCE_UNAVAILABLE)
         case_lifecycle_evidence_refs = list(evidence_refs)
+        evidence_refs = _dedupe_evidence_refs(evidence_refs + callback_evidence_refs)
 
         partial_reasons = [_REASON_CASE_HISTORY_PARTIAL]
         if event_evidence_incomplete:
@@ -1124,6 +1166,7 @@ class Support360Provider(IntelligenceProjectionProvider):
             "reasonCodes": partial_reasons,
         }
         slots = _unknown_support_slots(_REASON_CASE_COMMUNICATION_JOIN_MISSING)
+        slots["callbacks"] = callback_slot
         slots["case_summary"] = {
             "state": "degraded",
             "reasonCodes": partial_reasons,
@@ -1131,7 +1174,7 @@ class Support360Provider(IntelligenceProjectionProvider):
             "lifecycleState": lifecycle_state,
             "claimState": "observed",
             "sourceOccurredAt": lifecycle_observed_at,
-            "evidenceRefs": evidence_refs,
+            "evidenceRefs": case_lifecycle_evidence_refs,
         }
         slots["evidence_trace"] = {
             "state": "degraded",
@@ -1251,14 +1294,18 @@ class Support360Provider(IntelligenceProjectionProvider):
                 "evidenceRefs": case_communication_evidence,
                 "caseJoinEvidenceRefs": case_join_evidence_refs,
             }
-            evidence_refs = case_communication_evidence
+            evidence_refs = _dedupe_evidence_refs(
+                case_communication_evidence + callback_evidence_refs
+            )
             slots["evidence_trace"] = {
                 "state": "degraded",
                 "reasonCodes": partial_reasons + communication_reasons,
                 "count": len(evidence_refs),
                 "evidenceRefs": evidence_refs,
             }
-        case_degraded_reasons = sorted(set(partial_reasons + communication_reasons))
+        case_degraded_reasons = sorted(
+            set(partial_reasons + callback_reasons + communication_reasons)
+        )
         resolution_slot = _case_resolution_slot(record, events)
         if resolution_slot is not None:
             slots["resolution"] = resolution_slot
@@ -1310,6 +1357,7 @@ class Support360Provider(IntelligenceProjectionProvider):
             "entryCount": len(timeline_entries),
             "entries": timeline_entries,
             "coverage": "persisted_case_events_only",
+            "callbacks": callback_slot,
             "communicationHistory": {
                 "state": slots["conversation_history"]["state"],
                 "contentMode": "metadata_only",
@@ -1322,6 +1370,7 @@ class Support360Provider(IntelligenceProjectionProvider):
         evidence_content = {
             "count": len(evidence_refs),
             "evidenceRefs": evidence_refs,
+            "supportCallbackEvidenceRefs": callback_evidence_refs,
             "caseLifecycleEvidenceRefs": case_lifecycle_evidence_refs,
             "supportCommunicationEvidenceRefs": (
                 communication_refs if communication_scope_known else None
@@ -1347,6 +1396,27 @@ class Support360Provider(IntelligenceProjectionProvider):
                 ),
             )
         ]
+        if callback_slot["state"] not in {"unknown", "degraded_unavailable"}:
+            for callback in callback_slot.get("callbacks", []):
+                callback_refs = [
+                    reference
+                    for reference in callback.get("evidenceRefs", [])
+                    if isinstance(reference, EvidenceRef)
+                ]
+                if callback_refs:
+                    claims.append(
+                        ClaimEnvelope(
+                            id=f"support360.callback.{callback['callbackId']}.{callback['lastSourceEventId']}",
+                            kind="support_callback_schedule_execution_observation",
+                            subject=ProjectionSubject(kind="callback", id=callback["callbackId"]),
+                            evidenceRefs=callback_refs,
+                            claims=[
+                                "The tenant-authorized ingress accepted this source-asserted callback schedule or execution event for the exact canonical support case under the verified provider connection."
+                            ],
+                            claimState=EpistemicStatus.OBSERVED,
+                            domainSlotIds=["callbacks", "evidence_trace"],
+                        )
+                    )
         claims.extend(
             ClaimEnvelope(
                 id=f"support360.case.communication.{request.subject.id}.{reference.id}",
@@ -1367,7 +1437,14 @@ class Support360Provider(IntelligenceProjectionProvider):
                 state="degraded",
                 content=case_summary,
                 warnings=partial_reasons,
-                canonicalAuthorityRefs=["support_cases", "support_case_events", "provider_connections", "evidence"],
+                canonicalAuthorityRefs=[
+                    "support_cases",
+                    "support_case_events",
+                    "support_callbacks",
+                    "support_callback_events",
+                    "provider_connections",
+                    "evidence",
+                ],
             ),
             ProjectionSection(
                 id="state",
@@ -1377,6 +1454,8 @@ class Support360Provider(IntelligenceProjectionProvider):
                 canonicalAuthorityRefs=[
                     "support_cases",
                     "support_case_events",
+                    "support_callbacks",
+                    "support_callback_events",
                     "provider_connections",
                     "communication_facts",
                     "evidence",
@@ -1387,7 +1466,13 @@ class Support360Provider(IntelligenceProjectionProvider):
                 state="degraded",
                 content=timeline_content,
                 warnings=case_degraded_reasons,
-                canonicalAuthorityRefs=["support_case_events", "communication_facts", "evidence"],
+                canonicalAuthorityRefs=[
+                    "support_case_events",
+                    "support_callbacks",
+                    "support_callback_events",
+                    "communication_facts",
+                    "evidence",
+                ],
             ),
             ProjectionSection(
                 id="evidence",
@@ -1396,6 +1481,8 @@ class Support360Provider(IntelligenceProjectionProvider):
                 warnings=case_degraded_reasons,
                 canonicalAuthorityRefs=[
                     "support_case_events",
+                    "support_callbacks",
+                    "support_callback_events",
                     "provider_connections",
                     "communication_facts",
                     "evidence",
@@ -1456,6 +1543,235 @@ class Support360Provider(IntelligenceProjectionProvider):
                 hasNextPage=communication_read.truncated
                 or communication_read.next_cursor is not None,
             ),
+        )
+
+    async def _project_callback(
+        self,
+        request: ProjectionRequest,
+        context: ProjectionContext,
+        *,
+        limit: int,
+    ) -> ProjectionResult:
+        """Resolve a callback ID within tenant scope, then verify its exact case join."""
+        try:
+            callback_read = await self._callback_repository.get_callback(
+                request.tenantId,
+                request.subject.id,
+                limit=min(limit, 50),
+            )
+        except Exception:  # noqa: BLE001 - callback authority failure is unknown
+            return self._unknown_result(request, context, _REASON_CALLBACK_AUTHORITY_UNAVAILABLE)
+        if not isinstance(callback_read, SupportCallbackRead) or not callback_read.available:
+            return self._unknown_result(request, context, _REASON_CALLBACK_AUTHORITY_UNAVAILABLE)
+        if callback_read.expired:
+            return self._unknown_result(request, context, "support_callback_retention_expired")
+        record = callback_read.record
+        if not isinstance(record, dict):
+            return self._unknown_result(request, context, _REASON_CALLBACK_NOT_FOUND)
+        if record.get("tenant_id") != request.tenantId or record.get("callback_id") != request.subject.id:
+            return self._unknown_result(request, context, _REASON_CALLBACK_SCOPE_MISMATCH)
+        case_id = _safe_reference(_text(record.get("case_id")))
+        if case_id is None:
+            return self._unknown_result(request, context, _REASON_CALLBACK_SCOPE_MISMATCH)
+        try:
+            case_read = await self._case_repository.get_case(request.tenantId, case_id, limit=100)
+        except Exception:  # noqa: BLE001 - case join outage is unknown
+            return self._unknown_result(request, context, _REASON_CASE_AUTHORITY_UNAVAILABLE)
+        if not isinstance(case_read, SupportCaseAuthorityRead) or not case_read.available:
+            return self._unknown_result(request, context, _REASON_CASE_AUTHORITY_UNAVAILABLE)
+        if case_read.expired:
+            return self._unknown_result(request, context, _REASON_CASE_RETENTION_EXPIRED)
+        case_record = case_read.record
+        if (
+            not isinstance(case_record, dict)
+            or case_record.get("tenant_id") != request.tenantId
+            or str(case_record.get("case_id")) != case_id
+            or case_record.get("source_connection_id") != record.get("source_connection_id")
+            or case_record.get("source_provider_identity") != record.get("source_provider_identity")
+        ):
+            return self._unknown_result(request, context, _REASON_CALLBACK_SCOPE_MISMATCH)
+
+        callback_with_events = dict(record)
+        callback_with_events["events"] = callback_read.events
+        callback_with_events["events_complete"] = callback_read.complete
+        callback_with_events["event_count"] = max(
+            len(callback_read.events), int(record.get("event_count") or 0)
+        )
+        callback_source_read = SupportCallbacksRead(
+            [callback_with_events],
+            True,
+            callback_read.complete,
+            not callback_read.complete,
+        )
+        callback_slot, callback_refs, callback_reasons = _validated_callback_slot(
+            callback_source_read,
+            tenant_id=request.tenantId,
+            case_record=case_record,
+        )
+        if callback_slot.get("state") == "unknown":
+            return self._unknown_result(
+                request,
+                context,
+                (callback_slot.get("reasonCodes") or [_REASON_CALLBACK_EVIDENCE_UNAVAILABLE])[0],
+            )
+
+        case_ref = _support_case_record_evidence(case_record)
+        if case_ref is None:
+            return self._unknown_result(request, context, _REASON_CASE_EVIDENCE_UNAVAILABLE)
+        latest_case_event = next(
+            (
+                event
+                for event in case_read.events
+                if isinstance(event, dict)
+                and event.get("source_event_id") == case_record.get("last_source_event_id")
+            ),
+            None,
+        )
+        if not isinstance(latest_case_event, dict):
+            return self._unknown_result(request, context, _REASON_CASE_EVIDENCE_UNAVAILABLE)
+        case_event_refs = _case_event_evidence_refs(case_record, latest_case_event)
+        if not case_event_refs:
+            return self._unknown_result(request, context, _REASON_CASE_EVIDENCE_UNAVAILABLE)
+        evidence_refs = _dedupe_evidence_refs([case_ref, *case_event_refs, *callback_refs])
+        if not evidence_refs:
+            return self._unknown_result(request, context, _REASON_CALLBACK_EVIDENCE_UNAVAILABLE)
+
+        callback_entry = (callback_slot.get("callbacks") or [{}])[0]
+        case_lifecycle = _safe_reference(_text(case_record.get("lifecycle_state")))
+        freshness = {
+            "state": "unknown",
+            "newestObservedAt": callback_slot.get("freshness", {}).get("newestObservedAt"),
+            "reasonCode": _REASON_CALLBACK_FRESHNESS_UNKNOWN,
+        }
+        case_summary = {
+            "canonicalCallbackId": request.subject.id,
+            "canonicalCaseId": case_id,
+            "callbackState": callback_entry.get("state"),
+            "scheduledFor": callback_entry.get("scheduledFor"),
+            "sourceProvider": _safe_reference(_text(record.get("source_provider_identity"))),
+            "claimState": "observed",
+            "freshness": freshness,
+            "reasonCodes": callback_reasons,
+        }
+        slots = _unknown_support_slots(_REASON_CALLBACK_SCOPE_MISMATCH)
+        slots["case_summary"] = {
+            "state": "degraded",
+            "canonicalCaseId": case_id,
+            "lifecycleState": case_lifecycle,
+            "claimState": "observed",
+            "evidenceRefs": [case_ref, *case_event_refs],
+            "reasonCodes": ["support_case_source_history_coverage_unverified"],
+        }
+        slots["callbacks"] = callback_slot
+        slots["evidence_trace"] = {
+            "state": "degraded",
+            "count": len(evidence_refs),
+            "evidenceRefs": evidence_refs,
+            "reasonCodes": callback_reasons,
+        }
+        event_entries = callback_entry.get("events", [])
+        state_content = {
+            "supportCommunications": {
+                "state": "unknown",
+                "reasonCode": "support_callback_conversation_join_unavailable",
+            },
+            "supportCases": {
+                "state": "observed",
+                "canonicalCaseId": case_id,
+                "lifecycleState": case_lifecycle,
+                "claimState": "observed",
+            },
+            "journeyLinkage": {"state": "unknown", "reasonCode": _REASON_JOURNEY_JOIN_MISSING},
+            "measuredOutcomes": {"state": "unknown", "reasonCode": _REASON_OUTCOME_JOIN_MISSING},
+            "requiredSlots": slots,
+        }
+        claims = [
+            ClaimEnvelope(
+                id=f"support360.callback.{request.subject.id}.{callback_entry.get('lastSourceEventId')}",
+                kind="support_callback_schedule_execution_observation",
+                subject=request.subject,
+                evidenceRefs=callback_refs,
+                claims=[
+                    "The tenant-authorized ingress accepted this source-asserted callback schedule or execution event for the exact canonical support case under the verified provider connection."
+                ],
+                claimState=EpistemicStatus.OBSERVED,
+                domainSlotIds=["callbacks", "evidence_trace"],
+            )
+        ]
+        warnings = sorted(set(callback_reasons + ["support_case_source_history_coverage_unverified"]))
+        canonical_refs = [
+            "support_callbacks",
+            "support_callback_events",
+            "support_cases",
+            "support_case_events",
+            "provider_connections",
+            "evidence",
+        ]
+        sections = [
+            ProjectionSection(
+                id="summary",
+                state="degraded",
+                content=case_summary,
+                warnings=warnings,
+                canonicalAuthorityRefs=canonical_refs,
+            ),
+            ProjectionSection(
+                id="state",
+                state="degraded",
+                content=state_content,
+                warnings=warnings,
+                canonicalAuthorityRefs=canonical_refs,
+            ),
+            ProjectionSection(
+                id="timeline",
+                state="degraded",
+                content={
+                    "order": "source_occurred_at_descending",
+                    "causalRelationsDeclared": False,
+                    "entryCount": len(event_entries),
+                    "entries": event_entries,
+                    "callback": callback_entry,
+                },
+                warnings=warnings,
+                canonicalAuthorityRefs=canonical_refs,
+            ),
+            ProjectionSection(
+                id="evidence",
+                state="degraded",
+                content={
+                    "count": len(evidence_refs),
+                    "evidenceRefs": evidence_refs,
+                    "supportCallbackEvidenceRefs": callback_refs,
+                    "supportCaseEvidenceRefs": [case_ref, *case_event_refs],
+                },
+                warnings=warnings,
+                canonicalAuthorityRefs=canonical_refs,
+            ),
+            ProjectionSection(
+                id="interactions",
+                state="unknown",
+                content=None,
+                warnings=["support_callback_conversation_join_unavailable"],
+                canonicalAuthorityRefs=["communication_facts"],
+            ),
+            ProjectionSection(
+                id="outcomes",
+                state="unknown",
+                content=None,
+                warnings=[_REASON_RESOLUTION_AUTHORITY_MISSING],
+                canonicalAuthorityRefs=["outcome_facts"],
+            ),
+        ]
+        return ProjectionResult(
+            projectionId=self.projection_id,
+            tenantId=request.tenantId,
+            contractVersion=self.contract_version,
+            sections=sections,
+            claims=claims,
+            dependencyState=list(context.dependencyState),
+            generatedAt=datetime.now(timezone.utc).isoformat(),
+            degradedReasons=warnings,
+            page=PageInfo(nextCursor=None, hasNextPage=not callback_read.complete),
         )
 
     async def _case_communication_read(
@@ -1638,6 +1954,247 @@ def register_provider(registry: ProviderRegistry) -> str:
         Support360Provider(),
         source="services/api/journeys/support360",
     )
+
+
+def _validated_callback_slot(
+    read: SupportCallbacksRead,
+    *,
+    tenant_id: str,
+    case_record: dict[str, Any],
+) -> tuple[dict[str, Any], list[EvidenceRef], list[str]]:
+    """Recheck exact callback, case, connection, provider, and event evidence."""
+    if not isinstance(read, SupportCallbacksRead) or not read.available or not read.scope_known:
+        reason = (
+            _REASON_CALLBACK_AUTHORITY_UNAVAILABLE
+            if not isinstance(read, SupportCallbacksRead) or not read.available
+            else _REASON_CALLBACK_SCOPE_MISMATCH
+        )
+        return (
+            {"state": "unknown", "reasonCode": reason, "reasonCodes": [reason], "callbacks": None},
+            [],
+            [reason],
+        )
+    case_id = _safe_reference(_text(case_record.get("case_id")))
+    connection_id = _safe_reference(_text(case_record.get("source_connection_id")))
+    provider_identity = _safe_reference(_text(case_record.get("source_provider_identity")))
+    if case_record.get("tenant_id") != tenant_id or not case_id or not connection_id or not provider_identity:
+        reason = _REASON_CALLBACK_SCOPE_MISMATCH
+        return ({"state": "unknown", "reasonCode": reason, "reasonCodes": [reason], "callbacks": None}, [], [reason])
+
+    callbacks: list[dict[str, Any]] = []
+    all_refs: list[EvidenceRef] = []
+    newest_observed_at: Optional[str] = None
+    if not isinstance(read.callbacks, list):
+        reason = _REASON_CALLBACK_SCOPE_MISMATCH
+        return ({"state": "unknown", "reasonCode": reason, "reasonCodes": [reason], "callbacks": None}, [], [reason])
+
+    for callback in read.callbacks:
+        if not isinstance(callback, dict):
+            reason = _REASON_CALLBACK_SCOPE_MISMATCH
+            return ({"state": "unknown", "reasonCode": reason, "reasonCodes": [reason], "callbacks": None}, [], [reason])
+        callback_id = _safe_reference(_text(callback.get("callback_id")))
+        state = _safe_reference(_text(callback.get("callback_state")))
+        scheduled_for = _utc_timestamp(callback.get("scheduled_for"))
+        last_source_event_id = _safe_reference(_text(callback.get("last_source_event_id")))
+        if (
+            callback.get("tenant_id") != tenant_id
+            or str(callback.get("case_id")) != case_id
+            or callback.get("source_connection_id") != connection_id
+            or callback.get("source_provider_identity") != provider_identity
+            or callback_id is None
+            or state not in {"scheduled", "attempted", "completed", "failed", "cancelled"}
+            or scheduled_for is None
+            or last_source_event_id is None
+            or not isinstance(callback.get("events"), list)
+        ):
+            reason = _REASON_CALLBACK_SCOPE_MISMATCH
+            return ({"state": "unknown", "reasonCode": reason, "reasonCodes": [reason], "callbacks": None}, [], [reason])
+
+        event_entries: list[dict[str, Any]] = []
+        callback_refs: list[EvidenceRef] = []
+        latest_event_found = False
+        for event in callback["events"]:
+            if not isinstance(event, dict):
+                reason = _REASON_CALLBACK_SCOPE_MISMATCH
+                return ({"state": "unknown", "reasonCode": reason, "reasonCodes": [reason], "callbacks": None}, [], [reason])
+            event_id = _safe_reference(_text(event.get("source_event_id")))
+            event_type = _safe_reference(_text(event.get("event_type")))
+            occurred_at = _utc_timestamp(event.get("source_occurred_at"))
+            received_at = _utc_timestamp(event.get("received_at"))
+            event_callback_id = _safe_reference(_text(event.get("callback_id")))
+            case_source_event_id = _safe_reference(_text(event.get("case_source_event_id")))
+            if (
+                event.get("tenant_id") != tenant_id
+                or str(event.get("case_id")) != case_id
+                or event.get("source_connection_id") != connection_id
+                or event_callback_id != callback_id
+                or event_id is None
+                or event_type is None
+                or occurred_at is None
+                or received_at is None
+                or case_source_event_id is None
+                or event_type
+                not in {
+                    "support_callback_scheduled",
+                    "support_callback_rescheduled",
+                    "support_callback_attempted",
+                    "support_callback_completed",
+                    "support_callback_failed",
+                    "support_callback_cancelled",
+                }
+            ):
+                reason = _REASON_CALLBACK_SCOPE_MISMATCH
+                return ({"state": "unknown", "reasonCode": reason, "reasonCodes": [reason], "callbacks": None}, [], [reason])
+            if event.get("source_provider_identity") not in {None, provider_identity}:
+                reason = _REASON_CALLBACK_SCOPE_MISMATCH
+                return ({"state": "unknown", "reasonCode": reason, "reasonCodes": [reason], "callbacks": None}, [], [reason])
+            refs = _callback_event_evidence_refs(
+                event,
+                callback_id=callback_id,
+                case_id=case_id,
+                connection_id=connection_id,
+                provider_identity=provider_identity,
+            )
+            if not refs:
+                reason = _REASON_CALLBACK_EVIDENCE_UNAVAILABLE
+                return ({"state": "unknown", "reasonCode": reason, "reasonCodes": [reason], "callbacks": None}, [], [reason])
+            if event_id == last_source_event_id and event.get("state_applied") is True:
+                latest_event_found = True
+            if newest_observed_at is None or received_at.isoformat() > newest_observed_at:
+                newest_observed_at = received_at.isoformat()
+            callback_refs.extend(refs)
+            event_entries.append(
+                {
+                    "eventType": event_type,
+                    "occurredAt": occurred_at.isoformat(),
+                    "receivedAt": received_at.isoformat(),
+                    "scheduledFor": (
+                        _utc_timestamp(event.get("scheduled_for")).isoformat()
+                        if event.get("scheduled_for") is not None
+                        and _utc_timestamp(event.get("scheduled_for")) is not None
+                        else None
+                    ),
+                    "stateApplied": event.get("state_applied") is True,
+                    "sourceEventId": event_id,
+                    "evidenceRefs": refs,
+                }
+            )
+        if not latest_event_found:
+            reason = _REASON_CALLBACK_EVIDENCE_UNAVAILABLE
+            return ({"state": "unknown", "reasonCode": reason, "reasonCodes": [reason], "callbacks": None}, [], [reason])
+        if not callback_refs:
+            reason = _REASON_CALLBACK_EVIDENCE_UNAVAILABLE
+            return ({"state": "unknown", "reasonCode": reason, "reasonCodes": [reason], "callbacks": None}, [], [reason])
+        callback_refs = _dedupe_evidence_refs(callback_refs)
+        all_refs.extend(callback_refs)
+        callbacks.append(
+            {
+                "callbackId": callback_id,
+                "canonicalCaseId": case_id,
+                "state": state,
+                "scheduledFor": scheduled_for.isoformat(),
+                "lastSourceEventId": last_source_event_id,
+                "lastObservedAt": _safe_reference(_text(callback.get("last_observed_at"))),
+                "eventCount": int(callback.get("event_count") or len(event_entries)),
+                "eventsComplete": callback.get("events_complete") is True,
+                "events": event_entries,
+                "evidenceRefs": callback_refs,
+            }
+        )
+
+    reasons = [_REASON_CALLBACK_SOURCE_HISTORY_UNVERIFIED, _REASON_CALLBACK_FRESHNESS_UNKNOWN]
+    events_complete = all(callback.get("eventsComplete") is True for callback in callbacks)
+    if not read.complete or read.truncated or not events_complete:
+        reasons.append(_REASON_CALLBACK_HISTORY_PARTIAL)
+    complete = read.complete and not read.truncated and events_complete
+    slot_state = "empty" if not callbacks and complete else "degraded"
+    slot = {
+        "state": slot_state,
+        "reasonCodes": sorted(set(reasons)),
+        "count": len(callbacks),
+        "callbacks": callbacks,
+        "readCompleteness": "complete_current_store_read" if complete else "partial",
+        "sourceHistoryComplete": False,
+        "freshness": {
+            "state": "unknown",
+            "newestObservedAt": newest_observed_at,
+            "reasonCode": _REASON_CALLBACK_FRESHNESS_UNKNOWN,
+        },
+        "evidenceRefs": _dedupe_evidence_refs(all_refs),
+    }
+    return slot, _dedupe_evidence_refs(all_refs), sorted(set(reasons))
+
+
+def _callback_event_evidence_refs(
+    event: dict[str, Any],
+    *,
+    callback_id: str,
+    case_id: str,
+    connection_id: str,
+    provider_identity: str,
+) -> list[EvidenceRef]:
+    """Validate the persisted source receipts for one exact callback event."""
+    source_event_id = _safe_reference(_text(event.get("source_event_id")))
+    case_source_event_id = _safe_reference(_text(event.get("case_source_event_id")))
+    event_at = _utc_timestamp(event.get("source_occurred_at"))
+    raw_refs = event.get("evidence_refs")
+    if isinstance(raw_refs, str):
+        try:
+            raw_refs = json.loads(raw_refs)
+        except json.JSONDecodeError:
+            return []
+    if (
+        source_event_id is None
+        or case_source_event_id is None
+        or event_at is None
+        or not isinstance(raw_refs, (list, tuple))
+    ):
+        return []
+    expected = {
+        "callback": (callback_id, "entity", "support_callbacks", f"store://support_callbacks/{quote(callback_id, safe='')}", None),
+        "case": (case_id, "entity", "support_cases", f"store://support_cases/{quote(case_id, safe='')}", None),
+        "case_event": (
+            case_source_event_id,
+            "event",
+            provider_identity,
+            "provider-event://"
+            f"{quote(connection_id, safe='')}/{quote(case_source_event_id, safe='')}",
+            None,
+        ),
+        "event": (
+            source_event_id,
+            "event",
+            provider_identity,
+            "provider-event://"
+            f"{quote(connection_id, safe='')}/{quote(source_event_id, safe='')}",
+            event_at,
+        ),
+        "connection": (
+            connection_id,
+            "entity",
+            "provider_connections",
+            f"store://provider_connections/{quote(connection_id, safe='')}",
+            None,
+        ),
+    }
+    found: dict[str, EvidenceRef] = {}
+    for raw_ref in raw_refs:
+        try:
+            ref = raw_ref if isinstance(raw_ref, EvidenceRef) else EvidenceRef.model_validate(raw_ref)
+        except (TypeError, ValueError):
+            continue
+        for name, (expected_id, expected_type, expected_source, expected_uri, expected_at) in expected.items():
+            if (
+                ref.id == expected_id
+                and ref.type == expected_type
+                and ref.source == expected_source
+                and ref.uri == expected_uri
+                and (expected_at is None or _utc_timestamp(ref.observedAt) == expected_at)
+            ):
+                found[name] = ref
+    if set(found) != set(expected):
+        return []
+    return [found[name] for name in ("callback", "case", "case_event", "event", "connection")]
 
 
 def _entity_row_matches(row: dict[str, Any], entity_id: str) -> bool:
@@ -1976,7 +2533,14 @@ def _unknown_support_slots(reason: str) -> dict[str, dict[str, Any]]:
             "entries": None,
             "evidenceRefs": None,
         },
-        "callbacks": {"state": "unknown", "reasonCode": _REASON_CALLBACK_AUTHORITY_MISSING},
+        "callbacks": {
+            "state": "unknown",
+            "reasonCode": (
+                reason
+                if reason.startswith("support_callback_")
+                else _REASON_CALLBACK_AUTHORITY_MISSING
+            ),
+        },
         "participants": {
             "state": "unknown",
             "reasonCode": _REASON_PARTICIPANT_AUTHORITY_MISSING,

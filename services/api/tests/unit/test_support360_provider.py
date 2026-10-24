@@ -27,6 +27,7 @@ from journeys.support360.provider import (  # noqa: E402
     _REASON_CASE_NOT_FOUND,
     _REASON_CONVERSATION_AUTHORITY_MISSING,
     _REASON_CALLBACK_AUTHORITY_MISSING,
+    _REASON_CALLBACK_NOT_FOUND,
     _REASON_JOURNEY_JOIN_MISSING,
     _REASON_PARTIAL_ENTITY_JOIN,
     _REASON_PARTICIPANT_AUTHORITY_MISSING,
@@ -336,7 +337,7 @@ async def test_unsupported_subject_kinds_fail_closed(subject_kind: str) -> None:
     ("subject_kind", "expected_reason"),
     [
         ("support_case", _REASON_CASE_NOT_FOUND),
-        ("callback", _REASON_CALLBACK_AUTHORITY_MISSING),
+        ("callback", _REASON_CALLBACK_NOT_FOUND),
         ("conversation", _REASON_CONVERSATION_AUTHORITY_MISSING),
         ("ticket", _REASON_TICKET_CASE_JOIN_MISSING),
     ],
@@ -403,11 +404,12 @@ async def test_canonical_support_case_subject_reads_exact_case_summary_with_evid
     assert slots["case_summary"]["state"] == "degraded"
     assert slots["case_summary"]["canonicalCaseId"] == record["case_id"]
     assert slots["evidence_trace"]["state"] == "degraded"
+    assert slots["callbacks"]["state"] == "empty"
+    assert slots["callbacks"]["count"] == 0
     assert all(
         slots[slot_id]["state"] == "unknown"
         for slot_id in (
             "conversation_history",
-            "callbacks",
             "participants",
             "sla",
             "journey_links",

@@ -3558,8 +3558,22 @@ async def test_window_mode_is_supported_and_applies_explicit_event_time_bounds()
 
 
 async def test_frame_actor_metadata_uses_execution_evidence_and_keeps_decision_scoped() -> None:
+    row = _server_row()
+    row["created_at"] = "2026-10-16T10:00:00.500000+00:00"
+    row["policy_log"]["delegation_check"]["evaluated_at"] = (
+        "2026-10-16T10:00:00.250000+00:00"
+    )
     projection_request = _request()
-    result = await Execution360Provider(FakeSource()).project(
+    result = await Execution360Provider(
+        FakeSource(
+            server=ExecutionRead(
+                rows=[row],
+                available=True,
+                scope_known=True,
+                agent_ids=(AGENT,),
+            )
+        )
+    ).project(
         projection_request,
         await _context(projection_request),
     )
@@ -3580,6 +3594,7 @@ async def test_frame_actor_metadata_uses_execution_evidence_and_keeps_decision_s
     assert authority is not None
     assert authority.outcome == "allow"
     assert authority.delegationRefs == ["deleg-1"]
+    assert authority.decidedAt == "2026-10-16T10:00:00.250000+00:00"
     assert authority.reasonCodes == ["recorded_execution_scoped_decision_not_standing_authority"]
     assert authority.evidenceRefs
     assert metadata["actor_attribution"].delegator is not None
@@ -3708,6 +3723,78 @@ async def test_execution_authority_check_exposes_exact_recorded_decision_with_un
         ref["id"] == "exec-1" and ref["source"] == "agent_executions"
         for ref in evidence.content["evidence"]
     )
+
+
+async def test_execution_authority_check_exposes_persisted_evaluation_timestamp() -> None:
+    row = {
+        **_server_row(),
+        "created_at": "2026-10-16T10:00:03+00:00",
+        "policy_log": {
+            "delegation_check": {
+                "allowed": True,
+                "delegation_id": "deleg-1",
+                "evaluated_at": "2026-10-16T09:59:59.750000Z",
+            }
+        },
+    }
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[row],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    state = next(section for section in result.sections if section.id == "state")
+    authority = state.content["authorityCheck"]
+    decision = authority["joinedActionScopedDecisions"][0]
+    assert decision["decisionTime"] == {
+        "state": "recorded",
+        "evaluatedAt": "2026-10-16T09:59:59.750000+00:00",
+        "source": "agent_executions.policy_log.delegation_check.evaluated_at",
+    }
+    assert authority["temporalScope"]["decisionTimestamp"] == "persisted"
+    assert authority["freshness"]["state"] == "unknown"
+    assert authority["effectiveAuthorization"]["state"] == "unknown"
+
+
+async def test_execution_authority_check_rejects_decision_timestamp_after_record_creation() -> None:
+    row = {
+        **_server_row(),
+        "created_at": "2026-10-16T10:00:03+00:00",
+        "policy_log": {
+            "delegation_check": {
+                "allowed": True,
+                "delegation_id": "deleg-1",
+                "evaluated_at": "2026-10-16T10:00:04+00:00",
+            }
+        },
+    }
+    source = FakeSource(
+        server=ExecutionRead(
+            rows=[row],
+            available=True,
+            scope_known=True,
+            agent_ids=(AGENT,),
+        ),
+        observed=ExecutionRead([], available=True, scope_known=True, agent_ids=(AGENT,)),
+    )
+    request = _request()
+    result = await Execution360Provider(source).project(request, await _context(request))
+
+    state = next(section for section in result.sections if section.id == "state")
+    authority = state.content["authorityCheck"]
+    decision = authority["joinedActionScopedDecisions"][0]
+    assert authority["state"] == "degraded"
+    assert decision["decisionTime"] == {
+        "state": "unknown",
+        "reason": "delegation_decision_timestamp_after_execution_record",
+    }
+    assert authority["temporalScope"]["decisionTimestamp"] == "not_persisted"
 
 
 async def test_execution_authority_check_rejects_ambiguous_or_malformed_decision_rows() -> None:

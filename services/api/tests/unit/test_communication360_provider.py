@@ -3049,3 +3049,129 @@ def test_register_unknown_id_raises() -> None:
 
 def test_provider_contract_version_matches_registry() -> None:
     assert Communication360Provider.contract_version == INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("roster_state", "expected_count", "asserted_count", "expected_reason"),
+    [
+        (
+            "complete",
+            2,
+            2,
+            "complete_provider_roster_observed_but_provider_conversation_to_canonical_conversation_membership_is_unresolved",
+        ),
+        (
+            "partial",
+            4,
+            2,
+            "provider_participant_roster_is_explicitly_partial_or_has_uncovered_bindings",
+        ),
+    ],
+)
+async def test_typed_roster_read_surfaces_role_evidence_and_never_overstates_coverage(
+    roster_state: str,
+    expected_count: int,
+    asserted_count: int,
+    expected_reason: str,
+) -> None:
+    event_id = "evt-participant-read"
+    role_evidence = {
+        "id": "provider-role-evidence-1",
+        "type": "event",
+        "source": "provider-a",
+        "observedAt": "2026-10-23T12:00:00Z",
+    }
+    completeness_evidence = {
+        "id": "provider-roster-evidence-1",
+        "type": "event",
+        "source": "provider-a",
+        "observedAt": "2026-10-23T12:00:00Z",
+    }
+    fact = _fact(
+        TENANT_A,
+        "signed-participant-1",
+        kind="participant_binding",
+        actor_id="operator-user-1",
+        payload={
+            "tenant_id": TENANT_A,
+            "binding_id": "binding-author-1",
+            "communication_scope": "provider-conversation-9",
+            "communication_scope_kind": "provider_conversation",
+            "provider_conversation_id": "provider-conversation-9",
+            "provider": "provider-a",
+            "provider_account_id": "account-7",
+            "entity_id": "org-1",
+            "entity_type": "agent",
+            "role": "author",
+            "valid_from": "2026-10-23T12:00:00Z",
+            "claim_state": "observed",
+            "source_identity": {
+                "provider_recipient_id": "source-agent-1",
+                "identity_binding_id": "identity-binding-1",
+                "resolution_status": "resolved",
+            },
+            "role_evidence_refs": [role_evidence],
+            "roster_id": "comms_roster_1",
+            "roster_completeness_state": roster_state,
+            "roster_expected_binding_count": expected_count,
+            "roster_binding_count": asserted_count,
+            "roster_completeness_evidence_refs": [completeness_evidence],
+            "source_provenance": {
+                "namespace": "provider-a",
+                "provider_account_id": "account-7",
+                "event_id": event_id,
+                "authentication": {"method": "tenant_webhook_hmac", "verified": True},
+            },
+            "actor_attribution": {"actor_id": "operator-user-1"},
+            "policy": {
+                "ingress_consent_outcome": "allowed",
+                "sensitive_message_fields_redacted": True,
+            },
+        },
+    )
+    fact["source_event_id"] = event_id
+    provider = Communication360Provider(
+        sources=FakeSource(facts=[fact]),
+        entity_identity_reader=FakeEntityIdentityReader(canonical_entity_id="org-1"),
+        profile_link_reader=FakeProfileLinkReader(),
+        journey_reader=FakeJourneyReader(),
+        risk_signal_reader=FakeRiskSignalReader(),
+        consent_policy_reader=FakeConsentPolicyReader(),
+    )
+    request, context = await _make_context(
+        ProviderRegistry(),
+        subject=ProjectionSubject(kind="entity", id="org-1"),
+    )
+
+    result = await provider.project(request, context)
+
+    summary = next(section for section in result.sections if section.id == "summary")
+    participant_slot = summary.content["requiredSlotCoverage"]["participants"]
+    assert participant_slot["state"] == "degraded"
+    assert participant_slot["coverage"] == "partial"
+    assert participant_slot["reason"] == expected_reason
+    assert {ref["id"] for ref in participant_slot["evidenceRefs"]} >= {
+        "provider-role-evidence-1",
+        "provider-roster-evidence-1",
+    }
+
+    interactions = next(section for section in result.sections if section.id == "interactions")
+    binding = next(
+        item
+        for item in interactions.content["interactions"]
+        if item["interactionId"] == "signed-participant-1"
+    )
+    assert binding["role"] == "author"
+    assert binding["entityId"] == "org-1"
+    assert binding["communicationScopeKind"] == "provider_conversation"
+    assert binding["providerConversationId"] == "provider-conversation-9"
+    assert binding["sourceRosterState"] == roster_state
+    assert {"provider-role-evidence-1", "provider-roster-evidence-1"}.issubset(
+        binding["evidenceRefIds"]
+    )
+    claim = next(claim for claim in result.claims if claim.id == "canonical_fact.signed-participant-1")
+    assert {ref.id for ref in claim.evidenceRefs} >= {
+        "provider-role-evidence-1",
+        "provider-roster-evidence-1",
+    }

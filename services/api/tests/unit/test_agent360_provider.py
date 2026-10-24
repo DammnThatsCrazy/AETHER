@@ -170,6 +170,7 @@ class FakeSource:
                             "allowed": True,
                             "delegation_id": "delegation-in-1",
                             "reason": "scope_matched",
+                            "evaluated_at": "2026-10-02T00:00:30Z",
                         },
                     },
                     "input_snapshot": {"action": "read", "resource": "customer:123"},
@@ -1596,7 +1597,8 @@ async def test_agent360_projects_scoped_evidence_without_inventing_authority_or_
             "action": "read",
             "resource": "customer:123",
             "reason": "scope_matched",
-            "decisionAt": "2026-10-02T00:00:00Z",
+            "decisionAt": "2026-10-02T00:00:30+00:00",
+            "decisionTimestampState": "recorded",
             "scope": "action_scoped_request_time_only",
             "evidenceRef": {
                 "id": "exec-1",
@@ -2422,6 +2424,29 @@ async def test_agent360_rejects_conflicting_execution_and_policy_log_delegation_
     assert action_decision["delegationReferenceState"] == "conflicted"
     assert action_decision["delegationEvidenceRef"] is None
     assert "agent_execution_delegation_reference_conflicted" in result.degradedReasons
+
+
+@pytest.mark.asyncio
+async def test_agent360_marks_invalid_recorded_decision_timestamp_unknown_and_degraded():
+    class InvalidDecisionTimestampSource(FakeSource):
+        async def executions(self, tenant_id, agent_id, limit):
+            rows = await super().executions(tenant_id, agent_id, limit)
+            rows[0]["policy_log"]["delegation_check"]["evaluated_at"] = "not-an-instant"
+            return rows
+
+    result = await Agent360Provider(InvalidDecisionTimestampSource()).project(
+        _request(), _context()
+    )
+    authority = next(
+        item
+        for item in _sections(result)["state"].content["dimensions"]
+        if item["id"] == "authority_and_delegation"
+    )
+    action_decision = authority["content"]["actionScopedDecisions"][0]
+
+    assert action_decision["decisionAt"] is None
+    assert action_decision["decisionTimestampState"] == "invalid"
+    assert "agent_execution_decision_timestamp_invalid" in result.degradedReasons
 
 
 @pytest.mark.asyncio

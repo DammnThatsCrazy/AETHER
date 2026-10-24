@@ -36,6 +36,15 @@ blueprint captured in
 > per-phase record is the
 > [program ledger](../plans/COMMUNICATION_360_PHASES.md).
 
+> **Participant authoring update (2026-10-23):** the projection remains
+> read-only, while the existing signed `/v1/comms/webhook` ingress can now
+> author typed `participant_binding` facts into the existing
+> `communication360_facts` authority. The writer requires a valid tenant
+> webhook HMAC, explicit roster coverage, evidence for each role, and exact
+> tenant/provider/account identity mappings. It does not create canonical
+> Conversation membership or delegation authority; those joins remain partial
+> until their canonical authorities provide them.
+
 ---
 
 ## What it is
@@ -55,9 +64,12 @@ Projection Plane's shared contracts (`ProjectionRequest` → `ProjectionResult`)
 
 It is NOT an email dashboard, a Mailchimp/Klaviyo wrapper, a transcript store, a
 second attribution engine, or a second system of record (ADR-010,
-`ownsCanonicalTruth: false`). It never writes: `graphMutationPolicy: read_only`;
-there is no write path at all. It is the communication and information-flow
-projection of the Unified Intelligence Graph.
+`ownsCanonicalTruth: false`). The projection itself never writes and retains
+`graphMutationPolicy: read_only`. The existing comms ingress may author the
+typed participant facts described below under the `communication_facts`
+authority; it does not mutate the graph or make Communication360 a truth owner.
+It is the communication and information-flow projection of the Unified
+Intelligence Graph.
 
 ## Why
 
@@ -83,7 +95,7 @@ phases 2–6 and flipped in-lane (status note above).
 
 ## How it works
 
-### Canonical sources (read-only)
+### Canonical sources and participant authoring boundary
 
 | Section | Canonical source read |
 |---|---|
@@ -99,6 +111,46 @@ Every read is defensive: an unavailable backing source degrades its section
 leaks exception detail. `requiresDimensionState`, `requiresFreshness`, and
 `requiresLimitations` are honored — a Communication360 result without dimension
 state, freshness, and limitations is incomplete.
+
+#### Typed provider participant roster
+
+`POST /v1/comms/webhook` accepts an optional top-level `participant_roster` on a
+communication event. This is the only participant-roster writer in this slice.
+The request must have a configured tenant webhook secret and a valid
+`X-Aether-Signature` / `X-Aether-Timestamp`; signature verification establishes
+source authenticity only. It never establishes who a participant is.
+
+Each roster names a provider conversation and account, an explicit state
+(`complete`, `partial`, or `unknown`), and role bindings. Every binding must
+carry one or more opaque provider evidence references with source and observed
+time. A `complete` roster must also give a matching expected binding count,
+completeness evidence, and a validity start time for every role. A `partial`
+roster must include evidence for the incompleteness. Partial and unknown
+rosters stay partial in the read model.
+
+For each participant and optional principal, ingress resolves the exact
+provider recipient/profile key through the tenant/provider/account-scoped
+`ProviderIdentity` authority. The binding is rejected if the match is absent,
+ambiguous, unverified, shared-mailbox, stale/provisional, or not tenant-owned.
+Provider-supplied canonical IDs, message endpoints, names, and webhook
+signatures are never used as participant identity. Provider grant references
+remain source claims until the delegation authority resolves them.
+
+After the communication consent decision passes and the Bronze event is
+durable, the writer atomically upserts one idempotent
+`communication360_facts(kind="participant_binding")` row per role. Each row
+preserves tenant, provider/account/source IDs, exact identity-binding IDs,
+provider conversation scope, event ID/type/time, server-derived actor and
+credential class, observed role validity, evidence, HMAC provenance, roster
+coverage, and the ingress redaction/policy outcome. The existing JSONB fact
+table already includes this kind, so no schema migration is needed.
+
+The provider reads only the canonical entity-bound participant rows and
+surfaces their role evidence. It does not promote a provider conversation ID
+to a canonical `Conversation`, nor infer complete message coverage from the
+roster. Consequently a complete provider roster still produces a partial
+`participants` slot until explicit provider-thread-to-canonical-conversation
+membership is available; incomplete or unknown rosters remain partial as well.
 
 ### Epistemic honesty (message ≠ information; inference ≠ fact)
 

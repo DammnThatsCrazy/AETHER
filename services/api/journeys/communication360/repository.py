@@ -88,6 +88,53 @@ class Communication360FactsRepository:
             )
         return row
 
+    async def upsert_many(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Insert a related fact batch atomically with per-row replay keys.
+
+        Participant rosters are validated and resolved as a whole before this
+        method is called. A database error must not leave only some roles from
+        one roster visible, so PostgreSQL inserts share a transaction. The
+        local fallback preserves the existing first-write-wins semantics.
+        """
+        prepared: list[dict[str, Any]] = []
+        for source_row in rows:
+            row = dict(source_row)
+            row.setdefault("fact_id", str(uuid4()))
+            row.setdefault("received_at", datetime.now(timezone.utc).isoformat())
+            prepared.append(row)
+        if not prepared:
+            return []
+
+        pool = await self._pool()
+        if pool is None:
+            stored: list[dict[str, Any]] = []
+            for row in prepared:
+                key = f"{row.get('tenant_id')}:{row.get('idempotency_key')}"
+                _local_facts.setdefault(key, row)
+                stored.append(_local_facts[key])
+            return stored
+
+        columns = [column for column in _FACT_COLUMNS if column in prepared[0]]
+        if any([column for column in _FACT_COLUMNS if column in row] != columns for row in prepared):
+            raise ValueError("all Communication360 fact rows in a batch must share columns")
+        placeholders = ", ".join(f"${index + 1}" for index in range(len(columns)))
+        sql = f"""
+            INSERT INTO communication360_facts ({', '.join(columns)})
+            VALUES ({placeholders})
+            ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
+        """
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                for row in prepared:
+                    values = [
+                        json.dumps(row[column])
+                        if column in _JSON_COLUMNS and row[column] is not None
+                        else row[column]
+                        for column in columns
+                    ]
+                    await conn.execute(sql, *values)
+        return prepared
+
     # ── Read ─────────────────────────────────────────────────────────────────
 
     async def query(
