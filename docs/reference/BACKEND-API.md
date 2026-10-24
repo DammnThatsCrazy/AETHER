@@ -1963,6 +1963,17 @@ when both a model confidence score and model type/version lineage are present.
 The score is identified as model-reported, with calibration and application to
 realized value or ROI unvalidated; model-governance calibration evidence remains
 unbound.
+Value360's `financial_risk` slot now requires one direct Economic360 fact claim
+and one assessed Risk360 economic, payment, or transaction dimension claim for
+the same tenant and exact subject. Generic RiskSignals do not satisfy the risk
+side. The join is current-read only; historical or explicitly ranged requests remain
+unknown because the latest risk assessment cannot prove a coordinated
+snapshot. Current results remain degraded while freshness thresholds and
+complete source coverage are unknown.
+The Value360 binding requests only Risk360's `financial_risk` section, which
+contains evidence-backed scored financial dimensions and their assessment
+lineage; general findings, poisoning evidence, policy flags, and social
+propagation are not forwarded into the slot.
 Execution360's `approval_chain` joins x402 approval requests and decisions to
 admitted execution IDs and exact lifecycle approval references. Stored action or
 resource conflicts degrade the slot and suppress the affected request and linked
@@ -2036,6 +2047,15 @@ session coverage, and policy/freshness remain unresolved; Campaign360
 observation and source-fact dimensions, event completeness, and freshness remain
 unknown; Memory360 does not evaluate current consent or policy. These provider
 changes add no HTTP routes and do not complete any surface.
+
+Episode360 `touchpoints` remains unknown because episode rows have no typed
+canonical touchpoint references. Risk360 `anomaly_events` remains unknown
+because generic signals and assessment dimensions are not typed anomaly
+events. Memory360 `cards` and `embeddings_meta` remain unknown because the
+repository has no canonical context-card or embedding-metadata records;
+optional vector references and semantic pointers do not provide that authority.
+These gaps need tenant-scoped source records with evidence and policy/freshness
+semantics before providers can connect them.
 
 A follow-up slice adds partial Signals360 `classification` evidence for exact
 gateway-accepted SDK event types and registry families; source attribution,

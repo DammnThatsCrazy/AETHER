@@ -1261,7 +1261,7 @@ export const intelligenceProjectionDefinitions: Record<
     projectionDependencies: ['cluster360', 'economic360', 'profile360'],
     optionalProjectionDependencies: [],
     inputRefs: ['EntityRef', 'EvidenceRef', 'FilterExpression', 'GraphSnapshotRef', 'PageRequest', 'RelationshipRef', 'TimeRangeFilter'],
-    outputSections: ['evidence', 'findings', 'health', 'state', 'summary'],
+    outputSections: ['evidence', 'financial_risk', 'findings', 'health', 'state', 'summary'],
     supportedTemporalModes: ['as_of', 'relative', 'window'],
     surfaceIds: ['comparison_workbench', 'graph', 'risk360'],
     capabilityKeys: ['risk360.explore', 'risk360.read'],
@@ -5921,7 +5921,7 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
   value360: {
     backendCapabilities: {
       required: ['experience360.evidence.provenance', 'experience360.frame.compose', 'experience360.freshness.evaluate', 'experience360.policy.evaluate', 'experience360.tenant_scope.enforce'],
-      projectionCapabilityKeys: ['campaign360.explore', 'campaign360.read', 'economic360.explore', 'economic360.read', 'outcome360.explore', 'outcome360.read', 'temporal360.explore', 'temporal360.read'],
+      projectionCapabilityKeys: ['campaign360.explore', 'campaign360.read', 'economic360.explore', 'economic360.read', 'outcome360.explore', 'outcome360.read', 'risk360.explore', 'risk360.read', 'temporal360.explore', 'temporal360.read'],
       providerCapabilityStatus: 'registry_requirements_not_route_attestation'
     },
     blueprintContract: {
@@ -6030,9 +6030,23 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
         canonicalAuthorityRefs: ['economic_facts', 'risk_outputs'],
         description: 'Financial risk linked to economic facts by exact subject.',
         id: 'financial_risk',
-        projectionBindings: [],
-        requirement: 'required',
-        unboundReason: 'financial_risk_value_join_not_connected'
+        partialImplementationReason: 'Exact tenant and subject economic claims join only to assessed economic, payment, or transaction Risk360 dimension claims on current reads; historical joins, coordinated freshness thresholds, and complete source coverage remain unknown.',
+        projectionBindings: [
+          {
+            projectionId: 'economic360',
+            role: 'primary',
+            subjectKinds: ['agent', 'cluster', 'entity', 'source'],
+            sectionIds: ['evidence', 'summary']
+          },
+          {
+            projectionId: 'risk360',
+            role: 'supporting',
+            subjectKinds: ['agent', 'cluster', 'entity', 'source'],
+            sectionIds: ['financial_risk']
+          }
+        ],
+        requiredClaimProjectionIds: ['economic360', 'risk360'],
+        requirement: 'required'
       },
       {
         canonicalAuthorityRefs: ['ai_execution_facts', 'canonical_conversions', 'evidence'],
@@ -6191,6 +6205,12 @@ export const PRODUCT_360_SURFACE_DEFINITIONS: Record<
       {
         projectionId: 'outcome360',
         role: 'primary',
+        bindingStatus: 'catalog_only',
+        providerImplementationState: 'implemented'
+      },
+      {
+        projectionId: 'risk360',
+        role: 'supporting',
         bindingStatus: 'catalog_only',
         providerImplementationState: 'implemented'
       },

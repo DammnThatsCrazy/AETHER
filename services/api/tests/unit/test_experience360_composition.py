@@ -90,6 +90,210 @@ def test_explicitly_unbound_required_slot_remains_unknown_with_gap_reason() -> N
     assert missing == set()
 
 
+def test_value_financial_risk_catalog_requires_both_exact_subject_projections() -> None:
+    surface = PRODUCT_360_SURFACE_DEFINITIONS["value360"]
+    slot = next(item for item in surface["domainSlots"] if item["id"] == "financial_risk")
+
+    assert "unboundReason" not in slot
+    assert slot["requiredClaimProjectionIds"] == ("economic360", "risk360")
+    assert {
+        binding["projectionId"]: set(binding["subjectKinds"])
+        for binding in slot["projectionBindings"]
+    } == {
+        "economic360": {"agent", "cluster", "entity", "source"},
+        "risk360": {"agent", "cluster", "entity", "source"},
+    }
+    assert {"economic_facts", "risk_outputs"} == set(slot["canonicalAuthorityRefs"])
+    assert {"risk360.explore", "risk360.read"}.issubset(
+        set(surface["backendCapabilities"]["projectionCapabilityKeys"])
+    )
+    risk_binding = next(
+        binding
+        for binding in slot["projectionBindings"]
+        if binding["projectionId"] == "risk360"
+    )
+    assert risk_binding["sectionIds"] == ("financial_risk",)
+
+
+@pytest.mark.asyncio
+async def test_value_financial_risk_frame_runs_both_claim_sources_after_slot_policy() -> None:
+    calls: list[tuple[str, list[str] | None]] = []
+    economic_evidence = EVIDENCE.model_copy(update={"id": "economic-frame-fact"})
+    risk_evidence = EVIDENCE.model_copy(update={"id": "risk-frame-fact"})
+
+    class AllowPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-23T12:00:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "financial_risk": Experience360PolicyDisposition(state="allowed")
+                },
+            )
+
+    class Runtime:
+        async def execute_projection(self, request, **kwargs):
+            calls.append((request.projectionId, request.includeSections))
+            if request.projectionId == "economic360":
+                kind, evidence = "economic_rollup", economic_evidence
+            else:
+                kind, evidence = "risk_dimension_state", risk_evidence
+            return ProjectionResult(
+                projectionId=request.projectionId,
+                tenantId=request.tenantId,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[
+                    ProjectionSection(
+                        id=section_id,
+                        state="available",
+                        content={"evidenceRefs": [evidence]},
+                    )
+                    for section_id in (request.includeSections or [])
+                ],
+                claims=[
+                    ClaimEnvelope(
+                        id=f"{request.projectionId}.financial-risk",
+                        kind=kind,
+                        subject=request.subject,
+                        evidenceRefs=[evidence],
+                        claims=[f"Evidence-backed {kind} for the exact subject."],
+                        domainSlotIds=["financial_risk"],
+                    )
+                ],
+                dependencyState=[],
+                generatedAt="2026-10-23T12:00:00Z",
+                degradedReasons=[],
+            )
+
+    request = Experience360FrameRequest(
+        surfaceId="value360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="entity", id="entity-value-risk"),
+        requestedSlotIds=["financial_risk"],
+        includeEvidence=True,
+    )
+    frame = await build_experience360_frame(
+        request,
+        policy_evaluator=AllowPolicy(),
+        projection_runtime=Runtime(),
+        generated_at="2026-10-23T12:00:00Z",
+    )
+
+    slot = frame.slots[0]
+    assert calls == [
+        ("economic360", ["evidence", "summary"]),
+        ("risk360", ["financial_risk"]),
+    ]
+    assert slot.id == "financial_risk"
+    assert slot.state == "degraded"
+    assert {claim.kind for claim in slot.claims} == {
+        "economic_rollup",
+        "risk_dimension_state",
+    }
+    assert {ref.id for ref in slot.evidenceRefs} == {
+        "economic-frame-fact",
+        "risk-frame-fact",
+    }
+    assert slot.freshness.state == "unknown"
+    assert "slot_partial_implementation" in slot.reasonCodes
+
+
+@pytest.mark.parametrize("missing_claim_projection", [None, "economic360", "risk360"])
+def test_value_financial_risk_requires_economic_and_risk_source_claims(
+    missing_claim_projection: str | None,
+) -> None:
+    slot_definition = {
+        "id": "financial_risk",
+        "requirement": "required",
+        "canonicalAuthorityRefs": ["economic_facts", "risk_outputs"],
+        "requiredClaimProjectionIds": ["economic360", "risk360"],
+        "projectionBindings": [
+            {
+                "projectionId": "economic360",
+                "role": "primary",
+                "subjectKinds": ["entity"],
+                "sectionIds": ["evidence", "summary"],
+            },
+            {
+                "projectionId": "risk360",
+                "role": "supporting",
+                "subjectKinds": ["entity"],
+                "sectionIds": ["financial_risk"],
+            },
+        ],
+    }
+    economic_evidence = EVIDENCE.model_copy(update={"id": "economic-fact-1"})
+    risk_evidence = EVIDENCE.model_copy(update={"id": "financial-risk-1"})
+    results = []
+    for projection_id, section_ids, evidence, kind in (
+        ("economic360", ("evidence", "summary"), economic_evidence, "economic_rollup"),
+        (
+            "risk360",
+            ("financial_risk",),
+            risk_evidence,
+            "risk_dimension_state",
+        ),
+    ):
+        claims = []
+        if projection_id != missing_claim_projection:
+            claims = [
+                ClaimEnvelope(
+                    id=f"{projection_id}.financial-risk-claim",
+                    kind=kind,
+                    subject=SUBJECT,
+                    evidenceRefs=[evidence],
+                    claims=[f"Evidence-backed {kind} for the exact subject."],
+                    domainSlotIds=["financial_risk"],
+                )
+            ]
+        results.append(
+            ProjectionResult(
+                projectionId=projection_id,
+                tenantId=TENANT,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[
+                    ProjectionSection(
+                        id=section_id,
+                        state="available",
+                        content={"evidenceRefs": [evidence]},
+                    )
+                    for section_id in section_ids
+                ],
+                claims=claims,
+                dependencyState=[],
+                generatedAt="2026-10-23T12:00:00Z",
+                degradedReasons=[],
+            )
+        )
+
+    slot, reasons, missing = _compose_slot_content(
+        slot_id="financial_risk",
+        slot_definition=slot_definition,
+        results={result.projectionId: result for result in results},
+        include_evidence=True,
+        tenant_id=TENANT,
+        requested_as_of=None,
+        subject_kind="entity",
+        requires_exact_claim=True,
+    )
+
+    if missing_claim_projection is None:
+        assert slot["state"] == "available"
+        assert len(slot["claims"]) == 2
+        assert {claim.kind for claim in slot["claims"]} == {
+            "economic_rollup",
+            "risk_dimension_state",
+        }
+    else:
+        assert slot["state"] == "unknown"
+        assert slot["content"] is None
+        assert "required_source_claim_missing" in reasons
+        assert not slot["evidenceRefs"]
+    assert missing == set()
+
+
 def test_value360_confidence_is_partial_and_marks_model_governance_unbound() -> None:
     confidence = next(
         slot
@@ -98,6 +302,7 @@ def test_value360_confidence_is_partial_and_marks_model_governance_unbound() -> 
     )
 
     assert set(confidence["canonicalAuthorityRefs"]) == {
+        "ai_execution_facts",
         "attribution_runs",
         "attribution_credits",
         "canonical_conversions",
@@ -341,7 +546,7 @@ def test_projection_provenance_uses_only_slot_aligned_authorities() -> None:
     }
     assert authority_refs_by_projection == {
         "relationship360": {"graph", "relationship_facts"},
-        "risk360": {"entity_graph"},
+        "risk360": {"entity_graph", "graph", "relationship_facts"},
     }
 
 
@@ -772,7 +977,10 @@ async def test_agent360_risk_slot_routes_agent_subject_to_canonical_risk360() ->
     assert calls == [("risk360", "agent", ("evidence", "findings"))]
     assert frame.slots[0].state == "degraded"
     assert "slot_canonical_authority_gap" in frame.slots[0].reasonCodes
-    assert "exact_subject_authority_join_not_implemented" in frame.slots[0].reasonCodes
+    assert (
+        "agent_risk_summary_identity_relationship_and_social_authorities_not_fully_joined"
+        in frame.slots[0].reasonCodes
+    )
     risk_payload = next(
         payload
         for payload in frame.slots[0].content["sections"]

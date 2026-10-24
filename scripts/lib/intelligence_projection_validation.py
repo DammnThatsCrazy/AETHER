@@ -234,6 +234,7 @@ _OUTPUT_SECTIONS = frozenset(
     {
         "summary",
         "state",
+        "financial_risk",
         "timeline",
         "evidence",
         "interactions",
@@ -2099,6 +2100,32 @@ def validate_product_surface_catalog(reg: dict) -> list[Violation]:
                             sid,
                         )
                     )
+            required_claim_projection_ids = slot.get("requiredClaimProjectionIds", [])
+            if (
+                not isinstance(required_claim_projection_ids, list)
+                or not all(
+                    isinstance(projection_id, str) and projection_id
+                    for projection_id in required_claim_projection_ids
+                )
+                or len(set(required_claim_projection_ids)) != len(required_claim_projection_ids)
+            ):
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "requiredClaimProjectionIds must list unique bound projection ids",
+                        sid,
+                    )
+                )
+            elif set(required_claim_projection_ids) - slot_projection_ids:
+                violations.append(
+                    Violation(
+                        "product_surface_catalog",
+                        "error",
+                        "requiredClaimProjectionIds must be included in the slot projection bindings",
+                        sid,
+                    )
+                )
             if isinstance(authorities, list):
                 missing_authorities = set(authorities) - slot_provider_authorities
                 declared_gap = slot.get("unboundCanonicalAuthorityRefs", [])

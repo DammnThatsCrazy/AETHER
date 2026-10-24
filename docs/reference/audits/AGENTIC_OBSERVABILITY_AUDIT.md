@@ -11,7 +11,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:7109b8f871fa5ddf4e2a8761dc54935f748b5be987067de29900af27c4d6b850"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:0bdf0f163a658c0c0ed4931b1ff5cf124aea912705f00ba06b6d68a64ac0df4f"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:540f85292689337edc329c9b72b7c4f99487226a5e31aab6526c878e7ea36eeb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -39,7 +39,7 @@ source_hashes:
   "services/api/value/commerce/order_payment_reconciliation.py": "sha256:eefcfa3b35c8ff888be7141bcf91d2bfe08399a17b986b09abb9cafac41566b8"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
-  "services/api/value/economic/economic360_provider.py": "sha256:5c2f451c5aca56f2e429fdd250d5723f8bf25919b52ff110cbc90eeb6f856639"
+  "services/api/value/economic/economic360_provider.py": "sha256:17c4490500930b11358ab4eb9696e7bb755339770ee5f9a9f097a4921a5c2a61"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
   "services/api/value/x402/": "sha256:49f3660ba1468f6481b067fcd46ad230199aee60d7e7316ba57b7c69c368c4a9"
   "services/api/workers/runtime/specs.py": "sha256:b86659249b2f805b3ba81631c57e71ca57be089de07278fedccbe25b576df64b"
@@ -305,6 +305,20 @@ invocation facts through `OutcomeTruthStore`, without claiming workflow
 causality; historical reads are suppressed. These paths preserve incomplete
 coverage and unknown policy/freshness. They do not complete any of the 18
 product surfaces or add action authority.
+
+Value360 `financial_risk` now composes separate Economic360 and Risk360 claims
+only when both carry evidence for the exact same tenant and subject. The risk
+claim must be an assessed economic, payment, or transaction dimension; generic
+RiskSignals do not qualify. Historical or explicitly ranged reads remain unknown because a
+coordinated snapshot is unavailable, and current freshness remains unknown, so
+the slot stays degraded. Three other required capabilities remain blocked by
+missing canonical source contracts: Episode360 touchpoints lack typed episode
+references, Risk360 anomaly events lack a typed subject-scoped event authority,
+and Memory360 cards/embedding metadata lack canonical records. Timing and
+generic identifiers are not used to invent these links.
+The Value360 risk binding now requests only Risk360's narrow `financial_risk`
+section, excluding unrelated findings, poisoning evidence, policy flags, and
+social propagation from the composed value slot.
 
 ## Bucket 1 — Correctly observation-only
 

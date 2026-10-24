@@ -286,6 +286,34 @@ async def test_economic_claims_route_to_value360_facts_slot(
     assert summary_claim.evidenceRefs
 
 
+async def test_exact_subject_economic_claim_routes_to_value360_financial_risk() -> None:
+    subject = ProjectionSubject(kind="entity", id="entity-value-risk")
+    source = FakeSource(
+        [
+            _record(
+                "tenant-a",
+                "42.00",
+                "USD",
+                usd="42.00",
+                metric="gross_value",
+                ident="entity-value-economic-fact",
+            )
+        ]
+    )
+
+    result = await Economic360Provider(sources=source).project(
+        _request(subject=subject), await _make_context(ProviderRegistry())
+    )
+
+    economic_claim = next(
+        claim for claim in result.claims if claim.kind == "economic_rollup"
+    )
+    assert economic_claim.subject == subject
+    assert economic_claim.evidenceRefs[0].id == "entity-value-economic-fact"
+    assert economic_claim.domainSlotIds is not None
+    assert "financial_risk" in economic_claim.domainSlotIds
+
+
 async def test_economic_campaign_claims_compose_into_campaign_performance_slot(
     healthy_source: FakeSource,
 ) -> None:
@@ -1738,6 +1766,7 @@ async def test_entity_value_slot_is_profile_verified_and_direct_scope_only() -> 
     )
     assert value_claim.domainSlotIds == [
         "economic_facts_and_state",
+        "financial_risk",
         "value_summary",
         "evidence_trace",
         "value",

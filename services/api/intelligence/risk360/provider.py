@@ -102,7 +102,14 @@ EXPLORE_CAPABILITY = "risk360.explore"
 
 # Sections this provider emits, exactly the OUTPUT_SECTIONS the orchestrator's
 # registry row declares for risk360 (order is the projection's render order).
-OUTPUT_SECTIONS: tuple[str, ...] = ("summary", "state", "evidence", "findings", "health")
+OUTPUT_SECTIONS: tuple[str, ...] = (
+    "summary",
+    "state",
+    "financial_risk",
+    "evidence",
+    "findings",
+    "health",
+)
 
 # Sibling-projection dependencies we degrade honestly for while they are still
 # in_flight. ``profile360`` enriches the subject's risk *summary*; ``cluster360``
@@ -123,6 +130,8 @@ _MAX_ASSESSMENT_HISTORY_SCAN = 100
 _MAX_FINANCIAL_PATH_NODES = 21
 _MAX_TRANSFERS_PER_PATH_EDGE = 2
 _MAX_SOCIAL_PROPAGATION_PATHS = 50
+_FINANCIAL_RISK_DIMENSIONS = {"economic", "payment", "transaction"}
+_FINANCIAL_RISK_SUBJECT_KINDS = {"agent", "cluster", "entity", "source"}
 
 _BLUEPRINT_REQUIRED_SLOT_IDS = (
     "risk_summary",
@@ -150,6 +159,19 @@ def _dependency_missing(dep_state: list[Any], projection_id: str) -> bool:
     return dep is None or dep.state != "available"
 
 
+def _is_current_subject_read(
+    request: ProjectionRequest,
+    context: ProjectionContext,
+) -> bool:
+    """Whether current-only Risk360 claims may be routed into Value360."""
+    return (
+        request.asOf is None
+        and context.asOf is None
+        and request.timeRange is None
+        and request.temporalMode in {None, "window"}
+    )
+
+
 def _risk_assessment_slot_ids(subject_kind: str) -> list[str]:
     """Map an assessed risk fact only to slots that render assessment state."""
     slots = [
@@ -165,7 +187,12 @@ def _risk_assessment_slot_ids(subject_kind: str) -> list[str]:
     return slots
 
 
-def _risk_evidence_slot_ids(subject_kind: str) -> list[str]:
+def _risk_evidence_slot_ids(
+    subject_kind: str,
+    *,
+    risk_dimension: Optional[str] = None,
+    current_subject_read: bool = False,
+) -> list[str]:
     """Map atomic risk observations to slots supported for this subject kind."""
     slot_ids = ["risk_evidence_and_limitations", "evidence_trace"]
     if subject_kind == "agent":
@@ -175,6 +202,15 @@ def _risk_evidence_slot_ids(subject_kind: str) -> list[str]:
         slot_ids.append("risk_summary")
     elif subject_kind == "support_case":
         slot_ids.insert(0, "risk")
+    if (
+        current_subject_read
+        and subject_kind in _FINANCIAL_RISK_SUBJECT_KINDS
+        and risk_dimension in _FINANCIAL_RISK_DIMENSIONS
+    ):
+        # Value360 requires an assessed financial dimension (risk output), not
+        # a generic RiskSignal, and joins it to economic facts by the exact
+        # tenant + subject already bound to this projection request.
+        slot_ids.append("financial_risk")
     return slot_ids
 
 
@@ -1021,6 +1057,12 @@ class Risk360Provider:
         sections = [
             self._summary_section(request, assessment, assessment_degraded, dep_state),
             self._state_section(request, assessment, assessment_degraded, dep_state),
+            self._financial_risk_section(
+                request,
+                assessment,
+                assessment_degraded,
+                current_subject_read=_is_current_subject_read(request, context),
+            ),
             self._evidence_section(
                 evidence,
                 source_degraded=(
@@ -1077,6 +1119,7 @@ class Risk360Provider:
             poisoning_evidence,
             financial_link,
             agent_policy_flags,
+            current_subject_read=_is_current_subject_read(request, context),
             support_case_evidence=support_case_evidence,
         )
         claims.extend(social_path_claims)
@@ -1463,6 +1506,102 @@ class Risk360Provider:
             title="Risk state",
             content=content,
             warnings=warnings or None,
+        )
+
+    def _financial_risk_section(
+        self,
+        request: ProjectionRequest,
+        assessment: Optional[RiskAssessment],
+        assessment_degraded: bool,
+        *,
+        current_subject_read: bool,
+    ) -> ProjectionSection:
+        """Expose only assessed, evidence-backed financial risk dimensions.
+
+        This section is the narrow Risk360 source bound into Value360. It avoids
+        copying general findings/evidence that can contain poisoning, social,
+        policy, or unrelated risk data. Current RiskAssessment reads do not
+        provide bitemporal replay, so anchored or ranged requests expose no facts.
+        """
+        content: dict[str, Any] = {
+            "tenantId": request.tenantId,
+            "subject": {"kind": request.subject.kind, "id": request.subject.id},
+            "dimensions": [],
+            "evidenceRefs": [],
+        }
+        state: str = "available"
+        warnings: list[str] = []
+
+        if not current_subject_read:
+            state = "unknown"
+            warnings.append("financial risk assessment history is not bitemporal")
+        elif assessment_degraded:
+            state = "degraded"
+            warnings.append("risk assessment source unavailable; financial risk is degraded")
+        elif assessment is None:
+            state = "missing"
+            warnings.append("no risk assessment exists for the exact subject")
+        else:
+            financial_components = [
+                component
+                for component in assessment.vector.components
+                if component.dimension in _FINANCIAL_RISK_DIMENSIONS
+                and requires_value(component.state)
+                and component.evidence_refs
+            ]
+            if not financial_components:
+                state = "empty"
+                warnings.append(
+                    "no evidence-backed economic, payment, or transaction dimension is assessed"
+                )
+            else:
+                evidence_refs = _dedupe_evidence(
+                    [
+                        ref
+                        for component in financial_components
+                        for ref in component.evidence_refs
+                    ]
+                )
+                content["assessment"] = {
+                    "assessmentId": assessment.assessment_id,
+                    "policy": (
+                        {"id": assessment.policy_id, "version": assessment.policy_version}
+                        if assessment.policy_id is not None
+                        else None
+                    ),
+                    "assessedAt": (
+                        assessment.assessed_at.isoformat()
+                        if assessment.assessed_at is not None
+                        else None
+                    ),
+                    "runId": assessment.run_id,
+                    "claimState": assessment.claim_state.value,
+                    "confidence": assessment.confidence,
+                }
+                content["dimensions"] = [
+                    {
+                        "dimension": component.dimension,
+                        "state": component.state.value,
+                        "score": component.score,
+                        "claimState": component.claim_state.value,
+                        "confidence": component.confidence,
+                        "evidenceRefs": [
+                            ref.model_dump(mode="json") for ref in component.evidence_refs
+                        ],
+                    }
+                    for component in financial_components
+                ]
+                content["evidenceRefs"] = [
+                    ref.model_dump(mode="json") for ref in evidence_refs
+                ]
+
+        return ProjectionSection(
+            id="financial_risk",
+            state=state,  # type: ignore[arg-type]
+            title="Financial risk",
+            content=content,
+            warnings=warnings or None,
+            canonicalAuthorityRefs=["risk_outputs"],
         )
 
     def _evidence_section(
@@ -2118,6 +2257,7 @@ class Risk360Provider:
         financial_link: Optional[dict[str, Any]],
         agent_policy_flags: list[dict[str, Any]],
         *,
+        current_subject_read: bool,
         support_case_evidence: Optional[list[EvidenceRef]] = None,
     ) -> list[ClaimEnvelope]:
         """Evidence-grounded claims (requiresEvidence: never an empty envelope)."""
@@ -2177,7 +2317,11 @@ class Risk360Provider:
                         ],
                         confidence=component.confidence,
                         claimState=component.claim_state,
-                        domainSlotIds=_risk_evidence_slot_ids(subject.kind),
+                        domainSlotIds=_risk_evidence_slot_ids(
+                            subject.kind,
+                            risk_dimension=component.dimension,
+                            current_subject_read=current_subject_read,
+                        ),
                     )
                 )
 

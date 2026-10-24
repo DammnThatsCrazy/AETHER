@@ -83,10 +83,12 @@ VALUE_LTV_SLOT_ID = "ltv"
 VALUE_CONFIDENCE_SLOT_ID = "confidence"
 VALUE_EVIDENCE_TRACE_SLOT_ID = "evidence_trace"
 VALUE_RECONCILIATION_SLOT_ID = "reconciliation"
+VALUE_FINANCIAL_RISK_SLOT_ID = "financial_risk"
 ACCOUNT_VALUE_SLOT_ID = "value"
 _MAX_CONVERSION_INVENTORY_ROWS = 500
 _MAX_ATTRIBUTION_CONVERSIONS = 100
 _MAX_ATTRIBUTION_TOUCHPOINT_READS = 500
+_FINANCIAL_RISK_SUBJECT_KINDS = {"agent", "cluster", "entity", "source"}
 _LTV_JOIN_BASIS_BY_SUBJECT_KIND = {
     "profile": "exact_canonical_profile_conversion_id",
     "entity": "exact_canonical_profile_conversion_id",
@@ -111,6 +113,17 @@ def _economic_domain_slot_ids(subject: ProjectionSubject, primary_slot_id: str) 
     return slot_ids
 
 
+def _with_financial_risk_slot(subject: ProjectionSubject, slot_ids: list[str]) -> list[str]:
+    """Route a direct, evidence-backed economic fact to the exact-subject risk join."""
+    result = list(slot_ids)
+    if (
+        subject.kind in _FINANCIAL_RISK_SUBJECT_KINDS
+        and VALUE_FINANCIAL_RISK_SLOT_ID not in result
+    ):
+        result.append(VALUE_FINANCIAL_RISK_SLOT_ID)
+    return result
+
+
 def _value_summary_domain_slot_ids(
     subject: ProjectionSubject,
     *,
@@ -122,7 +135,9 @@ def _value_summary_domain_slot_ids(
     canonical tenant profile and reads direct subject-scoped records. This is
     an entity's own economic evidence, never a member/descendant aggregate.
     """
-    slot_ids = _economic_domain_slot_ids(subject, ECONOMIC_FACTS_SLOT_ID)
+    slot_ids = _with_financial_risk_slot(
+        subject, _economic_domain_slot_ids(subject, ECONOMIC_FACTS_SLOT_ID)
+    )
     slot_ids.extend([VALUE_SUMMARY_SLOT_ID, VALUE_EVIDENCE_TRACE_SLOT_ID])
     if subject.kind == "entity" and entity_profile_verified:
         slot_ids.append(ACCOUNT_VALUE_SLOT_ID)
@@ -3477,7 +3492,9 @@ class Economic360Provider:
                     subject=subject,
                     evidenceRefs=spend_refs or evidence[:5],
                     claims=[f"campaign spend (USD): {format(spend_usd, 'f')}"],
-                    domainSlotIds=_economic_domain_slot_ids(subject, ECONOMIC_FACTS_SLOT_ID),
+                    domainSlotIds=_with_financial_risk_slot(
+                        subject, _economic_domain_slot_ids(subject, ECONOMIC_FACTS_SLOT_ID)
+                    ),
                 )
             )
 
@@ -3503,7 +3520,9 @@ class Economic360Provider:
                         f"{format(ai_cost_usd, 'f')}; this is operating cost, "
                         "not a measured business outcome"
                     ],
-                    domainSlotIds=_economic_domain_slot_ids(subject, ECONOMIC_FACTS_SLOT_ID),
+                    domainSlotIds=_with_financial_risk_slot(
+                        subject, _economic_domain_slot_ids(subject, ECONOMIC_FACTS_SLOT_ID)
+                    ),
                 )
             )
 

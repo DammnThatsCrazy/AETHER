@@ -1806,6 +1806,7 @@
       "outputSections": [
         "summary",
         "state",
+        "financial_risk",
         "evidence",
         "findings",
         "health"
@@ -7043,8 +7044,40 @@
             "risk_outputs",
             "economic_facts"
           ],
-          "projectionBindings": [],
-          "unboundReason": "financial_risk_value_join_not_connected"
+          "projectionBindings": [
+            {
+              "projectionId": "economic360",
+              "role": "primary",
+              "subjectKinds": [
+                "agent",
+                "cluster",
+                "entity",
+                "source"
+              ],
+              "sectionIds": [
+                "evidence",
+                "summary"
+              ]
+            },
+            {
+              "projectionId": "risk360",
+              "role": "supporting",
+              "subjectKinds": [
+                "agent",
+                "cluster",
+                "entity",
+                "source"
+              ],
+              "sectionIds": [
+                "financial_risk"
+              ]
+            }
+          ],
+          "requiredClaimProjectionIds": [
+            "economic360",
+            "risk360"
+          ],
+          "partialImplementationReason": "Exact tenant and subject economic claims join only to assessed economic, payment, or transaction Risk360 dimension claims on current reads; historical joins, coordinated freshness thresholds, and complete source coverage remain unknown."
         },
         {
           "id": "confidence",
@@ -7260,6 +7293,12 @@
           "role": "primary",
           "bindingStatus": "catalog_only",
           "providerImplementationState": "implemented"
+        },
+        {
+          "projectionId": "risk360",
+          "role": "supporting",
+          "bindingStatus": "catalog_only",
+          "providerImplementationState": "implemented"
         }
       ],
       "sourceOfTruth": {
@@ -7323,6 +7362,8 @@
           "economic360.read",
           "outcome360.explore",
           "outcome360.read",
+          "risk360.explore",
+          "risk360.read",
           "temporal360.explore",
           "temporal360.read"
         ],

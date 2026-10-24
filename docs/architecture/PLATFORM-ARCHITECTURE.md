@@ -73,7 +73,7 @@ source_hashes:
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
-  "services/api/intelligence/risk360/provider.py": "sha256:44c0d5e17044082c86225e1bd424a23a94060897d9c5d0f8b9fbb98da4a52249"
+  "services/api/intelligence/risk360/provider.py": "sha256:661d1479056cfc749540dbcdc0374c71bd254215005a8e61a59ae32beca2a1d3"
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:f14b6b827c18be01cc0a2cb45c6c42730e25d93b65050f3e287ebe1a056bd4f6"
   "services/api/journeys/communication360/provider.py": "sha256:916e154d60723d687221bc2e0183d5aee672ed9b62db755c5d4cc7c939dd0fe6"
   "services/api/main.py": "sha256:fa7455e5dd5a1e6b6b2ac25cc3ce6fc8a09d8bcf5b242b500feb0b797ab2d7b7"
@@ -84,7 +84,7 @@ source_hashes:
   "services/api/repositories/repos.py": "sha256:2deaf337debdc8fc0fa1585901e1a736e2a269b967d0091bba4d0d7d8369d19f"
   "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:95a0255a37d99b96243b2a51a6d9465a4740f072963fc5d6565b16a77d454a3d"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
-  "services/api/value/economic/economic360_provider.py": "sha256:5c2f451c5aca56f2e429fdd250d5723f8bf25919b52ff110cbc90eeb6f856639"
+  "services/api/value/economic/economic360_provider.py": "sha256:17c4490500930b11358ab4eb9696e7bb755339770ee5f9a9f097a4921a5c2a61"
   "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
 # Aether vNext — Architecture Guide
@@ -650,6 +650,17 @@ when a model confidence score and model type/version lineage are present. The
 claim labels confidence as model-reported and states that calibration and
 application to realized value or ROI are unvalidated; model-governance
 calibration evidence remains unbound.
+Value360's `financial_risk` slot now requires separate Economic360 and Risk360
+claims for the same tenant and exact subject. Economic evidence must be a
+direct subject-scoped fact, and Risk360 must provide an assessed economic,
+payment, or transaction dimension; a generic RiskSignal does not satisfy the
+join. Historical or explicitly ranged value requests remain unknown because Risk360's
+latest assessment read cannot prove a coordinated snapshot, and current
+freshness remains unknown, so successful current joins stay degraded.
+The Value360 binding requests only Risk360's `financial_risk` section, which
+contains evidence-backed scored financial dimensions and their assessment
+lineage; unrelated findings, poisoning evidence, policy flags, and social
+propagation are not forwarded into the slot.
 Agent360 now joins agentic compatibility evidence to canonical Bronze by exact
 tenant, agent, source-row, event, schema, and timestamp references; Rights
 source identity, source trust, freshness, and unlinked historical rows remain
@@ -844,6 +855,17 @@ Workflow360 `outcomes` follows outcome IDs explicitly referenced by exact
 tenant/run AI invocation facts; the link records association only. Missing
 policy, complete coverage, causal attribution, or source watermarks remain
 unknown, and all four product slots remain partial.
+
+Three additional required slots remain blocked by missing source contracts.
+Episode360 `touchpoints` stays unknown because Episode records do not persist
+typed canonical touchpoint references; Journey touchpoints, timing, labels, and
+attribution records are not substitutes. Risk360 `anomaly_events` stays
+unknown because no typed subject-scoped anomaly event authority exists;
+RiskSignals and assessment dimensions are not events. Memory360 `cards` and
+`embeddings_meta` stay unknown because semantic context pointers and optional
+vector references do not establish canonical card or embedding-metadata
+records. Each needs its own tenant-scoped authority, evidence, and applicable
+policy and freshness semantics before the slot can be connected.
 
 The current risk and authority join wave adds partial Support360 `risk` and
 Execution360 `authority_check` paths. Support360 first proves an exact

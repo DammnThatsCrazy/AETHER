@@ -1538,6 +1538,56 @@ async def test_as_of_source_trust_stays_unknown_without_bitemporal_bronze_reader
 
 
 @pytest.mark.asyncio
+async def test_assessed_financial_dimension_routes_to_value360_financial_risk_only() -> None:
+    assessment, signal = _financial_risk_records(entity_id="entity-value-risk", index=3)
+    result = await Risk360Provider(
+        sources=_FakeReader(
+            assessment=assessment,
+            signals=[signal],
+        )
+    ).project(
+        _request(subject=ProjectionSubject(kind="entity", id="entity-value-risk")),
+        await _context(_available_registry()),
+    )
+
+    dimension_claim = next(
+        claim for claim in result.claims if claim.kind == "risk_dimension_state"
+    )
+    signal_claim = next(
+        claim for claim in result.claims if claim.kind == "risk_signal_context"
+    )
+    assert dimension_claim.domainSlotIds is not None
+    assert "financial_risk" in dimension_claim.domainSlotIds
+    assert signal_claim.domainSlotIds is not None
+    assert "financial_risk" not in signal_claim.domainSlotIds
+
+
+@pytest.mark.asyncio
+async def test_financial_risk_claim_is_not_emitted_for_historical_anchor() -> None:
+    assessment, signal = _financial_risk_records(entity_id="entity-value-risk", index=4)
+    result = await Risk360Provider(
+        sources=_FakeReader(assessment=assessment, signals=[signal])
+    ).project(
+        _request(
+            subject=ProjectionSubject(kind="entity", id="entity-value-risk"),
+            asOf="2026-10-20T12:00:00Z",
+        ),
+        await _context(_available_registry()),
+    )
+
+    dimension_claim = next(
+        claim for claim in result.claims if claim.kind == "risk_dimension_state"
+    )
+    assert dimension_claim.domainSlotIds is not None
+    assert "financial_risk" not in dimension_claim.domainSlotIds
+    section = next(s for s in result.sections if s.id == "financial_risk")
+    assert section.state == "unknown"
+    assert section.content["dimensions"] == []
+    assert section.content["evidenceRefs"] == []
+    assert "assessment" not in section.content
+
+
+@pytest.mark.asyncio
 async def test_financial_contagion_emits_only_exact_partial_value_risk_link() -> None:
     assessment_a, signal_a = _financial_risk_records(entity_id="entity-financial-a", index=1)
     assessment_b, signal_b = _financial_risk_records(entity_id="entity-financial-b", index=2)
@@ -1995,7 +2045,14 @@ async def test_project_returns_valid_result_from_repositories() -> None:
     assert result.generatedAt  # ISO-8601 UTC
     assert result.degradedReasons == []
     assert [s.id for s in result.sections] == list(OUTPUT_SECTIONS)
-    assert OUTPUT_SECTIONS == ("summary", "state", "evidence", "findings", "health")
+    assert OUTPUT_SECTIONS == (
+        "summary",
+        "state",
+        "financial_risk",
+        "evidence",
+        "findings",
+        "health",
+    )
     # dependencyState is echoed verbatim from the registry-computed context.
     assert result.dependencyState == context.dependencyState
     assert {d.projectionId for d in result.dependencyState} == {
@@ -2019,6 +2076,7 @@ async def test_section_states_are_typed_section_state_vocabulary() -> None:
         "degraded",
         "empty",
         "missing",
+        "unknown",
     }
 
 
@@ -2064,6 +2122,25 @@ async def test_state_section_honors_per_dimension_honesty() -> None:
             assert row["score"] is None, row
     # No invented traffic-light badge in the section content.
     assert "badge" not in state.content
+
+
+@pytest.mark.asyncio
+async def test_financial_risk_section_is_narrow_and_evidence_backed() -> None:
+    await _seed(_assessment(), [_signal("sig-1", TENANT_A)])
+    result = await Risk360Provider().project(
+        _request(), await _context(_available_registry())
+    )
+
+    section = next(s for s in result.sections if s.id == "financial_risk")
+    assert section.state == "available"
+    assert section.canonicalAuthorityRefs == ["risk_outputs"]
+    assert [row["dimension"] for row in section.content["dimensions"]] == ["economic"]
+    assert section.content["assessment"]["assessmentId"] == "a-1"
+    assert {ref["id"] for ref in section.content["evidenceRefs"]} == {"ev-economic-a-1"}
+    assert "findings" not in section.content
+    assert "poisoningEvidence" not in section.content
+    assert "policyFlags" not in section.content
+    assert "propagationPaths" not in section.content
 
 
 @pytest.mark.asyncio
@@ -2177,6 +2254,30 @@ async def test_assessment_with_zero_recorded_components_is_honest_empty() -> Non
     # Every dimension is typed as an honest absence, none fabricated a score.
     rows = {row["dimension"]: row for row in state.content["dimensionStates"]}
     assert rows["identity"]["score"] is None
+
+
+@pytest.mark.asyncio
+async def test_risk_signals_and_assessment_dimensions_are_not_anomaly_events() -> None:
+    """Generic risk inputs must not impersonate the separate anomaly event authority."""
+    reader = _FakeReader(
+        assessment=_assessment().model_dump(mode="json"),
+        signals=[_signal("signal-not-an-event", TENANT_A).model_dump(mode="json")],
+    )
+    result = await Risk360Provider(sources=reader).project(
+        _request(), await _context(_available_registry())
+    )
+
+    findings = next(section for section in result.sections if section.id == "findings")
+    coverage = findings.content["requiredSlotCoverage"]
+    assert coverage["risk_summary"] == {"state": "available"}
+    assert coverage["evidence_trace"] == {"state": "available"}
+    assert coverage["anomaly_events"] == {
+        "state": "unknown",
+        "reason": "canonical_anomaly_event_authority_unavailable",
+    }
+    assert findings.content["findings"] == []
+    assert "anomalyEvents" not in findings.content
+    assert not any("anomaly_events" in claim.domainSlotIds for claim in result.claims)
 
 
 # ---------------------------------------------------------------------------
@@ -2456,7 +2557,7 @@ async def test_result_never_raises_projection_error_from_backing_source() -> Non
     )
     result = await provider.project(_request(), await _context(ProviderRegistry()))
     assert isinstance(result, ProjectionResult)
-    assert len(result.sections) == 5
+    assert len(result.sections) == 6
 
 
 # ---------------------------------------------------------------------------
