@@ -11,7 +11,7 @@ source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
   "packages/shared/contracts/event-registry.json": "sha256:3d839b394ff0ee3a40679f92a9c38f2e321ab7785663d1a8ef047279d8b757f2"
-  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:8d986914d6f30c3aee5c95ce51b17eba27510dd5cb2bc0737dae38c47e71421d"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:b88f9d7ce62e7a6f50534a00dbf5470401de384e9627ef5146fc48000eebfe06"
   "packages/shared/events.ts": "sha256:864fd17d5e7e842b8cc96970b4f79f43879b7564281c3f9b1cdd3c637e92ebdd"
   "services/api/actions/agent/": "sha256:540f85292689337edc329c9b72b7c4f99487226a5e31aab6526c878e7ea36eeb"
   "services/api/actions/agent_marketplace/": "sha256:e5c25ced055d8f59d2d126a15d0e461e760c5dbaa28f19d4d9ed1567bb072568"
@@ -397,6 +397,21 @@ typed, tenant-scoped poisoning evidence with lifecycle and restatement history,
 but no production detector currently writes those records. These additions
 close evidence-path pieces; they do not complete Agent360, Execution360,
 Risk360, or the full 18-surface contract.
+
+Execution360's `authority_check` now exposes the delegation-engine outcome
+stored in `agent_executions.policy_log.delegation_check` only when it joins to
+the same exact tenant-scoped lifecycle record with its action, resource, and
+lifecycle evidence. The separate policy decision timestamp is not persisted;
+the provider reports it as unknown and does not claim current or standing
+authority. Duplicate, malformed, or incomplete joins remain degraded, while
+x402 approvals and other authority sources remain separate or unknown.
+
+Support360's required `risk` slot now routes to Risk360 after policy. Risk360
+proves the canonical tenant/case pair before reading case-keyed RiskAssessment
+and RiskSignal records and includes both risk and support-case evidence. If the
+case record is missing, expired, unavailable, or out of tenant scope, risk
+reads are suppressed. Case risk-history completeness, signal coverage,
+freshness, business outcome, and contagion authority remain unknown.
 
 ## Bucket 6 — Profile360/graph gap
 

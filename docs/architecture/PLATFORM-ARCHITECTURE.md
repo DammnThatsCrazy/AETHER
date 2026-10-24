@@ -73,7 +73,7 @@ source_hashes:
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
   "services/api/intelligence/fraud_networks/risk360_projection.py": "sha256:4ad7ac91c78b7f66f66e9abd986a723453a721e4868584fa1e349723d6cd306c"
-  "services/api/intelligence/risk360/provider.py": "sha256:eba14f9c045f33546133544c86ba27f074b7970ee47a332a58a0da25c3a9732d"
+  "services/api/intelligence/risk360/provider.py": "sha256:44c0d5e17044082c86225e1bd424a23a94060897d9c5d0f8b9fbb98da4a52249"
   "services/api/intelligence/workflow/workflow360_provider.py": "sha256:5a338c0e96e8af181e6e0cdbab061c7ded7333535bec55706cd8908de20bcbc9"
   "services/api/journeys/communication360/provider.py": "sha256:916e154d60723d687221bc2e0183d5aee672ed9b62db755c5d4cc7c939dd0fe6"
   "services/api/main.py": "sha256:fa7455e5dd5a1e6b6b2ac25cc3ce6fc8a09d8bcf5b242b500feb0b797ab2d7b7"
@@ -839,6 +839,18 @@ Workflow360 `outcomes` follows outcome IDs explicitly referenced by exact
 tenant/run AI invocation facts; the link records association only. Missing
 policy, complete coverage, causal attribution, or source watermarks remain
 unknown, and all four product slots remain partial.
+
+The current risk and authority join wave adds partial Support360 `risk` and
+Execution360 `authority_check` paths. Support360 first proves an exact
+tenant-owned canonical support case, then reads only case-keyed RiskAssessment
+and RiskSignal records with risk and case evidence; missing or expired case
+authority suppresses those reads. Case risk-history completeness, signal
+coverage, freshness, business outcome, and contagion authority remain unknown.
+Execution360 exposes only the action/resource-scoped delegation-engine result
+stored in the same tenant-owned AgentExecution row as its lifecycle evidence.
+The decision has no independent timestamp and does not establish current or
+standing authority; malformed or ambiguous joins remain degraded. Neither
+path completes its product surface or changes technical provider readiness.
 
 Exploration surfaces compose over the engine through projection-backed surface adapters
 

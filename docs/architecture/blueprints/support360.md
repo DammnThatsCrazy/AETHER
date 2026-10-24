@@ -49,21 +49,27 @@ establish a separately attributed business outcome.
   supports `conversation_history` for canonical `support_case` subjects, after
   that slot passes policy. Entity communication reads retain their separate
   exact recipient binding under `support_communications`.
+- The `risk` slot routes to Risk360 only after frame policy allows the slot.
+  Risk360 first proves the exact tenant-owned support case, then joins only
+  case-keyed assessments and signals with risk and case evidence. This path does
+  not establish complete risk history, signal coverage, a freshness SLA,
+  business outcome, or contagion authority.
 - Results must retain tenant scope, source timestamps, section state, evidence
   provenance, and explicit provider limitations. Policy suppression must not
   be inferred as absence.
 
 ## Explicit gaps
 
-- Callback scheduling, SLA timers, case-to-journey links, agent assignments and
-  handoffs, and case-specific risk joins lack canonical provider paths.
+- Callback scheduling, SLA timers, case-to-journey links, agent assignments,
+  and handoffs lack canonical provider paths.
 - Participant identity and message content policy authorities are not joined;
   participant IDs and message bodies remain suppressed.
 - Communication source-history completeness, a support-specific freshness
   service level, and historical replay are unavailable.
 - No authoritative support business outcome attribution is connected.
-- Risk and value context depend on their own providers and policy; this
-  provider does not derive either.
+- Risk history, support-case freshness, risk outcome attribution, and
+  case-specific contagion remain unknown. Value context depends on its own
+  provider and policy; this provider does not derive it.
 
 Until these gaps close, affected slots stay unknown or degraded and the
 projection must not be described as a complete Support 360 implementation.

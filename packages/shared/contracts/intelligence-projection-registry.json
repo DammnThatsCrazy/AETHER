@@ -1761,7 +1761,8 @@
         "entity",
         "population",
         "relationship",
-        "source"
+        "source",
+        "support_case"
       ],
       "canonicalAuthorities": [
         "cluster_membership",
@@ -1779,6 +1780,7 @@
         "risk_signals",
         "relationship_facts",
         "source_provenance",
+        "support_cases",
         "transfers"
       ],
       "hardDependencies": [
@@ -10616,10 +10618,30 @@
           "requirement": "required",
           "description": "Risk outputs associated with the exact support case.",
           "canonicalAuthorityRefs": [
-            "risk_outputs"
+            "risk_outputs",
+            "risk_signals",
+            "support_cases",
+            "evidence"
           ],
-          "projectionBindings": [],
-          "unboundReason": "support_risk_subject_join_unavailable"
+          "projectionBindings": [
+            {
+              "projectionId": "risk360",
+              "role": "primary",
+              "sectionIds": [
+                "summary",
+                "state",
+                "evidence",
+                "findings"
+              ],
+              "subjectKinds": [
+                "support_case"
+              ]
+            }
+          ],
+          "implementationCrosswalk": [
+            "risk_and_contagion"
+          ],
+          "partialImplementationReason": "The tenant-owned support case and its exact risk assessment and signals are joined with canonical evidence; risk-history completeness, support-case freshness SLA, and business outcome remain unknown."
         },
         {
           "id": "resolution",
@@ -10884,6 +10906,7 @@
           "outcome_facts",
           "provider_connections",
           "risk_outputs",
+          "risk_signals",
           "support_cases",
           "support_case_events",
           "source_coverage",

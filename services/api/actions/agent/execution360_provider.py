@@ -208,6 +208,21 @@ class ExecutionApprovalContext:
 
 
 @dataclass(frozen=True)
+class ExecutionAuthorityContext:
+    """Recorded request-time delegation decisions joined to lifecycle evidence."""
+
+    state: Literal["partial", "unknown", "degraded", "unavailable"]
+    decisions: tuple[dict[str, Any], ...] = ()
+    evidence_refs: tuple[EvidenceRef, ...] = ()
+    reason: Optional[str] = None
+    source_read_state: Literal["available", "unavailable"] = "available"
+    scope_known: bool = False
+    truncated: bool = False
+    ambiguous_execution_ids: tuple[str, ...] = ()
+    temporal_selection: str = "execution_lifecycle_rows"
+
+
+@dataclass(frozen=True)
 class ExecutionRiskEventContext:
     """Validated, evidence-backed execution risk signals and coverage state."""
 
@@ -2328,10 +2343,11 @@ def _evidence_ref(
 def _internal_record(row: dict[str, Any]) -> dict[str, Any]:
     snapshot = row.get("input_snapshot")
     snapshot = snapshot if isinstance(snapshot, dict) else {}
-    policy = row.get("policy_log")
+    raw_policy = row.get("policy_log")
+    policy = raw_policy
     policy = policy if isinstance(policy, dict) else {}
-    decision = policy.get("delegation_check")
-    decision = decision if isinstance(decision, dict) else {}
+    raw_decision = policy.get("delegation_check")
+    decision = raw_decision if isinstance(raw_decision, dict) else {}
     recorded_delegation_id = _safe_text(row.get("delegation_id"))
     canonical_delegation_id = _safe_text(row.get("canonical_delegation_id"))
     policy_delegation_id = _safe_text(decision.get("delegation_id"))
@@ -2352,6 +2368,7 @@ def _internal_record(row: dict[str, Any]) -> dict[str, Any]:
         resolution_status = "unverified_join_metadata"
     return {
         "executionId": _safe_text(row.get("execution_id")),
+        "_tenantId": _safe_text(row.get("tenant_id")),
         "workflowRunId": _safe_text(row.get("workflow_run_id")),
         "workflowRunInvocationEvidenceRefs": (
             row.get("workflow_run_invocation_evidence_refs")
@@ -2381,9 +2398,14 @@ def _internal_record(row: dict[str, Any]) -> dict[str, Any]:
         "status": _safe_text(row.get("status")) or "unknown",
         "startedAt": _safe_text(row.get("started_at")),
         "endedAt": _safe_text(row.get("ended_at")),
+        "recordCreatedAt": _safe_text(row.get("created_at")),
         "triggeredByEventId": _safe_text(row.get("triggered_by_event_id")),
         "requestedAction": _safe_text(snapshot.get("action")),
         "requestedResource": _safe_text(snapshot.get("resource")),
+        "_delegationDecisionPresent": (
+            "delegation_check" in policy
+            or (raw_policy is not None and not isinstance(raw_policy, dict))
+        ),
         "recordedDelegationDecision": (
             decision.get("allowed") if isinstance(decision.get("allowed"), bool) else None
         ),
@@ -2399,6 +2421,138 @@ def _internal_record(row: dict[str, Any]) -> dict[str, Any]:
         "businessOutcome": "unknown",
         "source": _INTERNAL_SOURCE,
     }
+
+
+def _execution_authority_context(
+    internal: list[dict[str, Any]],
+    *,
+    tenant_id: str,
+    source_read: ExecutionRead,
+    execution_inventory_complete: bool,
+    temporal_unavailable: bool,
+    time_range: Optional[TimeRangeFilter],
+) -> ExecutionAuthorityContext:
+    """Project stored policy outcomes without replaying the authority engine.
+
+    The delegation check and its action/resource are co-recorded on one
+    tenant-scoped ``agent_executions`` row. The policy check has no independent
+    timestamp; time windows therefore select the parent lifecycle row only.
+    """
+    if temporal_unavailable:
+        return ExecutionAuthorityContext(
+            state="unknown",
+            reason="temporal_anchor_not_reconstructable_from_current_sources",
+            source_read_state="available" if source_read.available else "unavailable",
+            temporal_selection="unsupported_historical_or_comparison_request",
+        )
+    if not source_read.available:
+        return ExecutionAuthorityContext(
+            state="unavailable",
+            reason=source_read.reason or "execution_authority_lifecycle_source_unavailable",
+            source_read_state="unavailable",
+            truncated=source_read.truncated,
+            temporal_selection=(
+                "execution_lifecycle_time_window" if time_range else "execution_lifecycle_rows"
+            ),
+        )
+
+    execution_counts: dict[str, int] = {}
+    for row in internal:
+        execution_id = _safe_text(row.get("executionId"))
+        if execution_id:
+            execution_counts[execution_id] = execution_counts.get(execution_id, 0) + 1
+    ambiguous_ids = tuple(sorted(
+        execution_id for execution_id, count in execution_counts.items() if count > 1
+    ))
+    ambiguous = set(ambiguous_ids)
+    invalid_record = bool(ambiguous_ids)
+    decisions: list[dict[str, Any]] = []
+    evidence_refs: list[EvidenceRef] = []
+
+    for row in internal:
+        execution_id = _safe_text(row.get("executionId"))
+        if execution_id is None or execution_id in ambiguous:
+            continue
+        if not isinstance(row.get("recordedDelegationDecision"), bool):
+            if row.get("_delegationDecisionPresent") is True:
+                invalid_record = True
+            continue
+        action = _safe_text(row.get("requestedAction"))
+        resource = _safe_text(row.get("requestedResource"))
+        evidence = _lifecycle_evidence(row)
+        if (
+            row.get("_tenantId") != tenant_id
+            or not action
+            or not resource
+            or evidence is None
+            or evidence.source != _INTERNAL_SOURCE
+            or evidence.id != execution_id
+            or _parse_aware_instant(evidence.observedAt) is None
+        ):
+            invalid_record = True
+            continue
+
+        serialized_evidence = evidence.model_dump(
+            mode="json", by_alias=True, exclude_none=True
+        )
+        evidence_refs.append(evidence)
+        decisions.append(
+            {
+                "tenantId": tenant_id,
+                "executionId": execution_id,
+                "action": action,
+                "resource": resource,
+                "decision": "allow" if row["recordedDelegationDecision"] else "deny",
+                "delegationId": row.get("delegationId"),
+                "reasonCode": row.get("delegationDecisionReason"),
+                "authority": "agent_executions.policy_log.delegation_check",
+                "lifecycleTimestamps": {
+                    "startedAt": row.get("startedAt"),
+                    "endedAt": row.get("endedAt"),
+                    "recordCreatedAt": row.get("recordCreatedAt"),
+                },
+                "decisionTime": {
+                    "state": "unknown",
+                    "reason": "delegation_decision_timestamp_not_persisted",
+                },
+                "evidenceRef": serialized_evidence,
+            }
+        )
+
+    complete_scope = (
+        source_read.scope_known
+        and not source_read.truncated
+        and execution_inventory_complete
+        and not invalid_record
+    )
+    if decisions and complete_scope:
+        state: Literal["partial", "unknown", "degraded", "unavailable"] = "partial"
+        reason = "recorded_delegation_checks_only_effective_authority_remains_unknown"
+    elif decisions or invalid_record or not complete_scope:
+        state = "degraded"
+        reason = (
+            "execution_authority_record_scope_or_evidence_ambiguous"
+            if invalid_record
+            else source_read.reason
+            or "execution_authority_inventory_or_scope_incomplete"
+        )
+    else:
+        state = "unknown"
+        reason = "no_exact_recorded_delegation_decision_for_admitted_execution_scope"
+
+    return ExecutionAuthorityContext(
+        state=state,
+        decisions=tuple(decisions),
+        evidence_refs=tuple(evidence_refs),
+        reason=reason,
+        source_read_state="available",
+        scope_known=complete_scope,
+        truncated=source_read.truncated,
+        ambiguous_execution_ids=ambiguous_ids,
+        temporal_selection=(
+            "execution_lifecycle_time_window" if time_range else "execution_lifecycle_rows"
+        ),
+    )
 
 
 def _task_decomposition_record(row: dict[str, Any]) -> Optional[dict[str, Any]]:
@@ -2947,6 +3101,14 @@ class Execution360Provider:
             execution_inventory_complete=execution_inventory_complete,
             temporal_unavailable=temporal_unavailable,
         )
+        authority_check = _execution_authority_context(
+            internal,
+            tenant_id=tenant_id,
+            source_read=server,
+            execution_inventory_complete=execution_inventory_complete,
+            temporal_unavailable=temporal_unavailable,
+            time_range=request.timeRange,
+        )
 
         reasons: list[str] = []
         if not server.available:
@@ -2979,6 +3141,8 @@ class Execution360Provider:
             reasons.append(risk_events.reason)
         if approval_chain.state in {"degraded", "unavailable"} and approval_chain.reason:
             reasons.append(approval_chain.reason)
+        if authority_check.state == "degraded" and authority_check.reason:
+            reasons.append(authority_check.reason)
         if request.subject.kind == "episode" and episode_event_binding_mismatch:
             reasons.append("episode_execution_event_binding_conflict")
 
@@ -2999,6 +3163,7 @@ class Execution360Provider:
             tool_calls,
             risk_events,
             approval_chain,
+            authority_check,
             latency_cost,
         )
         claims = (
@@ -3010,6 +3175,7 @@ class Execution360Provider:
                 tool_calls,
                 risk_events,
                 approval_chain,
+                authority_check,
                 latency_cost,
             )
             if request.includeClaims is not False
@@ -3028,6 +3194,7 @@ class Execution360Provider:
             tool_calls,
             risk_events,
             approval_chain,
+            authority_check,
             latency_cost,
         )
 
@@ -3208,6 +3375,7 @@ class Execution360Provider:
         tool_calls: ExecutionToolCallRead,
         risk_events: ExecutionRiskEventContext,
         approval_chain: ExecutionApprovalContext,
+        authority_check: ExecutionAuthorityContext,
         latency_cost: dict[str, Any],
     ) -> list[EvidenceRef]:
         refs: list[EvidenceRef] = []
@@ -3271,6 +3439,11 @@ class Execution360Provider:
                 continue
             seen.add((ref.id, ref.source))
             refs.append(ref)
+        for ref in authority_check.evidence_refs:
+            if (ref.id, ref.source) in seen:
+                continue
+            seen.add((ref.id, ref.source))
+            refs.append(ref)
         for invocation in latency_cost.get("cost", {}).get("invocations", []):
             for raw_ref in invocation.get("evidenceRefs", []):
                 try:
@@ -3292,6 +3465,7 @@ class Execution360Provider:
         tool_calls: ExecutionToolCallRead,
         risk_events: ExecutionRiskEventContext,
         approval_chain: ExecutionApprovalContext,
+        authority_check: ExecutionAuthorityContext,
         latency_cost: dict[str, Any],
     ) -> list[ClaimEnvelope]:
         claims: list[ClaimEnvelope] = []
@@ -3420,29 +3594,15 @@ class Execution360Provider:
                         domainSlotIds=[SLOT_ACTOR_ATTRIBUTION],
                     )
                 )
-            if isinstance(row.get("recordedDelegationDecision"), bool):
-                decision = "allowed" if row["recordedDelegationDecision"] else "denied"
-                action = row.get("requestedAction") or "unknown action"
-                resource = row.get("requestedResource") or "unknown resource"
-                claims.append(
-                    ClaimEnvelope(
-                        id=f"execution360:delegation:{row['executionId']}",
-                        kind="server_recorded_delegation_decision",
-                        subject=subject,
-                        evidenceRefs=[evidence],
-                        claims=[
-                            f"AETHER recorded a {decision} delegation-engine decision for {action} on {resource} in execution {row['executionId']}; the decision is action-scoped at request time and does not establish standing authority or prove execution."
-                        ],
-                        claimState=EpistemicStatus.OBSERVED,
-                        domainSlotIds=[
-                            SLOT_AUTHORITY_CHECK,
-                            SLOT_AGENT_AUTHORITY_ENVELOPE,
-                            SLOT_EVIDENCE,
-                        ],
-                    )
-                )
+            authority_execution_ids = {
+                check["executionId"] for check in authority_check.decisions
+            }
             grant_evidence = _internal_delegation_evidence(row)
-            if grant_evidence is not None and isinstance(row.get("recordedDelegationDecision"), bool):
+            if (
+                row.get("executionId") in authority_execution_ids
+                and grant_evidence is not None
+                and isinstance(row.get("recordedDelegationDecision"), bool)
+            ):
                 claims.append(
                     ClaimEnvelope(
                         id=f"execution360:server-delegation-reference:{row['executionId']}",
@@ -3501,6 +3661,26 @@ class Execution360Provider:
                         domainSlotIds=[SLOT_FAILURES, SLOT_EVIDENCE],
                     )
                 )
+        for decision in authority_check.decisions:
+            evidence_ref = EvidenceRef.model_validate(decision["evidenceRef"])
+            outcome = "allowed" if decision["decision"] == "allow" else "denied"
+            claims.append(
+                ClaimEnvelope(
+                    id=f"execution360:delegation:{decision['executionId']}",
+                    kind="server_recorded_delegation_decision",
+                    subject=subject,
+                    evidenceRefs=[evidence_ref],
+                    claims=[
+                        f"AETHER's tenant-scoped agent_executions record stores a {outcome} delegation-engine decision for action {decision['action']} on resource {decision['resource']} in execution {decision['executionId']}. The policy decision has no separate timestamp, so lifecycle timestamps locate the parent execution record only; this request-time result does not establish current or standing authority or prove external execution."
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=[
+                        SLOT_AUTHORITY_CHECK,
+                        SLOT_AGENT_AUTHORITY_ENVELOPE,
+                        SLOT_EVIDENCE,
+                    ],
+                )
+            )
         for row in external:
             evidence = _fact_evidence(row)
             if evidence is None:
@@ -3739,6 +3919,7 @@ class Execution360Provider:
         tool_calls: ExecutionToolCallRead,
         risk_events: ExecutionRiskEventContext,
         approval_chain: ExecutionApprovalContext,
+        authority_check: ExecutionAuthorityContext,
         latency_cost: dict[str, Any],
     ) -> list[ProjectionSection]:
         episode_context = server.episode_context or ExecutionEpisodeContextRead(
@@ -3954,6 +4135,37 @@ class Execution360Provider:
                 for ref in approval_chain.evidence_refs
             ],
         }
+        authority_check_linkage = {
+            "state": authority_check.state,
+            "reason": authority_check.reason,
+            "sourceReadState": authority_check.source_read_state,
+            "coverage": "recorded_delegation_engine_decisions_only",
+            "scopeKnown": authority_check.scope_known,
+            "truncated": authority_check.truncated,
+            "ambiguousExecutionIds": list(authority_check.ambiguous_execution_ids),
+            "joinedActionScopedDecisions": list(authority_check.decisions),
+            "effectiveAuthorization": {
+                "state": "unknown",
+                "reason": "a_recorded_request_time_decision_does_not_establish_current_or_standing_authority",
+            },
+            "freshness": {
+                "state": "unknown",
+                "reason": "no_execution_authority_decision_freshness_threshold_is_configured",
+            },
+            "temporalScope": {
+                "selection": authority_check.temporal_selection,
+                "decisionTimestamp": "not_persisted",
+                "limitation": "lifecycle timestamps bound the parent execution record and do not prove when the policy check occurred",
+            },
+            "otherAuthorityCoverage": {
+                "state": "unknown",
+                "reason": "x402_approval_workflow_is_projected_separately_and_other_authority_sources_are_not_joined",
+            },
+            "evidenceRefs": [
+                ref.model_dump(mode="json", by_alias=True, exclude_none=True)
+                for ref in authority_check.evidence_refs
+            ],
+        }
         risk_event_linkage = {
             "state": risk_events.state,
             "reason": risk_events.reason,
@@ -4110,7 +4322,12 @@ class Execution360Provider:
                 content={
                     **general,
                     "serverRecordedExecutions": [
-                        {k: v for k, v in row.items() if k not in {"source"}} for row in internal
+                        {
+                            k: v
+                            for k, v in row.items()
+                            if k not in {"source", "_tenantId", "_delegationDecisionPresent"}
+                        }
+                        for row in internal
                     ],
                     "sourceReportedRuns": [
                         {
@@ -4127,6 +4344,7 @@ class Execution360Provider:
                     "planSteps": plan_steps,
                     "latencyCost": latency_cost,
                     "workerRunLinkage": worker_linkage,
+                    "authorityCheck": authority_check_linkage,
                 },
             ),
             ProjectionSection(

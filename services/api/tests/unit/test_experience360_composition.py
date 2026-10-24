@@ -786,6 +786,130 @@ async def test_agent360_risk_slot_routes_agent_subject_to_canonical_risk360() ->
     assert EVIDENCE in frame.slots[0].evidenceRefs
 
 
+@pytest.mark.asyncio
+async def test_support360_risk_slot_routes_exact_support_case_to_risk360_after_policy() -> None:
+    events: list[tuple[str, str]] = []
+    subject = ProjectionSubject(kind="support_case", id="case-risk-1")
+    risk_evidence = EvidenceRef(
+        id="risk-case-assessment-1",
+        type="model_output",
+        source="risk_assessments",
+        observedAt="2026-10-23T12:00:00Z",
+    )
+
+    class AllowPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            events.append(("policy", request.surfaceId))
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-23T12:01:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "risk": Experience360PolicyDisposition(state="allowed")
+                },
+            )
+
+    class Runtime:
+        async def execute_projection(self, projection_request, **_kwargs):
+            events.append(("projection", projection_request.projectionId))
+            assert projection_request.projectionId == "risk360"
+            assert projection_request.tenantId == TENANT
+            assert projection_request.subject == subject
+            claim = ClaimEnvelope(
+                id="risk360.support-case-assessment-1",
+                kind="risk_assessment",
+                subject=subject,
+                evidenceRefs=[risk_evidence],
+                claims=["A tenant-scoped assessment is associated with this canonical support case."],
+                domainSlotIds=["risk"],
+            )
+            section_ids = tuple(projection_request.includeSections or ())
+            return ProjectionResult(
+                projectionId="risk360",
+                tenantId=projection_request.tenantId,
+                contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+                sections=[
+                    ProjectionSection(
+                        id=section_id,
+                        state="available",
+                        content={"evidenceRefs": [risk_evidence]},
+                        canonicalAuthorityRefs=["evidence", "risk_outputs", "risk_signals", "support_cases"],
+                    )
+                    for section_id in section_ids
+                ],
+                claims=[claim],
+                dependencyState=[],
+                generatedAt="2026-10-23T12:00:30Z",
+                degradedReasons=[],
+            )
+
+    request = Experience360FrameRequest(
+        surfaceId="support360",
+        tenantId=TENANT,
+        subject=subject,
+        requestedSlotIds=["risk"],
+        includeEvidence=True,
+    )
+    frame = await build_experience360_frame(
+        request,
+        policy_evaluator=AllowPolicy(),
+        projection_runtime=Runtime(),
+        generated_at="2026-10-23T12:01:00Z",
+    )
+
+    assert events == [("policy", "support360"), ("projection", "risk360")]
+    slot = frame.slots[0]
+    assert slot.id == "risk"
+    assert slot.state == "degraded"
+    assert "slot_partial_implementation" in slot.reasonCodes
+    assert [claim.id for claim in slot.claims] == [
+        "risk360.support-case-assessment-1"
+    ]
+    assert slot.evidenceRefs == [risk_evidence]
+
+
+@pytest.mark.asyncio
+async def test_support360_denied_risk_slot_does_not_query_risk360() -> None:
+    calls: list[str] = []
+
+    class RedactRiskPolicy:
+        async def evaluate(self, request: Experience360FrameRequest):
+            return Experience360PolicyEvaluation(
+                surfaceId=request.surfaceId,
+                tenantId=request.tenantId,
+                evaluatedAt="2026-10-23T12:01:00Z",
+                frameDisposition=Experience360PolicyDisposition(state="allowed"),
+                slotDispositions={
+                    "risk": Experience360PolicyDisposition(state="redacted")
+                },
+            )
+
+    class Runtime:
+        async def execute_projection(self, projection_request, **_kwargs):
+            calls.append(projection_request.projectionId)
+            raise AssertionError("redacted Support360 risk must not read any provider")
+
+    request = Experience360FrameRequest(
+        surfaceId="support360",
+        tenantId=TENANT,
+        subject=ProjectionSubject(kind="support_case", id="case-risk-redacted"),
+        requestedSlotIds=["risk"],
+        includeEvidence=True,
+    )
+    frame = await build_experience360_frame(
+        request,
+        policy_evaluator=RedactRiskPolicy(),
+        projection_runtime=Runtime(),
+        generated_at="2026-10-23T12:01:00Z",
+    )
+
+    assert calls == []
+    assert frame.slots[0].state == "suppressed"
+    assert frame.slots[0].content is None
+    assert frame.slots[0].evidenceRefs == []
+
+
 def test_partial_financial_contagion_claim_does_not_complete_risk_slot() -> None:
     subject = ProjectionSubject(kind="contagion_path", id="path-1")
     request = Experience360FrameRequest(

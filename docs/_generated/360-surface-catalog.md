@@ -44,7 +44,7 @@ Declared binding counts are registry coverage, not proof that a slot or surface 
 | [Risk 360](#risk-360) | source_aligned | `risk`, `entity`, `profile`, `agent`, `account`, `source`, `campaign`, `contagion_path`, `relationship`, `cluster` | 12 | 9/12 | 5 | 3 | 6 | `economic360`, `execution360`, `fraud360`, `relationship360`, `risk360`, `social360` | — |
 | [Signals 360](#signals-360) | source_aligned | `entity`, `signal`, `source`, `event`, `observation`, `stream` | 10 | 8/10 | 5 | 2 | 0 | `signals360` | — |
 | [Social 360](#social-360) | source_aligned | `entity`, `profile`, `relationship`, `community`, `syndicate`, `source`, `population` | 10 | 7/10 | 4 | 3 | 5 | `geographic360`, `population360`, `relationship360`, `social360`, `source360` | — |
-| [Support 360](#support-360) | source_aligned | `support_case`, `callback`, `conversation`, `ticket`, `entity`, `agent`, `episode`, `source` | 10 | 4/10 | 4 | 6 | 6 | `agent360`, `episode360`, `outcome360`, `profile360`, `risk360`, `source360`, `support360` | — |
+| [Support 360](#support-360) | source_aligned | `support_case`, `callback`, `conversation`, `ticket`, `entity`, `agent`, `episode`, `source` | 10 | 5/10 | 5 | 5 | 6 | `agent360`, `episode360`, `outcome360`, `profile360`, `risk360`, `source360`, `support360` | — |
 | [Value 360](#value-360) | source_aligned | `value`, `profile`, `account`, `conversion`, `cluster`, `campaign`, `episode`, `journey`, `entity`, `agent`, `source` | 11 | 8/11 | 6 | 3 | 5 | `campaign360`, `economic360`, `outcome360`, `temporal360` | — |
 | [Workflow 360](#workflow-360) | source_aligned | `workflow`, `automation`, `trigger`, `run`, `workflow_run` | 11 | 7/11 | 4 | 4 | 0 | `workflow360` | — |
 
@@ -921,7 +921,7 @@ Governed support context composed from communications, episodes and journeys, en
 | `measured_outcomes` | optional |  | `outcome_facts` | `outcome360` (primary): subjects `episode`; `outcomes`, `evidence` | — | — | Measured support outcomes where an authoritative provider exists. |
 | `participants` | required |  | `communication_facts`, `identity` | — | — | Unbound: `canonical_support_case_participants_unavailable` | Case participants with identity and content policy. |
 | `resolution` | required |  | `support_cases`, `support_case_events` | `support360` (primary): subjects `support_case`; `outcomes`, `state` | — | Partial: `exact_applied_case_lifecycle_event_and_provider_connection_evidence_support_resolved_or_closed_state; canonical_business_outcome_facts_remain_unavailable` | Recorded support outcome and resolution state; lifecycle resolution alone does not prove the business outcome. |
-| `risk` | required |  | `risk_outputs` | — | — | Unbound: `support_risk_subject_join_unavailable` | Risk outputs associated with the exact support case. |
+| `risk` | required |  | `risk_outputs`, `risk_signals`, `support_cases`, `evidence` | `risk360` (primary): subjects `support_case`; `summary`, `state`, `evidence`, `findings` | — | Partial: `The tenant-owned support case and its exact risk assessment and signals are joined with canonical evidence; risk-history completeness, support-case freshness SLA, and business outcome remain unknown.` | Risk outputs associated with the exact support case. |
 | `risk_context` | optional |  | `risk_outputs` | `risk360` (primary): subjects `entity`; `summary`, `findings`, `evidence` | — | — | Risk context from its governing projection, subject to policy. |
 | `sla` | required |  | `measurement_contract` | — | — | Unbound: `canonical_support_sla_authority_unavailable` | Support service level contract and timer state. |
 | `source_lineage_and_coverage` | optional |  | `source_provenance`, `source_coverage` | `source360` (primary): subjects `source`; `evidence`, `coverage` | — | — | Source provenance and coverage for support context. |
@@ -948,7 +948,7 @@ Governed support context composed from communications, episodes and journeys, en
 
 ### Authority and governance contract
 
-Canonical authorities: `agent_entities`, `agent_entity`, `communication_facts`, `episode_facts`, `events`, `evidence`, `identity`, `journeys`, `measurement_contract`, `outcome_facts`, `provider_connections`, `risk_outputs`, `support_cases`, `support_case_events`, `source_coverage`, `source_provenance`.
+Canonical authorities: `agent_entities`, `agent_entity`, `communication_facts`, `episode_facts`, `events`, `evidence`, `identity`, `journeys`, `measurement_contract`, `outcome_facts`, `provider_connections`, `risk_outputs`, `risk_signals`, `support_cases`, `support_case_events`, `source_coverage`, `source_provenance`.
 
 The frame owns no canonical truth. It composes governed reads, preserves provider provenance, and cannot mutate the authorities listed above.
 

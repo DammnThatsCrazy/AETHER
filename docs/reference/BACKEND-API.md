@@ -1875,7 +1875,7 @@ no write path) under its own prefix, capability-gated on `risk360.read` /
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/v1/risk360/{subject_kind}/{subject_id}` | Run the risk360 projection for the requesting tenant (`subject_kind` ∈ `entity` \| `relationship` \| `cluster` \| `population`); 404 for an unserved kind, 503 when the provider is unregistered |
+| GET | `/v1/risk360/{subject_kind}/{subject_id}` | Run the risk360 projection for the requesting tenant (`subject_kind` ∈ `agent` \| `cluster` \| `contagion_path` \| `entity` \| `population` \| `relationship` \| `source` \| `support_case`); 404 for an unserved kind, 503 when the provider is unregistered |
 | GET | `/v1/risk360/health` | Plane probe: risk360 provider registered + contract-compatible (`availability()` only) |
 | GET | `/v1/fraud360/{subject_kind}/{subject_id}` | Run the fraud360 projection for the requesting tenant (`subject_kind` ∈ `entity` \| `relationship` \| `agent`); 404 for an unserved kind, 503 when the provider is unregistered |
 | GET | `/v1/fraud360/health` | Plane probe: fraud360 provider registered + contract-compatible (`availability()` only) |
@@ -1971,6 +1971,12 @@ an exact tenant-scoped active `USER_ID` alias and active surviving identity
 subject, retaining both evidence references. Missing or ambiguous identity
 evidence stays unknown; this identity link does not establish action
 authorization or delegation authority.
+Execution360's `authority_check` also surfaces a recorded delegation-engine
+decision only when `policy_log.delegation_check` joins to the same tenant-owned
+execution row and the exact requested action and resource are present. The
+claim cites lifecycle evidence for that row; the decision timestamp is not
+persisted, so current or standing authority, other authority sources, and a
+freshness threshold remain unknown.
 Execution360's required `latency_cost` slot now joins canonical AI invocation
 facts only when tenant, execution `action_id`, and canonical Agent match an
 admitted execution. Invocation latency and evidence are preserved; known
@@ -2168,8 +2174,12 @@ the exact tenant, provider connection, and source case key on the canonical
 case. It suppresses message bodies and unresolved participant IDs, preserves
 case/connection/lifecycle/fact evidence, and reports current-store read
 completeness separately from unknown source-history completeness and freshness.
-Callbacks, SLA timers, journeys, agent assignment and handoffs, and case risk
-remain unjoined.
+The `risk` frame slot now routes to Risk360 after slot policy. Risk360 proves
+the exact tenant-owned case before reading case-keyed RiskAssessment and
+RiskSignal records and preserves both risk and case evidence. Missing, expired,
+or ambiguous case identity suppresses the risk reads. Risk history, signal
+coverage, freshness, business outcome, and case contagion remain unknown.
+Callbacks, SLA timers, journeys, agent assignment and handoffs remain unjoined.
 
 The caller must send one of `support_case_created`, `support_case_updated`,
 `support_case_escalated`, `support_case_resolved`, `support_case_reopened`, or

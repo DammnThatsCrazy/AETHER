@@ -1172,8 +1172,8 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "implementationState": "implemented",
         "implementationBlueprint": "docs/architecture/blueprints/risk360.md",
         "ownsCanonicalTruth": False,
-        "subjectKinds": ("agent", "cluster", "contagion_path", "entity", "population", "relationship", "source"),
-        "canonicalAuthorities": ("cluster_membership", "computation", "consent_policy_decisions", "economic_facts", "entity_graph", "evidence", "flow_trace_paths", "flow_traces", "graph", "model_governance", "relationship_facts", "risk_assessments", "risk_outputs", "risk_signals", "source_provenance", "transfers"),
+        "subjectKinds": ("agent", "cluster", "contagion_path", "entity", "population", "relationship", "source", "support_case"),
+        "canonicalAuthorities": ("cluster_membership", "computation", "consent_policy_decisions", "economic_facts", "entity_graph", "evidence", "flow_trace_paths", "flow_traces", "graph", "model_governance", "relationship_facts", "risk_assessments", "risk_outputs", "risk_signals", "source_provenance", "support_cases", "transfers"),
         "hardDependencies": ("computation_substrate", "evidence_provenance", "model_governance"),
         "projectionDependencies": ("cluster360", "economic360", "profile360"),
         "optionalProjectionDependencies": [],
@@ -5644,12 +5644,20 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
                 "requirement": "required"
             },
             {
-                "canonicalAuthorityRefs": ("risk_outputs",),
+                "canonicalAuthorityRefs": ("evidence", "risk_outputs", "risk_signals", "support_cases"),
                 "description": "Risk outputs associated with the exact support case.",
                 "id": "risk",
-                "projectionBindings": [],
-                "requirement": "required",
-                "unboundReason": "support_risk_subject_join_unavailable"
+                "implementationCrosswalk": ("risk_and_contagion",),
+                "partialImplementationReason": "The tenant-owned support case and its exact risk assessment and signals are joined with canonical evidence; risk-history completeness, support-case freshness SLA, and business outcome remain unknown.",
+                "projectionBindings": [
+                    {
+                        "projectionId": "risk360",
+                        "role": "primary",
+                        "subjectKinds": ("support_case",),
+                        "sectionIds": ("evidence", "findings", "state", "summary")
+                    }
+                ],
+                "requirement": "required"
             },
             {
                 "id": "risk_context",
@@ -5783,7 +5791,7 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             }
         ],
         "sourceOfTruth": {
-            "canonicalAuthorities": ("agent_entities", "agent_entity", "communication_facts", "episode_facts", "events", "evidence", "identity", "journeys", "measurement_contract", "outcome_facts", "provider_connections", "risk_outputs", "source_coverage", "source_provenance", "support_case_events", "support_cases"),
+            "canonicalAuthorities": ("agent_entities", "agent_entity", "communication_facts", "episode_facts", "events", "evidence", "identity", "journeys", "measurement_contract", "outcome_facts", "provider_connections", "risk_outputs", "risk_signals", "source_coverage", "source_provenance", "support_case_events", "support_cases"),
             "ownsCanonicalTruth": False,
             "prohibitedOwnership": ("economic_facts", "execution_facts", "graph", "identity", "observations", "risk_outputs", "source_provenance")
         },

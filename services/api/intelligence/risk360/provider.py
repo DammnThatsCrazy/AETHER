@@ -51,6 +51,7 @@ import json
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional, Protocol
+from urllib.parse import quote
 
 from pydantic import ValidationError
 
@@ -89,6 +90,7 @@ from intelligence.risk360.store import (
     RiskPoisoningEvidenceReadIncomplete,
     RiskSignalRepository,
 )
+from journeys.support360.cases import SupportCaseAuthorityRead, SupportCaseRepository
 
 PROJECTION_ID = "risk360"
 
@@ -150,13 +152,17 @@ def _dependency_missing(dep_state: list[Any], projection_id: str) -> bool:
 
 def _risk_assessment_slot_ids(subject_kind: str) -> list[str]:
     """Map an assessed risk fact only to slots that render assessment state."""
-    del subject_kind
-    return [
+    slots = [
         "risk_assessment_state",
         "risk_evidence_and_limitations",
         "risk_summary",
         "evidence_trace",
     ]
+    if subject_kind == "support_case":
+        # Support360 has an explicit required risk slot. Keep this binding
+        # subject-specific until the surface registry maps Risk360 to it.
+        slots.insert(0, "risk")
+    return slots
 
 
 def _risk_evidence_slot_ids(subject_kind: str) -> list[str]:
@@ -167,6 +173,8 @@ def _risk_evidence_slot_ids(subject_kind: str) -> list[str]:
         # the governed Risk360 destination. ``risk_signals`` is not a product
         # SSOT slot and must not escape as an invented compatibility binding.
         slot_ids.append("risk_summary")
+    elif subject_kind == "support_case":
+        slot_ids.insert(0, "risk")
     return slot_ids
 
 
@@ -812,12 +820,20 @@ class Risk360Provider:
         self,
         sources: Optional[RiskSourceReader] = None,
         *,
+        support_case_repository: Optional[SupportCaseRepository] = None,
         social_graph_path_reader: Optional[Any] = None,
         consent_reader: Optional[Any] = None,
     ) -> None:
         # Injected canonical reader (test seam); default reads the Phase-3
         # repositories. Read-only — the provider holds no write path.
         self._sources = sources if sources is not None else RepositoryRiskSourceReader()
+        # Support-case risk is readable only after the canonical case authority
+        # proves the exact tenant/case binding. The repository is read-only here.
+        self._support_case_repository = (
+            support_case_repository
+            if support_case_repository is not None
+            else SupportCaseRepository()
+        )
         # Keep the social graph seam lazy. Its default adapter reads canonical
         # graph + relationship-fact authorities and does not become a second
         # risk or contagion store.
@@ -835,11 +851,35 @@ class Risk360Provider:
         tenant_id = request.tenantId
         dep_state = context.dependencyState
 
+        support_case_scope: Optional[dict[str, Any]] = None
+        support_case_evidence: list[EvidenceRef] = []
+        support_case_scope_verified = True
+        if request.subject.kind == "support_case":
+            if context.tenantId != tenant_id:
+                support_case_scope = self._unknown_support_case_scope(
+                    tenant_id,
+                    request.subject.id,
+                    "support_case_tenant_context_mismatch",
+                )
+            else:
+                support_case_scope, support_case_evidence = await self._safe_support_case_scope(
+                    tenant_id,
+                    request.subject,
+                )
+            support_case_scope_verified = support_case_scope["state"] == "available"
+
         # The runtime context is the authenticated tenant boundary. Fail closed
         # when a direct caller supplies a request for a different tenant; never
         # let the request alone choose which canonical rows this provider reads.
         source_provenance_reason: Optional[str] = None
-        if context.tenantId != tenant_id:
+        if not support_case_scope_verified:
+            # A risk row keyed by a caller-supplied case ID is not enough. Do
+            # not query any risk authority until the canonical support_cases
+            # read proves that the exact tenant-owned case exists.
+            assessment, assessment_degraded = None, False
+            signals, signals_degraded = [], False
+            source_provenance, source_provenance_degraded = [], False
+        elif context.tenantId != tenant_id:
             assessment, assessment_degraded = None, True
             signals, signals_degraded = [], True
             source_provenance, source_provenance_degraded = (
@@ -884,16 +924,23 @@ class Risk360Provider:
                 tenant_id, request.subject
             )
 
-        agent_policy_flags, agent_policy_flags_degraded, agent_policy_flags_reason = (
-            await self._safe_agent_policy_flag_observations(
-                tenant_id=tenant_id,
-                request=request,
-                context=context,
+        if support_case_scope_verified:
+            agent_policy_flags, agent_policy_flags_degraded, agent_policy_flags_reason = (
+                await self._safe_agent_policy_flag_observations(
+                    tenant_id=tenant_id,
+                    request=request,
+                    context=context,
+                )
             )
-        )
+        else:
+            agent_policy_flags, agent_policy_flags_degraded = [], False
+            agent_policy_flags_reason = "support_case_subject_scope_unavailable"
 
         poisoning_as_of, poisoning_anchor_reason = self._poisoning_as_of(request, context)
-        if context.tenantId != tenant_id:
+        if not support_case_scope_verified:
+            poisoning_evidence, poisoning_evidence_degraded = [], False
+            poisoning_evidence_reason = "support_case_subject_scope_unavailable"
+        elif context.tenantId != tenant_id:
             poisoning_evidence, poisoning_evidence_degraded = [], True
             poisoning_evidence_reason = "poisoning_evidence_tenant_context_mismatch"
         elif poisoning_anchor_reason is not None:
@@ -913,7 +960,10 @@ class Risk360Provider:
         assessment_history_as_of, history_anchor_reason = self._assessment_history_as_of(
             request, context
         )
-        if context.tenantId != tenant_id:
+        if not support_case_scope_verified:
+            assessment_history, assessment_history_degraded = [], False
+            assessment_history_reason = "support_case_subject_scope_unavailable"
+        elif context.tenantId != tenant_id:
             assessment_history, assessment_history_degraded = [], True
             assessment_history_reason = "risk_assessment_history_tenant_context_mismatch"
         elif history_anchor_reason is not None:
@@ -930,12 +980,28 @@ class Risk360Provider:
                 as_of=assessment_history_as_of,
             )
 
-        financial_link, financial_link_degraded, financial_link_reason = (
-            await self._safe_financial_contagion_link(request, context)
-        )
-        social_propagation, social_path_claims = await self._safe_social_propagation_paths(
-            request, context
-        )
+        if not support_case_scope_verified:
+            financial_link, financial_link_degraded = None, False
+            financial_link_reason = "support_case_subject_scope_unavailable"
+            social_propagation, social_path_claims = self._unknown_social_propagation(
+                "support_case_subject_scope_unavailable"
+            ), []
+        elif request.subject.kind == "support_case":
+            # A canonical support-case identity joins case-keyed assessments
+            # and signals. It does not establish graph or financial-flow
+            # semantics for that case, so do not issue contagion reads.
+            financial_link, financial_link_degraded = None, False
+            financial_link_reason = "support_case_contagion_authority_not_connected"
+            social_propagation, social_path_claims = self._unknown_social_propagation(
+                "support_case_contagion_authority_not_connected"
+            ), []
+        else:
+            financial_link, financial_link_degraded, financial_link_reason = (
+                await self._safe_financial_contagion_link(request, context)
+            )
+            social_propagation, social_path_claims = await self._safe_social_propagation_paths(
+                request, context
+            )
 
         evidence = self._collect_evidence(
             assessment,
@@ -944,6 +1010,8 @@ class Risk360Provider:
             poisoning_evidence,
             agent_policy_flags,
         )
+        if support_case_evidence:
+            evidence = _dedupe_evidence([*evidence, *support_case_evidence])
         if financial_link is not None:
             evidence = _dedupe_evidence([*evidence, *financial_link["evidence_refs"]])
         evidence = _dedupe_evidence([*evidence, *social_propagation["evidence_refs"]])
@@ -1009,8 +1077,47 @@ class Risk360Provider:
             poisoning_evidence,
             financial_link,
             agent_policy_flags,
+            support_case_evidence=support_case_evidence,
         )
         claims.extend(social_path_claims)
+
+        if support_case_scope is not None:
+            if support_case_scope_verified:
+                risk_read = {
+                    "state": "available",
+                    "subjectKind": "support_case",
+                    "subjectId": request.subject.id,
+                    "tenantId": tenant_id,
+                    "binding": "exact_tenant_subject_kind_and_subject_id",
+                    "assessmentRead": "complete" if not assessment_degraded else "degraded",
+                    "assessmentPresent": assessment is not None,
+                    "signalRead": "complete" if not signals_degraded else "degraded",
+                    "signalCount": len(signals),
+                    "signalCoverage": "unknown",
+                    "freshnessSla": "unavailable",
+                }
+            else:
+                risk_read = {
+                    "state": "unknown",
+                    "reason": support_case_scope.get(
+                        "reason", "support_case_subject_scope_unavailable"
+                    ),
+                    "binding": "not_attempted",
+                    "assessmentRead": "not_read",
+                    "signalRead": "not_read",
+                    "signalCoverage": "unknown",
+                    "freshnessSla": "unavailable",
+                }
+            support_case_scope = {**support_case_scope, "riskRead": risk_read}
+
+        if support_case_scope is not None:
+            sections = self._attach_support_case_scope(
+                sections,
+                support_case_scope,
+                verified=support_case_scope_verified,
+            )
+            if not support_case_scope_verified:
+                claims = []
 
         return ProjectionResult(
             projectionId=self.projection_id,
@@ -1022,6 +1129,169 @@ class Risk360Provider:
             generatedAt=_utc_now_iso(),
             degradedReasons=[],
         )
+
+    async def _safe_support_case_scope(
+        self,
+        tenant_id: str,
+        subject: ProjectionSubject,
+    ) -> tuple[dict[str, Any], list[EvidenceRef]]:
+        """Prove an exact canonical case before allowing a case-keyed risk read."""
+        try:
+            read = await self._support_case_repository.get_case(tenant_id, subject.id)
+        except Exception:  # noqa: BLE001 - unavailable scope authority remains unknown
+            return (
+                self._unknown_support_case_scope(
+                    tenant_id,
+                    subject.id,
+                    "support_case_authority_unavailable",
+                ),
+                [],
+            )
+        if not isinstance(read, SupportCaseAuthorityRead) or not read.available:
+            return (
+                self._unknown_support_case_scope(
+                    tenant_id,
+                    subject.id,
+                    "support_case_authority_unavailable",
+                ),
+                [],
+            )
+        if read.expired:
+            return (
+                self._unknown_support_case_scope(
+                    tenant_id,
+                    subject.id,
+                    "support_case_retention_expired",
+                ),
+                [],
+            )
+        record = read.record
+        if not isinstance(record, dict):
+            return (
+                self._unknown_support_case_scope(
+                    tenant_id,
+                    subject.id,
+                    "support_case_not_found_for_tenant",
+                ),
+                [],
+            )
+        if record.get("tenant_id") != tenant_id or record.get("case_id") != subject.id:
+            return (
+                self._unknown_support_case_scope(
+                    tenant_id,
+                    subject.id,
+                    "support_case_tenant_scope_mismatch",
+                ),
+                [],
+            )
+
+        observed_at = _aware_datetime(record.get("last_observed_at"))
+        events = read.events if isinstance(read.events, list) else []
+        reference = EvidenceRef(
+            id=subject.id,
+            type="entity",
+            source="support_cases",
+            observedAt=observed_at.isoformat() if observed_at is not None else None,
+            uri=f"store://support_cases/{quote(subject.id, safe='')}",
+        )
+        return (
+            {
+                "state": "available",
+                "tenantId": tenant_id,
+                "supportCaseId": subject.id,
+                "subjectBinding": "exact_tenant_canonical_support_case_id",
+                "caseRecordRead": "available",
+                "caseRecordEvidenceRefs": [reference.model_dump(mode="json")],
+                "lifecycleEventScan": (
+                    "complete"
+                    if read.complete is True
+                    else "truncated"
+                    if read.complete is False
+                    else "unknown"
+                ),
+                "lifecycleEventCount": len(events),
+                "sourceHistoryCompleteness": "unknown",
+                "freshnessSla": "unavailable",
+            },
+            [reference],
+        )
+
+    @staticmethod
+    def _unknown_support_case_scope(
+        tenant_id: str,
+        support_case_id: str,
+        reason: str,
+    ) -> dict[str, Any]:
+        """Safe scope result when canonical case identity cannot be established."""
+        return {
+            "state": "unknown",
+            "reason": reason,
+            "tenantId": tenant_id,
+            "supportCaseId": support_case_id,
+            "subjectBinding": "exact_tenant_canonical_support_case_id_required",
+            "riskRead": "suppressed_until_case_identity_is_proven",
+            "evidenceRefs": [],
+            "sourceHistoryCompleteness": "unknown",
+            "freshnessSla": "unavailable",
+        }
+
+    @staticmethod
+    def _unknown_social_propagation(reason: str) -> dict[str, Any]:
+        return {
+            "state": "unknown",
+            "reason": reason,
+            "paths": [],
+            "evidence_refs": [],
+            "coverage": "bounded_current_observed_follows_paths",
+            "completeness": "unknown",
+            "freshness": "unknown",
+            "causalRiskPropagationEstablished": False,
+        }
+
+    @staticmethod
+    def _attach_support_case_scope(
+        sections: list[ProjectionSection],
+        scope: dict[str, Any],
+        *,
+        verified: bool,
+    ) -> list[ProjectionSection]:
+        """Expose the case join and its limits beside every Risk360 section."""
+        bound: list[ProjectionSection] = []
+        for section in sections:
+            warnings = list(section.warnings or [])
+            if isinstance(section.content, dict):
+                content = dict(section.content)
+            else:
+                # ProjectionSection content is expected to be an object. If a
+                # malformed upstream value reaches this boundary, omit it and
+                # retain a bounded warning instead of crashing the read.
+                content = {}
+                warnings.append("risk_section_content_invalid_for_support_case")
+            content["supportCaseScope"] = scope
+            state = section.state
+            if not verified:
+                if section.id in {"summary", "state", "evidence", "findings", "health"}:
+                    state = "unknown"
+                reason = str(scope.get("reason", "support_case_subject_scope_unavailable"))
+                warning = f"support case identity could not be established; risk read suppressed ({reason})"
+                warnings = [warning]
+                if section.id == "findings":
+                    coverage = content.get("requiredSlotCoverage")
+                    if isinstance(coverage, dict):
+                        coverage = dict(coverage)
+                        for slot_id in ("risk_summary", "evidence_trace", "poisoning_evidence", "audit_history"):
+                            coverage[slot_id] = {"state": "unknown", "reason": reason}
+                        content["requiredSlotCoverage"] = coverage
+            bound.append(
+                section.model_copy(
+                    update={
+                        "state": state,
+                        "content": content,
+                        "warnings": warnings or None,
+                    }
+                )
+            )
+        return bound
 
     # ── Section builders ───────────────────────────────────────────────────
 
@@ -1847,13 +2117,20 @@ class Risk360Provider:
         poisoning_evidence: list[RiskPoisoningEvidence],
         financial_link: Optional[dict[str, Any]],
         agent_policy_flags: list[dict[str, Any]],
+        *,
+        support_case_evidence: Optional[list[EvidenceRef]] = None,
     ) -> list[ClaimEnvelope]:
         """Evidence-grounded claims (requiresEvidence: never an empty envelope)."""
         claims: list[ClaimEnvelope] = []
         subject = ProjectionSubject(kind=request.subject.kind, id=request.subject.id)
+        case_scope_evidence = (
+            list(support_case_evidence or []) if subject.kind == "support_case" else []
+        )
 
         if assessment is not None:
-            assessment_refs = self._assessment_evidence(assessment)
+            assessment_refs = _dedupe_evidence(
+                [*self._assessment_evidence(assessment), *case_scope_evidence]
+            )
             if assessment_refs:
                 policy = (
                     f" under policy {assessment.policy_id} v{assessment.policy_version}"
@@ -1889,7 +2166,9 @@ class Risk360Provider:
                         id=f"risk360.dimension.{component.dimension}",
                         kind="risk_dimension_state",
                         subject=subject,
-                        evidenceRefs=list(component.evidence_refs),
+                        evidenceRefs=_dedupe_evidence(
+                            [*component.evidence_refs, *case_scope_evidence]
+                        ),
                         claims=[
                             f"Risk dimension {component.dimension!r} is "
                             f"{component.state.value} (score "
@@ -1927,7 +2206,9 @@ class Risk360Provider:
                     id=f"risk360.signal.{signal.signal_id}",
                     kind="risk_signal_context",
                     subject=subject,
-                    evidenceRefs=list(signal.evidence_refs),
+                    evidenceRefs=_dedupe_evidence(
+                        [*signal.evidence_refs, *case_scope_evidence]
+                    ),
                     claims=[
                         f"Risk signal {signal.signal_id!r} records "
                         f"{signal.risk_dimension!r} context from "

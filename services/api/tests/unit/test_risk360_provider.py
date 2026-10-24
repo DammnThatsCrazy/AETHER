@@ -70,6 +70,7 @@ from intelligence.risk360.provider import (  # noqa: E402
     register_provider,
 )
 from intelligence.risk360.routes import SERVED_SUBJECT_KINDS, create_router  # noqa: E402
+from journeys.support360.cases import SupportCaseAuthorityRead  # noqa: E402
 from services.social360.provider import (  # noqa: E402
     SocialGraphPathRead,
     SocialObservedPath,
@@ -370,6 +371,8 @@ class _FakeReader:
         self._signals_by_subject = signals_by_subject
         self._raise_assessment = raise_assessment
         self._raise_signals = raise_signals
+        self.assessment_calls: list[tuple[str, str, str]] = []
+        self.signal_calls: list[tuple[str, str, str]] = []
         self._source_provenance = list(source_provenance or [])
         self._source_provenance_truncated = source_provenance_truncated
         self._raise_source_provenance = raise_source_provenance
@@ -381,6 +384,7 @@ class _FakeReader:
         self.poisoning_evidence_calls = 0
         self.poisoning_evidence_as_of: datetime | None = None
         self._financial_flow_path = financial_flow_path
+        self.financial_flow_path_calls: list[tuple[str, str]] = []
         self._agent_policy_flags = list(agent_policy_flags or [])
         self._raise_agent_policy_flags = raise_agent_policy_flags
         self.agent_policy_flag_calls: list[tuple[str, str]] = []
@@ -390,6 +394,7 @@ class _FakeReader:
         self.assessment_history_calls: list[tuple[str, str, datetime | None]] = []
 
     async def latest_assessment(self, *, tenant_id: str, subject: object) -> dict | None:
+        self.assessment_calls.append((tenant_id, subject.kind, subject.id))
         if self._raise_assessment:
             raise RuntimeError("boom: secret-detail")
         if self._assessments_by_subject is not None:
@@ -409,6 +414,7 @@ class _FakeReader:
         return list(self._assessment_history_rows), self._assessment_history_complete
 
     async def signals(self, *, tenant_id: str, subject: object) -> list[dict]:
+        self.signal_calls.append((tenant_id, subject.kind, subject.id))
         if self._raise_signals:
             raise RuntimeError("boom: secret-detail")
         if self._signals_by_subject is not None:
@@ -456,7 +462,18 @@ class _FakeReader:
         )
 
     async def financial_flow_path(self, *, tenant_id: str, path_id: str) -> dict | None:
+        self.financial_flow_path_calls.append((tenant_id, path_id))
         return self._financial_flow_path
+
+
+class _SupportCaseReader:
+    def __init__(self, read: SupportCaseAuthorityRead) -> None:
+        self.read = read
+        self.calls: list[tuple[str, str]] = []
+
+    async def get_case(self, tenant_id: str, case_id: str) -> SupportCaseAuthorityRead:
+        self.calls.append((tenant_id, case_id))
+        return self.read
 
 
 class _FakeSocialGraphPathReader:
@@ -950,6 +967,156 @@ async def test_source_trust_projects_only_ingress_classification_and_marks_other
     assert source_claims[0].claimState == EpistemicStatus.OBSERVED
     assert source_claims[0].evidenceRefs[0].id == "source-event-1"
     assert source_claims[0].domainSlotIds == ["source_trust", "evidence_trace"]
+
+
+@pytest.mark.asyncio
+async def test_support_case_risk_joins_exact_case_assessment_and_skips_contagion_reads() -> None:
+    case_id = "case-risk-exact"
+    assessment = _assessment("assessment-case-risk", subject_id=case_id).model_dump(
+        mode="json"
+    )
+    assessment.update(
+        subject_kind="support_case",
+        subject_id=case_id,
+        subject_ref=None,
+        exposure=None,
+    )
+    signal = _signal("signal-case-risk", TENANT_A, subject_id=case_id).model_dump(
+        mode="json"
+    )
+    signal.update(subject_kind="support_case", subject_id=case_id)
+    source = _FakeReader(
+        assessments_by_subject={("support_case", case_id): assessment},
+        signals_by_subject={("support_case", case_id): [signal]},
+    )
+    case_repository = _SupportCaseReader(
+        SupportCaseAuthorityRead(
+            record={
+                "tenant_id": TENANT_A,
+                "case_id": case_id,
+                "last_observed_at": "2026-10-23T12:00:00+00:00",
+            },
+            events=[],
+            available=True,
+            complete=True,
+        )
+    )
+    social_reader = _FakeSocialGraphPathReader(
+        SocialGraphPathRead(tenant_id=TENANT_A, start_entity_id=case_id)
+    )
+    request = _request(subject=ProjectionSubject(kind="support_case", id=case_id))
+
+    result = await Risk360Provider(
+        sources=source,
+        support_case_repository=case_repository,
+        social_graph_path_reader=social_reader,
+        consent_reader=_allow_social_analytics_consent,
+    ).project(request, await _context(_available_registry()))
+
+    assert case_repository.calls == [(TENANT_A, case_id)]
+    assert source.assessment_calls == [(TENANT_A, "support_case", case_id)]
+    assert source.signal_calls == [(TENANT_A, "support_case", case_id)]
+    assert source.financial_flow_path_calls == []
+    assert social_reader.calls == []
+
+    assessment_claim = next(claim for claim in result.claims if claim.kind == "risk_assessment")
+    assert "risk" in assessment_claim.domainSlotIds
+    assert {ref.source for ref in assessment_claim.evidenceRefs} >= {
+        "ledger",
+        "support_cases",
+    }
+    findings = next(section for section in result.sections if section.id == "findings")
+    scope = findings.content["supportCaseScope"]
+    assert scope["state"] == "available"
+    assert scope["riskRead"]["binding"] == "exact_tenant_subject_kind_and_subject_id"
+    assert scope["riskRead"]["freshnessSla"] == "unavailable"
+    assert findings.content["propagationPaths"]["state"] == "unknown"
+    assert (
+        findings.content["propagationPaths"]["reason"]
+        == "support_case_contagion_authority_not_connected"
+    )
+    evidence = next(section for section in result.sections if section.id == "evidence")
+    assert any(ref["source"] == "support_cases" and ref["id"] == case_id
+               for ref in evidence.content["evidence"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "case_read",
+    [
+        SupportCaseAuthorityRead(None, [], available=True, complete=True),
+        SupportCaseAuthorityRead(
+            {"tenant_id": TENANT_B, "case_id": "case-risk-untrusted"},
+            [],
+            available=True,
+            complete=True,
+        ),
+        SupportCaseAuthorityRead(
+            {"tenant_id": TENANT_A, "case_id": "case-risk-untrusted"},
+            [],
+            available=True,
+            complete=True,
+            expired=True,
+        ),
+        SupportCaseAuthorityRead(None, [], available=False, complete=False),
+    ],
+    ids=["missing", "foreign-tenant", "expired", "unavailable"],
+)
+async def test_support_case_risk_suppresses_reads_without_exact_case_authority(
+    case_read: SupportCaseAuthorityRead,
+) -> None:
+    case_id = "case-risk-untrusted"
+    source = _FakeReader(
+        assessments_by_subject={("support_case", case_id): {"must_not_read": True}},
+        signals_by_subject={("support_case", case_id): [{"must_not_read": True}]},
+    )
+    case_repository = _SupportCaseReader(case_read)
+    request = _request(subject=ProjectionSubject(kind="support_case", id=case_id))
+
+    result = await Risk360Provider(
+        sources=source,
+        support_case_repository=case_repository,
+    ).project(request, await _context(_available_registry()))
+
+    assert case_repository.calls == [(TENANT_A, case_id)]
+    assert source.assessment_calls == []
+    assert source.signal_calls == []
+    assert result.claims == []
+    assert "must_not_read" not in result.model_dump_json()
+    findings = next(section for section in result.sections if section.id == "findings")
+    assert findings.state == "unknown"
+    assert findings.content["supportCaseScope"]["riskRead"]["state"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_support_case_risk_context_tenant_mismatch_skips_all_authority_reads() -> None:
+    case_id = "case-risk-context-mismatch"
+    source = _FakeReader()
+    case_repository = _SupportCaseReader(
+        SupportCaseAuthorityRead(
+            {"tenant_id": TENANT_A, "case_id": case_id},
+            [],
+            available=True,
+            complete=True,
+        )
+    )
+    request = _request(subject=ProjectionSubject(kind="support_case", id=case_id))
+    context = (await _context(_available_registry())).model_copy(
+        update={"tenantId": TENANT_B}
+    )
+
+    result = await Risk360Provider(
+        sources=source,
+        support_case_repository=case_repository,
+    ).project(request, context)
+
+    assert case_repository.calls == []
+    assert source.assessment_calls == []
+    assert source.signal_calls == []
+    findings = next(section for section in result.sections if section.id == "findings")
+    assert findings.content["supportCaseScope"]["reason"] == (
+        "support_case_tenant_context_mismatch"
+    )
 
 
 @pytest.mark.asyncio
@@ -1799,6 +1966,7 @@ def test_surface_constants_align_with_registry_row() -> None:
     assert set(OUTPUT_SECTIONS) == set(definition["outputSections"])
     assert PROJECTION_ID == "risk360"
     assert set(SERVED_SUBJECT_KINDS) == set(definition["subjectKinds"])
+    assert "support_case" in SERVED_SUBJECT_KINDS
     assert READ_CAPABILITY in PROJECTION_CAPABILITY_MAP["risk360"]
     assert EXPLORE_CAPABILITY in PROJECTION_CAPABILITY_MAP["risk360"]
     # Dependency map keys are sections we emit; values are registered projections.
