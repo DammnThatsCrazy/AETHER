@@ -98,6 +98,75 @@ async def test_as_of_does_not_leak_another_tenants_operation(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_payment_source_details_are_as_of_and_conflicts_remain_visible(monkeypatch):
+    current = [_instant(1)]
+    monkeypatch.setattr(ledger_module, "utc_now", lambda: current[0])
+    ledger = CommerceOrderPaymentLedger(MemoryStore())
+    base = {
+        "commerce_order_ref": "shop:crypto-1",
+        "provider": "coinbase",
+        "provider_payment_id": "tx-1",
+        "amount": "100.00",
+        "currency": "USD",
+        "status": "completed",
+        "occurred_at": "2026-10-01T10:00:00Z",
+    }
+    await ledger.record_payment("tenant-a", **base)
+    current[0] = _instant(2)
+    await ledger.record_payment(
+        "tenant-a",
+        **base,
+        payment_rail="coinbase",
+        flow_type="crypto_onramp",
+        source_amount="100.00",
+        source_asset="USD",
+        destination_amount="0.05",
+        destination_asset="ETH",
+        destination_chain="ethereum",
+        tx_hash="0xabc123",
+    )
+
+    before_enrichment = await ledger.get_as_of(
+        "tenant-a", "shop:crypto-1", "2026-10-01T18:00:00Z"
+    )
+    after_enrichment = await ledger.get_as_of(
+        "tenant-a", "shop:crypto-1", "2026-10-02T18:00:00Z"
+    )
+    assert before_enrichment is not None
+    assert "paymentRail" not in before_enrichment["payments"]["coinbase:tx-1"]
+    assert after_enrichment is not None
+    enriched = after_enrichment["payments"]["coinbase:tx-1"]
+    assert enriched["paymentRail"] == "coinbase"
+    assert enriched["flowType"] == "crypto_onramp"
+    assert enriched["destinationAmount"] == "0.05"
+    assert enriched["destinationAsset"] == "ETH"
+    assert enriched["destinationChain"] == "ethereum"
+    assert enriched["txHash"] == "0xabc123"
+
+    current[0] = _instant(3)
+    await ledger.record_payment(
+        "tenant-a",
+        **base,
+        payment_rail="coinbase",
+        flow_type="crypto_onramp",
+        source_amount="100.00",
+        source_asset="USD",
+        destination_amount="0.05",
+        destination_asset="ETH",
+        destination_chain="ethereum",
+        tx_hash="0xdivergent",
+    )
+    conflicted = await ledger.get_as_of(
+        "tenant-a", "shop:crypto-1", "2026-10-03T18:00:00Z"
+    )
+    assert conflicted is not None
+    assert conflicted["state"] == "conflict"
+    assert conflicted["conflictReason"] == (
+        "provider_payment_id_reused_with_divergent_evidence"
+    )
+
+
+@pytest.mark.asyncio
 async def test_explicit_refund_is_separate_and_reverses_only_its_payment(monkeypatch):
     current = [_instant(1)]
     monkeypatch.setattr(ledger_module, "utc_now", lambda: current[0])
@@ -254,6 +323,64 @@ def test_stripe_refund_extractor_requires_explicit_order_and_payment_refs():
     missing_ref = event.model_copy(deep=True)
     missing_ref.payload["data"]["object"]["metadata"] = {}
     assert StripeOnrampAdapter.extract_commerce_adjustments(missing_ref) == []
+
+
+def test_stripe_payment_rail_and_crypto_order_link_require_explicit_source_fields():
+    from connectors.integrations.providers.payment_rails.base import ParsedProviderEvent
+    from connectors.integrations.providers.payment_rails.stripe_onramp import StripeOnrampAdapter
+
+    adapter = StripeOnrampAdapter()
+    payment_event = ParsedProviderEvent(
+        provider="stripe",
+        provider_event_id="evt_payment",
+        event_type="payment_intent.succeeded",
+        occurred_at="2026-10-01T10:00:00Z",
+        raw_hash="hash",
+        payload={"data": {"object": {
+            "id": "pi_card",
+            "currency": "usd",
+            "amount_received": 1000,
+            "payment_method_types": ["card"],
+            "metadata": {"aether_order_ref": "shop:1"},
+        }}},
+    )
+    card = adapter.normalize_to_funding_session("tenant-a", payment_event)
+    assert card is not None
+    assert card.rail == "card"
+    assert card.metadata["commerce_order_ref"] == "shop:1"
+
+    ambiguous = payment_event.model_copy(deep=True)
+    ambiguous.payload["data"]["object"]["payment_method_types"] = ["card", "us_bank_account"]
+    normalized_ambiguous = adapter.normalize_to_funding_session("tenant-a", ambiguous)
+    assert normalized_ambiguous is not None
+    assert normalized_ambiguous.rail == "stripe"
+
+    onramp_event = ParsedProviderEvent(
+        provider="stripe",
+        provider_event_id="evt_crypto",
+        event_type="crypto.onramp_session_updated",
+        occurred_at="2026-10-01T10:00:00Z",
+        raw_hash="hash",
+        payload={"data": {"object": {
+            "id": "cos_1",
+            "status": "fulfillment_complete",
+            "metadata": {"commerce_order_ref": "shop:crypto-1"},
+            "transaction_details": {
+                "source_amount": "100.00",
+                "source_currency": "usd",
+                "destination_amount": "0.05",
+                "destination_currency": "eth",
+                "destination_network": "ethereum",
+                "transaction_hash": "0xabc123",
+            },
+        }}},
+    )
+    normalized_onramp = adapter.normalize_to_funding_session("tenant-a", onramp_event)
+    assert normalized_onramp is not None
+    assert normalized_onramp.metadata["commerce_order_ref"] == "shop:crypto-1"
+    assert normalized_onramp.metadata["commerce_payment_amount"] == "100.00"
+    assert normalized_onramp.metadata["commerce_payment_currency"] == "USD"
+    assert normalized_onramp.tx_hash == "0xabc123"
 
 
 @pytest.mark.asyncio

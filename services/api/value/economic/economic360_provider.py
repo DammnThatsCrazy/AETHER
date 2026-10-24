@@ -76,6 +76,8 @@ ECONOMIC_FACTS_SLOT_ID = "economic_facts_and_state"
 PAYMENTS_COMMERCE_SLOT_ID = "payments_and_commerce_evidence"
 CAMPAIGN_PERFORMANCE_SLOT_ID = "performance"
 VALUE_SUMMARY_SLOT_ID = "value_summary"
+VALUE_WEB2_SLOT_ID = "web2_value"
+VALUE_WEB3_SLOT_ID = "web3_value"
 VALUE_CONVERSION_INVENTORY_SLOT_ID = "conversion_inventory"
 VALUE_ATTRIBUTION_CREDITS_SLOT_ID = "attribution_credits"
 VALUE_REVENUE_EVENTS_SLOT_ID = "revenue_events"
@@ -149,6 +151,29 @@ _COMMERCE_JOIN_BASIS_BY_SUBJECT_KIND = {
     "campaign": "explicit_campaign_scoped_canonical_activity_commerce_order_ref",
     "entity": "explicit_canonical_profile_scoped_activity_commerce_order_ref",
 }
+_PAYMENT_RAIL_VALUES = {
+    "fiat",
+    "stripe",
+    "coinbase",
+    "moonpay",
+    "bridge",
+    "bank_transfer",
+    "card",
+    "ach",
+    "wire",
+    "sepa",
+    "onchain",
+    "x402",
+}
+_WEB2_PAYMENT_RAILS = {"bank_transfer", "card", "ach", "wire", "sepa"}
+_WEB3_PAYMENT_FLOWS = {
+    "crypto_onramp",
+    "crypto_deposit",
+    "offramp",
+    "commerce_payment",
+    "settlement",
+}
+_WEB3_RAILS = {"onchain", "x402"}
 
 # Registry projection dependencies we degrade for honestly while they are
 # still in_flight (profile360 / relationship360 / outcome360). Each entry maps
@@ -2179,13 +2204,15 @@ def _commerce_fact_claims(
         if not isinstance(raw_evidence, list):
             continue
         fact_evidence: list[EvidenceRef] = []
+        seen_evidence_ids: set[str] = set()
         for raw_ref in raw_evidence:
             try:
                 evidence_ref = EvidenceRef.model_validate(raw_ref)
             except Exception:  # noqa: BLE001 - malformed source evidence fails closed
                 continue
-            if evidence_ref.type == "transaction":
+            if evidence_ref.type == "transaction" and evidence_ref.id not in seen_evidence_ids:
                 fact_evidence.append(evidence_ref)
+                seen_evidence_ids.add(evidence_ref.id)
         if not fact_evidence:
             continue
 
@@ -2228,7 +2255,141 @@ def _commerce_fact_claims(
                 ),
             )
         )
+        if fact_kind.strip() != "payment":
+            continue
+        payment_rail = fact.get("paymentRail")
+        flow_type = fact.get("flowType")
+        lifecycle = lifecycle_state.strip().lower() if isinstance(lifecycle_state, str) else ""
+        if (
+            isinstance(payment_rail, str)
+            and payment_rail in _WEB2_PAYMENT_RAILS
+            and flow_type == "commerce_payment"
+            and lifecycle in {"completed", "settled"}
+        ):
+            claims.append(
+                ClaimEnvelope(
+                    id=(
+                        "commerce.web2."
+                        + hashlib.sha256(fact_id.encode("utf-8")).hexdigest()[:32]
+                    ),
+                    kind="web2_payment_value",
+                    subject=subject,
+                    evidenceRefs=fact_evidence,
+                    claims=[
+                        "source-reported Web2 payment records "
+                        f"{format(amount_value, 'f')} {currency.strip()} via the explicit "
+                        f"{payment_rail} rail; native currency only, with no attribution or "
+                        "aggregate asserted"
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=list(
+                        dict.fromkeys(
+                            _economic_domain_slot_ids(subject, VALUE_WEB2_SLOT_ID)
+                            + [VALUE_EVIDENCE_TRACE_SLOT_ID]
+                        )
+                    ),
+                )
+            )
+
+        for side, asset_amount, asset, chain in _web3_payment_legs(
+            fact,
+            fact_evidence,
+        ):
+            leg_digest = hashlib.sha256(f"{fact_id}:{side}".encode("utf-8")).hexdigest()[:32]
+            claims.append(
+                ClaimEnvelope(
+                    id=f"commerce.web3.{leg_digest}",
+                    kind="web3_payment_value",
+                    subject=subject,
+                    evidenceRefs=fact_evidence,
+                    claims=[
+                        "source-reported Web3 payment records "
+                        f"{format(asset_amount, 'f')} {asset} on {chain} ({side} side) "
+                        f"for the explicit {flow_type} flow; the provider transaction and "
+                        "transaction-hash references support this native-asset observation; "
+                        "wallet identity, conversion, and attribution are not asserted"
+                    ],
+                    claimState=EpistemicStatus.OBSERVED,
+                    domainSlotIds=list(
+                        dict.fromkeys(
+                            _economic_domain_slot_ids(subject, VALUE_WEB3_SLOT_ID)
+                            + [VALUE_EVIDENCE_TRACE_SLOT_ID]
+                        )
+                    ),
+                )
+            )
     return claims
+
+
+def _web3_payment_legs(
+    fact: dict[str, Any],
+    fact_evidence: list[EvidenceRef],
+) -> list[tuple[str, Decimal, str, str]]:
+    """Return complete native-asset legs backed by an exact transaction hash."""
+    rail = fact.get("paymentRail")
+    flow_type = fact.get("flowType")
+    lifecycle = fact.get("lifecycleState")
+    if (
+        not isinstance(rail, str)
+        or rail not in _PAYMENT_RAIL_VALUES
+        or not isinstance(flow_type, str)
+        or flow_type not in _WEB3_PAYMENT_FLOWS
+        or not isinstance(lifecycle, str)
+        or lifecycle.strip().lower() not in {"completed", "settled"}
+        or not _safe_source_label(rail)
+        or not _safe_source_label(flow_type)
+    ):
+        return []
+    tx_hash = fact.get("txHash")
+    if (
+        not isinstance(tx_hash, str)
+        or not tx_hash.strip()
+        or len(tx_hash.strip()) > 512
+        or any(ord(char) < 32 or ord(char) == 127 for char in tx_hash.strip())
+    ):
+        return []
+    tx_reference = next(
+        (
+            ref
+            for ref in fact_evidence
+            if ref.type == "transaction" and ref.id == tx_hash.strip()
+        ),
+        None,
+    )
+    provider = fact.get("provider")
+    if (
+        tx_reference is None
+        or not isinstance(provider, str)
+        or tx_reference.source != provider
+    ):
+        return []
+
+    sides = (
+        ("destination",)
+        if flow_type in {"crypto_onramp", "crypto_deposit"}
+        else ("source",)
+        if flow_type == "offramp"
+        else ("source", "destination")
+        if rail in _WEB3_RAILS
+        else ()
+    )
+    legs: list[tuple[str, Decimal, str, str]] = []
+    for side in sides:
+        amount = fact.get(f"{side}Amount")
+        asset = fact.get(f"{side}Asset")
+        chain = fact.get(f"{side}Chain")
+        amount_value = _to_decimal(amount)
+        if (
+            amount_value is None
+            or not amount_value.is_finite()
+            or not isinstance(asset, str)
+            or not _safe_source_label(asset)
+            or not isinstance(chain, str)
+            or not _safe_source_label(chain)
+        ):
+            continue
+        legs.append((side, amount_value, asset.strip(), chain.strip()))
+    return legs
 
 
 def _value_reconciliation_observations(

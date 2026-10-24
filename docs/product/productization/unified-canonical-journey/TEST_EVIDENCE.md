@@ -26,11 +26,11 @@ source_hashes:
 | `test_canonical_activity.py` | 8 | Upsert idempotency, status lifecycle, tenant isolation, tombstone exclusion |
 | `test_journey_compiler_v2.py` | 16 | Cross-rail ordering, deterministic sort, transitions, reorg, consent, typed-identity collisions, empty profile |
 | `test_journey_step_repo.py` | 10 | Bulk insert, cursor pagination, family/wallet/session filters, adjacent steps, source-evidence persistence contract |
-| `test_silver_adapters.py` | 14 | All 11 silver table adapters + idempotency stability + unknown table |
-| `test_commerce_reconciliation_as_of.py` | 6 | Commerce knowledge-time reconstruction, tenant isolation, exact Stripe refund reversal, and explicit settlement-link evidence |
+| `test_silver_adapters.py` | 15 | All 11 silver table adapters + idempotency stability + unknown table |
+| `test_commerce_reconciliation_as_of.py` | 10 | Commerce knowledge-time reconstruction, tenant isolation, exact Stripe refund reversal, explicit settlement-link evidence, source-detail as-of/conflict behavior, and Stripe rail/onramp order-link validation |
 | `test_unified_journey_e2e.py` | 5 | Scenarios A (campaign→web2→web3→conversion), B (anonymous), F (reorg), G (multi-tenant wallet), H (late event replay) |
 | `test_journey_tenant_isolation.py` | 4 | Tenant A cannot read tenant B activity, steps, or profile journeys |
-| **Total** | **64** | |
+| **Total** | **68** | |
 
 ## Key Test Scenarios
 

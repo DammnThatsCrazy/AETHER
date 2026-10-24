@@ -6046,19 +6046,33 @@ PRODUCT_360_SURFACE_DEFINITIONS: dict[str, dict] = {
             },
             {
                 "canonicalAuthorityRefs": ("commerce", "payments"),
-                "description": "Evidence backed Web2 payment and commerce value.",
+                "description": "Evidence-backed Web2 payment observations classified only from exact order-linked payment facts with an explicit supported payment rail.",
                 "id": "web2_value",
-                "projectionBindings": [],
-                "requirement": "required",
-                "unboundReason": "web2_value_semantic_classification_not_joined"
+                "partialImplementationReason": "Only completed exact-order-linked payment facts for campaign, entity, and journey subjects are classified when their source rail is explicitly card, ACH, wire, SEPA, or bank transfer. Non-USD normalization, source coverage, policy, and freshness remain unknown.",
+                "projectionBindings": [
+                    {
+                        "projectionId": "economic360",
+                        "role": "primary",
+                        "subjectKinds": ("campaign", "entity", "journey"),
+                        "sectionIds": ("evidence",)
+                    }
+                ],
+                "requirement": "required"
             },
             {
                 "canonicalAuthorityRefs": ("commerce", "currency_value_normalization"),
-                "description": "Evidence backed Web3 wallet and on-chain value.",
+                "description": "Evidence-backed Web3 native-asset payment observations with explicit flow, rail, chain, asset, amount, and transaction-hash evidence.",
                 "id": "web3_value",
-                "projectionBindings": [],
-                "requirement": "required",
-                "unboundReason": "web3_value_semantic_classification_not_joined"
+                "partialImplementationReason": "Only completed exact-order-linked payment facts with explicit crypto flow or on-chain rail and a complete source or destination asset leg plus transaction-hash evidence are classified. Wallet identity, currency normalization, source coverage, policy, and freshness remain unknown.",
+                "projectionBindings": [
+                    {
+                        "projectionId": "economic360",
+                        "role": "primary",
+                        "subjectKinds": ("campaign", "entity", "journey"),
+                        "sectionIds": ("evidence",)
+                    }
+                ],
+                "requirement": "required"
             }
         ],
         "freshnessPolicy": {

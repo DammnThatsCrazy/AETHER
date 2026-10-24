@@ -24,6 +24,10 @@ source_files:
   - services/api/repositories/repos.py
   - services/api/shared/intelligence_projections/frame_runtime.py
   - services/api/value/economic/economic360_provider.py
+  - services/api/value/economic/journey_operation_evidence.py
+  - services/api/value/commerce/order_payment_reconciliation.py
+  - services/api/connectors/integrations/providers/payment_rails/service.py
+  - services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py
   - services/api/value/economic/ai_aggregation.py
   - services/api/actions/agent/deployment_routes.py
   - services/api/actions/agent_marketplace/catalog.py
@@ -68,6 +72,8 @@ source_hashes:
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
   "services/api/config/settings.py": "sha256:fe581665da73af478c3da53600fb0fdd4994d801f408e56f6d2796fbd00748bf"
+  "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:8e681a79980dae410a82b15215fbc26fd73f55bdeefb5ded42b57675694ffa80"
+  "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:740b01479ca0ea5104850140eb269cfef35b9c60b4b848d0b0bd0ad7eecb3905"
   "services/api/identity/account360_provider.py": "sha256:73ebc9abdcdbd45ce00561cf36dc01d1668afc26a7899a27165d1834c6c2e8a0"
   "services/api/ingestion/ingestion/replay.py": "sha256:65f898480787b71d14c8f687351844fdf5585cd67664ff5c32699328594b24ce"
   "services/api/ingestion/ingestion/replay_routes.py": "sha256:5ce3f7c1d9f09cbb51e39ae223f9d502a1854f48b12a144472dc5b78c1ebc752"
@@ -83,8 +89,10 @@ source_hashes:
   "services/api/value/economic/economic360_provider.py": "sha256:feefe5903f7faa2fee321e31f11c2e89d344353ad9b0f585325ebd0d349cc57f"
   "services/api/repositories/repos.py": "sha256:2deaf337debdc8fc0fa1585901e1a736e2a269b967d0091bba4d0d7d8369d19f"
   "services/api/shared/intelligence_projections/frame_runtime.py": "sha256:95a0255a37d99b96243b2a51a6d9465a4740f072963fc5d6565b16a77d454a3d"
+  "services/api/value/commerce/order_payment_reconciliation.py": "sha256:92772b96ea6a009414e531c9cc57897d36042e79fd28998af1d3e154a2385c9a"
   "services/api/value/economic/ai_aggregation.py": "sha256:1c9a65985225dc3c25bb5f628610390cde15271dc320c0af6e0a2bbedd98c82f"
-  "services/api/value/economic/economic360_provider.py": "sha256:17c4490500930b11358ab4eb9696e7bb755339770ee5f9a9f097a4921a5c2a61"
+  "services/api/value/economic/economic360_provider.py": "sha256:f2d453f576196d2092802eec18f6d67bb6f8e4b9a91cdff113ae24d1d019a980"
+  "services/api/value/economic/journey_operation_evidence.py": "sha256:7228e2c59ef3514877744e8f12e4c0fe91d2c139684b8a709e2691c34a06f3fd"
   "services/api/workers/runtime/specs.py": "sha256:4c1c4a6d97f370ec2c4d891e54f999214884e00a8dbde5e06a4c5ed73bed0c9c"
 ---
 # Aether vNext — Architecture Guide
@@ -827,6 +835,15 @@ confirmed or adjusted conversion net-value observations by native currency
 for exact supported subjects and occurred-at scope. It does not emit an LTV
 amount while lifecycle completeness, outcome attribution, and freshness remain
 unknown.
+Value360's `web2_value` and `web3_value` slots now classify only exact
+order-linked completed payment facts. Web2 requires an explicit supported card,
+ACH, wire, SEPA, or bank-transfer rail. Web3 requires an explicit crypto flow or
+on-chain rail, a complete native amount/asset/chain side, and an exact
+transaction-hash evidence reference. The commerce ledger preserves source rail,
+flow, asset, chain, and transaction details with as-of observations; it does
+not store wallet addresses or aggregate payment amounts. Non-USD normalization,
+wallet identity, source coverage, policy, freshness, and full Value360 slot
+completion remain unknown.
 
 The next 2026-10-23 provider slice adds partial `workflow_run` support to
 Execution360. It admits tenant-scoped AgentExecution rows only when their

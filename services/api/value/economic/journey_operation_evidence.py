@@ -7,6 +7,18 @@ import hashlib
 import json
 from typing import Any, Optional
 
+_PAYMENT_SOURCE_DETAIL_FIELDS = (
+    "paymentRail",
+    "flowType",
+    "sourceAmount",
+    "sourceAsset",
+    "sourceChain",
+    "destinationAmount",
+    "destinationAsset",
+    "destinationChain",
+    "txHash",
+)
+
 
 async def journey_commerce_operation_evidence(
     tenant_id: str,
@@ -469,8 +481,26 @@ def _commerce_payment_facts(
             id=evidence_id,
             type="transaction",
             source=provider,
-            observedAt=source_record.get("observedAt"),
+            observedAt=source_record.get("_recordObservedAt")
+            or source_record.get("observedAt"),
         )
+        evidence_refs = [evidence.model_dump(mode="json")]
+        tx_hash = source_record.get("txHash")
+        if (
+            fact_kind == "payment"
+            and isinstance(tx_hash, str)
+            and tx_hash.strip()
+            and len(tx_hash.strip()) <= 512
+            and all(ord(char) >= 32 and ord(char) != 127 for char in tx_hash.strip())
+        ):
+            evidence_refs.append(
+                EvidenceRef(
+                    id=tx_hash.strip(),
+                    type="transaction",
+                    source=provider,
+                    observedAt=source_record.get("observedAt"),
+                ).model_dump(mode="json")
+            )
         reference_digest = hashlib.sha256(operation_ref.encode("utf-8")).hexdigest()[:16]
         fact_digest = hashlib.sha256(
             json.dumps(source_record, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -501,9 +531,14 @@ def _commerce_payment_facts(
                 "ledgerCreatedAt": record.get("createdAt"),
                 "ledgerUpdatedAt": record.get("updatedAt"),
                 "asOf": as_of,
-                "evidence": [evidence.model_dump(mode="json")],
+                "evidence": evidence_refs,
             }
         )
+        if fact_kind == "payment":
+            for field in _PAYMENT_SOURCE_DETAIL_FIELDS:
+                value = source_record.get(field)
+                if value is not None:
+                    facts[-1][field] = value
         if fact_kind == "order":
             facts[-1]["providerOrderId"] = source_record.get("providerOrderId")
             facts[-1]["revisionId"] = source_record.get("revisionId")
@@ -545,7 +580,7 @@ def _commerce_payment_facts(
     payment_observations = record.get("paymentObservations")
     if not isinstance(payment_observations, list) or not payment_observations:
         payment_observations = list((record.get("payments") or {}).values())
-    for payment in payment_observations:
+    for payment in _collapse_compatible_payment_observations(payment_observations):
         if isinstance(payment, dict):
             add_fact(
                 fact_kind="payment",
@@ -580,6 +615,68 @@ def _commerce_payment_facts(
             )
 
     return facts
+
+
+def _collapse_compatible_payment_observations(
+    observations: list[Any],
+) -> list[dict[str, Any]]:
+    """Keep one value fact per payment when a later snapshot only adds details.
+
+    The ledger retains each observed snapshot for as-of reconstruction. Once a
+    snapshot is selected for a projection, compatible snapshots with the same
+    provider payment ID can be folded into one fact. Any divergent amount,
+    lifecycle, timestamp, rail, or network evidence remains separate so the
+    existing conflict state stays visible.
+    """
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    ungrouped: list[dict[str, Any]] = []
+    for row in observations:
+        if not isinstance(row, dict):
+            continue
+        provider = row.get("provider")
+        payment_id = row.get("providerPaymentId")
+        if (
+            not isinstance(provider, str)
+            or not provider
+            or not isinstance(payment_id, str)
+            or not payment_id
+        ):
+            ungrouped.append(row)
+            continue
+        groups.setdefault((provider, payment_id), []).append(row)
+
+    collapsed: list[dict[str, Any]] = list(ungrouped)
+    stable_fields = (
+        "provider",
+        "providerPaymentId",
+        "amount",
+        "currency",
+        "status",
+        "occurredAt",
+    )
+    for rows in groups.values():
+        if len(rows) == 1:
+            collapsed.append(rows[0])
+            continue
+        divergent = any(
+            len({row.get(field) for row in rows}) > 1 for field in stable_fields
+        ) or any(
+            len({row.get(field) for row in rows if row.get(field) is not None}) > 1
+            for field in _PAYMENT_SOURCE_DETAIL_FIELDS
+        )
+        if divergent:
+            collapsed.extend(rows)
+            continue
+        merged = dict(rows[0])
+        merged["_recordObservedAt"] = rows[0].get("observedAt")
+        for row in rows[1:]:
+            for field in _PAYMENT_SOURCE_DETAIL_FIELDS:
+                if row.get(field) is not None:
+                    merged[field] = row[field]
+            if row.get("observedAt") is not None:
+                merged["observedAt"] = row["observedAt"]
+        collapsed.append(merged)
+    return collapsed
 
 
 __all__ = [

@@ -6895,24 +6895,50 @@
         {
           "id": "web2_value",
           "requirement": "required",
-          "description": "Evidence backed Web2 payment and commerce value.",
+          "description": "Evidence-backed Web2 payment observations classified only from exact order-linked payment facts with an explicit supported payment rail.",
           "canonicalAuthorityRefs": [
             "payments",
             "commerce"
           ],
-          "projectionBindings": [],
-          "unboundReason": "web2_value_semantic_classification_not_joined"
+          "projectionBindings": [
+            {
+              "projectionId": "economic360",
+              "role": "primary",
+              "sectionIds": [
+                "evidence"
+              ],
+              "subjectKinds": [
+                "campaign",
+                "entity",
+                "journey"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Only completed exact-order-linked payment facts for campaign, entity, and journey subjects are classified when their source rail is explicitly card, ACH, wire, SEPA, or bank transfer. Non-USD normalization, source coverage, policy, and freshness remain unknown."
         },
         {
           "id": "web3_value",
           "requirement": "required",
-          "description": "Evidence backed Web3 wallet and on-chain value.",
+          "description": "Evidence-backed Web3 native-asset payment observations with explicit flow, rail, chain, asset, amount, and transaction-hash evidence.",
           "canonicalAuthorityRefs": [
             "commerce",
             "currency_value_normalization"
           ],
-          "projectionBindings": [],
-          "unboundReason": "web3_value_semantic_classification_not_joined"
+          "projectionBindings": [
+            {
+              "projectionId": "economic360",
+              "role": "primary",
+              "sectionIds": [
+                "evidence"
+              ],
+              "subjectKinds": [
+                "campaign",
+                "entity",
+                "journey"
+              ]
+            }
+          ],
+          "partialImplementationReason": "Only completed exact-order-linked payment facts with explicit crypto flow or on-chain rail and a complete source or destination asset leg plus transaction-hash evidence are classified. Wallet identity, currency normalization, source coverage, policy, and freshness remain unknown."
         },
         {
           "id": "conversion_inventory",

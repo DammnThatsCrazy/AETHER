@@ -45,6 +45,10 @@ PaymentRail = Literal[
     "fiat", "stripe", "coinbase", "moonpay", "bridge", "bank_transfer",
     "card", "ach", "wire", "sepa", "onchain", "x402",
 ]
+PAYMENT_RAIL_VALUES: tuple[PaymentRail, ...] = (
+    "fiat", "stripe", "coinbase", "moonpay", "bridge", "bank_transfer",
+    "card", "ach", "wire", "sepa", "onchain", "x402",
+)
 
 FundingSessionStatus = Literal[
     "initiated", "submitted", "pending", "completed",

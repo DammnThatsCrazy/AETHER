@@ -1370,6 +1370,167 @@ async def test_journey_commerce_payment_facts_flow_into_economic_evidence_sectio
     assert "summary.ai_execution_cost" not in {claim.id for claim in result.claims}
 
 
+async def test_value360_classifies_only_explicit_web2_payment_rails(monkeypatch) -> None:
+    from value.economic import journey_operation_evidence
+
+    async def exact_journey_evidence(tenant_id: str, journey_id: str, *, as_of=None):
+        return {
+            "join_basis": "explicit_journey_step_commerce_order_ref",
+            "payment_facts": [
+                {
+                    "factId": "commerce:order-a:payment:stripe:pi-card:digest",
+                    "kind": "payment",
+                    "joinBasis": "explicit_journey_step_commerce_order_ref",
+                    "amount": "12.00",
+                    "currency": "USD",
+                    "lifecycleState": "completed",
+                    "paymentRail": "card",
+                    "flowType": "commerce_payment",
+                    "provider": "stripe",
+                    "evidence": [
+                        {"id": "pi-card", "type": "transaction", "source": "stripe"}
+                    ],
+                },
+                {
+                    "factId": "commerce:order-b:payment:stripe:pi-unknown:digest",
+                    "kind": "payment",
+                    "joinBasis": "explicit_journey_step_commerce_order_ref",
+                    "amount": "8.00",
+                    "currency": "USD",
+                    "lifecycleState": "completed",
+                    "paymentRail": "stripe",
+                    "flowType": "commerce_payment",
+                    "provider": "stripe",
+                    "evidence": [
+                        {"id": "pi-unknown", "type": "transaction", "source": "stripe"}
+                    ],
+                },
+            ],
+        }
+
+    monkeypatch.setattr(
+        journey_operation_evidence,
+        "journey_commerce_operation_evidence",
+        exact_journey_evidence,
+    )
+    result = await Economic360Provider(sources=FakeSource([])).project(
+        _request(subject=ProjectionSubject(kind="journey", id="journey-web2")),
+        await _make_context(ProviderRegistry()),
+    )
+
+    web2_claims = [claim for claim in result.claims if claim.kind == "web2_payment_value"]
+    assert len(web2_claims) == 1
+    assert web2_claims[0].domainSlotIds == ["web2_value", "evidence_trace"]
+    assert [ref.id for ref in web2_claims[0].evidenceRefs] == ["pi-card"]
+    assert "12.00 USD" in web2_claims[0].claims[0]
+    assert "no attribution or aggregate asserted" in web2_claims[0].claims[0]
+
+
+async def test_value360_web3_requires_explicit_complete_native_asset_evidence(monkeypatch) -> None:
+    from value.economic import journey_operation_evidence
+
+    async def exact_journey_evidence(tenant_id: str, journey_id: str, *, as_of=None):
+        join_basis = "explicit_journey_step_commerce_order_ref"
+        return {
+            "join_basis": join_basis,
+            "payment_facts": [
+                {
+                    "factId": "commerce:order-a:payment:coinbase:crypto-1:digest",
+                    "kind": "payment",
+                    "joinBasis": join_basis,
+                    "amount": "100.00",
+                    "currency": "USD",
+                    "lifecycleState": "completed",
+                    "paymentRail": "coinbase",
+                    "flowType": "crypto_onramp",
+                    "provider": "coinbase",
+                    "destinationAmount": "0.05",
+                    "destinationAsset": "ETH",
+                    "destinationChain": "ethereum",
+                    "txHash": "0xabc123",
+                    "evidence": [
+                        {"id": "provider-payment-1", "type": "transaction", "source": "coinbase"},
+                        {"id": "0xabc123", "type": "transaction", "source": "coinbase"},
+                    ],
+                },
+                {
+                    "factId": "commerce:order-b:payment:unknown:crypto-2:digest",
+                    "kind": "payment",
+                    "joinBasis": join_basis,
+                    "amount": "50.00",
+                    "currency": "USD",
+                    "lifecycleState": "completed",
+                    "paymentRail": "unknown",
+                    "flowType": "crypto_deposit",
+                    "provider": "unknown",
+                    "destinationAmount": "0.02",
+                    "destinationAsset": "ETH",
+                    "destinationChain": "ethereum",
+                    "txHash": "0xdef456",
+                    "evidence": [
+                        {"id": "provider-payment-2", "type": "transaction", "source": "unknown"},
+                        {"id": "0xdef456", "type": "transaction", "source": "unknown"},
+                    ],
+                },
+                {
+                    "factId": "commerce:order-c:payment:coinbase:crypto-3:digest",
+                    "kind": "payment",
+                    "joinBasis": join_basis,
+                    "amount": "25.00",
+                    "currency": "USD",
+                    "lifecycleState": "completed",
+                    "paymentRail": "coinbase",
+                    "flowType": "crypto_deposit",
+                    "provider": "coinbase",
+                    "destinationAmount": "0.01",
+                    "destinationAsset": "ETH",
+                    "destinationChain": "ethereum",
+                    "txHash": "0xmissing-evidence",
+                    "evidence": [
+                        {"id": "provider-payment-3", "type": "transaction", "source": "coinbase"}
+                    ],
+                },
+                {
+                    "factId": "commerce:order-d:payment:coinbase:crypto-4:digest",
+                    "kind": "payment",
+                    "joinBasis": join_basis,
+                    "amount": "30.00",
+                    "currency": "USD",
+                    "lifecycleState": "completed",
+                    "paymentRail": "coinbase",
+                    "flowType": "crypto_deposit",
+                    "provider": "coinbase",
+                    "destinationAmount": "0.015",
+                    "destinationAsset": "ETH",
+                    "destinationChain": "ethereum",
+                    "txHash": "0xwrong-provider",
+                    "evidence": [
+                        {"id": "provider-payment-4", "type": "transaction", "source": "coinbase"},
+                        {"id": "0xwrong-provider", "type": "transaction", "source": "other-provider"},
+                    ],
+                },
+            ],
+        }
+
+    monkeypatch.setattr(
+        journey_operation_evidence,
+        "journey_commerce_operation_evidence",
+        exact_journey_evidence,
+    )
+    result = await Economic360Provider(sources=FakeSource([])).project(
+        _request(subject=ProjectionSubject(kind="journey", id="journey-web3")),
+        await _make_context(ProviderRegistry()),
+    )
+
+    web3_claims = [claim for claim in result.claims if claim.kind == "web3_payment_value"]
+    assert len(web3_claims) == 1
+    claim = web3_claims[0]
+    assert claim.domainSlotIds == ["web3_value", "evidence_trace"]
+    assert {ref.id for ref in claim.evidenceRefs} == {"provider-payment-1", "0xabc123"}
+    assert "0.05 ETH on ethereum (destination side)" in claim.claims[0]
+    assert "wallet identity, conversion, and attribution are not asserted" in claim.claims[0]
+
+
 async def test_campaign_commerce_payment_facts_flow_through_canonical_activity_ref(
     monkeypatch,
 ) -> None:

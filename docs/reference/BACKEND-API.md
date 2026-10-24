@@ -2161,6 +2161,16 @@ stays null because lifetime completeness, outcome attribution, and freshness
 are unproved; missing net values degrade coverage and absent rows do not mean
 zero.
 
+Value360 `web2_value` and `web3_value` now classify exact order-linked completed
+payment facts without computing totals. Web2 requires an explicit supported
+card, ACH, wire, SEPA, or bank-transfer rail. Web3 requires an explicit crypto
+flow or on-chain rail, complete native amount/asset/chain evidence, and an
+exact transaction-hash EvidenceRef. Stripe PaymentIntent methods remain
+unclassified when the source method list is ambiguous; Stripe crypto-onramp
+joins require an exact order reference plus valid source amount and currency.
+Wallet identity, non-USD normalization, coverage, policy, and freshness remain
+unknown.
+
 The same 2026-10-23 projection wave binds Social360 `influence_paths` to a
 bounded `influence` section. It joins tenant-scoped directed FOLLOWS paths to
 persisted per-hop RelationshipFidelity measurements only when all vector

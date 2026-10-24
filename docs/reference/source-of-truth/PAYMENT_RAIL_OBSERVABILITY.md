@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [packages/shared/payment-rails.ts, services/api/connectors/integrations/providers/payment_rails/base.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/connectors/integrations/providers/payment_rails/repository.py, services/api/connectors/integrations/providers/payment_rails/reconciliation.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/routes.py, services/api/connectors/integrations/providers/payment_rails/sync_worker.py]
+source_files: [packages/shared/payment-rails.ts, services/api/connectors/integrations/providers/payment_rails/models.py, services/api/connectors/integrations/providers/payment_rails/base.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, services/api/connectors/integrations/providers/payment_rails/repository.py, services/api/connectors/integrations/providers/payment_rails/reconciliation.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/routes.py, services/api/connectors/integrations/providers/payment_rails/sync_worker.py]
 last_synced_commit: HEAD
 ---
 
@@ -95,6 +95,21 @@ preserves the exact opaque reference and the tenant commerce ledger checks it
 against the Shopify order reference. No reference is inferred from amount,
 time, or customer fields. Live endpoint certification and merchant-side
 metadata configuration remain required.
+
+Completed payment evidence is copied into the existing tenant-scoped commerce
+ledger only when a supported flow supplies an explicit commerce order reference
+and its source amount/currency. Stripe PaymentIntent rails use a single explicit
+`payment_method_types` value when available; ambiguous or unrecognized method
+types remain `stripe`. Stripe crypto-onramp sessions join only when their
+metadata supplies `aether_order_ref` or `commerce_order_ref` and the source
+amount and three-letter source currency are valid. The ledger preserves the
+explicit rail, flow, native source/destination amount, asset, chain, and
+transaction hash as time-bounded observations. It does not copy wallet
+addresses. Value360 classifies Web2 only from explicit supported card, ACH,
+wire, SEPA, or bank-transfer rails; Web3 classification requires an explicit
+crypto flow or on-chain rail, a complete source or destination native-asset leg,
+and an exact transaction-hash evidence reference. These are separate observed
+facts, not totals, wallet attribution, or currency-normalized value.
 
 ## Background sync worker
 

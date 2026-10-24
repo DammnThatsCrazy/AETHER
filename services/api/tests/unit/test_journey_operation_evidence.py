@@ -23,6 +23,7 @@ from journeys.measurement.repositories import (  # noqa: E402
 )
 from value.commerce import order_payment_reconciliation  # noqa: E402
 from value.economic.journey_operation_evidence import (  # noqa: E402
+    _commerce_payment_facts,
     campaign_commerce_operation_evidence,
     entity_commerce_operation_evidence,
     journey_commerce_operation_evidence,
@@ -150,6 +151,19 @@ async def test_journey_commerce_evidence_preserves_exact_source_payment_facts(
         for index in (1, 2)
     ]
     record = _ledger_record("order:exact-1", payments=payment_rows)
+    enriched_payment = {
+        **payment_rows[0],
+        "paymentRail": "coinbase",
+        "flowType": "crypto_onramp",
+        "sourceAmount": "10.00",
+        "sourceAsset": "USD",
+        "destinationAmount": "0.005",
+        "destinationAsset": "ETH",
+        "destinationChain": "ethereum",
+        "txHash": "0xpay-1-hash",
+        "observedAt": "2026-10-17T10:15:00Z",
+    }
+    record["paymentObservations"] = [payment_rows[0], enriched_payment, payment_rows[1]]
     record["state"] = "conflict"
     record["conflictReason"] = "provider_payment_id_reused_with_divergent_evidence"
     calls: list[tuple[str, str, str]] = []
@@ -215,12 +229,63 @@ async def test_journey_commerce_evidence_preserves_exact_source_payment_facts(
     assert facts[4]["reversesPaymentId"] == "pay-1"
     assert facts[5]["lifecycleState"] == "settled"
     assert facts[5]["settlesPaymentRefs"] == [{"provider": "stripe", "providerPaymentId": "pay-1"}]
-    assert facts[2]["observedAt"] == payment_rows[0]["observedAt"]
+    assert facts[2]["observedAt"] == enriched_payment["observedAt"]
     assert facts[2]["evidence"][0]["id"] == "pay-1"
     assert facts[2]["evidence"][0]["observedAt"] == payment_rows[0]["observedAt"]
+    assert facts[2]["paymentRail"] == "coinbase"
+    assert facts[2]["flowType"] == "crypto_onramp"
+    assert facts[2]["destinationAmount"] == "0.005"
+    assert facts[2]["destinationAsset"] == "ETH"
+    assert facts[2]["destinationChain"] == "ethereum"
+    assert facts[2]["evidence"][1]["id"] == "0xpay-1-hash"
+    assert facts[2]["evidence"][1]["type"] == "transaction"
     assert all(fact["ledgerUpdatedAt"] == "2026-10-18T12:01:00Z" for fact in facts)
     assert all(fact["joinBasis"] == result["join_basis"] for fact in facts)
     assert "total" not in {key.lower() for fact in facts for key in fact}
+
+
+def test_compatible_payment_enrichment_emits_one_source_fact() -> None:
+    payment = {
+        "provider": "coinbase",
+        "providerPaymentId": "payment-1",
+        "amount": "100.00",
+        "currency": "USD",
+        "status": "completed",
+        "occurredAt": "2026-10-17T10:00:00Z",
+        "observedAt": "2026-10-17T10:01:00Z",
+    }
+    record = {
+        "commerceOrderRef": "order:exact-1",
+        "payments": {"coinbase:payment-1": payment},
+        "paymentObservations": [
+            payment,
+            {
+                **payment,
+                "paymentRail": "coinbase",
+                "flowType": "crypto_onramp",
+                "destinationAmount": "0.05",
+                "destinationAsset": "ETH",
+                "destinationChain": "ethereum",
+                "txHash": "0xabc123",
+                "observedAt": "2026-10-17T10:02:00Z",
+            },
+        ],
+    }
+
+    payment_facts = [
+        fact
+        for fact in _commerce_payment_facts(record, as_of=None)
+        if fact["kind"] == "payment"
+    ]
+
+    assert len(payment_facts) == 1
+    assert payment_facts[0]["paymentRail"] == "coinbase"
+    assert payment_facts[0]["destinationAsset"] == "ETH"
+    assert payment_facts[0]["observedAt"] == "2026-10-17T10:02:00Z"
+    assert [ref["id"] for ref in payment_facts[0]["evidence"]] == [
+        "payment-1",
+        "0xabc123",
+    ]
 
 
 @pytest.mark.asyncio

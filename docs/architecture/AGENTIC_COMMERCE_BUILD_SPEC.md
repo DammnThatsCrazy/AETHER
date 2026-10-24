@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [services/api/value/commerce/, services/api/value/x402/, services/api/actions/agent/economic.py, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/actions/agent_marketplace/graph_state_check.py, services/api/actions/agent/deployment_routes.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/repositories/repos.py, services/api/workers/profile360_workers/workers.py, packages/sdk/server/src/agent-telemetry.ts]
+source_files: [services/api/value/commerce/, services/api/value/x402/, services/api/actions/agent/economic.py, services/api/actions/agent_marketplace/authority.py, services/api/actions/agent_marketplace/identity_binding.py, services/api/actions/agent_marketplace/graph_state_check.py, services/api/actions/agent/deployment_routes.py, services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py, services/api/alembic/versions/20261011_agent_delegated_to_namespace.py, services/api/ingestion/silver/projectors/agent_execution_projector.py, services/api/value/economic/economic360_contracts.py, services/api/value/economic/operation_linkage.py, services/api/value/economic/journey_operation_evidence.py, services/api/value/economic/economic360_provider.py, services/api/identity/profile/agent.py, services/api/ingestion/ingestion/lifecycle_worker.py, services/api/ingestion/silver/projectors/silver_graph_projector.py, services/api/repositories/repos.py, services/api/workers/profile360_workers/workers.py, services/api/connectors/integrations/providers/payment_rails/models.py, services/api/connectors/integrations/providers/payment_rails/service.py, services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py, packages/shared/contracts/intelligence-projection-registry.json, packages/sdk/server/src/agent-telemetry.ts]
 canonical_owner: commerce@aether
 estimated_read_minutes: 45
 toc_depth: 3
@@ -16,12 +16,16 @@ reviewed_source_commits:
 source_hashes:
   "packages/sdk/server/src/agent-telemetry.ts": "sha256:95db783d969918011e29a3aeb96e837a559f547aec4c2efcee1679188b360f0b"
   "services/api/actions/agent/deployment_routes.py": "sha256:46ace5ea27e1c0a95bb62b7d63cd9c53f383f0ae759e30c795914f41e5e2a8b4"
+  "packages/shared/contracts/intelligence-projection-registry.json": "sha256:062d38891458d627fb2393a4fd450507fb9a942584e23bb17f729e6940f0df31"
   "services/api/actions/agent/economic.py": "sha256:97ae74cc0595758a6bfc23ff9be140a442dd445ca193ea84b5df63327c3de976"
   "services/api/actions/agent_marketplace/authority.py": "sha256:b136984919ab302e7140815f5984f4cfad11494c3a591853af33d4c741a88b29"
   "services/api/actions/agent_marketplace/graph_state_check.py": "sha256:595617063afe604a7a5b1c421fa73916141a37b374a008606bb6dab460cd0983"
   "services/api/actions/agent_marketplace/identity_binding.py": "sha256:0508f1094a8d369cd6c02004a18456c4b21b3b15f7160742d0ba6c9155aae352"
   "services/api/alembic/versions/20261011_agent_delegated_to_namespace.py": "sha256:446edfe924829cc75d627af169fb12c975f11f2ab13cf17b735ff14a8fed1c10"
   "services/api/alembic/versions/20261011_agent_deployment_identity_bindings.py": "sha256:ab8553556c2c9d6e0e46fe55899132946dcfef9c432b8aed72d394da8e5a3269"
+  "services/api/connectors/integrations/providers/payment_rails/models.py": "sha256:fa63fb1a785b98a7ec322f0d06b13ed30ed722003daee53177ba13078a4c77ed"
+  "services/api/connectors/integrations/providers/payment_rails/service.py": "sha256:8e681a79980dae410a82b15215fbc26fd73f55bdeefb5ded42b57675694ffa80"
+  "services/api/connectors/integrations/providers/payment_rails/stripe_onramp.py": "sha256:740b01479ca0ea5104850140eb269cfef35b9c60b4b848d0b0bd0ad7eecb3905"
   "services/api/identity/profile/agent.py": "sha256:f7aa0168d674cfe5241d169f6516478ef24c882e848dc097af98706f0aee576c"
   "services/api/ingestion/ingestion/lifecycle_worker.py": "sha256:7b6d7d2323a5646c0f7a7093e7ae256f943c70af07557080ef5949d09d07e5d8"
   "services/api/ingestion/silver/projectors/agent_execution_projector.py": "sha256:1db7a6ff778ed3ca22ebae87717636c37f6b821b1e37ddc4d85161a5bb3bb4bf"
@@ -29,6 +33,8 @@ source_hashes:
   "services/api/repositories/repos.py": "sha256:1784df01b61c04f087c80397c3eab3b7167aef930bf199b7a82da4bfdc18dbf4"
   "services/api/value/commerce/": "sha256:b96641f8d5b28f66fcf7aea39c2494a2af76f6e08e2f2c205b5e5abf92bbf03c"
   "services/api/value/economic/economic360_contracts.py": "sha256:8a3053f8e23ed369850714d8e77525135dd8f4b2085ead3c89273f741923f4f5"
+  "services/api/value/economic/economic360_provider.py": "sha256:f2d453f576196d2092802eec18f6d67bb6f8e4b9a91cdff113ae24d1d019a980"
+  "services/api/value/economic/journey_operation_evidence.py": "sha256:7228e2c59ef3514877744e8f12e4c0fe91d2c139684b8a709e2691c34a06f3fd"
   "services/api/value/economic/operation_linkage.py": "sha256:0f663fa20e86fdeaf99d9f27afebdb603423887458b5bbdd0c3450baecd5b9d4"
   "services/api/value/x402/": "sha256:a92283788ffc7dab83f99071da7dc9de7cd695eb5a46fb614afa5cbdbdadb708"
   "services/api/workers/profile360_workers/workers.py": "sha256:2e38b6a9e27174adb31de0cc93582d0515fbc8a00c17e0986a9ec0b96de3ade5"
@@ -188,6 +194,19 @@ provider correction feeds beyond the signed Stripe refund path, and production
 journey evidence remain open. Linked source references retain source event
 time, validity/revision time where available, and first-persisted time where
 available without conflating source time with ingestion time.
+
+The current Value360 payment slice carries source-native payment-rail and
+on-chain details through the same exact-order ledger path. Stripe
+PaymentIntents map to a specific Web2 rail only when one explicit payment
+method is present; unknown or ambiguous method types remain unclassified.
+Stripe crypto-onramp evidence joins only when metadata supplies an exact
+commerce order reference and the source supplies a valid fiat amount/currency.
+Value360 labels Web2 only for explicit supported card, ACH, wire, SEPA, or
+bank-transfer rails. It labels Web3 only when an exact linked payment has an
+explicit crypto flow or on-chain rail, a complete native amount/asset/chain
+side, and an exact transaction-hash evidence reference. Wallet addresses,
+normalized non-USD values, aggregates, and attribution are not inferred; source
+coverage, policy, and freshness remain unknown.
 
 The shared Experience 360 frame route is a read-only consumer of these
 authorities. Campaign and Journey commerce links require exact same-tenant

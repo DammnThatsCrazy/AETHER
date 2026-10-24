@@ -648,7 +648,13 @@ class PaymentRailsService:
         commerce_amount = commerce_meta.get("commerce_payment_amount")
         commerce_currency = commerce_meta.get("commerce_payment_currency")
         if (
-            record.get("flow_type") not in {"settlement", "commerce_payment"}
+            record.get("flow_type") not in {
+                "settlement",
+                "commerce_payment",
+                "crypto_onramp",
+                "crypto_deposit",
+                "offramp",
+            }
             or record.get("status") != "completed"
             or not commerce_ref
             or commerce_amount is None
@@ -673,6 +679,23 @@ class PaymentRailsService:
             currency=str(commerce_currency),
             status="completed",
             occurred_at=str(record.get("occurred_at") or event.occurred_at),
+            payment_rail=str(record.get("rail") or "") or None,
+            flow_type=str(record.get("flow_type") or "") or None,
+            source_amount=(
+                str(record["source_amount"])
+                if record.get("source_amount") is not None
+                else None
+            ),
+            source_asset=record.get("source_asset"),
+            source_chain=record.get("source_chain"),
+            destination_amount=(
+                str(record["destination_amount"])
+                if record.get("destination_amount") is not None
+                else None
+            ),
+            destination_asset=record.get("destination_asset"),
+            destination_chain=record.get("destination_chain"),
+            tx_hash=record.get("tx_hash"),
         )
 
     async def _record_commerce_adjustment_evidence(
